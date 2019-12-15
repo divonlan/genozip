@@ -136,13 +136,6 @@ void zfile_uncompress_section(VariantBlock *vb,
     unsigned data_compressed_len   = ENDN32 (section_header->data_compressed_len);
     unsigned data_uncompressed_len = ENDN32 (section_header->data_uncompressed_len);
 
-    ASSERT (expected_section_type != SEC_VCF_HEADER ||
-            (uncompressed_data->len >= sizeof(SectionHeaderVCFHeader) &&
-            ENDN32(((SectionHeaderVCFHeader *)section_header)->magic) == VCZIP_MAGIC),
-            "Error: Input file is not a vcz file", "");
-printf ("expected_section_type=%u uncompressed_data->len=%u ENDN32(((SectionHeaderVCFHeader *)section_header)->magic)=%x\n",
-expected_section_type, uncompressed_data->len, ENDN32(((SectionHeaderVCFHeader *)section_header)->magic));
-
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %u but seeing %u", expected_section_type, section_header->section_type);
 
     buf_alloc (vb, uncompressed_data, data_uncompressed_len + 1, 1.1, "zfile_uncompress_section", 0); // +1 for \0
@@ -260,7 +253,7 @@ void zfile_compress_variant_data (VariantBlock *vb)
     buf_free (&vb->vardata_header_buf);
 }
 
-void zfile_compress_section_data (VariantBlock *vb, unsigned section_type, Buffer *section_data)
+void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Buffer *section_data)
 {
     SectionHeader header;
     header.section_type          = section_type;
@@ -312,7 +305,7 @@ static bool zfile_read_from_disk (VariantBlock *vb, char *out_str, unsigned len)
 // returns offset of header within data, EOF if end of file
 int zfile_read_one_section (VariantBlock *vb,
                             Buffer *data, /* buffer to append */
-                            unsigned header_size, unsigned section_type,
+                            unsigned header_size, SectionType section_type,
                             bool allow_eof)
 {
     unsigned header_offset = data->len;
@@ -331,6 +324,9 @@ int zfile_read_one_section (VariantBlock *vb,
     
     // if we expected a new VB and got a VCF header - that's ok - we allow concatenated VCZ files
     bool skip_this_vcf_header = (header->section_type == SEC_VCF_HEADER && section_type == SEC_VARIANT_DATA);
+
+    ASSERT (section_type != SEC_VCF_HEADER || header->section_type == section_type || skip_this_vcf_header,  
+            "Error: Input file is not a vcz file", "");
 
     // check that we received the section type we expect, 
     ASSERT (header->section_type == section_type || skip_this_vcf_header,  

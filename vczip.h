@@ -339,17 +339,17 @@ extern int gl_optimize_get_gl_subfield_index(const char *data);
 
 extern void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text);
 extern void zfile_compress_variant_data (VariantBlock *vb);
-extern void zfile_compress_section_data (VariantBlock *vb, unsigned section_type, Buffer *section_data);
+extern void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Buffer *section_data);
 
 extern bool zfile_read_one_vb (VariantBlock *vb);
 
 // returns offset of header within data, -1 if EOF
 extern int zfile_read_one_section (VariantBlock *vb, 
-                                    Buffer *data /* buffer to append */, 
-                                    unsigned header_size, unsigned section_type,
-                                    bool allow_eof);
+                                   Buffer *data /* buffer to append */, 
+                                   unsigned header_size, SectionType section_type,
+                                   bool allow_eof);
 
-extern void zfile_uncompress_section(VariantBlock *vb, const void *section_header, Buffer *uncompressed_data, unsigned expected_section_type);
+extern void zfile_uncompress_section(VariantBlock *vb, const void *section_header, Buffer *uncompressed_data, SectionType expected_section_type);
 extern void zfile_update_vcf_header_section_header (File *z_file, long long vcf_data_size, long long vcf_num_lines);
 
 extern void squeeze (VariantBlock *vb,
