@@ -10,8 +10,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <inttypes.h>
-#include <bzlib.h>
-
+#include "bzlib/bzlib.h"
 #include "vczip.h"
 
 #define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
