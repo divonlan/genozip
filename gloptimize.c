@@ -7,12 +7,13 @@
 // in the VCF spec - it consists of floating point comma-seperated numbers - representing
 // the log(probability) of allele combinations (for example, 00, 01, 11 in case of diploid with one alt allele)
 // it looks something like this: -0.16,-0.52,-3.22  . note that 10^(-0.16) + 10^(-0.52) + 10^(-3.22) = 1.
-// In this optimization, we do simply replace the highest number (the negative number closest to 0) with
+//
+// In this optimization, we do simply replace the highest number (i.e. -0.16 in the example above) with
 // a string of '0' the same length. The number can be recovered from the formula above. After replacing, 
 // we test that the number indeed recovers to the original number, which it sometimes doesn't due to
-// floating point rounding errors. We handle the most common error of an error of 1 on the least significant
+// rounding errors in the data. We handle the most common error of an error of 1 on the least significant
 // digit, which we encode as 010000 (of the correct length). With this, we capture 98% of the cases. 
-// We skip optimizing a GL field in which not all numbers are of the format -0.2342... (negative, one 
+// We skip optimizing a GL field in which not all numbers are of the format -[0-9].[0-9]+ (negative, one 
 // integer digit, up to 9 digits after the decimal point)
 
 #include <math.h>
@@ -131,7 +132,7 @@ void gl_optimize_do(VariantBlock *vb, char *data, unsigned data_len, unsigned gl
 
         double gl = *(data+1) - '0'; // integer part
         data += 3;
-// TO DO: to find if its bigger than best its sufficient to compare ascii        
+   
         double divisor = 10.0;
         while (*data != ':' && *data != ',' && *data != '\t') {
             gl += (*(data++) - '0') / divisor;

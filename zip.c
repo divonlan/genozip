@@ -133,131 +133,7 @@ static unsigned zip_get_genotype_vb_start_len(VariantBlock *vb)
 
     return max_len;
 }
-/*
-static unsigned strcpy_delta (char *dst, const char *src, const char *base, int base_len)
-{
-    const char *start = src;
 
-    // first (up to) base_len characters - xor, remaining characters - copy as-is
-    do {
-        *(dst++) = (base_len--) > 0 ? *(src++) - *(base++) : *(src++);
-    } while (*(src-1) != '\t');
-
-    return src - start; // length
-}
-*/
-/*
-// strcpy, except if its sees a floating point number with trailing zeros - it cuts them out
-static inline void zip_compress_fp (char *dst, const char *src,
-                                    unsigned *dst_len, unsigned *src_len) // return values
-{
-    const char *start_src = src, *start_dst = dst;
-
-    bool field_start = true;
-    bool number = true; // this field is a number until proven otherwise
-    bool decimal_seen = false; // have we seen a decimal point in this number yet
-    bool point_first = false; // does this number start with a decimal, eg .0012
-    bool non_zero_integer_seen = false;
-    unsigned leading_zeros = 0;  // count leading zeros eg 0.123
-    unsigned trailing_zeros = 0; // count trailing zeros eg 0.1000
-
-    do {
-        // example: "0.1000:0.111,0.000,9\t" --> "0.1:0.111,0,9\t"
-
-        bool is_number_char = ((number || field_start) && *src >= '0' && *src <= '9') || 
-                              (field_start && *src == '-') || 
-                              ((number || field_start) && !decimal_seen && *src == '.');
-
-        bool is_field_end = (*src == ':' || *src == ',' || *src == '\t');
-
-        // check if we're terminating a number
-        if (number) {
-            if (is_number_char) {
-                
-                if (decimal_seen) {
-                    if (*src == '0') trailing_zeros++;
-                    else             trailing_zeros = 0;
-                }
-
-                else if (*src == '.') {
-                    decimal_seen = true;
-
-                    if (leading_zeros == 1) {
-                        dst--; // remove the leading zero
-                        point_first = true;
-                    }
-                    else if (!non_zero_integer_seen)
-                        point_first = true;
-                }
-
-                else if (*src != '0') {
-                    leading_zeros = 0;
-                    non_zero_integer_seen = true;
-                }
-                else if (*src == '0' && !non_zero_integer_seen) {
-                    if (leading_zeros) 
-                        number = false; // if it has more than 1 leading 0 eg 000.111 we don't consider it a number
-                    else
-                        leading_zeros = 1;
-                }
-            }
-            // if we just terminated a number with trailing zeros... move back dst if its the end of the field
-            else {
-                if (is_field_end) {
-
-                    if (trailing_zeros) 
-                        dst -= trailing_zeros; // remove trailing zeros
-
-                    if (dst > start_dst && *(dst-1) == '.') {  // if all digits after the decimal point are 0
-                        if (point_first)
-                            *(dst-1) = '0'; // change .000 -> 0
-                        else
-                            dst--; // delete the decimal point and leave the integer
-                    }
-
-                    number = true;
-                }
-                else 
-                    number = false;
-
-                non_zero_integer_seen = decimal_seen = point_first = false;
-                leading_zeros = trailing_zeros=0;
-            }
-        } else if (is_field_end) { // not a number
-            number = true;
-            non_zero_integer_seen = decimal_seen = point_first = false;
-            leading_zeros = trailing_zeros=0;
-        }
-
-        field_start = is_field_end; // next char is a field start if and only if this is a field end
-        
-        *(dst++) = (*src++);
-
-    } while (*(src-1) != '\t');
-
-    *src_len = src - start_src;
-    *dst_len = dst - start_dst;
-}
-void zip_compress_fp_unit_test()
-{
-    const char *data[] = { "00.00,0.,.0:0.20",
-                           "0.12,01.12,00.12,00.00,A0.00,0A.00,0A,A0",
-                           "0.1000:0.111,.000,0.000,9,934.0\t",  // regular FPs
-                           ".11:.2200,.4400,.0011\t", // starting with decimal
-                           "A.11:A2200,A0.4400,0.00B\t", // not numbers
-                           "5,6,009,9001:0.0001:0.10001,10001000\t" 
-                        };
-
-    unsigned src_len, dst_len;
-    char dst[100];
-
-    for (unsigned i=0; i < sizeof(data) / sizeof(char*); i++) {
-        zip_compress_fp (dst, data[i], &dst_len, &src_len);
-
-        printf ("src=%s dst=%.*s src_len=%u dst_len=%u\n", data[i], dst_len, dst, src_len, dst_len);
-    }
-}
-*/
 // split genotype data to sample groups, within a sample group genotypes are separated by a tab
 static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 {
@@ -278,22 +154,11 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
             char **src_next_in_this_sb_p = &((char**)vb->genotype_sample_block_line_starts_buf.data)[line_i * vb->num_sample_blocks + sb_i];
 
-         ///   unsigned len =  strcpy_delta (dst_next, *src_next_in_this_sb_p, first_gt_in_sb, first_gt_in_sb_len);
-
             // copy string up to and including the \t, and push the index ahead
             unsigned len = strcpy_tab (dst_next, *src_next_in_this_sb_p); 
             *src_next_in_this_sb_p += len;
             dst_next               += len;
             vb->genotype_one_section_data.len += len;
-
-
-/*            unsigned dst_len, src_len;
-            zip_compress_fp (dst_next, *src_next_in_this_sb_p, &dst_len, &src_len);
-            *src_next_in_this_sb_p += src_len;
-            dst_next               += dst_len;
-            vb->genotype_one_section_data.len += dst_len;
-            if (src_len != dst_len) vb->add_bytes[SEC_GENOTYPE_DATA] += dst_len - src_len;
-*/
         }
     }
 
@@ -528,7 +393,6 @@ void *zip_compress_variant_block_thread_entry (void *vb_)
 {
     zip_compress_variant_block ((VariantBlock*)vb_);
 }
-
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread

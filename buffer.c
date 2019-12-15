@@ -4,8 +4,8 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 // memory management - when running the same code by the same thread for another variant block - we reuse
-// the previous variant's block memory. this way we save repetitive malloc/free cycles which take up to
-// 75% of the total run time. 
+// the previous variant's block memory. this way we save repetitive malloc/free cycles which might
+// be very time consuming.
 
 #include <stdio.h>
 #include <stdlib.h>

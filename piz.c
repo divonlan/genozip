@@ -156,7 +156,6 @@ unsigned piz_get_genotype_sample_starts (VariantBlock *vb)
     return max_line_len;
 }
 
-
 // convert genotype data from sample block format to line format
 static void piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, unsigned gl_subfield)
 {
