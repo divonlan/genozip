@@ -4,6 +4,8 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 static char *license[] = {
+    "This program, \"vczip\", and all documentation, are copyright (C) 2019-2020 Divon M Lan.  All rights reserved.",
+    "",
     "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION",
     "1. Definitions.",
     "\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.",
