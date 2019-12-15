@@ -61,7 +61,7 @@ typedef struct  __attribute__((__packed__)) {
 // The VCF header section appears once in the file, and includes the VCF file header 
 #define FILE_METADATA_LEN 72
 
-#define VCFZIP_MAGIC 0x27052012
+#define VCZIP_MAGIC 0x27052012
 
 #define COMPRESSION_ALG_BZLIB 0
 
@@ -414,7 +414,7 @@ extern void zip_compress_fp_unit_test();
 #define ENDN16(x) (global_little_endian ? __builtin_bswap16(x) : (x))
 #define ENDN32(x) (global_little_endian ? __builtin_bswap32(x) : (x))
 #define ENDN64(x) (global_little_endian ? __builtin_bswap64(x) : (x))
-static inline void exit_assert() { abort(); }// an exit function so we can put a debugging break point when ASSERT exits
+static inline void exit_assert() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
 #define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_assert(); }}
 #define ASSERTW(condition, format, ...) { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
 

@@ -198,5 +198,5 @@ bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header
 {
     int bytes = fread ((char*)vcf_header_header, 1, sizeof(SectionHeaderVCFHeader), z_file->file);
     
-    return (bytes == sizeof(SectionHeaderVCFHeader) && ENDN32 (vcf_header_header->magic) == VCFZIP_MAGIC);
+    return (bytes == sizeof(SectionHeaderVCFHeader) && ENDN32 (vcf_header_header->magic) == VCZIP_MAGIC);
 }
