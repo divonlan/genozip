@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   squeeze.c
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
-//   Please see terms and conditions in the file LICENSE.txt
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // A module for squeezing an index array. An index array of length len, in an array in which each entry containing a unique number 0->(len-1). 
 // Squeezing the array means using the minimal number of bits for each entry.

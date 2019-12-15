@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   gl-optimize.c
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
-//   Please see terms and conditions in the file LICENSE.txt
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // Optimization - for GL (Genotype Likelihood) subfield - this is a standard subfield defined
 // in the VCF spec - it consists of floating point comma-seperated numbers - representing

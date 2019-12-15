@@ -6,8 +6,8 @@
             "label": "Build vczip",
             "command": "C:\\mingw-w64\\i686-8.1.0-posix-dwarf-rt_v6-rev0\\mingw32\\bin\\gcc.exe",
             "args": [
-                "-g", "-DDEBUG",
-                //"-Ofast", 
+                //"-g", "-DDEBUG",
+                "-Ofast", 
                 "-IC:\\Users\\USER\\projects\\vczip\\bzlib",
                 "-IC:\\Users\\USER\\projects\\vczip\\zlib",
                 "C:\\Users\\USER\\projects\\vczip\\main.c",

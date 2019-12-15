@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   segregate.c
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
-//   Please see terms and conditions in the file LICENSE.txt
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <stdio.h>
 #include <stdlib.h>
