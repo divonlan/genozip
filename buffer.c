@@ -55,7 +55,7 @@ void buf_test_overflows(const VariantBlock *vb)
 
         if (buf->memory) {
             if (!buf->name) {
-                fprintf (stderr, "buffer=0x%x : Corrupt Buffer structure - null name\n", (unsigned)buf);
+                fprintf (stderr, "buffer=0x%x : Corrupt Buffer structure - null name\n", (uintptr_t)buf);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
