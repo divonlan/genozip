@@ -1,0 +1,59 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/vczip.exe",
+            
+            // benchmark file1:
+            //"args": ["-f", "-z", "--showcontent", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf"],
+            //"args": ["-f", "-d", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcz", "-o", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.2.vcf"],
+
+            // benchmark file2:
+            //"args": ["-f", "-z", "--show-content", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf"],
+            //"args": ["-f", "-d", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcz", "-o", "ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.2.vcf"],
+            
+            // debug stuff
+            "args": ["-L"],
+            //"args": ["-f", "-z", "--show-content", "data/chr1-1klines.vcf"],
+            //"args": ["-f", "-d", "--optimize-gl", "--show-content", "data/chr1-1klines.vcz", "-o", "data/chr1-1klines.2.vcf"],
+            //"args": ["-f", "-t", "data/chr1-1line.vcf"],
+            //"args": ["-f", "-z", "--optimize-gl", "--show-content","data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf", "-o", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.gl.vcz"],
+            //"args": ["--show-content", "--optimize-gl", "-z","-f", "data/multiallele.vcf" ],
+
+            //"args": [ "-d", "../code/vczip -d ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcz"],
+            //"args": [ "-f", "-z", "data/ALL.chr1.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf"],
+            //"args": [ "-f", "-z", "data/chr22.10000variants.vcf"],
+            //"args": ["-f", "-t", "data/1200Cattles_biallelic_SNPs_autosoms__5000lines.vcf"],
+            //"args": ["-f", "-t", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf"],
+            //"args": ["-f", "-z", "d:/1000 genomes/ALL.chrY.phase3_integrated_v1b.20130502.genotypes.vcf.gz"],
+            //"args": ["-f", "-z", "d:/1000 genomes/ALL.chrX.phase3_shapeit2_mvncall_integrated_v1b.20130502.genotypes.vcf"],
+            //"args": ["-f", "-d", "d:/1000 genomes/ALL.chrX.phase3_shapeit2_mvncall_integrated_v1b.20130502.genotypes.vcf.dv"],
+            //"args": ["-f", "-z", "--showcontent", "data/ALL.chr22.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz"],
+            //"args": ["-f", "-d", "data/ALL.chr22.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.2.vcf.dv"],
+            //"args": ["-f", "", "1000genomes/ALL.chrX.phase3_shapeit2_mvncall_integrated_v1b.20130502.genotypes.vcf.gz","-o", "test.dv"],
+            //"args": ["-f", "-t", "--showcontent", "data/minimal.vcf"],
+            //"args": ["-f", "-d", "-o", "data/concat.vcf", "data/multiallele.vcf.dv", "data/multiallele2.vcf.dv"],
+            //"args": ["-l", "data/*"],
+            //"args": ["-z", "-f", "--showcontent", ".\\data\\ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:\\mingw-w64\\i686-8.1.0-posix-dwarf-rt_v6-rev0\\mingw32\\bin\\gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

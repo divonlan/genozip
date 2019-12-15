@@ -70,7 +70,7 @@ int main_print_help()
     printf ("\n");
     printf ("Usage: vczip  [options]... [files]...\n");
     printf ("       vcpiz  [options]... [files]...\n");
-    printf ("       vcfcat [options]... [files]...\n");
+    printf ("       vccat [options]... [files]...\n");
     printf ("\n");
     printf ("Compress or uncompress VCF (Variant Call Format) files\n");
     printf ("\n");
@@ -564,14 +564,14 @@ int main (int argc, char **argv)
         out_filename = NULL;
     }
 
-    // vczip with no input filename, no output filename, and no output redirection - show help
-    if (optind == argc && !out_filename && isatty(1)) 
-        command = HELP;
-
     // take action, depending on the command selected
     if (command == VERSION) return main_print_version();
     if (command == LICENSE) return main_print_license();
     if (command == HELP)    return main_print_help();
+
+    // vczip with no input filename, no output filename, and no output redirection - show help
+    if (optind == argc && !out_filename && isatty(1)) 
+        command = HELP;
 
     flag_concat_mode = (out_filename != NULL);
 
