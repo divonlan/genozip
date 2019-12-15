@@ -136,9 +136,9 @@ void zfile_uncompress_section(VariantBlock *vb,
     unsigned data_compressed_len   = ENDN32 (section_header->data_compressed_len);
     unsigned data_uncompressed_len = ENDN32 (section_header->data_uncompressed_len);
 
-    ASSERT (expected_section_type != SEC_VCF_HEADER &&
-            uncompressed_data->len >= sizeof(SectionHeaderVCFHeader) &&
-            ENDN32(((SectionHeaderVCFHeader *)section_header)->magic) == VCZIP_MAGIC,
+    ASSERT (expected_section_type != SEC_VCF_HEADER ||
+            (uncompressed_data->len >= sizeof(SectionHeaderVCFHeader) &&
+            ENDN32(((SectionHeaderVCFHeader *)section_header)->magic) == VCZIP_MAGIC),
             "Error: Input file is not a vcz file", "");
 
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %u but seeing %u", expected_section_type, section_header->section_type);
