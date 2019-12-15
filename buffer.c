@@ -60,17 +60,17 @@ void buf_test_overflows(const VariantBlock *vb)
             }
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
                 fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%x memory=0x%x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%x\n", 
-                         vb ? vb->id : 0, buf_i, (unsigned)buf, (unsigned)buf->memory, buf->name, buf->param, buf->data);
+                         vb ? vb->id : 0, buf_i, (uintptr_t)buf, (uintptr_t)buf->memory, buf->name, buf->param, buf->data);
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%x memory=0x%x : Underflow in buffer %.30s param=%u \"%.8s\"\n", 
-                         vb ? vb->id : 0, (unsigned)buf, (unsigned)buf->memory, buf->name, buf->param, buf->memory);
+                         vb ? vb->id : 0, (uintptr_t)buf, (uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
                 fprintf (stderr,"vb_id=%u buf_i=%u buffer=0x%x memory=0x%x size=%u : Overflow in buffer %.30s param=%u \"%.8s\"\n", 
-                         vb ? vb->id : 0, buf_i, (unsigned)buf, (unsigned)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
+                         vb ? vb->id : 0, buf_i, (uintptr_t)buf, (uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
                 
                 corruption = true;
             }
