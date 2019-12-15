@@ -125,9 +125,9 @@ static void zfile_compress(VariantBlock *vb, Buffer *z_data, SectionHeader *head
 
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
 void zfile_uncompress_section(VariantBlock *vb,
-                               const void *section_header_p,
-                               Buffer *uncompressed_data,
-                               unsigned expected_section_type) 
+                              const void *section_header_p,
+                              Buffer *uncompressed_data,
+                              SectionType expected_section_type) 
 {
     START_TIMER;
     const SectionHeader *section_header = section_header_p;
@@ -135,6 +135,10 @@ void zfile_uncompress_section(VariantBlock *vb,
     unsigned compressed_offset     = ENDN32 (section_header->compressed_offset);
     unsigned data_compressed_len   = ENDN32 (section_header->data_compressed_len);
     unsigned data_uncompressed_len = ENDN32 (section_header->data_uncompressed_len);
+
+    ASSERT (expected_section_type != SEC_VCF_HEADER ||
+            ENDN32(((SectionHeaderVCFHeader *)section_header)->magic) == VCZIP_MAGIC,
+            "Error: Input file is not a vcz file", "");
 
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %u but seeing %u", expected_section_type, section_header->section_type);
 
@@ -193,7 +197,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     vcf_header.h.section_type          = SEC_VCF_HEADER;
     vcf_header.h.data_uncompressed_len = ENDN32 (vcf_header_text->len);
     vcf_header.h.compressed_offset     = ENDN32 (sizeof (SectionHeaderVCFHeader));
-    vcf_header.magic                   = ENDN32 (VCFZIP_MAGIC);
+    vcf_header.magic                   = ENDN32 (VCZIP_MAGIC);
     vcf_header.vczip_version           = VCZIP_VERSION;
     vcf_header.compression_alg         = COMPRESSION_ALG_BZLIB;
     vcf_header.num_samples             = ENDN32 (global_num_samples);
