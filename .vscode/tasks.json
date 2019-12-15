@@ -8,7 +8,6 @@
             "args": [
                 "-g", "-DDEBUG",
                 //"-Ofast", 
-                "-DZ_LARGE64",
                 "-IC:\\Users\\USER\\projects\\vczip\\bzlib",
                 "-IC:\\Users\\USER\\projects\\vczip\\zlib",
                 "C:\\Users\\USER\\projects\\vczip\\main.c",
