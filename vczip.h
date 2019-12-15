@@ -3,8 +3,8 @@
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef VCFZIP_INCLUDED
-#define VCFZIP_INCLUDED
+#ifndef VCZIP_INCLUDED
+#define VCZIP_INCLUDED
 
 #include <stdio.h>
 #include <stdbool.h>
