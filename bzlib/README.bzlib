@@ -1,0 +1,4 @@
+Note from the author of vczip regarding the bzlib directory:
+
+The files contained in this directory are unmodified files which are part of bzip2/libbzip2 version 1.0.8. Use of these
+files is governed by the unmodified license of bzip2/libbzip2 included in this directory.

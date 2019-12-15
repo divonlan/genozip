@@ -1,0 +1,34 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "bzip2-1.0.8"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"string.h": "c",
+			"typeinfo": "c",
+			"types.h": "c",
+			"stdbool.h": "c",
+			"time.h": "c",
+			"bzlib.h": "c",
+			"vczip.h": "c",
+			"cstddef": "c",
+			"string": "c",
+			"optional": "c",
+			"limits": "c",
+			"memory": "c",
+			"new": "c",
+			"type_traits": "c",
+			"array": "c",
+			"string_view": "c",
+			"initializer_list": "c",
+			"utility": "c",
+			"license.h": "c",
+			"sstream": "c"
+		}
+	}
+}
