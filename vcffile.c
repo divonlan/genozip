@@ -2,10 +2,7 @@
 //   vcffile.c
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
 //   Please see terms and conditions in the file LICENSE.txt
-
-#define __USE_LARGEFILE64
-#define Z_LARGE64
-
+ 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +12,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <inttypes.h>
+
+#define Z_LARGE64
 #include "zlib/zlib.h"
+
 #include "vczip.h"
 
 // we implement our own "getc" which manages read buffers a lot more efficiently
