@@ -181,8 +181,10 @@ static bool main_vczip (const char *vcf_filename,
     // get input file
     if (vcf_filename) 
         vcf_file = file_open (vcf_filename, READ, VCF);
-    else  // stdin
+    else {  // stdin
         vcf_file = file_fdopen (0, READ, STDIN);
+        flag_stdout = true; // implicit setting of stdout by using stdin
+    }
 
     // get output FILE
     if (!flag_stdout && pipefd_zip_to_unzip < 0) {
@@ -444,8 +446,6 @@ static void main_list (const char *z_filename, bool finalize)
 
 int main (int argc, char **argv)
 {
-    //zip_compress_fp_unit_test(); exit(0); // DEBUG
-
 #   define COMPRESS   'z'
 #   define UNCOMPRESS 'd'
 #   define TEST       't'
@@ -536,7 +536,10 @@ int main (int argc, char **argv)
 
     // if command not chosen explicitly, use the default determined by the executable name
     if (command < 0) { 
-        if      (strstr (argv[0], "vcpiz"))   command = UNCOMPRESS;
+
+        // vczip with no input filename, no output filename, and no output or input redirection - show help
+        if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) command = HELP;
+        else if (strstr (argv[0], "vcpiz"))   command = UNCOMPRESS;
         else if (strstr (argv[0], "vccat")) { command = UNCOMPRESS; flag_stdout=1 ; }
         else                                  command = COMPRESS; // default 
     }
@@ -568,10 +571,6 @@ int main (int argc, char **argv)
     if (command == VERSION) return main_print_version();
     if (command == LICENSE) return main_print_license();
     if (command == HELP)    return main_print_help();
-
-    // vczip with no input filename, no output filename, and no output redirection - show help
-    if (optind == argc && !out_filename && isatty(1)) 
-        command = HELP;
 
     flag_concat_mode = (out_filename != NULL);
 
