@@ -19,7 +19,7 @@
             //"args": ["-f", "-d", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcz", "-o", "ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.2.vcf"],
             
             // debug stuff
-            "args": ["-L"],
+            //"args": ["-L"],
             //"args": ["-f", "-z", "--show-content", "data/chr1-1klines.vcf"],
             //"args": ["-f", "-d", "--optimize-gl", "--show-content", "data/chr1-1klines.vcz", "-o", "data/chr1-1klines.2.vcf"],
             //"args": ["-f", "-t", "data/chr1-1line.vcf"],

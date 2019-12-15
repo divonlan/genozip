@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   vczip.h
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
-//   Please see terms and conditions in the file LICENSE.txt
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #ifndef VCZIP_INCLUDED
 #define VCZIP_INCLUDED
