@@ -141,7 +141,8 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
                          (dl->phase_type == PHASE_UNKNOWN || dl->phase_type == PHASE_HAPLO))
                     dl->phase_type = cell_phase_type;
 
-                else if (dl->phase_type == '|' && cell_phase_type == '/' || dl->phase_type == '/' && cell_phase_type == '|') {
+                else if ((dl->phase_type == '|' && cell_phase_type == '/') || 
+                         (dl->phase_type == '/' && cell_phase_type == '|')) {
                     dl->phase_type = PHASE_MIXED_PHASED;
                 
                     // realloc and not malloc, bc it can be already allocated in case of a re-do following a ploidy overflow
@@ -230,7 +231,7 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
     const char *pos_start; unsigned pos_len; // start and length of pos field
     bool ploidy_overflow = false;
 
-    char *c; for (c = dl->line.data; *c && area; c++) {
+    char *c; for (c = dl->line.data; *c && area != DONE; c++) {
 
         // skip if we didn't arrive at a meaningful separator - tab, newline or : after a haplotype
         if (*c != '\t' && *c != '\n' && (*c != ':' || area != HAPLOTYPE)) continue;
@@ -269,6 +270,10 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
             case GENOTYPE:
                 segregate_genotype_area (vb, dl, area_start, c-area_start, line_i);
                 break;
+
+            case DONE: 
+            default:
+                ABORT0 ("in segregate_data_line(), should never reach here");
         }
 
         if (*c != ':') {
