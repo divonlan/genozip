@@ -80,7 +80,7 @@ else
 endif
 
 clean-debug:
-	@echo Cleaning up (debug)
+	@echo Cleaning up debug
 ifeq ($(OS),Windows_NT)
 	@del /q /f $(DEBUG_OBJ) vczip-debug$(EXE) >nul 2>&1
 else
