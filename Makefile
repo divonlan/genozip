@@ -63,7 +63,7 @@ else
 endif
 	@ln $^ $@
 
-.PHONY: clean license
+.PHONY: clean
 
 LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@
