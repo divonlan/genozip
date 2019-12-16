@@ -4,8 +4,8 @@
 #   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 CC=gcc
-CFLAGS=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Ofast
-CFLAGS_DEBUG=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DDEBUG -g
+CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Ofast
+CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DDEBUG -g
 LIBS = -pthread -lm
 
 SLASH :=
