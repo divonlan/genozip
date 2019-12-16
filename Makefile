@@ -14,30 +14,40 @@ OBJ = vcf_header.o zip.o piz.o gloptimize.o buffer.o main.o vcffile.o squeeze.o 
       bzlib/blocksort.o bzlib/bzlib.o bzlib/compress.o bzlib/crctable.o bzlib/decompress.o bzlib/huffman.o bzlib/randtable.o \
       zlib/gzlib.o zlib/gzread.o zlib/inflate.o zlib/inffast.o zlib/zutil.o zlib/inftrees.o zlib/crc32.o zlib/adler32.o 
 
-all: vczip vcpiz vccat
+EXE :=
+ifeq ($(OS),Windows_NT)
+	EXE := .exe
+endif
+
+all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
 .c.o:
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-all: vczip vcpiz vccat LICENSE.non-commercial.txt
+all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE) LICENSE.non-commercial.txt
 
-vczip: $(OBJ)
+vczip$(EXE): $(OBJ)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
-vcpiz vccat: vczip
+vcpiz$(EXE) vccat$(exe): vczip$(EXE)
 	@echo Hard linking $@
+ifeq ($(OS),Windows_NT)
+	if exist $@ (del $@)
+	mklink /h $@ $^ 
+else
 	@rm -f $@
 	@ln $^ $@
+endif
 
 .PHONY: clean license
 
-LICENSE.non-commercial.txt: vczip
+LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@
-	@vczip -L > $@
+	@vczip$(EXE) -L > $@
 
 clean:
 	@echo Cleaning up
-	@rm -f $(OBJ) vczip vcpiz vccat
+	@rm -f $(OBJ) vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
