@@ -70,6 +70,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
     }
 
     ABORT ("Error: invalid VCF file - it does not contain a field header line; tab_count=%u", tab_count+1);
+    return false; // avoid complication warnings
 }
 
 // reads VCF header and writes its compressed form to the VCZ file. returns num_samples.
@@ -162,7 +163,7 @@ bool vcf_header_vcz_to_vcf (VariantBlock *vb, bool concat_mode)
 
     ASSERT (header->compression_alg == COMPRESSION_ALG_BZLIB, "Unrecognized compression_alg=%u", header->compression_alg);
 
-    ASSERT (ENDN32 (header->h.compressed_offset) == sizeof(SectionHeaderVCFHeader), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", ENDN32 (header->h.compressed_offset), sizeof(SectionHeaderVCFHeader));
+    ASSERT (ENDN32 (header->h.compressed_offset) == sizeof(SectionHeaderVCFHeader), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", ENDN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
 
     unsigned data_compressed_len = compressed_vcf_section.len - sizeof(SectionHeaderVCFHeader);
     ASSERT (data_compressed_len == ENDN32 (header->h.data_compressed_len), "Error: failed to read VCF header's data. Read %u bytes, expecting %u bytes", data_compressed_len, header->h.data_compressed_len);

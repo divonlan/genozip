@@ -85,14 +85,14 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned line_i,
             const char *after_delta = delta_pos_start + delta_pos_len;
 
             sprintf (vb->line_variant_data.data, "%.*s%s%.*s",
-                     delta_pos_start - *line_start, *line_start,    // substring until \t preceding delta
+                     (int)(delta_pos_start - *line_start), *line_start,    // substring until \t preceding delta
                      pos_str,                           // decoded pos string
                      next - after_delta, after_delta);  // substring starting \t after delta
             
             vb->line_variant_data.len = line_strlen + add_len;
 
             *line_start = next;
-            return;
+            goto cleanup;
         }
 
         next++;
@@ -100,9 +100,11 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned line_i,
     
     *length_remaining = after - next;
 
-    ABORT ("Error: corrupt dv file - at end of variant_data buffer, and no newline was found", "");
+    ABORT ("Error: corrupt dv file - at end of variant_data buffer, and no newline was found%s", "");
 
+cleanup:
     COPY_TIMER(vb->profile.piz_get_variant_data_line);
+    return;
 }
 
 unsigned piz_get_genotype_sample_starts (VariantBlock *vb)
@@ -143,7 +145,7 @@ unsigned piz_get_genotype_sample_starts (VariantBlock *vb)
         }
 
         // verify that there is no data left over after getting all the genotypes of this sample block
-        ASSERT (next_gt_in_sb == beyond_last_gt_in_sb, "Error: expected to find %genotypes, but found more. sb_i=%u, first_line=%u",
+        ASSERT (next_gt_in_sb == beyond_last_gt_in_sb, "Error: expected to find %u genotypes, but found more. sb_i=%u, first_line=%u",
                 vb->num_lines * num_samples_in_sample_block, sb_i, vb->first_line);
     }
 
@@ -332,7 +334,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
         unsigned gt_len;
         if (dl->has_genotype_data) {
             char *tab = strchr (next_gt, '\t');
-            ASSERT (tab, "Error: has_genotype_data=true, but cannot find a tab separator between genotype elements in vb->line_genotype_data", "")
+            ASSERT (tab, "Error: has_genotype_data=true, but cannot find a tab separator between genotype elements in vb->line_genotype_data%s", "")
 
             gt_len = tab - next_gt;
         }
@@ -362,7 +364,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
     *next = '\0'; // end of string;
 
     // sanity check
-    ASSERT (next - dl->line.data == dl->line.len, "Error: unexpected line size: calculated=%u, actual=%u", dl->line.len, next - dl->line.data);
+    ASSERT (next - dl->line.data == dl->line.len, "Error: unexpected line size: calculated=%u, actual=%u", dl->line.len, (unsigned)(next - dl->line.data));
 }
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
@@ -501,7 +503,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
 
 // this is the compute thread entry point. It receives all data of a variant block and processes it
 // in memory to the uncompressed format. This thread then terminates the I/O thread writes the output.
-static void *piz_uncompress_variant_block (VariantBlock *vb)
+static void piz_uncompress_variant_block (VariantBlock *vb)
 {
     START_TIMER;
 
@@ -524,6 +526,8 @@ static void *piz_uncompress_variant_block (VariantBlock *vb)
 void *piz_uncompress_variant_block_thread_entry (void *vb_)
 {
     piz_uncompress_variant_block ((VariantBlock*)vb_);
+
+    return NULL;
 }
 
 void piz_dispatcher (char *z_basename, File *z_file, File *vcf_file, bool concat_mode, bool test_mode, unsigned max_threads)

@@ -55,22 +55,22 @@ void buf_test_overflows(const VariantBlock *vb)
 
         if (buf->memory) {
             if (!buf->name) {
-                fprintf (stderr, "buffer=0x%"PRIx64" : Corrupt Buffer structure - null name\n", (uintptr_t)buf);
+                fprintf (stderr, "buffer=0x%"PRIx64" : Corrupt Buffer structure - null name\n", (unsigned long long)(uintptr_t)buf);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
                 fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%x\n", 
-                         vb ? vb->id : 0, buf_i, (uintptr_t)buf, (uintptr_t)buf->memory, buf->name, buf->param, buf->data);
+                         vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, buf->data);
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u \"%.8s\"\n", 
-                         vb ? vb->id : 0, (uintptr_t)buf, (uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
+                         vb ? vb->id : 0, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
                 fprintf (stderr,"vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u \"%.8s\"\n", 
-                         vb ? vb->id : 0, buf_i, (uintptr_t)buf, (uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
+                         vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
                 
                 corruption = true;
             }
@@ -130,7 +130,7 @@ void buf_display_memory_usage(bool memory_full)
                 stats[num_stats].bytes   = buf->size + 2*(sizeof(long long));
                 stats[num_stats].buffers = 1;
                 num_stats++;
-                ASSERT (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing %u", MAX_MEMORY_STATS);
+                ASSERT (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing MAX_MEMORY_STATS", MAX_MEMORY_STATS);
             }
 
             num_buffers++;
@@ -208,7 +208,7 @@ unsigned buf_alloc (VariantBlock *vb,
 
     // sanity checks
     ASSERT (buf->type != BUF_OVERLAYED, "Error: cannot buf_alloc an overlayed buffer. name=%s", buf->name ? buf->name : "");
-    ASSERT (vb, "Error: null vb", "");
+    ASSERT (vb, "Error: null vb%s", "");
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) 
@@ -230,7 +230,7 @@ unsigned buf_alloc (VariantBlock *vb,
     #endif
             }
 
-            ASSERT (buf->memory, "Error: buf_alloc failed to realloc %u bytes. name=%s param=%u", new_size + 2*sizeof (long long), name, param);
+            ASSERT (buf->memory, "Error: buf_alloc failed to realloc %lu bytes. name=%s param=%u", new_size + 2*sizeof (long long), name, param);
 
             *(long long *)(buf->data + new_size) = OVERFLOW_TRAP; // overflow prortection (underflow protection was copied with realloc)
 
@@ -250,7 +250,7 @@ unsigned buf_alloc (VariantBlock *vb,
     #endif
             }
 
-            ASSERT (buf->memory, "Error: buf_alloc failed to malloc %u bytes. name=%s param=%u", new_size + 2*sizeof (long long), name, param);
+            ASSERT (buf->memory, "Error: buf_alloc failed to malloc %lu bytes. name=%s param=%u", new_size + 2*sizeof (long long), name, param);
 
             buf->data = buf->memory + sizeof (long long);
             buf->size = new_size;
