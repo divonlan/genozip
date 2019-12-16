@@ -2,12 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"path": "bzip2"
-		}
-		{
-			"path": "zlib"
 		}
 	],
 	"settings": {
@@ -32,6 +26,16 @@
 			"utility": "c",
 			"license.h": "c",
 			"sstream": "c"
+		},
+		"files.autoSave": "onFocusChange",
+		"files.exclude": {
+			"zlib/*.o": true,
+			"zlib/*.debug-o": true,
+			"bzip2/*.o": true,
+			"bzip2/*.debug-o": true,
+			"*.o": true,
+			"*.debug-o": true,
+			"*.exe": true
 		}
 	}
 }
