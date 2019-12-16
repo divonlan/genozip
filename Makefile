@@ -14,25 +14,30 @@ OBJ = vcf_header.o zip.o piz.o gloptimize.c buffer.o main.o vcffile.o squeeze.o 
       bzlib/blocksort.o bzlib/bzlib.o bzlib/compress.o bzlib/crctable.o bzlib/decompress.o bzlib/huffman.o bzlib/randtable.o \
       zlib/gzlib.o zlib/gzread.o zlib/inflate.o zlib/inffast.o zlib/zutil.o zlib/inftrees.o zlib/crc32.o zlib/adler32.o 
 
-ODIR=obj
-
-$(ODIR)/%.o: %.c $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
-
-vczip: $(OBJ)
-	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
-
-vcpiz: vczip
-	ln $^ $o
-
-vccat: vczip
-	ln $^ $o
-
-.PHONY: clean
-
 all: vczip vcpiz vccat
 
-clean:
-	rm -f *.o zlib/*.o bzlib/*.o *~ core $(INCDIR)/*~ vczip
+.c.o:
+	@echo Compiling $<
+	@$(CC) -c -o $@ $< $(CFLAGS)
 
+all: vczip vcpiz vccat LICENSE.non-commercial.txt
+
+vczip: $(OBJ)
+	@echo Linking $@
+	@$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+
+vcpiz vccat: vczip
+	@echo Hard linking $@
+	@rm -f $@
+	@ln $^ $@
+
+.PHONY: clean license
+
+LICENSE.non-commercial.txt: vczip
+	@echo Generating $@
+	@vczip -L > $@
+
+clean:
+	@echo Cleaning up
+	@rm -f *.o zlib/*.o bzlib/*.o *~ core vczip vcpiz vccat
 
