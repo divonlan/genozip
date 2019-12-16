@@ -417,6 +417,7 @@ extern void zip_compress_fp_unit_test();
 static inline void exit_assert() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
 #define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_assert(); }}
 #define ASSERTW(condition, format, ...) { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
+#define ABORT(format, ...)  { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_assert();}
 
 #define START_WALLCLOCK       struct timespec wallclock; clock_gettime(CLOCK_REALTIME, &wallclock); 
 #define COPY_WALLCLOCK(res)   struct timespec tb; clock_gettime(CLOCK_REALTIME, &tb); \

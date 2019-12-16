@@ -100,7 +100,7 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned line_i,
     
     *length_remaining = after - next;
 
-    ASSERT (false, "Error: corrupt dv file - at end of variant_data buffer, and no newline was found", "");
+    ABORT ("Error: corrupt dv file - at end of variant_data buffer, and no newline was found", "");
 
     COPY_TIMER(vb->profile.piz_get_variant_data_line);
 }

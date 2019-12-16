@@ -69,6 +69,51 @@ LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@
 	@vczip$(EXE) -L > $@
 
+vczip.tar.gz: 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 clean:
 	@echo Cleaning up
 ifeq ($(OS),Windows_NT)

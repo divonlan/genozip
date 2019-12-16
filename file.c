@@ -37,7 +37,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             ASSERT (file, "%s: cannot open file %s", global_cmd, file->name);
         }
         else         
-            ASSERT (false, "%s: file: %s - file must have a .vcf or .vcf.gz extension", global_cmd, file->name);
+            ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz extension", global_cmd, file->name);
     }
     else { // VCZ
         if (file_has_ext (file->name, ".vcz")) {
@@ -55,7 +55,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             return NULL;
         
         else
-            ASSERT (false, "%s: file: %s - file must have a .vcz extension", global_cmd, file->name);
+            ABORT ("%s: file: %s - file must have a .vcz extension", global_cmd, file->name);
     }
 
     if (mode == READ) {

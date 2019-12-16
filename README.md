@@ -5,7 +5,7 @@ It typically achieves compression of x2 - x5 better that gzip, and is faster tha
 
 The command line options are very much similar to gzip, bzip2 etc, so if you're familiar with these, it works pretty much the same. Try vczip --help to get started.
 
-To build - on Linux, run "make". For Windows, conifguration files for Visual Studio Code are included.
+To build - just run "make". 
 
 Feedback and bug reports: vczip@blackpawventures.com
 

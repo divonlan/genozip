@@ -392,6 +392,8 @@ static void *zip_compress_variant_block (VariantBlock *vb)
 void *zip_compress_variant_block_thread_entry (void *vb_)
 {
     zip_compress_variant_block ((VariantBlock*)vb_);
+    
+    return NULL;
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 

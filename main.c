@@ -219,7 +219,7 @@ static bool main_vczip (const char *vcf_filename,
     else if (pipefd_zip_to_unzip >= 0) {
         z_file = file_fdopen (pipefd_zip_to_unzip, WRITE, PIPE);
     }
-    else ASSERT (false, "Error: No output channel", "");
+    else ABORT ("Error: No output channel", "");
     
     zip_dispatcher (flag_quiet ? NULL : get_basename(vcf_filename), vcf_file, z_file, 
                     flag_concat_mode, pipefd_zip_to_unzip >= 0, max_threads);
