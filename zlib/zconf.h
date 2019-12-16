@@ -506,7 +506,7 @@ typedef uLong FAR uLongf;
 #endif
 
 #ifdef __APPLE__
-#    define z_off64_t __int64
+#    define z_off64_t __int64_t
 #elif !defined(_WIN32) && defined(Z_LARGE64)
 //#if !defined(_WIN32) && defined(Z_LARGE64)
 #  define z_off64_t __off64_t

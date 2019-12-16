@@ -59,7 +59,7 @@ void buf_test_overflows(const VariantBlock *vb)
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
-                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x"PRIx64, 
+                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
                          vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, (unsigned long long)(uintptr_t)buf->data);
                 corruption = true;
             }
