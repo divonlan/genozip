@@ -15,13 +15,15 @@ else
 	SLASH := /
 endif
 
-ZLIB = zlib$(SLASH)
+MAC   = mac$(SLASH)
+ZLIB  = zlib$(SLASH)
 BZLIB = bzlib$(SLASH)
 
 DEPS = vczip.h
 SRC = vcf_header.c zip.c piz.c gloptimize.c buffer.c main.c vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c \
       $(BZLIB)blocksort.c $(BZLIB)bzlib.c $(BZLIB)compress.c $(BZLIB)crctable.c $(BZLIB)decompress.c $(BZLIB)huffman.c $(BZLIB)randtable.c \
-      $(ZLIB)gzlib.c $(ZLIB)gzread.c $(ZLIB)inflate.c $(ZLIB)inffast.c $(ZLIB)zutil.c $(ZLIB)inftrees.c $(ZLIB)crc32.c $(ZLIB)adler32.c 
+      $(ZLIB)gzlib.c $(ZLIB)gzread.c $(ZLIB)inflate.c $(ZLIB)inffast.c $(ZLIB)zutil.c $(ZLIB)inftrees.c $(ZLIB)crc32.c $(ZLIB)adler32.c \
+	  $(MAC)mach_gettime.c
 
 OBJ  := $(SRC:.c=.o)
 

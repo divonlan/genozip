@@ -11,6 +11,10 @@
 #include <math.h>
 #include <time.h>
 
+#ifdef __APPLE__
+#include "mac/mach_gettime.h"
+#endif
+
 #define VCZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the dv file format changes
 
 // this was carefully picked as the optimal number based on testing with 1000-genomes chromosome 22 - 1024 samples:
