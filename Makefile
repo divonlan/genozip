@@ -10,7 +10,7 @@ CFLAGS=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Ofast
 LIBS = -pthread -lm
 
 DEPS = vczip.h
-OBJ = vcf_header.o zip.o piz.o gloptimize.c buffer.o main.o vcffile.o squeeze.o zfile.o segregate.o profiler.o file.o vb.o\
+OBJ = vcf_header.o zip.o piz.o gloptimize.o buffer.o main.o vcffile.o squeeze.o zfile.o segregate.o profiler.o file.o vb.o\
       bzlib/blocksort.o bzlib/bzlib.o bzlib/compress.o bzlib/crctable.o bzlib/decompress.o bzlib/huffman.o bzlib/randtable.o \
       zlib/gzlib.o zlib/gzread.o zlib/inflate.o zlib/inffast.o zlib/zutil.o zlib/inftrees.o zlib/crc32.o zlib/adler32.o 
 
@@ -39,5 +39,5 @@ LICENSE.non-commercial.txt: vczip
 
 clean:
 	@echo Cleaning up
-	@rm -f *.o zlib/*.o bzlib/*.o *~ core vczip vcpiz vccat
+	@rm -f $(OBJ) vczip vcpiz vccat
 
