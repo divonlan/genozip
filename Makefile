@@ -7,7 +7,7 @@
 
 CC=gcc
 CFLAGS=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Ofast
-#CFLAGS=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DDEBUG -g
+CFLAGS_DEBUG=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DDEBUG -g
 LIBS = -pthread -lm
 
 SLASH :=
@@ -38,13 +38,13 @@ all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
 debug: vczip-debug$(EXE)
 
-%.debug-o: %.c vczip.h 
-	@echo Compiling $<
-	@$(CC) -c -o $@ $< $(CFLAGS)
-
 %.o: %.c vczip.h 
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+%.debug-o: %.c vczip.h 
+	@echo Compiling debug $<
+	@$(CC) -c -o $@ $< $(CFLAGS_DEBUG)
 
 all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
