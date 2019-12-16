@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   buffer.c
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
-//   Please see terms and conditions in the file LICENSE.txt
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // memory management - when running the same code by the same thread for another variant block - we reuse
 // the previous variant's block memory. this way we save repetitive malloc/free cycles which might

@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   license.h
 //   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
-//   Please see terms and conditions in the file LICENSE.txt
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 static char *license[] = {
     "This program, \"vczip\", and all documentation, are copyright (C) 2019-2020 Divon M Lan.  All rights reserved.",
