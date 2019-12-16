@@ -1,7 +1,5 @@
-#/bin/bash --norc
-
 # ------------------------------------------------------------------
-#   make.sh
+#   Makefile
 #   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
 #   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
