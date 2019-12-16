@@ -60,7 +60,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
                 return true;
             }
 
-            ASSERT (tab_count != 8, "Error: invalid VCF file - field header line contains a FORMAT field but no samples%s", "");
+            ASSERT0 (tab_count != 8, "Error: invalid VCF file - field header line contains a FORMAT field but no samples");
 
             ASSERT (tab_count == 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 
@@ -137,7 +137,7 @@ bool vcf_header_vcf_to_vcz (VariantBlock *vb,
 
     // case : header not found, but data line found
     else 
-        ASSERT(*first_data_line, "Error: file has no VCF header%s", "");
+        ASSERT0 (*first_data_line, "Error: file has no VCF header");
 
     // case : empty file - not an error (caller will see that *first_data_line is NULL)
     buf_free (&vcf_header_text);

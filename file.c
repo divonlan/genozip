@@ -16,7 +16,7 @@
 
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
-    ASSERT (filename, "Error: filename is null", "");
+    ASSERT0 (filename, "Error: filename is null");
 
     ASSERT (mode==WRITE || access(filename, F_OK)==0, "%s: cannot open %s", global_cmd, filename);
     

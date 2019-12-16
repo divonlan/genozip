@@ -76,7 +76,7 @@ void buf_test_overflows(const VariantBlock *vb)
             }
         }
     }
-    ASSERT (!corruption, "Aborting due to memory corruption%s", "");
+    ASSERT0 (!corruption, "Aborting due to memory corruption");
 }
 
 typedef struct {
@@ -208,7 +208,7 @@ unsigned buf_alloc (VariantBlock *vb,
 
     // sanity checks
     ASSERT (buf->type != BUF_OVERLAYED, "Error: cannot buf_alloc an overlayed buffer. name=%s", buf->name ? buf->name : "");
-    ASSERT (vb, "Error: null vb%s", "");
+    ASSERT0 (vb, "Error: null vb");
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) 
@@ -314,7 +314,7 @@ void buf_free(Buffer *buf)
 
 void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, unsigned start, unsigned max_size /* if 0 copies the entire buffer */)
 {
-    ASSERT (src->data, "Error in buf_copy: src->data is NULL%s", "");
+    ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
     
     unsigned size = max_size ? MIN (max_size, src->size - start) : src->size - start;
 

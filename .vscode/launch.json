@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/vczip-debug.exe",
             
-            // for benchmark files used in paper
+            // for benchmark files used in the paper
 
             // benchmark file1:
             // file1 can be downloaded here:

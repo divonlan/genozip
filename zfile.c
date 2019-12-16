@@ -33,7 +33,7 @@ static void *zfile_bzalloc (void *vb_, int items, int size)
             if (use_buf->size == items * size) break;
         }
     }
-    ASSERT (use_buf, "Error: zfile_bzalloc could not find a free buffer", "");
+    ASSERT0 (use_buf, "Error: zfile_bzalloc could not find a free buffer");
 
     buf_alloc (vb, use_buf, items * size, 1, "compress_bufs", 0);
 
@@ -51,7 +51,7 @@ static void zfile_bzfree (void *vb_, void *addr)
             break;
         }
 
-    ASSERT (i < NUM_COMPRESS_BUFS, "Error: zfile_bzfree failed to find buffer to free", "");
+    ASSERT0 (i < NUM_COMPRESS_BUFS, "Error: zfile_bzfree failed to find buffer to free");
 }
 
 static void zfile_compress(VariantBlock *vb, Buffer *z_data, SectionHeader *header, char *data, SectionType section_type) 
@@ -149,7 +149,7 @@ void zfile_uncompress_section(VariantBlock *vb,
         START_TIMER; // seperate block for another time
 
         int ret = BZ2_bzDecompressInit (&strm, 0, 0);
-        ASSERT (ret == BZ_OK, "Error: BZ2_bzDecompressInit failed", "");
+        ASSERT0 (ret == BZ_OK, "Error: BZ2_bzDecompressInit failed");
 
         strm.next_in   = (char*)section_header + compressed_offset;
         strm.next_out  = uncompressed_data->data;
@@ -267,7 +267,7 @@ void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Bu
 // return true if data was read as requested, false if file has reached EOF and error otherwise
 static bool zfile_read_from_disk (VariantBlock *vb, char *out_str, unsigned len)
 {
-    ASSERT (len, "Error: in zfile_read_from_disk, len is 0", "");
+    ASSERT0 (len, "Error: in zfile_read_from_disk, len is 0");
 
     bool memcpyied = false;
     File *file = vb->z_file; // for code readability
@@ -311,7 +311,7 @@ int zfile_read_one_section (VariantBlock *vb,
     buf_alloc (vb, data, header_offset + header_size, 2, "zfile_read_one_section", 1);
 
     bool success = zfile_read_from_disk (vb, &data->data[header_offset], header_size);
-    ASSERT (success || allow_eof, "Failed to read header", "");
+    ASSERT0 (success || allow_eof, "Failed to read header");
     
     if (!success) return EOF; 
 
@@ -324,8 +324,8 @@ int zfile_read_one_section (VariantBlock *vb,
     // if we expected a new VB and got a VCF header - that's ok - we allow concatenated VCZ files
     bool skip_this_vcf_header = (header->section_type == SEC_VCF_HEADER && section_type == SEC_VARIANT_DATA);
 
-    ASSERT (section_type != SEC_VCF_HEADER || header->section_type == section_type || skip_this_vcf_header,  
-            "Error: Input file is not a vcz file", "");
+    ASSERT0 (section_type != SEC_VCF_HEADER || header->section_type == section_type || skip_this_vcf_header,  
+             "Error: Input file is not a vcz file");
 
     // check that we received the section type we expect, 
     ASSERT (header->section_type == section_type || skip_this_vcf_header,  
@@ -432,7 +432,7 @@ void zfile_update_vcf_header_section_header (File *z_file,
 {
     SectionHeaderVCFHeader vcf_header; // just for measuring the offset (must be static or it will be optimized away)
 
-    ASSERT((char*)&vcf_header.num_lines - (char*)&vcf_header.vcf_data_size == sizeof (long long), "Error: looks like SectionHeaderVCFHeader changed", "");
+    ASSERT0((char*)&vcf_header.num_lines - (char*)&vcf_header.vcf_data_size == sizeof (long long), "Error: looks like SectionHeaderVCFHeader changed");
 
     int ret = fseek (z_file->file, (char*)&vcf_header.vcf_data_size - (char*)&vcf_header, SEEK_SET);
     if (!ret) {
@@ -443,6 +443,6 @@ void zfile_update_vcf_header_section_header (File *z_file,
         fwrite (&header_num_lines, sizeof (long long), 1, z_file->file); 
 
     } else
-        ASSERTW (false, "Warning: failed to update the vcf header section", "");
+        ASSERTW0 (false, "Warning: failed to update the vcf header section");
 }
 

@@ -100,7 +100,7 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned line_i,
     
     *length_remaining = after - next;
 
-    ABORT ("Error: corrupt dv file - at end of variant_data buffer, and no newline was found%s", "");
+    ABORT0 ("Error: corrupt dv file - at end of variant_data buffer, and no newline was found");
 
 cleanup:
     COPY_TIMER(vb->profile.piz_get_variant_data_line);
@@ -334,7 +334,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
         unsigned gt_len;
         if (dl->has_genotype_data) {
             char *tab = strchr (next_gt, '\t');
-            ASSERT (tab, "Error: has_genotype_data=true, but cannot find a tab separator between genotype elements in vb->line_genotype_data%s", "")
+            ASSERT0 (tab, "Error: has_genotype_data=true, but cannot find a tab separator between genotype elements in vb->line_genotype_data");
 
             gt_len = tab - next_gt;
         }

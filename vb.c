@@ -96,7 +96,7 @@ void vb_release_vb (VariantBlock **vb_p)
 VariantBlockPool *vb_construct_pool (unsigned num_vbs, unsigned vb_id_prefix)
 {
     VariantBlockPool *pool = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
-    ASSERT (pool, "Error: failed to calloc pool", "");
+    ASSERT0 (pool, "Error: failed to calloc pool");
 
     pool->num_vbs      = num_vbs;
     pool->vb_id_prefix = vb_id_prefix;
@@ -113,7 +113,7 @@ VariantBlock *vb_get_vb(VariantBlockPool *pool,
 
     if (!pool) { // should only be used for unit testing - memory-leaks a VB
         vb = calloc (1, sizeof(VariantBlock));
-        ASSERT (vb, "Error: failed to calloc vb", "");
+        ASSERT0 (vb, "Error: failed to calloc vb");
     }
     else {
         // see if there's a VB avaiable for recycling

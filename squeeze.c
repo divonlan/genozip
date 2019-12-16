@@ -151,8 +151,8 @@ void unsqueeze (VariantBlock *vb,
         expected_prod *= (i | 1) ; normal_prod *= (normal[i] | 1);
     }
     
-    ASSERT (expected_sum == normal_sum && expected_prod == normal_prod,
-            "Error: unsequeeze failed - index is not a permutation", "");
+    ASSERT0 (expected_sum == normal_sum && expected_prod == normal_prod,
+             "Error: unsequeeze failed - index is not a permutation");
 
    COPY_TIMER (vb->profile.squeeze)
 }

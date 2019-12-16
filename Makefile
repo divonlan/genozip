@@ -6,7 +6,7 @@
 CC=gcc
 CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Ofast
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DDEBUG -g
-LIBS = -pthread -lm
+LIBS = -lpthread -lm
 
 SLASH :=
 ifeq ($(OS),Windows_NT)

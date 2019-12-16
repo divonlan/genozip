@@ -128,7 +128,7 @@ static char *get_basename(const char *fn)
     unsigned fn_len = strlen(fn);
 
     char *fn_copy = malloc (fn_len+1);
-    ASSERT (fn_copy, "Failed to malloc fn_copy%s", "");
+    ASSERT0 (fn_copy, "Failed to malloc fn_copy");
 
     strcpy (fn_copy, fn);
 
@@ -219,7 +219,7 @@ static void main_vczip (const char *vcf_filename,
     else if (pipefd_zip_to_unzip >= 0) {
         z_file = file_fdopen (pipefd_zip_to_unzip, WRITE, PIPE);
     }
-    else ABORT ("Error: No output channel%s", "");
+    else ABORT0 ("Error: No output channel");
     
     zip_dispatcher (flag_quiet ? NULL : get_basename(vcf_filename), vcf_file, z_file, 
                     flag_concat_mode, pipefd_zip_to_unzip >= 0, max_threads);
@@ -345,7 +345,7 @@ void *main_test_uncompress_thread_entry (void *p_)
 
 static void main_test (const char *vcf_filename)
 {
-    ASSERT (vcf_filename, "vczip: filename missing%s", "");
+    ASSERT0 (vcf_filename, "vczip: filename missing");
 
     File *vcf_file = file_open (vcf_filename, READ, VCF);
 
@@ -383,7 +383,7 @@ static void main_test (const char *vcf_filename)
     ASSERT (!err, "Error: failed to create test decompress thread, err=%u", err);
 
     FILE *from_pipe = fdopen (pipefd_unzip_to_main[0], "rb");
-    ASSERT (from_pipe, "Failed to fdopen pipe from decompress%s", "");
+    ASSERT0 (from_pipe, "Failed to fdopen pipe from decompress");
 
     vcffile_compare_pipe_to_file (from_pipe, vcf_file);
 
@@ -465,8 +465,8 @@ int main (int argc, char **argv)
     global_cmd = get_basename(argv[0]); // global var
 
     // verify CPU architecture and compiler is supported
-    ASSERT (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
-            "Error: Unsupported C type lengths, check compiler options%s", "");
+    ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
+             "Error: Unsupported C type lengths, check compiler options");
     
     // runtime endianity (byte order) detection - safer than compile-time
     unsigned test_endianity = 0x01020304;
@@ -584,7 +584,7 @@ int main (int argc, char **argv)
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring --replace / -R option", global_cmd);
         
-        ASSERT (!count || !flag_show_content, "Error: --showcontent can only work on one file at time%s", "");
+        ASSERT0 (!count || !flag_show_content, "Error: --showcontent can only work on one file at time");
 
         switch (command) {
             case COMPRESS   : main_vczip (next_input_file, out_filename, -1, global_max_threads, optind==argc); break;
