@@ -4,4 +4,7 @@
 vczip
 vcpiz
 vccat
-
+1000genomes/*
+data/*
+benchmark.txt
+notes.txt

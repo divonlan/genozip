@@ -144,7 +144,7 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
     char vsize[30], zsize[30];
     long long total_vcf=0, total_z=0;
 
-    printf ("Section stats:\n");
+    printf ("\n\nSection stats:\n");
     printf ("Section                 VCF bytes     %%     VCZ bytes     %%  Ratio\n");
     const char *format = "%21s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
     for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
