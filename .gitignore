@@ -1,1 +1,7 @@
-vczip.exe
+*.exe
+*.o
+*.debug-o
+vczip
+vcpiz
+vccat
+

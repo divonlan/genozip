@@ -33,7 +33,7 @@
 // Memory consumption is linear with the number of threads (each allocated a VB)
 
 #define DEFAULT_MAX_THREADS 8 // maximum compute threads created - one I/O thread, and the rest of compute threads. This can be changed with command line option -@
-
+ 
 #define MAX_MEMORY (1.7*1024*1024*1024) // 1.7GB - so Windows 32bit code doesn't explode at 2GB. TO DO - make this platform specific or get ulimits
 
 //#define PROFILER 

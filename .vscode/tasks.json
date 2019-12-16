@@ -3,20 +3,9 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "Build vczip",
-            "command": "gcc.exe",
-            "args": [
-                //"-g", "-DDEBUG",
-                "-Ofast", 
-                "-Ibzlib", "-Izlib",
-                "main.c", "vcffile.c", "zfile.c", "file.c", "vb.c", "zip.c", "gloptimize.c", "segregate.c",
-                "piz.c", "vcf_header.c", "squeeze.c", "buffer.c", "profiler.c",
-                "bzlib/blocksort.c", "bzlib/bzlib.c", "bzlib/compress.c", "bzlib/crctable.c",
-                "bzlib/decompress.c", "bzlib/huffman.c", "bzlib/randtable.c",
-                "zlib/gzlib.c", "zlib/gzread.c", "zlib/inflate.c", "zlib/inffast.c", "zlib/inftrees.c",
-                "zlib/crc32.c", "zlib/adler32.c", "zlib/zutil.c", 
-                "-o", "vczip.exe"
-            ],
+            "label": "make all (optimized)",
+            "command": "mingw32-make.exe",
+            "args": [ "all" ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -33,20 +22,61 @@
         },
         {
             "type": "shell",
-            "label": "Hard link vcpiz and vccat",
-            "command": "${workspaceRoot}/mklink.bat",
-//            "args": [ "${workspaceRoot}" ]
-
+            "label": "make vczip-debug",
+            "command": "mingw32-make.exe",
+            "args": [ "debug" ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
+            "problemMatcher": [
+                "$gcc"
+            ],
             "group": {
                 "kind": "build",
-                "isDefault": false
+                "isDefault": true
             },
             "presentation": {
                 "clear": true
             }
-        }        
+        },
+        {
+            "type": "shell",
+            "label": "make clean",
+            "command": "mingw32-make.exe",
+            "args": [ "clean" ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "make clean-debug",
+            "command": "mingw32-make.exe",
+            "args": [ "clean-debug" ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        }
+
     ]
 }
