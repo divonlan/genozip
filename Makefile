@@ -7,12 +7,23 @@
 
 CC=gcc
 CFLAGS=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Ofast
+#CFLAGS=-Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DDEBUG -g
 LIBS = -pthread -lm
 
+SLASH :=
+ifeq ($(OS),Windows_NT)
+	SLASH := \\
+else
+	SLASH := /
+endif
+
+ZLIB = zlib$(SLASH)
+BZLIB = bzlib$(SLASH)
+
 DEPS = vczip.h
-OBJ = vcf_header.o zip.o piz.o gloptimize.o buffer.o main.o vcffile.o squeeze.o zfile.o segregate.o profiler.o file.o vb.o\
-      bzlib/blocksort.o bzlib/bzlib.o bzlib/compress.o bzlib/crctable.o bzlib/decompress.o bzlib/huffman.o bzlib/randtable.o \
-      zlib/gzlib.o zlib/gzread.o zlib/inflate.o zlib/inffast.o zlib/zutil.o zlib/inftrees.o zlib/crc32.o zlib/adler32.o 
+OBJ = vcf_header.o zip.o piz.o gloptimize.o buffer.o main.o vcffile.o squeeze.o zfile.o segregate.o profiler.o file.o vb.o \
+      $(BZLIB)blocksort.o $(BZLIB)bzlib.o $(BZLIB)compress.o $(BZLIB)crctable.o $(BZLIB)decompress.o $(BZLIB)huffman.o $(BZLIB)randtable.o \
+      $(ZLIB)gzlib.o $(ZLIB)gzread.o $(ZLIB)inflate.o $(ZLIB)inffast.o $(ZLIB)zutil.o $(ZLIB)inftrees.o $(ZLIB)crc32.o $(ZLIB)adler32.o 
 
 EXE :=
 ifeq ($(OS),Windows_NT)
@@ -21,7 +32,7 @@ endif
 
 all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
-.c.o:
+.c.o: 
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
@@ -49,5 +60,9 @@ LICENSE.non-commercial.txt: vczip$(EXE)
 
 clean:
 	@echo Cleaning up
+ifeq ($(OS),Windows_NT)
+	del /q /f $(OBJ) vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
+else
 	@rm -f $(OBJ) vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
+endif
 
