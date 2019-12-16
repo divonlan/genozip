@@ -345,7 +345,7 @@ void *main_test_uncompress_thread_entry (void *p_)
 
 static void main_test (const char *vcf_filename)
 {
-    ASSERT (vcf_filename, "vczip: filename missing", "");
+    ASSERT (vcf_filename, "vczip: filename missing%s", "");
 
     File *vcf_file = file_open (vcf_filename, READ, VCF);
 

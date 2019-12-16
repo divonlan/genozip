@@ -70,7 +70,7 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, B
         char c = vcffile_get_char (vb);
         
         if (c == EOF) {
-            ASSERT(!str_len, "Invalid VCF file: Expecting file to end with a newline", "");
+            ASSERT(!str_len, "Invalid VCF file: Expecting file to end with a newline%s", "");
 
             file->eof = true;
 
@@ -133,10 +133,10 @@ void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
     const unsigned buf_size = 500000;
 
     char *data_pipe = calloc (buf_size, 1);
-    ASSERT (data_pipe, "Error: Failed to allocate data_pipe", "");
+    ASSERT (data_pipe, "Error: Failed to allocate data_pipe%s", "");
 
     char *data_file = calloc (buf_size, 1);
-    ASSERT (data_file, "Error: Failed to allocate data_file", "");
+    ASSERT (data_file, "Error: Failed to allocate data_file%s", "");
 
     unsigned len_file, len_pipe;
     long long total_len=0;

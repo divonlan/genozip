@@ -59,24 +59,24 @@ void buf_test_overflows(const VariantBlock *vb)
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
-                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%x\n", 
+                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%x", 
                          vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, buf->data);
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
-                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u \"%.8s\"\n", 
-                         vb ? vb->id : 0, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
+                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u \"%.8s\"", 
+                         vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
-                fprintf (stderr,"vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u \"%.8s\"\n", 
+                fprintf (stderr,"vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u \"%.8s\"", 
                          vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
                 
                 corruption = true;
             }
         }
     }
-    ASSERT (!corruption, "Aborting due to memory corruption", "");
+    ASSERT (!corruption, "Aborting due to memory corruption%s", "");
 }
 
 typedef struct {
@@ -314,7 +314,7 @@ void buf_free(Buffer *buf)
 
 void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, unsigned start, unsigned max_size /* if 0 copies the entire buffer */)
 {
-    ASSERT (src->data, "Error in buf_copy: src->data is NULL", 0);
+    ASSERT (src->data, "Error in buf_copy: src->data is NULL%s", "");
     
     unsigned size = max_size ? MIN (max_size, src->size - start) : src->size - start;
 

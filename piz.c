@@ -87,7 +87,7 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned line_i,
             sprintf (vb->line_variant_data.data, "%.*s%s%.*s",
                      (int)(delta_pos_start - *line_start), *line_start,    // substring until \t preceding delta
                      pos_str,                           // decoded pos string
-                     next - after_delta, after_delta);  // substring starting \t after delta
+                     (int)(next - after_delta), after_delta);  // substring starting \t after delta
             
             vb->line_variant_data.len = line_strlen + add_len;
 
