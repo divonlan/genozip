@@ -4,45 +4,21 @@
         {
             "type": "shell",
             "label": "Build vczip",
-            "command": "C:\\mingw-w64\\i686-8.1.0-posix-dwarf-rt_v6-rev0\\mingw32\\bin\\gcc.exe",
+            "command": "gcc.exe",
             "args": [
                 //"-g", "-DDEBUG",
                 "-Ofast", 
-                "-IC:\\Users\\USER\\projects\\vczip\\bzlib",
-                "-IC:\\Users\\USER\\projects\\vczip\\zlib",
-                "C:\\Users\\USER\\projects\\vczip\\main.c",
-                "C:\\Users\\USER\\projects\\vczip\\vcffile.c",
-                "C:\\Users\\USER\\projects\\vczip\\zfile.c",
-                "C:\\Users\\USER\\projects\\vczip\\file.c",
-                "C:\\Users\\USER\\projects\\vczip\\vb.c",
-                "C:\\Users\\USER\\projects\\vczip\\zip.c",
-                "C:\\Users\\USER\\projects\\vczip\\gloptimize.c",
-                "C:\\Users\\USER\\projects\\vczip\\segregate.c",
-                "C:\\Users\\USER\\projects\\vczip\\piz.c",
-                "C:\\Users\\USER\\projects\\vczip\\vcf_header.c",
-                "C:\\Users\\USER\\projects\\vczip\\squeeze.c",
-                "C:\\Users\\USER\\projects\\vczip\\buffer.c",
-                "C:\\Users\\USER\\projects\\vczip\\profiler.c",
-                "C:\\Users\\USER\\projects\\vczip\\bzlib\\blocksort.c",
-                "C:\\Users\\USER\\projects\\vczip\\bzlib\\bzlib.c",
-                "C:\\Users\\USER\\projects\\vczip\\bzlib\\compress.c",
-                "C:\\Users\\USER\\projects\\vczip\\bzlib\\crctable.c",
-                "C:\\Users\\USER\\projects\\vczip\\bzlib\\decompress.c",
-                "C:\\Users\\USER\\projects\\vczip\\bzlib\\huffman.c",
-                "C:\\Users\\USER\\projects\\vczip\\bzlib\\randtable.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\gzlib.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\gzread.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\inflate.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\inffast.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\inftrees.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\crc32.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\adler32.c",
-                "C:\\Users\\USER\\projects\\vczip\\zlib\\zutil.c", // for malloc and free - which we should replace
-                "-o",
-                "C:\\Users\\USER\\projects\\vczip\\vczip.exe"
+                "-Ibzlib", "-Izlib",
+                "main.c", "vcffile.c", "zfile.c", "file.c", "vb.c", "zip.c", "gloptimize.c", "segregate.c",
+                "piz.c", "vcf_header.c", "squeeze.c", "buffer.c", "profiler.c",
+                "bzlib/blocksort.c", "bzlib/bzlib.c", "bzlib/compress.c", "bzlib/crctable.c",
+                "bzlib/decompress.c", "bzlib/huffman.c", "bzlib/randtable.c",
+                "zlib/gzlib.c", "zlib/gzread.c", "zlib/inflate.c", "zlib/inffast.c", "zlib/inftrees.c",
+                "zlib/crc32.c", "zlib/adler32.c", "zlib/zutil.c", 
+                "-o", "vczip.exe"
             ],
             "options": {
-                "cwd": "C:\\mingw-w64\\i686-8.1.0-posix-dwarf-rt_v6-rev0\\mingw32\\bin"
+                "cwd": "${workspaceRoot}"
             },
             "problemMatcher": [
                 "$gcc"
@@ -57,20 +33,20 @@
         },
         {
             "type": "shell",
-            "label": "gcc.exe build active file",
-            "command": "C:\\mingw-w64\\i686-8.1.0-posix-dwarf-rt_v6-rev0\\mingw32\\bin\\gcc.exe",
-            "args": [
-                "-g",
-                "${file}",
-                "-o",
-                "${fileDirname}\\${fileBasenameNoExtension}.exe"
-            ],
+            "label": "Hard link vcpiz and vccat",
+            "command": "${workspaceRoot}/mklink.bat",
+//            "args": [ "${workspaceRoot}" ]
+
             "options": {
-                "cwd": "C:\\mingw-w64\\i686-8.1.0-posix-dwarf-rt_v6-rev0\\mingw32\\bin"
+                "cwd": "${workspaceRoot}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
             },
             "presentation": {
                 "clear": true
             }
-        }
+        }        
     ]
 }
