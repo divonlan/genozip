@@ -424,7 +424,7 @@ static inline void exit_assert() { exit(1); }// an exit function so we can put a
 #define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_assert(); }}
 #define ASSERT0(condition, string)      { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_assert(); }}
 #define ASSERTW(condition, format, ...) { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
-#define ASSERTW0(condition, string)     { if (!(condition)) { fprintf (stderr, "\n%s\n", string); }
+#define ASSERTW0(condition, string)     { if (!(condition)) { fprintf (stderr, "\n%s\n", string); } }
 #define ABORT(format, ...)              { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_assert();}
 #define ABORT0(string)                  { fprintf (stderr, "\n%s\n", string); exit_assert();}
 
