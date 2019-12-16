@@ -46,7 +46,7 @@ debug: vczip-debug$(EXE)
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE) LICENSE.non-commercial.txt
+all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
 vczip$(EXE): $(OBJ)
 	@echo Linking $@
