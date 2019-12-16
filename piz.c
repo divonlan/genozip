@@ -591,7 +591,7 @@ void piz_dispatcher (char *z_basename, File *z_file, File *vcf_file, bool concat
             // note: the first variant block is always done on the main thread, so we can measure
             // memory consumption and reduce the number of compute threads and/or num_lines in subsequent vbs
             if (max_threads > 1 
-#if __WIN32__
+#if defined _WIN32 && ! defined _WIN64 // note: _WIN32 is defined for both Windows 32 & 64 bit
                 && variant_block_i > 1
 #endif
                ) {

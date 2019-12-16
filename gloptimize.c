@@ -44,7 +44,7 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
         // In an optimized GL, other fields are guaranteed to start with a minus sign.
         if (*data == '0') { 
 
-            if (*(data+1) == '1') {
+            if (data[1] == '1') {
                 rounding_error_correction = 1;
                 data += 2;
                 (*gl_len) += 2;
@@ -57,16 +57,16 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
             
             ASSERT (*gl_len <= MAX_GL_LEN, "Optimized gl subfield is %u characters exceeding allowed maximum of %u", *gl_len, MAX_GL_LEN);
 
-            if (*(data-1) != ',' && *(data-1) != ':' && *(data-1) != '\t') return -1; // not an optimized GL - series of 0s should have been termianted by a , or : or \t
+            if (data[-1] != ',' && data[-1] != ':' && data[-1] != '\t') return -1; // not an optimized GL - series of 0s should have been termianted by a , or : or \t
             *gl_start = start;
 
             continue;
         }
 
         // get the floating point number - it is expected to be -*.**** (a minus sign, one integer, decimal) if this GL has optimization
-        if (*data != '-' || *(data+2) != '.') return -1;
+        if (data[0] != '-' || data[2] != '.') return -1;
 
-        double gl = 0 - (*(data+1) - '0'); // nagative integer part
+        double gl = 0 - (data[1] - '0'); // nagative integer part
         data += 3;
 
         double divisor = 10.0;
@@ -79,7 +79,7 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
 
         data++; // skip separator
 
-    } while (*(data-1) != ':' && *(data-1) != '\t');
+    } while (data[-1] != ':' && data[-1] != '\t');
 
     if (! *gl_len) return -1; // there is no optimed value here
 
@@ -128,9 +128,9 @@ void gl_optimize_do(VariantBlock *vb, char *data, unsigned data_len, unsigned gl
         char *gl_start = data;
 
         // we expect all numbers to be -*.**** : mandatory -, one integer, mandatory . and a variable number of decimals
-        if (*data != '-' || *(data+2) != '.') goto cleanup;
+        if (data[0] != '-' || data[2] != '.') goto cleanup;
 
-        double gl = *(data+1) - '0'; // integer part
+        double gl = data[1] - '0'; // integer part
         data += 3;
    
         double divisor = 10.0;
@@ -150,7 +150,7 @@ void gl_optimize_do(VariantBlock *vb, char *data, unsigned data_len, unsigned gl
         data++; // skip the seperator
     }
 
-    if (*(data-1) == ',') goto cleanup; // more than MAX_NUM_GL_VALUES - sorry, can't optimize this
+    if (data[-1] == ',') goto cleanup; // more than MAX_NUM_GL_VALUES - sorry, can't optimize this
 
     if (*(best_gl_start+1) == '.') goto cleanup; // we don't currently support the numeric format "-.001" (no integer) - we can in the future, if there's a need
 
@@ -220,12 +220,12 @@ int gl_optimize_get_gl_subfield_index(const char *data)
 {
     const char *start_str = data;
     do {
-        if (*data=='G' && *(data+1)=='L')
+        if (data[0]=='G' && data[1]=='L')
             return 1 + (data - start_str) / 3;
 
         data += 3;
     } 
-    while (*(data-1) != '\t');
+    while (data[-1] != '\t' && data[-1] != '\n');
 
     return 0; // no GL
 }
