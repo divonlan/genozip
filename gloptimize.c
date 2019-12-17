@@ -120,8 +120,8 @@ void gl_optimize_do(VariantBlock *vb, char *data, unsigned data_len, unsigned gl
 
 #   define MAX_NUM_GL_VALUES 32 /* for normal one-alt diploids only 3 are used */
     double best_gl=10000000 /* initialize high value */;
-    char *best_gl_start;
-    unsigned best_gl_len;
+    char *best_gl_start=NULL;
+    unsigned best_gl_len=0;
 
     unsigned gl_i; for (gl_i=0; gl_i < MAX_NUM_GL_VALUES; gl_i++) {
 

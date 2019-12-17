@@ -23,7 +23,6 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     File *file = calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
     file->name = filename; // usually comes from the command line - cannot be freed
-    unsigned fn_len = strlen ((char*)filename);
 
     if (expected_type == VCF) {
         if (file_has_ext (file->name, ".vcf")) {

@@ -142,9 +142,6 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
     // build sample block genetype data
     char *dst_next = vb->genotype_one_section_data.data;
     
-    const char *first_gt_in_sb = ((char**)vb->genotype_sample_block_line_starts_buf.data)[sb_i];
-    unsigned first_gt_in_sb_len = strchr (first_gt_in_sb, '\t') - first_gt_in_sb + 1; // length including the \t
-
     // move the GT items from the line data to the permuted data - with each 
     // sample block of gt data containing the data in TRANSPOSED order - i.e. first
     // the gt data for all the variants for sample 1, then all of samples 2 etc.
@@ -334,7 +331,7 @@ static void *zip_compress_variant_block (VariantBlock *vb)
 
     // if testing, make a copy of the original lines read from the file, to compare to the result of vunblocking later
     Buffer *lines_orig = NULL;
-    unsigned max_genotype_section_len;
+    unsigned max_genotype_section_len=0;
 
     // split each lines in this variant block to its components
     segregate_all_data_lines (vb, lines_orig);

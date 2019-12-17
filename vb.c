@@ -154,7 +154,7 @@ static void vb_human_time (unsigned secs, char *str /* out */)
 
 
 void vb_show_progress(double *last_percent, const File *file, long long vcf_data_written_so_far,
-                      long long bytes_compressed, // may be 0
+                      uint64_t bytes_compressed, // may be 0
                       unsigned seconds_so_far, bool done,
                       bool test_mode)
 {
@@ -162,7 +162,7 @@ void vb_show_progress(double *last_percent, const File *file, long long vcf_data
 
 #ifndef PROFILER
 
-    long long total, sofar;
+    uint64_t total, sofar;
     if (file->vcf_data_size) { // if we have the VCF data size, go by it 
         total = file->vcf_data_size;
         sofar = vcf_data_written_so_far;
@@ -200,7 +200,7 @@ void vb_show_progress(double *last_percent, const File *file, long long vcf_data
         if (!done) {
 
             // time remaining
-            char time_str[70], progress[70];
+            char time_str[70], progress[100];
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             vb_human_time (secs, time_str);
 

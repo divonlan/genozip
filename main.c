@@ -142,7 +142,7 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
     const SectionType secs[] = {SEC_VCF_HEADER, SEC_VARIANT_DATA, SEC_HAPLOTYPE_DATA, SEC_GENOTYPE_DATA, SEC_PHASE_DATA, SEC_STATS_HT_SEPERATOR};
     const char *sec_names[] = {"VCF header", "Columns 1-9", "Allele values", "Other subfields", "Phasing char","Allele separator char"};
     char vsize[30], zsize[30];
-    long long total_vcf=0, total_z=0;
+    uint64_t total_vcf=0, total_z=0;
 
     printf ("\n\nSection stats:\n");
     printf ("Section                 VCF bytes     %%     VCZ bytes     %%  Ratio\n");
@@ -470,7 +470,7 @@ int main (int argc, char **argv)
     
     // runtime endianity (byte order) detection - safer than compile-time
     unsigned test_endianity = 0x01020304;
-    global_little_endian = *(unsigned char*)&test_endianity==0x04; // in big endian it is 0x01;
+    global_little_endian = *(uint8_t*)&test_endianity==0x04; // in big endian it is 0x01;
 
     // process command line options
     while (1) {
@@ -490,7 +490,7 @@ int main (int argc, char **argv)
             {"version",    no_argument,       &command, VERSION     },
             {"compress",   no_argument,       &command, COMPRESS    },
             {"threads",    required_argument, 0, '@'                },
-            {"gzip",       no_argument,       &flag_gzip            },
+            {"gzip",       no_argument,       &flag_gzip, 1         },
             {"output",     required_argument, 0, 'o'                }, 
             {"show-content",no_argument,      &flag_show_content, 1 }, 
             {0, 0, 0, 0                                             },

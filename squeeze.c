@@ -27,8 +27,8 @@ unsigned squeeze_len(unsigned int len)
 int min (int a, int b) { return a < b ? a : b; }
 
 void squeeze (VariantBlock *vb,
-              unsigned char *squeezed, // memory should be pre-allocated by caller
-              unsigned short *squeezed_checksum,
+              uint8_t *squeezed, // memory should be pre-allocated by caller
+              uint16_t *squeezed_checksum,
               const unsigned *normal, 
               unsigned normal_len)
 {
@@ -52,7 +52,7 @@ void squeeze (VariantBlock *vb,
         while (num_remaining_bits_this_entry) {
             unsigned num_bits_this_iteration = min (num_remaining_bits_this_entry, 8 - next_squeezed_bit_index);
             unsigned mask = ((1<<num_bits_this_iteration)-1);
-            unsigned char bits_to_add = (unsigned char)(val & mask);
+            uint8_t bits_to_add = (uint8_t)(val & mask);
 
             squeezed[next_squeezed_byte_index] |= bits_to_add << next_squeezed_bit_index;
 
@@ -70,12 +70,12 @@ void squeeze (VariantBlock *vb,
 
     *squeezed_checksum = 0;
     for (unsigned i=0; i < squeezed_len; i++)
-        (*squeezed_checksum) += (unsigned short)squeezed[i];
+        (*squeezed_checksum) += (uint16_t)squeezed[i];
 
     COPY_TIMER (vb->profile.squeeze)
 }
 
-static unsigned unsqueeze_get_number(const unsigned char *squeezed, unsigned start_bit, unsigned end_bit)
+static unsigned unsqueeze_get_number(const uint8_t *squeezed, unsigned start_bit, unsigned end_bit)
 {
     unsigned number = 0;
 
@@ -85,12 +85,12 @@ static unsigned unsqueeze_get_number(const unsigned char *squeezed, unsigned sta
     // if number is contained entirely within a single byte
     if (start_byte == end_byte) {
         unsigned num_high_bits_to_mask_out = ((end_bit+1) % 8);
-        unsigned char mask = num_high_bits_to_mask_out ? (1 << num_high_bits_to_mask_out) - 1 : 0xff;
+        uint8_t mask = num_high_bits_to_mask_out ? (1 << num_high_bits_to_mask_out) - 1 : 0xff;
         return (mask & squeezed[start_byte]) >> (start_bit % 8);
     }
 
     // number spans multiple bytes
-    unsigned bits_so_far;
+    unsigned bits_so_far=0;
     for (unsigned byte_i=start_byte; byte_i <= end_byte ; byte_i++) {
 
         // in start_byte, we might only use the MSb's
@@ -118,17 +118,17 @@ static unsigned unsqueeze_get_number(const unsigned char *squeezed, unsigned sta
 
 void unsqueeze (VariantBlock *vb,
                 unsigned *normal, // memory should be pre-allocated by caller
-                const unsigned char *squeezed, 
-                unsigned short squeezed_checksum,
+                const uint8_t *squeezed, 
+                uint16_t squeezed_checksum,
                 unsigned normal_len)
 {
     START_TIMER;
     
     unsigned squeezed_len = squeeze_len (normal_len);
 
-    unsigned short my_squeezed_checksum = 0;
+    uint16_t my_squeezed_checksum = 0;
     for (unsigned i=0; i < squeezed_len; i++)
-        my_squeezed_checksum += (unsigned short)squeezed[i];
+        my_squeezed_checksum += (uint16_t)squeezed[i];
 
     ASSERT (squeezed_checksum == my_squeezed_checksum, "Error: failed squeezed checksum. Expected: %u seeing: %u", squeezed_checksum, my_squeezed_checksum);
 
@@ -160,10 +160,10 @@ void unsqueeze (VariantBlock *vb,
 void squeeze_unit_test()
 {
     unsigned normal[] = {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31};
-    unsigned char squeezed[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+    uint8_t squeezed[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
     unsigned unsqueezed[32];
 
-    unsigned short checksum;
+    uint16_t checksum;
 
     VariantBlock vb;
     squeeze(&vb, squeezed, &checksum, normal, 32);

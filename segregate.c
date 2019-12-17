@@ -128,7 +128,7 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
         if (ploidy > 1 && ht_i < ploidy-1) {
             
             PhaseType cell_phase_type = *(str++);
-            PhaseType ht0_phase_type;
+            PhaseType ht0_phase_type = PHASE_UNKNOWN;
             len--;
 
             ASSERT (cell_phase_type == '|' || cell_phase_type == '/', "Error: invalid VCF file - line %u - unable to parse sample %u: expecting a | or / but seeing %c", line_i, sample_i+1, cell_phase_type);
@@ -227,8 +227,8 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
     
     enum {DONE, VARIANT, GENOTYPE, HAPLOTYPE} area = VARIANT;
     char *area_start = dl->line.data;
-    long long pos_delta; // delta between POS in this row and the previous row
-    const char *pos_start; unsigned pos_len; // start and length of pos field
+    long long pos_delta=0; // delta between POS in this row and the previous row
+    const char *pos_start=NULL; unsigned pos_len=0; // start and length of pos field
     bool ploidy_overflow = false;
 
     char *c; for (c = dl->line.data; *c && area != DONE; c++) {
@@ -310,7 +310,6 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
 
     // update lengths
     if (dl->has_haplotype_data) {
-        unsigned a = global_num_samples * vb->ploidy;
         vb->line_haplotype_data.len = global_num_samples * vb->ploidy;
 
         if (dl->phase_type == PHASE_MIXED_PHASED) 
@@ -366,12 +365,9 @@ void segregate_data_line_unit_test()
     buf_alloc (vb, &data_line->line, strlen(test_data) + 1, 0, "segregate_data_line_unit_test0", 0);
     strcpy (data_line->line.data, test_data);
     
-    unsigned line_len = strlen(test_data) + 2; // maximum length of any part of the line (leave room for terminator eg \n or \t and a \0)
-
     unsigned line_i = 555;
 
     segregate_data_line (NULL, data_line, line_i);
-    unsigned stophere=1;
 }
 
 static void segregate_update_vb_from_dl (VariantBlock *vb, DataLine *dl)
@@ -442,7 +438,7 @@ void segregate_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testi
 
     unsigned num_ploidy_overlows = 0;
 
-    for (int vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+    for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
         DataLine *dl = &vb->data_lines[vb_line_i];
 

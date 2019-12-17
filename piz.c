@@ -51,9 +51,9 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned line_i,
     START_TIMER;
 
     // decoding the delta-encouded value of the POS field
-    const char *delta_pos_start; // start of delta-POS field
-    unsigned delta_pos_len; // length of encoded delta-pos
-    int add_len; // how much more (or less) characters do we need in the string after decoding POS?
+    const char *delta_pos_start=0; // start of delta-POS field
+    unsigned delta_pos_len=0; // length of encoded delta-pos
+    int add_len=0; // how much more (or less) characters do we need in the string after decoding POS?
     char pos_str[22]; // decoded POS value
 
     const char *next = *line_start;
@@ -80,7 +80,7 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned line_i,
             unsigned line_strlen = next - *line_start; // inc. the newline, not including \0
 
             buf_alloc (vb, &vb->line_variant_data, line_strlen + add_len + 1 /* +1 sprintf adds a \0 */, 
-                         1, "line_variant_data", 0);
+                       1, "line_variant_data", 0);
 
             const char *after_delta = delta_pos_start + delta_pos_len;
 
@@ -303,7 +303,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
         // add haplotype data - ploidy haplotypes per sample 
         if (dl->has_haplotype_data) {
 
-            PhaseType phase = (vb->phase_type == PHASE_MIXED_PHASED ? vb->line_phase_data.data[sample_i]
+            PhaseType phase = (vb->phase_type == PHASE_MIXED_PHASED ? (PhaseType)vb->line_phase_data.data[sample_i]
                                                                     : vb->phase_type);
             ASSERT (phase=='/' || phase=='|' || phase=='*', "Error: invalid phase %c line_i=%u sample_i=%u", phase, line_i, sample_i+1);
 
@@ -382,7 +382,7 @@ void piz_reconstruct_line_components (VariantBlock *vb)
         buf_alloc (vb, &vb->line_phase_data, global_num_samples, 1, "line_phase_data", 0);
 
     // initialize haplotype stuff
-    const char **ht_columns_data;
+    const char **ht_columns_data=NULL;
     if (vb->has_haplotype_data) {
 
         //  memory - realloc for exact size, add 7 because depermuting_loop works on a word (32/64 bit) boundary
@@ -404,7 +404,7 @@ void piz_reconstruct_line_components (VariantBlock *vb)
         vb->line_haplotype_data.len = vb->line_genotype_data.len = vb->line_phase_data.len = 0;
 
         // de-permute variant data into vb->line_variant_data
-        unsigned gl_subfield; 
+        unsigned gl_subfield=0; 
         piz_get_variant_data_line (vb, line_i, &variant_data_length_remaining, &variant_data_next_line, &gl_subfield);
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)

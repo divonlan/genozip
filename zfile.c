@@ -30,7 +30,7 @@ static void *zfile_bzalloc (void *vb_, int items, int size)
    for (unsigned i=0; i < NUM_COMPRESS_BUFS ; i++) {
         if (!buf_is_allocated (&bufs[i])) {
             use_buf = &bufs[i];
-            if (use_buf->size == items * size) break;
+            if (use_buf->size == (unsigned)(items * size)) break;
         }
     }
     ASSERT0 (use_buf, "Error: zfile_bzalloc could not find a free buffer");
@@ -240,7 +240,7 @@ void zfile_compress_variant_data (VariantBlock *vb)
     vardata_header->ploidy                  = ENDN16 (vb->ploidy);
     vardata_header->vcf_data_size           = ENDN32 (vb->vcf_data_size);
 
-    unsigned short haplotype_index_checksum;
+    uint16_t haplotype_index_checksum;
     squeeze (vb, vardata_header->haplotype_index, &haplotype_index_checksum,
              (unsigned *)vb->haplotype_permutation_index.data, 
              vb->num_haplotypes_per_line);
@@ -427,8 +427,8 @@ bool zfile_read_one_vb (VariantBlock *vb)
 // the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
 // when we're done
 void zfile_update_vcf_header_section_header (File *z_file, 
-                                             long long vcf_data_size,
-                                             long long vcf_num_lines)
+                                             uint64_t vcf_data_size,
+                                             uint64_t vcf_num_lines)
 {
     SectionHeaderVCFHeader vcf_header; // just for measuring the offset (must be static or it will be optimized away)
 
@@ -436,11 +436,11 @@ void zfile_update_vcf_header_section_header (File *z_file,
 
     int ret = fseek (z_file->file, (char*)&vcf_header.vcf_data_size - (char*)&vcf_header, SEEK_SET);
     if (!ret) {
-        long long header_vcf_data_size = ENDN64(vcf_data_size);
-        fwrite (&header_vcf_data_size, sizeof (long long), 1, z_file->file); 
+        uint64_t header_vcf_data_size = ENDN64(vcf_data_size);
+        fwrite (&header_vcf_data_size, sizeof (header_vcf_data_size), 1, z_file->file); 
 
-        long long header_num_lines = ENDN64(vcf_num_lines);
-        fwrite (&header_num_lines, sizeof (long long), 1, z_file->file); 
+        uint64_t header_num_lines = ENDN64(vcf_num_lines);
+        fwrite (&header_num_lines, sizeof (header_num_lines), 1, z_file->file); 
 
     } else
         ASSERTW0 (false, "Warning: failed to update the vcf header section");

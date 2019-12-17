@@ -24,7 +24,7 @@
 static Buffer **buffer_lists = NULL; 
 static unsigned num_buffer_lists = 0;
 
-char *buf_human_readable_size (long long size, char *str /* out */)
+char *buf_human_readable_size (uint64_t size, char *str /* out */)
 {
     if      (size > (1ULL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1ULL << 40));
     else if (size > (1ULL << 30)) sprintf (str, "%3.1lf GB", ((double)size) / (double)(1ULL << 30));
@@ -55,22 +55,22 @@ void buf_test_overflows(const VariantBlock *vb)
 
         if (buf->memory) {
             if (!buf->name) {
-                fprintf (stderr, "buffer=0x%"PRIx64" : Corrupt Buffer structure - null name\n", (unsigned long long)(uintptr_t)buf);
+                fprintf (stderr, "buffer=0x%"PRIx64" : Corrupt Buffer structure - null name\n", (uint64_t)(uintptr_t)buf);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
                 fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
-                         vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, (unsigned long long)(uintptr_t)buf->data);
+                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, (uint64_t)(uintptr_t)buf->data);
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u \"%.8s\"", 
-                         vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
+                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
                 fprintf (stderr,"vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u \"%.8s\"", 
-                         vb ? vb->id : 0, buf_i, (unsigned long long)(uintptr_t)buf, (unsigned long long)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
+                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
                 
                 corruption = true;
             }
@@ -230,7 +230,7 @@ unsigned buf_alloc (VariantBlock *vb,
     #endif
             }
 
-            ASSERT (buf->memory, "Error: buf_alloc failed to realloc %lu bytes. name=%s param=%u", new_size + 2*sizeof (long long), name, param);
+            ASSERT (buf->memory, "Error: buf_alloc failed to realloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
 
             *(long long *)(buf->data + new_size) = OVERFLOW_TRAP; // overflow prortection (underflow protection was copied with realloc)
 
@@ -250,7 +250,7 @@ unsigned buf_alloc (VariantBlock *vb,
     #endif
             }
 
-            ASSERT (buf->memory, "Error: buf_alloc failed to malloc %lu bytes. name=%s param=%u", new_size + 2*sizeof (long long), name, param);
+            ASSERT (buf->memory, "Error: buf_alloc failed to malloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
 
             buf->data = buf->memory + sizeof (long long);
             buf->size = new_size;

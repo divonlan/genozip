@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include <time.h>
+#include <inttypes.h>
 
 #ifdef __APPLE__
 #include "mac/mach_gettime.h"
@@ -53,13 +54,13 @@ typedef enum {
 } SectionType;
 #define NUM_SEC_TYPES 6
 
-// Section headers - unsigned is 32 bit, unsigned short is 16 bit, little endian
+// Section headers - big endian
 
 typedef struct  __attribute__((__packed__)) {
-    unsigned char section_type;
-    unsigned compressed_offset; // number of bytes from the start of the header that is the start of compressed data
-    unsigned data_compressed_len;
-    unsigned data_uncompressed_len;
+    uint8_t  section_type;
+    uint32_t compressed_offset; // number of bytes from the start of the header that is the start of compressed data
+    uint32_t data_compressed_len;
+    uint32_t data_uncompressed_len;
 } SectionHeader; 
 
 // The VCF header section appears once in the file, and includes the VCF file header 
@@ -71,12 +72,12 @@ typedef struct  __attribute__((__packed__)) {
 
 typedef struct  __attribute__((__packed__)) {
     SectionHeader h;
-    unsigned magic; 
-    unsigned char vczip_version;
-    unsigned char compression_alg;
-    long long vcf_data_size; // number of bytes in the original VCF file
-    long long num_lines;     // number of variants (data lines) in the original vCF file
-    unsigned num_samples;             // number of samples in the original VCF file
+    uint32_t magic; 
+    uint8_t  vczip_version;
+    uint8_t  compression_alg;
+    uint64_t vcf_data_size; // number of bytes in the original VCF file
+    uint64_t num_lines;     // number of variants (data lines) in the original vCF file
+    uint32_t num_samples;             // number of samples in the original VCF file
     char created [FILE_METADATA_LEN];
     char modified[FILE_METADATA_LEN];
 } SectionHeaderVCFHeader; 
@@ -94,23 +95,23 @@ typedef struct  __attribute__((__packed__)) {
  
 typedef struct  __attribute__((__packed__)) {
     SectionHeader h;
-    unsigned first_line;                  // line (starting from 1) of this variant block in the VCF file
-    unsigned short num_lines;             // number of variants in this block
-    unsigned char phase_type;
+    uint32_t first_line;                  // line (starting from 1) of this variant block in the VCF file
+    uint16_t num_lines;             // number of variants in this block
+    uint8_t phase_type;
     
     // flags
-    unsigned char has_genotype_data : 1;  // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
-    unsigned char for_future_use    : 7;
+    uint8_t has_genotype_data : 1;  // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
+    uint8_t for_future_use    : 7;
 
-    unsigned num_samples;
-    unsigned num_haplotypes_per_line;     // 0 if no haplotypes
-    unsigned num_sample_blocks;
-    unsigned num_samples_per_block;
-    unsigned short ploidy;
-    unsigned vcf_data_size;               // size of variant block as it appears in the source file
-    unsigned z_data_bytes;                // total bytes of this variant block in the dv file including all sections and their headers
-    unsigned short haplotype_index_checksum;
-    unsigned char haplotype_index[]    ;  // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
+    uint32_t num_samples;
+    uint32_t num_haplotypes_per_line;     // 0 if no haplotypes
+    uint32_t num_sample_blocks;
+    uint32_t num_samples_per_block;
+    uint16_t ploidy;
+    uint32_t vcf_data_size;               // size of variant block as it appears in the source file
+    uint32_t z_data_bytes;                // total bytes of this variant block in the dv file including all sections and their headers
+    uint16_t haplotype_index_checksum;
+    uint8_t haplotype_index[]    ;  // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
 } SectionHeaderVariantData; 
 
 typedef struct {
@@ -146,30 +147,30 @@ typedef struct {
     const char *name;
     FileType type;
     // these relate to actual bytes on the disk
-    long long disk_size; // 0 if not known (eg stdin)
-    long long disk_so_far;  // data read/write to/from "disk" (using fread/fwrite)
+    uint64_t disk_size; // 0 if not known (eg stdin)
+    uint64_t disk_so_far;  // data read/write to/from "disk" (using fread/fwrite)
 
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
-    long long vcf_data_size;    // VCF: size of the VCF data (if known)
+    uint64_t vcf_data_size;    // VCF: size of the VCF data (if known)
                                          // VCZ: VCZ: size of original VCF data in the VCF file currently being processed
-    long long vcf_data_so_far;  // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
+    uint64_t vcf_data_so_far;  // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
                                          // VCZ: VCF data so far of original VCF file currently being processed
 
     // Used for READING VCF/VCF_GZ files: stats used to optimize memory allocation
     double avg_header_line_len, avg_data_line_len;// average length of data line so far. 
-    unsigned header_lines_so_far, data_lines_so_far; // number of lines read so far
+    uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
 
     // Used for WRITING VCZ files
-    long long disk_at_beginning_of_this_vcf_file; // the value of disk_size when starting to read this vcf file
-    long long vcf_concat_data_size; // concatenated vcf_data_size of all files compressed
-    long long num_lines;            // number of lines in concatenated (or single) vcf file
+    uint64_t disk_at_beginning_of_this_vcf_file; // the value of disk_size when starting to read this vcf file
+    uint64_t vcf_concat_data_size; // concatenated vcf_data_size of all files compressed
+    uint64_t num_lines;            // number of lines in concatenated (or single) vcf file
 
     // Information content stats - how many bytes does this file have in each section type
-    long long section_bytes[6];   
+    uint64_t section_bytes[6];   
 
     // USED FOR READING ALL FILES
 #   define READ_BUFFER_SIZE (1<<19) // 512KB
-    unsigned next_read, last_read; // indices into read_buffer
+    uint32_t next_read, last_read; // indices into read_buffer
     bool eof; // we reached EOF
     char read_buffer[]; // only allocated for mode=READ files
     
@@ -321,7 +322,7 @@ extern unsigned vb_num_sections(VariantBlock *vb);
 extern void vb_release_vb (VariantBlock **vb_p);
 
 extern void vb_show_progress(double *last_percent, const File *file, long long vcf_data_written_so_far,                           
-                             long long bytes_compressed, // may be 0
+                             uint64_t bytes_compressed, // may be 0
                              unsigned seconds_so_far, bool done, bool test_mode);
 
 extern void vb_adjust_max_threads_by_vb_size(const VariantBlock *vb, unsigned *max_threads, bool test_mode);
@@ -354,18 +355,18 @@ extern int zfile_read_one_section (VariantBlock *vb,
                                    bool allow_eof);
 
 extern void zfile_uncompress_section(VariantBlock *vb, const void *section_header, Buffer *uncompressed_data, SectionType expected_section_type);
-extern void zfile_update_vcf_header_section_header (File *z_file, long long vcf_data_size, long long vcf_num_lines);
+extern void zfile_update_vcf_header_section_header (File *z_file, uint64_t vcf_data_size, uint64_t vcf_num_lines);
 
 extern void squeeze (VariantBlock *vb,
-                     unsigned char *dst, // memory should be pre-allocated by caller
-                     unsigned short *squeezed_checksum,
+                     uint8_t *dst, // memory should be pre-allocated by caller
+                     uint16_t *squeezed_checksum,
                      const unsigned *src, 
                      unsigned src_len);
 
 extern void unsqueeze (VariantBlock *vb,
                        unsigned *normal, // memory should be pre-allocated by caller
-                       const unsigned char *squeezed, 
-                       unsigned short squeezed_checksum,
+                       const uint8_t *squeezed, 
+                       uint16_t squeezed_checksum,
                        unsigned normal_len);
 
 extern unsigned squeeze_len(unsigned int len);
@@ -393,7 +394,7 @@ extern bool buf_has_underflowed(const Buffer *buf);
 extern long long buf_vb_memory_consumption (const VariantBlock *vb);
 extern void buf_display_memory_usage(bool memory_full);
 
-extern char *buf_human_readable_size (long long size, char *str /* out */);
+extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples;
