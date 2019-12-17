@@ -87,7 +87,7 @@ vcpiz$(EXE) vccat$(EXE): vczip$(EXE)
 archive: 
 vczip.tar.gz: 
 
-.PHONY: clean
+.PHONY: clean clean-debug clean-all LICENSE.non-commercial.txt
 
 LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@
