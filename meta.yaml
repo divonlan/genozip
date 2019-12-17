@@ -5,7 +5,7 @@ package:
 
 source:
   url: https://github.com/divonlan/vczip/archive/vczip-1.0.0.tar.gz
-  sha256: af84152e13ce18250bc0c6005cf43a7f135b9d71bb23945be771e871a35b80ff
+  sha256: 6a391f1d2eb67fea87a378bcd26d7acd609c4ccb71eb08da11555c8dd7d6f762
 
 build:
   number: 0
@@ -17,9 +17,12 @@ requirements:
   run:
 
 test:
+  files: 
+    - data/test-file.vcf
+
   commands:
-    - vczip -t data/test-file.vcf  # [not win]
-    - .\vczip.exe -t data/test-file.vcf  # [win]
+    - vczip -t test-file.vcf        # [unix]
+    - .\vczip.exe -t test-file.vcf  # [win]
 
 about:
   home: https://github.com/divonlan/vczip

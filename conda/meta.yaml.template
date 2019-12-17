@@ -20,9 +20,12 @@ requirements:
   run:
 
 test:
+  files: 
+    - data/test-file.vcf
+
   commands:
-    - vczip -t data/test-file.vcf  # [not win]
-    - .\vczip.exe -t data/test-file.vcf  # [win]
+    - vczip -t test-file.vcf        # [unix]
+    - .\vczip.exe -t test-file.vcf  # [win]
 
 about:
   home: https://github.com/divonlan/vczip
