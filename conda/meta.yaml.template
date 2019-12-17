@@ -24,7 +24,9 @@ test:
     - data/test-file.vcf
 
   commands:
+    - test -f $PREFIX/vczip         # [unix]
     - vczip -t test-file.vcf        # [unix]
+    - if not exist $PREFIX/vczip.exe exit 1  # [win]
     - .\vczip.exe -t test-file.vcf  # [win]
 
 about:
