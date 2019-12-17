@@ -14,7 +14,7 @@
 #include "vczip.h"
 
 static void segregate_pos_field (VariantBlock *vb, const char *str, 
-                                 long long *pos_delta, const char **pos_start, unsigned *pos_len,
+                                 int64_t *pos_delta, const char **pos_start, unsigned *pos_len,
                                  unsigned line_i)
 {
     *pos_start = str;
@@ -47,9 +47,9 @@ static void segregate_format_field(DataLine *dl, const char *str, unsigned line_
 }
 
 static void segregate_variant_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len,
-                                   long long pos_delta, const char *pos_start, unsigned pos_len)
+                                   int64_t pos_delta, const char *pos_start, unsigned pos_len)
 {
-    char pos_delta_str[22];
+    char pos_delta_str[30];
     sprintf (pos_delta_str, "%"PRId64, pos_delta);
     unsigned pos_delta_len = strlen (pos_delta_str);
 
@@ -227,7 +227,7 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
     
     enum {DONE, VARIANT, GENOTYPE, HAPLOTYPE} area = VARIANT;
     char *area_start = dl->line.data;
-    long long pos_delta=0; // delta between POS in this row and the previous row
+    int64_t pos_delta=0; // delta between POS in this row and the previous row
     const char *pos_start=NULL; unsigned pos_len=0; // start and length of pos field
     bool ploidy_overflow = false;
 

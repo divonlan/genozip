@@ -139,7 +139,7 @@ void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
     ASSERT0 (data_file, "Error: Failed to allocate data_file");
 
     unsigned len_file, len_pipe;
-    long long total_len=0;
+    uint64_t total_len=0;
     do {
         len_pipe = fread (data_pipe, 1, buf_size, from_pipe);
         

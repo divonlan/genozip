@@ -218,7 +218,7 @@ typedef struct variant_block_ {
     unsigned variant_block_i;  // number of variant block within VCF file
     unsigned longest_line_genotype_data; // used for predictive memory allocation for gt data
 
-    long long last_pos; // value of POS field of the previous line, to do delta encoding
+    uint64_t last_pos;         // value of POS field of the previous line, to do delta encoding
 
     // tracking execution
     unsigned vcf_data_size;    // size of variant block as it appears in the source file
