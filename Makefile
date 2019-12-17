@@ -82,6 +82,9 @@ $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 	@echo "Archiving to $@ - WARNING: Make sure you have no un-pushed changes locally (Makefile doesn't verify this)"
 	@tar --create --gzip --file $(TARBALL) $^
 
+# currently, I build for conda from my Windows machine so I don't bother supporting other platforms
+ifeq ($(OS),Windows_NT)
+
 meta.yaml: conda/meta.yaml.template $(TARBALL)
 	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.yaml.template | \
@@ -102,6 +105,8 @@ bld.bat: $(TARBALL) conda/bld.bat.template
 	@sed 's/%BUILD/$(CC).exe $(CFLAGS) $(LIBS) $(WIN_SRCS) -o vczip.exe/' conda/$@.template > $@
 
 conda: $(TARBALL) meta.yaml build.sh bld.bat
+
+endif
 
 LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@
