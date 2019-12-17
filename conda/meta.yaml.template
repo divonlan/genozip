@@ -30,7 +30,7 @@ test:
 about:
   home: https://github.com/divonlan/vczip
   dev_url: https://github.com/divonlan/vczip
-  # doc_url: https://vczip.readthedocs.io/
+# doc_url: https://vczip.readthedocs.io/
   license: Apache-2.0, non-commercial only
   license_family: Apache
   license_file: LICENSE.non-commercial.txt

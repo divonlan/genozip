@@ -5,7 +5,7 @@ package:
 
 source:
   url: https://github.com/divonlan/vczip/archive/vczip-1.0.0.tar.gz
-  sha256: 6a391f1d2eb67fea87a378bcd26d7acd609c4ccb71eb08da11555c8dd7d6f762
+  sha256: ea60357f843abdd74c13efa739984f52b620a56b8c2c48567b6ce1b16adc4762
 
 build:
   number: 0
@@ -27,7 +27,6 @@ test:
 about:
   home: https://github.com/divonlan/vczip
   dev_url: https://github.com/divonlan/vczip
-  # doc_url: https://vczip.readthedocs.io/
   license: Apache-2.0, non-commercial only
   license_family: Apache
   license_file: LICENSE.non-commercial.txt
