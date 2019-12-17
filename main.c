@@ -352,8 +352,8 @@ static void main_test (const char *vcf_filename)
     int pipefd_zip_to_unzip [2];
     int pipefd_unzip_to_main[2];
 #if __WIN32__
-    _pipe (pipefd_zip_to_unzip,  10000000, _O_BINARY); // nig 10MB pipe space to make sure both sides stay busy
-    _pipe (pipefd_unzip_to_main, 10000000, _O_BINARY);
+    _pipe (pipefd_zip_to_unzip,  25000000, _O_BINARY); // 25MB pipe space to make sure both sides stay busy
+    _pipe (pipefd_unzip_to_main, 25000000, _O_BINARY);
 #else
     pipe (pipefd_zip_to_unzip);
     pipe (pipefd_unzip_to_main);
