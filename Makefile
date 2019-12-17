@@ -3,67 +3,44 @@
 #   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
 #   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+# Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
+# Mingw: http://mingw-w64.org/doku.php  (Windows 32 bit version also works)
+# Cygwin: https://www.cygwin.com/
+
 VERSION = v1.0.0
+
+EXE =
+ifeq ($(OS),Windows_NT)
+	EXE = .exe
+endif
 
 CC=gcc
 CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
 LIBS = -lpthread -lm
 
-SLASH :=
-ifeq ($(OS),Windows_NT)
-	SLASH := \\
-else
-	SLASH := /
-endif
-
-RM :=
-ifeq ($(OS),Windows_NT)
-	RM := del /q /f 
-else
-	RM := rm -f
-endif
-
-AFTER_RM :=
-ifeq ($(OS),Windows_NT)
-	AFTER_RM := >nul 2>&1
-endif
-
-# directories
-MAC     = mac$(SLASH)
-ZLIB    = zlib$(SLASH)
-BZLIB   = bzlib$(SLASH)
-VSCODE  = .vscode$(SLASH)
-ARCHIVE = archive$(SLASH)
-DATA    = data$(SLASH)
-
-DEVS = Makefile ln.bat .gitignore vczip.code-workspace \
-       $(VSCODE)c_cpp_properties.json $(VSCODE)launch.json $(VSCODE)settings.json $(VSCODE)tasks.json \
-       $(DATA)test-file.vcf
+DEVS = Makefile .gitignore vczip.code-workspace \
+       .vscode/c_cpp_properties.json .vscode/launch.json .vscode/settings.json .vscode/tasks.json \
+       data/test-file.vcf
 
 DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
-       $(BZLIB)LICENSE.bzlib $(BZLIB)/README.bzlib \
-	   $(ZLIB)/README.zlib
+       bzlib/LICENSE.bzlib bzlib//README.bzlib \
+	   zlib//README.zlib
 
 INCS = vczip.h license.h \
-       $(BZLIB)bzlib.h $(BZLIB)bzlib_private.h \
-	   $(ZLIB)crc32.h $(ZLIB)gzguts.h $(ZLIB)inffast.h $(ZLIB)inffixed.h $(ZLIB)inflate.h $(ZLIB)inftrees.h $(ZLIB)zconf.h $(ZLIB)zlib.h $(ZLIB)zutil.h \
-	   $(MAC)mach_gettime.h
+       bzlib/bzlib.h bzlib/bzlib_private.h \
+	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
+	   mac/mach_gettime.h
 
 SRCS = vcf_header.c zip.c piz.c gloptimize.c buffer.c main.c vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c \
-       $(BZLIB)blocksort.c $(BZLIB)bzlib.c $(BZLIB)compress.c $(BZLIB)crctable.c $(BZLIB)decompress.c $(BZLIB)huffman.c $(BZLIB)randtable.c \
-       $(ZLIB)gzlib.c $(ZLIB)gzread.c $(ZLIB)inflate.c $(ZLIB)inffast.c $(ZLIB)zutil.c $(ZLIB)inftrees.c $(ZLIB)crc32.c $(ZLIB)adler32.c \
-       $(MAC)mach_gettime.c
+       bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
+       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c \
+       mac/mach_gettime.c
 
-OBJS  := $(SRCS:.c=.o)
-DEBUG_OBJS := $(SRCS:.c=.debug-o)
+OBJS  = $(SRCS:.c=.o)
+DEBUG_OBJS = $(SRCS:.c=.debug-o)
 
-DEPS  := $(SRCS:.c=.d)
-
-EXE :=
-ifeq ($(OS),Windows_NT)
-	EXE := .exe
-endif
+DEPS  = $(SRCS:.c=.d)
 
 all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
@@ -95,30 +72,50 @@ vczip-debug$(EXE): $(DEBUG_OBJS)
 
 vcpiz$(EXE) vccat$(EXE): vczip$(EXE)
 	@echo Hard linking $@
-	@$(RM) $@ $(AFTER_RM)
+	@rm -f $@ 
 	@ln $^ $@
 
-$(ARCHIVE)$(VERSION).tar.gz: $(SRCS) $(INCS) $(DOCS) $(DEVS)
-	@echo Archiving to $@
-	@echo WARNING: Make sure you have no un-pushed changes locally
-	@tar --create --gzip --file $(ARCHIVE)$(VERSION).tar.gz $^
+archive/$(VERSION).tar.gz: $(SRCS) $(INCS) $(DOCS) $(DEVS)
+	@echo "Archiving to $@ - WARNING: Make sure you have no un-pushed changes locally (Makefile doesn't verify this)"
+	@tar --create --gzip --file archive/$(VERSION).tar.gz $^
 
-archive: $(ARCHIVE)$(VERSION).tar.gz
+meta.yaml: conda/meta.yaml.template archive/$(VERSION).tar.gz
+	@echo Generating meta.yaml
+	@cat conda/meta.yaml.template | \
+	sed s/%SHA256/$$(openssl sha256 archive/v1.0.0.tar.gz|cut -d= -f2|cut -c2-)/ | \
+	sed s/%VERSION/$(VERSION)/g \
+	> $@
+
+# a lot of round-about escaping due to sed not liking / and Makefile making it difficult to output backslash
+
+
+# we make the build scripts dependents on the archives, so if file list changes, we need to re-generate build
+UNIX_SRCS = $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
+build.sh: archive/$(VERSION).tar.gz conda/build.sh.template 
+	@echo Generating $@
+	@sed 's/%BUILD/$(CC) $(CFLAGS) $(LIBS) $(UNIX_SRCS) -o vczip/' conda/$@.template > $@
+	
+WIN_SRCS  = $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
+bld.bat: archive/$(VERSION).tar.gz conda/bld.bat.template
+	@echo Generating $@
+	@sed 's/%BUILD/$(CC).exe $(CFLAGS) $(LIBS) $(WIN_SRCS) -o vczip.exe/' conda/$@.template > $@
+
+conda: archive/$(VERSION).tar.gz meta.yaml build.sh bld.bat
 
 LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@
-	@vczip$(EXE) -L > $@
+	@./vczip$(EXE) -L > $@
 
 .PHONY: clean clean-debug clean-all
 
 clean:
 	@echo Cleaning up
-	@$(RM) $(OBJS) vczip$(EXE) vcpiz$(EXE) vccat$(EXE) $(AFTER_RM)
+	@rm -f $(OBJS) vczip$(EXE) vcpiz$(EXE) vccat$(EXE) 
 
 clean-debug:
 	@echo Cleaning up debug
-	@$(RM) $(DEBUG_OBJS) vczip-debug$(EXE) $(AFTER_RM)
+	@rm -f $(DEBUG_OBJS) vczip-debug$(EXE) 
 
 clean-all: clean clean-debug
 	@echo Cleaning up dependencies
-	@$(RM) $(DEPS) $(AFTER_RM)
+	@rm -f $(DEPS) 

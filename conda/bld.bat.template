@@ -1,0 +1,9 @@
+%BUILD
+
+md %PREFIX%\bin >nul 2>&1
+copy %SRC_DIR%\vczip.exe %PREFIX%\bin\vczip.exe
+copy %SRC_DIR%\vczip.exe %PREFIX%\bin\vcpiz.exe
+copy %SRC_DIR%\vczip.exe %PREFIX%\bin\vccat.exe
+copy %SRC_DIR%\LICENSE.non-commerical.txt %PREFIX%
+copy %SRC_DIR%\LICENSE.commerical.txt %PREFIX%
+

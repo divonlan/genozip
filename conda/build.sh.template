@@ -1,0 +1,13 @@
+#!/bin/bash 
+
+# build script for conda - Linux & MacOS
+
+%BUILD
+
+mkdir -p $PREFIX/bin
+cp $SRC_DIR/vczip $PREFIX/bin/vczip
+cp $SRC_DIR/vczip $PREFIX/bin/vcpiz
+cp $SRC_DIR/vczip $PREFIX/bin/vccat
+cp $SRC_DIR/LICENSE.non-commerical.txt $PREFIX/
+cp $SRC_DIR/LICENSE.commerical.txt $PREFIX/
+
