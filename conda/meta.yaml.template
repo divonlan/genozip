@@ -1,12 +1,13 @@
 # See: https://docs.conda.io/projects/conda-build/en/latest/resources/build-scripts.html
 # See: https://docs.ligo.org/lscsoft/conda/packaging/
+# Example here: https://github.com/conda-forge/nds2-client-feedstock/tree/492436f4fa3c6b8a62dbc86dc68d79f818d251e3/recipe/
 
 package:
   name: vczip
   version: %VERSION
 
 source:
-  url: https://github.com/divonlan/vczip/archive/%VERSION.tar.gz
+  url: https://github.com/divonlan/vczip/archive/vczip-%VERSION.tar.gz
   sha256: %SHA256
 
 build:
@@ -14,33 +15,23 @@ build:
 
 requirements:
   build:
-    # If your project compiles code (such as a C extension) then add the required compilers as separate entries here.
-    # Compilers are named 'c', 'cxx' and 'fortran'.
     - {{ compiler('c') }}
   host:
-    - python
-    - pip
   run:
-    - python
 
 test:
-  # Some packages might need a `test/commands` key to check CLI.
-  # List all the packages/modules that `run_test.py` imports.
-  imports:
-    - simplejson
-    - simplejson.tests
+  commands:
+    - vczip -t data/test-file.vcf  # [not win]
+    - .\vczip.exe -t data/test-file.vcf  # [win]
 
 about:
   home: https://github.com/divonlan/vczip
-  # Remember to specify the license variants for BSD, Apache, GPL, and LGPL.
-  # Prefer the short version, e.g: GPL-2.0 instead of GNU General Public License version 2.0
-  # See https://opensource.org/licenses/alphabetical
+  dev_url: https://github.com/divonlan/vczip
+  # doc_url: https://vczip.readthedocs.io/
   license: Apache-2.0, non-commercial only
   license_family: Apache
-
   license_file: LICENSE.non-commercial.txt
   summary: 'Compressor for VCF genomic files, a lot better than gzip or bzip2'
-
   description: |
     vczip is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz files). 
     It is very easy to use - in fact, if you're familiar with gzip, it works pretty much the same.
@@ -48,8 +39,6 @@ about:
     of the genomic data, such as linkage disequilibrium, to compress better. 
     It is also a lot faster than gzip. 
     The compression is lossless - the decompressed file is identical to the original file.
-  doc_url: https://vczip.readthedocs.io/
-  dev_url: https://github.com/divonlan/vczip
 
 extra:
   recipe-maintainers:

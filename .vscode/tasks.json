@@ -4,7 +4,7 @@
         {
             "type": "shell",
             "label": "make all (optimized)",
-            "command": "mak",
+            "command": "make",
             "args": [ "all" ],
             "options": {
                 "cwd": "${workspaceRoot}"

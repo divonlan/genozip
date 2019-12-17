@@ -7,7 +7,7 @@
 # Mingw: http://mingw-w64.org/doku.php  (Windows 32 bit version also works)
 # Cygwin: https://www.cygwin.com/
 
-VERSION = v1.0.0
+VERSION = 1.0.0
 
 EXE =
 ifeq ($(OS),Windows_NT)
@@ -21,11 +21,12 @@ LIBS = -lpthread -lm
 
 DEVS = Makefile .gitignore vczip.code-workspace \
        .vscode/c_cpp_properties.json .vscode/launch.json .vscode/settings.json .vscode/tasks.json \
-       data/test-file.vcf
+       data/test-file.vcf \
+       conda/build.sh.template conda/bld.bat.template conda/meta.yaml.template
 
 DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
-       bzlib/LICENSE.bzlib bzlib//README.bzlib \
-	   zlib//README.zlib
+       bzlib/LICENSE.bzlib bzlib/README.bzlib \
+	   zlib/README.zlib
 
 INCS = vczip.h license.h \
        bzlib/bzlib.h bzlib/bzlib_private.h \
@@ -37,10 +38,10 @@ SRCS = vcf_header.c zip.c piz.c gloptimize.c buffer.c main.c vcffile.c squeeze.c
        zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c \
        mac/mach_gettime.c
 
-OBJS  = $(SRCS:.c=.o)
-DEBUG_OBJS = $(SRCS:.c=.debug-o)
+OBJS       := $(SRCS:.c=.o)
+DEBUG_OBJS := $(SRCS:.c=.debug-o)
 
-DEPS  = $(SRCS:.c=.d)
+DEPS       := $(SRCS:.c=.d)
 
 all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
 
@@ -57,7 +58,7 @@ debug: vczip-debug$(EXE)
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
 %.debug-o: %.c %.d
-	@echo Compiling debug $<
+	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS_DEBUG)
 
 all: vczip$(EXE) vcpiz$(EXE) vccat$(EXE)
@@ -75,32 +76,32 @@ vcpiz$(EXE) vccat$(EXE): vczip$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-archive/$(VERSION).tar.gz: $(SRCS) $(INCS) $(DOCS) $(DEVS)
+TARBALL := archive/vczip-$(VERSION).tar.gz
+
+$(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 	@echo "Archiving to $@ - WARNING: Make sure you have no un-pushed changes locally (Makefile doesn't verify this)"
-	@tar --create --gzip --file archive/$(VERSION).tar.gz $^
+	@tar --create --gzip --file $(TARBALL) $^
 
-meta.yaml: conda/meta.yaml.template archive/$(VERSION).tar.gz
-	@echo Generating meta.yaml
+meta.yaml: conda/meta.yaml.template $(TARBALL)
+	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.yaml.template | \
-	sed s/%SHA256/$$(openssl sha256 archive/v1.0.0.tar.gz|cut -d= -f2|cut -c2-)/ | \
-	sed s/%VERSION/$(VERSION)/g \
-	> $@
-
-# a lot of round-about escaping due to sed not liking / and Makefile making it difficult to output backslash
-
+		sed s/%SHA256/$$(openssl sha256 $(TARBALL)|cut -d= -f2|cut -c2-)/ | \
+		sed s/%VERSION/$(VERSION)/g | \
+		grep -v "^#" \
+		> $@
 
 # we make the build scripts dependents on the archives, so if file list changes, we need to re-generate build
-UNIX_SRCS = $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
-build.sh: archive/$(VERSION).tar.gz conda/build.sh.template 
-	@echo Generating $@
+UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
+build.sh: $(TARBALL) conda/build.sh.template 
+	@echo "Generating $@ (for conda)"
 	@sed 's/%BUILD/$(CC) $(CFLAGS) $(LIBS) $(UNIX_SRCS) -o vczip/' conda/$@.template > $@
 	
-WIN_SRCS  = $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
-bld.bat: archive/$(VERSION).tar.gz conda/bld.bat.template
-	@echo Generating $@
+WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
+bld.bat: $(TARBALL) conda/bld.bat.template
+	@echo "Generating $@ (for conda)"
 	@sed 's/%BUILD/$(CC).exe $(CFLAGS) $(LIBS) $(WIN_SRCS) -o vczip.exe/' conda/$@.template > $@
 
-conda: archive/$(VERSION).tar.gz meta.yaml build.sh bld.bat
+conda: $(TARBALL) meta.yaml build.sh bld.bat
 
 LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@

@@ -4,10 +4,9 @@
 
 %BUILD
 
-mkdir -p $PREFIX/bin
-cp $SRC_DIR/vczip $PREFIX/bin/vczip
-cp $SRC_DIR/vczip $PREFIX/bin/vcpiz
-cp $SRC_DIR/vczip $PREFIX/bin/vccat
-cp $SRC_DIR/LICENSE.non-commerical.txt $PREFIX/
-cp $SRC_DIR/LICENSE.commerical.txt $PREFIX/
+cp $RECIPE_DIR/vczip $PREFIX/vczip
+cp $RECIPE_DIR/vczip $PREFIX/vcpiz
+cp $RECIPE_DIR/vczip $PREFIX/vccat
+cp $RECIPE_DIR/LICENSE.non-commerical.txt $PREFIX/
+cp $RECIPE_DIR/LICENSE.commerical.txt $PREFIX/
 
