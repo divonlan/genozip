@@ -99,6 +99,7 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
 
     vb->add_bytes[SEC_PHASE_DATA] -= (ploidy-1); // we "saved" this number of phase characters vs the vcf file (... we will add them back later if we didn't)
 
+    PhaseType ht0_phase_type = PHASE_UNKNOWN;
     for (unsigned ht_i=0; ht_i < ploidy; ht_i++) {
 
         char ht = *(str++); 
@@ -128,7 +129,6 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
         if (ploidy > 1 && ht_i < ploidy-1) {
             
             PhaseType cell_phase_type = *(str++);
-            PhaseType ht0_phase_type = PHASE_UNKNOWN;
             len--;
 
             ASSERT (cell_phase_type == '|' || cell_phase_type == '/', "Error: invalid VCF file - line %u - unable to parse sample %u: expecting a | or / but seeing %c", line_i, sample_i+1, cell_phase_type);
