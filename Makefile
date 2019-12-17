@@ -3,6 +3,8 @@
 #   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
 #   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+VERSION = v1.0.0
+
 CC=gcc
 CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
@@ -27,11 +29,23 @@ ifeq ($(OS),Windows_NT)
 	AFTER_RM := >nul 2>&1
 endif
 
-MAC   = mac$(SLASH)
-ZLIB  = zlib$(SLASH)
-BZLIB = bzlib$(SLASH)
+# directories
+MAC     = mac$(SLASH)
+ZLIB    = zlib$(SLASH)
+BZLIB   = bzlib$(SLASH)
+VSCODE  = .vscode$(SLASH)
+ARCHIVE = archive$(SLASH)
+DATA    = data$(SLASH)
 
-INCS = vczip.h licenese.h \
+DEVS = Makefile ln.bat .gitignore vczip.code-workspace \
+       $(VSCODE)c_cpp_properties.json $(VSCODE)launch.json $(VSCODE)settings.json $(VSCODE)tasks.json \
+       $(DATA)test-file.vcf
+
+DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
+       $(BZLIB)LICENSE.bzlib $(BZLIB)/README.bzlib \
+	   $(ZLIB)/README.zlib
+
+INCS = vczip.h license.h \
        $(BZLIB)bzlib.h $(BZLIB)bzlib_private.h \
 	   $(ZLIB)crc32.h $(ZLIB)gzguts.h $(ZLIB)inffast.h $(ZLIB)inffixed.h $(ZLIB)inflate.h $(ZLIB)inftrees.h $(ZLIB)zconf.h $(ZLIB)zlib.h $(ZLIB)zutil.h \
 	   $(MAC)mach_gettime.h
@@ -84,14 +98,18 @@ vcpiz$(EXE) vccat$(EXE): vczip$(EXE)
 	@$(RM) $@ $(AFTER_RM)
 	@ln $^ $@
 
-archive: 
-vczip.tar.gz: 
+$(ARCHIVE)$(VERSION).tar.gz: $(SRCS) $(INCS) $(DOCS) $(DEVS)
+	@echo Archiving to $@
+	@echo WARNING: Make sure you have no un-pushed changes locally
+	@tar --create --gzip --file $(ARCHIVE)$(VERSION).tar.gz $^
 
-.PHONY: clean clean-debug clean-all LICENSE.non-commercial.txt
+archive: $(ARCHIVE)$(VERSION).tar.gz
 
 LICENSE.non-commercial.txt: vczip$(EXE)
 	@echo Generating $@
 	@vczip$(EXE) -L > $@
+
+.PHONY: clean clean-debug clean-all
 
 clean:
 	@echo Cleaning up

@@ -119,8 +119,7 @@
             "args": [ "archive" ],
             "options": {
                 "cwd": "${workspaceRoot}"
-            }
-            ],
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
