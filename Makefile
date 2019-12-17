@@ -101,6 +101,6 @@ clean-debug:
 	@echo Cleaning up debug
 	@$(RM) $(DEBUG_OBJS) vczip-debug$(EXE) $(AFTER_RM)
 
-clean-dependencies:
+clean-all: clean clean-debug
 	@echo Cleaning up dependencies
 	@$(RM) $(DEPS) $(AFTER_RM)

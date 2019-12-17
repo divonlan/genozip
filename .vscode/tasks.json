@@ -79,9 +79,9 @@
         },
         {
             "type": "shell",
-            "label": "make clean-dependencies",
+            "label": "make clean-all",
             "command": "mingw32-make.exe",
-            "args": [ "clean-dependencies" ],
+            "args": [ "clean-all" ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
