@@ -278,7 +278,7 @@ typedef struct variant_block_ {
     Buffer next_gt_in_sample;        // used for depermuting genotype data
     Buffer gt_line_lengths;          // line length of each line of genotypes - used for depermuting genotype data
 
-// Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
+    // Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
     int add_bytes[6];                
     uint32_t vcf_section_bytes[6];   // how many bytes did each section have in the original vcf file - should add up to the file size
     uint32_t z_section_bytes[6];        // how many bytes does each section type have (including headers) in the vcz file - should add up to the file size
