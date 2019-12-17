@@ -179,7 +179,7 @@ typedef struct {
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
 
-    unsigned line_i;
+    uint32_t line_i;
 
     // initially, data from vcf file line, later segregated to components "stored" in the overlay buffers below
     Buffer line;             
@@ -213,23 +213,23 @@ typedef struct variant_block_ {
     bool in_use;               // this vb is in use
         
     DataLine data_lines[VARIANTS_PER_BLOCK];
-    unsigned num_lines;        // number of lines in this variant block
-    unsigned first_line;       // line number in VCF file (counting from 1), of this variant block
-    unsigned variant_block_i;  // number of variant block within VCF file
-    unsigned longest_line_genotype_data; // used for predictive memory allocation for gt data
+    uint32_t num_lines;        // number of lines in this variant block
+    uint32_t first_line;       // line number in VCF file (counting from 1), of this variant block
+    uint32_t variant_block_i;  // number of variant block within VCF file
+    uint32_t longest_line_genotype_data; // used for predictive memory allocation for gt data
 
     uint64_t last_pos;         // value of POS field of the previous line, to do delta encoding
 
     // tracking execution
-    unsigned vcf_data_size;    // size of variant block as it appears in the source file
+    uint32_t vcf_data_size;    // size of variant block as it appears in the source file
 
     ProfilerRec profile;
 
     // charactaristics of the data
-    unsigned ploidy;
-    unsigned num_sample_blocks;
-    unsigned num_samples_per_block; // except last sample block that may have less
-    unsigned num_haplotypes_per_line;
+    uint16_t ploidy;
+    uint32_t num_sample_blocks;
+    uint32_t num_samples_per_block; // except last sample block that may have less
+    uint32_t num_haplotypes_per_line;
     bool has_genotype_data;    // if any variant has genotype data, then the block is considered to have it
     bool has_haplotype_data;   // ditto for haplotype data
     bool optimize_gl;          // do we apply the GL subfield optimization to this VB
@@ -280,8 +280,8 @@ typedef struct variant_block_ {
 
 // Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
     int add_bytes[6];                
-    unsigned vcf_section_bytes[6];   // how many bytes did each section have in the original vcf file - should add up to the file size
-    unsigned z_section_bytes[6];        // how many bytes does each section type have (including headers) in the vcz file - should add up to the file size
+    uint32_t vcf_section_bytes[6];   // how many bytes did each section have in the original vcf file - should add up to the file size
+    uint32_t z_section_bytes[6];        // how many bytes does each section type have (including headers) in the vcz file - should add up to the file size
 
 #define NUM_COMPRESS_BUFS 4  // bzlib2 compress requires 4 and decompress requires 2
     Buffer compress_bufs[NUM_COMPRESS_BUFS];    // memory allocation for compressor so it doesn't do its own malloc/free
