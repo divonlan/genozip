@@ -281,9 +281,9 @@ typedef struct variant_block_ {
     // Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
     int add_bytes[6];                
     uint32_t vcf_section_bytes[6];   // how many bytes did each section have in the original vcf file - should add up to the file size
-    uint32_t z_section_bytes[6];        // how many bytes does each section type have (including headers) in the vcz file - should add up to the file size
+    uint32_t z_section_bytes[6];     // how many bytes does each section type have (including headers) in the vcz file - should add up to the file size
 
-#define NUM_COMPRESS_BUFS 4  // bzlib2 compress requires 4 and decompress requires 2
+#define NUM_COMPRESS_BUFS 4          // bzlib2 compress requires 4 and decompress requires 2
     Buffer compress_bufs[NUM_COMPRESS_BUFS];    // memory allocation for compressor so it doesn't do its own malloc/free
     
     // use for testing
