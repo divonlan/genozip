@@ -79,6 +79,25 @@
         },
         {
             "type": "shell",
+            "label": "make clean-dependencies",
+            "command": "mingw32-make.exe",
+            "args": [ "clean-dependencies" ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },        
+        {
+            "type": "shell",
             "label": "make license",
             "command": "mingw32-make.exe",
             "args": [ "LICENSE.non-commercial.txt" ],

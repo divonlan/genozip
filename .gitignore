@@ -1,6 +1,7 @@
 *.exe
 *.o
 *.debug-o
+*.d
 vczip
 vcpiz
 vccat
