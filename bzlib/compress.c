@@ -253,7 +253,7 @@ void sendMTFValues ( EState* s )
    --*/
 
 
-   UInt16 cost[BZ_N_GROUPS];
+   UInt16 cost[BZ_N_GROUPS] = {0,0,0,0,0}; // initialized to avoid -Wall warnings --divon
    Int32  fave[BZ_N_GROUPS];
 
    UInt16* mtfv = s->mtfv;
