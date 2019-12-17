@@ -4,7 +4,7 @@
         {
             "type": "shell",
             "label": "make all (optimized)",
-            "command": "mingw32-make.exe",
+            "command": "mak",
             "args": [ "all" ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -101,6 +101,22 @@
             "label": "make license",
             "command": "mingw32-make.exe",
             "args": [ "LICENSE.non-commercial.txt" ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "make archive",
+            "command": "mingw32-make.exe",
+            "args": [ "archive" ],
             "options": {
                 "cwd": "${workspaceRoot}"
             }
