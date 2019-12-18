@@ -23,6 +23,9 @@
 #include <sys/sysinfo.h>
 #include <termios.h>
 #endif
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
 
 #include "vczip.h"
 
@@ -147,8 +150,18 @@ static unsigned main_get_num_cores()
     unsigned num_cores;
     int ret = sscanf (env, "%u", &num_cores);
     return ret==1 ? num_cores : DEFAULT_MAX_THREADS; 
-#else
-    return get_nproc();
+
+#elif defined __APPLE__
+    int num_cores;
+    size_t len = sizeof(num_cores);
+    int mib[2] = { CTL_HW, HW_NCPU };
+    if (sysctl(mib, 2, &num_cores, &len, NULL, 0))
+        return DEFAULT_MAX_THREADS;
+
+    return num_cores;
+
+#else // Linux etc
+    return get_nprocs();
 #endif
 }
 
