@@ -98,7 +98,7 @@ void file_close (File **file_p)
         int ret = gzclose_r(file->file);
         ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
     }
-    else {
+    else if (strcmp (file->name, "/dev/null")) {
         int ret = fclose(file->file);
         ASSERTW (!ret, "Warning: failed to close vcf file %s: %s", file->name ? file->name : "", strerror(errno));
     } 
