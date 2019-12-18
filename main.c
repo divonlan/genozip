@@ -18,13 +18,14 @@
 #include <inttypes.h>
 #if __WIN32__
 #include <process.h>
+#elif defined __APPLE__
+#include <sys/ioctl.h>
+#include <sys/sysctl.h>
+#include <termios.h>
 #else
 #include <sys/ioctl.h>
 #include <sys/sysinfo.h>
 #include <termios.h>
-#endif
-#ifdef __APPLE__
-#include <sys/sysctl.h>
 #endif
 
 #include "vczip.h"
