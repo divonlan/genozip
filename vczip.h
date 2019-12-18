@@ -409,9 +409,10 @@ extern void squeeze_unit_test();
 extern void zip_compress_fp_unit_test();
 
 // macros
-    
+#ifndef MIN
 #define MIN(a, b) ((a < b) ? a : b )
 #define MAX(a, b) ((a > b) ? a : b )
+#endif
 
 // encode section headers in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
