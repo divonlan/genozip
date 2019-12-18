@@ -546,6 +546,9 @@ void zip_dispatcher (char *vcf_basename, File *vcf_file,
 
             bool done = input_exhausted && !num_running_compute_threads && !next_vb;
 
+            if (done) 
+                vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
+
 #ifdef PROFILER
             profiler_add (&pseudo_vb->profile, &th->vb->profile);
 
@@ -586,7 +589,7 @@ void zip_dispatcher (char *vcf_basename, File *vcf_file,
 
 finish:
     z_file->disk_size = z_file->disk_so_far;
-    vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
+    vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far; // just in case its not set already
     buf_free (&compute_threads_buf);
     vb_release_vb (&pseudo_vb);
 }
