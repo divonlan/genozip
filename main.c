@@ -158,7 +158,7 @@ static unsigned main_get_num_cores()
     if (sysctl(mib, 2, &num_cores, &len, NULL, 0))
         return DEFAULT_MAX_THREADS;
 
-    return num_cores;
+    return (unsigned)num_cores;
  
 #else // Linux etc
     return get_nprocs();
