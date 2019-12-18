@@ -20,6 +20,7 @@
 #include <process.h>
 #else
 #include <sys/ioctl.h>
+#include <sys/sysinfo.h>
 #include <termios.h>
 #endif
 
@@ -135,6 +136,20 @@ static char *get_basename(const char *fn)
     return basename(fn_copy);
 
     // note: we leak fn_copy and never free it - it's ok, its a small amount
+}
+
+static unsigned main_get_num_cores()
+{
+#if __WIN32__
+    char *env = getenv ("NUMBER_OF_PROCESSORS");
+    if (!env) return DEFAULT_MAX_THREADS;
+
+    unsigned num_cores;
+    int ret = sscanf (env, "%u", &num_cores);
+    return ret==1 ? num_cores : DEFAULT_MAX_THREADS; 
+#else
+    return get_nproc();
+#endif
 }
 
 static void main_display_section_stats (const File *vcf_file, const File *z_file)
@@ -560,12 +575,15 @@ int main (int argc, char **argv)
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --output / -o option", global_cmd);
     ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with -z or -t", global_cmd);
     
+    // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
         int ret = sscanf (threads_str, "%u", &global_max_threads);
         ASSERT (ret == 1 && global_max_threads >= 1, "%s: --threads / -@ option requires an integer value of at least 1", global_cmd);
         ASSERT (command != TEST || global_max_threads >= 3, "%s invalid --threads / -@ value: number of threads for --test / -t should be at least 3", global_cmd);
     }
-
+    else    
+        global_max_threads = main_get_num_cores();
+printf ("num_cores=%u\n", global_max_threads);
     if (command == TEST) {
         flag_stdout = flag_force = flag_replace = flag_quiet = flag_gzip = false;
         out_filename = NULL;
