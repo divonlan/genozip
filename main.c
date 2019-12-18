@@ -173,7 +173,11 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
     char vsize[30], zsize[30];
     uint64_t total_vcf=0, total_z=0;
 
-    printf ("\n\nSection stats:\n");
+    printf ("\n\n");
+    if (vcf_file->name) printf ("File name: %s\n", vcf_file->name);
+    printf ("Individuals: %u   Variants: %"PRIu64"\n", global_num_samples, z_file->num_lines);
+
+    printf ("Section stats:\n");
     printf ("Section                 VCF bytes     %%     VCZ bytes     %%  Ratio\n");
     const char *format = "%21s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
     for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
