@@ -159,7 +159,7 @@ static unsigned main_get_num_cores()
         return DEFAULT_MAX_THREADS;
 
     return num_cores;
-
+ 
 #else // Linux etc
     return get_nprocs();
 #endif
