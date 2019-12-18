@@ -155,16 +155,10 @@ static unsigned main_get_num_cores()
 #elif defined __APPLE__
     int num_cores;
     size_t len = sizeof(num_cores);
-    if (sysctlbyname("hw.activecpu", &num_cores, &len, NULL, 0) &&  /* osx preferes activecpu over ncpu */
+    if (sysctlbyname("hw.activecpu", &num_cores, &len, NULL, 0) &&  
         sysctlbyname("hw.ncpu", &num_cores, &len, NULL, 0))
             return DEFAULT_MAX_THREADS; // if both failed
-/*
-    int num_cores;
-    size_t len = sizeof(num_cores);
-    int mib[2] = { CTL_HW, HW_NCPU };
-    if (sysctl(mib, 2, &num_cores, &len, NULL, 0))
-        return DEFAULT_MAX_THREADS;
-*/
+
     return (unsigned)num_cores;
  
 #else // Linux etc
@@ -603,7 +597,7 @@ int main (int argc, char **argv)
     }
     else    
         global_max_threads = main_get_num_cores();
-printf ("num_cores=%u\n", global_max_threads);
+
     if (command == TEST) {
         flag_stdout = flag_force = flag_replace = flag_quiet = flag_gzip = false;
         out_filename = NULL;
