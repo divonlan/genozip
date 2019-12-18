@@ -52,10 +52,12 @@ void vb_release_vb (VariantBlock **vb_p)
             
 
     vb->num_lines = vb->first_line = vb->variant_block_i = vb->longest_line_genotype_data = 0;
-    vb->vcf_data_size = vb->ploidy = vb->num_sample_blocks = vb->num_haplotypes_per_line = vb->last_pos = 0;
+    vb->vcf_data_size = vb->ploidy = vb->num_sample_blocks = vb->num_haplotypes_per_line;
     vb->has_genotype_data = vb->has_haplotype_data = vb->ready_to_dispatch = false;
     vb->phase_type = PHASE_UNKNOWN;
     vb->vcf_file = vb->z_file = NULL;
+
+    vb->min_pos = vb->max_pos = vb->last_pos = vb->chrom[0] = vb->is_sorted_by_pos = 0;
 
     memset(vb->add_bytes, 0, sizeof(vb->add_bytes));
     memset(vb->vcf_section_bytes, 0, sizeof(vb->vcf_section_bytes));
@@ -130,10 +132,12 @@ VariantBlock *vb_get_vb(VariantBlockPool *pool,
         ASSERT (vb_i < pool->num_vbs, "Error: VB pool vb_id_prefix=%u maxed out", pool->vb_id_prefix)
     }
 
-    vb->in_use          = true;
-    vb->variant_block_i = variant_block_i;
-    vb->vcf_file        = vcf_file;
-    vb->z_file          = z_file;
+    vb->in_use           = true;
+    vb->variant_block_i  = variant_block_i;
+    vb->vcf_file         = vcf_file;
+    vb->z_file           = z_file;
+    vb->is_sorted_by_pos = true;
+    vb->min_pos = vb->max_pos = -1;
 
     return vb;
 }

@@ -443,7 +443,7 @@ void zip_dispatcher (char *vcf_basename, File *vcf_file,
     // 3. Wait for the first thread (by sequential order) to complete the compute and output the results
 
     unsigned variant_block_i = 0;
-    bool show_progress = vcf_basename && !!isatty(2);
+    bool show_progress = vcf_basename && !!isatty(2) && !flag_show_alleles;
 
 #ifndef PROFILER
     if (show_progress) 

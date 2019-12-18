@@ -239,6 +239,10 @@ void zfile_compress_variant_data (VariantBlock *vb)
     vardata_header->num_sample_blocks       = ENDN32 (vb->num_sample_blocks);
     vardata_header->ploidy                  = ENDN16 (vb->ploidy);
     vardata_header->vcf_data_size           = ENDN32 (vb->vcf_data_size);
+    vardata_header->min_pos                 = ENDN64 (vb->min_pos);
+    vardata_header->max_pos                 = ENDN64 (vb->max_pos);
+    vardata_header->is_sorted_by_pos        = vb->is_sorted_by_pos;
+    memcpy (vardata_header->chrom, vb->chrom, MAX_CHROM_LEN);
 
     uint16_t haplotype_index_checksum;
     squeeze (vb, vardata_header->haplotype_index, &haplotype_index_checksum,
@@ -370,7 +374,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
     START_TIMER;
 
     int vardata_header_offset = zfile_read_one_section (vb, &vb->z_data, 
-                                                       sizeof(SectionHeaderVariantData), SEC_VARIANT_DATA, true);
+                                                        sizeof(SectionHeaderVariantData), SEC_VARIANT_DATA, true);
     if (vardata_header_offset == EOF) {
 
         // update size - in case they were not known (pipe, gzip etc)

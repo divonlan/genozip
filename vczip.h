@@ -101,13 +101,20 @@ typedef struct  __attribute__((__packed__)) {
     
     // flags
     uint8_t has_genotype_data : 1;  // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
-    uint8_t for_future_use    : 7;
+    uint8_t is_sorted_by_pos  : 1;  // 1 if variant block is sorted by POS
+    uint8_t for_future_use    : 6;
 
+    // features of the data
     uint32_t num_samples;
     uint32_t num_haplotypes_per_line;     // 0 if no haplotypes
     uint32_t num_sample_blocks;
     uint32_t num_samples_per_block;
     uint16_t ploidy;
+    
+#define MAX_CHROM_LEN 64
+    char chrom[MAX_CHROM_LEN];            // a null-terminated ID of the chromosome
+    int64_t min_pos, max_pos;             // minimum and maximum POS values in this VB. -1 if unknown
+
     uint32_t vcf_data_size;               // size of variant block as it appears in the source file
     uint32_t z_data_bytes;                // total bytes of this variant block in the dv file including all sections and their headers
     uint16_t haplotype_index_checksum;
@@ -218,8 +225,6 @@ typedef struct variant_block_ {
     uint32_t variant_block_i;  // number of variant block within VCF file
     uint32_t longest_line_genotype_data; // used for predictive memory allocation for gt data
 
-    uint64_t last_pos;         // value of POS field of the previous line, to do delta encoding
-
     // tracking execution
     uint32_t vcf_data_size;    // size of variant block as it appears in the source file
 
@@ -234,6 +239,12 @@ typedef struct variant_block_ {
     bool has_haplotype_data;   // ditto for haplotype data
     bool optimize_gl;          // do we apply the GL subfield optimization to this VB
     PhaseType phase_type;      // phase type of this variant block
+
+    // chrom and pos
+    char chrom[MAX_CHROM_LEN]; // a null-terminated ID of the chromosome
+    int64_t min_pos, max_pos;  // minimum and maximum POS values in this VB. -1 if unknown
+    uint64_t last_pos;         // value of POS field of the previous line, to do delta encoding
+    bool is_sorted_by_pos;     // true if it this variant block is sorted by POS    
 
     // working memory for segregate - we segregate a line components into these buffers, and when done
     // we copy it back to DataLine - the buffers overlaying the line field
@@ -401,7 +412,8 @@ extern unsigned    global_num_samples;
 extern const char *global_cmd;         // set once in main()
 extern unsigned    global_max_threads; // set in main()
 extern bool        global_little_endian;  // set in main()
-extern int flag_stdout, flag_force, flag_replace, flag_quiet, flag_gzip, flag_concat_mode, flag_show_content;
+extern int flag_stdout, flag_force, flag_replace, flag_quiet, flag_gzip, flag_concat_mode,
+           flag_show_content, flag_show_alleles;
 
 // unit tests
 extern void segregate_data_line_unit_test();

@@ -441,7 +441,12 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->ploidy                  = ENDN16 (vardata_header->ploidy);
     vb->num_sample_blocks       = ENDN32 (vardata_header->num_sample_blocks);
     vb->vcf_data_size           = ENDN32 (vardata_header->vcf_data_size);
-        
+    
+    vb->min_pos                 = ENDN64 (vardata_header->min_pos);
+    vb->max_pos                 = ENDN64 (vardata_header->max_pos);
+    vb->is_sorted_by_pos        = vardata_header->is_sorted_by_pos;
+    memcpy(vb->chrom, vardata_header->chrom, MAX_CHROM_LEN);
+    
     ASSERT (global_num_samples == ENDN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, vardata_header->num_samples);
 
     // we allocate memory for the Buffer arrays only once the first time this VariantBlock

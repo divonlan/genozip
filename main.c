@@ -37,7 +37,7 @@ bool global_little_endian;
 
 // the flags are globals 
 int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_gzip=0, flag_concat_mode=0, 
-    flag_show_content=0;
+    flag_show_content=0, flag_show_alleles=0;
 
 int main_print_license()
 {
@@ -102,6 +102,8 @@ int main_print_help()
     printf ("   -@ --threads      specify how many threads to use. default is 8. for best performance, this should match\n");    
     printf ("   --show-content    show the information content of VCF files and the compression ratios of each components\n");
     printf ("                     the number of logical CPU cores (which is double the number of physical cores on Intel processors)");
+    printf ("   --show-alleles    output allele values to stdout. Each row corresponds to a row in the VCF file.\n");
+    printf ("                     Mixed-ploidy regions are padded, and 2-digit allele values are replaced with an ascii character\n");
 
     printf ("\n");
     printf ("One or more file names may be given, or if omitted, standard input/output is used instead\n");
@@ -526,6 +528,7 @@ int main (int argc, char **argv)
             {"gzip",       no_argument,       &flag_gzip, 1         },
             {"output",     required_argument, 0, 'o'                }, 
             {"show-content",no_argument,      &flag_show_content, 1 }, 
+            {"show-alleles",no_argument,      &flag_show_alleles, 1 }, 
             {0, 0, 0, 0                                             },
         };        
         
@@ -545,7 +548,6 @@ int main (int argc, char **argv)
             case 'f' : flag_force         = 1 ; break;
             case 'R' : flag_replace       = 1 ; break;
             case 'q' : flag_quiet         = 1 ; break;
-            case 'C' : flag_show_content   = 1 ; break;
             case 'g' : flag_gzip          = 1 ; break;
             case '@' : threads_str  = optarg  ; break;
             case 'o' : out_filename = optarg  ; break;
@@ -584,6 +586,8 @@ int main (int argc, char **argv)
     // sanity checks
     ASSERT (!flag_stdout || !out_filename, "%s: option --stdout / -c is incompatable with --output / -o", global_cmd);
     ASSERT (!flag_stdout || !flag_replace, "%s: option --stdout / -c is incompatable with --replace / -R", global_cmd);
+    ASSERT (!flag_stdout || !flag_show_content, "%s: option --stdout / -c is incompatable with --show-content", global_cmd);
+    ASSERT (!flag_stdout || !flag_show_alleles, "%s: option --stdout / -c is incompatable with --show-alleles", global_cmd);
     ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --stdout / -c option", global_cmd);
     ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --force / -f option", global_cmd);
     ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --replace / -R option", global_cmd);
@@ -592,6 +596,7 @@ int main (int argc, char **argv)
     ASSERTW (!flag_gzip         ||                        command == UNCOMPRESS, "%s: ignoring --gzip / -g option", global_cmd);
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --output / -o option", global_cmd);
     ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with -z or -t", global_cmd);
+    ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with -z or -t", global_cmd);
     
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

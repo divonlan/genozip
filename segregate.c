@@ -13,9 +13,29 @@
 
 #include "vczip.h"
 
+// returns true if this line has the same chrom as this VB, or if it is the first line
+static bool segregate_chrom_field (VariantBlock *vb, const char *str)
+{
+    unsigned i=0;
+    if (! *vb->chrom) { // first line in this VB
+        do {
+            vb->chrom[i] = str[i];
+            i++;
+        } while (str[i-1] != '\t' && i < MAX_CHROM_LEN-1);
+        vb->chrom[i-1] = 0;
+       return true;
+    }
+ 
+    for (i=0; i < MAX_CHROM_LEN-1 && vb->chrom[i] && str[i] != '\t'; i++)
+        if (vb->chrom[i] != str[i]) return false;
+
+    return str[i] == '\t' && vb->chrom[i] == '\0'; // true if they are the same length
+}
+
+ 
+
 static void segregate_pos_field (VariantBlock *vb, const char *str, 
-                                 int64_t *pos_delta, const char **pos_start, unsigned *pos_len,
-                                 unsigned line_i)
+                                 int64_t *pos_delta, const char **pos_start, unsigned *pos_len)
 {
     *pos_start = str;
 
@@ -23,7 +43,16 @@ static void segregate_pos_field (VariantBlock *vb, const char *str,
     long long this_pos=0;
     const char *s; for (s=str; *s != '\t'; s++)
         this_pos = this_pos * 10 + (*s - '0');
-    
+
+    if (this_pos < vb->last_pos) 
+        vb->is_sorted_by_pos = false;
+
+    if ((int64_t)this_pos < vb->min_pos || vb->min_pos < 0)
+        vb->min_pos = (int64_t)this_pos;
+
+    if ((int64_t)this_pos > vb->max_pos)
+        vb->max_pos = (int64_t)this_pos;
+
     *pos_len     = s - str;
     *pos_delta   = this_pos - vb->last_pos;
     vb->last_pos = this_pos;
@@ -234,16 +263,23 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
     char *c; for (c = dl->line.data; *c && area != DONE; c++) {
 
         // skip if we didn't arrive at a meaningful separator - tab, newline or : after a haplotype
-        if (*c != '\t' && *c != '\n' && (*c != ':' || area != HAPLOTYPE)) continue;
+        if (c != dl->line.data && *c != '\t' && *c != '\n' && (*c != ':' || area != HAPLOTYPE)) continue;
 
         if (*c == '\t') num_tabs++;
 
         // handle the data in the area that we just passed
         switch (area) {
             case VARIANT:
+                // we are at the CHROM field - make sure the VB has consisent CHROM
+                if (num_tabs == 0) {
+                    //bool same_chrom = TO DO: finish this vb and start a new one when chrom changes
+                    segregate_chrom_field (vb, c);
+                    continue;
+                }
+
                 // we are at at the POS field - re-encode it to be the delta from the previous line
                 if (num_tabs == 1) {
-                    segregate_pos_field (vb, c+1, &pos_delta, &pos_start, &pos_len, line_i);
+                    segregate_pos_field (vb, c+1, &pos_delta, &pos_start, &pos_len);
                     continue;
                 }
 
@@ -324,8 +360,12 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
 
     buf_overlay (&dl->variant_data, &dl->line, &vb->line_variant_data, &offset_in_line, "dl->variant_data", line_i);
     
-    if (dl->has_haplotype_data)
+    if (dl->has_haplotype_data) {
         buf_overlay (&dl->haplotype_data, &dl->line, &vb->line_haplotype_data, &offset_in_line, "dl->haplotype_data", line_i);
+        
+        if (flag_show_alleles)
+            printf ("%.*s\n", dl->haplotype_data.len, dl->haplotype_data.data);
+    }
 
     if (dl->has_haplotype_data && dl->phase_type == PHASE_MIXED_PHASED)
         buf_overlay (&dl->phase_data, &dl->line, &vb->line_phase_data, &offset_in_line, "dl->phase_data", line_i);    
