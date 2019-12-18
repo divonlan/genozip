@@ -14,7 +14,7 @@
 
             // benchmark file1:
             // file1 can be downloaded here:
-            //"args": ["-f", "-z", "--showcontent", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf"],
+            //"args": ["-f", "-z", "--show-content", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf"],
             //"args": ["-f", "-d", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcz", "-o", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.2.vcf"],
 
             // benchmark file2:
@@ -23,7 +23,8 @@
             //"args": ["-f", "-d", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcz", "-o", "ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.2.vcf"],
             
             // test file
-            "args": ["--show-content", "-t", "data/test-file.vcf" ],
+            "args": ["--show-alleles", "-z", "-f", "data/test-file.vcf"],
+
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

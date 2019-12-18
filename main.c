@@ -235,7 +235,7 @@ static void main_vczip (const char *vcf_filename,
                 else // VCF_GZ
                     sprintf (z_filename, "%.*sz", fn_len-4, vcf_filename); // .vcf.gz -> .vcz
             }
-            ASSERT (flag_force || access(z_filename, F_OK) || !strcmp (z_filename, "/dev/null"), 
+            ASSERT (flag_force || access(z_filename, F_OK), 
                     "%s: output file %s already exists", global_cmd, z_filename);
 
             z_file = file_open (z_filename, WRITE, VCZ);

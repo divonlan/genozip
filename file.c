@@ -36,8 +36,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             ASSERT (file, "%s: cannot open file %s", global_cmd, file->name);
         }
         else         
-            ASSERT (mode == WRITE && !strcmp (file->name, "/dev/null"),
-                    "%s: file: %s - file must have a .vcf or .vcf.gz extension", global_cmd, file->name);
+            ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz extension", global_cmd, file->name);
     }
     else { // VCZ
         if (file_has_ext (file->name, ".vcz")) {
@@ -55,8 +54,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             return NULL;
         
         else
-            ASSERT (mode == WRITE && !strcmp (file->name, "/dev/null"),
-                    "%s: file: %s - file must have a .vcz extension", global_cmd, file->name);
+            ABORT ("%s: file: %s - file must have a .vcz extension", global_cmd, file->name);
     }
 
     if (mode == READ) {
@@ -98,7 +96,7 @@ void file_close (File **file_p)
         int ret = gzclose_r(file->file);
         ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
     }
-    else if (strcmp (file->name, "/dev/null")) {
+    else {
         int ret = fclose(file->file);
         ASSERTW (!ret, "Warning: failed to close vcf file %s: %s", file->name ? file->name : "", strerror(errno));
     } 
