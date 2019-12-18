@@ -155,10 +155,9 @@ static unsigned main_get_num_cores()
 #elif defined __APPLE__
     int num_cores;
     size_t len = sizeof(num_cores);
-    sysctlbyname("hw.activecpu", &num_cores, &len, NULL, 0); /* osx preferes activecpu over ncpu */
-    if (ierr) { /* freebsd check ncpu */
-        if (sysctlbyname("hw.ncpu", &num_cores, &len, NULL, 0))
-            return DEFAULT_MAX_THREADS;
+    if (sysctlbyname("hw.activecpu", &num_cores, &len, NULL, 0) &&  /* osx preferes activecpu over ncpu */
+        sysctlbyname("hw.ncpu", &num_cores, &len, NULL, 0)); 
+            return DEFAULT_MAX_THREADS; // if both failed
     }
 /*
     int num_cores;
