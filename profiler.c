@@ -77,9 +77,9 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
     if (p->piz_uncompress_variant_block)
         sprintf (str, "OS=%s\n"
 #ifdef DEBUG
-                      "Build=DEBUG\n"
+                      "Build=Debug\n"
 #else
-                      "Build=OPTIMIZED\n"
+                      "Build=Optimized\n"
 #endif
                       "max_threads=%u\n"
                       "file=%s\n\n"
@@ -118,9 +118,9 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
     else // compress
         sprintf (str, "OS=%s\n"
 #ifdef DEBUG
-                      "Build=DEBUG\n"
+                      "Build=Debug\n"
 #else
-                      "Build=OPTIMIZED\n"
+                      "Build=Optimized\n"
 #endif
                       "max_threads=%u\n"
                       "file=%s\n\n"
