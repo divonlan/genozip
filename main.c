@@ -187,7 +187,7 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
             global_num_samples, z_file->num_lines, z_file->num_subfields);
 
     printf ("Compression stats:\n");
-    printf ("                               VCF     %%       GENOZIP         %%  Ratio\n");
+    printf ("                               VCF     %%       GENOZIP     %%  Ratio\n");
     const char *format = "%22s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
 
 #ifdef DEBUG
