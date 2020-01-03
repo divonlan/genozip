@@ -271,7 +271,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, int *
             }
 
             // if we ended with a : - remove it
-            next -= (vb->line_gt_data.len && vb->line_gt_data.data[vb->line_gt_data.len-1] == ':');
+            next -= (next[-1] == ':');
 
             // add sample terminator - \t
             *(next++) = '\t';
