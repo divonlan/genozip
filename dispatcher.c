@@ -69,7 +69,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
     buf_alloc (dd->pseudo_vb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (!flag_show_time && dd->show_progress) 
+    if (dd->show_progress) 
         fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
 
     return dd;
