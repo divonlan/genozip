@@ -364,7 +364,7 @@ int zfile_read_one_section (VariantBlock *vb,
             "Error: invalid header - expecting compressed_offset to be %u but found %u", header_size, compressed_offset);
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
-    buf_alloc (vb, data, header_offset + compressed_offset + data_compressed_len, 1, "zfile_read_one_section", 2);
+    buf_alloc (vb, data, header_offset + compressed_offset + data_compressed_len, 2, "zfile_read_one_section", 2);
 
     // read the rest of the header
     // if skip_this_vcf_header, VCF header is bigger than Variant Data header that was read

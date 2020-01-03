@@ -15,7 +15,7 @@
 
 #include "genozip.h"
 
-//#define DISPLAY_ALLOCS_AFTER 4000 // display allocations, except the first X allocations. reallocs are always displayed
+//#define DISPLAY_ALLOCS_AFTER 4100 // display allocations, except the first X allocations. reallocs are always displayed
 
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
 #define OVERFLOW_TRAP  0x776F6C667265766FULL // "OVERFLOW" - inserted at the end of each memory block to detected overflows
@@ -198,7 +198,7 @@ static inline void buf_add(VariantBlock *vb, Buffer *buf)
 unsigned buf_alloc (VariantBlock *vb,
                     Buffer *buf, 
                     unsigned requested_size,
-                    float grow_at_least_factor, // grow more than new_size, IF growth is needed   
+                    float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
                     const char *name, unsigned param)      // for debugging
 {
     START_TIMER;
@@ -218,6 +218,9 @@ unsigned buf_alloc (VariantBlock *vb,
 
         // case 2: we need to allocate memory - buffer is already allocated so copy over the data
         if (buf->memory) {
+#ifdef DISPLAY_ALLOCS_AFTER
+            unsigned  old_size = buf->size;
+#endif
             buf->memory = realloc (buf->memory, new_size + 2*sizeof (long long));
             ASSERT (buf->memory, "Error: buf_alloc failed to realloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
 
@@ -226,17 +229,17 @@ unsigned buf_alloc (VariantBlock *vb,
 
             if (!buf->memory) {
                 buf_test_overflows(vb);
-#               ifdef DEBUG
+#ifdef DEBUG
                     buf_display_memory_usage(true);
-#               endif
+#endif
             }
 
             *(long long *)(buf->data + new_size) = OVERFLOW_TRAP; // overflow prortection (underflow protection was copied with realloc)
 
-#           ifdef DISPLAY_ALLOCS_AFTER
+#ifdef DISPLAY_ALLOCS_AFTER
                 if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-                    printf ("%s (%u): requested_size=%u growth_factor=%f new_size=%u\n", name, param, requested_size, grow_at_least_factor, new_size);
-#           endif
+                    printf ("%s (%u): old_size=%u requested_size=%u growth_factor=%f new_size=%u\n", name, param, old_size, requested_size, grow_at_least_factor, new_size);
+#endif
         }
 
         // case 3: we need to allocate memory - buffer is not yet allocated, so no need to copy data
@@ -265,9 +268,10 @@ unsigned buf_alloc (VariantBlock *vb,
             
             buf_add(vb, buf);
 
-    #ifdef DISPLAY_ALLOCS_AFTER
-            printf ("%s (%u) (malloc2): %u\n", name, param, new_size);
-    #endif
+#ifdef DISPLAY_ALLOCS_AFTER
+            if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
+                printf ("%s (%u) (malloc): %u\n", name, param, new_size);
+#endif
         }
     }
 
