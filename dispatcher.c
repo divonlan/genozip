@@ -154,8 +154,8 @@ void dispatcher_dispatch (Dispatcher dispatcher, void (*func)(VariantBlock *))
             char str[30]; 
             printf ("\nvb_memory=%s max_threads=%u\n", buf_human_readable_size (vb_memory, str), dd->max_threads);
 #endif
-#endif
         }
+#endif
     }
     dd->next_vb = NULL;
     dd->num_running_compute_threads++;
