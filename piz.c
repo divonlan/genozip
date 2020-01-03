@@ -474,8 +474,11 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
     }
     *next = '\0'; // end of string;
 
-    // sanity check
-    ASSERT (next - dl->line.data == dl->line.len, "Error: unexpected line size: calculated=%u, actual=%u", dl->line.len, (unsigned)(next - dl->line.data));
+    // sanity check (the actual can be smaller in a line with missing samples)
+    ASSERT (next - dl->line.data <= dl->line.len, "Error: unexpected line size in line_i=%u: calculated=%u, actual=%u", 
+            vb->first_line + line_i, dl->line.len, (unsigned)(next - dl->line.data));
+
+    dl->line.len = next - dl->line.data; // update line len to actual, which will be smaller in case of missing samples
 
     COPY_TIMER (vb->profile.piz_merge_line);
 }
