@@ -59,7 +59,7 @@ static inline char vcffile_get_char(VariantBlock *vb)
 // get the next line in a text file terminated by \n or EOF. 
 // Returns the line length (excluding the terminating \0) or 0 if no more lines exist.
 // unlike fgets, the line is not limited by any particular length
-bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, Buffer *line)
+bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, Buffer *line, const char *buf_name)
 {    
     File *file = vb->vcf_file; // for code readability
 
@@ -67,8 +67,8 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, B
     unsigned *lines_so_far      = vb ? &file->data_lines_so_far : &file->header_lines_so_far;
 
     // allocate only if buffer not allocated already - otherwise try to make do with what we have first
-    unsigned buf_len = line->size ? buf_alloc (vb, line, line->size, 1, "vcffile_get_line", line_i_in_file) // just make buffer allocated, without mallocing new memory
-                                  : buf_alloc (vb, line, MAX(1000, (unsigned)(*avg_line_len_so_far * 1.2)), 1, "vcffile_get_line", line_i_in_file); // we reuse the same buffer for every line
+    unsigned buf_len = line->size ? buf_alloc (vb, line, line->size, 1, buf_name, line_i_in_file) // just make buffer allocated, without mallocing new memory
+                                  : buf_alloc (vb, line, MAX(1000, (unsigned)(*avg_line_len_so_far * 1.2)), 1, buf_name, line_i_in_file); // we reuse the same buffer for every line
     unsigned str_len = 0;
 
     do {
@@ -86,7 +86,7 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, B
         str_len++;
     
         if (str_len+1 > buf_len) // leave 1 for the \0 to be added 
-            buf_len = buf_alloc (vb, line, MAX (str_len * 2, (unsigned)(*avg_line_len_so_far * 2)), 1, "vcffile_get_line", line_i_in_file);
+            buf_len = buf_alloc (vb, line, MAX (str_len * 2, (unsigned)(*avg_line_len_so_far * 2)), 1, buf_name, line_i_in_file);
 
     } while (line->data[str_len-1] != '\n');
             

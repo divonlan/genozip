@@ -84,12 +84,15 @@ void dispatcher_finish (Dispatcher dispatcher)
         clock_gettime(CLOCK_REALTIME, &tb); 
         int wallclock_ms = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000);
 
-        fprintf (stderr, "PROFILER:\nwallclock: %u\n%s\n", wallclock_ms, 
+        fprintf (stderr, "\nPROFILER:\nwallclock: %u milliseconds\n%s\n", wallclock_ms, 
                  profiler_print_report (&dd->pseudo_vb->profile, dd->max_threads, dd->filename));
     }
 
     buf_free (&dd->compute_threads_buf);
     vb_release_vb (&dd->pseudo_vb);
+
+    // must be before vb_cleanup_memory() 
+    if (flag_show_memory) buf_display_memory_usage (false);    
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // this is only true if the files are being concatenated
@@ -229,14 +232,10 @@ void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long lon
     buf_test_overflows(dd->processed_vb);
 #endif
 
-    if (flag_show_time) {
+    if (flag_show_time) 
         profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
 
-        fprintf (stderr, "COMPLETED     block #%u %s\n", 
-                 dd->processed_vb->variant_block_i, profiler_print_short (&dd->processed_vb->profile));
-    }
-
-    if (flag_show_time || !dd->show_progress) return; // we don't show progress in profiler mode
+    if (!dd->show_progress) return; // we don't show progress in profiler mode
 
     struct timespec tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 

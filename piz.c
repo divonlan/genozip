@@ -392,8 +392,15 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
         }
     }
 
-    dl->line.len = var_data_len + ht_digits_len + phase_sepr_len + gt_colon_len + gt_data_len; // assigning line->line.len before allocating line->line should work
-    buf_alloc (vb, &dl->line, dl->line.len + 2, 1, "dl->line", vb->first_line + line_i); // +1 for string terminator, +1 for temporary additonal phase in case of '*'
+    // this buf_alloc, when just naively called with the size actually needed, is responsible for 63% of the memory
+    // consumed, and 34% of the execution time on one of our large test files. the time is mostly due to reallocs by subsequent
+    // VBs. By allocating a bit more than required, we avoid most of the reallocs and significantly bring down the overall
+    // execution time of genounzip
+    
+    dl->line.len = var_data_len + ht_digits_len + phase_sepr_len + gt_colon_len + gt_data_len; 
+
+    if (!buf_is_allocated (&dl->line) || dl->line.size < dl->line.len + 2)
+        buf_alloc (vb, &dl->line, 1.2 * (dl->line.len + 2), 1, "dl->line", vb->first_line + line_i); // +1 for string terminator, +1 for temporary additonal phase in case of '*'
 
     char *next    = dl->line.data;
     char *next_gt = vb->line_gt_data.data;
@@ -408,6 +415,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
 
     // add samples
     for (unsigned sample_i=0; sample_i < global_num_samples; sample_i++) {
+
         // add haplotype data - ploidy haplotypes per sample 
         if (dl->has_haplotype_data) {
 

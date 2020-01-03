@@ -536,7 +536,7 @@ void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
         //printf ("vb_line_i=%u\n", vb_line_i);
         DataLine *dl = &vb->data_lines[vb_line_i];
 
-        if (lines_orig) buf_copy (vb, &lines_orig[vb_line_i], &dl->line, 1, 0, dl->line.len+1); // if testing
+        if (lines_orig) buf_copy (vb, &lines_orig[vb_line_i], &dl->line, 1, 0, dl->line.len+1, "lines_orig", vb->variant_block_i); // if testing
         bool ploidy_overflow = seg_data_line (vb, dl, vb->first_line + vb_line_i);
 #       define MAX_PLOIDY_OVERFLOWS 1000 /* an arbitrary large number to avoid an ininifinate loop in case of a bug */
 

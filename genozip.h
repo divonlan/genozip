@@ -156,7 +156,7 @@ typedef struct {
         piz_get_haplotype_data_line, piz_get_line_get_num_subfields,
         piz_get_genotype_sample_starts, piz_get_line_subfields, piz_merge_line, 
         piz_get_phase_data_line, piz_get_genotype_data_line, zfile_uncompress_section,
-        piz_reconstruct_line_components, squeeze, piz_decode_pos, buffer,
+        piz_reconstruct_line_components, squeeze, piz_decode_pos, buf_alloc,
         zip_compress_variant_block, seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
         zip_generate_genotype_sections, zip_generate_phase_sections, zip_generate_variant_data_section,
         mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx,
@@ -383,7 +383,7 @@ extern void file_close (File **vcf_file_p);
 extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
 
-extern bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file, Buffer *line);
+extern bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file, Buffer *line, const char *buf_name);
 extern void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb);
 extern unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf);
 extern void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file);
@@ -504,7 +504,8 @@ extern void buf_free(Buffer *buf); // free buffer - without freeing memory. A fu
 static inline bool buf_is_allocated(Buffer *buf) {return buf->data != NULL && buf->type == BUF_REGULAR;}
 
 extern void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, unsigned bytes_per_entry,
-                      unsigned start_entry, unsigned max_entries /* if 0 copies the entire buffer */);
+                      unsigned start_entry, unsigned max_entries, // if 0 copies the entire buffer
+                      const char *name, unsigned param);
 
 extern void buf_test_overflows(const VariantBlock *vb);
 extern bool buf_has_overflowed(const Buffer *buf);

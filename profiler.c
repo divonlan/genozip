@@ -22,7 +22,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->piz_get_genotype_data_line        += src->piz_get_genotype_data_line;
     dst->zfile_uncompress_section          += src->zfile_uncompress_section;
     dst->squeeze                           += src->squeeze;
-    dst->buffer                            += src->buffer;
+    dst->buf_alloc                         += src->buf_alloc;
     dst->piz_get_line_get_num_subfields    += src->piz_get_line_get_num_subfields;
     dst->piz_get_genotype_sample_starts    += src->piz_get_genotype_sample_starts;
     dst->piz_get_line_subfields            += src->piz_get_line_subfields;
@@ -64,8 +64,10 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
 {
     static char str[2000]; // not thread safe
 
-#if __WIN32__
-    static const char *os ="Windows";
+#if __WIN32__ && defined _WIN64
+    static const char *os ="Windows (64 bit)";
+#elif defined _WIN32 
+    static const char *os ="Windows (32 bit)";
 #elif defined __APPLE__
     static const char *os ="MacOS";
 #else
@@ -99,6 +101,7 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
                       "      piz_get_phase_data_line: %u\n"
                       "      piz_merge_line: %u\n"
                       "   squeeze: %u\n"
+                      "buf_alloc: %u\n"
                       "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n",
                  os, max_threads, filename ? filename : "(not file)",
                  ms(p->read), ms(p->mtf_integrate_dictionary_fragment), ms(p->write), 
@@ -109,6 +112,7 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
                  ms(p->piz_get_genotype_sample_starts), ms(p->piz_get_genotype_data_line), 
                  ms(p->piz_get_phase_data_line), ms(p->piz_merge_line),
                  ms(p->squeeze), 
+                 ms(p->buf_alloc), 
                  ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
                  
     else // compress

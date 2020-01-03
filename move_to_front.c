@@ -144,7 +144,7 @@ uint32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip,
                    2, "mtf_ctx->mtf" , 0);
 
     if (!buf_is_allocated (&ctx->hash)) {
-        buf_alloc (vb, &ctx->hash, sizeof(int) * MTF_HASH_TABLE_LEN, 1, "ctx->hash", 0);
+        buf_alloc (vb, &ctx->hash, sizeof(int) * MTF_HASH_TABLE_LEN, 1, "mtf_ctx->hash", 0);
         int *hash = (int *)ctx->hash.data;
         for (unsigned i=0; i < MTF_HASH_TABLE_LEN; i++) hash[i] = NIL;
         ctx->hash.len = MTF_HASH_TABLE_LEN;
@@ -171,9 +171,9 @@ uint32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip,
 static void mtf_copy_ctx (VariantBlock *vb, MtfContext *dst, MtfContext *src)
 {
     if (buf_is_allocated (&src->dict)) {  // something already for this subfield
-        buf_copy (vb, &dst->dict, &src->dict, 1, 0, 0);
-        buf_copy (vb, &dst->hash, &src->hash, sizeof(int), 0, 0);
-        buf_copy (vb, &dst->mtf,  &src->mtf,  sizeof(MtfNode), 0, 0);
+        buf_copy (vb, &dst->dict, &src->dict, 1, 0, 0, "mtf_ctx->dict", vb->variant_block_i);
+        buf_copy (vb, &dst->hash, &src->hash, sizeof(int), 0, 0, "mtf_ctx->hash", vb->variant_block_i);
+        buf_copy (vb, &dst->mtf,  &src->mtf,  sizeof(MtfNode), 0, 0, "mtf_ctx->mtf", vb->variant_block_i);
     }
 
     dst->subfield = src->subfield;

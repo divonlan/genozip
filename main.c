@@ -674,7 +674,5 @@ int main (int argc, char **argv)
     // if this is "list", finalize
     if (command == LIST) main_list (NULL, true);
 
-    if (flag_show_memory) buf_display_memory_usage (false);
-        
     return 0;
 }

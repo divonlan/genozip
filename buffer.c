@@ -271,7 +271,7 @@ unsigned buf_alloc (VariantBlock *vb,
         }
     }
 
-    if (vb) COPY_TIMER (vb->profile.buffer);
+    if (vb) COPY_TIMER (vb->profile.buf_alloc);
 
     return buf->size;
 }
@@ -366,7 +366,7 @@ void buf_free(Buffer *buf)
     if (buf->type == BUF_REGULAR) {
         buf->data = NULL ; 
         buf->len = 0;
-        // memory and size are not changed
+        // name, memory and size are not changed
     }
     else
         memset (buf, 0, sizeof (Buffer));
@@ -374,13 +374,14 @@ void buf_free(Buffer *buf)
 
 void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, 
                unsigned bytes_per_entry, // how many bytes are counted by a unit of .len
-               unsigned start_entry, unsigned max_entries /* if 0 copies the entire buffer */)
+               unsigned start_entry, unsigned max_entries,  // if 0 copies the entire buffer 
+               const char *name, unsigned param)
 {
     ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
     
     unsigned num_entries = max_entries ? MIN (max_entries, src->len - start_entry) : src->len - start_entry;
 
-    buf_alloc(vb, dst, num_entries * bytes_per_entry, 1, "buf_copy", 0); // use realloc rather than malloc to allocate exact size
+    buf_alloc(vb, dst, num_entries * bytes_per_entry, 1, name, param); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 

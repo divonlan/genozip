@@ -33,7 +33,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
         
             // if first vcf file - copy the header to the global
             if (!buf_is_allocated (&global_vcf_header_line)) {
-                buf_copy (vb, &global_vcf_header_line, vcf_header, 1, i, vcf_header->len - i);
+                buf_copy (vb, &global_vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "global_vcf_header_line", 0);
                 vcf_header_line_filename = filename;
             }
 
@@ -75,12 +75,12 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
 bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line)
 {    
-    static Buffer line            = EMPTY_BUFFER; // serves to read the header, then its the first line in the data, and again the header when starting the next vcf file
+    static Buffer vcf_header_line = EMPTY_BUFFER; // serves to read the header, then its the first line in the data, and again the header when starting the next vcf file
     static Buffer vcf_header_text = EMPTY_BUFFER;
 
     // line might be used as the first line, so it cannot be free at the end of this function
     // however, by the time we come here again, at the next VCF file, it is no longer needed
-    if (buf_is_allocated (&line)) buf_free (&line); 
+    if (buf_is_allocated (&vcf_header_line)) buf_free (&vcf_header_line); 
 
     *first_data_line = NULL;
 
@@ -90,26 +90,26 @@ bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_d
 
     while (1) 
     {
-        bool success = vcffile_get_line(vb, *line_i + 1, &line);
+        bool success = vcffile_get_line(vb, *line_i + 1, &vcf_header_line, "vcf_header_line");
         if (!success) break; // end of header - no data lines in this VCF file
 
         (*line_i)++;
 
         // case : we reached the end of the header - we exit here
 
-        if (line.data[0] != '#') { // end of header - we have read the first data line
-            line.data[line.len] = '\0'; // remove newline - data line reader is expecting lines without the newline
+        if (vcf_header_line.data[0] != '#') { // end of header - we have read the first data line
+            vcf_header_line.data[vcf_header_line.len] = '\0'; // remove newline - data line reader is expecting lines without the newline
 
-            *first_data_line = &line;
+            *first_data_line = &vcf_header_line;
 
             break;
         }
 
-        buf_alloc (vb, &vcf_header_text, line.len + vcf_header_text.len + 1, 2, "vcf_header_text", 1); // +1 for terminating \0
+        buf_alloc (vb, &vcf_header_text, vcf_header_line.len + vcf_header_text.len + 1, 2, "vcf_header_text", 1); // +1 for terminating \0
 
-        memcpy (&vcf_header_text.data[vcf_header_text.len], line.data, line.len);
+        memcpy (&vcf_header_text.data[vcf_header_text.len], vcf_header_line.data, vcf_header_line.len);
         
-        vcf_header_text.len += line.len;
+        vcf_header_text.len += vcf_header_line.len;
         vcf_header_text.data[vcf_header_text.len] = '\0';
     }
 

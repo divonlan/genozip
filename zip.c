@@ -35,11 +35,11 @@ static void zip_read_variant_block (File *vcf_file,
         if (vb_line_i > 0 || !first_data_line) { // first line might be supplied by caller
 
             // allocate line Buffer and read line from file 
-            bool success = vcffile_get_line (vb, first_line + vb_line_i, &dl->line); 
+            bool success = vcffile_get_line (vb, first_line + vb_line_i, &dl->line, "dl->line"); 
             if (!success) break; // no more lines - we're done
         }
         else {
-            buf_copy (vb, &dl->line, first_data_line, 1, 0, 0);
+            buf_copy (vb, &dl->line, first_data_line, 1, 0, 0, "dl->line", vb->variant_block_i);
             buf_free (first_data_line); 
         }
         dl->line_i = first_line + vb_line_i;

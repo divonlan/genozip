@@ -39,7 +39,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             file->file = BZ2_bzopen (file->name, mode == READ ? "rb" : "wb");    
         }
         else         
-            ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz extension", global_cmd, file->name);
+            ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz or .vcf.bz2 extension", global_cmd, file->name);
 
         ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
     }

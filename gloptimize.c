@@ -172,7 +172,7 @@ cleanup:
 void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, 
                              unsigned dict_start_char, unsigned num_words)
 {
-    buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0);
+    buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0, "optimized_gl_dict", vb->variant_block_i);
 return; // DEBUG
 
     char *next = vb->optimized_gl_dict.data;
