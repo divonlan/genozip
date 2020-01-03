@@ -32,7 +32,7 @@ static void zip_read_variant_block (File *vcf_file,
     {
         DataLine *dl = &vb->data_lines[vb_line_i];
 
-        if (vb_line_i > 0 || !first_data_line) {// first line might be supplied by caller
+        if (vb_line_i > 0 || !first_data_line) { // first line might be supplied by caller
 
             // allocate line Buffer and read line from file 
             bool success = vcffile_get_line (vb, first_line + vb_line_i, &dl->line); 
@@ -122,61 +122,6 @@ static unsigned zip_get_genotype_vb_start_len (VariantBlock *vb)
 
     return section_0_len; // in subfields (uint32_t)
 }
-/*
-static void zip_copy_gt_with_mtf (VariantBlock *vb, DataLine *dl,
-                                  char *dst, const char *src, 
-                                  unsigned *dst_len, unsigned *src_len) //out
-{
-    const char *dst_start = dst;
-    const char *src_start = src;
-
-    unsigned last_index = dl->has_haplotype_data;
-
-    for (unsigned sf=0; sf < MAX_SUBFIELDS; sf++) {
-
-        if (!dl->sf_i[sf].index) continue; // this line doesnt have this subfield
-
-        const char *last_src = src;
-
-        uint32_t snip_len = seg_seek_subfield((char**)&src, dl->sf_i[sf].index - last_index);
-        last_index = dl->sf_i[sf].index;
-
-        if (snip_len) {
-            if (src > last_src) { // if we skipped some subfields (or maybe a seperator) - copy them verbatim
-                memcpy (dst, last_src, src-last_src);
-                dst += src-last_src;
-            }
-        
-            // get index, moves to front, and moves src to the next : or \t separator - for all subfields
-            Base250 index = mtf_get_index_by_snip (vb, &vb->mtf_ctx[dl->sf_i[sf].subfield], (char**)&src, snip_len); // note that subfields are sorted by index by seg_format()
-
-            memcpy (dst, index.numerals, index.num_numerals);
-            dst += index.num_numerals;
-        }
-
-        // whether found or not - we are standing now on a separator. copy it
-        // *(dst++) = *(src++);
-        src++; // DEBUG
-        if (src[-1] == '\t') break; // end of gt data - possibly missing some subfields
-    }
-
-    // copy up to and including the \t - if there are more subfields
-    if (src[-1] != '\t') {
-        unsigned len = strcpy_tab (dst, src);
-        dst += len;
-        src += len;
-    }
-
-    // TO DO: for GL, the shortest GL is 0 characters "0,0,0" and the longest index is 4,
-    // so we guaranteed this is a shortening transform. However, this might not be the case
-    // if we MTF a single floating point number that has a huge amount of values and hence
-    // a multi-digit index. If we ever do that, we need to make sure that
-    // we have enough memory allocated considering the very rare case where are transform might
-    // be enlarging
-
-    *src_len = src - src_start;
-    *dst_len = dst - dst_start; 
-}*/
 
 // split genotype data to sample groups, within a sample group genotypes are separated by a tab
 static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
@@ -319,13 +264,13 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
     HaploTypeSortHelperIndex *helper_index = (HaploTypeSortHelperIndex *)vb->helper_index_buf.data;
 
     { 
-        START_TIMER; // this loop, testing in 1KGP data, consumes 10% of all compute time
+        START_TIMER; 
         // build index array 
-        for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
-
+        for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
             helper_index[ht_i].index_in_original_line = ht_i;
 
-            for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+            for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
 
                 // we count as alt alleles : 1 - 99 (ascii 49 to 147)
                 //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
