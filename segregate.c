@@ -316,9 +316,6 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
 
         if (*c == '\t' || *c == '\n') num_tabs++;
 
-        if (*area_start == '\n')  // redundant tab at end of line
-            vb->add_bytes[SEC_VARIANT_DATA]--;
-
         // handle the data in the area that we just passed
         switch (area) {
             case VARIANT:
