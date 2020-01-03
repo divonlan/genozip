@@ -32,7 +32,7 @@
 #include "genozip.h"
 
 // globals - set it main() and never change
-const char *global_cmd = NULL; 
+char *global_cmd = NULL; 
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 bool global_little_endian;
 
@@ -531,6 +531,7 @@ int main (int argc, char **argv)
     char *threads_str = NULL;
 
     global_cmd = get_basename(argv[0]); // global var
+    if (file_has_ext (global_cmd, ".exe")) global_cmd[strlen(global_cmd)-4] = 0; // for Windows
 
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 

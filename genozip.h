@@ -518,7 +518,7 @@ extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples;
-extern const char *global_cmd;            // set once in main()
+extern char       *global_cmd;            // set once in main()
 extern unsigned    global_max_threads;    // set in main()
 extern bool        global_little_endian;  // set in main()
 
