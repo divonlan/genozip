@@ -38,6 +38,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->zip_generate_variant_data_section += src->zip_generate_variant_data_section;
 
     dst->mtf_merge_in_vb_ctx               += src->mtf_merge_in_vb_ctx;
+    dst->gl_optimize_dictionary            += src->gl_optimize_dictionary;
     dst->mtf_clone_ctx                     += src->mtf_clone_ctx;
     dst->mtf_integrate_dictionary_fragment += src->mtf_integrate_dictionary_fragment;
 
@@ -139,6 +140,7 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
                       "   zip_generate_variant_data_section: %u\n"
                       "   mtf_clone_ctx: %u\n"
                       "   mtf_merge_in_vb_ctx: %u\n"
+                      "      gl_optimize_dictionary: %u\n"
                       "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n",
                  os, max_threads, filename ? filename : "(not file)",
                  ms(p->read), ms(p->write), ms(p->zip_compress_variant_block), ms(p->compressor), 
@@ -146,7 +148,7 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
                  ms(p->zip_generate_haplotype_sections), ms(p->count_alt_alleles), ms(p->sample_haplotype_data), 
                  ms(p->zip_generate_genotype_sections),
                  ms(p->zip_generate_phase_sections), ms(p->zip_generate_variant_data_section),
-                 ms(p->mtf_clone_ctx), ms(p->mtf_merge_in_vb_ctx), 
+                 ms(p->mtf_clone_ctx), ms(p->mtf_merge_in_vb_ctx), ms(p->gl_optimize_dictionary), 
                  ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
     return str;
 }

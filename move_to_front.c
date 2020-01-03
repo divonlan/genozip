@@ -239,7 +239,7 @@ static void mtf_wait_for_my_turn(VariantBlock *vb)
 }
 
 // this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
-bool mtf_merge_in_vb_ctx_one_subfield(VariantBlock *vb, unsigned sf)
+static bool mtf_merge_in_vb_ctx_one_subfield(VariantBlock *vb, unsigned sf)
 {
     MtfContext *vb_ctx = &vb->mtf_ctx[sf];
 

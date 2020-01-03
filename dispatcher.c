@@ -98,6 +98,8 @@ void dispatcher_finish (Dispatcher dispatcher)
     // this is only true if the files are being concatenated
     if (!flag_concat_mode) vb_cleanup_memory(dd->vb_pool); 
 
+    // free dictionary memories that were abandoned when dictionary realloced (they were not freed so that they can remain
+    // with their overlaying buffers) 
     buf_free_abandoned_memories();
 
     free (dd);

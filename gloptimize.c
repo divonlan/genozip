@@ -16,12 +16,12 @@
 // We skip optimizing a GL field in which not all numbers are of the format -[0-9].[0-9]+ (negative, one 
 // integer digit, up to 9 digits after the decimal point)
 
+#include "genozip.h"
+
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-#include "genozip.h"
 
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */
 
@@ -172,14 +172,16 @@ cleanup:
 void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, 
                              unsigned dict_start_char, unsigned num_words)
 {
-    buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0, "optimized_gl_dict", vb->variant_block_i);
-return; // DEBUG
+    START_TIMER;
 
-    char *next = vb->optimized_gl_dict.data;
+    buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0, "optimized_gl_dict", vb->variant_block_i);
+
     for (unsigned i=0; i < num_words; i++) {
-        gl_optimize_do (next, nodes[i].snip_len);
-        next += nodes[i].snip_len + 1; // skip \t too
+        unsigned char_index = nodes[i].char_index - dict_start_char;
+        gl_optimize_do (&vb->optimized_gl_dict.data[char_index], nodes[i].snip_len);
     }
+
+    COPY_TIMER (vb->profile.gl_optimize_dictionary);
 }
 
 void gl_deoptimize_dictionary (char *data, unsigned len)

@@ -159,7 +159,7 @@ typedef struct {
         piz_reconstruct_line_components, squeeze, piz_decode_pos, buf_alloc,
         zip_compress_variant_block, seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
         zip_generate_genotype_sections, zip_generate_phase_sections, zip_generate_variant_data_section,
-        mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx,
+        mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx, gl_optimize_dictionary,
         tmp1, tmp2, tmp3, tmp4, tmp5;
 } ProfilerRec;
 
