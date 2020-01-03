@@ -26,7 +26,7 @@
             
             // test file
             //"args": ["-t", "data/test-file.vcf", "--show-content"],
-            //"args": ["-z", "-f", "data/test-file.vcf", "--show-content"],
+            "args": ["-z", "-f", "data/test-file.vcf", "--show-content"],
             //"args": ["-d", "-f", "data/test-file.vcf.genozip", "-o", "data/test-file.test.vcf"],
             //"args": ["-z", "-f", "data/chr1-1line.vcf", "--show-content"],
             //"args": ["-d", "-f", "data/chr1-1line.vcf.genozip", "-o", "data/chr1-1line.test.vcf"],
@@ -35,9 +35,10 @@
             //"args": ["-t", "data/file2.1vb.vcf", "--show-content"],
             //"args": ["-z", "-f", "-@1", "data/file2.1vb.vcf", "--show-content"],
             //"args": ["-d", "-f", "data/file2.1vb.vcf.genozip", "-o", "data/file2.1vb.test.vcf"],
-            //"args": ["-z", "-f", "data/USW_Chr2L_1_23011544.vcf", "--show-content"],
-            "args": ["-d", "-f", "data/USW_Chr2L_1_23011544.vcf.genozip", "-o", "data/USW_Chr2L_1_23011544.test.vcf"],
-
+            //"args": ["-z", "-f", "data/USW_Chr2L_1_23011544.vcf", "--show-content"],  // from data/USW_Chr2L_1_23011544.vcf.genotype
+            //"args": ["-d", "-f", "data/USW_Chr2L_1_23011544.vcf.genozip", "-o", "data/USW_Chr2L_1_23011544.test.vcf"], 
+            //"args": ["-z", "data/output_Chr3L_1_23011544.vcf", "--show-content"],  // from data/USW_Chr2L_1_23011544.vcf.genotype
+            
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

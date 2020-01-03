@@ -106,7 +106,8 @@ static void seg_format_field(VariantBlock *vb, DataLine *dl,
         while (str[-1] != '\t' && str[-1] != '\n');
     }
 
-    buf_alloc (vb, &vb->line_gt_data, dl->num_subfields * global_num_samples * sizeof(uint32_t), 1, "line_gt_data", line_i); 
+    if (dl->has_genotype_data)
+        buf_alloc (vb, &vb->line_gt_data, dl->num_subfields * global_num_samples * sizeof(uint32_t), 1, "line_gt_data", line_i); 
 }
 
 static void seg_variant_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len,
@@ -313,7 +314,10 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
         // skip if we didn't arrive at a meaningful separator - tab, newline or : after a haplotype
         if (c != dl->line.data && *c != '\t' && *c != '\n' && (*c != ':' || area != HAPLOTYPE)) continue;
 
-        if (*c == '\t') num_tabs++;
+        if (*c == '\t' || *c == '\n') num_tabs++;
+
+        if (*area_start == '\n')  // redundant tab at end of line
+            vb->add_bytes[SEC_VARIANT_DATA]--;
 
         // handle the data in the area that we just passed
         switch (area) {
@@ -400,6 +404,7 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
             if (dl->has_haplotype_data) {
                 // '*' (haplotype padding) with ploidy 1
                 seg_haplotype_area (vb, dl, "*", 1, line_i, sample_i);
+                vb->add_bytes[SEC_HAPLOTYPE_DATA]++;
             }
 
             if (dl->has_genotype_data) {
