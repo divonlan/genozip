@@ -269,6 +269,12 @@ BZ_EXTERN const char * BZ_API(BZ2_bzerror) (
       BZFILE *b, 
       int    *errnum
    );
+
+// this function was added by Divon Lan (c) 2020
+BZ_EXTERN unsigned long long BZ_API(BZ2_bzoffset) (
+      BZFILE* b
+   );
+
 #endif
 
 #ifdef __cplusplus

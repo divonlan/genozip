@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   main.c
-//   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
+//   Copyright (C) 2019 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <stdio.h>
@@ -22,13 +22,14 @@
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
 #include <termios.h>
-#else
+#else // LINUX
+#include <sched.h>
 #include <sys/ioctl.h>
 #include <sys/sysinfo.h>
 #include <termios.h>
 #endif
 
-#include "vczip.h"
+#include "genozip.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -36,8 +37,7 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 bool global_little_endian;
 
 // the flags are globals 
-int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_gzip=0, flag_concat_mode=0, 
-    flag_show_content=0, flag_show_alleles=0;
+int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_concat_mode=0, flag_show_content=0, flag_show_alleles=0, flag_profiler=0;
 
 int main_print_license()
 {
@@ -73,19 +73,19 @@ int main_print_license()
 int main_print_help()
 {
     printf ("\n");
-    printf ("Usage: vczip  [options]... [files]...\n");
-    printf ("       vcpiz  [options]... [files]...\n");
-    printf ("       vccat [options]... [files]...\n");
+    printf ("Usage: genozip  [options]... [files]...\n");
+    printf ("       genounzip  [options]... [files]...\n");
+    printf ("       genocat [options]... [files]...\n");
     printf ("\n");
     printf ("Compress or uncompress VCF (Variant Call Format) files\n");
     printf ("\n");
     printf ("Actions - use at most one of these actions:\n");
-    printf ("   -z --compress     compress a .vcf or a .vcs.gz file into a .vcz file. The source file is left unchanged.\n");
-    printf ("                     this is the default action for vczip\n");
-    printf ("   -d --decompress   decompress a .vcz file into a .vcf file. The .vcz file is left unchanged.\n");
-    printf ("                     this is the default action for vcpiz\n");
-    printf ("   -l --list         list the compression ratios of these .vcz files\n");
-    printf ("   -t --test         test vczip. Compress the .vcf file(s), decompress, and then compare the\n");
+    printf ("   -z --compress     compress a .vcf, .vcf.gz or .vcf.bz2 file (yes! we can compress an already-compress file).\n");
+    printf ("                     the source file is left unchanged. this is the default action for genozip\n");
+    printf ("   -d --decompress   decompress a .vcf.genozip file. The .vcf.genozip file is left unchanged.\n");
+    printf ("                     this is the default action for genounzip\n");
+    printf ("   -l --list         list the compression ratios of these .vcf.genozip files\n");
+    printf ("   -t --test         test genozip. Compress the .vcf file(s), decompress, and then compare the\n");
     printf ("                     result to the original .vcf - all in memory without writing to any file\n");
     printf ("   -h --help         show this help page\n");
     printf ("   -L --license      show the license terms and conditions for this product\n");
@@ -93,24 +93,25 @@ int main_print_help()
     printf ("\n");    
     printf ("Flags:\n");    
     printf ("   -c --stdout       send output to standard output instead of a file. -dc is the default action of dvcat\n");    
-    printf ("   -f --force        force overwrite of the output file, or force writing .vcz data to standard output\n");    
+    printf ("   -f --force        force overwrite of the output file, or force writing .vcf.genozip data to standard output\n");    
     printf ("   -R --replace      replace the source file with the result file, rather than leaving it unchanged\n");    
     printf ("   -o --output       output file name. this option can also be used to concatenate multiple input files\n");
     printf ("                     into a single concatented output file\n");
-    printf ("   -g --gzip         in conjunction with -d, generates .vcf.gz files compatabile with bgzip / gzip\n");    
     printf ("   -q --quiet        don't show the progress indicator\n");    
     printf ("   -@ --threads      specify how many threads to use. default is 8. for best performance, this should match\n");    
     printf ("   --show-content    show the information content of VCF files and the compression ratios of each components\n");
-    printf ("                     the number of logical CPU cores (which is double the number of physical cores on Intel processors)");
+    printf ("                     the number of logical CPU cores (which is double the number of physical cores on Intel processors)\n");
     printf ("   --show-alleles    output allele values to stdout. Each row corresponds to a row in the VCF file.\n");
-    printf ("                     Mixed-ploidy regions are padded, and 2-digit allele values are replaced with an ascii character\n");
+    printf ("                     mixed-ploidy regions are padded, and 2-digit allele values are replaced with an ascii character\n");
+    printf ("   --show-time       show what functions are consuming the most time (useful mostly for developers of genozip)\n");
 
     printf ("\n");
     printf ("One or more file names may be given, or if omitted, standard input/output is used instead\n");
     printf ("\n");
-    printf ("vczip is freely available for academic use. Commercial use requires a license. vczip contains pantent-pending inventions\n");
+    printf ("genozip is available for free for non-commercial use. Commercial use requires a commercial license.\n");
+    printf ("genozip contains pantent-pending inventions\n");
     printf ("\n");
-    printf ("For bug reports or license inquires: vczip@blackpawventures.com\n");
+    printf ("For bug reports or license inquires: genozip@blackpawventures.com\n");
     printf ("\n");
     printf ("THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE\n");
     printf ("WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE\n");
@@ -122,7 +123,7 @@ int main_print_help()
 
 int main_print_version()
 {
-    printf ("version=%u\n", VCZIP_VERSION);
+    printf ("version=%u\n", GENOZIP_VERSION);
     return 0;
 }
 
@@ -164,47 +165,85 @@ static unsigned main_get_num_cores()
     return (unsigned)num_cores;
  
 #else // Linux etc
-    return get_nprocs();
+    // this works correctly with slurm too (get_nprocs doesn't account for slurm core allocation)
+    cpu_set_t cpu_set_mask;
+    extern int sched_getaffinity (__pid_t __pid, size_t __cpusetsize, cpu_set_t *__cpuset);
+    sched_getaffinity(0, sizeof(cpu_set_t), &cpu_set_mask);
+    return __sched_cpucount (sizeof (cpu_set_t), &cpu_set_mask);
+    // TODO - sort out include files so we don't need this extern
+
+    //return get_nprocs();
 #endif
 }
 
 static void main_display_section_stats (const File *vcf_file, const File *z_file)
 {
-    const SectionType secs[] = {SEC_VCF_HEADER, SEC_VARIANT_DATA, SEC_HAPLOTYPE_DATA, SEC_GENOTYPE_DATA, SEC_PHASE_DATA, SEC_STATS_HT_SEPERATOR};
-    const char *sec_names[] = {"VCF header", "Columns 1-9", "Allele values", "Other subfields", "Phasing char","Allele separator char"};
     char vsize[30], zsize[30];
     uint64_t total_vcf=0, total_z=0;
 
     printf ("\n\n");
     if (vcf_file->name) printf ("File name: %s\n", vcf_file->name);
-    printf ("Individuals: %u   Variants: %"PRIu64"\n", global_num_samples, z_file->num_lines);
+    printf ("Individuals: %u   Variants: %"PRIu64"   Non-GT subfields: %u\n", 
+            global_num_samples, z_file->num_lines, z_file->num_subfields);
 
-    printf ("Section stats:\n");
-    printf ("Section                 VCF bytes     %%     VCZ bytes     %%  Ratio\n");
-    const char *format = "%21s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
+    printf ("Compression stats:\n");
+    printf ("                         VCF bytes     %%     GENOZIP bytes     %%  Ratio\n");
+    const char *format = "%22s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
+
+#ifdef DEBUG
+    // the order in which we want them displayed
+    const SectionType secs[] = {SEC_VCF_HEADER, SEC_VARIANT_DATA, 
+                                SEC_HAPLOTYPE_DATA, SEC_PHASE_DATA, SEC_STATS_HT_SEPERATOR, 
+                                SEC_GENOTYPE_DATA, SEC_DICTIONARY};
+
+    const char *categories[] = {"VCF header", "Columns 1-9", 
+                                "Haplotype data", "Phasing char", "HT separator char", 
+                                "Other subfields", "Other subfields: dicts"};
+
+    uint64_t vbytes[NUM_SEC_TYPES], zbytes[NUM_SEC_TYPES];
     for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
-        printf (format, sec_names[sec_i], 
-                buf_human_readable_size(vcf_file->section_bytes[secs[sec_i]], vsize), 100.0 * (double)vcf_file->section_bytes[secs[sec_i]] / (double)vcf_file->vcf_data_size,
-                buf_human_readable_size(z_file->section_bytes[secs[sec_i]], zsize), 100.0 * (double)z_file->section_bytes[secs[sec_i]] / (double)z_file->disk_size,
-                z_file->section_bytes[secs[sec_i]] ? (double)vcf_file->section_bytes[secs[sec_i]] / (double)z_file->section_bytes[secs[sec_i]] : 0,
-                !z_file->section_bytes[secs[sec_i]] ? (vcf_file->section_bytes[secs[sec_i]] ? "\b\b\bInf" : "\b\b\b---") : "");
-
-        total_vcf += vcf_file->section_bytes[sec_i];
-        total_z   += z_file->section_bytes[sec_i];
+        vbytes[sec_i] = vcf_file->section_bytes[secs[sec_i]];
+        zbytes[sec_i] = z_file->section_bytes[secs[sec_i]];
     }
+
+#else // show a summary only
+    const char *categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9"};
+    
+    uint64_t vbytes[] = {vcf_file->section_bytes[SEC_HAPLOTYPE_DATA],
+                         vcf_file->section_bytes[SEC_PHASE_DATA] + vcf_file->section_bytes[SEC_GENOTYPE_DATA] + vcf_file->section_bytes[SEC_STATS_HT_SEPERATOR],
+                         vcf_file->section_bytes[SEC_VCF_HEADER] + vcf_file->section_bytes[SEC_VARIANT_DATA]
+                        };
+
+    uint64_t zbytes[] = {z_file->section_bytes[SEC_HAPLOTYPE_DATA],
+                         z_file->section_bytes[SEC_PHASE_DATA] + z_file->section_bytes[SEC_GENOTYPE_DATA] + z_file->section_bytes[SEC_DICTIONARY],
+                         z_file->section_bytes[SEC_VCF_HEADER] + z_file->section_bytes[SEC_VARIANT_DATA]
+                        };
+#endif
+
+    for (unsigned i=0; i < sizeof(vbytes)/sizeof(vbytes[0]); i++) {
+        printf (format, categories[i], 
+                buf_human_readable_size(vbytes[i], vsize), 100.0 * (double)vbytes[i] / (double)vcf_file->vcf_data_size,
+                buf_human_readable_size(zbytes[i], zsize), 100.0 * (double)zbytes[i] / (double)z_file->disk_size,
+                zbytes[i] ? (double)vbytes[i] / (double)zbytes[i] : 0,
+                !zbytes[i] ? (vbytes[i] ? "\b\b\bInf" : "\b\b\b---") : "");
+
+        total_vcf += vbytes[i];
+        total_z   += zbytes[i];
+    }
+
     printf (format, "TOTAL", 
             buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size,
             buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
             (double)total_vcf / (double)total_z, "");
 
-    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for VCZ sizes: total section sizes=%"PRIu64" but file size is %"PRIu64" (diff=%"PRId64")", 
+    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRIu64" but file size is %"PRIu64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);
 
     ASSERTW (total_vcf == vcf_file->vcf_data_size, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRIu64" but file size is %"PRIu64" (diff=%"PRId64")", 
              total_vcf, vcf_file->vcf_data_size, vcf_file->vcf_data_size - total_vcf);
 }
 
-static void main_vczip (const char *vcf_filename, 
+static void main_genozip (const char *vcf_filename, 
                         char *z_filename,
                         int pipefd_zip_to_unzip,  // send output to pipe (used for testing)
                         unsigned max_threads,
@@ -217,7 +256,7 @@ static void main_vczip (const char *vcf_filename,
     if (vcf_filename) 
         vcf_file = file_open (vcf_filename, READ, VCF);
     else {  // stdin
-        vcf_file = file_fdopen (0, READ, STDIN);
+        vcf_file = file_fdopen (0, READ, STDIN, false);
         flag_stdout = true; // implicit setting of stdout by using stdin
     }
 
@@ -231,14 +270,18 @@ static void main_vczip (const char *vcf_filename,
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
                 if (vcf_file->type == VCF)
-                    sprintf (z_filename, "%.*sz", fn_len-1, vcf_filename); // .vcf -> .vcz
-                else // VCF_GZ
-                    sprintf (z_filename, "%.*sz", fn_len-4, vcf_filename); // .vcf.gz -> .vcz
+                    sprintf (z_filename, "%s.genozip", vcf_filename); // .vcf -> .vcf.genozip
+                else if (vcf_file->type == VCF_GZ)
+                    sprintf (z_filename, "%.*sgenozip", fn_len-2, vcf_filename); // .vcf.gz -> .vcf.genozip
+                else if (vcf_file->type == VCF_BZ2)
+                    sprintf (z_filename, "%.*sgenozip", fn_len-3, vcf_filename); // .vcf.gz -> .vcf.genozip
+                else
+                    ABORT ("Invalid file type: %u", vcf_file->type);
             }
             ASSERT (flag_force || access(z_filename, F_OK), 
                     "%s: output file %s already exists", global_cmd, z_filename);
 
-            z_file = file_open (z_filename, WRITE, VCZ);
+            z_file = file_open (z_filename, WRITE, GENOZIP);
         }
         z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
         z_file->vcf_data_so_far                    = 0; // reset these as they relate to the VCF data of the VCF file currently being processed
@@ -250,15 +293,15 @@ static void main_vczip (const char *vcf_filename,
 #endif
         ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
-        z_file = file_fdopen (1, WRITE, STDOUT);
+        z_file = file_fdopen (1, WRITE, STDOUT, false);
     } 
     else if (pipefd_zip_to_unzip >= 0) {
-        z_file = file_fdopen (pipefd_zip_to_unzip, WRITE, PIPE);
+        z_file = file_fdopen (pipefd_zip_to_unzip, WRITE, PIPE, true);
     }
     else ABORT0 ("Error: No output channel");
     
     zip_dispatcher (flag_quiet ? NULL : get_basename(vcf_filename), vcf_file, z_file, 
-                    flag_concat_mode, pipefd_zip_to_unzip >= 0, max_threads);
+                    pipefd_zip_to_unzip >= 0, max_threads);
 
     if (flag_show_content) main_display_section_stats (vcf_file, z_file);
 
@@ -267,8 +310,8 @@ static void main_vczip (const char *vcf_filename,
     file_close (&vcf_file);
 
     if (is_last_file && z_file) {
-        // update the vcf data size in the VCZ vcf_header section
-        if (z_file->type == VCZ)
+        // update the vcf data size in the GENOZIP vcf_header section
+        if (z_file->type == GENOZIP)
             zfile_update_vcf_header_section_header (z_file, z_file->vcf_concat_data_size, z_file->num_lines);
 
         file_close (&z_file); 
@@ -277,7 +320,7 @@ static void main_vczip (const char *vcf_filename,
     if (remove_vcf_file) file_remove (vcf_filename); 
 }
 
-static void main_vcpiz (const char *z_filename,
+static void main_genounzip (const char *z_filename,
                         char *vcf_filename, 
                         int pipe_from_zip_thread, 
                         int pipe_to_test_thread,
@@ -286,37 +329,26 @@ static void main_vcpiz (const char *z_filename,
     static File *vcf_file = NULL; // static to support concat mode
     File *z_file;
 
-    if (vcf_filename) {
-        if (file_has_ext (vcf_filename, ".gz"))
-            flag_gzip = true; // output file .gz implicitly turns on flag_gzip
-
-        ASSERT (!flag_gzip || file_has_ext (vcf_filename, ".gz"), "%s: output file %s does not end with gz, which is incompatable with the --gzip / -g option", 
-                global_cmd, vcf_filename);
-    }
-
     // get input FILE
     if (z_filename) {
         unsigned fn_len = strlen (z_filename);
 
-        ASSERT (file_has_ext (z_filename, ".vcz"), "%s: file: %s - vczip can only decompress files with a .vcz extension", global_cmd, z_filename);
+        ASSERT (file_has_ext (z_filename, ".vcf.genozip"), "%s: file: %s - genozip can only decompress files with a .vcf.genozip extension", global_cmd, z_filename);
 
         if (!vcf_filename && !flag_stdout && pipe_to_test_thread < 0) {
             vcf_filename = malloc(fn_len + 10);
             ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
 
-            if (flag_gzip)
-                sprintf (vcf_filename, "%.*sf.gz", fn_len-1, z_filename);
-            else
-                sprintf (vcf_filename, "%.*sf", fn_len-1, z_filename);
+            sprintf (vcf_filename, "%.*s", fn_len-8, z_filename);    // .vcf.genozip -> .vcf
         }
 
-        z_file = file_open (z_filename, READ, VCZ);    
+        z_file = file_open (z_filename, READ, GENOZIP);    
     }
     else if (pipe_from_zip_thread >= 0) {
-        z_file = file_fdopen (pipe_from_zip_thread, READ, VCZ);
+        z_file = file_fdopen (pipe_from_zip_thread, READ, GENOZIP, false);
     }
     else { // stdin
-        z_file = file_fdopen (0, READ, STDIN);
+        z_file = file_fdopen (0, READ, STDIN, false);
     }
 
     // get output FILE
@@ -329,17 +361,17 @@ static void main_vcpiz (const char *z_filename,
         }
     }
     else if (pipe_to_test_thread >= 0) {
-        vcf_file = file_fdopen (pipe_to_test_thread, WRITE, VCF);
+        vcf_file = file_fdopen (pipe_to_test_thread, WRITE, VCF, false);
     }
     else { // stdout
 #ifdef _WIN32
         ASSERT (isatty(1), "%s: redirecting output is not currently supported on Windows", global_cmd);
 #endif
-        vcf_file = file_fdopen (1, WRITE, VCF); // STDOUT
+        vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
     }
 
     piz_dispatcher (flag_quiet ? NULL : get_basename (z_filename), z_file, vcf_file, 
-                    flag_concat_mode, pipe_from_zip_thread >= 0, max_threads);
+                    pipe_from_zip_thread >= 0, max_threads);
 
     if (!flag_concat_mode) 
         file_close(&vcf_file); // no worries about not closing the concatenated file - it will close with the process exits
@@ -365,7 +397,7 @@ void *main_test_compress_thread_entry (void *p_)
 {
     TestToCompressData *t2c = (TestToCompressData*)p_;
 
-    main_vczip (t2c->vcf_filename, NULL, t2c->pipe_to_uncompress_thread, t2c->max_threads, true);
+    main_genozip (t2c->vcf_filename, NULL, t2c->pipe_to_uncompress_thread, t2c->max_threads, true);
 
     return NULL;
 }
@@ -374,14 +406,14 @@ void *main_test_uncompress_thread_entry (void *p_)
 {
     TestToUncompressData *t2u = (TestToUncompressData*)p_;
 
-    main_vcpiz (NULL, NULL, t2u->pipe_from_zip_thread, t2u->pipe_to_test_thread, t2u->max_threads);
+    main_genounzip (NULL, NULL, t2u->pipe_from_zip_thread, t2u->pipe_to_test_thread, t2u->max_threads);
 
     return NULL;
 }
 
 static void main_test (const char *vcf_filename)
 {
-    ASSERT0 (vcf_filename, "vczip: filename missing");
+    ASSERT (vcf_filename, "%s: filename missing", global_cmd);
 
     File *vcf_file = file_open (vcf_filename, READ, VCF);
 
@@ -408,7 +440,7 @@ static void main_test (const char *vcf_filename)
     t2c.max_threads               = (global_max_threads-1) / 2; 
 
     TestToUncompressData t2u;
-    t2u.pipe_from_zip_thread = pipefd_zip_to_unzip[0];
+    t2u.pipe_from_zip_thread      = pipefd_zip_to_unzip[0];
     t2u.pipe_to_test_thread       = pipefd_unzip_to_main[1];
     t2u.max_threads               = (global_max_threads-1) / 2;
 
@@ -416,10 +448,10 @@ static void main_test (const char *vcf_filename)
     ASSERT (!err, "Error: failed to create test compress thread, err=%u", err);
 
     err = pthread_create(&test_uncompress_thread, NULL, main_test_uncompress_thread_entry, &t2u);
-    ASSERT (!err, "Error: failed to create test decompress thread, err=%u", err);
+    ASSERT (!err, "Error: failed to create test unzip thread, err=%u", err);
 
     FILE *from_pipe = fdopen (pipefd_unzip_to_main[0], "rb");
-    ASSERT0 (from_pipe, "Failed to fdopen pipe from decompress");
+    ASSERT0 (from_pipe, "Failed to fdopen pipe from unzip");
 
     vcffile_compare_pipe_to_file (from_pipe, vcf_file);
 
@@ -447,7 +479,7 @@ static void main_list (const char *z_filename, bool finalize)
 
             printf ("Total:                   %19s %19s  %5uX  \n", c_str, u_str, ratio);
             
-            if (files_ignored) printf ("\nIgnored %u files that do not have a .vcz extension or are not readable\n", files_ignored);
+            if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf.genozip extension or are not readable\n", files_ignored);
         }
         return;
     }
@@ -526,15 +558,15 @@ int main (int argc, char **argv)
             {"version",    no_argument,       &command, VERSION     },
             {"compress",   no_argument,       &command, COMPRESS    },
             {"threads",    required_argument, 0, '@'                },
-            {"gzip",       no_argument,       &flag_gzip, 1         },
             {"output",     required_argument, 0, 'o'                }, 
             {"show-content",no_argument,      &flag_show_content, 1 }, 
             {"show-alleles",no_argument,      &flag_show_alleles, 1 }, 
+            {"show-time"   ,no_argument,      &flag_profiler    , 1 }, 
             {0, 0, 0, 0                                             },
         };        
         
         int option_index = 0;
-        int c = getopt_long (argc, argv, "cdfhlLqRtVz@:go:", long_options, &option_index);
+        int c = getopt_long (argc, argv, "cdfhlLqRtVz@:o:", long_options, &option_index);
 
         if (c == -1) break; // no more options
 
@@ -549,7 +581,6 @@ int main (int argc, char **argv)
             case 'f' : flag_force         = 1 ; break;
             case 'R' : flag_replace       = 1 ; break;
             case 'q' : flag_quiet         = 1 ; break;
-            case 'g' : flag_gzip          = 1 ; break;
             case '@' : threads_str  = optarg  ; break;
             case 'o' : out_filename = optarg  ; break;
 
@@ -577,10 +608,10 @@ int main (int argc, char **argv)
     // if command not chosen explicitly, use the default determined by the executable name
     if (command < 0) { 
 
-        // vczip with no input filename, no output filename, and no output or input redirection - show help
+        // genozip with no input filename, no output filename, and no output or input redirection - show help
         if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) command = HELP;
-        else if (strstr (argv[0], "vcpiz"))   command = UNCOMPRESS;
-        else if (strstr (argv[0], "vccat")) { command = UNCOMPRESS; flag_stdout=1 ; }
+        else if (strstr (argv[0], "genounzip"))   command = UNCOMPRESS;
+        else if (strstr (argv[0], "genocat")) { command = UNCOMPRESS; flag_stdout=1 ; }
         else                                  command = COMPRESS; // default 
     }
 
@@ -594,7 +625,6 @@ int main (int argc, char **argv)
     ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --replace / -R option", global_cmd);
     ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --quiet / -q option", global_cmd);
     ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --threads / -@ option", global_cmd);
-    ASSERTW (!flag_gzip         ||                        command == UNCOMPRESS, "%s: ignoring --gzip / -g option", global_cmd);
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --output / -o option", global_cmd);
     ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with -z or -t", global_cmd);
     ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with -z or -t", global_cmd);
@@ -609,7 +639,7 @@ int main (int argc, char **argv)
         global_max_threads = main_get_num_cores();
 
     if (command == TEST) {
-        flag_stdout = flag_force = flag_replace = flag_quiet = flag_gzip = false;
+        flag_stdout = flag_force = flag_replace = flag_quiet = false;
         out_filename = NULL;
     }
 
@@ -629,8 +659,8 @@ int main (int argc, char **argv)
         ASSERT0 (!count || !flag_show_content, "Error: --showcontent can only work on one file at time");
 
         switch (command) {
-            case COMPRESS   : main_vczip (next_input_file, out_filename, -1, global_max_threads, optind==argc); break;
-            case UNCOMPRESS : main_vcpiz (next_input_file, out_filename, -1, -1, global_max_threads); break;
+            case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, optind==argc); break;
+            case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads); break;
             case TEST       : main_test  (next_input_file); break;
             case LIST       : main_list  (next_input_file, false); break;
             

@@ -3,14 +3,14 @@
         {
             "name": "Win32",
             "includePath": [
-                "C:\\Users\\USER\\projects\\vczip\\**"
+                "C:\\Users\\USER\\projects\\genozip\\**"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
                 "_UNICODE"
             ],
-            "compilerPath": "C:\\mingw-w64\\x86_64-8.1.0-posix-seh-rt_v6-rev0\\mingw64\\\bin\\gcc.exe",
+            "compilerPath": "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/bin/gcc.exe",
             "cStandard": "c99",
             "intelliSenseMode": "gcc-x64"
         }

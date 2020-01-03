@@ -1,8 +1,8 @@
 %BUILD
 
-copy %RECIPE_DIR%\vczip.exe %PREFIX%\vczip.exe
-copy %RECIPE_DIR%\vczip.exe %PREFIX%\vcpiz.exe
-copy %RECIPE_DIR%\vczip.exe %PREFIX%\vccat.exe
+copy %RECIPE_DIR%\genozip.exe %PREFIX%\genozip.exe
+copy %RECIPE_DIR%\genozip.exe %PREFIX%\genounzip.exe
+copy %RECIPE_DIR%\genozip.exe %PREFIX%\genocat.exe
 copy %RECIPE_DIR%\LICENSE.non-commerical.txt %PREFIX%
 copy %RECIPE_DIR%\LICENSE.commerical.txt %PREFIX%
 

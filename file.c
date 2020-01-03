@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.c
-//   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
+//   Copyright (C) 2019 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <stdio.h>
@@ -10,15 +10,16 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <zlib.h>
+#include "zlib/zlib.h"
+#include "bzlib/bzlib.h"
 
-#include "vczip.h"
+#include "genozip.h"
 
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
     ASSERT0 (filename, "Error: filename is null");
 
-    ASSERT (mode==WRITE || access(filename, F_OK)==0, "%s: cannot open %s", global_cmd, filename);
+    ASSERT (mode==WRITE || access(filename, F_OK)==0, "%s: cannot open file for reading: %s", global_cmd, filename);
     
     File *file = calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
@@ -28,19 +29,23 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
         if (file_has_ext (file->name, ".vcf")) {
             file->type = VCF;
             file->file = fopen(file->name, mode == READ ? "r" : "wb"); // "wb" so Windows doesn't add ASCII 13
-            ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
         }
         else if (file_has_ext (file->name, ".vcf.gz")) {
             file->type = VCF_GZ;
             file->file = gzopen (file->name, mode == READ ? "rb" : "wb");    
-            ASSERT (file, "%s: cannot open file %s", global_cmd, file->name);
+        }
+        else if (file_has_ext (file->name, ".vcf.bz2")) {
+            file->type = VCF_BZ2;
+            file->file = BZ2_bzopen (file->name, mode == READ ? "rb" : "wb");    
         }
         else         
             ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz extension", global_cmd, file->name);
+
+        ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
     }
-    else { // VCZ
-        if (file_has_ext (file->name, ".vcz")) {
-            file->type = VCZ;
+    else { // GENOZIP
+        if (file_has_ext (file->name, ".vcf.genozip")) {
+            file->type = GENOZIP;
             file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "wb" so Windows doesn't add ASCII 13
             
             if (expected_type == VCZ_TEST && !file->file) {
@@ -49,12 +54,21 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             }
 
             ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
+
+            if (mode == WRITE) {
+                unsigned ret = pthread_mutex_init (&file->mutex, NULL);
+                file->mutex_initialized = true;
+                ASSERT0 (!ret, "pthread_mutex_init failed");
+
+                file->next_variant_i_to_merge = 1;
+            }
+
         }
         else if (expected_type == VCZ_TEST)
             return NULL;
         
         else
-            ABORT ("%s: file: %s - file must have a .vcz extension", global_cmd, file->name);
+            ABORT ("%s: file: %s - file must have a .vcf.genozip extension", global_cmd, file->name);
     }
 
     if (mode == READ) {
@@ -74,7 +88,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     return file;
 }
 
-File *file_fdopen (int fd, FileMode mode, FileType type)
+File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex)
 {
     File *file = calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
@@ -84,6 +98,13 @@ File *file_fdopen (int fd, FileMode mode, FileType type)
     file->type = type;
     file->last_read = file->next_read = READ_BUFFER_SIZE;
 
+    if (initialize_mutex) {
+        unsigned ret = pthread_mutex_init (&file->mutex, NULL);
+        file->mutex_initialized = true;
+        file->next_variant_i_to_merge = 1;
+        ASSERT0 (!ret, "pthread_mutex_init failed");
+    }
+    
     return file;
 }
 
@@ -96,13 +117,21 @@ void file_close (File **file_p)
         int ret = gzclose_r(file->file);
         ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
     }
+    else if (file->type == VCF_BZ2) {
+        BZ2_bzclose(file->file);
+    }
     else {
         int ret = fclose(file->file);
         ASSERTW (!ret, "Warning: failed to close vcf file %s: %s", file->name ? file->name : "", strerror(errno));
     } 
 
-    // note: we don't free file->name, because it might come from getopt - and should not be freed
+    for (unsigned i=0; i < file->num_subfields; i++) 
+        mtf_free_context (&file->mtf_ctx[i]);
 
+    if (file->mutex_initialized) 
+        pthread_mutex_destroy (&file->mutex);
+
+    // note: we don't free file->name, because it might come from getopt - and should not be freed
     free (file);
 }
 

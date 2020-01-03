@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   segregate.c
-//   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
+//   Copyright (C) 2019 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <stdio.h>
@@ -11,10 +11,10 @@
 #include <unistd.h>
 #include <inttypes.h>
 
-#include "vczip.h"
+#include "genozip.h"
 
 // returns true if this line has the same chrom as this VB, or if it is the first line
-static bool segregate_chrom_field (VariantBlock *vb, const char *str)
+static bool seg_chrom_field (VariantBlock *vb, const char *str)
 {
     unsigned i=0;
     if (! *vb->chrom) { // first line in this VB
@@ -32,9 +32,7 @@ static bool segregate_chrom_field (VariantBlock *vb, const char *str)
     return str[i] == '\t' && vb->chrom[i] == '\0'; // true if they are the same length
 }
 
- 
-
-static void segregate_pos_field (VariantBlock *vb, const char *str, 
+static void seg_pos_field (VariantBlock *vb, const char *str, 
                                  int64_t *pos_delta, const char **pos_start, unsigned *pos_len)
 {
     *pos_start = str;
@@ -58,8 +56,34 @@ static void segregate_pos_field (VariantBlock *vb, const char *str,
     vb->last_pos = this_pos;
 }
 
-static void segregate_format_field(DataLine *dl, const char *str, unsigned line_i)
+// traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
+SubfieldIdType seg_get_subfield (const char **str, unsigned len, // remaining length of line
+                                 unsigned line_i) // line in original vcf file
 {
+    SubfieldIdType subfield = EMPTY_SUBFIELD_ID;
+
+    for (unsigned i=0; i < len; i++) {
+        if ((*str)[i] != ':' && (*str)[i] != '\t' && (*str)[i] != '\n') { // note: in vcf files, we will see \t at end of FORMAT, but in variant data sections of piz files, we will see a \n
+            
+            if (i < SUBFIELD_ID_LEN)
+                subfield.id[i] = (*str)[i];
+
+        } else {
+            *str += i+1;
+            return subfield;
+        }
+    }
+    // we reached the end of the line without encountering a : or \t OR this is piz and we reached \n
+    ASSERT ((*str)[-1]=='\n', "Error: invalid FORMAT field in line %u", line_i); 
+    return subfield; // never reach here, just to avoid a compiler warning
+}
+
+static void seg_format_field(VariantBlock *vb, DataLine *dl, 
+                             const char *str, unsigned len, // remaining length of line
+                             unsigned line_i) // line in original vcf file
+{
+    dl->num_subfields = 0; // in case of re-segmenting after ploidy overflow it might already be set and we need to reset it
+
     if (!global_num_samples) return; // if we're not expecting any samples, we ignore the FORMAT field
 
     ASSERT(str[0] && str[1] && str[2], "Error: missing samples in line %u, expected by VCF file sample name header line", line_i);
@@ -70,12 +94,22 @@ static void segregate_format_field(DataLine *dl, const char *str, unsigned line_
     if (str[2] == ':' || !dl->has_haplotype_data) {
         dl->has_genotype_data = true; // no GT subfield, or subfields in addition to GT
 
-        // check which subfield (if any) is GL
-        dl->gl_subfield = gl_optimize_get_gl_subfield_index(str);
+        if (dl->has_haplotype_data) str +=3; // skip over GT
+
+        do {
+            SubfieldIdType subfield = seg_get_subfield (&str, len, line_i);
+
+            unsigned sf_i = mtf_get_sf_i_by_subfield (vb->mtf_ctx, &vb->num_subfields, subfield);
+
+            dl->sf_i[dl->num_subfields++] = sf_i;
+        } 
+        while (str[-1] != '\t' && str[-1] != '\n');
     }
+
+    buf_alloc (vb, &vb->line_gt_data, dl->num_subfields * global_num_samples * sizeof(uint32_t), 1, "line_gt_data", line_i); 
 }
 
-static void segregate_variant_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len,
+static void seg_variant_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len,
                                    int64_t pos_delta, const char *pos_start, unsigned pos_len)
 {
     char pos_delta_str[30];
@@ -96,7 +130,7 @@ static void segregate_variant_area(VariantBlock *vb, DataLine *dl, const char *s
     vb->add_bytes[SEC_VARIANT_DATA] -= pos_len - pos_delta_len; // we saved this number of bytes vs. the original file
 }
 
-static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len, 
+static bool seg_haplotype_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len, 
                                      unsigned line_i, unsigned sample_i)
 {
     // check ploidy
@@ -104,7 +138,7 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
     for (unsigned i=1; i<len-1; i++)
         if (str[i] == '|' || str[i] == '/') ploidy++;
 
-    ASSERT (ploidy <= 65535, "Error: ploidy=%u exceeds the maximum of 65535 in line_i=%u", ploidy, line_i);
+    ASSERT (ploidy <= MAX_PLOIDY, "Error: ploidy=%u exceeds the maximum of %u in line_i=%u", ploidy, MAX_PLOIDY, line_i);
     
     // if the ploidy of this sample is bigger than the ploidy of the data in this VB so far, then
     // we have to re-do the VB with a larger ploidy. This can happen for example in the X chromosome
@@ -119,12 +153,12 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample)
 
     // initial allocation, or might be enlarged in case of a re-do following a ploidy overflow
-    if (!vb->line_haplotype_data.data || vb->line_haplotype_data.size < vb->ploidy * global_num_samples) {
-        buf_alloc (vb, &vb->line_haplotype_data, vb->ploidy * global_num_samples, 1, "line_haplotype_data", line_i);
+    if (!vb->line_ht_data.data || vb->line_ht_data.size < vb->ploidy * global_num_samples) {
+        buf_alloc (vb, &vb->line_ht_data, vb->ploidy * global_num_samples, 1, "line_ht_data", line_i);
         dl->phase_type = (vb->ploidy==1 ? PHASE_HAPLO : PHASE_UNKNOWN);
     }
 
-    char *ht_data = &vb->line_haplotype_data.data[vb->ploidy * sample_i];
+    char *ht_data = &vb->line_ht_data.data[vb->ploidy * sample_i];
 
     vb->add_bytes[SEC_PHASE_DATA] -= (ploidy-1); // we "saved" this number of phase characters vs the vcf file (... we will add them back later if we didn't)
 
@@ -148,7 +182,7 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
             len--;
 
             // make sure there isn't a 3rd digit
-            ASSERT (!len || *str < '0' || * str > '9', "Error: VCF file - line %u sample %u - vczip currently supports only alleles up to 99", line_i, sample_i+1);
+            ASSERT (!len || *str < '0' || * str > '9', "Error: VCF file - line %u sample %u - genozip currently supports only alleles up to 99", line_i, sample_i+1);
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
             vb->add_bytes[SEC_HAPLOTYPE_DATA]--; // we saved one byte vs the original file
@@ -207,34 +241,43 @@ static bool segregate_haplotype_area(VariantBlock *vb, DataLine *dl, const char 
     return false;
 }
 
-
-static void segregate_genotype_area (VariantBlock *vb, DataLine *dl, 
-                                     const char *cell_gt_data, 
-                                     unsigned cell_gt_data_len,  // not include the \t or \n 
-                                     unsigned line_i)
+// returns length of the snip, not including the separator
+static inline unsigned seg_snip_len_tnc (const char *snip)
 {
-    // add memory if needed - but most chances are that we already have enough and realloc will return immediately
-    vb->longest_line_genotype_data = MAX (vb->longest_line_genotype_data, vb->line_genotype_data.len + cell_gt_data_len + 1 /* \t */);
+    const char *s; for (s=snip ; *s != '\t' && *s != ':' && *s != '\n'; s++);
+    return s - snip;
+}
 
-    // allocate buffer - this will allocate existing memory, or realloc it if needed
-    buf_alloc (vb, &vb->line_genotype_data, vb->longest_line_genotype_data, 2, "line_genotype_data", line_i); 
-
-    // case - empty genotype - just add \t
-    if (!cell_gt_data_len) { 
-        vb->line_genotype_data.data[vb->line_genotype_data.len++] = '\t';
-        return;
-    }
-
-    // copy genotype data
-    char *next = vb->line_genotype_data.data + vb->line_genotype_data.len;
-    memcpy (next, cell_gt_data, cell_gt_data_len);
-    next[cell_gt_data_len] = '\t';
+static void seg_genotype_area (VariantBlock *vb, DataLine *dl, 
+                               const char *cell_gt_data, 
+                               unsigned cell_gt_data_len,  // not including the \t or \n 
+                               unsigned line_i)
+{
+    uint32_t *next = (uint32_t *)(&vb->line_gt_data.data[vb->line_gt_data.len]);
  
-    // if we are asked to optimize the GL subfield - zero-out the largest number
-    if (dl->gl_subfield) 
-        gl_optimize_do (vb, next, cell_gt_data_len, dl->gl_subfield - dl->has_haplotype_data);
-    
-    vb->line_genotype_data.len += cell_gt_data_len + 1;  // +1 for the \t
+    bool end_of_cell = !cell_gt_data_len;
+    for (unsigned sf=0; sf < dl->num_subfields; sf++) { // iterate on the order as in the line
+
+        // move next to the beginning of the subfield data, if there is any
+        unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data);
+
+        MtfContext *ctx = &vb->mtf_ctx[dl->sf_i[sf]];
+        uint32_t node_index = mtf_evaluate_snip (vb, ctx, cell_gt_data, len);
+        *(next++) = node_index;
+
+        if (node_index != SEG_MISSING_SF) // don't skip the \t if we might have more missing subfields
+            cell_gt_data += len + 1; // skip separator too
+
+        end_of_cell = end_of_cell || cell_gt_data[-1] != ':'; // a \t or \n encountered
+
+        if (vb->variant_block_i == 1 && node_index <= SEG_MAX_INDEX) 
+            ((MtfNode *)ctx->mtf.data)[node_index].count++;
+    }
+    ASSERT0 (end_of_cell, "Error: invalid reading of genotype data");
+
+    vb->line_gt_data.len += dl->num_subfields * sizeof(uint32_t);  // len is number of bytes
+
+    vb->add_bytes[SEC_GENOTYPE_DATA] += dl->num_subfields * sizeof(uint32_t) - (cell_gt_data_len ? cell_gt_data_len+1 : 0);
 }
 
 /* split variant line to: 
@@ -243,9 +286,9 @@ static void segregate_genotype_area (VariantBlock *vb, DataLine *dl,
    3. haplotype data - a string of eg 1 or 0 (no whitespace) - ordered by the permutation order
    4. phase data - only if MIXED phase - a string of | and / - one per sample
 */
-static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
-                                 DataLine *dl, 
-                                 unsigned line_i) // line in original VCF file
+static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
+                           DataLine *dl, 
+                           unsigned line_i) // line in original VCF file
 {
     // Caller must make sure all the fields of dl are 0 except for line and line_len
     
@@ -259,6 +302,7 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
     int64_t pos_delta=0; // delta between POS in this row and the previous row
     const char *pos_start=NULL; unsigned pos_len=0; // start and length of pos field
     bool ploidy_overflow = false;
+    unsigned gt_line_len=0;
 
     char *c; for (c = dl->line.data; *c && area != DONE; c++) {
 
@@ -273,50 +317,51 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
                 // we are at the CHROM field - make sure the VB has consisent CHROM
                 if (num_tabs == 0) {
                     //bool same_chrom = TO DO: finish this vb and start a new one when chrom changes
-                    segregate_chrom_field (vb, c);
+                    seg_chrom_field (vb, c);
                     continue;
                 }
 
                 // we are at at the POS field - re-encode it to be the delta from the previous line
                 if (num_tabs == 1) {
-                    segregate_pos_field (vb, c+1, &pos_delta, &pos_start, &pos_len);
+                    seg_pos_field (vb, c+1, &pos_delta, &pos_start, &pos_len);
                     continue;
                 }
 
                 // we arrived at the FORMAT column - figure out if we have haplotype and genotype data for this line
                 if (num_tabs == 8) { 
-                    segregate_format_field(dl, c+1, line_i);                 
+                    seg_format_field (vb, dl, c+1, dl->line.len - ((c+1)-dl->line.data),line_i);                 
                     continue;
                 }
 
                 if (*c != '\n' && num_tabs < 9) continue; // if not yet the end of the variant data
 
                 // we are at the end of the variant area
-                segregate_variant_area(vb, dl, area_start, c - area_start, pos_delta, pos_start, pos_len);
+                seg_variant_area(vb, dl, area_start, c - area_start, pos_delta, pos_start, pos_len);
                 break;
 
             case HAPLOTYPE:
                 ASSERT (dl->has_genotype_data || *c != ':', "Error: unexpected ':' after haplotype info, line %u sample %u", line_i, sample_i+1);
 
-                ploidy_overflow = segregate_haplotype_area (vb, dl, area_start, c-area_start, line_i, sample_i);
+                ploidy_overflow = seg_haplotype_area (vb, dl, area_start, c-area_start, line_i, sample_i);
                 if (ploidy_overflow) goto cleanup; // we need to re-do this VB with the updated, higher, ploidy
 
                 break;
 
             case GENOTYPE:
-                segregate_genotype_area (vb, dl, area_start, c-area_start, line_i);
+                seg_genotype_area (vb, dl, area_start, c-area_start, line_i);
+                gt_line_len += c-area_start + 1; // including the \t or \n
                 break;
 
             case DONE: 
             default:
-                ABORT0 ("in segregate_data_line(), should never reach here");
+                ABORT0 ("in seg_data_line(), should never reach here");
         }
 
         if (*c != ':') {
             // missing genotype data despite being declared in FORMAT - this is permitted by VCF spec
             if (area == HAPLOTYPE && dl->has_genotype_data) {
-                segregate_genotype_area (vb, dl, NULL, 0, line_i);
-                vb->add_bytes[SEC_GENOTYPE_DATA]++; // we added a \t that was not in the original file
+                seg_genotype_area (vb, dl, NULL, 0, line_i);
+                gt_line_len++; // adding the \t
                 area = GENOTYPE; // we just processed an (empty) genotype area
             }
 
@@ -346,14 +391,18 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
 
     // update lengths
     if (dl->has_haplotype_data) {
-        vb->line_haplotype_data.len = global_num_samples * vb->ploidy;
+        vb->line_ht_data.len = global_num_samples * vb->ploidy;
 
         if (dl->phase_type == PHASE_MIXED_PHASED) 
             vb->line_phase_data.len = global_num_samples;
-    }
+    } else 
+        vb->line_ht_data.len = 0;
+
+    vb->max_gt_line_len = MAX (vb->max_gt_line_len, gt_line_len);
 
     // now, overlay the data over the line memory so we can re-use our working buffers vb->line_* for the next line
-    unsigned total_len = vb->line_variant_data.len + vb->line_haplotype_data.len + vb->line_genotype_data.len + vb->line_phase_data.len;
+    unsigned total_len = vb->line_variant_data.len + vb->line_ht_data.len + sizeof(uint32_t) * vb->line_gt_data.len + vb->line_phase_data.len;
+ 
     buf_alloc (vb, &dl->line, total_len, 1, "dl->line", line_i);
 
     unsigned offset_in_line = 0;
@@ -361,7 +410,7 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
     buf_overlay (&dl->variant_data, &dl->line, &vb->line_variant_data, &offset_in_line, "dl->variant_data", line_i);
     
     if (dl->has_haplotype_data) {
-        buf_overlay (&dl->haplotype_data, &dl->line, &vb->line_haplotype_data, &offset_in_line, "dl->haplotype_data", line_i);
+        buf_overlay (&dl->haplotype_data, &dl->line, &vb->line_ht_data, &offset_in_line, "dl->haplotype_data", line_i);
         
         if (flag_show_alleles)
             printf ("%.*s\n", dl->haplotype_data.len, dl->haplotype_data.data);
@@ -370,19 +419,25 @@ static bool segregate_data_line (VariantBlock *vb, /* may be NULL if testing */
     if (dl->has_haplotype_data && dl->phase_type == PHASE_MIXED_PHASED)
         buf_overlay (&dl->phase_data, &dl->line, &vb->line_phase_data, &offset_in_line, "dl->phase_data", line_i);    
 
-    if (dl->has_genotype_data)
-        buf_overlay (&dl->genotype_data, &dl->line, &vb->line_genotype_data, &offset_in_line, "dl->genotype_data", line_i);
+    if (dl->has_genotype_data) 
+        buf_overlay (&dl->genotype_data, &dl->line, &vb->line_gt_data, &offset_in_line, "dl->genotype_data", line_i);
 
 cleanup:
     buf_free (&vb->line_variant_data);
-    buf_free (&vb->line_haplotype_data);
+    buf_free (&vb->line_ht_data);
     buf_free (&vb->line_phase_data);
-    buf_free (&vb->line_genotype_data);
+    buf_free (&vb->line_gt_data);
+
+    // roll back in case of ploidy overflow
+    if (ploidy_overflow) {
+        vb->last_pos = 0;
+        memset (vb->add_bytes, 0, sizeof(vb->add_bytes));
+    }
 
     return ploidy_overflow; 
 }
 
-void segregate_data_line_unit_test()
+void seg_data_line_unit_test()
 {
     unsigned *n = &global_num_samples;
 
@@ -402,15 +457,15 @@ void segregate_data_line_unit_test()
 
     VariantBlock *vb = vb_get_vb(NULL, NULL, NULL, 0);
 
-    buf_alloc (vb, &data_line->line, strlen(test_data) + 1, 0, "segregate_data_line_unit_test0", 0);
+    buf_alloc (vb, &data_line->line, strlen(test_data) + 1, 0, "seg_data_line_unit_test0", 0);
     strcpy (data_line->line.data, test_data);
     
     unsigned line_i = 555;
 
-    segregate_data_line (NULL, data_line, line_i);
+    seg_data_line (NULL, data_line, line_i);
 }
 
-static void segregate_update_vb_from_dl (VariantBlock *vb, DataLine *dl)
+static void seg_update_vb_from_dl (VariantBlock *vb, DataLine *dl)
 {
     // update block data
     vb->has_genotype_data = vb->has_genotype_data || dl->has_genotype_data;
@@ -428,7 +483,7 @@ static void segregate_update_vb_from_dl (VariantBlock *vb, DataLine *dl)
 
 // complete haplotype and genotypes of lines that don't have them, if we found out that some
 // other line has them, and hence all lines in the vb must have them
-void segregate_complete_missing_lines (VariantBlock *vb)
+void seg_complete_missing_lines (VariantBlock *vb)
 {
     vb->num_haplotypes_per_line = vb->ploidy * global_num_samples;
     
@@ -451,42 +506,40 @@ void segregate_complete_missing_lines (VariantBlock *vb)
 
             vb->add_bytes[SEC_HAPLOTYPE_DATA] += vb->num_haplotypes_per_line; // we added these bytes that are not in the orignial file
 
-            dl->has_haplotype_data = true;
+            // NOTE: we DONT set dl->has_haplotype_data to true bc downstream we still
+            // count this row as having no GT field when analyzing gt data
         }
 
         if (vb->has_genotype_data && !dl->has_genotype_data) {
-            // realloc line which is the buffer on which genotype data is overlaid
-            buf_alloc (vb, &dl->line, dl->line.len + global_num_samples, 1, dl->line.name, dl->line.param);
+            // realloc line which is the buffer on which haplotype data is overlaid
+            buf_alloc (vb, &dl->line, dl->line.len + global_num_samples * sizeof(uint32_t), 1, dl->line.name, dl->line.param);
 
-            // overlay the genotype buffer overlaid at the end of the line buffer
+            // overlay the haplotype buffer overlaid at the end of the line buffer
             buf_overlay (&dl->genotype_data, &dl->line, NULL, &dl->line.len, "dl->genotype_data", vb->first_line + vb_line_i);
+            for (unsigned i=0; i < global_num_samples; i++) 
+                ((uint32_t*)dl->genotype_data.data)[i] = SEG_MISSING_SF;
 
-            memset (dl->genotype_data.data, '\t', global_num_samples); // empty genotype data
-            dl->genotype_data.len = global_num_samples;
+            dl->genotype_data.len += global_num_samples * sizeof(uint32_t);
+            dl->num_subfields = 1;
 
-            vb->add_bytes[SEC_GENOTYPE_DATA] += global_num_samples; // we added these bytes that are not in the orignial file
-
-            dl->has_genotype_data = true;
+            vb->add_bytes[SEC_GENOTYPE_DATA] += global_num_samples * sizeof(uint32_t); // we added these bytes that are not in the orignial file
         }
     }
 }
 
 // split each lines in this variant block to its components
-void segregate_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
+void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
 {
     START_TIMER;
 
     unsigned num_ploidy_overlows = 0;
 
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
-
+        //printf ("vb_line_i=%u\n", vb_line_i);
         DataLine *dl = &vb->data_lines[vb_line_i];
 
-        if (lines_orig) buf_copy (vb, &lines_orig[vb_line_i], &dl->line, 0, dl->line.len+1); // if testing
-
-        long long saved_last_pos = vb->last_pos;
-        
-        bool ploidy_overflow = segregate_data_line (vb, dl, vb->first_line + vb_line_i);
+        if (lines_orig) buf_copy (vb, &lines_orig[vb_line_i], &dl->line, 1, 0, dl->line.len+1); // if testing
+        bool ploidy_overflow = seg_data_line (vb, dl, vb->first_line + vb_line_i);
 #       define MAX_PLOIDY_OVERFLOWS 1000 /* an arbitrary large number to avoid an ininifinate loop in case of a bug */
 
         // ploidy overflow is a situation where earlier samples in the VB have a low ploidy and then
@@ -498,19 +551,15 @@ void segregate_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testi
             ASSERT (num_ploidy_overlows < MAX_PLOIDY_OVERFLOWS, "Error: too many ploidy overflows, line_i=%u", vb->first_line + vb_line_i);
             vb_line_i = -1; // next line is 0
             num_ploidy_overlows++;
-            vb->last_pos = saved_last_pos;
-
-            // reset adders
-            memset (vb->add_bytes, 0, sizeof(vb->add_bytes));
 
             continue;
         }
 
-        segregate_update_vb_from_dl (vb, dl);
+        seg_update_vb_from_dl (vb, dl);
     }
 
-    if (vb->has_genotype_data || vb->has_haplotype_data)
-        segregate_complete_missing_lines(vb);
-
-    COPY_TIMER(vb->profile.segregate_all_data_lines);
+    if (/*vb->has_genotype_data || */vb->has_haplotype_data)
+        seg_complete_missing_lines(vb);
+        
+    COPY_TIMER(vb->profile.seg_all_data_lines);
 }

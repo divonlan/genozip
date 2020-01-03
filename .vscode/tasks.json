@@ -22,7 +22,7 @@
         },
         {
             "type": "shell",
-            "label": "make vczip-debug",
+            "label": "make genozip-debug",
             "command": "mingw32-make.exe",
             "args": [ "debug" ],
             "options": {

@@ -2,9 +2,9 @@
 *.o
 *.debug-o
 *.d
-vczip
-vcpiz
-vccat
+genozip
+genounzip
+genocat
 1000genomes/*
 data/*
 benchmark.txt

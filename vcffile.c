@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcffile.c
-//   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
+//   Copyright (C) 2019 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
  
 #include <stdio.h>
@@ -15,8 +15,9 @@
 
 #define Z_LARGE64
 #include "zlib/zlib.h"
+#include "bzlib/bzlib.h"
 
-#include "vczip.h"
+#include "genozip.h"
 
 // we implement our own "getc" which manages read buffers a lot more efficiently
 static inline char vcffile_get_char(VariantBlock *vb)
@@ -35,9 +36,13 @@ static inline char vcffile_get_char(VariantBlock *vb)
             file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
             file->disk_so_far += (long long)file->last_read;
         }
-        else { // VCF_GZ
+        else if (file->type == VCF_GZ) { 
             file->last_read   = gzfread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
             file->disk_so_far = gzoffset64 (file->file); // for compressed files, we update by block read
+        }
+        else if (file->type == VCF_BZ2) { 
+            file->last_read   = BZ2_bzread (file->file, file->read_buffer, READ_BUFFER_SIZE);
+            file->disk_so_far = BZ2_bzoffset (file->file); // for compressed files, we update by block read
         }
 
         file->next_read = 0;
@@ -148,16 +153,17 @@ void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
         else // VCF_GZ
             len_file = gzfread (data_file, 1, buf_size, vcf_file->file);
 
-        const char *failed_text = "FAILED!!! Please contact vczip@blackpawventures.com to help fix this bug in vczip";
+        const char *failed_text = "FAILED!!! Please contact genozip@blackpawventures.com to help fix this bug in genozip";
 
         unsigned min_len = MIN (len_file, len_pipe);
         bool failed = false;
         if (memcmp (data_pipe, data_file, min_len)) {
 
-            for (unsigned i=0; i < min_len ; i++) {
+            for (int i=0; i < (int)min_len ; i++) {
                 if (data_pipe[i] != data_file[i]) {
-                    printf ("Data differs from pipe in character %"PRIu64" of the file. Showing the buffers starting at this character (100 char max):\n"
-                            "***** After ZIP & PIZ *****\n%.*s\n***** ORIGINAL FILE *****\n%.*s\n", total_len + i, MIN (len_pipe, 100), &data_pipe[i], MIN (len_file, 100), &data_file[i]);                     
+                    int display_start = MAX (i-50, 0);
+                    printf ("Data differs from pipe in character %"PRIu64" of the file. Showing the buffers around this character:\n"
+                            "***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", total_len + i, MIN (len_pipe, 100), &data_pipe[display_start], MIN (len_file, 100), &data_file[display_start]);                     
                     break;
                 }
             }

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.c
-//   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
+//   Copyright (C) 2019 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // memory management - when running the same code by the same thread for another variant block - we reuse
@@ -13,10 +13,9 @@
 #include <stdbool.h>
 #include <inttypes.h>
 
-#include "vczip.h"
+#include "genozip.h"
 
-//#define DISPLAY_MALLOCS
-//#define DISPLAY_REALLOCS
+//#define DISPLAY_ALLOCS_AFTER 4000 // display allocations, except the first X allocations. reallocs are always displayed
 
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
 #define OVERFLOW_TRAP  0x776F6C667265766FULL // "OVERFLOW" - inserted at the end of each memory block to detected overflows
@@ -182,7 +181,7 @@ static inline void buf_add(VariantBlock *vb, Buffer *buf)
 
         if (!buffer_lists) buffer_lists = malloc (sizeof (Buffer *) * (global_max_threads + 1)); // +1 for psuedo vbs
 
-        ASSERT (num_buffer_lists < global_max_threads + 1, "Error: buffer_lists maxed out num_buffer_lists=%u", num_buffer_lists);
+        ASSERT (num_buffer_lists < MAX(2,global_max_threads) + 1, "Error: buffer_lists maxed out num_buffer_lists=%u", num_buffer_lists);
 
         // malloc - this will call this function recursively - that's ok bc that point buffer_list is already allocated
         buf_alloc (vb, buffer_list, INITIAL_MAX_MEM_NUM_BUFFERS * sizeof(Buffer *), false, "buffer_list", vb ? vb->id : 0);
@@ -200,7 +199,7 @@ unsigned buf_alloc (VariantBlock *vb,
                     Buffer *buf, 
                     unsigned requested_size,
                     float grow_at_least_factor, // grow more than new_size, IF growth is needed   
-                    const char*name, unsigned param)      // for debugging
+                    const char *name, unsigned param)      // for debugging
 {
     START_TIMER;
 
@@ -220,23 +219,24 @@ unsigned buf_alloc (VariantBlock *vb,
         // case 2: we need to allocate memory - buffer is already allocated so copy over the data
         if (buf->memory) {
             buf->memory = realloc (buf->memory, new_size + 2*sizeof (long long));
+            ASSERT (buf->memory, "Error: buf_alloc failed to realloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
+
             buf->data = buf->memory + sizeof (long long);
             buf->size = new_size;
 
             if (!buf->memory) {
                 buf_test_overflows(vb);
-    #ifdef DEBUG
-                buf_display_memory_usage(true);
-    #endif
+#               ifdef DEBUG
+                    buf_display_memory_usage(true);
+#               endif
             }
-
-            ASSERT (buf->memory, "Error: buf_alloc failed to realloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
 
             *(long long *)(buf->data + new_size) = OVERFLOW_TRAP; // overflow prortection (underflow protection was copied with realloc)
 
-    #ifdef DISPLAY_REALLOCS
-            printf ("%s (%u) (realloc): requested_size=%u growth_factor=%f new_size=%u\n", name, param, requested_size, grow_at_least_factor, new_size);
-    #endif
+#           ifdef DISPLAY_ALLOCS_AFTER
+                if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
+                    printf ("%s (%u): requested_size=%u growth_factor=%f new_size=%u\n", name, param, requested_size, grow_at_least_factor, new_size);
+#           endif
         }
 
         // case 3: we need to allocate memory - buffer is not yet allocated, so no need to copy data
@@ -245,9 +245,10 @@ unsigned buf_alloc (VariantBlock *vb,
 
             if (!buf->memory) {
                 buf_test_overflows(vb);
-    #ifdef DEBUG
-                buf_display_memory_usage(true);
-    #endif
+    
+#               ifdef DEBUG
+                    buf_display_memory_usage(true);
+#               endif
             }
 
             ASSERT (buf->memory, "Error: buf_alloc failed to malloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
@@ -261,10 +262,10 @@ unsigned buf_alloc (VariantBlock *vb,
             buf->name  = name;
             buf->param = param;
             buf->type  = BUF_REGULAR;
-
+            
             buf_add(vb, buf);
 
-    #ifdef DISPLAY_MALLOCS
+    #ifdef DISPLAY_ALLOCS_AFTER
             printf ("%s (%u) (malloc2): %u\n", name, param, new_size);
     #endif
         }
@@ -281,9 +282,9 @@ void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_
 {
     ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error: cannot buf_overlay to a buffer already in use. overlaid_buf->name=%s", overlaid_buf->name ? overlaid_buf->name : "");
     ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
-    ASSERT (!copy_from || *regular_buf_offset + copy_from->len <= regular_buf->size, "Error: buf_overlay exceeds the size of the regular buffer: offset=%u size=%u regular_buf.size=%u", *regular_buf_offset, copy_from->len, regular_buf->size);
+    ASSERT (!copy_from || (regular_buf_offset ? *regular_buf_offset : 0) + copy_from->len <= regular_buf->size, "Error: buf_overlay exceeds the size of the regular buffer: offset=%u size=%u regular_buf.size=%u", *regular_buf_offset, copy_from->len, regular_buf->size);
 
-    overlaid_buf->data   = regular_buf->data + *regular_buf_offset;
+    overlaid_buf->data   = regular_buf->data + (regular_buf_offset ? *regular_buf_offset : 0);
 
     if (copy_from && copy_from->len)
         memcpy (overlaid_buf->data, copy_from->data, copy_from->len);
@@ -295,9 +296,68 @@ void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_
     overlaid_buf->name   = name;
     overlaid_buf->param  = param;
 
-    *regular_buf_offset += overlaid_buf->len;
+    // new data was copied to overlaid buffer - move the offset forward and update the len of the regular buffer
+    // to enable to the next buffer to be overlaid subsequently
+    if (regular_buf_offset) {
+        *regular_buf_offset += overlaid_buf->len;
+        regular_buf->len = *regular_buf_offset;
+    }
+    
+    // full buffer overlay - copy len too
+    if (!regular_buf_offset && !copy_from)
+        overlaid_buf->len = regular_buf->len;
+}
 
-    regular_buf->len = *regular_buf_offset;
+static Buffer abandoned_memories = EMPTY_BUFFER; // no thread safety issues - only used by dispatcher thread
+
+// if needed, we extend the buf, but without reallocting memory which could disturb other threads which have their
+// own buffers overlaid on buf. Instead, we abandon the memory used by buf, but without freeing it.
+// We add the abandoned memory to an abandoned memory list to be freed at the end of this operation (piz). Then,
+// we allocate new memory (at least double) and copy the old data and len to it.
+void buf_extend (VariantBlock *vb, Buffer *buf, 
+                 unsigned num_new_units, unsigned sizeof_unit, /* len is measured in these units */
+                 const char *name, unsigned param)
+{
+    if (!buf_is_allocated (buf)) 
+        buf_alloc (vb, buf, num_new_units * sizeof_unit, 1, name, param);
+
+    // if we need more space, we abandon the memory used by buf, but without freeing it as VBs are overlaying on it.
+    // instead, we add it to an abandoned memory list to be freed at the end of this piz
+    if ((buf->len + num_new_units) * sizeof_unit > buf->size) { 
+
+        if (!buf_is_allocated (&abandoned_memories) || abandoned_memories.len * sizeof(char *) == abandoned_memories.size)
+            buf_alloc (vb, &abandoned_memories, 1000 * sizeof(char*), 2, "abandoned_memories", 0);
+        
+        unsigned old_len       = buf->len;
+        const char *old_memory = buf->memory;
+        const char *old_data   = buf->data;
+
+        ((const char**)abandoned_memories.data)[abandoned_memories.len++] = old_memory;
+
+        memset (buf, 0, sizeof (Buffer));
+        buf_alloc (vb, buf, sizeof_unit * MAX (old_len * 2, old_len + num_new_units), 1, name, param);
+        memcpy (buf->data, old_data, old_len * sizeof_unit);
+        buf->len = old_len;
+    }
+}
+
+// if there is space, the fragment is just appended to the base and len is updated. 
+// If not, we extend the memory without disturbing other VBs that are overlaying on it, and add
+// the fragment
+void buf_append (VariantBlock *vb, Buffer *base, 
+                 Buffer *fragment, unsigned sizeof_unit, // len is measured in these units 
+                 const char *name, unsigned param)
+{
+    buf_extend (vb, base, fragment->len, sizeof_unit, name, param);
+
+    memcpy (&base->data[base->len * sizeof_unit], fragment->data, fragment->len * sizeof_unit);
+    base->len += fragment->len;
+}
+
+void buf_free_abandoned_memories()
+{
+    for (unsigned i=0; i < abandoned_memories.len; i++)
+        free (((char**)abandoned_memories.data)[i]);
 }
 
 // free buffer - without freeing memory. A future buf_malloc of this buffer will reuse the memory if possible.
@@ -312,13 +372,17 @@ void buf_free(Buffer *buf)
         memset (buf, 0, sizeof (Buffer));
 } 
 
-void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, unsigned start, unsigned max_size /* if 0 copies the entire buffer */)
+void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, 
+               unsigned bytes_per_entry, // how many bytes are counted by a unit of .len
+               unsigned start_entry, unsigned max_entries /* if 0 copies the entire buffer */)
 {
     ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
     
-    unsigned size = max_size ? MIN (max_size, src->size - start) : src->size - start;
+    unsigned num_entries = max_entries ? MIN (max_entries, src->len - start_entry) : src->len - start_entry;
 
-    buf_alloc(vb, dst, size, 1, "buf_copy", 0); // use realloc rather than malloc to allocate exact size
+    buf_alloc(vb, dst, num_entries * bytes_per_entry, 1, "buf_copy", 0); // use realloc rather than malloc to allocate exact size
 
-    memcpy (dst->data, &src->data[start], size);
+    memcpy (dst->data, &src->data[start_entry * bytes_per_entry], num_entries * bytes_per_entry);
+
+    dst->len = num_entries;  
 }   

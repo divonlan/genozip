@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   gl-optimize.c
-//   Copyright (C) 2019 Divon Lan <vczip@blackpawventures.com>
+//   Copyright (C) 2019 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // Optimization - for GL (Genotype Likelihood) subfield - this is a standard subfield defined
@@ -21,7 +21,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "vczip.h"
+#include "genozip.h"
 
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */
 
@@ -95,27 +95,9 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
     return missing_gl_int;
 }
 
-// moves data pointer to the beginning of the GL subfield with the a line data column.
-// returns false if the GL field is missing from this sample
-static inline bool gl_optimize_seek_gl_subfield(char **data, unsigned gl_subfield_no_gt)
-{
-    for (unsigned colon_i=1; colon_i < gl_subfield_no_gt; (*data)++) {
-        if (**data == '\t') return false; // this subfield is missing (and all following subfields too) - this is allowed by VCF spec
-        if (**data == ':') colon_i++;
-    }
-
-    if (**data == ':' || **data == '\t') return false; // :: or :\t - this subfield is missing, and next subfield is about to begin - this is allowed by VCF spec
-
-    return true;
-}
-
 // returns length of gt after optimization, or -1 if optimization failed
-void gl_optimize_do(VariantBlock *vb, char *data, unsigned data_len, unsigned gl_subfield_no_gt) 
+static void gl_optimize_do (char *data, unsigned data_len) 
 {
-    START_TIMER; // note: the timer itself add a lot of time to this function
-
-    if (!gl_optimize_seek_gl_subfield (&data, gl_subfield_no_gt)) goto cleanup; // no GL field
-
     char *start_gl_subfield = data;
 
 #   define MAX_NUM_GL_VALUES 32 /* for normal one-alt diploids only 3 are used */
@@ -184,50 +166,42 @@ void gl_optimize_do(VariantBlock *vb, char *data, unsigned data_len, unsigned gl
     }
 
 cleanup:
-    COPY_TIMER(vb->profile.gl_optimize_do);
+    return;
 }
 
-void gl_optimize_undo (VariantBlock *vb, char *data, unsigned len, unsigned gl_subfield_no_gt)
+void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, 
+                             unsigned dict_start_char, unsigned num_words)
 {
-    START_TIMER; // note: the timer itself add a lot of time to this function
+    buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0);
+return; // DEBUG
 
-    // find the correct subfield
-    if (!gl_optimize_seek_gl_subfield (&data, gl_subfield_no_gt)) goto cleanup; // no GL field
-
-    // get the missing data and its location and length
-    char *gl_start;
-    unsigned gl_len;
-    int missing_gl_int = gl_optimize_get_missing_gl_int(data, &gl_start, &gl_len);
-    if (missing_gl_int < 0) goto cleanup; // not an optimized GL subfield
-
-    // output "manually" - don't call sprintf - much faster - output number from right to left
-    for (unsigned i=gl_len-1; i >= 3; i--) {
-        gl_start[i] = missing_gl_int % 10 + '0';
-        missing_gl_int /= 10;
+    char *next = vb->optimized_gl_dict.data;
+    for (unsigned i=0; i < num_words; i++) {
+        gl_optimize_do (next, nodes[i].snip_len);
+        next += nodes[i].snip_len + 1; // skip \t too
     }
-
-    gl_start[2] = '.';
-    gl_start[1] = missing_gl_int + '0';
-    gl_start[0] = '-';
-
-cleanup:
-    COPY_TIMER (vb->profile.gl_optimize_undo);
 }
 
-// look at FORMAT column string, to figure out the index of the gl_subfield in this line
-// index starts from 1. index=0 indicates the subfield is missing from FORMAT
-int gl_optimize_get_gl_subfield_index(const char *data)
+void gl_deoptimize_dictionary (char *data, unsigned len)
 {
-    const char *start_str = data;
-    do {
-        if (data[0]=='G' && data[1]=='L')
-            return 1 + (data - start_str) / 3;
+    while (len) {
+        // get the missing data and its location and length
+        char *gl_start;
+        unsigned gl_len;
+        int missing_gl_int = gl_optimize_get_missing_gl_int(data, &gl_start, &gl_len);
+        
+        if (missing_gl_int >= 0) { // an optimized GL subfield
+            // output "manually" - don't call sprintf - much faster - output number from right to left
+            for (unsigned i=gl_len-1; i >= 3; i--) {
+                gl_start[i] = missing_gl_int % 10 + '0';
+                missing_gl_int /= 10;
+            }
 
-        data += 3;
-    } 
-    while (data[-1] != '\t' && data[-1] != '\n');
-
-    return 0; // no GL
+            gl_start[2] = '.';
+            gl_start[1] = missing_gl_int + '0';
+            gl_start[0] = '-';
+        }
+        // move to next dictionary entry - after \t
+        do { data++; len--; } while (data[-1] != '\t');
+    }
 }
-
- 

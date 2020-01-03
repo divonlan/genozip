@@ -1,4 +1,4 @@
-This program, "vczip", and all documentation, are copyright (C) 2019-2020 Divon M Lan.  All rights
+This program, "genozip", and all documentation, are copyright (C) 2019-2020 Divon M Lan.  All rights
 reserved.
 
 
@@ -59,7 +59,7 @@ including teaching and research at educational institutions, research at non-pro
 institutions, and personal non-profit purposes. For using the Work or Derivative Works for
 commercial purposes, including but not restricted to consulting activities, work that is intended
 to lead to commercial products or services, and work at or by a commercial entity, its employees,
-consultants and contractors for any purpose, you have to contact vczip@blackpawventures.com for a
+consultants and contractors for any purpose, you have to contact genozip@blackpawventures.com for a
 commercial license.
 
 2. Grant of Copyright License. Subject to the terms and conditions of this License, each

@@ -12,7 +12,7 @@
 			"stdbool.h": "c",
 			"time.h": "c",
 			"bzlib.h": "c",
-			"vczip.h": "c",
+			"genozip.h": "c",
 			"cstddef": "c",
 			"string": "c",
 			"optional": "c",
@@ -25,7 +25,10 @@
 			"initializer_list": "c",
 			"utility": "c",
 			"license.h": "c",
-			"sstream": "c"
+			"sstream": "c",
+			"rb_tree.h": "c",
+			"math.h": "c",
+			"stdlib.h": "c"
 		},
 		"files.autoSave": "onFocusChange",
 		"files.exclude": {

@@ -3,11 +3,11 @@
 # Example here: https://github.com/conda-forge/nds2-client-feedstock/tree/492436f4fa3c6b8a62dbc86dc68d79f818d251e3/recipe/
 
 package:
-  name: vczip
+  name: genozip
   version: %VERSION
 
 source:
-  url: https://github.com/divonlan/vczip/archive/vczip-%VERSION.tar.gz
+  url: https://github.com/divonlan/genozip/archive/genozip-%VERSION.tar.gz
   sha256: %SHA256
 
 build:
@@ -24,21 +24,21 @@ test:
     - data/test-file.vcf
 
   commands:
-    - test -f $PREFIX/vczip         # [unix]
-    - vczip -t test-file.vcf        # [unix]
-    - if not exist $PREFIX/vczip.exe exit 1  # [win]
-    - .\vczip.exe -t test-file.vcf  # [win]
+    - test -f $PREFIX/genozip         # [unix]
+    - genozip -t test-file.vcf        # [unix]
+    - if not exist $PREFIX/genozip.exe exit 1  # [win]
+    - .\genozip.exe -t test-file.vcf  # [win]
 
 about:
-  home: https://github.com/divonlan/vczip
-  dev_url: https://github.com/divonlan/vczip
-# doc_url: https://vczip.readthedocs.io/
+  home: https://github.com/divonlan/genozip
+  dev_url: https://github.com/divonlan/genozip
+# doc_url: https://genozip.readthedocs.io/
   license: Apache-2.0, non-commercial only
   license_family: Apache
   license_file: LICENSE.non-commercial.txt
   summary: 'Compressor for VCF genomic files, a lot better than gzip or bzip2'
   description: |
-    vczip is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz files). 
+    genozip is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz files). 
     It is very easy to use - in fact, if you're familiar with gzip, it works pretty much the same.
     It achieves x2 to x5 better compression ratios than gzip because it leverages some properties
     of the genomic data, such as linkage disequilibrium, to compress better. 
