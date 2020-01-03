@@ -37,7 +37,7 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 bool global_little_endian;
 
 // the flags are globals 
-int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_concat_mode=0, flag_show_content=0, flag_show_alleles=0, flag_profiler=0;
+int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_concat_mode=0, flag_show_content=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
 
 int main_print_license()
 {
@@ -98,12 +98,12 @@ int main_print_help()
     printf ("   -o --output       output file name. this option can also be used to concatenate multiple input files\n");
     printf ("                     into a single concatented output file\n");
     printf ("   -q --quiet        don't show the progress indicator\n");    
-    printf ("   -@ --threads      specify how many threads to use. default is 8. for best performance, this should match\n");    
+    printf ("   -@ --threads      specify the number of threads to use. by default, genozip uses all cores available to it\n");
     printf ("   --show-content    show the information content of VCF files and the compression ratios of each components\n");
-    printf ("                     the number of logical CPU cores (which is double the number of physical cores on Intel processors)\n");
     printf ("   --show-alleles    output allele values to stdout. Each row corresponds to a row in the VCF file.\n");
     printf ("                     mixed-ploidy regions are padded, and 2-digit allele values are replaced with an ascii character\n");
     printf ("   --show-time       show what functions are consuming the most time (useful mostly for developers of genozip)\n");
+    printf ("   --show-memory     show what buffers are consuming the most memory (useful mostly for developers of genozip)\n");
 
     printf ("\n");
     printf ("One or more file names may be given, or if omitted, standard input/output is used instead\n");
@@ -561,7 +561,8 @@ int main (int argc, char **argv)
             {"output",     required_argument, 0, 'o'                }, 
             {"show-content",no_argument,      &flag_show_content, 1 }, 
             {"show-alleles",no_argument,      &flag_show_alleles, 1 }, 
-            {"show-time"   ,no_argument,      &flag_profiler    , 1 }, 
+            {"show-time"   ,no_argument,      &flag_show_time   , 1 }, 
+            {"show-memory" ,no_argument,      &flag_show_memory , 1 }, 
             {0, 0, 0, 0                                             },
         };        
         
@@ -672,6 +673,8 @@ int main (int argc, char **argv)
             
     // if this is "list", finalize
     if (command == LIST) main_list (NULL, true);
+
+    if (flag_show_memory) buf_display_memory_usage (false);
         
     return 0;
 }

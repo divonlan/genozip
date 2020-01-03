@@ -86,7 +86,7 @@ bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_d
 
     const unsigned INITIAL_BUF_SIZE = 65536;
 
-    buf_alloc (vb, &vcf_header_text, INITIAL_BUF_SIZE, 0, "vcf_header_do", 0);
+    buf_alloc (vb, &vcf_header_text, INITIAL_BUF_SIZE, 0, "vcf_header_text", 0);
 
     while (1) 
     {
@@ -105,7 +105,7 @@ bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_d
             break;
         }
 
-        buf_alloc (vb, &vcf_header_text, line.len + vcf_header_text.len + 1, 2, "vcf_header_do", 1); // +1 for terminating \0
+        buf_alloc (vb, &vcf_header_text, line.len + vcf_header_text.len + 1, 2, "vcf_header_text", 1); // +1 for terminating \0
 
         memcpy (&vcf_header_text.data[vcf_header_text.len], line.data, line.len);
         

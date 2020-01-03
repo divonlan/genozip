@@ -47,6 +47,8 @@ static void piz_get_line_get_num_subfields (VariantBlock *vb, unsigned line_i, /
                                             const char **line, unsigned *remaining_len,
                                             const char **subfields_start, unsigned *subfields_len, int *num_subfields)
 {    
+    START_TIMER;
+
     const char *after = *line + *remaining_len;
 
     unsigned column=1, i=0; for (; i < *remaining_len && column < 9; i++)
@@ -83,12 +85,16 @@ static void piz_get_line_get_num_subfields (VariantBlock *vb, unsigned line_i, /
 
 cleanup:
     *remaining_len = after - *line;
+
+    COPY_TIMER (vb->profile.piz_get_line_get_num_subfields)
 }
 
 static void piz_get_line_subfields (VariantBlock *vb, unsigned line_i, // line in vcf file
                                     const char *subfields_start, unsigned subfields_len,
                                     int *line_subfields) // out
 {
+    START_TIMER;
+
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) line_subfields[i] = NIL;
 
     // case: this line has no subfields, despite other lines in the VB having
@@ -114,6 +120,8 @@ static void piz_get_line_subfields (VariantBlock *vb, unsigned line_i, // line i
 #endif
         if (subfields_start[-1] == '\t' || subfields_start[-1] == '\n') break;
     } 
+
+    COPY_TIMER (vb->profile.piz_get_line_subfields)
 }
 
 static void piz_get_variant_data_line (VariantBlock *vb, 
@@ -184,6 +192,8 @@ static inline unsigned base250_len (const uint8_t *data) {
 
 void piz_get_genotype_sample_starts (VariantBlock *vb, int *num_subfields)
 {
+    START_TIMER;
+    
     buf_alloc (vb, &vb->next_gt_in_sample, sizeof(uint8_t*) * global_num_samples, 1, "next_gt_in_sample", 0);
     const uint8_t **next_gt_in_sample = (const uint8_t **)vb->next_gt_in_sample.data; // an array of uint8_t * - each element pointing to the gt of the first line of a sample
     
@@ -215,6 +225,8 @@ void piz_get_genotype_sample_starts (VariantBlock *vb, int *num_subfields)
         ASSERT (next == after, "Error: expected to find %u genotypes in sb_i=%u of variant_block_i=%u, but found more. ",
                 vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i);
     }
+
+    COPY_TIMER (vb->profile.piz_get_genotype_sample_starts)
 }
 
 // convert genotype data from sample block format of indices in base-250 to line format
@@ -301,8 +313,6 @@ static void piz_get_phase_data_line (VariantBlock *vb, unsigned line_i)
 // of pointers, each pointer being a beginning of column data within the section array
 static const char **piz_get_ht_columns_data (VariantBlock *vb)
 {
-    START_TIMER;
-
     buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 7), 1, "ht_columns_data", 0); // realloc for exact size
 
     const char **ht_columns_data = (const char **)vb->ht_columns_data.data;
@@ -325,8 +335,6 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
 
     for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 7; ht_i++)
         ht_columns_data[ht_i] = column_of_zeros;
-
-    COPY_TIMER(vb->profile.piz_get_ht_permutation_lookups);
 
     return ht_columns_data;
 }
@@ -357,6 +365,8 @@ static void piz_get_haplotype_data_line (VariantBlock *vb, unsigned line_i, cons
 // merge line components (variant, haplotype, genotype, phase) back into a line
 static void piz_merge_line(VariantBlock *vb, unsigned line_i)
 {
+    START_TIMER;
+
     DataLine *dl = &vb->data_lines[line_i]; 
 
     // calculate the line length & allocate it
@@ -459,6 +469,8 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
 
     // sanity check
     ASSERT (next - dl->line.data == dl->line.len, "Error: unexpected line size: calculated=%u, actual=%u", dl->line.len, (unsigned)(next - dl->line.data));
+
+    COPY_TIMER (vb->profile.piz_merge_line);
 }
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,

@@ -69,7 +69,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
     buf_alloc (dd->pseudo_vb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (!flag_profiler && dd->show_progress) 
+    if (!flag_show_time && dd->show_progress) 
         fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
 
     return dd;
@@ -79,7 +79,7 @@ void dispatcher_finish (Dispatcher dispatcher)
 {
     DispatcherData *dd = dispatcher;
 
-    if (flag_profiler) {
+    if (flag_show_time) {
         struct timespec tb; 
         clock_gettime(CLOCK_REALTIME, &tb); 
         int wallclock_ms = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000);
@@ -229,14 +229,14 @@ void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long lon
     buf_test_overflows(dd->processed_vb);
 #endif
 
-    if (flag_profiler) {
+    if (flag_show_time) {
         profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
 
         fprintf (stderr, "COMPLETED     block #%u %s\n", 
                  dd->processed_vb->variant_block_i, profiler_print_short (&dd->processed_vb->profile));
     }
 
-    if (flag_profiler || !dd->show_progress) return; // we don't show progress in profiler mode
+    if (flag_show_time || !dd->show_progress) return; // we don't show progress in profiler mode
 
     struct timespec tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 

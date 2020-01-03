@@ -293,7 +293,7 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
 
         // allocate memory for haplotype data for each sample block - one character per haplotype
         buf_alloc (vb, &vb->haplotype_sections_data[sb_i], vb->num_lines * num_haplotypes_in_sample_block, 
-                   0, "haplotype_sections_data[sb_i]", vb->first_line);
+                   0, "haplotype_sections_data", vb->first_line);
 
         // build sample block haplptype data - 
         // -- using the helper index to access the haplotypes in sorted order

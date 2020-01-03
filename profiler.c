@@ -23,7 +23,10 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->zfile_uncompress_section          += src->zfile_uncompress_section;
     dst->squeeze                           += src->squeeze;
     dst->buffer                            += src->buffer;
-    dst->piz_get_ht_permutation_lookups    += src->piz_get_ht_permutation_lookups;
+    dst->piz_get_line_get_num_subfields    += src->piz_get_line_get_num_subfields;
+    dst->piz_get_genotype_sample_starts    += src->piz_get_genotype_sample_starts;
+    dst->piz_get_line_subfields            += src->piz_get_line_subfields;
+    dst->piz_merge_line                    += src->piz_merge_line;
 
     dst->zip_compress_variant_block        += src->zip_compress_variant_block;
     dst->seg_all_data_lines          += src->seg_all_data_lines;
@@ -88,18 +91,23 @@ const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
                       "   piz_reconstruct_line_components: %u\n"
                       "      piz_get_variant_data_line: %u\n"
                       "          piz_decode_pos: %u\n"
+                      "      piz_get_line_get_num_subfields: %u\n"
+                      "      piz_get_line_subfields: %u\n"
                       "      piz_get_haplotype_data_line: %u\n"
-                      "          piz_get_ht_permutation_lookups: %u\n"
+                      "      piz_get_genotype_sample_starts: %u\n"
                       "      piz_get_genotype_data_line: %u\n"
                       "      piz_get_phase_data_line: %u\n"
+                      "      piz_merge_line: %u\n"
                       "   squeeze: %u\n"
                       "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n",
                  os, max_threads, filename ? filename : "(not file)",
                  ms(p->read), ms(p->mtf_integrate_dictionary_fragment), ms(p->write), 
                  ms(p->piz_uncompress_variant_block), ms(p->zfile_uncompress_section),
                  ms(p->piz_reconstruct_line_components), ms(p->piz_get_variant_data_line), ms(p->piz_decode_pos),
-                 ms(p->piz_get_haplotype_data_line), ms (p->piz_get_ht_permutation_lookups), 
-                 ms(p->piz_get_genotype_data_line), ms(p->piz_get_phase_data_line),
+                 ms(p->piz_get_line_get_num_subfields), ms(p->piz_get_line_subfields),
+                 ms(p->piz_get_haplotype_data_line), 
+                 ms(p->piz_get_genotype_sample_starts), ms(p->piz_get_genotype_data_line), 
+                 ms(p->piz_get_phase_data_line), ms(p->piz_merge_line),
                  ms(p->squeeze), 
                  ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
                  

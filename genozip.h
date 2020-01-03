@@ -153,7 +153,8 @@ typedef struct {
 
 typedef struct {
     long long read, piz_uncompress_variant_block, compressor, write, piz_get_variant_data_line, 
-        piz_get_haplotype_data_line, piz_get_ht_permutation_lookups,
+        piz_get_haplotype_data_line, piz_get_line_get_num_subfields,
+        piz_get_genotype_sample_starts, piz_get_line_subfields, piz_merge_line, 
         piz_get_phase_data_line, piz_get_genotype_data_line, zfile_uncompress_section,
         piz_reconstruct_line_components, squeeze, piz_decode_pos, buffer,
         zip_compress_variant_block, seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
@@ -520,7 +521,7 @@ extern const char *global_cmd;            // set once in main()
 extern unsigned    global_max_threads;    // set in main()
 extern bool        global_little_endian;  // set in main()
 
-extern int flag_stdout, flag_force, flag_replace, flag_quiet, flag_concat_mode, flag_show_content, flag_show_alleles, flag_profiler;
+extern int flag_stdout, flag_force, flag_replace, flag_quiet, flag_concat_mode, flag_show_content, flag_show_alleles, flag_show_time, flag_show_memory;
 
 // unit tests
 extern void seg_data_line_unit_test();
@@ -562,9 +563,9 @@ static inline int strcpy_tab (char *dst, const char *src)
 }
 
 #define START_TIMER     struct timespec profiler_timer; \
-                        if (flag_profiler) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
+                        if (flag_show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
 
-#define COPY_TIMER(res) if (flag_profiler) { \
+#define COPY_TIMER(res) if (flag_show_time) { \
                             struct timespec tb; \
                             clock_gettime(CLOCK_REALTIME, &tb); \
                             res += (tb.tv_sec-profiler_timer.tv_sec)*1000000000ULL + (tb.tv_nsec-profiler_timer.tv_nsec); \
