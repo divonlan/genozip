@@ -130,8 +130,7 @@ static void seg_variant_area(VariantBlock *vb, DataLine *dl, const char *str, un
     vb->add_bytes[SEC_VARIANT_DATA] -= pos_len - pos_delta_len; // we saved this number of bytes vs. the original file
 }
 
-static bool seg_haplotype_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len, 
-                                     unsigned line_i, unsigned sample_i)
+static bool seg_haplotype_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len, unsigned line_i, unsigned sample_i)
 {
     // check ploidy
     unsigned ploidy=1;
@@ -162,13 +161,15 @@ static bool seg_haplotype_area(VariantBlock *vb, DataLine *dl, const char *str, 
 
     vb->add_bytes[SEC_PHASE_DATA] -= (ploidy-1); // we "saved" this number of phase characters vs the vcf file (... we will add them back later if we didn't)
 
+    bool padding_only = (*str == '*');
+
     PhaseType ht0_phase_type = PHASE_UNKNOWN;
     for (unsigned ht_i=0; ht_i < ploidy; ht_i++) {
 
         char ht = *(str++); 
         len--;
 
-        ASSERT ((ht >= '0' && ht <= '9') || ht == '.',
+        ASSERT ((ht >= '0' && ht <= '9') || ht == '.' || ht == '*',
                 "Error: invalid VCF file - line %u - expecting an allele in a sample to be a number 0-9 or . , but seeing %c", line_i, *str);
 
         // single-digit allele numbers
@@ -234,6 +235,9 @@ static bool seg_haplotype_area(VariantBlock *vb, DataLine *dl, const char *str, 
         
         vb->add_bytes[SEC_HAPLOTYPE_DATA] += vb->ploidy - ploidy; // we added some characters that weren't in the original vcf
     }
+
+    if (padding_only)
+        vb->add_bytes[SEC_HAPLOTYPE_DATA] += 1; // we adding a '*' that was not in the original file
 
     if (ploidy==1 && vb->ploidy > 1 && dl->phase_type == PHASE_MIXED_PHASED)
         vb->line_phase_data.data[sample_i] = (char)PHASE_HAPLO;
@@ -361,7 +365,7 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
             // missing genotype data despite being declared in FORMAT - this is permitted by VCF spec
             if (area == HAPLOTYPE && dl->has_genotype_data) {
                 seg_genotype_area (vb, dl, NULL, 0, line_i);
-                gt_line_len++; // adding the \t
+                gt_line_len++; // adding the SEG_MISSING_SF
                 area = GENOTYPE; // we just processed an (empty) genotype area
             }
 
@@ -385,9 +389,26 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
 
     ASSERT (!area, "Error: line %u ends pre-maturely", line_i);
 
-    ASSERT(sample_i == global_num_samples, 
-           "Error: Invalid VCF file: the number of samples in line %u is %u, different than the VCF column header line which has %u samples",
-           line_i, sample_i, global_num_samples);
+    // some real-world files I encountered have too-short lines due to human errors. we pad them
+    if (sample_i < global_num_samples) {
+        
+        ASSERTW(false, "Warning: the number of samples in line %u is %u, different than the VCF column header line which has %u samples",
+                line_i, sample_i, global_num_samples);
+
+        for (; sample_i < global_num_samples; sample_i++) {
+
+            if (dl->has_haplotype_data) {
+                // '*' (haplotype padding) with ploidy 1
+                seg_haplotype_area (vb, dl, "*", 1, line_i, sample_i);
+            }
+
+            if (dl->has_genotype_data) {
+                seg_genotype_area (vb, dl, NULL, 0, line_i);
+                gt_line_len++; // adding the SEG_MISSING_SF
+            }
+
+        }
+    }
 
     // update lengths
     if (dl->has_haplotype_data) {
@@ -435,34 +456,6 @@ cleanup:
     }
 
     return ploidy_overflow; 
-}
-
-void seg_data_line_unit_test()
-{
-    unsigned *n = &global_num_samples;
-
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT:GQ:DP:HQ\t0|0:49:3:58,50\t0|1:3:5:65,3\n"; // normal
-    // *n=0 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\n";  // no samples (=ok)
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT:GQ:DP:HQ\t0|0:49:3:58,50\t0|1|0:3:5:65,3\n"; // inconsistent ploidy
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT:GQ:DP:HQ\t1:49:3:58,50\t0:3:5:65,3\n"; // genotype data only
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT:GQ:DP:HQ\t0|0\t0|1\n"; // missing genotype data
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT\t0|0:1\t0|1:0\n"; // unexpected genotype data
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT\t0|0\t0/1\n"; // mixed phase
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT\n"; // missing haplotype
-    // *n=2 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tHT\n"; // missing genotype data
-    // *n=1 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT\t0|0\t0/1\n"; // too many samples
-    *n=3 ; char *test_data = "20\t17330\t.\tT\tA\t3\tq10\tNS=3;DP=11;AF=0.017\tGT\t0|0\t0/1\n"; // not enough samples
-    
-    DataLine *data_line = calloc (1, sizeof(DataLine));
-
-    VariantBlock *vb = vb_get_vb(NULL, NULL, NULL, 0);
-
-    buf_alloc (vb, &data_line->line, strlen(test_data) + 1, 0, "seg_data_line_unit_test0", 0);
-    strcpy (data_line->line.data, test_data);
-    
-    unsigned line_i = 555;
-
-    seg_data_line (NULL, data_line, line_i);
 }
 
 static void seg_update_vb_from_dl (VariantBlock *vb, DataLine *dl)

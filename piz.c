@@ -403,7 +403,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned line_i)
 
             PhaseType phase = (vb->phase_type == PHASE_MIXED_PHASED ? (PhaseType)vb->line_phase_data.data[sample_i]
                                                                     : vb->phase_type);
-            ASSERT (phase=='/' || phase=='|' || phase=='*', "Error: invalid phase %c line_i=%u sample_i=%u", phase, line_i, sample_i+1);
+            ASSERT (phase=='/' || phase=='|' || phase=='1' || phase=='*', "Error: invalid phase character '%c' line_i=%u sample_i=%u", phase, line_i, sample_i+1);
 
             for (unsigned p=0; p < vb->ploidy ; p++) {
                 
