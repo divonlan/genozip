@@ -237,8 +237,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, int *
 
     uint8_t **next_gt_in_sample = (uint8_t **)vb->next_gt_in_sample.data; // for convenience
 
-    vb->line_gt_data.len = 0;
-
+    char *next = vb->line_gt_data.data;
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
         unsigned first_sample = sb_i*SAMPLES_PER_BLOCK;
@@ -255,17 +254,16 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, int *
                 if (line_subfields[sf_i] != NIL) {  // this line has this subfield (according to its FORMAT field)
 
                     // add a colon before, if needed
-                    if (snip) vb->line_gt_data.data[vb->line_gt_data.len++] = ':'; // this works for empty "" snip too
+                    if (snip) *(next++) = ':'; // this works for empty "" snip too
 
                     uint8_t *word_index_base250 = next_gt_in_sample[sample_i];
                     unsigned snip_len;
-                    mtf_get_snip_by_word_index (vb, 
-                                                &vb->mtf_ctx[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case word_index_base250 will be a control character
+                    mtf_get_snip_by_word_index (vb, &vb->mtf_ctx[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case word_index_base250 will be a control character
                                                 word_index_base250, &snip, &snip_len);
 
                     if (snip && snip_len) { // it can be a valid empty subfield if snip="" and snip_len=0
-                        memcpy (&vb->line_gt_data.data[vb->line_gt_data.len], snip, snip_len);
-                        vb->line_gt_data.len += snip_len;
+                        memcpy (next, snip, snip_len);
+                        next += snip_len;
                     }
 
                     next_gt_in_sample[sample_i] += base250_len (word_index_base250);
@@ -273,19 +271,22 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, int *
             }
 
             // if we ended with a : - remove it
-            vb->line_gt_data.len -= (vb->line_gt_data.len && vb->line_gt_data.data[vb->line_gt_data.len-1] == ':');
+            next -= (vb->line_gt_data.len && vb->line_gt_data.data[vb->line_gt_data.len-1] == ':');
 
             // add sample terminator - \t
-            vb->line_gt_data.data[vb->line_gt_data.len++] = '\t';
+            *(next++) = '\t';
 
             // safety
-            ASSERT (vb->line_gt_data.len <= vb->line_gt_data.size, 
+            ASSERT (next <= vb->line_gt_data.data + vb->line_gt_data.size, 
                     "Error: line_gt_data buffer overflow. variant_block_i=%u line_i=%u sb_i=%u sample_i=%u",
                     vb->variant_block_i, line_i + vb->first_line, sb_i, sample_i);
         }
     }
+
     // change last terminator to a \n
-    vb->line_gt_data.data[vb->line_gt_data.len-1] = '\n';
+    next[-1] = '\n';
+
+    vb->line_gt_data.len = next - vb->line_gt_data.data;
 
     vb->data_lines[line_i].has_genotype_data = vb->line_gt_data.len > global_num_samples; // not all just \t
 
