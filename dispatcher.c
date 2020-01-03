@@ -4,6 +4,8 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
