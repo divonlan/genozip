@@ -423,8 +423,8 @@ static void main_test (const char *vcf_filename)
     _pipe (pipefd_zip_to_unzip,  25000000, _O_BINARY); // 25MB pipe space to make sure both sides stay busy
     _pipe (pipefd_unzip_to_main, 25000000, _O_BINARY);
 #else
-    pipe (pipefd_zip_to_unzip);
-    pipe (pipefd_unzip_to_main);
+    ASSERT (pipe (pipefd_zip_to_unzip)  >= 0, "Error: failed to create pipe 1: %s", strerror(errno));
+    ASSERT (pipe (pipefd_unzip_to_main) >= 0, "Error: failed to create pipe 2: %s", strerror(errno));
 #endif
 
     // open 2 threads - one for compression and for decompression - and the main thread and compares to the original
