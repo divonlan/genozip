@@ -181,13 +181,13 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
     char vsize[30], zsize[30];
     uint64_t total_vcf=0, total_z=0;
 
-    printf ("\n\n");
-    if (vcf_file->name) printf ("File name: %s\n", vcf_file->name);
-    printf ("Individuals: %u   Variants: %"PRIu64"   Non-GT subfields: %u\n", 
-            global_num_samples, z_file->num_lines, z_file->num_subfields);
+    fprintf (stderr, "\n\n");
+    if (vcf_file->name) fprintf (stderr, "File name: %s\n", vcf_file->name);
+    fprintf (stderr, "Individuals: %u   Variants: %"PRIu64"   Non-GT subfields: %u\n", 
+             global_num_samples, z_file->num_lines, z_file->num_subfields);
 
-    printf ("Compression stats:\n");
-    printf ("                               VCF     %%       GENOZIP     %%  Ratio\n");
+    fprintf (stderr, "Compression stats:\n");
+    fprintf (stderr, "                               VCF     %%       GENOZIP     %%  Ratio\n");
     const char *format = "%22s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
 
 #ifdef DEBUG
@@ -221,20 +221,20 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
 #endif
 
     for (unsigned i=0; i < sizeof(vbytes)/sizeof(vbytes[0]); i++) {
-        printf (format, categories[i], 
-                buf_human_readable_size(vbytes[i], vsize), 100.0 * (double)vbytes[i] / (double)vcf_file->vcf_data_size,
-                buf_human_readable_size(zbytes[i], zsize), 100.0 * (double)zbytes[i] / (double)z_file->disk_size,
-                zbytes[i] ? (double)vbytes[i] / (double)zbytes[i] : 0,
-                !zbytes[i] ? (vbytes[i] ? "\b\b\bInf" : "\b\b\b---") : "");
+        fprintf (stderr, format, categories[i], 
+                 buf_human_readable_size(vbytes[i], vsize), 100.0 * (double)vbytes[i] / (double)vcf_file->vcf_data_size,
+                 buf_human_readable_size(zbytes[i], zsize), 100.0 * (double)zbytes[i] / (double)z_file->disk_size,
+                 zbytes[i] ? (double)vbytes[i] / (double)zbytes[i] : 0,
+                 !zbytes[i] ? (vbytes[i] ? "\b\b\bInf" : "\b\b\b---") : "");
 
         total_vcf += vbytes[i];
         total_z   += zbytes[i];
     }
 
-    printf (format, "TOTAL", 
-            buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size,
-            buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
-            (double)total_vcf / (double)total_z, "");
+    fprintf (stderr, format, "TOTAL", 
+             buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size,
+             buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
+             (double)total_vcf / (double)total_z, "");
 
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRIu64" but file size is %"PRIu64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);
