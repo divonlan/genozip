@@ -80,7 +80,8 @@ void buf_test_overflows(const VariantBlock *vb)
 
 typedef struct {
     const char *name;
-    unsigned bytes, buffers;
+    uint64_t bytes; 
+    unsigned buffers;
 } MemStats;
 
 static int buf_stats_sort_by_bytes(const void *a, const void *b)  
@@ -90,7 +91,7 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
 
 void buf_display_memory_usage(bool memory_full)
 {
-    #define MAX_MEMORY_STATS 1000
+    #define MAX_MEMORY_STATS 100
     static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
     unsigned num_stats = 0, num_buffers = 0;
 
@@ -139,7 +140,7 @@ void buf_display_memory_usage(bool memory_full)
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);
 
-    unsigned total_bytes=0;
+    uint64_t total_bytes=0;
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
     char str[30];
