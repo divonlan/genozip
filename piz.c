@@ -678,11 +678,29 @@ void piz_dispatcher (char *z_basename, File *z_file, File *vcf_file, bool test_m
     unsigned input_exhausted = false;
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
-    // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
-    // 2. If data is available for writing, write it to disk
+    // 1. If data is available for writing, write it to disk
+    // 2. In input is not exhausted, and a compute thread is available - read a variant block and compute it
     // 3. Wait for the first thread (by sequential order) to complete the compute make data available for writing
+
+    // note: write having priority over read has a small execution time advantage on computers with
+    // a dedicated (i.e. single-user) hard drive, and a bigger (but still not very big - 2-4%) difference with a
+    // network/shared (i.e. slow) drive. No difference with a dedicated SSD.
+
     do {
-        // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a variant block and compute it
+        // PRIORITY 1: If data is available for writing, write it to disk
+        if (writer_vb) {
+            vcffile_write_one_variant_block (vcf_file, writer_vb);
+
+            z_file->vcf_data_so_far += writer_vb->vcf_data_size; 
+
+            dispatcher_show_progress (dispatcher, z_file, vcf_file->vcf_data_so_far, 0, input_exhausted && !dispatcher_has_busy_thread (dispatcher));
+
+            vb_release_vb (&writer_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+
+            continue;
+        }
+        
+        // PRIORITY 2: In input is not exhausted, and a compute thread is available - read a variant block and compute it
        if (!input_exhausted && dispatcher_has_free_thread (dispatcher)) {
 
             VariantBlock *next_vb = dispatcher_generate_next_vb (dispatcher); 
@@ -699,19 +717,6 @@ void piz_dispatcher (char *z_basename, File *z_file, File *vcf_file, bool test_m
             continue;
         }
 
-        // PRIORITY 2: If data is available for writing, write it to disk
-        if (writer_vb) {
-            vcffile_write_one_variant_block (vcf_file, writer_vb);
-
-            z_file->vcf_data_so_far += writer_vb->vcf_data_size; 
-
-            dispatcher_show_progress (dispatcher, z_file, vcf_file->vcf_data_so_far, 0, input_exhausted && !dispatcher_has_busy_thread (dispatcher));
-
-            vb_release_vb (&writer_vb); // cleanup vb and get it ready for another usage (without freeing memory)
-
-            continue;
-        }
-        
         // PRIORITY 3: Wait for the first thread (by sequential order) to complete the compute make data available 
         // for writing
         writer_vb = dispatcher_get_next_processed_vb (dispatcher); // NULL if there is no computing thread
