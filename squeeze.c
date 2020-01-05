@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   squeeze.c
-//   Copyright (C) 2019 Divon Lan <genozip@blackpawventures.com>
+//   Copyright (C) 2019-2020 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // A module for squeezing an index array. An index array of length len, in an array in which each entry containing a unique number 0->(len-1). 
