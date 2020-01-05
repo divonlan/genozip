@@ -31,6 +31,8 @@
 
 #include "genozip.h"
 
+#define GENOTYPE_EXT ".genozip"
+
 // globals - set it main() and never change
 char *global_cmd = NULL; 
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
@@ -82,9 +84,9 @@ int main_print_help()
     printf ("Actions - use at most one of these actions:\n");
     printf ("   -z --compress     compress a .vcf, .vcf.gz or .vcf.bz2 file (yes! we can compress an already-compress file).\n");
     printf ("                     the source file is left unchanged. this is the default action for genozip\n");
-    printf ("   -d --decompress   decompress a .vcf.genozip file. The .vcf.genozip file is left unchanged.\n");
+    printf ("   -d --decompress   decompress a .vcf" GENOTYPE_EXT " file. The .vcf " GENOTYPE_EXT " file is left unchanged.\n");
     printf ("                     this is the default action for genounzip\n");
-    printf ("   -l --list         list the compression ratios of these .vcf.genozip files\n");
+    printf ("   -l --list         list the compression ratios of these .vcf" GENOTYPE_EXT " files\n");
     printf ("   -t --test         test genozip. Compress the .vcf file(s), decompress, and then compare the\n");
     printf ("                     result to the original .vcf - all in memory without writing to any file\n");
     printf ("   -h --help         show this help page\n");
@@ -93,7 +95,7 @@ int main_print_help()
     printf ("\n");    
     printf ("Flags:\n");    
     printf ("   -c --stdout       send output to standard output instead of a file. -dc is the default action of dvcat\n");    
-    printf ("   -f --force        force overwrite of the output file, or force writing .vcf.genozip data to standard output\n");    
+    printf ("   -f --force        force overwrite of the output file, or force writing .vcf " GENOTYPE_EXT " data to standard output\n");    
     printf ("   -R --replace      replace the source file with the result file, rather than leaving it unchanged\n");    
     printf ("   -o --output       output file name. this option can also be used to concatenate multiple input files\n");
     printf ("                     into a single concatented output file\n");
@@ -266,15 +268,15 @@ static void main_genozip (const char *vcf_filename,
         if (!z_file) { // if we're the second file onwards in concatenation mode - nothing to do
             if (!z_filename) {
                 unsigned fn_len = strlen (vcf_filename);
-                z_filename = malloc (fn_len + 4);
+                z_filename = malloc (fn_len + strlen (GENOTYPE_EXT) + 1);
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
                 if (vcf_file->type == VCF)
-                    sprintf (z_filename, "%s.genozip", vcf_filename); // .vcf -> .vcf.genozip
+                    sprintf (z_filename, "%s" GENOTYPE_EXT, vcf_filename); // .vcf -> .vcf.genozip
                 else if (vcf_file->type == VCF_GZ)
-                    sprintf (z_filename, "%.*sgenozip", fn_len-2, vcf_filename); // .vcf.gz -> .vcf.genozip
+                    sprintf (z_filename, "%.*s" GENOTYPE_EXT, fn_len-3, vcf_filename); // .vcf.gz -> .vcf.genozip
                 else if (vcf_file->type == VCF_BZ2)
-                    sprintf (z_filename, "%.*sgenozip", fn_len-3, vcf_filename); // .vcf.gz -> .vcf.genozip
+                    sprintf (z_filename, "%.*s" GENOTYPE_EXT, fn_len-4, vcf_filename); // .vcf.bz2 -> .vcf.genozip
                 else
                     ABORT ("Invalid file type: %u", vcf_file->type);
             }
@@ -333,13 +335,13 @@ static void main_genounzip (const char *z_filename,
     if (z_filename) {
         unsigned fn_len = strlen (z_filename);
 
-        ASSERT (file_has_ext (z_filename, ".vcf.genozip"), "%s: file: %s - genozip can only decompress files with a .vcf.genozip extension", global_cmd, z_filename);
+        ASSERT (file_has_ext (z_filename, ".vcf" GENOTYPE_EXT), "%s: file: %s - genozip can only decompress files with a .vcf" GENOTYPE_EXT " extension", global_cmd, z_filename);
 
         if (!vcf_filename && !flag_stdout && pipe_to_test_thread < 0) {
             vcf_filename = malloc(fn_len + 10);
             ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
 
-            sprintf (vcf_filename, "%.*s", fn_len-8, z_filename);    // .vcf.genozip -> .vcf
+            sprintf (vcf_filename, "%.*s", (int)(fn_len - strlen(GENOTYPE_EXT)), z_filename);    // .vcf.genozip -> .vcf
         }
 
         z_file = file_open (z_filename, READ, GENOZIP);    
@@ -479,7 +481,7 @@ static void main_list (const char *z_filename, bool finalize)
 
             printf ("Total:                   %19s %19s  %5uX  \n", c_str, u_str, ratio);
             
-            if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf.genozip extension or are not readable\n", files_ignored);
+            if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf" GENOTYPE_EXT " extension or are not readable\n", files_ignored);
         }
         return;
     }
