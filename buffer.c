@@ -95,9 +95,9 @@ void buf_display_memory_usage(bool memory_full)
     unsigned num_stats = 0, num_buffers = 0;
 
     if (memory_full)
-        printf ("\n\nError memory is full:\n");
+        fprintf (stderr, "\n\nError memory is full:\n");
     else
-        printf ("\n-------------------------------------------------------------------------------------\n");
+        fprintf (stderr, "\n-------------------------------------------------------------------------------------\n");
 
     for (unsigned buf_list_i=0; buf_list_i < num_buffer_lists; buf_list_i++ ) {
 
@@ -144,11 +144,11 @@ void buf_display_memory_usage(bool memory_full)
 
     char str[30];
     buf_human_readable_size (total_bytes, str);
-    printf ("Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, num_buffer_lists);
+    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, num_buffer_lists);
 
     for (unsigned i=0; i < num_stats; i++) {
         buf_human_readable_size (stats[i].bytes, str);
-        printf ("%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
+        fprintf (stderr, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
     }
 }
 
@@ -238,7 +238,7 @@ unsigned buf_alloc (VariantBlock *vb,
 
 #ifdef DISPLAY_ALLOCS_AFTER
                 if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-                    printf ("%s (%u): old_size=%u requested_size=%u growth_factor=%f new_size=%u\n", name, param, old_size, requested_size, grow_at_least_factor, new_size);
+                    fprintf (stderr, "%s (%u): old_size=%u requested_size=%u growth_factor=%f new_size=%u\n", name, param, old_size, requested_size, grow_at_least_factor, new_size);
 #endif
         }
 
@@ -270,7 +270,7 @@ unsigned buf_alloc (VariantBlock *vb,
 
 #ifdef DISPLAY_ALLOCS_AFTER
             if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-                printf ("%s (%u) (malloc): %u\n", name, param, new_size);
+                fprintf (stderr, "%s (%u) (malloc): %u\n", name, param, new_size);
 #endif
         }
     }
