@@ -20,6 +20,8 @@
  
 #define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the dv file format changes
 
+#define GENOZIP_EXT ".genozip"
+
 // this was carefully picked as the optimal number based on testing with 1000-genomes chromosome 22 - 1024 samples:
 // there is a tradeoff: we sort haplotypes by number of 1s for this entire variant block, and maintain and Index that is 
 // #haplotypes x roundup(log2(#haplotypes)) - and we the number of indices we have in the final file depends on the number

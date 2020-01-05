@@ -38,13 +38,22 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             file->type = VCF_BZ2;
             file->file = BZ2_bzopen (file->name, mode == READ ? "rb" : "wb");    
         }
-        else         
+        else if (file_has_ext (file->name, ".bcf")) {
+            ABORT ("To genozip BCF files, use in conjuction with bcftools, e.g.:\n"
+                   "bcftools view -Ov %s | %s -o %.*s" GENOZIP_EXT, file->name, global_cmd, (int)(strlen(file->name)-4), file->name);
+        }
+        else if (file_has_ext (file->name, ".bcf.gz")) {
+            ABORT ("To genozip BCF files, use in conjuction with bcftools, e.g.:\n"
+                   "bcftools view -Ov %s | %s -o %.*s" GENOZIP_EXT, file->name, global_cmd, (int)(strlen(file->name)-7), file->name);
+        }
+        else {
             ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz or .vcf.bz2 extension", global_cmd, file->name);
+        }
 
         ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
     }
     else { // GENOZIP
-        if (file_has_ext (file->name, ".vcf.genozip")) {
+        if (file_has_ext (file->name, ".vcf" GENOZIP_EXT)) {
             file->type = GENOZIP;
             file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "wb" so Windows doesn't add ASCII 13
             
@@ -68,7 +77,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             return NULL;
         
         else
-            ABORT ("%s: file: %s - file must have a .vcf.genozip extension", global_cmd, file->name);
+            ABORT ("%s: file: %s - file must have a .vcf" GENOZIP_EXT " extension", global_cmd, file->name);
     }
 
     if (mode == READ) {
