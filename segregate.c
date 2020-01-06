@@ -424,14 +424,13 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
     vb->max_gt_line_len = MAX (vb->max_gt_line_len, gt_line_len);
 
     // now, overlay the data over the line memory so we can re-use our working buffers vb->line_* for the next line
-    unsigned total_len = vb->line_variant_data.len + vb->line_ht_data.len + sizeof(uint32_t) * vb->line_gt_data.len + vb->line_phase_data.len;
- 
+    unsigned total_len = vb->line_variant_data.len + vb->line_ht_data.len + vb->line_gt_data.len + vb->line_phase_data.len;
     buf_alloc (vb, &dl->line, total_len, 1, "dl->line", line_i);
 
     unsigned offset_in_line = 0;
 
     buf_overlay (&dl->variant_data, &dl->line, &vb->line_variant_data, &offset_in_line, "dl->variant_data", line_i);
-    
+
     if (dl->has_haplotype_data) {
         buf_overlay (&dl->haplotype_data, &dl->line, &vb->line_ht_data, &offset_in_line, "dl->haplotype_data", line_i);
         
