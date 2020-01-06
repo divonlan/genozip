@@ -638,7 +638,7 @@ int main (int argc, char **argv)
         ASSERT (command != TEST || global_max_threads >= 3, "%s invalid --threads / -@ value: number of threads for --test / -t should be at least 3", global_cmd);
     }
     else    
-        global_max_threads = main_get_num_cores() + 2; // 2 extra threads in case compute threads become idle eg when they're done and not joined yet
+        global_max_threads = main_get_num_cores();
 
     if (command == TEST) {
         flag_stdout = flag_force = flag_replace = flag_quiet = false;
