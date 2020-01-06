@@ -45,12 +45,6 @@ static inline int *mtf_hash (const MtfContext *ctx, const char *snip, unsigned s
     return &((int *)ctx->hash.data)[hash]; // pointer to the hash table entry containing mtf_i or NIL
 }
 
-static inline unsigned mtf_snip_len_t (const char *snip)
-{
-    const char *s; for (s=snip ; *s != '\t' ; s++);
-    return s - snip;
-}
-
 // add a snip to the dictionary the first time it is encountered in the VCF file.
 // the dictionary will be written to GENOZIP and used to reconstruct the MTF during decompression
 static inline uint32_t mtf_insert_to_dict (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len)
