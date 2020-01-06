@@ -46,9 +46,13 @@ typedef struct {
     const char *filename;
 } DispatcherData;
 
+static struct timespec profiler_timer; // wallclock
+
 Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_file, File *z_file,
                             bool test_mode, bool show_progress, const char *filename)
 {
+    clock_gettime(CLOCK_REALTIME, &profiler_timer);
+
     DispatcherData *dd = calloc (1, sizeof(DispatcherData));
     ASSERT0 (dd, "failed to calloc DispatcherData");
 
@@ -79,20 +83,16 @@ void dispatcher_finish (Dispatcher dispatcher)
 {
     DispatcherData *dd = dispatcher;
 
-    if (flag_show_time) {
-        struct timespec tb; 
-        clock_gettime(CLOCK_REALTIME, &tb); 
-        int wallclock_ms = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000);
+    COPY_TIMER (dd->pseudo_vb->profile.wallclock);
 
-        fprintf (stderr, "\nPROFILER:\nwallclock: %u milliseconds\n%s\n", wallclock_ms, 
-                 profiler_print_report (&dd->pseudo_vb->profile, dd->max_threads, dd->filename));
-    }
-
-    buf_free (&dd->compute_threads_buf);
-    vb_release_vb (&dd->pseudo_vb);
+    if (flag_show_time) 
+        profiler_print_report (&dd->pseudo_vb->profile, dd->max_threads, dd->filename, dd->variant_block_i-1);
 
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (false);    
+
+    buf_free (&dd->compute_threads_buf);
+    vb_release_vb (&dd->pseudo_vb);
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // this is only true if the files are being concatenated

@@ -154,12 +154,12 @@ typedef struct {
 #define EMPTY_BUFFER {0,0,0,0,0,0,0}
 
 typedef struct {
-    long long read, piz_uncompress_variant_block, compressor, write, piz_get_variant_data_line, 
+    long long wallclock, read, compute, compressor, write, piz_get_variant_data_line, 
         piz_get_haplotype_data_line, piz_get_line_get_num_subfields,
         piz_get_genotype_sample_starts, piz_get_line_subfields, piz_merge_line, 
         piz_get_phase_data_line, piz_get_genotype_data_line, zfile_uncompress_section,
         piz_reconstruct_line_components, squeeze, piz_decode_pos, buf_alloc,
-        zip_compress_variant_block, seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
+        seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
         zip_generate_genotype_sections, zip_generate_phase_sections, zip_generate_variant_data_section,
         mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx, gl_optimize_dictionary,
         tmp1, tmp2, tmp3, tmp4, tmp5;
@@ -576,7 +576,7 @@ static inline int strcpy_tab (char *dst, const char *src)
 
 extern void profiler_add (ProfilerRec *dst, const ProfilerRec *src);
 extern const char *profiler_print_short (const ProfilerRec *p);
-extern const char *profiler_print_report (const ProfilerRec *p, unsigned max_threads, const char *filename);
+extern void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const char *filename, unsigned num_vbs);
 
 
 

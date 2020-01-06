@@ -658,7 +658,7 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
     // merge line components (variant, haplotype, genotype, phase) back into a line
     //piz_merge_all_lines (vb);
 
-    COPY_TIMER (vb->profile.piz_uncompress_variant_block);
+    COPY_TIMER (vb->profile.compute);
 
 #ifdef DEBUG
     buf_test_overflows(vb);

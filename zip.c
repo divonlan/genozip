@@ -425,7 +425,7 @@ static void zip_compress_variant_block (VariantBlock *vb)
         vb->vcf_section_bytes[sec_i] -= vb->add_bytes[sec_i];
     }
     
-    COPY_TIMER (vb->profile.zip_compress_variant_block);
+    COPY_TIMER (vb->profile.compute);
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
