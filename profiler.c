@@ -58,8 +58,7 @@ const char *profiler_print_short (const ProfilerRec *p)
     return str;
 }
 
-const void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const char *filename, 
-                                  unsigned num_vbs)
+void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const char *filename, unsigned num_vbs)
 {
 #if __WIN32__ && defined _WIN64
     static const char *os ="Windows (64 bit)";
