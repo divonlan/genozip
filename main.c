@@ -322,10 +322,10 @@ static void main_genozip (const char *vcf_filename,
 }
 
 static void main_genounzip (const char *z_filename,
-                        char *vcf_filename, 
-                        int pipe_from_zip_thread, 
-                        int pipe_to_test_thread,
-                        unsigned max_threads)
+                            char *vcf_filename, 
+                            int pipe_from_zip_thread, 
+                            int pipe_to_test_thread,
+                            unsigned max_threads)
 {
     static File *vcf_file = NULL; // static to support concat mode
     File *z_file;
@@ -349,6 +349,10 @@ static void main_genounzip (const char *z_filename,
         z_file = file_fdopen (pipe_from_zip_thread, READ, GENOZIP, false);
     }
     else { // stdin
+#ifdef _WIN32
+        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the input stream...
+        ABORT ("%s: redirecting binary input is not supported on Windows", global_cmd);
+#endif
         z_file = file_fdopen (0, READ, STDIN, false);
     }
 
