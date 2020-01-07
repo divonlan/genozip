@@ -117,12 +117,8 @@ LICENSE.non-commercial.txt: genozip$(EXE)
 
 clean:
 	@echo Cleaning up
-	@rm -f $(OBJS) genozip$(EXE) genounzip$(EXE) genocat$(EXE) 
+	@rm -f $(DEPS) $(OBJS) genozip$(EXE) genounzip$(EXE) genocat$(EXE) 
 
 clean-debug:
 	@echo Cleaning up debug
-	@rm -f $(DEBUG_OBJS) genozip-debug$(EXE) 
-
-clean-all: clean clean-debug
-	@echo Cleaning up dependencies
-	@rm -f $(DEPS) 
+	@rm -f $(DEPS) $(DEBUG_OBJS) genozip-debug$(EXE) 
