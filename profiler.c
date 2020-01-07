@@ -86,12 +86,12 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const ch
 
     if (p->piz_reconstruct_line_components) { // this is a uncompress operation
 
-        fprintf (stderr, "UNZIP dispatcher thread:\n");
+        fprintf (stderr, "GENOUNZIP I/O thread (piz_dispatcher):\n");
         fprintf (stderr, "   zfile_read_one_vb: %u\n", ms(p->zfile_read_one_vb));
         fprintf (stderr, "      read: %u\n", ms(p->read));
         fprintf (stderr, "      mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
         fprintf (stderr, "   write: %u\n", ms(p->write));
-        fprintf (stderr, "piz_uncompress_variant_block: %u\n", ms(p->compute));
+        fprintf (stderr, "GENOUNZIP compute threads (piz_uncompress_variant_block): %u\n", ms(p->compute));
         fprintf (stderr, "   zfile_uncompress_section: %u\n", ms(p->zfile_uncompress_section));
         fprintf (stderr, "   piz_reconstruct_line_components: %u\n", ms(p->piz_reconstruct_line_components));
         fprintf (stderr, "      piz_get_variant_data_line: %u\n", ms(p->piz_get_variant_data_line));
@@ -106,11 +106,11 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const ch
         fprintf (stderr, "   squeeze: %u\n", ms(p->squeeze));
     }
     else { // compress
-        fprintf (stderr, "ZIP dispatcher thread:\n");
+        fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
         fprintf (stderr, "   zip_read_variant_block: %u\n", ms(p->zip_read_variant_block));
         fprintf (stderr, "      read: %u\n", ms(p->read));
         fprintf (stderr, "   write: %u\n", ms(p->write));
-        fprintf (stderr, "zip_compress_variant_block: %u\n", ms(p->compute));
+        fprintf (stderr, "GENOZIP compute threads (zip_compress_variant_block): %u\n", ms(p->compute));
         fprintf (stderr, "   compressor: %u\n", ms(p->compressor));
         fprintf (stderr, "   seg_all_data_lines: %u\n", ms(p->seg_all_data_lines));
         fprintf (stderr, "   zip_generate_haplotype_sections: %u\n", ms(p->zip_generate_haplotype_sections));
