@@ -41,7 +41,7 @@ int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_concat_mode=
 
 int main_print_license()
 {
-#include "license.h"
+#include "lic-text.h"
 
 #if __WIN32__
     unsigned line_width = 100;
