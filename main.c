@@ -654,6 +654,8 @@ int main (int argc, char **argv)
     unsigned count=0;
     do {
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
+        
+        if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring --replace / -R option", global_cmd);
         
