@@ -187,10 +187,10 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     SectionHeaderVCFHeader vcf_header;
     memset (&vcf_header, 0, sizeof(vcf_header));
 
+    vcf_header.h.magic                 = ENDN16 (GENOZIP_MAGIC);
     vcf_header.h.section_type          = SEC_VCF_HEADER;
     vcf_header.h.data_uncompressed_len = ENDN32 (vcf_header_text->len);
     vcf_header.h.compressed_offset     = ENDN32 (sizeof (SectionHeaderVCFHeader));
-    vcf_header.magic                   = ENDN32 (GENOZIP_MAGIC);
     vcf_header.genozip_version           = GENOZIP_VERSION;
     vcf_header.num_samples             = ENDN32 (global_num_samples);
     vcf_header.vcf_data_size           = ENDN64 (vb->vcf_file->vcf_data_size) /* 0 if gzipped - will be updated later*/; 
@@ -221,6 +221,7 @@ void zfile_compress_variant_data (VariantBlock *vb)
     buf_alloc (vb, &vb->vardata_header_buf, sizeof_header, 0, "zfile_compress_variant_data", vb->first_line);
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)vb->vardata_header_buf.data;
 
+    vardata_header->h.magic                 = ENDN16 (GENOZIP_MAGIC);
     vardata_header->h.section_type          = SEC_VARIANT_DATA;
     vardata_header->h.data_uncompressed_len = ENDN32 (vb->variant_data_section_data.len);
     vardata_header->h.compressed_offset     = ENDN32 (sizeof_header);
@@ -272,6 +273,7 @@ void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield,
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
     SectionHeaderDictionary header;
+    header.h.magic                 = ENDN16 (GENOZIP_MAGIC);
     header.h.section_type          = SEC_DICTIONARY;
     header.h.data_uncompressed_len = ENDN32 (num_chars);
     header.h.compressed_offset     = ENDN32 (sizeof(SectionHeaderDictionary));
@@ -284,6 +286,7 @@ void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield,
 void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Buffer *section_data)
 {
     SectionHeader header;
+    header.magic                 = ENDN16 (GENOZIP_MAGIC);
     header.section_type          = section_type;
     header.data_uncompressed_len = ENDN32 (section_data->len);
     header.compressed_offset     = ENDN32 (sizeof(header));

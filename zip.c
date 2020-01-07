@@ -449,6 +449,8 @@ void zip_dispatcher (char *vcf_basename, File *vcf_file,
     if (!first_data_line) goto finish; // VCF file has only a header or is an empty file - no data - we're done
     unsigned input_exhausted = false;
 
+    mtf_initialize_mutex (z_file);
+    
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In there is a new variant block avaialble, and a compute thread available to take it - dispatch it
     // 2. If there is no new variant block available, but input is not exhausted yet - read one

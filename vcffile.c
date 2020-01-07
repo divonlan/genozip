@@ -34,9 +34,27 @@ static inline char vcffile_get_char(VariantBlock *vb)
         
         START_TIMER;
 
-        if (file->type == VCF) {
+        file->next_read = 0;
+
+        if (file->type == VCF || file->type == STDIN) {
             file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
             file->disk_so_far += (long long)file->last_read;
+
+            if (file->type == STDIN) {
+#ifdef _WIN32
+                // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
+                if (file->last_read >=3 && 
+                    (uint8_t)file->read_buffer[0] == 0xEF && 
+                    (uint8_t)file->read_buffer[1] == 0xBB && 
+                    (uint8_t)file->read_buffer[2] == 0xBF) {
+
+                    file->next_read = 3; // skip the BOM;
+                    file->disk_so_far -= 3;
+                }
+#endif
+                file->type = VCF; // we only accept VCF from stdin. TO DO: identify the file type by the magic number (first 2 bytes for gz and bz2)
+            }
+
         }
         else if (file->type == VCF_GZ) { 
             file->last_read   = gzfread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
@@ -45,9 +63,10 @@ static inline char vcffile_get_char(VariantBlock *vb)
         else if (file->type == VCF_BZ2) { 
             file->last_read   = BZ2_bzread (file->file, file->read_buffer, READ_BUFFER_SIZE);
             file->disk_so_far = BZ2_bzoffset (file->file); // for compressed files, we update by block read
+        } 
+        else {
+            ABORT0 ("Invalid file type");
         }
-
-        file->next_read = 0;
 
         COPY_TIMER (vb->profile.read);
     }
@@ -77,7 +96,7 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, B
 
     do {
         char c = vcffile_get_char (vb);
-        
+
         if (c == EOF) {
             ASSERT0 (!str_len, "Invalid VCF file: Expecting file to end with a newline");
 

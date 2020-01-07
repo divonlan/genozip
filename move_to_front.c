@@ -214,6 +214,15 @@ static unsigned mtf_get_z_file_sf_i (VariantBlock *vb, SubfieldIdType subfield)
     return vb->z_file->num_subfields-1;
 }
 
+void mtf_initialize_mutex (File *z_file)
+{
+    unsigned ret = pthread_mutex_init (&z_file->mutex, NULL);
+    z_file->mutex_initialized = true;
+    ASSERT0 (!ret, "pthread_mutex_init failed");
+
+    z_file->next_variant_i_to_merge = 1;
+}
+
 // we need to add "our" new words to the global dictionaries in the correct order of VBs
 static void mtf_wait_for_my_turn(VariantBlock *vb)
 {
@@ -298,7 +307,7 @@ static bool mtf_merge_in_vb_ctx_one_subfield(VariantBlock *vb, unsigned sf)
 // while holding exclusive access to the z_file dictionaries. returns num_dictionary_sections
 unsigned mtf_merge_in_vb_ctx (VariantBlock *vb)
 {
-    mtf_wait_for_my_turn(vb); // we grab the mutex in the sequencial order of VBs
+    if (flag_multithreaded) mtf_wait_for_my_turn(vb); // we grab the mutex in the sequencial order of VBs
 
     START_TIMER; // note: careful not to count time spent waiting for the mutex
 

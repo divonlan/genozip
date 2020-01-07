@@ -68,7 +68,10 @@ typedef enum {
 
 // Section headers - big endian
 
+#define GENOZIP_MAGIC 0x2705
+
 typedef struct  __attribute__((__packed__)) {
+    uint16_t magic; 
     uint8_t  section_type;
     uint32_t compressed_offset; // number of bytes from the start of the header that is the start of compressed data
     uint32_t data_compressed_len;
@@ -78,11 +81,8 @@ typedef struct  __attribute__((__packed__)) {
 // The VCF header section appears once in the file, and includes the VCF file header 
 #define FILE_METADATA_LEN 72
 
-#define GENOZIP_MAGIC 0x27052012
-
 typedef struct  __attribute__((__packed__)) {
     SectionHeader h;
-    uint32_t magic; 
     uint8_t  genozip_version;
     uint32_t num_samples;   // number of samples in the original VCF file
 
@@ -422,6 +422,7 @@ extern unsigned mtf_get_sf_i_by_subfield (MtfContext *mtf_ctx, unsigned *num_sub
 extern void mtf_integrate_dictionary_fragment (VariantBlock *vb, const char *data);
 extern void mtf_overlay_dictionaries_to_vb (VariantBlock *vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlock *vb);
+extern void mtf_initialize_mutex (File *z_file);
 
 extern void mtf_free_context (MtfContext *ctx);
 #ifdef DEBUG
@@ -524,7 +525,8 @@ extern char       *global_cmd;            // set once in main()
 extern unsigned    global_max_threads;    // set in main()
 extern bool        global_little_endian;  // set in main()
 
-extern int flag_stdout, flag_force, flag_replace, flag_quiet, flag_concat_mode, flag_show_content, flag_show_alleles, flag_show_time, flag_show_memory;
+extern int flag_stdout, flag_force, flag_replace, flag_quiet, flag_concat_mode, flag_show_content, 
+           flag_show_alleles, flag_show_time, flag_show_memory, flag_multithreaded;
 
 // unit tests
 extern void seg_data_line_unit_test();

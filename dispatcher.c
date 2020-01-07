@@ -62,7 +62,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
     dd->vcf_file      = vcf_file;
     dd->z_file        = z_file;
     dd->test_mode     = test_mode;
-    dd->show_progress = show_progress && filename && !!isatty(2);
+    dd->show_progress = show_progress && !flag_quiet && !!isatty(2);
     dd->filename      = filename;
     dd->last_len      = 2;
 

@@ -63,15 +63,6 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             }
 
             ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
-
-            if (mode == WRITE) {
-                unsigned ret = pthread_mutex_init (&file->mutex, NULL);
-                file->mutex_initialized = true;
-                ASSERT0 (!ret, "pthread_mutex_init failed");
-
-                file->next_variant_i_to_merge = 1;
-            }
-
         }
         else if (expected_type == VCZ_TEST)
             return NULL;

@@ -37,7 +37,8 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 bool global_little_endian;
 
 // the flags are globals 
-int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_concat_mode=0, flag_show_content=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
+int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_concat_mode=0, flag_show_content=0,
+    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_multithreaded=1;
 
 int main_print_license()
 {
@@ -243,10 +244,10 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
 }
 
 static void main_genozip (const char *vcf_filename, 
-                        char *z_filename,
-                        int pipefd_zip_to_unzip,  // send output to pipe (used for testing)
-                        unsigned max_threads,
-                        bool is_last_file)
+                          char *z_filename,
+                          int pipefd_zip_to_unzip,  // send output to pipe (used for testing)
+                          unsigned max_threads,
+                          bool is_last_file)
 {
     File *vcf_file;
     static File *z_file = NULL; // static to support concat mode
@@ -286,9 +287,10 @@ static void main_genozip (const char *vcf_filename,
         z_file->vcf_data_so_far                    = 0; // reset these as they relate to the VCF data of the VCF file currently being processed
         z_file->vcf_data_size                      = vcf_file->vcf_data_size; // 0 if vcf is .gz or a pipe or stdin
     }
-    else if (flag_stdout || !vcf_filename) { // stdout
+    else if (flag_stdout) { // stdout
 #ifdef _WIN32
-        ASSERT (isatty(1), "%s: redirecting output is not currently supported on Windows", global_cmd);
+        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
+        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
 #endif
         ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
@@ -299,7 +301,7 @@ static void main_genozip (const char *vcf_filename,
     }
     else ABORT0 ("Error: No output channel");
     
-    zip_dispatcher (flag_quiet ? NULL : get_basename(vcf_filename), vcf_file, z_file, 
+    zip_dispatcher (vcf_filename ? get_basename(vcf_filename) : "(stdin)", vcf_file, z_file, 
                     pipefd_zip_to_unzip >= 0, max_threads);
 
     if (flag_show_content) main_display_section_stats (vcf_file, z_file);
@@ -363,13 +365,10 @@ static void main_genounzip (const char *z_filename,
         vcf_file = file_fdopen (pipe_to_test_thread, WRITE, VCF, false);
     }
     else { // stdout
-#ifdef _WIN32
-        ASSERT (isatty(1), "%s: redirecting output is not currently supported on Windows", global_cmd);
-#endif
         vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
     }
 
-    piz_dispatcher (flag_quiet ? NULL : get_basename (z_filename), z_file, vcf_file, 
+    piz_dispatcher (z_filename ? get_basename (z_filename) : "(stdin)", z_file, vcf_file, 
                     pipe_from_zip_thread >= 0, max_threads);
 
     if (!flag_concat_mode) 
@@ -634,7 +633,10 @@ int main (int argc, char **argv)
     if (threads_str) {
         int ret = sscanf (threads_str, "%u", &global_max_threads);
         ASSERT (ret == 1 && global_max_threads >= 1, "%s: --threads / -@ option requires an integer value of at least 1", global_cmd);
-        ASSERT (command != TEST || global_max_threads >= 3, "%s invalid --threads / -@ value: number of threads for --test / -t should be at least 3", global_cmd);
+        ASSERT (command != TEST || (global_max_threads >= 3 && global_max_threads != 4), "%s invalid --threads / -@ value: number of threads for --test / -t should be at least 3 (but not 4)", global_cmd);
+
+        // note: we don't support 4 threads for TEST, because then zip and piz will have inconsistent flag_multithreaded
+        flag_multithreaded = global_max_threads > (command == TEST ? 3 : 1);
     }
     else    
         global_max_threads = main_get_num_cores();
