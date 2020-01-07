@@ -52,7 +52,7 @@ static void zip_read_variant_block (File *vcf_file,
 
     vb->num_lines = vb_line_i;
 
-    COPY_TIMER (vb->profile.read);
+    COPY_TIMER (vb->profile.zip_read_variant_block);
 }
 
 // concatenated variant data (up to and including the FORMAT field) into a single string

@@ -296,6 +296,8 @@ void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Bu
 // return true if data was read as requested, false if file has reached EOF and error otherwise
 static bool zfile_read_from_disk (VariantBlock *vb, char *out_str, unsigned len)
 {
+    START_TIMER;
+
     ASSERT0 (len, "Error: in zfile_read_from_disk, len is 0");
 
     bool memcpyied = false;
@@ -313,7 +315,10 @@ static bool zfile_read_from_disk (VariantBlock *vb, char *out_str, unsigned len)
             file->disk_so_far += file->last_read;
 
             ASSERT (file->last_read || !memcpyied, "Error: data requested could not be read bytes_so_far=%"PRIu64"", file->disk_so_far);
-            if (!file->last_read) return false; // file is exhausted - nothing read
+            if (!file->last_read) {
+                COPY_TIMER (vb->profile.read);
+                return false; // file is exhausted - nothing read
+            }
         }
 
         unsigned memcpy_len = MIN (len, file->last_read - file->next_read);
@@ -326,6 +331,9 @@ static bool zfile_read_from_disk (VariantBlock *vb, char *out_str, unsigned len)
 
         memcpyied = true;
     }
+
+    COPY_TIMER (vb->profile.read);
+
     return true;
 }
 
@@ -406,7 +414,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
         vb->z_file->disk_size = vb->z_file->disk_so_far;
         vb->z_file->eof = true;
 
-        COPY_TIMER (vb->profile.read);
+        COPY_TIMER (vb->profile.zfile_read_one_vb);
         return false; // end of file
     }
 
@@ -469,7 +477,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
         }
     }
 
-    COPY_TIMER (vb->profile.read);
+    COPY_TIMER (vb->profile.zfile_read_one_vb);
 
     return true; 
 }

@@ -28,15 +28,17 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->piz_get_genotype_sample_starts    += src->piz_get_genotype_sample_starts;
     dst->piz_get_line_subfields            += src->piz_get_line_subfields;
     dst->piz_merge_line                    += src->piz_merge_line;
+    dst->zfile_read_one_vb                 += src->zfile_read_one_vb;
 
-    dst->seg_all_data_lines          += src->seg_all_data_lines;
+    dst->seg_all_data_lines                += src->seg_all_data_lines;
     dst->zip_generate_haplotype_sections   += src->zip_generate_haplotype_sections;
     dst->count_alt_alleles                 += src->count_alt_alleles;
     dst->sample_haplotype_data             += src->sample_haplotype_data;
     dst->zip_generate_genotype_sections    += src->zip_generate_genotype_sections;
     dst->zip_generate_phase_sections       += src->zip_generate_phase_sections;
     dst->zip_generate_variant_data_section += src->zip_generate_variant_data_section;
-
+    dst->zip_read_variant_block            += src->zip_read_variant_block;
+    
     dst->mtf_merge_in_vb_ctx               += src->mtf_merge_in_vb_ctx;
     dst->gl_optimize_dictionary            += src->gl_optimize_dictionary;
     dst->mtf_clone_ctx                     += src->mtf_clone_ctx;
@@ -84,9 +86,10 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const ch
 
     if (p->piz_reconstruct_line_components) { // this is a uncompress operation
 
-        fprintf (stderr, "PIZ dispatcher thread:\n");
-        fprintf (stderr, "   read: %u\n", ms(p->read));
-        fprintf (stderr, "   mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
+        fprintf (stderr, "UNZIP dispatcher thread:\n");
+        fprintf (stderr, "   zfile_read_one_vb: %u\n", ms(p->zfile_read_one_vb));
+        fprintf (stderr, "      read: %u\n", ms(p->read));
+        fprintf (stderr, "      mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
         fprintf (stderr, "   write: %u\n", ms(p->write));
         fprintf (stderr, "piz_uncompress_variant_block: %u\n", ms(p->compute));
         fprintf (stderr, "   zfile_uncompress_section: %u\n", ms(p->zfile_uncompress_section));
@@ -104,7 +107,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const ch
     }
     else { // compress
         fprintf (stderr, "ZIP dispatcher thread:\n");
-        fprintf (stderr, "   read: %u\n", ms(p->read));
+        fprintf (stderr, "   zip_read_variant_block: %u\n", ms(p->zip_read_variant_block));
+        fprintf (stderr, "      read: %u\n", ms(p->read));
         fprintf (stderr, "   write: %u\n", ms(p->write));
         fprintf (stderr, "zip_compress_variant_block: %u\n", ms(p->compute));
         fprintf (stderr, "   compressor: %u\n", ms(p->compressor));

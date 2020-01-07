@@ -32,6 +32,8 @@ static inline char vcffile_get_char(VariantBlock *vb)
 
     if (file->next_read == file->last_read) {
         
+        START_TIMER;
+
         if (file->type == VCF) {
             file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
             file->disk_so_far += (long long)file->last_read;
@@ -46,6 +48,8 @@ static inline char vcffile_get_char(VariantBlock *vb)
         }
 
         file->next_read = 0;
+
+        COPY_TIMER (vb->profile.read);
     }
 
     char ret_char = file->last_read ? file->read_buffer[file->next_read++] : EOF;
