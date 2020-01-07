@@ -14,7 +14,7 @@
  being appropriate or not.
  http://pubs.opengroup.org/onlinepubs/009695299/basedefs/time.h.html */
 
-// XXX only supports a single timer
+// only supports a single timer
 #define TIMER_ABSTIME -1
 #define CLOCK_REALTIME CALENDAR_CLOCK
 #define CLOCK_MONOTONIC SYSTEM_CLOCK
