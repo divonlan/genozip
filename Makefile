@@ -28,7 +28,7 @@ DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
        bzlib/LICENSE.bzlib bzlib/README.bzlib \
 	   zlib/README.zlib
 
-INCS = genozip.h license.h \
+INCS = genozip.h lic-text.h \
        bzlib/bzlib.h bzlib/bzlib_private.h \
 	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
 	   mac/mach_gettime.h
