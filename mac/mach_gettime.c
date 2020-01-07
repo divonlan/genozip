@@ -3,6 +3,8 @@
 #include "mach_gettime.h"
 #include <mach/mach_time.h>
 
+#ifndef CLOCK_REALTIME
+
 #define MT_NANO (+1.0E-9)
 #define MT_GIGA UINT64_C(1000000000)
 
@@ -40,6 +42,8 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp)
 
     return retval;
 }
+
+#endif
 
 #endif
 

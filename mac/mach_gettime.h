@@ -5,6 +5,8 @@
 #include <mach/mach.h>
 #include <mach/clock.h>
 
+#ifndef CLOCK_REALTIME
+
 #ifndef mach_time_h
 #define mach_time_h
 
@@ -24,6 +26,8 @@ typedef int clockid_t;
 // struct timespec { time_t tv_sec; long tv_nsec; };
 
 int clock_gettime(clockid_t clk_id, struct timespec *tp);
+
+#endif
 
 #endif
 
