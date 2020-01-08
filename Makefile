@@ -15,7 +15,7 @@ ifeq ($(OS),Windows_NT)
 endif
 
 CC=gcc
-CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast
+CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast -s
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
 LIBS = -lpthread -lm
 
