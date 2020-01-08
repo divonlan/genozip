@@ -5,8 +5,7 @@ package:
 
 source:
   url: https://github.com/divonlan/genozip/archive/genozip-1.0.0.tar.gz
-  sha256: 705894eeb19f2668fdc469de827e22e67716b7c97ccfded30cbd136539b12759
-
+  sha256: 007cd86351be41c93f2e1a1613474436061c57f1adc1439eb0b17b19a4afc5da
 
 build:
   number: 0
@@ -21,20 +20,20 @@ test:
   files: 
     - data/test-file.vcf
 
-  commands:genozip
-    - genozip-f $PREFIX/genozip         # [unix]
-    - genozip -t test-file.vcgenozip    # [unix]
-    - ifgenozipexist $PREFIX/genozip.exe exit 1  # [win]
+  commands:
+    - test -f $PREFIX/genozip         # [unix]
+    - genozip -t test-file.vcf        # [unix]
+    - if not exist $PREFIX/genozip.exe exit 1  # [win]
     - .\genozip.exe -t test-file.vcf  # [win]
 
-about:genozip
-  home: https://github.com/divonlan/vczgenozip
+about:
+  home: https://github.com/divonlan/genozip
   dev_url: https://github.com/divonlan/genozip
   license: Apache-2.0, non-commercial only
   license_family: Apache
   license_file: LICENSE.non-commercial.txt
   summary: 'Compressor for VCF genomic files, a lot better than gzip or bzip2'
-  degenoziption: |
+  description: |
     genozip is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz files). 
     It is very easy to use - in fact, if you're familiar with gzip, it works pretty much the same.
     It achieves x2 to x5 better compression ratios than gzip because it leverages some properties

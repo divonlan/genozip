@@ -1,5 +1,5 @@
-This program, "genozip", and all documentation, are copyright (C) 2019-2020 Divon M Lan.  All rights
-reserved.
+This program, "genozip", and all documentation, are copyright (C) 2019-2020 Divon M Lan.  All
+rights reserved.
 
 
 
