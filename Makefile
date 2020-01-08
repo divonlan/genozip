@@ -128,7 +128,7 @@ LICENSE.non-commercial.txt: genozip$(EXE)
 	@echo Generating $@
 	@./genozip$(EXE) -L > $@
 
-.PHONY: clean clean-debug clean-all build.sh bld.bat
+.PHONY: clean clean-debug clean-all build.sh bld.bat meta.yaml
 
 clean:
 	@echo Cleaning up

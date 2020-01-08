@@ -6,3 +6,5 @@ copy %RECIPE_DIR%\genozip.exe %PREFIX%\genocat.exe
 copy %RECIPE_DIR%\LICENSE.non-commerical.txt %PREFIX%
 copy %RECIPE_DIR%\LICENSE.commerical.txt %PREFIX%
 
+exit /b 0
+
