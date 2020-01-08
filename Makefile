@@ -110,7 +110,7 @@ build.sh: conda/build.sh.template
 WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
 bld.bat: conda/bld.bat.template
 	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/%GCC%make $(CFLAGS) $(LIBS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
+	@sed 's/%BUILD/%GCC% $(CFLAGS) $(LIBS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
 
 conda: $(TARBALL) meta.yaml build.sh bld.bat
 	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
