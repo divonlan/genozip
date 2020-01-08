@@ -24,8 +24,8 @@ test:
     - test-file.vcf
 
   commands:
-    - genozip -t test-file.vcf        # [unix]
-    - .\genozip.exe -t test-file.vcf  # [win]
+    - $PREFIX/genozip -t $PREFIX/test-file.vcf        # [unix]
+    - genozip.exe -t test-file.vcf  # [win]
 
 about:
   home: https://github.com/divonlan/genozip

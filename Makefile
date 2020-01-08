@@ -86,6 +86,11 @@ $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
+# to publish to conda:
+# 1. Make conda - this will also copy meta.yaml to the local staged-recipes which should be checked out
+#    to the branch genozip-branch
+# 2. git commit and and git push the file in staged-recipes
+# 3. from the github website, go to my forked branch and submit pull request from my branch of my fork to the source master
 meta.yaml: conda/meta.yaml.template $(TARBALL)
 	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.yaml.template | \
