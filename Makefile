@@ -21,7 +21,7 @@ LIBS = -lpthread -lm
 
 DEVS = Makefile .gitignore genozip.code-workspace \
        .vscode/c_cpp_properties.json .vscode/launch.json .vscode/settings.json .vscode/tasks.json \
-       data/test-file.vcf \
+       test-file.vcf \
        conda/build.sh.template conda/bld.bat.template conda/meta.yaml.template
 
 DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
