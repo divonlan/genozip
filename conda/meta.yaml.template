@@ -21,12 +21,10 @@ requirements:
 
 test:
   files: 
-    - data/test-file.vcf
+    - test-file.vcf
 
   commands:
-    - test -f $PREFIX/genozip         # [unix]
     - genozip -t test-file.vcf        # [unix]
-    - if not exist $PREFIX/genozip.exe exit 1  # [win]
     - .\genozip.exe -t test-file.vcf  # [win]
 
 about:
@@ -38,7 +36,7 @@ about:
   license_file: LICENSE.non-commercial.txt
   summary: 'Compressor for VCF genomic files, a lot better than gzip or bzip2'
   description: |
-    genozip is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz files). 
+    genozip is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz or .vcf.bz2 files). 
     It is very easy to use - in fact, if you're familiar with gzip, it works pretty much the same.
     It achieves x2 to x5 better compression ratios than gzip because it leverages some properties
     of the genomic data, such as linkage disequilibrium, to compress better. 

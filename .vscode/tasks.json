@@ -23,7 +23,7 @@
         {
             "type": "shell",
             "label": "make genozip-debug",
-            "command": "mingw32-make.exe",
+            "command": "make.exe",
             "args": [ "debug" ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -42,7 +42,7 @@
         {
             "type": "shell",
             "label": "make clean",
-            "command": "mingw32-make.exe",
+            "command": "make.exe",
             "args": [ "clean" ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -61,7 +61,7 @@
         {
             "type": "shell",
             "label": "make clean-debug",
-            "command": "mingw32-make.exe",
+            "command": "make.exe",
             "args": [ "clean-debug" ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -79,9 +79,9 @@
         },
         {
             "type": "shell",
-            "label": "make clean-all",
-            "command": "mingw32-make.exe",
-            "args": [ "clean-all" ],
+            "label": "make conda",
+            "command": "make.exe",
+            "args": [ "conda" ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -99,7 +99,7 @@
         {
             "type": "shell",
             "label": "make license",
-            "command": "mingw32-make.exe",
+            "command": "make.exe",
             "args": [ "LICENSE.non-commercial.txt" ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -115,7 +115,7 @@
         {
             "type": "shell",
             "label": "make archive",
-            "command": "mingw32-make.exe",
+            "command": "make.exe",
             "args": [ "archive" ],
             "options": {
                 "cwd": "${workspaceRoot}"
