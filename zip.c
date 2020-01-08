@@ -129,7 +129,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
     START_TIMER;
 
     // build sample block genetype data
-    char *dst_next = vb->genotype_one_section_data.data;
+    uint8_t *dst_next = (uint8_t *)vb->genotype_one_section_data.data;
     
     // move the GT items from the line data to the permuted data - with each 
     // sample block of gt data containing the data in TRANSPOSED order - i.e. first
@@ -143,7 +143,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
             unsigned *this_line = sb_lines[SBL(line_i, sb_i)];
             
             // lookup word indices in the global dictionary for all the subfields
-            const char *dst_start = dst_next;
+            const uint8_t *dst_start = dst_next;
             for (unsigned sf=0; sf < dl->num_subfields; sf++) { // iterate on the order as in the line
             
                 uint32_t node_index = this_line[dl->num_subfields * sample_i + sf];

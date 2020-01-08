@@ -1,8 +1,14 @@
 #!/bin/bash 
 
 # build script for conda - Linux & MacOS
+apple=`echo $HOST|grep apple`
+if [ ${#test} -eq 0 ] ; then 
+   CONDA_LD=-s -lrt # Linux
+else 
+   CONDA_LD=
+fi
 
-%BUILD
+%BUILD $CONDA_LD
 
 cp $RECIPE_DIR/genozip $PREFIX/genozip
 cp $RECIPE_DIR/genozip $PREFIX/genounzip

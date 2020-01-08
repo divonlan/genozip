@@ -15,7 +15,7 @@ ifeq ($(OS),Windows_NT)
 endif
 
 CC=gcc
-CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast -s 
+CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast 
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
 LIBS = -lpthread -lm
 
@@ -105,7 +105,7 @@ meta.yaml: conda/meta.yaml.template $(TARBALL)
 UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
 build.sh: conda/build.sh.template 
 	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(LIBS) -lrt $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
+	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(LIBS) $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
 	
 WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
 bld.bat: conda/bld.bat.template
@@ -117,7 +117,7 @@ conda: $(TARBALL) meta.yaml build.sh bld.bat
 	@cp meta.yaml build.sh bld.bat ../staged-recipes/recipes/genozip/
 	@echo "Committing files & pushing changes to my forked staged-recipies/genozip-branch"
 	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
-	@echo
+	@echo " "
 	@echo "Now, (1) go to https://github.com/divonlan/staged-recipes/tree/genozip-branch"
 	@echo "     (2) select the branch 'genozip-branch'"
 	@echo "     (3) click 'New Pull Request'"
