@@ -15,7 +15,7 @@ ifeq ($(OS),Windows_NT)
 endif
 
 CC=gcc
-CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast -s
+CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast -s 
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
 LIBS = -lpthread -lm
 
@@ -82,11 +82,13 @@ TARBALL := archive/genozip-$(VERSION).tar.gz
 $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 	@echo "Archiving to $@ - WARNING: Make sure you have no un-pushed changes locally (Makefile doesn't verify this)"
 	@tar --create --gzip --file $(TARBALL) $^
+	@echo "Committing $(TARBALL) & pushing changes to genozip/master"
+	@(git commit -m "update archive" $(TARBALL) ; git push)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
-# to publish to conda:
+# to publish to conda: 
 # 1. Make conda - this will also copy meta.yaml to the local staged-recipes which should be checked out
 #    to the branch genozip-branch
 # 2. git commit and and git push the file in staged-recipes
@@ -98,21 +100,27 @@ meta.yaml: conda/meta.yaml.template $(TARBALL)
 		sed s/%VERSION/$(VERSION)/g | \
 		grep -v "^#" \
 		> $@
-	@echo "Copying meta.yaml to staged-recipes"
-	@cp meta.yaml ../staged-recipes/recipes/genozip/meta.yaml
 
 # we make the build scripts dependents on the archives, so if file list changes, we need to re-generate build
 UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
-build.sh: $(TARBALL) conda/build.sh.template 
+build.sh: conda/build.sh.template 
 	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/$(CC) $(CFLAGS) $(LIBS) $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
+	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(LIBS) -lrt $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
 	
 WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
-bld.bat: $(TARBALL) conda/bld.bat.template
+bld.bat: conda/bld.bat.template
 	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/$(CC).exe $(CFLAGS) $(LIBS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
+	@sed 's/%BUILD/%GCC%make $(CFLAGS) $(LIBS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
 
 conda: $(TARBALL) meta.yaml build.sh bld.bat
+	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
+	@cp meta.yaml build.sh bld.bat ../staged-recipes/recipes/genozip/
+	@echo "Committing files & pushing changes to my forked staged-recipies/genozip-branch"
+	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
+	@echo
+	@echo "Now, (1) go to https://github.com/divonlan/staged-recipes/tree/genozip-branch"
+	@echo "     (2) select the branch 'genozip-branch'"
+	@echo "     (3) click 'New Pull Request'"
 
 endif
 
@@ -120,7 +128,7 @@ LICENSE.non-commercial.txt: genozip$(EXE)
 	@echo Generating $@
 	@./genozip$(EXE) -L > $@
 
-.PHONY: clean clean-debug clean-all
+.PHONY: clean clean-debug clean-all build.sh bld.bat
 
 clean:
 	@echo Cleaning up
