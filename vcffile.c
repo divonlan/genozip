@@ -129,17 +129,23 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, B
     return true;
 }
 
-// this function manages a write buffer and writes to the disk only when the buffer is full (or end of data)
-// this doesn't make a difference for SSD performance, but it makes a significant different for HD
 unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
 {
-    unsigned bytes_written = fwrite (buf->data, 1, buf->len, vcf_file->file);
-    ASSERT (bytes_written==buf->len, "Error in writing VCF file: expected to write %u but wrote only %u", buf->len, bytes_written);
+    unsigned len = buf->len;
+    char *next = buf->data;
 
-    vcf_file->vcf_data_so_far += bytes_written;
-    vcf_file->disk_so_far     += bytes_written;
+    while (len) {
+        unsigned bytes_written = fwrite (next, 1, len, vcf_file->file);
+        ASSERT (bytes_written, "Error in vcffile_write_to_disk: failed to write %u bytes", len);
 
-    return bytes_written;
+        len  -= bytes_written;
+        next += bytes_written;
+    }
+
+    vcf_file->vcf_data_so_far += buf->len;
+    vcf_file->disk_so_far     += buf->len;
+
+    return buf->len;
 }
 
 void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb)
