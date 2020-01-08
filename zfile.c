@@ -414,7 +414,9 @@ bool zfile_read_one_vb (VariantBlock *vb)
     if (vardata_header_offset == EOF) {
 
         // update size - in case they were not known (pipe, gzip etc)
-        vb->z_file->disk_size = vb->z_file->disk_so_far;
+        if (!vb->z_file->disk_size) 
+            vb->z_file->disk_size = vb->z_file->disk_so_far;
+            
         vb->z_file->eof = true;
 
         COPY_TIMER (vb->profile.zfile_read_one_vb);

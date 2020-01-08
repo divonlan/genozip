@@ -447,10 +447,9 @@ void zip_dispatcher (char *vcf_basename, File *vcf_file,
     if (!success) goto finish;
 
     if (!first_data_line) goto finish; // VCF file has only a header or is an empty file - no data - we're done
-    unsigned input_exhausted = false;
 
     mtf_initialize_mutex (z_file);
-    
+
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In there is a new variant block avaialble, and a compute thread available to take it - dispatch it
     // 2. If there is no new variant block available, but input is not exhausted yet - read one
@@ -460,13 +459,11 @@ void zip_dispatcher (char *vcf_basename, File *vcf_file,
         next_vb = dispatcher_get_next_vb (dispatcher);
         
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
-        if (next_vb && next_vb->ready_to_dispatch && dispatcher_has_free_thread (dispatcher)) {
-            dispatcher_dispatch (dispatcher, zip_compress_variant_block);
-            continue;
-        }
+        if (next_vb && next_vb->ready_to_dispatch && dispatcher_has_free_thread (dispatcher)) 
+            dispatcher_compute (dispatcher, zip_compress_variant_block);
 
         // PRIORITY 2: If there is no new variant block available, but input is not exhausted yet - read one
-        if (!next_vb && !input_exhausted) {
+        else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
             next_vb = dispatcher_generate_next_vb (dispatcher);
             next_vb->first_line = line_i;
@@ -474,61 +471,49 @@ void zip_dispatcher (char *vcf_basename, File *vcf_file,
             zip_read_variant_block (vcf_file, &line_i, first_data_line, next_vb);
             first_data_line = NULL;
 
-            // input exhausted, and there are no lines - this can happen if the previous variant block was exactly VARIANTS_PER_BLOCK
-            if (!next_vb->num_lines) {
-                input_exhausted = true;
-                vb_release_vb (&next_vb);
-                continue;
-            }
-
-            // this is the last block, and input is exhausted. this block contains some lines.
-            if (next_vb->num_lines < VARIANTS_PER_BLOCK)
-                input_exhausted = true;
-
-            next_vb->ready_to_dispatch = true;
-
-            continue;
+            if (next_vb->num_lines)  // we found some data 
+                next_vb->ready_to_dispatch = true;
+            else
+                dispatcher_input_exhausted (dispatcher);
         }
 
         // PRIORITY 3: Wait for the first thread (by sequential order) to complete the compute and output the results
         // dispatch computing the compressed to a separate compute thread
-        VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher);
-        if (!processed_vb) continue;
-        
-        START_TIMER;
-        fwrite (processed_vb->z_data.data, 1, processed_vb->z_data.len, z_file->file);
-        COPY_TIMER (processed_vb->profile.write);
+        else {
+            VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher);
+            if (!processed_vb) continue;
+            
+            START_TIMER;
+            fwrite (processed_vb->z_data.data, 1, processed_vb->z_data.len, z_file->file);
+            COPY_TIMER (processed_vb->profile.write);
 
-        z_file->disk_so_far     += (long long)processed_vb->z_data.len;
-        z_file->vcf_data_so_far += (long long)processed_vb->vcf_data_size;
-        z_file->num_lines       += (long long)processed_vb->num_lines;
+            z_file->disk_so_far     += (long long)processed_vb->z_data.len;
+            z_file->vcf_data_so_far += (long long)processed_vb->vcf_data_size;
+            z_file->num_lines       += (long long)processed_vb->num_lines;
 
-        // update section stats
-        for (SectionType sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-            z_file->section_bytes[sec_i]   += processed_vb->z_section_bytes[sec_i];
-            vcf_file->section_bytes[sec_i] += processed_vb->vcf_section_bytes[sec_i];
+            // update section stats
+            for (SectionType sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
+                z_file->section_bytes[sec_i]   += processed_vb->z_section_bytes[sec_i];
+                vcf_file->section_bytes[sec_i] += processed_vb->vcf_section_bytes[sec_i];
+            }
+
+            if (dispatcher_is_final_processed_vb (dispatcher)) {
+
+                ASSERT (!z_file->vcf_data_size || 
+                        z_file->vcf_data_size /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
+                        "Error: VCF file uncompressed is of different length than expected - expected: %" PRIu64 " actual: %" PRIu64 "",
+                        z_file->vcf_data_size, z_file->vcf_data_so_far);
+
+                vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
+
+                z_file->vcf_concat_data_size += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
+            }
+
+            dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
+                                        z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
+
         }
-
-        bool done = input_exhausted && !dispatcher_has_busy_thread(dispatcher) && !next_vb;
-
-        if (done) 
-            vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
-
-        dispatcher_show_progress (dispatcher, vcf_file, z_file->vcf_data_so_far,
-                                    z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file, done);
-
-        if (done) {
-            ASSERT (!z_file->vcf_data_size || 
-                    z_file->vcf_data_size /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
-                    "Error: VCF file uncompressed is of different length than expected - expected: %" PRIu64 " actual: %" PRIu64 "",
-                    z_file->vcf_data_size, z_file->vcf_data_so_far);
-
-            z_file->vcf_concat_data_size += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
-        }
-
-        vb_release_vb (&processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
-
-    } while (!input_exhausted || dispatcher_has_busy_thread (dispatcher) || next_vb);
+    } while (!dispatcher_is_done (dispatcher));
 
 finish:
     z_file->disk_size = z_file->disk_so_far;

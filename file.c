@@ -74,7 +74,8 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     if (mode == READ) {
         // get file size
         struct stat64 st;
-        int ret = fstat64(fileno(file->file), &st);
+        int ret = stat64(file->name, &st);
+        ASSERTW (!ret, "Warning: stat64(%s) failed: %s", file->name, strerror(errno));
 
         file->disk_size = ret ? 0 : st.st_size;
 

@@ -58,11 +58,15 @@ static inline char vcffile_get_char(VariantBlock *vb)
         }
         else if (file->type == VCF_GZ) { 
             file->last_read   = gzfread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
-            file->disk_so_far = gzoffset64 (file->file); // for compressed files, we update by block read
+            
+            if (file->last_read)
+                file->disk_so_far = gzoffset64 (file->file); // for compressed files, we update by block read
         }
         else if (file->type == VCF_BZ2) { 
             file->last_read   = BZ2_bzread (file->file, file->read_buffer, READ_BUFFER_SIZE);
-            file->disk_so_far = BZ2_bzoffset (file->file); // for compressed files, we update by block read
+
+            if (file->last_read)
+                file->disk_so_far = BZ2_bzoffset (file->file); // for compressed files, we update by block read
         } 
         else {
             ABORT0 ("Invalid file type");
@@ -73,7 +77,7 @@ static inline char vcffile_get_char(VariantBlock *vb)
 
     char ret_char = file->last_read ? file->read_buffer[file->next_read++] : EOF;
 
-    if (ret_char == EOF) 
+    if (ret_char == EOF && !file->disk_size) 
         file->disk_size = file->disk_so_far; // in case it was not known
 
     return ret_char;

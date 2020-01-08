@@ -27,11 +27,13 @@ typedef struct {
     VariantBlock *next_vb; // next vb to be dispatched
     VariantBlock *processed_vb; // last vb for which caller got the processing results
 
+    bool input_exhausted;
+
     unsigned next_thread_to_dispatched;
     unsigned next_thread_to_be_joined;
 
     unsigned num_running_compute_threads;
-    unsigned variant_block_i;
+    unsigned next_vb_i;
     unsigned max_threads;
     File *vcf_file;
     File *z_file;
@@ -86,7 +88,7 @@ void dispatcher_finish (Dispatcher dispatcher)
     COPY_TIMER (dd->pseudo_vb->profile.wallclock);
 
     if (flag_show_time) 
-        profiler_print_report (&dd->pseudo_vb->profile, dd->max_threads, dd->filename, dd->variant_block_i-1);
+        profiler_print_report (&dd->pseudo_vb->profile, dd->max_threads, dd->filename, dd->next_vb_i-1);
 
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (false);    
@@ -118,13 +120,13 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = dispatcher;
 
-    dd->variant_block_i++;
+    dd->next_vb_i++;
 
-    dd->next_vb = vb_get_vb (dd->vb_pool, dd->vcf_file, dd->z_file, dd->variant_block_i);
+    dd->next_vb = vb_get_vb (dd->vb_pool, dd->vcf_file, dd->z_file, dd->next_vb_i);
     return dd->next_vb;
 }
 
-void dispatcher_dispatch (Dispatcher dispatcher, void (*func)(VariantBlock *))
+void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
 {
     DispatcherData *dd = dispatcher;
     Thread *th = &dd->compute_threads[dd->next_thread_to_dispatched];
@@ -137,12 +139,12 @@ void dispatcher_dispatch (Dispatcher dispatcher, void (*func)(VariantBlock *))
 #if defined _WIN32 && ! defined _WIN64 // note: _WIN32 is defined for both Windows 32 & 64 bit
         // note: in 32bit Windows, the first variant block is always done on the main thread, so we can measure
         // memory consumption and reduce the number of compute threads and/or num_lines in subsequent vbs
-        && dd->variant_block_i > 1
+        && dd->next_vb_i > 1
 #endif
         ) {
 
         unsigned err = pthread_create(&th->thread_id, NULL, dispatcher_thread_entry, th);
-        ASSERT (!err, "Error: failed to create thread for variant_block_i=%u, err=%u", dd->next_vb->variant_block_i, err);
+        ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->variant_block_i, err);
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % (dd->max_threads-1);
     }
@@ -193,12 +195,6 @@ bool dispatcher_has_free_thread (Dispatcher dispatcher)
     return dd->num_running_compute_threads < MAX(1, dd->max_threads-1);
 }
 
-bool dispatcher_has_busy_thread (Dispatcher dispatcher)
-{
-    DispatcherData *dd = dispatcher;
-    return dd->num_running_compute_threads > 0;
-}
-
 VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = dispatcher;
@@ -225,19 +221,12 @@ static void dispatcher_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
-                               uint64_t bytes_compressed /* possibly 0 */, bool done)
+static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
+                                      uint64_t bytes_compressed /* possibly 0 */)
 {
     DispatcherData *dd = dispatcher;
 
-#ifdef DEBUG
-    buf_test_overflows(dd->processed_vb);
-#endif
-
-    if (flag_show_time) 
-        profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
-
-    if (!dd->show_progress) return; // we don't show progress in profiler mode
+    if (!dd->show_progress) return; 
 
     struct timespec tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -258,7 +247,7 @@ void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long lon
         // sofar can be -1LL bc it seems that gzoffset64 returns that for values over 2GB on Windows -
         // as a work around, use the previous ratio as an estimate
         if (sofar > 9000000000000000000ULL)
-            sofar = ratio_so_far * vcf_data_written_so_far;
+            sofar = ratio_so_far * (double)vcf_data_written_so_far * 0.97; // underestimate by bit (97%) - better err on the side of under-estimation
         else
             ratio_so_far = (double)sofar / (double)vcf_data_written_so_far;
     } 
@@ -266,13 +255,13 @@ void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long lon
         return; // we can't show anything if we don't know the file size
 
     double percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
-    
+
     // need to update progress indicator, max once a second or if 100% is reached
     if (percent && (dd->last_seconds_so_far < seconds_so_far || percent == 100)) { 
 
         const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
-        if (!done) {
+        if (!dispatcher_is_done (dispatcher)) {
 
             // time remaining
             char time_str[70], progress[100];
@@ -309,3 +298,48 @@ void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long lon
     dd->last_seconds_so_far = seconds_so_far;
 }
 
+void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
+                                 uint64_t bytes_compressed /* possibly 0 */)
+{
+    DispatcherData *dd = dispatcher;
+
+#ifdef DEBUG
+    buf_test_overflows(dd->processed_vb);
+#endif
+
+    if (flag_show_time) 
+        profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
+
+    vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+
+    dispatcher_show_progress (dispatcher, file, vcf_data_written_so_far, bytes_compressed);
+}                           
+
+void dispatcher_input_exhausted (Dispatcher dispatcher)
+{
+    DispatcherData *dd = dispatcher;
+    dd->input_exhausted = true;
+
+    vb_release_vb (&dd->next_vb);
+}    
+
+bool dispatcher_is_done (Dispatcher dispatcher)
+{
+    DispatcherData *dd = dispatcher;
+
+    return dd->input_exhausted && !dd->next_vb && !dd->processed_vb && !dd->num_running_compute_threads;
+}
+
+bool dispatcher_is_final_processed_vb (Dispatcher dispatcher)
+{
+    DispatcherData *dd = dispatcher;
+
+    return dd->input_exhausted && !dd->next_vb && !dd->num_running_compute_threads;
+}
+
+bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
+{
+    DispatcherData *dd = dispatcher;
+
+    return dd->input_exhausted;
+}

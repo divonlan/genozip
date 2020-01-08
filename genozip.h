@@ -445,15 +445,17 @@ typedef void *Dispatcher;
 extern Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_file, File *z_file,
                                    bool test_mode, bool show_progress, const char *filename);
 extern void dispatcher_finish (Dispatcher dispatcher);
-extern void dispatcher_dispatch (Dispatcher dispatcher, void (*func)(VariantBlock *));
+extern void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *));
 extern VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher);                                         
 extern VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher);
 extern bool dispatcher_has_free_thread (Dispatcher dispatcher);
-extern bool dispatcher_has_busy_thread (Dispatcher dispatcher);
 extern VariantBlock *dispatcher_get_pseudo_vb (Dispatcher dispatcher);
 extern VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher);
-
-extern void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far, uint64_t bytes_compressed, bool done);
+extern void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far, uint64_t bytes_compressed);
+extern void dispatcher_input_exhausted (Dispatcher dispatcher);
+extern bool dispatcher_is_done (Dispatcher dispatcher);
+extern bool dispatcher_is_final_processed_vb (Dispatcher dispatcher);
+extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 
 extern void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text);
 extern void zfile_compress_variant_data (VariantBlock *vb);
