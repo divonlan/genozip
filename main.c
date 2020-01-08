@@ -627,7 +627,7 @@ int main (int argc, char **argv)
     ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --stdout / -c option", global_cmd);
     ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --force / -f option", global_cmd);
     ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --replace / -R option", global_cmd);
-    ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --quiet / -q option", global_cmd);
+    ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --quiet / -q option", global_cmd);
     ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --threads / -@ option", global_cmd);
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --output / -o option", global_cmd);
     ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with -z or -t", global_cmd);
@@ -646,7 +646,7 @@ int main (int argc, char **argv)
         global_max_threads = main_get_num_cores();
 
     if (command == TEST) {
-        flag_stdout = flag_force = flag_replace = flag_quiet = false;
+        flag_stdout = flag_force = flag_replace = false;
         out_filename = NULL;
     }
 
