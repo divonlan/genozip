@@ -93,6 +93,8 @@ meta.yaml: conda/meta.yaml.template $(TARBALL)
 		sed s/%VERSION/$(VERSION)/g | \
 		grep -v "^#" \
 		> $@
+	@echo "Copying meta.yaml to staged-recipes"
+	@cp meta.yaml ../staged-recipes/recipes/genozip/meta.yaml
 
 # we make the build scripts dependents on the archives, so if file list changes, we need to re-generate build
 UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c

@@ -7,7 +7,7 @@ package:
   version: %VERSION
 
 source:
-  url: https://github.com/divonlan/genozip/archive/genozip-%VERSION.tar.gz
+  url: https://github.com/divonlan/genozip/raw/master/archive/genozip-%VERSION.tar.gz
   sha256: %SHA256
 
 build:
