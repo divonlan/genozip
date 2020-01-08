@@ -26,7 +26,7 @@ test:
   commands:
     - $PREFIX/genozip -t $PREFIX/test-file.vcf        # [unix]
     - genozip.exe -t test-file.vcf  # [win]
-
+ 
 about:
   home: https://github.com/divonlan/genozip
   dev_url: https://github.com/divonlan/genozip
