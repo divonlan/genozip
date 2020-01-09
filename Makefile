@@ -35,7 +35,7 @@ DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
 INCS = genozip.h lic-text.h \
        bzlib/bzlib.h bzlib/bzlib_private.h \
 	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
-       compatability/visual_c_getopt.h compatability/visual-c-stdbool.h \
+       compatability/visual_c_getopt.h compatability/visual_c_stdbool.h \
 	   compatability/mac_gettime.h \
 	   compatability/win32_pthread.h
 
