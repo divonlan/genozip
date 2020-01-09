@@ -1,4 +1,4 @@
-%CC% -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DVISUAL_C -O2 {{ src }} -link pthread-win32.lib /OUT genozip.exe
+%CC% -D_LARGEFILE64_SOURCE=1 -DVISUAL_C -O2 {{ src }} -link pthread-win32.lib /OUT genozip.exe
 
 copy genozip.exe %PREFIX%\bin\genozip.exe
 copy genozip.exe %PREFIX%\bin\genounzip.exe

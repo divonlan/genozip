@@ -16,11 +16,9 @@ build:
 requirements:
   build:
     - {{ compiler('c') }}
-    - pthread-win32 # [win]
     - make # [unix]
   host:
   run:
-    - pthread-win32 # [win]
 
 test:
   source_files: 

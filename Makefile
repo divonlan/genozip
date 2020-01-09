@@ -14,8 +14,8 @@ ifndef CONDA_BUILD_SYSROOT
 CC=gcc
 endif
 
-CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall 
-CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
+CFLAGS       = -D_LARGEFILE64_SOURCE=1 -Wall 
+CFLAGS_DEBUG = -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
 LDFLAGS      = -lpthread -lm
 
 ifeq ($(CC),gcc)
