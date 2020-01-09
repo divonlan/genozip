@@ -91,10 +91,11 @@ genounzip$(EXE) genocat$(EXE): genozip$(EXE)
 
 # this is used by build.sh and bld.bat to build on conda
 install: genozip$(EXE)
+	@echo "Installing in $(PREFIX)/bin"
 	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
-	@cp -f genozip  $(PREFIX)/bin/genozip$(EXE)
+	@cp -f genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
 ifneq ($(OS),Windows_NT)
-	@chmod a+x      $(PREFIX)/bin/genozip
+	@chmod a+x $(PREFIX)/bin/genozip$(EXE)
 endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genounzip$(EXE)
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
