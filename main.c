@@ -698,3 +698,6 @@ int main (int argc, char **argv)
 
     return 0;
 }
+
+// we make this a function so we can put a debugger breakpoint on it
+void main_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits

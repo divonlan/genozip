@@ -569,25 +569,13 @@ extern void zip_compress_fp_unit_test();
 #define ENDN64(x) (global_little_endian ? __builtin_bswap64(x) : (x))
 
 // sanity checks
-static inline void exit_assert() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
-#define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_assert(); }}
-#define ASSERT0(condition, string)      { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_assert(); }}
+extern void main_exit();
+#define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); main_exit(); }}
+#define ASSERT0(condition, string)      { if (!(condition)) { fprintf (stderr, "\n%s\n", string); main_exit(); }}
 #define ASSERTW(condition, format, ...) { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
 #define ASSERTW0(condition, string)     { if (!(condition)) { fprintf (stderr, "\n%s\n", string); } }
-#define ABORT(format, ...)              { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_assert();}
-#define ABORT0(string)                  { fprintf (stderr, "\n%s\n", string); exit_assert();}
-
-// copies a string up to an including the tab \t, and returns the length - inc. the tab
-static inline int strcpy_tab (char *dst, const char *src)
-{
-    const char *start = src;
-
-    do {
-        *(dst++) = *(src++);
-    } while (*(src-1) != '\t');
-
-    return src - start; // return length
-}
+#define ABORT(format, ...)              { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); main_exit();}
+#define ABORT0(string)                  { fprintf (stderr, "\n%s\n", string); main_exit();}
 
 #define START_TIMER     struct timespec profiler_timer; \
                         if (flag_show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
