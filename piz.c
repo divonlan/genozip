@@ -12,7 +12,6 @@
 #ifndef VISUAL_C
 #include <unistd.h>
 #endif
-#include <pthread.h>
 #include <inttypes.h>
 
 #include "genozip.h"

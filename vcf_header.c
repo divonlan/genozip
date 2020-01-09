@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <pthread.h>
 #ifndef VISUAL_C
 #include <unistd.h>
 #endif

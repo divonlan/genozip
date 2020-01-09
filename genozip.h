@@ -12,10 +12,14 @@
 #include <math.h>
 #include <time.h>
 #include <inttypes.h>
+#ifdef _WIN32
+#include "compatability/win32_pthread.h"
+#else
 #include <pthread.h>
+#endif
 
 #ifdef __APPLE__
-#include "mac_compatability/mach_gettime.h"
+#include "compatability/mac_gettime.h"
 #endif
  
 #define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the dv file format changes
@@ -445,7 +449,9 @@ typedef void *Dispatcher;
 extern Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_file, File *z_file,
                                    bool test_mode, bool show_progress, const char *filename);
 extern void dispatcher_finish (Dispatcher dispatcher);
-extern void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *));
+
+typedef void (*DispatcherFuncType)(VariantBlock *);
+extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func);
 extern VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher);                                         
 extern VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher);
 extern bool dispatcher_has_free_thread (Dispatcher dispatcher);

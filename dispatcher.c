@@ -10,7 +10,6 @@
 #ifndef VISUAL_C
 #include <unistd.h>
 #endif
-#include <pthread.h>
 #include <stdbool.h>
 
 #include "genozip.h"

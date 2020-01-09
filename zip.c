@@ -12,7 +12,6 @@
 #include <stdbool.h>
 #include <math.h>
 #include <time.h>
-#include <pthread.h>
 #include <inttypes.h>
 
 #include "genozip.h"
