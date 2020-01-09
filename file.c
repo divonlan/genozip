@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef VISUAL_C
 #include <unistd.h>
+#endif
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>

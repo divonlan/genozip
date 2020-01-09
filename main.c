@@ -6,13 +6,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <libgen.h>
 #include <stdbool.h>
 #include <sys/types.h>
+#ifndef VISUAL_C
+#include <libgen.h>
 #include <unistd.h>
+#include <getopt.h>
+#else
+#include "visual_c_compatability/getopt.h"
+#endif
 #include <fcntl.h>
 #include <time.h>
-#include <getopt.h>
 #include <pthread.h>
 #include <errno.h>
 #include <inttypes.h>

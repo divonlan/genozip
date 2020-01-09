@@ -8,7 +8,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
+#ifndef VISUAL_C
 #include <unistd.h>
+#endif
 #include <inttypes.h>
 
 #include "genozip.h"

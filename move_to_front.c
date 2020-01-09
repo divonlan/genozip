@@ -25,7 +25,9 @@ unzip:
 
 #include <stdlib.h>
 #include <string.h>
+#ifndef VISUAL_C
 #include <unistd.h>
+#endif
 #include "genozip.h"
 
 #define INITIAL_NUM_NODES 10000

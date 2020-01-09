@@ -7,7 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifndef VISUAL_C
 #include <unistd.h>
+#endif
 #include <pthread.h>
 #include <stdbool.h>
 

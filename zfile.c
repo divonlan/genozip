@@ -8,7 +8,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <time.h>
+#ifndef VISUAL_C
 #include <unistd.h>
+#endif
 #include <inttypes.h>
 #include "bzlib/bzlib.h"
 #include "genozip.h"

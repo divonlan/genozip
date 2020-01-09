@@ -8,7 +8,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <pthread.h>
+#ifndef VISUAL_C
 #include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 
