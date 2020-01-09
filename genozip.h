@@ -80,7 +80,9 @@ typedef enum {
 
 #define GENOZIP_MAGIC 0x2705
 
-typedef struct  __attribute__((__packed__)) {
+#pragma pack(push, 1) // structures that are part of the genozip format are packed.
+
+typedef struct {
     uint16_t magic; 
     uint8_t  section_type;
     uint32_t compressed_offset; // number of bytes from the start of the header that is the start of compressed data
@@ -91,7 +93,7 @@ typedef struct  __attribute__((__packed__)) {
 // The VCF header section appears once in the file, and includes the VCF file header 
 #define FILE_METADATA_LEN 72
 
-typedef struct  __attribute__((__packed__)) {
+typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
     uint32_t num_samples;   // number of samples in the original VCF file
@@ -115,7 +117,7 @@ typedef struct  __attribute__((__packed__)) {
 //
 // Note: this doesn't affect retrieval time of a specific sample, because the sample block is just looked up via the index
  
-typedef struct  __attribute__((__packed__)) {
+typedef struct {
     SectionHeader h;
     uint32_t first_line;                  // line (starting from 1) of this variant block in the VCF file
     uint16_t num_lines;             // number of variants in this block
@@ -146,11 +148,13 @@ typedef struct  __attribute__((__packed__)) {
     uint8_t haplotype_index[];         // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
 } SectionHeaderVariantData; 
 
-typedef struct  __attribute__((__packed__)) {
+typedef struct {
     SectionHeader h;
     uint32_t num_snips;        // number of items in dictionary
     char subfield_id[SUBFIELD_ID_LEN];   // \0-padded id
 } SectionHeaderDictionary; 
+
+#pragma pack(pop)
 
 typedef struct {
     enum {BUF_UNALLOCATED, BUF_REGULAR, BUF_OVERLAYED} type;
