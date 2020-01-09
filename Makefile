@@ -90,12 +90,14 @@ genounzip$(EXE) genocat$(EXE): genozip$(EXE)
 	@ln $^ $@
 
 # this is used by build.sh and bld.bat to build on conda
-install: genozip
+install: genozip$(EXE)
 	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
-	@cp -f genozip  $(PREFIX)/bin/genozip
+	@cp -f genozip  $(PREFIX)/bin/genozip$(EXE)
+ifneq ($(OS),Windows_NT)
 	@chmod a+x      $(PREFIX)/bin/genozip
-	@ln -fs genozip $(PREFIX)/bin/genounzip
-	@ln -fs genozip $(PREFIX)/bin/genocat
+endif
+	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genounzip$(EXE)
+	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
 
 TARBALL := archive/genozip-$(VERSION).tar.gz
 
