@@ -9,7 +9,6 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #ifndef VISUAL_C
-#include <libgen.h>
 #include <unistd.h>
 #include <getopt.h>
 #else
@@ -36,7 +35,7 @@
 #include "genozip.h"
 
 // globals - set it main() and never change
-char *global_cmd = NULL; 
+const char *global_cmd = NULL; 
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 bool global_little_endian;
 
@@ -139,22 +138,21 @@ int main_print_version()
     return 0;
 }
 
-// get basename of a filename 
-static char *get_basename(const char *fn)
+// get basename of a filename - we write our own basename for Visual C and Windows compatability
+// note that the return value is a pointer within filename and thus should not be freed
+static const char *get_basename(const char *filename)
 {
-    if (!fn) return NULL;
+    if (!filename) return NULL;
 
     // we need to make a copy of the name first, as basename() modifies the string
-    unsigned fn_len = strlen(fn);
+    unsigned len = strlen(filename);
 
-    char *fn_copy = malloc (fn_len+1);
-    ASSERT0 (fn_copy, "Failed to malloc fn_copy");
+    for (unsigned i=len-1; i >= 0; i++)
+        if (filename[i]=='/' || filename[i]=='\\')
+            return &filename[i+1];
 
-    strcpy (fn_copy, fn);
-
-    return basename(fn_copy);
-
-    // note: we leak fn_copy and never free it - it's ok, its a small amount
+    // no / or \ - return the whole filename
+    return filename;
 }
 
 static unsigned main_get_num_cores()
@@ -548,7 +546,12 @@ int main (int argc, char **argv)
     char *threads_str = NULL;
 
     global_cmd = get_basename(argv[0]); // global var
-    if (file_has_ext (global_cmd, ".exe")) global_cmd[strlen(global_cmd)-4] = 0; // for Windows
+    
+    if (file_has_ext (global_cmd, ".exe")) { // for Windows
+        char *new_global_cmd = malloc (strlen (global_cmd));
+        sprintf (new_global_cmd, "%.*s", (int)(strlen(global_cmd)-4), global_cmd);
+        global_cmd = new_global_cmd;
+    }
 
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
