@@ -9,15 +9,10 @@
 
 VERSION = 1.0.0
 
-EXE =
-ifeq ($(OS),Windows_NT)
-	EXE = .exe
-endif
-
 CC=gcc
 CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast 
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
-LIBS = -lpthread -lm
+LDFLAGS = -lpthread -lm
 
 DEVS = Makefile .gitignore genozip.code-workspace \
        .vscode/c_cpp_properties.json .vscode/launch.json .vscode/settings.json .vscode/tasks.json \
@@ -44,6 +39,21 @@ DEBUG_OBJS := $(SRCS:.c=.debug-o)
 
 DEPS       := $(SRCS:.c=.d)
 
+EXE =
+ifeq ($(OS),Windows_NT)
+# Windows
+	EXE = .exe
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+# Linux
+        LDFLAGS += -lrt -s
+    endif
+    ifeq ($(UNAME_S),Darwin)
+# Mac
+    endif
+endif
+
 all: genozip$(EXE) genounzip$(EXE) genocat$(EXE)
 
 debug: genozip-debug$(EXE)
@@ -66,11 +76,11 @@ all: genozip$(EXE) genounzip$(EXE) genocat$(EXE)
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 genozip-debug$(EXE): $(DEBUG_OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 genounzip$(EXE) genocat$(EXE): genozip$(EXE)
 	@echo Hard linking $@
@@ -105,12 +115,12 @@ meta.yaml: conda/meta.yaml.template $(TARBALL)
 UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
 build.sh: conda/build.sh.template 
 	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(LIBS) $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
+	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
 	
 WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
 bld.bat: conda/bld.bat.template
 	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/%GCC% $(CFLAGS) $(LIBS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
+	@sed 's/%BUILD/%GCC% $(CFLAGS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
 
 conda: $(TARBALL) meta.yaml build.sh bld.bat
 	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
