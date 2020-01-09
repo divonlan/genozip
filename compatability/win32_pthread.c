@@ -3,11 +3,11 @@
 //   Copyright (C) 2020 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#ifdef _WIN32
+
 #include <windows.h>
 #include "win32_pthread.h"
 #include "../genozip.h"
-
-#ifdef _WIN32
 
 typedef struct {
     void *(*start_routine) (void *);
