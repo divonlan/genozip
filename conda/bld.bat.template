@@ -1,0 +1,12 @@
+%CC% -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -DVISUAL_C -Wall -O2 {{ src }} -lthreads-win32 -link /OUT genozip.exe
+
+copy genozip.exe %PREFIX%\bin\genozip.exe
+copy genozip.exe %PREFIX%\bin\genounzip.exe
+copy genozip.exe %PREFIX%\bin\genocat.exe
+
+exit /b 0
+
+rem copy %RECIPE_DIR%\LICENSE.non-commerical.txt %PREFIX%
+rem copy %RECIPE_DIR%\LICENSE.commerical.txt %PREFIX%
+
+ 

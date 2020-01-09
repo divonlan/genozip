@@ -17,10 +17,10 @@ requirements:
   build:
     - {{ compiler('c') }}
     - make # [unix]
-    - jom  # [win]
   host:
   run:
-
+    - pthreads-win32 # [win]
+    
 test:
   source_files: 
     - test-file.vcf

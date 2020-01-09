@@ -14,9 +14,15 @@ ifndef CONDA_BUILD_SYSROOT
 CC=gcc
 endif
 
-CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast 
+CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall 
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
 LDFLAGS = -lpthread -lm
+
+ifeq ($(CC),gcc)
+	CFLAGS += -Ofast
+else
+	CFLAGS += -O2
+endif
 
 DEVS = Makefile .gitignore genozip.code-workspace \
        .vscode/c_cpp_properties.json .vscode/launch.json .vscode/settings.json .vscode/tasks.json \
@@ -28,19 +34,13 @@ DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
 
 INCS = genozip.h lic-text.h \
        bzlib/bzlib.h bzlib/bzlib_private.h \
-	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
-	   mac/mach_gettime.h
+	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h 
+
 
 SRCS = base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c main.c \
 	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c \
        bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
-       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c \
-       mac/mach_gettime.c
-
-OBJS       := $(SRCS:.c=.o)
-DEBUG_OBJS := $(SRCS:.c=.debug-o)
-
-DEPS       := $(SRCS:.c=.d)
+       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
 
 ifeq ($(OS),Windows_NT)
 # Windows
@@ -53,8 +53,15 @@ else
     endif
     ifeq ($(UNAME_S),Darwin)
 # Mac
+		SRCS += mac_compatability/mach_gettime.c
+		INCS += mac_compatability/mach_gettime.h
     endif
 endif
+
+OBJS       := $(SRCS:.c=.o)
+DEBUG_OBJS := $(SRCS:.c=.debug-o)
+
+DEPS       := $(SRCS:.c=.d)
 
 all: genozip$(EXE) genounzip$(EXE) genocat$(EXE)
 
@@ -100,7 +107,7 @@ endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genounzip$(EXE)
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
 
-TARBALL := archive/genozip-$(VERSION).tar.gz
+TARBALL := conda/genozip-$(VERSION).tar.gz
 
 $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 	@echo "Archiving to $@"
@@ -110,7 +117,7 @@ $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
-
+ 
 conda/meta.yaml: conda/meta.yaml.template $(TARBALL)
 	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.yaml.template | \
@@ -118,20 +125,14 @@ conda/meta.yaml: conda/meta.yaml.template $(TARBALL)
 		sed s/'{{ version }}'/$(VERSION)/g | \
 		grep -v "^#" \
 		> $@
-
-# we make the build scripts dependents on the archives, so if file list changes, we need to re-generate build
-#UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
-#build.sh: conda/build.sh.template 
-#	@echo "Generating $@ (for conda)"
-#	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
 	
-#WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
-#bld.bat: conda/bld.bat.template
-#	@echo "Generating $@ (for conda)"
-#	@sed 's/%BUILD/%GCC% $(CFLAGS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
+WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
+conda/bld.bat: conda/bld.bat.template Makefile
+	@echo "Building $@ (for conda)"
+	@sed s/'{{ src }}'/'$(WIN_SRCS)'/ $@.template > $@
 
 # publish to conda-forge
-conda: $(TARBALL) meta.yaml build.sh bld.bat
+conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat ../staged-recipes/recipes/genozip/
 	@echo "Committing files & pushing changes to my forked staged-recipies/genozip-branch"
@@ -148,7 +149,7 @@ LICENSE.non-commercial.txt: genozip$(EXE)
 	@echo Generating $@
 	@./genozip$(EXE) -L > $@
 
-.PHONY: clean clean-debug clean-all build.sh bld.bat meta.yaml
+.PHONY: clean clean-debug clean-all meta.yaml 
 
 clean:
 	@echo Cleaning up
