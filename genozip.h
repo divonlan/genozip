@@ -16,12 +16,12 @@
 #include <stdbool.h>
 #include <unistd.h>
 #else
-#include "comptatability/visual_c_stdbool.h"
+#include "compatability/visual_c_stdbool.h"
 #endif
-#ifdef _WIN32
-#include "compatability/win32_pthread.h"
-#else
+#ifndef _WIN32
 #include <pthread.h>
+#else
+#include "compatability/win32_pthread.h"
 #endif
 
 #ifdef __APPLE__
