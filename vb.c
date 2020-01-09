@@ -119,7 +119,7 @@ VariantBlock *vb_get_vb(VariantBlockPool *pool,
                         File *vcf_file, File *z_file,
                         unsigned variant_block_i)
 {
-    VariantBlock *vb;
+    VariantBlock *vb=NULL;
 
     if (!pool) { // should only be used for unit testing - memory-leaks a VB
         vb = calloc (1, sizeof(VariantBlock));
