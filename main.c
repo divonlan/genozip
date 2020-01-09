@@ -3,21 +3,14 @@
 //   Copyright (C) 2019-2020 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
 #include <sys/types.h>
 #ifndef VISUAL_C
-#include <unistd.h>
 #include <getopt.h>
 #else
 #include "compatability/visual_c_getopt.h"
 #endif
 #include <fcntl.h>
-#include <time.h>
 #include <errno.h>
-#include <inttypes.h>
 #if __WIN32__
 #include <process.h>
 #elif defined __APPLE__

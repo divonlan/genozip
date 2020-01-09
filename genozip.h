@@ -8,10 +8,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
+#include <string.h>
 #include <math.h>
 #include <time.h>
 #include <inttypes.h>
+#ifndef VISUAL_C
+#include <stdbool.h>
+#include <unistd.h>
+#else
+#include "comptatability/visual_c_stdbool.h"
+#endif
 #ifdef _WIN32
 #include "compatability/win32_pthread.h"
 #else

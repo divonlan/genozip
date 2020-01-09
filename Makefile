@@ -35,7 +35,9 @@ DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
 INCS = genozip.h lic-text.h \
        bzlib/bzlib.h bzlib/bzlib_private.h \
 	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
-       compatability/visual_c_getopt.h compatability/mac_gettime.h compatability/win32_pthread.h
+       compatability/visual_c_getopt.h compatability/visual-c-stdbool.h \
+	   compatability/mac_gettime.h \
+	   compatability/win32_pthread.h
 
 SRCS = base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c main.c \
 	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c \

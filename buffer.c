@@ -7,12 +7,6 @@
 // the previous variant's block memory. this way we save repetitive malloc/free cycles which might
 // be very time consuming.
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <inttypes.h>
-
 #include "genozip.h"
 
 //#define DISPLAY_ALLOCS_AFTER 4100 // display allocations, except the first X allocations. reallocs are always displayed

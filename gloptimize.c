@@ -18,11 +18,6 @@
 
 #include "genozip.h"
 
-#include <math.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdlib.h>
-
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */
 
 // look at a GL field that has been optimized, and return the value missing, as an

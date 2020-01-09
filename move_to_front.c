@@ -23,11 +23,6 @@ unzip:
     3) Re-create genotype data by looking up words in the dictionaries
 */
 
-#include <stdlib.h>
-#include <string.h>
-#ifndef VISUAL_C
-#include <unistd.h>
-#endif
 #include "genozip.h"
 
 #define INITIAL_NUM_NODES 10000

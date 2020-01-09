@@ -5,10 +5,6 @@
 
 // vb stands for VariantBlock - i.e. one block of VARIANTS_PER_BLOCK data lines in the vcf file
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-
 #include "genozip.h"
 
 unsigned vb_num_samples_in_sb(const VariantBlock *vb, unsigned sb_i)
