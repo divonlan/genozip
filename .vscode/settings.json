@@ -1,6 +1,10 @@
 {
     "files.associations": {
         "string.h": "c",
-        "genozip.h": "c"
+        "genozip.h": "c",
+        "win32_pthread.h": "c",
+        "inttypes.h": "c",
+        "visual_c_stdbool.h": "c",
+        "mac_gettime.h": "c"
     },
 }

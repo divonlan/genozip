@@ -4,14 +4,14 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <sys/types.h>
-#ifndef VISUAL_C
+#ifndef _MSC_VER // Microsoft compiler
 #include <getopt.h>
 #else
 #include "compatability/visual_c_getopt.h"
 #endif
 #include <fcntl.h>
 #include <errno.h>
-#if __WIN32__
+#ifdef _WIN32
 #include <process.h>
 #elif defined __APPLE__
 #include <sys/ioctl.h>
@@ -39,7 +39,7 @@ int main_print_license()
 {
 #include "lic-text.h"
 
-#if __WIN32__
+#ifdef _WIN32
     unsigned line_width = 100;
 #else
     // in Linux, we can get the actual terminal width
@@ -156,7 +156,7 @@ static const char *get_basename(const char *filename, bool remove_exe, const cha
 
 static unsigned main_get_num_cores()
 {
-#if __WIN32__
+#ifdef _WIN32
     char *env = getenv ("NUMBER_OF_PROCESSORS");
     if (!env) return DEFAULT_MAX_THREADS;
 
@@ -433,7 +433,7 @@ static void main_test (const char *vcf_filename)
 
     int pipefd_zip_to_unzip [2];
     int pipefd_unzip_to_main[2];
-#if __WIN32__
+#ifdef _WIN32
     _pipe (pipefd_zip_to_unzip,  25000000, _O_BINARY); // 25MB pipe space to make sure both sides stay busy
     _pipe (pipefd_unzip_to_main, 25000000, _O_BINARY);
 #else

@@ -3,9 +3,6 @@
 //   Copyright (C) 2019-2020 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#ifndef VISUAL_C
-#include <unistd.h>
-#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 

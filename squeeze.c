@@ -19,8 +19,6 @@ unsigned squeeze_len(unsigned int len)
     return ceil(((float)(squeeze_bits_per_entry(len) * len)) / 8.0); 
 }
 
-int min (int a, int b) { return a < b ? a : b; }
-
 void squeeze (VariantBlock *vb,
               uint8_t *squeezed, // memory should be pre-allocated by caller
               uint16_t *squeezed_checksum,
@@ -45,7 +43,7 @@ void squeeze (VariantBlock *vb,
         ASSERT (val < normal_len, "Error: invalid value in permutation index. val=%u normal_len=%u", val, normal_len);
 
         while (num_remaining_bits_this_entry) {
-            unsigned num_bits_this_iteration = min (num_remaining_bits_this_entry, 8 - next_squeezed_bit_index);
+            unsigned num_bits_this_iteration = MIN (num_remaining_bits_this_entry, 8 - next_squeezed_bit_index);
             unsigned mask = ((1<<num_bits_this_iteration)-1);
             uint8_t bits_to_add = (uint8_t)(val & mask);
 

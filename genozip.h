@@ -11,12 +11,14 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
-#ifndef VISUAL_C
 #include <stdbool.h>
 #include <unistd.h>
 #else
+#include "compatability/visual_c_inttypes.h"
 #include "compatability/visual_c_stdbool.h"
+#include "compatability/visual_c_unistd.h"
 #endif
 #ifndef _WIN32
 #include <pthread.h>
@@ -24,8 +26,10 @@
 #include "compatability/win32_pthread.h"
 #endif
 
-#ifdef __APPLE__
+#if defined __APPLE__ 
 #include "compatability/mac_gettime.h"
+#elif defined _MSC_VER // Microsoft compiler
+#include "compatability/visual_c_gettime.h"
 #endif
  
 #define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the dv file format changes
@@ -553,8 +557,8 @@ extern void zip_compress_fp_unit_test();
 
 // macros
 #ifndef MIN
-#define MIN(a, b) ((a < b) ? a : b )
-#define MAX(a, b) ((a > b) ? a : b )
+#define MIN(a, b) (((a) < (b)) ? (a) : (b) )
+#define MAX(a, b) (((a) > (b)) ? (a) : (b) )
 #endif
 
 // encode section headers in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
@@ -601,7 +605,7 @@ extern void profiler_print_report (const ProfilerRec *p, unsigned max_threads, c
 
 
 // Windows compatibility stuff
-#if __WIN32__
+#ifdef _WIN32
 #define stat64  _stat64
 #define fstat64 _fstat64
 #else // this needs more work - there are more cases, depending if gcc is 32 or 64

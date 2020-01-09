@@ -1,4 +1,4 @@
-#ifdef __APPLE__
+#if defined __APPLE__ 
 
 #include "mac_gettime.h"
 #include <mach/mach_time.h>
