@@ -188,7 +188,7 @@ void gl_deoptimize_dictionary (char *data, unsigned len)
 {
     while (len) {
         // get the missing data and its location and length
-        char *gl_start;
+        char *gl_start = NULL;
         unsigned gl_len;
         int missing_gl_int = gl_optimize_get_missing_gl_int(data, &gl_start, &gl_len);
         
