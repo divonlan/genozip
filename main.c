@@ -169,10 +169,13 @@ static unsigned main_get_num_cores()
     cpu_set_t cpu_set_mask;
     extern int sched_getaffinity (__pid_t __pid, size_t __cpusetsize, cpu_set_t *__cpuset);
     sched_getaffinity(0, sizeof(cpu_set_t), &cpu_set_mask);
-    return __sched_cpucount (sizeof (cpu_set_t), &cpu_set_mask);
+    unsigned cpu_count = __sched_cpucount (sizeof (cpu_set_t), &cpu_set_mask);
     // TODO - sort out include files so we don't need this extern
 
-    //return get_nprocs();
+    // if failed to get a number - fall back on good ol' get_nprocs
+    if (!cpu_count) cpu_count = get_nprocs();
+
+    return cpu_count;
 #endif
 }
 
@@ -642,9 +645,12 @@ int main (int argc, char **argv)
         // note: we don't support 4 threads for TEST, because then zip and piz will have inconsistent flag_multithreaded
         flag_multithreaded = global_max_threads > (command == TEST ? 3 : 1);
     }
-    else    
+    else {
         global_max_threads = main_get_num_cores();
-
+        
+        if (global_max_threads < 3 && command == TEST) // with -t, we allow 3 threads even if we have only 1 or 2 cores
+            global_max_threads = 3; 
+    }
     if (command == TEST) {
         flag_stdout = flag_force = flag_replace = false;
         out_filename = NULL;

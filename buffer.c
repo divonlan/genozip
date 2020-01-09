@@ -180,9 +180,15 @@ static inline void buf_add(VariantBlock *vb, Buffer *buf)
 #define INITIAL_MAX_MEM_NUM_BUFFERS (VARIANTS_PER_BLOCK*3) /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     if (!buf_is_allocated (buffer_list)) {
 
-        if (!buffer_lists) buffer_lists = malloc (sizeof (Buffer *) * (global_max_threads + 1)); // +1 for psuedo vbs
+        static unsigned buffer_lists_len = 0;
 
-        ASSERT (num_buffer_lists < MAX(2,global_max_threads) + 1, "Error: buffer_lists maxed out num_buffer_lists=%u", num_buffer_lists);
+        if (!buffer_lists) {
+            buffer_lists_len = global_max_threads + 2; // +2 for psuedo vbs of zip/piz (in case of --test)
+            buffer_lists = malloc (sizeof (Buffer *) * buffer_lists_len); 
+        }
+
+        ASSERT (num_buffer_lists < buffer_lists_len, 
+                "Error: buffer_lists maxed out num_buffer_lists=%u buffer_lists_len=%u", num_buffer_lists, buffer_lists_len);
 
         // malloc - this will call this function recursively - that's ok bc that point buffer_list is already allocated
         buf_alloc (vb, buffer_list, INITIAL_MAX_MEM_NUM_BUFFERS * sizeof(Buffer *), false, "buffer_list", vb ? vb->id : 0);
