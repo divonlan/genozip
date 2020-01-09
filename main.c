@@ -16,7 +16,6 @@
 #endif
 #include <fcntl.h>
 #include <time.h>
-#include <pthread.h>
 #include <errno.h>
 #include <inttypes.h>
 #if __WIN32__
@@ -139,20 +138,27 @@ int main_print_version()
 }
 
 // get basename of a filename - we write our own basename for Visual C and Windows compatability
-// note that the return value is a pointer within filename and thus should not be freed
-static const char *get_basename(const char *filename)
+static const char *get_basename(const char *filename, bool remove_exe, const char *default_basename)
 {
-    if (!filename) return NULL;
+    if (!filename) return default_basename;
 
-    // we need to make a copy of the name first, as basename() modifies the string
-    unsigned len = strlen(filename);
+    unsigned len = strlen (filename);
+    if (remove_exe && file_has_ext (filename, ".exe")) len -= 4; // for Windows
 
-    for (unsigned i=len-1; i >= 0; i++)
-        if (filename[i]=='/' || filename[i]=='\\')
-            return &filename[i+1];
+    char *basename = malloc (len); 
 
-    // no / or \ - return the whole filename
-    return filename;
+    // get start of basename
+    const char *start = filename;
+    for (int i=len-1; i >= 0; i--)
+        if (filename[i]=='/' || filename[i]=='\\') {
+            start = &filename[i+1];
+            break;
+        }
+
+
+    sprintf (basename, "%.*s", (int)(len - (start-filename)), start);
+
+    return basename;
 }
 
 static unsigned main_get_num_cores()
@@ -314,8 +320,8 @@ static void main_genozip (const char *vcf_filename,
     }
     else ABORT0 ("Error: No output channel");
     
-    zip_dispatcher (vcf_filename ? get_basename(vcf_filename) : "(stdin)", vcf_file, z_file, 
-                    pipefd_zip_to_unzip >= 0, max_threads);
+    const char *basename = get_basename(vcf_filename, false, "(stdin)");
+    zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads);
 
     if (flag_show_content) main_display_section_stats (vcf_file, z_file);
 
@@ -385,8 +391,8 @@ static void main_genounzip (const char *z_filename,
         vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
     }
 
-    piz_dispatcher (z_filename ? get_basename (z_filename) : "(stdin)", z_file, vcf_file, 
-                    pipe_from_zip_thread >= 0, max_threads);
+    const char *basename = get_basename (z_filename, false, "(stdin)");
+    piz_dispatcher (basename, z_file, vcf_file, pipe_from_zip_thread >= 0, max_threads);
 
     if (!flag_concat_mode) 
         file_close(&vcf_file); // no worries about not closing the concatenated file - it will close with the process exits
@@ -545,14 +551,8 @@ int main (int argc, char **argv)
     char *out_filename = NULL;
     char *threads_str = NULL;
 
-    global_cmd = get_basename(argv[0]); // global var
+    global_cmd = get_basename(argv[0], true, "(executable)"); // global var
     
-    if (file_has_ext (global_cmd, ".exe")) { // for Windows
-        char *new_global_cmd = malloc (strlen (global_cmd));
-        sprintf (new_global_cmd, "%.*s", (int)(strlen(global_cmd)-4), global_cmd);
-        global_cmd = new_global_cmd;
-    }
-
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
              "Error: Unsupported C type lengths, check compiler options");
