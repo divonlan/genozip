@@ -3,10 +3,17 @@
 //   Copyright (C) 2020 Divon Lan <genozip@blackpawventures.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#ifdef _WIN32
+#ifdef _MSC_VER
+
+#include <time.h>
 
 #define CLOCK_REALTIME 0
 
-extern int clock_gettime (int unused, struct timeval *tv);
+struct my_timespec { 
+    time_t tv_sec;
+    long tv_nsec;
+};
+
+extern int clock_gettime (int unused, struct my_timespec *ts);
 
 #endif

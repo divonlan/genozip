@@ -2,9 +2,11 @@
 // See here regarding Stack Overflow license for snippets: https://stackoverflow.com/help/licensing
 // the license is here: https://creativecommons.org/licenses/by-sa/4.0/
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 
 #include <windows.h>
+
+#include "visual_c_gettime.h"
 
 static LARGE_INTEGER getFILETIMEoffset()
 {
@@ -26,7 +28,7 @@ static LARGE_INTEGER getFILETIMEoffset()
     return (t);
 }
 
-int clock_gettime (int unused, struct timeval *tv)
+int clock_gettime (int unused, struct my_timespec *tv)
 {
     LARGE_INTEGER           t;
     FILETIME                f;
@@ -60,7 +62,7 @@ int clock_gettime (int unused, struct timeval *tv)
     microseconds = (double)t.QuadPart / frequencyToMicroseconds;
     t.QuadPart = microseconds;
     tv->tv_sec = t.QuadPart / 1000000;
-    tv->tv_usec = t.QuadPart % 1000000;
+    tv->tv_nsec = 1000 * (t.QuadPart % 1000000);
     return (0);
 }
 

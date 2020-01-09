@@ -48,21 +48,42 @@ void buf_test_overflows(const VariantBlock *vb)
 
         if (buf->memory) {
             if (!buf->name) {
-                fprintf (stderr, "buffer=0x%"PRIx64" : Corrupt Buffer structure - null name\n", (uint64_t)(uintptr_t)buf);
+                fprintf (stderr, 
+#ifdef _MSC_VER
+                         "buffer=0x%I64x : Corrupt Buffer structure - null name\n", 
+#else
+                         "buffer=0x%"PRIx64" : Corrupt Buffer structure - null name\n", 
+#endif
+                         (uint64_t)(uintptr_t)buf);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
-                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
+                fprintf (stderr, 
+#ifdef _MSC_VER
+                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
+#else
+                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
+#endif
                          vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, (uint64_t)(uintptr_t)buf->data);
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
-                fprintf (stderr, "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u \"%.8s\"", 
+                fprintf (stderr, 
+#ifdef _MSC_VER
+                        "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Underflow in buffer %.30s param=%u \"%.8s\"", 
+#else
+                        "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u \"%.8s\"", 
+#endif
                          vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
-                fprintf (stderr,"vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u \"%.8s\"", 
+                fprintf (stderr,
+#ifdef _MSC_VER
+                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x size=%u : Overflow in buffer %.30s param=%u \"%.8s\"", 
+#else
+                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u \"%.8s\"", 
+#endif
                          vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
                 
                 corruption = true;
@@ -178,7 +199,7 @@ static inline void buf_add(VariantBlock *vb, Buffer *buf)
 
         if (!buffer_lists) {
             buffer_lists_len = global_max_threads + 2; // +2 for psuedo vbs of zip/piz (in case of --test)
-            buffer_lists = malloc (sizeof (Buffer *) * buffer_lists_len); 
+            buffer_lists = (Buffer **)malloc (sizeof (Buffer *) * buffer_lists_len); 
         }
 
         ASSERT (num_buffer_lists < buffer_lists_len, 
@@ -222,7 +243,7 @@ unsigned buf_alloc (VariantBlock *vb,
 #ifdef DISPLAY_ALLOCS_AFTER
             unsigned  old_size = buf->size;
 #endif
-            buf->memory = realloc (buf->memory, new_size + 2*sizeof (long long));
+            buf->memory = (char *)realloc (buf->memory, new_size + 2*sizeof (long long));
             ASSERT (buf->memory, "Error: buf_alloc failed to realloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
 
             buf->data = buf->memory + sizeof (long long);
@@ -245,7 +266,7 @@ unsigned buf_alloc (VariantBlock *vb,
 
         // case 3: we need to allocate memory - buffer is not yet allocated, so no need to copy data
         else {
-            buf->memory = malloc (new_size + 2*sizeof (long long));
+            buf->memory = (char *)malloc (new_size + 2*sizeof (long long));
 
             if (!buf->memory) {
                 buf_test_overflows(vb);

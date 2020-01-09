@@ -37,13 +37,18 @@ INCS = genozip.h lic-text.h \
 	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
        compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h\
 	   compatability/mac_gettime.h \
-	   compatability/win32_pthread.h compatability/visual_c_gettime.h compatability/visual_c_inttypes.h compatability/visual_c_stdint.h
+	   compatability/win32_pthread.h compatability/visual_c_gettime.h \
+	   compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h
 
-SRCS = base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c main.c \
+OLD_C_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
+       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
+       
+C99_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
 	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c \
-       bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
-       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c \
-       compatability/mac_gettime.c compatability/win32_pthread.c compatability/visual_c_gettime.c
+       compatability/mac_gettime.c compatability/win32_pthread.c compatability/visual_c_gettime.c \
+	   compatability/visual_c_misc_funcs.c
+
+SRCS = $(C99_SRCS) $(OLD_C_SRCS)
 
 ifeq ($(OS),Windows_NT)
 # Windows
@@ -126,11 +131,19 @@ conda/meta.yaml: conda/meta.yaml.template $(TARBALL)
 		sed s/'{{ version }}'/$(VERSION)/g | \
 		grep -v "^#" \
 		> $@
-	
-WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
+
+ttt:
+	echo $(x)
+
+OLD_C_COMPILE_AS_C := $(shell echo $(OLD_C_SRCS) | tr ' ' '\n' | sed 's/^/-Tc /g'|tr '\n' ' ')
+C99_COMPILE_AS_CPP := $(shell echo $(C99_SRCS)   | tr ' ' '\n' | sed 's/^/-Tp /g'|tr '\n' ' ')
+
+OLD_C_WIN_SRCS  := $(shell echo $(OLD_C_COMPILE_AS_C) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
+C99_WIN_SRCS    := $(shell echo $(C99_COMPILE_AS_CPP) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) 
+
 conda/bld.bat: conda/bld.bat.template Makefile
 	@echo "Building $@ (for conda)"
-	@sed s/'{{ src }}'/'$(WIN_SRCS)'/ $@.template > $@
+	@sed s/'{{ src }}'/'$(C99_WIN_SRCS) $(OLD_C_WIN_SRCS)'/ $@.template > $@
 
 # publish to conda-forge
 conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat

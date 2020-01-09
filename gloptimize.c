@@ -85,7 +85,12 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
     if (missing_gl > 9) missing_gl = 9; // at most 9 - i.e. a probabiliy of 0.000000001 - highly unlikely value for the item that's suppose to be the highest probability
 
     // round to the number of digits available
-    unsigned missing_gl_int = (unsigned)round(missing_gl * POW10[(*gl_len)-3]) + rounding_error_correction;
+#ifdef _MSC_VER
+#define ROUND my_round
+#else
+#define ROUND round
+#endif
+    unsigned missing_gl_int = (unsigned)ROUND(missing_gl * (double)POW10[(*gl_len)-3]) + rounding_error_correction;
 
     return missing_gl_int;
 }

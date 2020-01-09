@@ -5,6 +5,8 @@
         "win32_pthread.h": "c",
         "inttypes.h": "c",
         "visual_c_stdbool.h": "c",
-        "mac_gettime.h": "c"
+        "mac_gettime.h": "c",
+        "visual_c_gettime.h": "c",
+        "cmath": "c"
     },
 }

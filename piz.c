@@ -25,7 +25,13 @@ static inline void piz_decode_pos (VariantBlock *vb,
     if (negative) delta = -delta;
 
     vb->last_pos += delta;
-    sprintf (pos_str, "%"PRIu64, vb->last_pos);
+    sprintf (pos_str, 
+#ifdef _MSC_VER
+    "%I64u", 
+#else
+    "%"PRIu64, 
+#endif
+    vb->last_pos);
     
     *delta_pos_len = s - str;
     *add_len = strlen (pos_str) - *delta_pos_len;
@@ -322,7 +328,7 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (suppoting 32bit and 64bit assignments)
     static char *column_of_zeros = NULL; // this static is allocated once and never changed, so no thread safety issues here
-    if (!column_of_zeros) column_of_zeros = calloc (VARIANTS_PER_BLOCK, 1);
+    if (!column_of_zeros) column_of_zeros = (char *)calloc (VARIANTS_PER_BLOCK, 1);
 
     for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 7; ht_i++)
         ht_columns_data[ht_i] = column_of_zeros;
@@ -557,7 +563,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)(vb->z_data.data + section_index[0]);
     vb->first_line              = ENDN32 (vardata_header->first_line);
     vb->num_lines               = ENDN16 (vardata_header->num_lines);
-    vb->phase_type              = vardata_header->phase_type;
+    vb->phase_type              = (PhaseType)vardata_header->phase_type;
     vb->has_genotype_data       = vardata_header->has_genotype_data;
     vb->is_sorted_by_pos        = vardata_header->is_sorted_by_pos;
     vb->num_haplotypes_per_line = ENDN32 (vardata_header->num_haplotypes_per_line);
@@ -579,13 +585,13 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
     // BUG: this won't work if we're doing mutiple unrelated VCF on the command line
     if (vb->has_genotype_data && !vb->genotype_sections_data) 
-        vb->genotype_sections_data  = calloc (vb->num_sample_blocks, sizeof (Buffer));
+        vb->genotype_sections_data  = (Buffer *)calloc (vb->num_sample_blocks, sizeof (Buffer));
 
     if (vb->phase_type == PHASE_MIXED_PHASED && !vb->phase_sections_data) 
-        vb->phase_sections_data     = calloc (vb->num_sample_blocks, sizeof (Buffer));
+        vb->phase_sections_data     = (Buffer *)calloc (vb->num_sample_blocks, sizeof (Buffer));
     
     if (vb->num_haplotypes_per_line && !vb->haplotype_sections_data) 
-        vb->haplotype_sections_data = calloc (vb->num_sample_blocks, sizeof (Buffer));
+        vb->haplotype_sections_data = (Buffer *)calloc (vb->num_sample_blocks, sizeof (Buffer));
 
     // unsqueeze permutation index - if this VCF has samples
     if (global_num_samples) {

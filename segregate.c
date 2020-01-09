@@ -106,7 +106,13 @@ static void seg_variant_area(VariantBlock *vb, DataLine *dl, const char *str, un
                                    int64_t pos_delta, const char *pos_start, unsigned pos_len)
 {
     char pos_delta_str[30];
-    sprintf (pos_delta_str, "%"PRId64, pos_delta);
+    sprintf (pos_delta_str, 
+#ifdef _MSC_VER
+             "%I64d", 
+#else
+             "%"PRId64, 
+#endif
+             pos_delta);
     unsigned pos_delta_len = strlen (pos_delta_str);
 
     vb->line_variant_data.len = len + (pos_delta_len - pos_len) + 1; // +1 for the \n, but not including the \0
@@ -185,7 +191,7 @@ static bool seg_haplotype_area(VariantBlock *vb, DataLine *dl, const char *str, 
         // get phase
         if (ploidy > 1 && ht_i < ploidy-1) {
             
-            PhaseType cell_phase_type = *(str++);
+            PhaseType cell_phase_type = (PhaseType)*(str++);
             len--;
 
             ASSERT (cell_phase_type == '|' || cell_phase_type == '/', "Error: invalid VCF file - line %u - unable to parse sample %u: expecting a | or / but seeing %c", line_i, sample_i+1, cell_phase_type);

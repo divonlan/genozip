@@ -176,7 +176,7 @@ static void zip_generate_phase_sections (VariantBlock *vb)
     // we allocate memory for the Buffer array only once the first time this VariantBlock
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
     if (!vb->phase_sections_data) 
-        vb->phase_sections_data = calloc (vb->num_sample_blocks, sizeof(Buffer)); // allocate once, never free
+        vb->phase_sections_data = (Buffer *)calloc (vb->num_sample_blocks, sizeof(Buffer)); // allocate once, never free
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
@@ -237,7 +237,7 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
     // we allocate memory for the Buffer array only once the first time this VariantBlock
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
     if (!vb->haplotype_sections_data) 
-        vb->haplotype_sections_data = calloc (vb->num_sample_blocks, sizeof(Buffer)); // allocate once, never free
+        vb->haplotype_sections_data = (Buffer *)calloc (vb->num_sample_blocks, sizeof(Buffer)); // allocate once, never free
 
     // TO DO : there's a bug in this allocation ^ if a user is compressing multiple VCF, they 
     // may not have the same num_sample_blocks. We should remember how many we allocated and add more
@@ -409,7 +409,7 @@ static void zip_compress_variant_block (VariantBlock *vb)
     ((SectionHeaderVariantData *)vb->z_data.data)->z_data_bytes = vb->z_data.len;
 
     // updates stats for --showcontent - reduce by the bytes added by us over the bytes in the original file (might be a negative value if we saved bytes rather than added)
-    for (SectionType sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
+    for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
         //printf ("sec: %u, bytes before compression: %u, bytes added by alg: %d\n", sec_i, vb->vcf_section_bytes[sec_i], vb->add_bytes[sec_i]);
         vb->vcf_section_bytes[sec_i] -= vb->add_bytes[sec_i];
     }
@@ -473,7 +473,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             if (!processed_vb) continue;
             
             START_TIMER;
-            fwrite (processed_vb->z_data.data, 1, processed_vb->z_data.len, z_file->file);
+            fwrite (processed_vb->z_data.data, 1, processed_vb->z_data.len, (FILE *)z_file->file);
             COPY_TIMER (processed_vb->profile.write);
 
             z_file->disk_so_far     += (long long)processed_vb->z_data.len;
@@ -481,7 +481,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             z_file->num_lines       += (long long)processed_vb->num_lines;
 
             // update section stats
-            for (SectionType sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
+            for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
                 z_file->section_bytes[sec_i]   += processed_vb->z_section_bytes[sec_i];
                 vcf_file->section_bytes[sec_i] += processed_vb->vcf_section_bytes[sec_i];
             }

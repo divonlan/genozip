@@ -122,7 +122,7 @@ void zfile_uncompress_section(VariantBlock *vb,
                               SectionType expected_section_type) 
 {
     START_TIMER;
-    const SectionHeader *section_header = section_header_p;
+    const SectionHeader *section_header = (const SectionHeader *)section_header_p;
     
     unsigned compressed_offset     = ENDN32 (section_header->compressed_offset);
     unsigned data_compressed_len   = ENDN32 (section_header->data_compressed_len);
@@ -198,7 +198,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
 
     zfile_compress ((VariantBlock*)vb, &vcf_header_buf, (SectionHeader*)&vcf_header, vcf_header_text->data, SEC_VCF_HEADER);
 
-    fwrite (vcf_header_buf.data, 1, vcf_header_buf.len, file->file);
+    fwrite (vcf_header_buf.data, 1, vcf_header_buf.len, (FILE *)file->file);
 
     file->disk_so_far      += vcf_header_buf.len;  // length of GENOZIP data writen to disk
     file->vcf_data_so_far  += vcf_header_text->len; // length of the original VCF header
@@ -306,7 +306,7 @@ static bool zfile_read_from_disk (VariantBlock *vb, char *out_str, unsigned len)
             if (file->last_read != READ_BUFFER_SIZE && !memcpyied) return false; // EOF reached last time, nothing more to read
 
             ASSERT (file->last_read == READ_BUFFER_SIZE, "Error: end-of-file of input file, read %"PRIu64" bytes", file->disk_so_far)
-            file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
+            file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)file->file);
             file->next_read = 0;
             file->disk_so_far += file->last_read;
 
@@ -420,7 +420,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)&vb->z_data.data[vardata_header_offset];
     unsigned num_sample_blocks       = ENDN32 (vardata_header->num_sample_blocks);
     bool has_genotype_data           = vardata_header->has_genotype_data;
-    PhaseType phase_type             = vardata_header->phase_type;
+    PhaseType phase_type             = (PhaseType)vardata_header->phase_type;
     unsigned num_haplotypes_per_line = ENDN32 (vardata_header->num_haplotypes_per_line);
     unsigned num_dictionary_sections = ENDN16 (vardata_header->num_dictionary_sections);
 
@@ -491,12 +491,12 @@ void zfile_update_vcf_header_section_header (File *z_file,
 
     ASSERT0((char*)&vcf_header.num_lines - (char*)&vcf_header.vcf_data_size == sizeof (long long), "Error: looks like SectionHeaderVCFHeader changed");
 
-    int ret = fseek (z_file->file, (char*)&vcf_header.vcf_data_size - (char*)&vcf_header, SEEK_SET);
+    int ret = fseek ((FILE *)z_file->file, (char*)&vcf_header.vcf_data_size - (char*)&vcf_header, SEEK_SET);
     if (ret) return; // we cannot update the header - that's fine, these fields are optional - they improve performance. for example, if the file is stdout or a pipe (-t) we cannot update
 
     uint64_t header_vcf_data_size = ENDN64(vcf_data_size);
-    fwrite (&header_vcf_data_size, sizeof (header_vcf_data_size), 1, z_file->file); 
+    fwrite (&header_vcf_data_size, sizeof (header_vcf_data_size), 1, (FILE *)z_file->file); 
 
     uint64_t header_num_lines = ENDN64(vcf_num_lines);
-    fwrite (&header_num_lines, sizeof (header_num_lines), 1, z_file->file); 
+    fwrite (&header_num_lines, sizeof (header_num_lines), 1, (FILE *)z_file->file); 
 }

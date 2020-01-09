@@ -188,7 +188,7 @@ bool vcf_header_vcz_to_vcf (VariantBlock *vb)
 // returns the the VCF header section's header from a GENOZIP file
 bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header)
 {
-    int bytes = fread ((char*)vcf_header_header, 1, sizeof(SectionHeaderVCFHeader), z_file->file);
+    int bytes = fread ((char*)vcf_header_header, 1, sizeof(SectionHeaderVCFHeader), (FILE *)z_file->file);
     
     return (bytes == sizeof(SectionHeaderVCFHeader) && ENDN16 (vcf_header_header->h.magic) == GENOZIP_MAGIC);
 }

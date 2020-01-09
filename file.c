@@ -17,7 +17,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
 
     ASSERT (mode==WRITE || access(filename, F_OK)==0, "%s: cannot open file for reading: %s", global_cmd, filename);
     
-    File *file = calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
+    File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
     file->name = filename; // usually comes from the command line - cannot be freed
 
@@ -87,7 +87,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
 
 File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex)
 {
-    File *file = calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
+    File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
     file->file = fdopen (fd, mode==READ ? "rb" : "wb");
     ASSERT (file->file, "%s: Failed to file descriptor %u: %s", global_cmd, fd, strerror (errno));
@@ -111,14 +111,14 @@ void file_close (File **file_p)
     *file_p = NULL;
 
     if (file->type == VCF_GZ) {
-        int ret = gzclose_r(file->file);
+        int ret = gzclose_r((gzFile)file->file);
         ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
     }
     else if (file->type == VCF_BZ2) {
-        BZ2_bzclose(file->file);
+        BZ2_bzclose((BZFILE *)file->file);
     }
     else {
-        int ret = fclose(file->file);
+        int ret = fclose((FILE *)file->file);
         ASSERTW (!ret, "Warning: failed to close vcf file %s: %s", file->name ? file->name : "", strerror(errno));
     } 
 

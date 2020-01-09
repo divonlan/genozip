@@ -32,7 +32,7 @@ typedef struct {
     bool test_mode;
 
     // progress indicator stuff
-    struct timespec start_time; 
+    TimeSpecType start_time; 
     bool show_progress;
     double last_percent;
     unsigned last_len;
@@ -40,14 +40,14 @@ typedef struct {
     const char *filename;
 } DispatcherData;
 
-static struct timespec profiler_timer; // wallclock
+static TimeSpecType profiler_timer; // wallclock
 
 Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_file, File *z_file,
                             bool test_mode, bool show_progress, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
-    DispatcherData *dd = calloc (1, sizeof(DispatcherData));
+    DispatcherData *dd = (DispatcherData *)calloc (1, sizeof(DispatcherData));
     ASSERT0 (dd, "failed to calloc DispatcherData");
 
     clock_gettime(CLOCK_REALTIME, &dd->start_time); 
@@ -75,7 +75,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
 
 void dispatcher_finish (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
     COPY_TIMER (dd->pseudo_vb->profile.wallclock);
 
@@ -110,7 +110,7 @@ static void *dispatcher_thread_entry (void *thread_)
 
 VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
     dd->next_vb_i++;
 
@@ -120,7 +120,7 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher)
 
 void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
     Thread *th = &dd->compute_threads[dd->next_thread_to_dispatched];
 
     th->vb = dd->next_vb;
@@ -162,7 +162,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
 
 VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
     if (dd->max_threads > 1 && !dd->num_running_compute_threads) return NULL; // no running compute threads 
 
@@ -183,19 +183,19 @@ VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher)
 
 bool dispatcher_has_free_thread (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->num_running_compute_threads < MAX(1, dd->max_threads-1);
 }
 
 VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->next_vb;
 }
 
 VariantBlock *dispatcher_get_pseudo_vb (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->pseudo_vb;
 }
 
@@ -216,11 +216,11 @@ static void dispatcher_human_time (unsigned secs, char *str /* out */)
 static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
                                       uint64_t bytes_compressed /* possibly 0 */)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
     if (!dd->show_progress) return; 
 
-    struct timespec tb; 
+    TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
@@ -293,7 +293,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
 void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
                                  uint64_t bytes_compressed /* possibly 0 */)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
 #ifdef DEBUG
     buf_test_overflows(dd->processed_vb);
@@ -309,7 +309,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
 
 void dispatcher_input_exhausted (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
     dd->input_exhausted = true;
 
     vb_release_vb (&dd->next_vb);
@@ -317,21 +317,21 @@ void dispatcher_input_exhausted (Dispatcher dispatcher)
 
 bool dispatcher_is_done (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
     return dd->input_exhausted && !dd->next_vb && !dd->processed_vb && !dd->num_running_compute_threads;
 }
 
 bool dispatcher_is_final_processed_vb (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
     return dd->input_exhausted && !dd->next_vb && !dd->num_running_compute_threads;
 }
 
 bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
 {
-    DispatcherData *dd = dispatcher;
+    DispatcherData *dd = (DispatcherData *)dispatcher;
 
     return dd->input_exhausted;
 }

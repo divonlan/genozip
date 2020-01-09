@@ -7,6 +7,9 @@
 
 #ifdef _WIN32
 
+#ifndef WIN32_PTHREAD_INCLUDED
+#define WIN32_PTHREAD_INCLUDED
+
 // thread functions
 typedef void *pthread_t; // same as Windows HANDLE
 extern int pthread_create (pthread_t *newthread, const void *unused, 
@@ -21,5 +24,7 @@ extern int pthread_mutex_init (pthread_mutex_t *mutex, void *unused);
 extern int pthread_mutex_destroy (pthread_mutex_t *mutex);
 extern int pthread_mutex_lock (pthread_mutex_t *mutex);
 extern int pthread_mutex_unlock (pthread_mutex_t *mutex);
+
+#endif
 
 #endif

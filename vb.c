@@ -122,7 +122,7 @@ VariantBlock *vb_get_vb(VariantBlockPool *pool,
     VariantBlock *vb=NULL;
 
     if (!pool) { // should only be used for unit testing - memory-leaks a VB
-        vb = calloc (1, sizeof(VariantBlock));
+        vb = (VariantBlock *)calloc (1, sizeof(VariantBlock));
         ASSERT0 (vb, "Error: failed to calloc vb");
     }
     else {

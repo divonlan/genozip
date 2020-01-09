@@ -1,4 +1,4 @@
-cl.exe -D_LARGEFILE64_SOURCE=1 -O2 {{ src }} -link pthread-win32.lib /OUT genozip.exe
+cl.exe /D_LARGEFILE64_SOURCE=1 /O2 {{ src }} 
 
 copy genozip.exe %PREFIX%\bin\genozip.exe
 copy genozip.exe %PREFIX%\bin\genounzip.exe

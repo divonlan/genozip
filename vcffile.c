@@ -30,7 +30,7 @@ static inline char vcffile_get_char(VariantBlock *vb)
         file->next_read = 0;
 
         if (file->type == VCF || file->type == STDIN) {
-            file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
+            file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)file->file);
             file->disk_so_far += (long long)file->last_read;
 
             if (file->type == STDIN) {
@@ -50,16 +50,16 @@ static inline char vcffile_get_char(VariantBlock *vb)
 
         }
         else if (file->type == VCF_GZ) { 
-            file->last_read   = gzfread (file->read_buffer, 1, READ_BUFFER_SIZE, file->file);
+            file->last_read   = gzfread (file->read_buffer, 1, READ_BUFFER_SIZE, (gzFile)file->file);
             
             if (file->last_read)
-                file->disk_so_far = gzoffset64 (file->file); // for compressed files, we update by block read
+                file->disk_so_far = gzoffset64 ((gzFile)file->file); // for compressed files, we update by block read
         }
         else if (file->type == VCF_BZ2) { 
-            file->last_read   = BZ2_bzread (file->file, file->read_buffer, READ_BUFFER_SIZE);
+            file->last_read   = BZ2_bzread ((BZFILE *)file->file, file->read_buffer, READ_BUFFER_SIZE);
 
             if (file->last_read)
-                file->disk_so_far = BZ2_bzoffset (file->file); // for compressed files, we update by block read
+                file->disk_so_far = BZ2_bzoffset ((BZFILE *)file->file); // for compressed files, we update by block read
         } 
         else {
             ABORT0 ("Invalid file type");
@@ -128,7 +128,7 @@ unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
     char *next = buf->data;
 
     while (len) {
-        unsigned bytes_written = fwrite (next, 1, len, vcf_file->file);
+        unsigned bytes_written = fwrite (next, 1, len, (FILE *)vcf_file->file);
         ASSERT (bytes_written, "Error in vcffile_write_to_disk: failed to write %u bytes", len);
 
         len  -= bytes_written;
@@ -163,21 +163,25 @@ void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
 {
     const unsigned buf_size = 500000;
 
-    char *data_pipe = calloc (buf_size, 1);
+    char *data_pipe = (char *)calloc (buf_size, 1);
     ASSERT0 (data_pipe, "Error: Failed to allocate data_pipe");
 
-    char *data_file = calloc (buf_size, 1);
+    char *data_file = (char *)calloc (buf_size, 1);
     ASSERT0 (data_file, "Error: Failed to allocate data_file");
 
-    unsigned len_file, len_pipe;
+    unsigned len_file=0, len_pipe=0;
     uint64_t total_len=0;
     do {
         len_pipe = fread (data_pipe, 1, buf_size, from_pipe);
         
         if (vcf_file->type == VCF)
-            len_file =   fread (data_file, 1, buf_size, vcf_file->file);
-        else // VCF_GZ
-            len_file = gzfread (data_file, 1, buf_size, vcf_file->file);
+            len_file =   fread (data_file, 1, buf_size, (FILE *)vcf_file->file);
+        else if (vcf_file->type == VCF_GZ)
+            len_file = gzfread (data_file, 1, buf_size, (gzFile)vcf_file->file);
+        else if (vcf_file->type == VCF_BZ2) 
+            len_file = BZ2_bzread ((BZFILE *)vcf_file->file, data_file, buf_size);
+        else
+            ABORT0 ("Unknown file type");
 
         const char *failed_text = "FAILED!!! Please contact genozip@blackpawventures.com to help fix this bug in genozip";
 
@@ -188,8 +192,14 @@ void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
             for (int i=0; i < (int)min_len ; i++) {
                 if (data_pipe[i] != data_file[i]) {
                     int display_start = MAX (i-50, 0);
-                    printf ("Data differs from pipe in character %"PRIu64" of the file. Showing the buffers around this character:\n"
-                            "***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", total_len + i, MIN (len_pipe, 100), &data_pipe[display_start], MIN (len_file, 100), &data_file[display_start]);                     
+                    printf (
+#ifdef _MSC_VER
+                            "Data differs from pipe in character %I64u of the file. Showing the buffers around this character:\n***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", 
+#else
+                            "Data differs from pipe in character %"PRIu64" of the file. Showing the buffers around this character:\n"
+                            "***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", 
+#endif
+                            total_len + i, MIN (len_pipe, 100), &data_pipe[display_start], MIN (len_file, 100), &data_file[display_start]);                     
                     break;
                 }
             }

@@ -16,9 +16,11 @@
 #include <stdbool.h>
 #include <unistd.h>
 #else
-#include "compatability/visual_c_inttypes.h"
+#include "compatability/visual_c_stdint.h"
 #include "compatability/visual_c_stdbool.h"
 #include "compatability/visual_c_unistd.h"
+#include "compatability/visual_c_gettime.h"
+#include "compatability/visual_c_misc_funcs.h"
 #endif
 #ifndef _WIN32
 #include <pthread.h>
@@ -28,8 +30,6 @@
 
 #if defined __APPLE__ 
 #include "compatability/mac_gettime.h"
-#elif defined _MSC_VER // Microsoft compiler
-#include "compatability/visual_c_gettime.h"
 #endif
  
 #define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the dv file format changes
@@ -160,8 +160,10 @@ typedef struct {
 
 #pragma pack(pop)
 
+typedef enum {BUF_UNALLOCATED, BUF_REGULAR, BUF_OVERLAYED} BufferType;
+
 typedef struct {
-    enum {BUF_UNALLOCATED, BUF_REGULAR, BUF_OVERLAYED} type;
+    BufferType type;
     const char *name; // name of allocator - used for memory debugging & statistics
     unsigned param;   // parameter provided by allocator - used for memory debugging & statistics
     unsigned size;    // number of bytes allocated to memory
@@ -169,7 +171,7 @@ typedef struct {
     char *data;       // =memory+2*sizeof(long long) if buffer is allocated or NULL if not
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 } Buffer;
-#define EMPTY_BUFFER {0,0,0,0,0,0,0}
+#define EMPTY_BUFFER {BUF_UNALLOCATED,NULL,0,0,0,NULL,NULL}
 
 typedef struct {
     long long wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 
@@ -564,9 +566,15 @@ extern void zip_compress_fp_unit_test();
 // encode section headers in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
+#ifndef _MSC_VER
 #define ENDN16(x) (global_little_endian ? __builtin_bswap16(x) : (x))
 #define ENDN32(x) (global_little_endian ? __builtin_bswap32(x) : (x))
 #define ENDN64(x) (global_little_endian ? __builtin_bswap64(x) : (x))
+#else
+#define ENDN16(x) (global_little_endian ? _byteswap_ushort(x) : (x))
+#define ENDN32(x) (global_little_endian ? _byteswap_ulong (x) : (x))
+#define ENDN64(x) (global_little_endian ? _byteswap_uint64(x) : (x))
+#endif
 
 // sanity checks
 extern void main_exit();
@@ -577,11 +585,17 @@ extern void main_exit();
 #define ABORT(format, ...)              { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); main_exit();}
 #define ABORT0(string)                  { fprintf (stderr, "\n%s\n", string); main_exit();}
 
-#define START_TIMER     struct timespec profiler_timer; \
+#ifdef _MSC_VER
+typedef struct my_timespec TimeSpecType;
+#else
+typedef struct timespec TimeSpecType;
+#endif
+
+#define START_TIMER     TimeSpecType profiler_timer; \
                         if (flag_show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
 
 #define COPY_TIMER(res) if (flag_show_time) { \
-                            struct timespec tb; \
+                            TimeSpecType tb; \
                             clock_gettime(CLOCK_REALTIME, &tb); \
                             res += (tb.tv_sec-profiler_timer.tv_sec)*1000000000ULL + (tb.tv_nsec-profiler_timer.tv_nsec); \
                         }

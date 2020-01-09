@@ -12,7 +12,9 @@ Base250 base250_encode (uint32_t n)
     ASSERT (n <= MAX_B250, "Error: number too large for base250. n=%u, MAX_B250=%u", n, MAX_B250);
 
     // least-signifcant first order
-    Base250 result = { .num_numerals = 1 };
+    Base250 result;
+    result.num_numerals = 1;
+    
     for (unsigned i=1; i <= 4; i++) {
         result.numerals[i] = n % 250;
         n /= 250;
