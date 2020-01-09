@@ -1,6 +1,6 @@
 #ifdef __APPLE__
 
-#include "mach_gettime.h"
+#include "mac_gettime.h"
 #include <mach/mach_time.h>
 
 #ifdef mach_time_h
