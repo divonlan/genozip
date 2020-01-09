@@ -4,11 +4,11 @@
 
 package:
   name: genozip
-  version: %VERSION
+  version: {{ version }}
 
 source:
-  url: https://github.com/divonlan/genozip/raw/master/archive/genozip-%VERSION.tar.gz
-  sha256: %SHA256
+  url: https://github.com/divonlan/genozip/raw/master/archive/genozip-{{ version }}.tar.gz
+  sha256: {{ sha256 }}
 
 build:
   number: 0
@@ -16,17 +16,27 @@ build:
 requirements:
   build:
     - {{ compiler('c') }}
+    - make # [unix]
+    - jom  # [win]
   host:
   run:
 
 test:
-  files: 
+  source_files: 
     - test-file.vcf
 
   commands:
-    - $PREFIX/genozip -t $PREFIX/test-file.vcf        # [unix]
+    {% set genozip_executables = [
+      "genozip",
+      "genounzip",
+      "genocat"
+    ] %}
+    {% for executable in genozip_executables %}
+    - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
+    {% endfor %}
+    - genozip -t test-file.vcf      # [unix]
     - genozip.exe -t test-file.vcf  # [win]
- 
+
 about:
   home: https://github.com/divonlan/genozip
   dev_url: https://github.com/divonlan/genozip
@@ -42,6 +52,7 @@ about:
     of the genomic data, such as linkage disequilibrium, to compress better. 
     It is also a lot faster than gzip. 
     The compression is lossless - the decompressed file is identical to the original file.
+    Contact: genozip@blackpawventures.com
 
 extra:
   recipe-maintainers:

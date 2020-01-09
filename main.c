@@ -74,8 +74,8 @@ int main_print_license()
 int main_print_help()
 {
     printf ("\n");
-    printf ("Usage: genozip  [options]... [files]...\n");
-    printf ("       genounzip  [options]... [files]...\n");
+    printf ("Usage: genozip [options]... [files]...\n");
+    printf ("       genounzip [options]... [files]...\n");
     printf ("       genocat [options]... [files]...\n");
     printf ("\n");
     printf ("Compress or uncompress VCF (Variant Call Format) files\n");
@@ -118,6 +118,14 @@ int main_print_help()
     printf ("COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT,\n");
     printf ("TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n");
     printf ("\n");
+
+// in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
+// from Windows Explorer - the terminal will open and he will see the help
+#ifdef _WIN32
+    printf ("Press any key to continue...\n");
+    getc(stdin);
+#endif
+
     return 0;
 }
 

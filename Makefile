@@ -9,15 +9,18 @@
 
 VERSION = 1.0.0
 
+# use gcc, unless its conda - let it define its own compiler
+ifndef CONDA_BUILD_SYSROOT 
 CC=gcc
+endif
+
 CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -Ofast 
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
 LDFLAGS = -lpthread -lm
 
 DEVS = Makefile .gitignore genozip.code-workspace \
        .vscode/c_cpp_properties.json .vscode/launch.json .vscode/settings.json .vscode/tasks.json \
-       test-file.vcf \
-       conda/build.sh.template conda/bld.bat.template conda/meta.yaml.template
+       test-file.vcf 
 
 DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
        bzlib/LICENSE.bzlib bzlib/README.bzlib \
@@ -86,10 +89,18 @@ genounzip$(EXE) genocat$(EXE): genozip$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
+# this is used by build.sh and bld.bat to build on conda
+install: genozip
+	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
+	@cp -f genozip  $(PREFIX)/bin/genozip
+	@chmod a+x      $(PREFIX)/bin/genozip
+	@ln -fs genozip $(PREFIX)/bin/genounzip
+	@ln -fs genozip $(PREFIX)/bin/genocat
+
 TARBALL := archive/genozip-$(VERSION).tar.gz
 
 $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
-	@echo "Archiving to $@ - WARNING: Make sure you have no un-pushed changes locally (Makefile doesn't verify this)"
+	@echo "Archiving to $@"
 	@tar --create --gzip --file $(TARBALL) $^
 	@echo "Committing $(TARBALL) & pushing changes to genozip/master"
 	@(git commit -m "update archive" $(TARBALL) ; git push)
@@ -97,39 +108,36 @@ $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
-# to publish to conda: 
-# 1. Make conda - this will also copy meta.yaml to the local staged-recipes which should be checked out
-#    to the branch genozip-branch
-# 2. git commit and and git push the file in staged-recipes
-# 3. from the github website, go to my forked branch and submit pull request from my branch of my fork to the source master
-meta.yaml: conda/meta.yaml.template $(TARBALL)
+conda/meta.yaml: conda/meta.yaml.template $(TARBALL)
 	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.yaml.template | \
-		sed s/%SHA256/$$(openssl sha256 $(TARBALL)|cut -d= -f2|cut -c2-)/ | \
-		sed s/%VERSION/$(VERSION)/g | \
+		sed s/'{{ sha256 }}'/$$(openssl sha256 $(TARBALL)|cut -d= -f2|cut -c2-)/ | \
+		sed s/'{{ version }}'/$(VERSION)/g | \
 		grep -v "^#" \
 		> $@
 
 # we make the build scripts dependents on the archives, so if file list changes, we need to re-generate build
-UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
-build.sh: conda/build.sh.template 
-	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
+#UNIX_SRCS := $(shell echo $(SRCS) | sed 's/\\//\\\\\\//g' ) # a list of files that look like: zlib\/inflate.c
+#build.sh: conda/build.sh.template 
+#	@echo "Generating $@ (for conda)"
+#	@sed 's/%BUILD/\\$$CC $(CFLAGS) $(UNIX_SRCS) -o genozip/' conda/$@.template > $@
 	
-WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
-bld.bat: conda/bld.bat.template
-	@echo "Generating $@ (for conda)"
-	@sed 's/%BUILD/%GCC% $(CFLAGS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
+#WIN_SRCS  := $(shell echo $(SRCS) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
+#bld.bat: conda/bld.bat.template
+#	@echo "Generating $@ (for conda)"
+#	@sed 's/%BUILD/%GCC% $(CFLAGS) $(WIN_SRCS) -o genozip.exe/' conda/$@.template > $@
 
+# publish to conda-forge
 conda: $(TARBALL) meta.yaml build.sh bld.bat
 	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
-	@cp meta.yaml build.sh bld.bat ../staged-recipes/recipes/genozip/
+	@cp conda/meta.yaml conda/build.sh conda/bld.bat ../staged-recipes/recipes/genozip/
 	@echo "Committing files & pushing changes to my forked staged-recipies/genozip-branch"
 	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
+	@echo "Submitting pull request to conda-forge"
+	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip-branch)
 	@echo " "
-	@echo "Now, (1) go to https://github.com/divonlan/staged-recipes/tree/genozip-branch"
-	@echo "     (2) select the branch 'genozip-branch'"
-	@echo "     (3) click 'New Pull Request'"
+	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
+	@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
 
 endif
 
