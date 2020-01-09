@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #else
-#include "visual_c_compatability/getopt.h"
+#include "compatability/visual_c_getopt.h"
 #endif
 #include <fcntl.h>
 #include <time.h>
