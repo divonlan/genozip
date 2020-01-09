@@ -39,7 +39,6 @@ DEBUG_OBJS := $(SRCS:.c=.debug-o)
 
 DEPS       := $(SRCS:.c=.d)
 
-EXE =
 ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
