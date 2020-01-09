@@ -433,7 +433,7 @@ static void zip_compress_variant_block (VariantBlock *vb)
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_dispatcher (char *vcf_basename, File *vcf_file, 
+void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
                      File *z_file, bool test_mode, unsigned max_threads)
 {
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);

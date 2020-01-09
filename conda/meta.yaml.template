@@ -7,7 +7,7 @@ package:
   version: {{ version }}
 
 source:
-  url: https://github.com/divonlan/genozip/raw/master/archive/genozip-{{ version }}.tar.gz
+  url: https://github.com/divonlan/genozip/raw/master/conda/genozip-{{ version }}.tar.gz
   sha256: {{ sha256 }}
 
 build:
@@ -16,11 +16,12 @@ build:
 requirements:
   build:
     - {{ compiler('c') }}
+    - pthread-win32 # [win]
     - make # [unix]
   host:
   run:
-    - pthreads-win32 # [win]
-    
+    - pthread-win32 # [win]
+
 test:
   source_files: 
     - test-file.vcf

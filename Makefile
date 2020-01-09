@@ -16,7 +16,7 @@ endif
 
 CFLAGS       = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall 
 CFLAGS_DEBUG = -Ibzlib -Izlib -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
-LDFLAGS = -lpthread -lm
+LDFLAGS      = -lpthread -lm
 
 ifeq ($(CC),gcc)
 	CFLAGS += -Ofast
@@ -34,13 +34,14 @@ DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
 
 INCS = genozip.h lic-text.h \
        bzlib/bzlib.h bzlib/bzlib_private.h \
-	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h 
-
+	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
+       visual_c_compatability/getopt.h mac_compatability/mach_gettime.h
 
 SRCS = base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c main.c \
 	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c \
        bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
-       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
+       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c \
+       mac_compatability/mach_gettime.c
 
 ifeq ($(OS),Windows_NT)
 # Windows
@@ -53,8 +54,6 @@ else
     endif
     ifeq ($(UNAME_S),Darwin)
 # Mac
-		SRCS += mac_compatability/mach_gettime.c
-		INCS += mac_compatability/mach_gettime.h
     endif
 endif
 
@@ -109,7 +108,7 @@ endif
 
 TARBALL := conda/genozip-$(VERSION).tar.gz
 
-$(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
+$(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS) 
 	@echo "Archiving to $@"
 	@tar --create --gzip --file $(TARBALL) $^
 	@echo "Committing $(TARBALL) & pushing changes to genozip/master"

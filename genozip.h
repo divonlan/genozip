@@ -15,7 +15,7 @@
 #include <pthread.h>
 
 #ifdef __APPLE__
-#include "mac/mach_gettime.h"
+#include "mac_compatability/mach_gettime.h"
 #endif
  
 #define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the dv file format changes
@@ -432,10 +432,10 @@ extern void mtf_tree_test (const MtfContext *ctx);
 extern void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words);
 extern void gl_deoptimize_dictionary (char *data, unsigned len);
 
-extern void zip_dispatcher (char *vcf_basename, File *vcf_file, 
+extern void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
                             File *z_file, bool test_mode, unsigned max_threads);
 
-extern void piz_dispatcher (char *z_basename, File *z_file, File *vcf_file, 
+extern void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, 
                             bool test_mode, unsigned max_threads);
 
 extern void piz_reconstruct_line_components (VariantBlock *vb);
@@ -523,7 +523,7 @@ extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples;
-extern char       *global_cmd;            // set once in main()
+extern const char *global_cmd;            // set once in main()
 extern unsigned    global_max_threads;    // set in main()
 extern bool        global_little_endian;  // set in main()
 

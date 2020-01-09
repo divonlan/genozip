@@ -667,7 +667,7 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 #endif
 }
 
-void piz_dispatcher (char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
+void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
 {
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, vcf_file, z_file, test_mode, true, z_basename);
 
