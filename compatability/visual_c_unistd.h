@@ -14,7 +14,6 @@
 #include <io.h>
 #include <process.h> /* for getpid() and the exec..() family */
 #include <direct.h> /* for _getcwd() and _chdir() */
-#include "visual_c_getopt.h" 
 
 #define srandom srand
 #define random rand
