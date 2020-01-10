@@ -74,11 +74,11 @@ int main_print_license(bool for_installer)
 static int main_print_help (bool explicit)
 {
     printf ("\n");
+    printf ("Compress or uncompress VCF (Variant Call Format) files\n");
+    printf ("\n");
     printf ("Usage: genozip [options]... [files]...\n");
     printf ("       genounzip [options]... [files]...\n");
     printf ("       genocat [options]... [files]...\n");
-    printf ("\n");
-    printf ("Compress or uncompress VCF (Variant Call Format) files\n");
     printf ("\n");
     printf ("Actions - use at most one of these actions:\n");
     printf ("   -z --compress     Compress a .vcf, .vcf.gz or .vcf.bz2 file (Yes! You can compress an already-compressed file).\n");

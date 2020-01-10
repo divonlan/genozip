@@ -1,9 +1,9 @@
 
+Compress or uncompress VCF (Variant Call Format) files
+
 Usage: genozip [options]... [files]...
        genounzip [options]... [files]...
        genocat [options]... [files]...
-
-Compress or uncompress VCF (Variant Call Format) files
 
 Actions - use at most one of these actions:
    -z --compress     Compress a .vcf, .vcf.gz or .vcf.bz2 file (Yes! You can compress an already-compressed file).
