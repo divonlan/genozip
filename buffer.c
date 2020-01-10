@@ -60,7 +60,7 @@ void buf_test_overflows(const VariantBlock *vb)
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
                 fprintf (stderr, 
 #ifdef _MSC_VER
-                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
+                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%I64x", 
 #else
                          "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
 #endif
