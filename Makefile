@@ -124,9 +124,9 @@ $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
  
-conda/meta.yaml: conda/meta.yaml.template $(TARBALL)
+conda/meta.yaml: conda/meta.template.yaml $(TARBALL)
 	@echo "Generating meta.yaml (for conda)"
-	@cat conda/meta.yaml.template | \
+	@cat conda/meta.template.yaml | \
 		sed s/'{{ sha256 }}'/$$(openssl sha256 $(TARBALL)|cut -d= -f2|cut -c2-)/ | \
 		sed s/'{{ version }}'/$(VERSION)/g | \
 		grep -v "^#" \
@@ -138,9 +138,9 @@ C99_COMPILE_AS_CPP := $(shell echo $(C99_SRCS)   | tr ' ' '\n' | sed 's/^/-Tp /g
 OLD_C_WIN_SRCS  := $(shell echo $(OLD_C_COMPILE_AS_C) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
 C99_WIN_SRCS    := $(shell echo $(C99_COMPILE_AS_CPP) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) 
 
-conda/bld.bat: conda/bld.bat.template Makefile
+conda/bld.bat: conda/bld.template.bat Makefile
 	@echo "Building $@ (for conda)"
-	@sed s/'{{ src }}'/'$(C99_WIN_SRCS) $(OLD_C_WIN_SRCS)'/ $@.template > $@
+	@sed s/'{{ src }}'/'$(C99_WIN_SRCS) $(OLD_C_WIN_SRCS)'/ conda/bld.template.bat > $@
 
 # publish to conda-forge
 conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat
@@ -170,11 +170,11 @@ windows-installer: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
 
 endif
 
-windows/LICENSE.for-installer.txt: genozip$(EXE)
+windows/LICENSE.for-installer.txt: lic-text.h
 	@echo Generating $@
 	@./genozip$(EXE) --license --force > $@
 
-LICENSE.non-commercial.txt: genozip$(EXE)
+LICENSE.non-commercial.txt: lic-text.h
 	@echo Generating $@
 	@./genozip$(EXE) --license > $@
 
@@ -182,7 +182,7 @@ windows/readme.txt: genozip$(EXE)
 	@echo Generating $@
 	@./genozip$(EXE) --help > $@
 
-.PHONY: clean clean-debug clean-all meta.yaml windows-installer
+.PHONY: clean clean-debug clean-all 
 
 clean:
 	@echo Cleaning up
