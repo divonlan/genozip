@@ -7,7 +7,8 @@ The command line options are very much similar to gzip, bzip2 etc, so if you're 
 
 To build - just run "make". It is tested to work on Mac, Windows, Linux.
 
-Feedback and bug reports: genozip@blackpawventures.com
+Feedback and bug reports: bugs@genozip.com
+Commercial license: sales@genozip.com
 
 Usage is subject to terms and conditions, see the LICENSE.commercial.txt and LICENSE.non-commercial.txt file.
 

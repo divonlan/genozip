@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2020 Divon Lan <genozip@blackpawventures.com>
+#   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 #   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):

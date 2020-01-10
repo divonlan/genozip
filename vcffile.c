@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcffile.c
-//   Copyright (C) 2019-2020 Divon Lan <genozip@blackpawventures.com>
+//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
  
 #include <sys/types.h>
@@ -183,7 +183,7 @@ void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
         else
             ABORT0 ("Unknown file type");
 
-        const char *failed_text = "FAILED!!! Please contact genozip@blackpawventures.com to help fix this bug in genozip";
+        const char *failed_text = "FAILED!!! Please contact bugs@genozip.com to help fix this bug in genozip";
 
         unsigned min_len = MIN (len_file, len_pipe);
         bool failed = false;

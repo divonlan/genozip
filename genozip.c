@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genozip.c
-//   Copyright (C) 2019-2020 Divon Lan <genozip@blackpawventures.com>
+//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <sys/types.h>
@@ -106,7 +106,7 @@ int main_print_help()
     printf ("\n");
     printf ("Genozip is available for free for non-commercial use. Commercial use requires a commercial license.\n");
     printf ("\n");
-    printf ("For bug reports or license inquires: genozip@blackpawventures.com\n");
+    printf ("For bug reports: bugs@genozip.com and license inquires: sales@genozip.com\n");
     printf ("\n");
     printf ("THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE\n");
     printf ("WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE\n");

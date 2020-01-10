@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.c
-//   Copyright (C) 2019-2020 Divon Lan <genozip@blackpawventures.com>
+//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // memory management - when running the same code by the same thread for another variant block - we reuse

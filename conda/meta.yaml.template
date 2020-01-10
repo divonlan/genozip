@@ -52,7 +52,7 @@ about:
     of the genomic data, such as linkage disequilibrium, to compress better. 
     It is also a lot faster than gzip. 
     The compression is lossless - the decompressed file is identical to the original file.
-    Contact: genozip@blackpawventures.com
+    Contact: info@genozip.com
 
 extra:
   recipe-maintainers:
