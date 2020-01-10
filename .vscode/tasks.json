@@ -5,7 +5,9 @@
             "type": "shell",
             "label": "make all (optimized)",
             "command": "make",
-            "args": [ "all" ],
+            "args": [
+                "all"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -24,7 +26,9 @@
             "type": "shell",
             "label": "make genozip-debug",
             "command": "make.exe",
-            "args": [ "debug" ],
+            "args": [
+                "debug"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -43,7 +47,9 @@
             "type": "shell",
             "label": "make clean",
             "command": "make.exe",
-            "args": [ "clean" ],
+            "args": [
+                "clean"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -62,7 +68,9 @@
             "type": "shell",
             "label": "make clean-debug",
             "command": "make.exe",
-            "args": [ "clean-debug" ],
+            "args": [
+                "clean-debug"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -81,7 +89,9 @@
             "type": "shell",
             "label": "make conda",
             "command": "make.exe",
-            "args": [ "conda" ],
+            "args": [
+                "conda"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -95,12 +105,14 @@
             "presentation": {
                 "clear": true
             }
-        },        
+        },
         {
             "type": "shell",
             "label": "make license",
             "command": "make.exe",
-            "args": [ "LICENSE.non-commercial.txt" ],
+            "args": [
+                "LICENSE.non-commercial.txt"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -114,9 +126,11 @@
         },
         {
             "type": "shell",
-            "label": "make archive",
+            "label": "make windows-installer",
             "command": "make.exe",
-            "args": [ "archive" ],
+            "args": [
+                "windows-installer"
+            ],
             "options": {
                 "cwd": "${workspaceRoot}"
             },
@@ -126,7 +140,8 @@
             },
             "presentation": {
                 "clear": true
-            }
+            },
+            "problemMatcher": []
         }
     ]
 }

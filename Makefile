@@ -132,9 +132,6 @@ conda/meta.yaml: conda/meta.yaml.template $(TARBALL)
 		grep -v "^#" \
 		> $@
 
-ttt:
-	echo $(x)
-
 OLD_C_COMPILE_AS_C := $(shell echo $(OLD_C_SRCS) | tr ' ' '\n' | sed 's/^/-Tc /g'|tr '\n' ' ')
 C99_COMPILE_AS_CPP := $(shell echo $(C99_SRCS)   | tr ' ' '\n' | sed 's/^/-Tp /g'|tr '\n' ' ')
 
@@ -157,13 +154,35 @@ conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
 	@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
 
+WINDOWS_INSTALL_FILES = genozip.exe genounzip.exe genocat.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
+
+windows-installer: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
+	@echo 'Copying files to windows'
+	@cp genozip.exe genounzip.exe genocat.exe windows
+	@echo 'Using the UI:'
+	@echo '  (1) Open windows/genozip.ifp'
+	@echo '  (2) Make sure the version is set to $(VERSION)'
+	@echo '  (3) Make sure the files list, and the license from LICENSE.for-installer.txt are up to date'
+	@echo '  (4) Click Build'
+	@C:\\Program\ Files\ \(x86\)\\solicus\\InstallForge\\InstallForge.exe
+	@echo
+
+
 endif
+
+windows/LICENSE.for-installer.txt: genozip$(EXE)
+	@echo Generating $@
+	@./genozip$(EXE) --license --force > $@
 
 LICENSE.non-commercial.txt: genozip$(EXE)
 	@echo Generating $@
-	@./genozip$(EXE) -L > $@
+	@./genozip$(EXE) --license > $@
 
-.PHONY: clean clean-debug clean-all meta.yaml 
+windows/readme.txt: genozip$(EXE)
+	@echo Generating $@
+	@./genozip$(EXE) --help > $@
+
+.PHONY: clean clean-debug clean-all meta.yaml windows-installer
 
 clean:
 	@echo Cleaning up

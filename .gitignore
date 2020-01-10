@@ -5,6 +5,9 @@
 genozip
 genounzip
 genocat
+./genozip.exe
+./genounzip.exe
+./genocat.exe
 1000genomes/*
 data/*
 benchmark.txt
@@ -13,3 +16,4 @@ to do.txt
 junk*
 meta.yaml
 bld.bat
+windows/LICENSE.for-installer.txt

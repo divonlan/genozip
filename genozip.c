@@ -35,18 +35,23 @@ bool global_little_endian;
 int flag_stdout=0, flag_force=0, flag_replace=0, flag_quiet=0, flag_concat_mode=0, flag_show_content=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_multithreaded=1;
 
-int main_print_license()
+int main_print_license(bool for_installer)
 {
 #include "lic-text.h"
+    unsigned line_width = 0;
+    if (for_installer)
+        line_width = 60; // width of InstallForge license text field
 
+    else {
 #ifdef _WIN32
-    unsigned line_width = 100;
+        line_width = 100;
 #else
-    // in Linux, we can get the actual terminal width
-    struct winsize w;
-    ioctl(0, TIOCGWINSZ, &w);
-    unsigned line_width = w.ws_col;
+        // in Linux, we can get the actual terminal width
+        struct winsize w;
+        ioctl(0, TIOCGWINSZ, &w);
+        line_width = w.ws_col;
 #endif
+    }
 
     unsigned num_lines = sizeof(license) / sizeof(char*);
     
@@ -66,7 +71,7 @@ int main_print_license()
     return 0;
 }
 
-int main_print_help()
+static int main_print_help (bool explicit)
 {
     printf ("\n");
     printf ("Usage: genozip [options]... [files]...\n");
@@ -117,8 +122,10 @@ int main_print_help()
 // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
 // from Windows Explorer - the terminal will open and he will see the help
 #ifdef _WIN32
-    printf ("Press any key to continue...\n");
-    getc(stdin);
+    if (!explicit) {
+        printf ("Press any key to continue...\n");
+        getc(stdin);
+    }
 #endif
 
     return 0;
@@ -574,7 +581,8 @@ int main (int argc, char **argv)
             {"force",      no_argument,       &flag_force,   1      },
             {"help",       no_argument,       &command, HELP        },
             {"list",       required_argument, &command, LIST        },
-            {"license",    no_argument,       &command, LICENSE     },
+            {"license",    no_argument,       &command, LICENSE     }, // US spelling
+            {"licence",    no_argument,       &command, LICENSE     }, // British spelling
             {"quiet",      no_argument,       &flag_quiet, 1        },
             {"replace",    no_argument,       &flag_replace, 1      },
             {"test",       no_argument,       &command, TEST        },
@@ -633,7 +641,9 @@ int main (int argc, char **argv)
     if (command < 0) { 
 
         // genozip with no input filename, no output filename, and no output or input redirection - show help
-        if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) command = HELP;
+        if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) 
+            return main_print_help (false);
+
         else if (strstr (argv[0], "genounzip"))   command = UNCOMPRESS;
         else if (strstr (argv[0], "genocat")) { command = UNCOMPRESS; flag_stdout=1 ; }
         else                                  command = COMPRESS; // default 
@@ -674,9 +684,14 @@ int main (int argc, char **argv)
     }
 
     // take action, depending on the command selected
-    if (command == VERSION) return main_print_version();
-    if (command == LICENSE) return main_print_license();
-    if (command == HELP)    return main_print_help();
+    if (command == VERSION) 
+        return main_print_version();
+
+    if (command == LICENSE) 
+        return main_print_license (flag_force); // --license --force means output license in Windows installer format (used by Makefile)
+
+    if (command == HELP)    
+        return main_print_help (true);
 
     flag_concat_mode = (out_filename != NULL);
 
