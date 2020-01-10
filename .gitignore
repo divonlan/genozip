@@ -3,11 +3,12 @@
 *.debug-o
 *.d
 genozip
-genounzip
-genocat
-./genozip.exe
-./genounzip.exe
-./genocat.exe
+genozip.exe
+genounzip*
+genocat*
+!windows/genozip.exe
+!windows/genounzip.exe
+!windows/genocat.exe
 1000genomes/*
 data/*
 benchmark.txt
