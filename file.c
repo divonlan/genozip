@@ -53,14 +53,14 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             file->type = GENOZIP;
             file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "wb" so Windows doesn't add ASCII 13
             
-            if (expected_type == VCZ_TEST && !file->file) {
+            if (expected_type == GENOZIP_TEST && !file->file) {
                 free (file);
                 return NULL;
             }
 
             ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
         }
-        else if (expected_type == VCZ_TEST)
+        else if (expected_type == GENOZIP_TEST)
             return NULL;
         
         else

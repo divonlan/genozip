@@ -67,7 +67,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
 }
 
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
-bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line)
+bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line)
 {    
     static Buffer vcf_header_line = EMPTY_BUFFER; // serves to read the header, then its the first line in the data, and again the header when starting the next vcf file
     static Buffer vcf_header_text = EMPTY_BUFFER;
@@ -119,7 +119,7 @@ bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_d
             return false;
         }
 
-        // in concat mode, we write the header to the dv file, only for the first vcf file
+        // in concat mode, we write the header to the genozip file, only for the first vcf file
         if (vb->z_file && (!flag_concat_mode || first_vcf)) 
             zfile_write_vcf_header (vb, &vcf_header_text); 
 
@@ -137,7 +137,7 @@ bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_d
     return true; // everything's good
 }
 
-bool vcf_header_vcz_to_vcf (VariantBlock *vb)
+bool vcf_header_genozip_to_vcf (VariantBlock *vb)
 {
     static Buffer compressed_vcf_section = EMPTY_BUFFER;
 
@@ -175,7 +175,7 @@ bool vcf_header_vcz_to_vcf (VariantBlock *vb)
         return false;
     }
 
-    // in concat mode, we write the vcf header, only for the first dv file
+    // in concat mode, we write the vcf header, only for the first genozip file
     if (first_vcf || !flag_concat_mode)
         vcffile_write_to_disk (vb->vcf_file, &vcf_header_buf);
 

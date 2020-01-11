@@ -515,7 +515,7 @@ static void main_list (const char *z_filename, bool finalize)
         first_file = false;
     }
     
-    File *z_file = file_open(z_filename, READ, VCZ_TEST);    
+    File *z_file = file_open(z_filename, READ, GENOZIP_TEST);    
     if (!z_file) {
         files_ignored++;
         return;

@@ -666,7 +666,7 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, vcf_file, z_file, test_mode, true, z_basename);
 
     // read and write VCF header
-    bool success = vcf_header_vcz_to_vcf (dispatcher_get_pseudo_vb (dispatcher));
+    bool success = vcf_header_genozip_to_vcf (dispatcher_get_pseudo_vb (dispatcher));
     if (!success) goto finish; // empty file - not an error
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:

@@ -32,7 +32,7 @@
 #include "compatability/mac_gettime.h"
 #endif
  
-#define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the dv file format changes
+#define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the genozip file format changes
 
 #define GENOZIP_EXT ".genozip"
 
@@ -147,7 +147,7 @@ typedef struct {
     int64_t min_pos, max_pos;          // minimum and maximum POS values in this VB. -1 if unknown
 
     uint32_t vcf_data_size;            // size of variant block as it appears in the source file
-    uint32_t z_data_bytes;             // total bytes of this variant block in the dv file including all sections and their headers
+    uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
     uint8_t haplotype_index[];         // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
 } SectionHeaderVariantData; 
@@ -237,7 +237,7 @@ typedef struct {
     Buffer word_list;
 } MtfContext;
 
-typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, VCZ_TEST, PIPE, STDIN, STDOUT} FileType;
+typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
 
 typedef struct {
     void *file;
@@ -411,8 +411,8 @@ extern unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf);
 extern void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file);
 
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
-extern bool vcf_header_vcf_to_vcz (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line);
-extern bool vcf_header_vcz_to_vcf (VariantBlock *vb);
+extern bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line);
+extern bool vcf_header_genozip_to_vcf (VariantBlock *vb);
 extern bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header);
 
 #define POOL_ID_ZIP   100

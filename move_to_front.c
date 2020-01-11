@@ -358,7 +358,7 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, const char *section_da
     // compute threads might be using these dictionaries. This is ok, bc the dispatcher thread makes
     // sure we integrate dictionaries from vbs by order - so that running compute threads never
     // need to access the new parts of dictionaries. We also pre-allocate the dictionaries in
-    // vcf_header_vcz_to_vcf() so that they don't need to be realloced. dict.len may be accessed
+    // vcf_header_genozip_to_vcf() so that they don't need to be realloced. dict.len may be accessed
     // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
     uint32_t num_snips = ENDN32 (header->num_snips);
