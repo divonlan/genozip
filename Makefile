@@ -152,6 +152,7 @@ conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat
 	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip-branch)
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
+	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10543"
 	@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
 
 WINDOWS_INSTALL_FILES = genozip.exe genounzip.exe genocat.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
