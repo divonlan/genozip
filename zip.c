@@ -307,7 +307,7 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
     }
 
     // final step - build the reverse index that will allow access by the original index to the sorted array
-    // this will be included in the dv file
+    // this will be included in the genozip file
     for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
         helper_index[ht_i].index_in_sorted_line = ht_i;
 
@@ -405,9 +405,6 @@ static void zip_compress_variant_block (VariantBlock *vb)
     // note: this updates the z_data in memory (not on disk)
     zfile_update_compressed_variant_data_header (vb, variant_data_header_pos, num_dictionary_sections);
 
-    // update dv file size
-    ((SectionHeaderVariantData *)vb->z_data.data)->z_data_bytes = vb->z_data.len;
-
     // updates stats for --showcontent - reduce by the bytes added by us over the bytes in the original file (might be a negative value if we saved bytes rather than added)
     for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
         //printf ("sec: %u, bytes before compression: %u, bytes added by alg: %d\n", sec_i, vb->vcf_section_bytes[sec_i], vb->add_bytes[sec_i]);
@@ -432,7 +429,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     Buffer *first_data_line = NULL; // contains a value only for first variant block, otherwise empty. 
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
-    bool success = vcf_header_vcf_to_vcz (dispatcher_get_pseudo_vb (dispatcher), &line_i, &first_data_line);
+    bool success = vcf_header_vcf_to_genozip (dispatcher_get_pseudo_vb (dispatcher), &line_i, &first_data_line);
     if (!success) goto finish;
 
     if (!first_data_line) goto finish; // VCF file has only a header or is an empty file - no data - we're done

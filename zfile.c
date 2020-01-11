@@ -260,6 +260,7 @@ void zfile_update_compressed_variant_data_header (VariantBlock *vb,
 {
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)&vb->z_data.data[pos];
     vardata_header->num_dictionary_sections = ENDN16 ((uint16_t)num_dictionary_sections);
+    vardata_header->z_data_bytes            = ENDN32 ((uint32_t)vb->z_data.len);
 }
 
 void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield, 
