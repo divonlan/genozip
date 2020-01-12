@@ -46,6 +46,8 @@ void buf_test_overflows(const VariantBlock *vb)
     for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
         const Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
 
+        if (!buf) continue; // buf was 'buf_destroy'd
+
         if (buf->memory) {
             if (!buf->name) {
                 fprintf (stderr, 
@@ -127,7 +129,7 @@ void buf_display_memory_usage(bool memory_full)
 
             Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
             
-            if (!buf->memory) continue; // exclude destroyed or not-yet-allocated buffers
+            if (!buf || !buf->memory) continue; // exclude destroyed or not-yet-allocated buffers
 
             bool found = false;
             for (unsigned st_i=0; st_i < num_stats && !found; st_i++) {
@@ -181,8 +183,13 @@ long long buf_vb_memory_consumption (const VariantBlock *vb)
     if (vb->phase_sections_data)     vb_memory += vb->num_sample_blocks * sizeof (Buffer);
 
     // memory allocated via Buffer (the vast majority, usually)
-    for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) 
-        vb_memory += ((Buffer **)buf_list->data)[buf_i]->size;
+    for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
+        Buffer *buf = ((Buffer **)buf_list->data)[buf_i]; 
+        
+        if (!buf || !buf->memory) continue; // exclude destroyed or not-yet-allocated buffers
+        
+        vb_memory += buf->size;
+    }
 
     return vb_memory;
 }
@@ -204,7 +211,7 @@ static inline void buf_add(VariantBlock *vb, Buffer *buf)
         }
 
         ASSERT (num_buffer_lists < buffer_lists_len, 
-                "Error: buffer_lists maxed out num_buffer_lists=%u buffer_lists_len=%u", num_buffer_lists, buffer_lists_len);
+                "Error: buffer_lists maxed out global_max_threads=%u num_buffer_lists=%u buffer_lists_len=%u", global_max_threads, num_buffer_lists, buffer_lists_len);
 
         // malloc - this will call this function recursively - that's ok bc that point buffer_list is already allocated
         buf_alloc (vb, buffer_list, INITIAL_MAX_MEM_NUM_BUFFERS * sizeof(Buffer *), false, "buffer_list", vb ? vb->id : 0);
@@ -398,6 +405,24 @@ void buf_free(Buffer *buf)
     else
         memset (buf, 0, sizeof (Buffer));
 } 
+
+// destroy buffer complete
+void buf_destroy (VariantBlock *vb, Buffer *buf)
+{
+    if (!buf) return; // nothing to do
+
+    if (buf->memory) free (buf->memory);
+
+    // remove from buffer_list of this vb
+    unsigned i=0; for (; i < vb->buffer_list.len; i++) 
+        if (((Buffer **)vb->buffer_list.data)[i] == buf) {
+            ((Buffer **)vb->buffer_list.data)[i] = NULL;
+            break;
+        }
+
+    // sanity
+    ASSERT0 (i < vb->buffer_list.len, "Error: cannot find buffer in buffer_list");
+}
 
 void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, 
                unsigned bytes_per_entry, // how many bytes are counted by a unit of .len

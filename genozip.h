@@ -414,15 +414,17 @@ extern bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffe
 extern bool vcf_header_genozip_to_vcf (VariantBlock *vb);
 extern bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header);
 
-#define POOL_ID_ZIP   100
-#define POOL_ID_UNZIP 200
+#define NUM_VB_POOLS  2 // for zip and piz that can run concurrently during --test
+#define POOL_ID_QUANT 10000
+#define POOL_ID_ZIP   (1*POOL_ID_QUANT)
+#define POOL_ID_UNZIP (2*POOL_ID_QUANT)
 typedef struct {
     unsigned num_vbs;
     unsigned vb_id_prefix;
     VariantBlock vb[];
 } VariantBlockPool;
 
-extern VariantBlockPool *vb_construct_pool (unsigned num_vbs, unsigned vb_id_prefix);
+extern VariantBlockPool *vb_get_pool (unsigned num_vbs, unsigned pool_id);
 extern void vb_cleanup_memory(VariantBlockPool *pool);
 extern VariantBlock *vb_get_vb(VariantBlockPool *pool, File *vcf_file, File *z_file, unsigned variant_block_i);
 extern unsigned vb_num_samples_in_sb (const VariantBlock *vb, unsigned sb_i);
@@ -516,16 +518,12 @@ extern unsigned buf_alloc (VariantBlock *vb,
                            float grow_at_least_factor, // grow more than new_size    
                            const char *name, unsigned param); // for debugging
 
-extern void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_from,
-                         unsigned *regular_buf_offset, const char *name, unsigned param);
-
+extern void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_from, unsigned *regular_buf_offset, const char *name, unsigned param);
 extern void buf_extend (VariantBlock *vb, Buffer *buf, unsigned num_new_units, unsigned sizeof_unit, const char *name, unsigned param);
-
 extern void buf_append(VariantBlock *vb, Buffer *base, Buffer *fragment, unsigned sizeof_unit, const char *name, unsigned param);
-
 extern void buf_free_abandoned_memories();
-
 extern void buf_free(Buffer *buf); // free buffer - without freeing memory. A future buf_malloc of this buffer will reuse the memory if possible.
+extern void buf_destroy (VariantBlock *vb, Buffer *buf);
 
 static inline bool buf_is_allocated(Buffer *buf) {return buf->data != NULL && buf->type == BUF_REGULAR;}
 

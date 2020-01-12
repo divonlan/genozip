@@ -23,6 +23,7 @@ void vb_release_vb (VariantBlock **vb_p)
 {
     if (! *vb_p) return; // nothing to release
 
+
     VariantBlock *vb = *vb_p;
     *vb_p = NULL;
 
@@ -93,7 +94,6 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->z_file = vb->vcf_file = NULL; // we're not freeing them, must setting the point to null
 
     vb->in_use = false; // released the VB back into the pool - it may now be reused
-
     // things that persist:
     
     // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used
@@ -103,15 +103,20 @@ void vb_release_vb (VariantBlock **vb_p)
 
 }
 
-VariantBlockPool *vb_construct_pool (unsigned num_vbs, unsigned vb_id_prefix)
+VariantBlockPool *vb_get_pool (unsigned num_vbs, unsigned pool_id)
 {
-    VariantBlockPool *pool = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
-    ASSERT0 (pool, "Error: failed to calloc pool");
+    static VariantBlockPool *pools[NUM_VB_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
+    const unsigned pool_index = (pool_id - POOL_ID_QUANT) / POOL_ID_QUANT;
 
-    pool->num_vbs      = num_vbs;
-    pool->vb_id_prefix = vb_id_prefix;
+    if (!pools[pool_index])
+        pools[pool_index] = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
 
-    return pool;
+    ASSERT0 (pools[pool_index], "Error: failed to calloc pool");
+
+    pools[pool_index]->num_vbs      = num_vbs;
+    pools[pool_index]->vb_id_prefix = pool_id;
+
+    return pools[pool_index];
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
@@ -150,12 +155,13 @@ VariantBlock *vb_get_vb(VariantBlockPool *pool,
     return vb;
 }
 
-void vb_free_buffer_array (Buffer **buf_array, unsigned buf_array_len)
+// freeing arrays of buffers allocated by calloc 
+static void vb_free_buffer_array (VariantBlock *vb, Buffer **buf_array, unsigned buf_array_len)
 {
     if (! (*buf_array)) return; // array not allocated - nothing to do
 
     for (unsigned i=0; i < buf_array_len; i++) 
-        if ((*buf_array)[i].memory) free ((*buf_array)[i].memory);
+        buf_destroy (vb, &(*buf_array)[i]);
 
     free (*buf_array);
 
@@ -168,9 +174,9 @@ void vb_cleanup_memory(VariantBlockPool *pool)
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
         VariantBlock *vb = &pool->vb[vb_i];
      
-        vb_free_buffer_array (&vb->genotype_sections_data, vb->num_sample_blocks);
-        vb_free_buffer_array (&vb->haplotype_sections_data, vb->num_sample_blocks);
-        vb_free_buffer_array (&vb->phase_sections_data, vb->num_sample_blocks);
+        vb_free_buffer_array (vb, &vb->genotype_sections_data, vb->num_sample_blocks);
+        vb_free_buffer_array (vb, &vb->haplotype_sections_data, vb->num_sample_blocks);
+        vb_free_buffer_array (vb, &vb->phase_sections_data, vb->num_sample_blocks);
      
         vb->num_sample_blocks = 0;
     }

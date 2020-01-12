@@ -62,7 +62,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
     dd->filename      = filename;
     dd->last_len      = 2;
 
-    dd->vb_pool = vb_construct_pool (MAX (2,max_threads)+1 /* +1 for pseudo-vb */, pool_id);
+    dd->vb_pool = vb_get_pool (MAX (2,max_threads)+1 /* +1 for pseudo-vb */, pool_id);
 
     dd->pseudo_vb = vb_get_vb (dd->vb_pool, vcf_file, z_file, 0);
 

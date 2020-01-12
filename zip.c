@@ -448,11 +448,12 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
         if (next_vb && next_vb->ready_to_dispatch && dispatcher_has_free_thread (dispatcher)) 
             dispatcher_compute (dispatcher, zip_compress_variant_block);
-
+        
         // PRIORITY 2: If there is no new variant block available, but input is not exhausted yet - read one
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
             next_vb = dispatcher_generate_next_vb (dispatcher);
+
             next_vb->first_line = line_i;
 
             zip_read_variant_block (vcf_file, &line_i, first_data_line, next_vb);
