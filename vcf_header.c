@@ -127,8 +127,6 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
                 zfile_write_vcf_header (vb, &vcf_header_text); 
             else
                 vb->z_file->vcf_data_so_far  += vcf_header_text.len; // length of the original VCF header
-
-//                vb->add_bytes[SEC_VCF_HEADER] -= vcf_header_text.len;
         }
 
         vb->vcf_file->section_bytes[SEC_VCF_HEADER] = vcf_header_text.len;
