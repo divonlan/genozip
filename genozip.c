@@ -554,7 +554,9 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     static long long total_uncompressed_len=0, total_compressed_len=0;
     char c_str[20], u_str[20];
 
-    const char *head_format = "%5s %8s %10s %10s %6s %-32s %s\n";
+    const unsigned FILENAME_WIDTH = 35;
+
+    const char *head_format = "%5s %8s %10s %10s %6s %*s %s\n";
     const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
 
 #ifdef _MSC_VER        
@@ -577,7 +579,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     }
 
     if (first_file) {
-        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", "Name", "Creation"); // follow gzip format
+        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", -FILENAME_WIDTH, "Name", "Creation"); // follow gzip format
         first_file = false;
     }
     
@@ -603,7 +605,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     printf (item_format, ENDN32(vcf_header_header.num_samples), ENDN64(vcf_header_header.num_lines), 
             c_str, u_str, ratio, 
             (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-            is_subdir ? -MAX (1, 32 - 1 - strlen(subdir)) : -32,
+            is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
             z_filename, vcf_header_header.created);
             
     total_compressed_len   += z_file->disk_size;
