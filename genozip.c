@@ -366,7 +366,7 @@ static void main_genounzip (const char *z_filename,
     if (z_filename) {
         unsigned fn_len = strlen (z_filename);
 
-        ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: %s - genozip can only decompress files with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
+        ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: %s - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
 
         if (!vcf_filename && !flag_stdout && pipe_to_test_thread < 0) {
             vcf_filename = (char *)malloc(fn_len + 10);

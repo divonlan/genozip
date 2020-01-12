@@ -121,9 +121,15 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
             return false;
         }
 
-        // in concat mode, we write the header to the genozip file, only for the first vcf file
-        if (vb->z_file && (!flag_concat_mode || first_vcf)) 
-            zfile_write_vcf_header (vb, &vcf_header_text); 
+        if (vb->z_file) {
+            // in concat mode, we write the header to the genozip file, only for the first vcf file
+            if (!flag_concat_mode || first_vcf)
+                zfile_write_vcf_header (vb, &vcf_header_text); 
+            else
+                vb->z_file->vcf_data_so_far  += vcf_header_text.len; // length of the original VCF header
+
+//                vb->add_bytes[SEC_VCF_HEADER] -= vcf_header_text.len;
+        }
 
         vb->vcf_file->section_bytes[SEC_VCF_HEADER] = vcf_header_text.len;
         vb->z_file  ->section_bytes[SEC_VCF_HEADER] = vb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress

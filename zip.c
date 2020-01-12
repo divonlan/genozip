@@ -489,7 +489,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
                 ASSERT (!z_file->vcf_data_size || 
                         z_file->vcf_data_size /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
-                        "Error: VCF file uncompressed is of different length than expected - expected: %" PRIu64 " actual: %" PRIu64 "",
+                        "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
                         z_file->vcf_data_size, z_file->vcf_data_so_far);
 
                 vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
