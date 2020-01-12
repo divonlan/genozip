@@ -570,13 +570,13 @@ extern void zip_compress_fp_unit_test();
 #endif
 
 // sanity checks
-extern void main_exit();
-#define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); main_exit(); }}
-#define ASSERT0(condition, string)      { if (!(condition)) { fprintf (stderr, "\n%s\n", string); main_exit(); }}
+static inline void my_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
+#define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit(); }}
+#define ASSERT0(condition, string)      { if (!(condition)) { fprintf (stderr, "\n%s\n", string); my_exit(); }}
 #define ASSERTW(condition, format, ...) { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
 #define ASSERTW0(condition, string)     { if (!(condition)) { fprintf (stderr, "\n%s\n", string); } }
-#define ABORT(format, ...)              { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); main_exit();}
-#define ABORT0(string)                  { fprintf (stderr, "\n%s\n", string); main_exit();}
+#define ABORT(format, ...)              { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit();}
+#define ABORT0(string)                  { fprintf (stderr, "\n%s\n", string); my_exit();}
 
 #ifdef _MSC_VER
 typedef struct my_timespec TimeSpecType;

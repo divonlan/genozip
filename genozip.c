@@ -10,7 +10,10 @@
 #include "compatability/visual_c_getopt.h"
 #endif
 #include <fcntl.h>
+#include <dirent.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #ifdef _WIN32
 #include <process.h>
 #elif defined __APPLE__
@@ -522,21 +525,42 @@ static void main_generate_aes_key (const char *password)
     free (peppered_password);
 }
 
-static void main_list (const char *z_filename, bool finalize) 
+static void main_list_dir(); // forward declaration
+
+static void main_list (const char *z_filename, bool finalize, const char *subdir) 
 {
-    ASSERT (z_filename || finalize, "%s: missing filename. tip: to see all files in a folder, run: genols *", global_cmd);
+    if (!finalize) {
+        // no specific filename = show entire directory
+        if (!z_filename) {
+            main_list_dir("."); 
+            return;
+        }
+
+        // filename is a directory - show directory contents (but not recursively)
+        if (!subdir) {
+            struct stat st;
+            int ret = stat (z_filename, &st);
+            ASSERT (!ret, "Error: failed to stat(%s): %s", z_filename, strerror (errno));
+
+            if (S_ISDIR (st.st_mode)) {
+                main_list_dir (z_filename);
+                return;
+            }
+        }
+    }
 
     static bool first_file = true;
     static unsigned files_listed=0, files_ignored=0;
     static long long total_uncompressed_len=0, total_compressed_len=0;
     char c_str[20], u_str[20];
 
-
     const char *head_format = "%5s %8s %10s %10s %6s %-32s %s\n";
+    const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
+
 #ifdef _MSC_VER        
     const char *item_format = "%5u %8I64u %10s %10s %5uX %-32s %s\n";
 #else
-    const char *item_format = "%5u %8"PRIu64" %10s %10s %5uX %-32s %s\n";
+    const char *item_format = "%5u %8"PRIu64" %10s %10s %5uX %s%s%*s %s\n";
 #endif
 
     if (finalize) {
@@ -545,9 +569,9 @@ static void main_list (const char *z_filename, bool finalize)
             buf_human_readable_size(total_uncompressed_len, u_str);
             unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            printf ("Total:                   %19s %19s  %5uX  \n", c_str, u_str, ratio);
+            printf (foot_format, c_str, u_str, ratio);
             
-            if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf" GENOZIP_EXT " extension or are not readable\n", files_ignored);
+            if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf" GENOZIP_EXT " extension or are not readable\n\n", files_ignored);
         }
         return;
     }
@@ -572,15 +596,49 @@ static void main_list (const char *z_filename, bool finalize)
 
     unsigned ratio = z_file->disk_size ? ((double)ENDN64(vcf_header_header.vcf_data_size) / (double)z_file->disk_size) : 0;
     
+    bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
+
     buf_human_readable_size(z_file->disk_size, c_str);
     buf_human_readable_size(ENDN64(vcf_header_header.vcf_data_size), u_str);
     printf (item_format, ENDN32(vcf_header_header.num_samples), ENDN64(vcf_header_header.num_lines), 
-            c_str, u_str, ratio, z_filename, vcf_header_header.created);
+            c_str, u_str, ratio, 
+            (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
+            is_subdir ? -MAX (1, 32 - 1 - strlen(subdir)) : -32,
+            z_filename, vcf_header_header.created);
             
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += ENDN64(vcf_header_header.vcf_data_size);
     
+    files_listed++;
+
     file_close (&z_file);
+}
+
+static void main_list_dir(const char *dirname)
+{
+    DIR *dir;
+    struct dirent *ent;
+
+    dir = opendir (dirname);
+    ASSERT (dir, "Error: failed to open directory: %s", strerror (errno));
+
+    int ret = chdir (dirname);
+    ASSERT (!ret, "Error: failed to chdir(%s)", dirname);
+
+    while ((ent = readdir(dir))) {
+        
+        struct stat st;
+        ret = stat (ent->d_name, &st);
+        ASSERT (!ret, "Error: failed to stat(%s): %s", ent->d_name, strerror (errno));
+
+        if (!S_ISDIR (st.st_mode))  // don't go down subdirectories recursively
+            main_list (ent->d_name, false, dirname);
+    
+    }
+    closedir(dir);    
+
+    ret = chdir ("..");
+    ASSERT0 (!ret, "Error: failed to chdir(..)");
 }
 
 int main (int argc, char **argv)
@@ -758,7 +816,7 @@ int main (int argc, char **argv)
             case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, optind==argc); break;
             case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads); break;
             case TEST       : main_test  (next_input_file); break;
-            case LIST       : main_list  (next_input_file, false); break;
+            case LIST       : main_list  (next_input_file, false, NULL); break;
             
             default         : ASSERT(false, "%s: unrecognized command %c", global_cmd, command);
         }
@@ -767,10 +825,8 @@ int main (int argc, char **argv)
     } while (optind < argc);
             
     // if this is "list", finalize
-    if (command == LIST) main_list (NULL, true);
+    if (command == LIST) main_list (NULL, true, NULL);
 
     return 0;
 }
 
-// we make this a function so we can put a debugger breakpoint on it
-void main_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
