@@ -432,6 +432,7 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
     if (dl->has_haplotype_data) {
         buf_overlay (&dl->haplotype_data, &dl->line, &vb->line_ht_data, &offset_in_line, "dl->haplotype_data", line_i);
         
+        extern int flag_show_alleles; // defined in main()
         if (flag_show_alleles)
             printf ("%.*s\n", dl->haplotype_data.len, dl->haplotype_data.data);
     }

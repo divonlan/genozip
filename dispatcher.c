@@ -45,6 +45,8 @@ static TimeSpecType profiler_timer; // wallclock
 Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_file, File *z_file,
                             bool test_mode, bool show_progress, const char *filename)
 {
+    extern int flag_quiet; // set in main()
+
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
     DispatcherData *dd = (DispatcherData *)calloc (1, sizeof(DispatcherData));
@@ -76,6 +78,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
 void dispatcher_finish (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
+    extern int flag_show_memory, flag_concat_mode; // set in main()
 
     COPY_TIMER (dd->pseudo_vb->profile.wallclock);
 

@@ -146,7 +146,7 @@ typedef struct {
     char chrom[MAX_CHROM_LEN];         // a null-terminated ID of the chromosome
     int64_t min_pos, max_pos;          // minimum and maximum POS values in this VB. -1 if unknown
 
-    uint32_t vcf_data_size;            // size of variant block as it appears in the source file
+    uint32_t vb_data_size;            // size of variant block as it appears in the source file
     uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
     uint8_t haplotype_index[];         // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
@@ -321,7 +321,7 @@ typedef struct variant_block_ {
     uint32_t variant_block_i;  // number of variant block within VCF file
 
     // tracking execution
-    uint32_t vcf_data_size;    // size of variant block as it appears in the source file
+    uint32_t vb_data_size;     // size of variant block as it appears in the source file
     uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation
 
     ProfilerRec profile;
@@ -546,11 +546,7 @@ extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples;
 extern const char *global_cmd;            // set once in main()
-extern unsigned    global_max_threads;    // set in main()
 extern bool        global_little_endian;  // set in main()
-
-extern int flag_stdout, flag_force, flag_replace, flag_quiet, flag_concat_mode, flag_show_content, 
-           flag_show_alleles, flag_show_time, flag_show_memory, flag_multithreaded;
 
 // unit tests
 extern void seg_data_line_unit_test();
@@ -590,6 +586,8 @@ typedef struct my_timespec TimeSpecType;
 #else
 typedef struct timespec TimeSpecType;
 #endif
+
+extern int flag_show_time; // set in main()
 
 #define START_TIMER     TimeSpecType profiler_timer; \
                         if (flag_show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 

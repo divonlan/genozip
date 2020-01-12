@@ -577,7 +577,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     memcpy(vb->chrom, vardata_header->chrom, MAX_CHROM_LEN);
     vb->min_pos                 = ENDN64 (vardata_header->min_pos);
     vb->max_pos                 = ENDN64 (vardata_header->max_pos);
-    vb->vcf_data_size           = ENDN32 (vardata_header->vcf_data_size);
+    vb->vb_data_size            = ENDN32 (vardata_header->vb_data_size);
     
     ASSERT (global_num_samples == ENDN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, vardata_header->num_samples);
 
@@ -692,7 +692,7 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     
             vcffile_write_one_variant_block (vcf_file, processed_vb);
 
-            z_file->vcf_data_so_far += processed_vb->vcf_data_size; 
+            z_file->vcf_data_so_far += processed_vb->vb_data_size; 
 
             dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far, 0);
         }

@@ -11,6 +11,8 @@
 unsigned global_num_samples = 0; // a global param - assigned once before any thread is crated, and never changes - so no thread safety issue
 static Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
 
+extern int flag_concat_mode; // defined in main()
+
 static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffer *vcf_header)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken

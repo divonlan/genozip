@@ -16,7 +16,7 @@ static void zip_read_variant_block (File *vcf_file,
     unsigned first_line= *line_i;
 
     unsigned vb_line_i;
-    vb->vcf_data_size = 0; // size of variant block as it appears in the source file
+    vb->vb_data_size = 0; // size of variant block as it appears in the source file
     for (vb_line_i=0; vb_line_i < VARIANTS_PER_BLOCK; vb_line_i++) 
     {
         DataLine *dl = &vb->data_lines[vb_line_i];
@@ -36,7 +36,7 @@ static void zip_read_variant_block (File *vcf_file,
         (*line_i)++;
         
         // count bytes in the source file, for sanity check after we reconstruct
-        vb->vcf_data_size += dl->line.len;
+        vb->vb_data_size += dl->line.len;
     }
 
     vb->num_lines = vb_line_i;
@@ -332,7 +332,7 @@ static void zip_compress_variant_block (VariantBlock *vb)
 
     // allocate memory for the final compressed data of this vb. allocate 20% of the 
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
-    buf_alloc (vb, &vb->z_data, vb->vcf_data_size / 5, 1.2, "z_data", 0);
+    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
 
     // initalize variant block data (everything else is initialzed to 0 via calloc)
     vb->phase_type = PHASE_UNKNOWN;  // phase type of this block
@@ -421,6 +421,7 @@ static void zip_compress_variant_block (VariantBlock *vb)
 void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
                      File *z_file, bool test_mode, unsigned max_threads)
 {
+    extern int flag_show_alleles; // defined in main()
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);
 
     unsigned line_i = 0; // last line read (first line in file = 1, consistent with script line numbers)
@@ -474,7 +475,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             COPY_TIMER (processed_vb->profile.write);
 
             z_file->disk_so_far     += (long long)processed_vb->z_data.len;
-            z_file->vcf_data_so_far += (long long)processed_vb->vcf_data_size;
+            z_file->vcf_data_so_far += (long long)processed_vb->vb_data_size;
             z_file->num_lines       += (long long)processed_vb->num_lines;
 
             // update section stats

@@ -227,7 +227,7 @@ void zfile_compress_variant_data (VariantBlock *vb)
     vardata_header->num_samples_per_block   = ENDN32 (vb->num_samples_per_block);
     vardata_header->num_sample_blocks       = ENDN32 (vb->num_sample_blocks);
     vardata_header->ploidy                  = ENDN16 (vb->ploidy);
-    vardata_header->vcf_data_size           = ENDN32 (vb->vcf_data_size);
+    vardata_header->vb_data_size            = ENDN32 (vb->vb_data_size);
     vardata_header->max_gt_line_len         = ENDN32 (vb->max_gt_line_len);
     vardata_header->num_subfields           = ENDN16 (vb->num_subfields);
     vardata_header->min_pos                 = ENDN64 (vb->min_pos);
@@ -493,7 +493,7 @@ void zfile_update_vcf_header_section_header (File *z_file,
     ASSERT0((char*)&vcf_header.num_lines - (char*)&vcf_header.vcf_data_size == sizeof (long long), "Error: looks like SectionHeaderVCFHeader changed");
 
     int ret = fseek ((FILE *)z_file->file, (char*)&vcf_header.vcf_data_size - (char*)&vcf_header, SEEK_SET);
-    if (ret) return; // we cannot update the header - that's fine, these fields are optional - they improve performance. for example, if the file is stdout or a pipe (-t) we cannot update
+    if (ret) return; // we cannot update the header - that's fine, these fields are optional (eg they're using in --list). for example, if the file is stdout or a pipe (-t) we cannot update
 
     uint64_t header_vcf_data_size = ENDN64(vcf_data_size);
     fwrite (&header_vcf_data_size, sizeof (header_vcf_data_size), 1, (FILE *)z_file->file); 

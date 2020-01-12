@@ -189,6 +189,7 @@ long long buf_vb_memory_consumption (const VariantBlock *vb)
 
 static inline void buf_add(VariantBlock *vb, Buffer *buf)
 {
+    extern unsigned global_max_threads;    // set in main()
     Buffer *buffer_list   = &vb->buffer_list;
     unsigned max_num_buffers = buffer_list->size / sizeof (Buffer *);
 
