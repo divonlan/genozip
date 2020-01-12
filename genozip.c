@@ -288,10 +288,12 @@ static void main_genozip (const char *vcf_filename,
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
 
+    ASSERT0 (flag_concat_mode || !z_file, "Error: expecting z_file to be NULL in non-concat mode");
+
     // get output FILE
     if (!flag_stdout && pipefd_zip_to_unzip < 0) {
 
-        if (!z_file) { // if we're the second file onwards in concatenation mode - nothing to do
+        if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
             if (!z_filename) {
                 unsigned fn_len = strlen (vcf_filename);
                 z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
@@ -338,7 +340,7 @@ static void main_genozip (const char *vcf_filename,
 
     file_close (&vcf_file);
 
-    if (is_last_file && z_file) {
+    if ((is_last_file || !flag_concat_mode) && z_file) {
         // update the vcf data size in the GENOZIP vcf_header section
         if (z_file->type == GENOZIP)
             zfile_update_vcf_header_section_header (z_file, z_file->vcf_concat_data_size, z_file->num_lines);
