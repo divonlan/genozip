@@ -106,8 +106,7 @@ typedef struct {
     uint64_t vcf_data_size; // number of bytes in the original VCF file
     uint64_t num_lines;     // number of variants (data lines) in the original vCF file
 
-    char created [FILE_METADATA_LEN];
-    char modified[FILE_METADATA_LEN];
+    char created[FILE_METADATA_LEN];
 } SectionHeaderVCFHeader; 
 
 // The variant data section appears for each variant block

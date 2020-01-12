@@ -168,9 +168,15 @@ static void zfile_get_metadata(char *metadata)
 
     strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
 
-    char *user = getenv ("USER")     ? getenv ("USER")     : "unknown";
-    char *host = getenv ("HOSTNAME") ? getenv ("HOSTNAME") : "unknown";
-    sprintf(metadata, "%.19s %.20s@%.30s", time_buf, user, host); // 71 chars + the string termintor \0 = 72
+    const char *user = getenv ("USER");
+    const char *host = getenv ("HOSTNAME");
+    sprintf(metadata, "%.19s %.20s%s%.30s", time_buf,  // 71 chars + the string termintor \0 = 72
+            user ? user : "",
+            user && host ? "@" : "",
+            host ? host : "");
+
+    // sanity
+    ASSERT0 (strlen (metadata) < FILE_METADATA_LEN, "Error: metadata too long");
 }
 
 void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
@@ -189,7 +195,6 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     vcf_header.vcf_data_size           = ENDN64 (vb->vcf_file->vcf_data_size) /* 0 if gzipped - will be updated later*/; 
     
     zfile_get_metadata (vcf_header.created);
-    zfile_get_metadata (vcf_header.modified);
 
     static Buffer vcf_header_buf = EMPTY_BUFFER;
 
@@ -483,7 +488,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
 
 // updating the VCF bytes of a GENOZIP file. If we're compressing a simple VCF file, we will know
 // the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
-// when we're done
+// when we're done. num_lines can only be known after we're done.
 void zfile_update_vcf_header_section_header (File *z_file, 
                                              uint64_t vcf_data_size,
                                              uint64_t vcf_num_lines)

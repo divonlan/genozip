@@ -527,6 +527,14 @@ static void main_list (const char *z_filename, bool finalize)
     static long long total_uncompressed_len=0, total_compressed_len=0;
     char c_str[20], u_str[20];
 
+
+    const char *head_format = "%5s %8s %10s %10s %6s %-32s %s\n";
+#ifdef _MSC_VER        
+    const char *item_format = "%5u %8I64u %10s %10s %5uX %-32s %s\n";
+#else
+    const char *item_format = "%5u %8"PRIu64" %10s %10s %5uX %-32s %s\n";
+#endif
+
     if (finalize) {
         if (files_listed > 1) {
             buf_human_readable_size(total_compressed_len, c_str);
@@ -541,7 +549,7 @@ static void main_list (const char *z_filename, bool finalize)
     }
 
     if (first_file) {
-        printf ("Individuals     Variants          Compressed        Uncompressed  Factor  Name\n"); // follow gzip format
+        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", "Name", "Creation"); // follow gzip format
         first_file = false;
     }
     
@@ -562,14 +570,8 @@ static void main_list (const char *z_filename, bool finalize)
     
     buf_human_readable_size(z_file->disk_size, c_str);
     buf_human_readable_size(ENDN64(vcf_header_header.vcf_data_size), u_str);
-    printf (
-#ifdef _MSC_VER        
-        "%11u  %11I64u %19s %19s  %5uX  %s\n", 
-#else
-        "%11u  %11"PRIu64" %19s %19s  %5uX  %s\n", 
-#endif
-            ENDN32(vcf_header_header.num_samples), ENDN64(vcf_header_header.num_lines), 
-            c_str, u_str, ratio, z_filename);
+    printf (item_format, ENDN32(vcf_header_header.num_samples), ENDN64(vcf_header_header.num_lines), 
+            c_str, u_str, ratio, z_filename, vcf_header_header.created);
             
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += ENDN64(vcf_header_header.vcf_data_size);
