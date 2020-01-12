@@ -28,7 +28,8 @@ test:
     {% set genozip_executables = [
       "genozip",
       "genounzip",
-      "genocat"
+      "genocat",
+      "genols"
     ] %}
     {% for executable in genozip_executables %}
     - test -f ${PREFIX}/bin/{{ executable }}  # [unix]

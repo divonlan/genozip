@@ -71,7 +71,7 @@ DEBUG_OBJS := $(SRCS:.c=.debug-o)
 
 DEPS       := $(SRCS:.c=.d)
 
-all: genozip$(EXE) genounzip$(EXE) genocat$(EXE)
+all: genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
 
 debug: genozip-debug$(EXE)
 
@@ -89,8 +89,6 @@ debug: genozip-debug$(EXE)
 	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS_DEBUG)
 
-all: genozip$(EXE) genounzip$(EXE) genocat$(EXE)
-
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
@@ -99,7 +97,7 @@ genozip-debug$(EXE): $(DEBUG_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-genounzip$(EXE) genocat$(EXE): genozip$(EXE)
+genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
 	@ln $^ $@
@@ -114,6 +112,7 @@ ifneq ($(OS),Windows_NT)
 endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genounzip$(EXE)
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
+	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genols$(EXE)
 
 TARBALL := conda/genozip-$(VERSION).tar.gz
 
@@ -157,11 +156,11 @@ conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10543"
 	@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
 
-WINDOWS_INSTALL_FILES = genozip.exe genounzip.exe genocat.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
+WINDOWS_INSTALL_FILES = genozip.exe genounzip.exe genocat.exe genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
 
 windows-installer: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
 	@echo 'Copying files to windows'
-	@cp genozip.exe genounzip.exe genocat.exe windows
+	@cp genozip.exe genounzip.exe genocat.exe genols.exe windows
 	@echo 'Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
 	@echo '  (2) Make sure the version is set to $(VERSION)'
@@ -189,7 +188,7 @@ windows/readme.txt: genozip$(EXE)
 
 clean:
 	@echo Cleaning up
-	@rm -f $(DEPS) $(OBJS) genozip$(EXE) genounzip$(EXE) genocat$(EXE) 
+	@rm -f $(DEPS) $(OBJS) genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE) 
 
 clean-debug:
 	@echo Cleaning up debug

@@ -7,9 +7,11 @@ genozip
 genozip.exe
 genounzip*
 genocat*
+genols*
 !windows/genozip.exe
 !windows/genounzip.exe
 !windows/genocat.exe
+!windows/genols.exe
 1000genomes/*
 data/*
 benchmark.txt

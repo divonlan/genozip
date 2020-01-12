@@ -4,13 +4,15 @@ Compress or uncompress VCF (Variant Call Format) files
 Usage: genozip [options]... [files]...
        genounzip [options]... [files]...
        genocat [options]... [files]...
+       genols files
 
 Actions - use at most one of these actions:
    -z --compress     Compress a .vcf, .vcf.gz or .vcf.bz2 file (Yes! You can compress an already-compressed file).
-                     The source file is left unchanged. This is the default action for genozip
+                     The source file is left unchanged. This is the default action of genozip
    -d --decompress   Decompress a .vcf.genozip file. The .vcf .genozip file is left unchanged.
-                     This is the default action for genounzip
+                     This is the default action of genounzip
    -l --list         List the compression ratios of the .vcf.genozip files
+                     This is the default action of genols
    -t --test         Test genozip. Compress the .vcf file(s), uncompress, and then compare the
                      result to the original .vcf - all in memory without writing to any file
    -h --help         Show this help page
@@ -23,7 +25,7 @@ Flags:
    -R --replace      Replace the source file with the result file, rather than leaving it unchanged
    -o --output       Output file name. This option can also be used to concatenate multiple input files
                      with the same individuals, into a single concatenated output file
-   -q --quiet        Don't show the progress indicator
+   -p --password     Password-protected - encrypted with 256-bit AES   -q --quiet        Don't show the progress indicator
    -@ --threads      Specify the number of threads to use. By default, genozip uses all cores available to it
    --show-content    Show the information content of VCF files and the compression ratios of each component
    --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file.

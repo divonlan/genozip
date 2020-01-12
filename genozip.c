@@ -82,13 +82,15 @@ static int main_print_help (bool explicit)
     printf ("Usage: genozip [options]... [files]...\n");
     printf ("       genounzip [options]... [files]...\n");
     printf ("       genocat [options]... [files]...\n");
+    printf ("       genols files\n");
     printf ("\n");
     printf ("Actions - use at most one of these actions:\n");
     printf ("   -z --compress     Compress a .vcf, .vcf.gz or .vcf.bz2 file (Yes! You can compress an already-compressed file).\n");
-    printf ("                     The source file is left unchanged. This is the default action for genozip\n");
+    printf ("                     The source file is left unchanged. This is the default action of genozip\n");
     printf ("   -d --decompress   Decompress a .vcf" GENOZIP_EXT " file. The .vcf " GENOZIP_EXT " file is left unchanged.\n");
-    printf ("                     This is the default action for genounzip\n");
+    printf ("                     This is the default action of genounzip\n");
     printf ("   -l --list         List the compression ratios of the .vcf" GENOZIP_EXT " files\n");
+    printf ("                     This is the default action of genols\n");
     printf ("   -t --test         Test genozip. Compress the .vcf file(s), uncompress, and then compare the\n");
     printf ("                     result to the original .vcf - all in memory without writing to any file\n");
     printf ("   -h --help         Show this help page\n");
@@ -522,7 +524,7 @@ static void main_generate_aes_key (const char *password)
 
 static void main_list (const char *z_filename, bool finalize) 
 {
-    ASSERT (z_filename || finalize, "%s: missing filename", global_cmd);
+    ASSERT (z_filename || finalize, "%s: missing filename. tip: to see all files in a folder, run: genols *", global_cmd);
 
     static bool first_file = true;
     static unsigned files_listed=0, files_ignored=0;
@@ -682,7 +684,9 @@ int main (int argc, char **argv)
     if (command < 0) { 
 
         // genozip with no input filename, no output filename, and no output or input redirection - show help
-        if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) 
+        if (strstr (argv[0], "genols"))         command = LIST; // genols can be run without arguments
+        
+        else if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) 
             return main_print_help (false);
 
         else if (strstr (argv[0], "genounzip")) command = UNCOMPRESS;
