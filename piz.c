@@ -663,7 +663,9 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 
 void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
 {
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, vcf_file, z_file, test_mode, true, z_basename);
+    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, vcf_file, z_file, test_mode, 
+                                             !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
+                                             z_basename);
 
     // read and write VCF header
     bool success = vcf_header_genozip_to_vcf (dispatcher_get_pseudo_vb (dispatcher));
