@@ -348,7 +348,7 @@ unsigned mtf_get_sf_i_by_subfield (MtfContext *mtf_ctx, unsigned *num_subfields,
 }
 
 // this is called by the piz dispatcher thread after reading a dictionary section 
-void mtf_integrate_dictionary_fragment (VariantBlock *vb, const char *section_data)
+void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
 {
     START_TIMER;
 

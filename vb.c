@@ -55,7 +55,7 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->has_genotype_data = vb->has_haplotype_data = vb->ready_to_dispatch = false;
     vb->phase_type = PHASE_UNKNOWN;
     vb->vcf_file = vb->z_file = NULL;
-
+    vb->z_next_header_i = 0;
     vb->min_pos = vb->max_pos = vb->last_pos = vb->chrom[0] = vb->is_sorted_by_pos = 0;
 
     memset(vb->add_bytes, 0, sizeof(vb->add_bytes));
@@ -84,6 +84,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->ht_columns_data);
+    buf_free(&vb->flavored_password);
 
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) 
         mtf_free_context (&vb->mtf_ctx[i]);

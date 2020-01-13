@@ -28,18 +28,17 @@
 #endif
 
 #include "genozip.h"
-#include "crypto/WjCryptLib_Md5.h"
-#include "crypto/aes.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
+
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 bool global_little_endian;
-uint8_t global_aes_key[AES_KEYLEN];
 
 // the flags - some are static, some are globals 
 static int flag_stdout=0, flag_force=0, flag_replace=0, flag_show_content=0;
-int flag_quiet=0, flag_concat_mode=0, flag_show_alleles=0, flag_show_time=0, flag_multithreaded=1, flag_show_memory=0;
+int flag_quiet=0, flag_concat_mode=0, 
+    flag_show_alleles=0, flag_show_time=0, flag_multithreaded=1, flag_show_memory=0;
 
 int main_print_license(bool for_installer)
 {
@@ -337,7 +336,7 @@ static void main_genozip (const char *vcf_filename,
     else ABORT0 ("Error: No output channel");
     
     const char *basename = get_basename(vcf_filename, false, "(stdin)");
-    zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads);
+    zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads, is_last_file);
 
     if (flag_show_content) main_display_section_stats (vcf_file, z_file);
 
@@ -345,13 +344,8 @@ static void main_genozip (const char *vcf_filename,
 
     file_close (&vcf_file);
 
-    if ((is_last_file || !flag_concat_mode) && z_file) {
-        // update the vcf data size in the GENOZIP vcf_header section
-        if (z_file->type == GENOZIP)
-            zfile_update_vcf_header_section_header (z_file, z_file->vcf_concat_data_size, z_file->num_lines);
-
+    if ((is_last_file || !flag_concat_mode) && z_file) 
         file_close (&z_file); 
-    }
 
     if (remove_vcf_file) file_remove (vcf_filename); 
 }
@@ -499,32 +493,6 @@ static void main_test (const char *vcf_filename)
     return;
 }
 
-// 256 bit AES is a concatenation of 2 MD5 hashes of the password - each one of length 128 bit
-// each hash is a hash of the password concatenated with a constant string
-static void main_generate_aes_key (const char *password)
-{
-    // add some salt to the password
-    static const char *SALT = "frome";
-    char *salty_password = malloc (strlen (SALT) + strlen (password) + 1);
-    sprintf (salty_password, "%s%s", password, SALT);
-    MD5_HASH salty_hash;
-    Md5Calculate (salty_password, strlen (salty_password), &salty_hash);
-
-    // now some pepper
-    static const char *PEPPER = "vaughan";
-    char *peppered_password = malloc (strlen (PEPPER) + strlen (password) + 1);
-    sprintf (peppered_password, "%s%s", password, PEPPER);
-    MD5_HASH peppered_hash;
-    Md5Calculate (peppered_password, strlen (peppered_password), &peppered_hash);
-
-    // get hash
-    memcpy (global_aes_key, salty_hash.bytes, MD5_HASH_SIZE); // first half of key
-    memcpy (global_aes_key + MD5_HASH_SIZE, peppered_hash.bytes, MD5_HASH_SIZE); // 2nd half of key
-
-    free (salty_password);
-    free (peppered_password);
-}
-
 static void main_list_dir(); // forward declaration
 
 static void main_list (const char *z_filename, bool finalize, const char *subdir) 
@@ -558,7 +526,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
 
     const char *head_format = "%5s %8s %10s %10s %6s %*s %s\n";
     const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
-
+    const char *encr_format = "<encrypted>                                 %s\n";
 #ifdef _MSC_VER        
     const char *item_format = "%5u %8I64u %10s %10s %5uX %-32s %s\n";
 #else
@@ -572,9 +540,10 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
             unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
             printf (foot_format, c_str, u_str, ratio);
-            
-            if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf" GENOZIP_EXT " extension or are not readable\n\n", files_ignored);
         }
+        
+        if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf" GENOZIP_EXT " extension\n\n", files_ignored);
+        
         return;
     }
 
@@ -589,27 +558,38 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
         return;
     }
 
-    SectionHeaderVCFHeader vcf_header_header;
-    bool success = vcf_header_get_vcf_header (z_file, &vcf_header_header);
+    static SectionHeaderVCFHeader *vcf_header_header = NULL;
+    if (!vcf_header_header) vcf_header_header = malloc (crypt_padded_len (sizeof (SectionHeaderVCFHeader)));
+    ASSERT0 (vcf_header_header, "failed to malloc vcf_header_header");
+
+    bool encrypted;
+    bool success = vcf_header_get_vcf_header (z_file, vcf_header_header, &encrypted);
     if (!success) {
-        files_ignored++;
+        if (encrypted)
+            printf (encr_format, z_filename);
+        else
+            files_ignored++;
         return;
     }   
 
-    unsigned ratio = z_file->disk_size ? ((double)ENDN64(vcf_header_header.vcf_data_size) / (double)z_file->disk_size) : 0;
+    uint64_t vcf_data_size = ENDN64 (vcf_header_header->vcf_data_size);
+    uint32_t num_samples   = ENDN32 (vcf_header_header->num_samples);
+    uint64_t num_lines     = ENDN64 (vcf_header_header->num_lines);
+
+    unsigned ratio = z_file->disk_size ? ((double)vcf_data_size / (double)z_file->disk_size) : 0;
     
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
     buf_human_readable_size(z_file->disk_size, c_str);
-    buf_human_readable_size(ENDN64(vcf_header_header.vcf_data_size), u_str);
-    printf (item_format, ENDN32(vcf_header_header.num_samples), ENDN64(vcf_header_header.num_lines), 
+    buf_human_readable_size(vcf_data_size, u_str);
+    printf (item_format, num_samples, num_lines, 
             c_str, u_str, ratio, 
             (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
             is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-            z_filename, vcf_header_header.created);
+            z_filename, vcf_header_header->created);
             
     total_compressed_len   += z_file->disk_size;
-    total_uncompressed_len += ENDN64(vcf_header_header.vcf_data_size);
+    total_uncompressed_len += vcf_data_size;
     
     files_listed++;
 
@@ -655,7 +635,6 @@ int main (int argc, char **argv)
 
     static int command = -1;  // must be static to initialize list_options 
     char *out_filename = NULL;
-    char *password = NULL;
     char *threads_str = NULL;
 
     global_cmd = get_basename(argv[0], true, "(executable)"); // global var
@@ -697,7 +676,7 @@ int main (int argc, char **argv)
         };        
         
         int option_index = 0;
-        int c = getopt_long (argc, argv, "cdfhlLqRtVz@:o:", long_options, &option_index);
+        int c = getopt_long (argc, argv, "cdfhlLqRtVz@:o:p:", long_options, &option_index);
 
         if (c == -1) break; // no more options
 
@@ -708,20 +687,20 @@ int main (int argc, char **argv)
                 command=c; 
                 break;
 
-            case 'c' : flag_stdout        = 1 ; break;
-            case 'f' : flag_force         = 1 ; break;
-            case 'R' : flag_replace       = 1 ; break;
-            case 'q' : flag_quiet         = 1 ; break;
-            case '@' : threads_str  = optarg  ; break;
-            case 'o' : out_filename = optarg  ; break;
-            case 'p' : password = optarg      ; break;
+            case 'c' : flag_stdout        = 1      ; break;
+            case 'f' : flag_force         = 1      ; break;
+            case 'R' : flag_replace       = 1      ; break;
+            case 'q' : flag_quiet         = 1      ; break;
+            case '@' : threads_str  = optarg       ; break;
+            case 'o' : out_filename = optarg       ; break;
+            case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
                 if (long_options[option_index].val == 'o') 
                     out_filename = optarg;
 
                 if (long_options[option_index].val == 'p') 
-                    password = optarg;
+                    crypt_set_password (optarg);
 
                 else if (long_options[option_index].val == '@') 
                     threads_str = optarg;
@@ -765,7 +744,6 @@ int main (int argc, char **argv)
     ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --quiet / -q option", global_cmd);
     ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --threads / -@ option", global_cmd);
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --output / -o option", global_cmd);
-    ASSERTW (!password          || command == COMPRESS || command == UNCOMPRESS || command == TEST || command == LIST, "%s: ignoring --password / -p option", global_cmd);
     ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with -z or -t", global_cmd);
     ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with -z or -t", global_cmd);
     
@@ -784,8 +762,6 @@ int main (int argc, char **argv)
         if (global_max_threads < 3 && command == TEST) // with -t, we allow 3 threads even if we have only 1 or 2 cores
             global_max_threads = 3; 
     }
-
-    if (password) main_generate_aes_key (password);
 
     if (command == TEST) {
         flag_stdout = flag_force = flag_replace = false;

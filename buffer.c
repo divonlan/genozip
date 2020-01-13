@@ -390,8 +390,10 @@ void buf_append (VariantBlock *vb, Buffer *base,
 
 void buf_free_abandoned_memories()
 {
+    char **abm = (char**)abandoned_memories.data;
+
     for (unsigned i=0; i < abandoned_memories.len; i++)
-        free (((char**)abandoned_memories.data)[i]);
+        free (abm[i]);
 }
 
 // free buffer - without freeing memory. A future buf_malloc of this buffer will reuse the memory if possible.

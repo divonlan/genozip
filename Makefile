@@ -46,7 +46,7 @@ OLD_C_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c b
 	   crypto/aes.c crypto/WjCryptLib_Md5.c
        
 C99_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
-	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c \
+	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c \
        compatability/mac_gettime.c compatability/win32_pthread.c compatability/visual_c_gettime.c \
 	   compatability/visual_c_misc_funcs.c
 

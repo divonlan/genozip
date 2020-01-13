@@ -419,7 +419,7 @@ static void zip_compress_variant_block (VariantBlock *vb)
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
 void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
-                     File *z_file, bool test_mode, unsigned max_threads)
+                     File *z_file, bool test_mode, unsigned max_threads, bool is_last_file)
 {
     extern int flag_show_alleles; // defined in main()
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);
@@ -502,6 +502,12 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
         }
     } while (!dispatcher_is_done (dispatcher));
+
+    // go back and update some fields in the vcf header's section header - only if we can go back
+    // (i.e. not output redirected). we might need to re-encrypt.
+    extern int flag_concat_mode; // set in main()
+    if ((is_last_file || !flag_concat_mode) && z_file && z_file->type == GENOZIP) 
+        zfile_update_vcf_header_section_header (dispatcher_get_pseudo_vb (dispatcher));
 
 finish:
     z_file->disk_size = z_file->disk_so_far;

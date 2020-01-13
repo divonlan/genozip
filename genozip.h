@@ -27,11 +27,11 @@
 #else
 #include "compatability/win32_pthread.h"
 #endif
-
 #if defined __APPLE__ 
 #include "compatability/mac_gettime.h"
 #endif
- 
+#include "crypto/aes.h"
+
 #define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the genozip file format changes
 
 #define GENOZIP_EXT ".genozip"
@@ -82,16 +82,20 @@ typedef enum {
 
 // Section headers - big endian
 
-#define GENOZIP_MAGIC 0x2705
+#define GENOZIP_MAGIC 0x27052012
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
 typedef struct {
-    uint16_t magic; 
-    uint8_t  section_type;
-    uint32_t compressed_offset; // number of bytes from the start of the header that is the start of compressed data
+    uint32_t magic; 
+    uint32_t compressed_offset;     // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
+    uint32_t data_encrypted_len;    // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t data_compressed_len;
     uint32_t data_uncompressed_len;
+    uint32_t variant_block_i;       // VB with in file starting from 1 ; 0 for VCF Header
+    uint16_t section_i;             // section within VB - 0 for Variant Data
+    uint8_t  section_type;          
+    uint8_t  unused;                // padding + for future use
 } SectionHeader; 
 
 // The VCF header section appears once in the file, and includes the VCF file header 
@@ -100,13 +104,13 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
-    uint32_t num_samples;   // number of samples in the original VCF file
+    uint32_t num_samples;    // number of samples in the original VCF file
 
-    // these 2 fields must appear together, in this order, for zfile_update_vcf_header_section_header()
-    uint64_t vcf_data_size; // number of bytes in the original VCF file
-    uint64_t num_lines;     // number of variants (data lines) in the original vCF file
+    uint64_t vcf_data_size;  // number of bytes in the original VCF file
+#define NUM_LINES_UNKNOWN ((uint64_t)-1) 
+    uint64_t num_lines;      // number of variants (data lines) in the original vCF file
 
-    char created[FILE_METADATA_LEN];
+    char created[FILE_METADATA_LEN];    
 } SectionHeaderVCFHeader; 
 
 // The variant data section appears for each variant block
@@ -122,18 +126,18 @@ typedef struct {
  
 typedef struct {
     SectionHeader h;
-    uint32_t first_line;                  // line (starting from 1) of this variant block in the VCF file
-    uint16_t num_lines;             // number of variants in this block
+    uint32_t first_line;               // line (starting from 1) of this variant block in the VCF file
+    uint32_t num_lines;                // number of variants in this block
     uint8_t phase_type;
     
     // flags
-    uint8_t has_genotype_data : 1;  // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
-    uint8_t is_sorted_by_pos  : 1;  // 1 if variant block is sorted by POS
+    uint8_t has_genotype_data : 1;     // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
+    uint8_t is_sorted_by_pos  : 1;     // 1 if variant block is sorted by POS
     uint8_t for_future_use    : 6;
 
     // features of the data
     uint32_t num_samples;
-    uint32_t num_haplotypes_per_line;     // 0 if no haplotypes
+    uint32_t num_haplotypes_per_line;  // 0 if no haplotypes
     uint32_t num_sample_blocks;
     uint32_t num_samples_per_block;
     uint16_t ploidy;
@@ -145,7 +149,7 @@ typedef struct {
     char chrom[MAX_CHROM_LEN];         // a null-terminated ID of the chromosome
     int64_t min_pos, max_pos;          // minimum and maximum POS values in this VB. -1 if unknown
 
-    uint32_t vb_data_size;            // size of variant block as it appears in the source file
+    uint32_t vb_data_size;             // size of variant block as it appears in the source file
     uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
     uint8_t haplotype_index[];         // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
@@ -153,8 +157,8 @@ typedef struct {
 
 typedef struct {
     SectionHeader h;
-    uint32_t num_snips;        // number of items in dictionary
-    char subfield_id[SUBFIELD_ID_LEN];   // \0-padded id
+    uint32_t num_snips;                // number of items in dictionary
+    char subfield_id[SUBFIELD_ID_LEN]; // \0-padded id
 } SectionHeaderDictionary; 
 
 #pragma pack(pop)
@@ -243,39 +247,42 @@ typedef struct {
     const char *name;
     FileType type;
     // these relate to actual bytes on the disk
-    uint64_t disk_size; // 0 if not known (eg stdin)
-    uint64_t disk_so_far;  // data read/write to/from "disk" (using fread/fwrite)
+    uint64_t disk_size;                // 0 if not known (eg stdin)
+    uint64_t disk_so_far;              // data read/write to/from "disk" (using fread/fwrite)
 
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
-    uint64_t vcf_data_size;    // VCF: size of the VCF data (if known)
-                                         // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
-    uint64_t vcf_data_so_far;  // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
-                                         // GENOZIP: VCF data so far of original VCF file currently being processed
+    uint64_t vcf_data_size;            // VCF: size of the VCF data (if known)
+                                       // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
+    uint64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
+                                       // GENOZIP: VCF data so far of original VCF file currently being processed
 
     // Used for READING VCF/VCF_GZ/VCF_BZ2 files: stats used to optimize memory allocation
-    double avg_header_line_len, avg_data_line_len;// average length of data line so far. 
+    double avg_header_line_len, avg_data_line_len;   // average length of data line so far. 
     uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
 
     // Used for WRITING GENOZIP files
-    uint64_t disk_at_beginning_of_this_vcf_file; // the value of disk_size when starting to read this vcf file
-    uint64_t vcf_concat_data_size; // concatenated vcf_data_size of all files compressed
-    uint64_t num_lines;            // number of lines in concatenated (or single) vcf file
+    uint64_t disk_at_beginning_of_this_vcf_file;     // the value of disk_size when starting to read this vcf file
+    uint64_t vcf_concat_data_size;     // concatenated vcf_data_size of all files compressed
+    uint64_t num_lines;                // number of lines in concatenated (or single) vcf file
+    
+    SectionHeaderVCFHeader vcf_header; // store the VCF header - we might need to update it at the very end;
+    uint8_t vcf_header_enc_padding[AES_BLOCKLEN-1]; // just so we can overwrite vcf_header with encryption padding
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     pthread_mutex_t mutex;
     bool mutex_initialized;
     unsigned next_variant_i_to_merge;  // merging vb's dictionaries into mtf_ctx needs to be in the variant_block_i order
-    unsigned num_subfields;             // length of populated subfield_ids and mtx_ctx;
+    unsigned num_subfields;            // length of populated subfield_ids and mtx_ctx;
     MtfContext mtf_ctx[MAX_SUBFIELDS]; // a merge of dictionaries of all VBs
 
     // Information content stats - how many bytes does this file have in each section type
     uint64_t section_bytes[NUM_SEC_TYPES];   
 
     // USED FOR READING ALL FILES
-#   define READ_BUFFER_SIZE (1<<19) // 512KB
-    uint32_t next_read, last_read; // indices into read_buffer
-    bool eof; // we reached EOF
-    char read_buffer[]; // only allocated for mode=READ files   
+#   define READ_BUFFER_SIZE (1<<19)    // 512KB
+    uint32_t next_read, last_read;     // indices into read_buffer
+    bool eof;                          // we reached EOF
+    char read_buffer[];                // only allocated for mode=READ files   
 } File;
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
@@ -348,6 +355,8 @@ typedef struct variant_block_ {
     Buffer line_ht_data;       // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
 
+    Buffer flavored_password;  // used by crypt_generate_aes_key()
+
     // section data - ready to compress
     Buffer variant_data_section_data;    // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0
     Buffer haplotype_permutation_index;
@@ -360,28 +369,33 @@ typedef struct variant_block_ {
     // in contrast the sample blocks of haplotypes are num_samples_per_block*ploidy haplotypes as permuted. 
     // e.g. genotypes and phase in sample_block_i=1 don't necessary correspond to haplotypes in sample_block_i=1.
 
-    Buffer *haplotype_sections_data; // this is the haplotype character for each haplotype in the transposed sample group
-    Buffer *phase_sections_data;     // this is the phase character for each genotype in the sample group
-    Buffer *genotype_sections_data;  // this is for piz - each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
+    Buffer *haplotype_sections_data;  // this is the haplotype character for each haplotype in the transposed sample group
+    Buffer *phase_sections_data;      // this is the phase character for each genotype in the sample group
+    Buffer *genotype_sections_data;   // this is for piz - each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
     Buffer genotype_one_section_data; // for zip we need only one section data
 
     // compresssed file data 
-    Buffer z_data;                  // all headers and section data as read from disk
-    Buffer z_section_headers;       // (used by piz) an array of unsigned offsets of section headers within z_data
+    Buffer z_data;                    // all headers and section data as read from disk
 
-    Buffer gt_sb_line_starts_buf,   // used by zip_get_genotype_vb_start_len 
+    // encryption stuff
+    struct AES_ctx aes_ctx;
+    int16_t z_next_header_i;          // next header of this VB to be encrypted or decrypted
+
+    Buffer z_section_headers;         // (used by piz) an array of unsigned offsets of section headers within z_data
+
+    Buffer gt_sb_line_starts_buf,     // used by zip_get_genotype_vb_start_len 
            gt_sb_line_lengths_buf,
            genotype_section_lens_buf; 
 
-    Buffer helper_index_buf;         // used by zip_do_haplotypes
+    Buffer helper_index_buf;          // used by zip_do_haplotypes
 
-    Buffer vardata_header_buf;       // used by zfile_compress_variant_data
+    Buffer vardata_header_buf;        // used by zfile_compress_variant_data
 
-    Buffer compressed;               // used by various zfile functions
+    Buffer compressed;                // used by various zfile functions
+ 
+    Buffer ht_columns_data;           // used by piz_get_ht_permutation_lookups
 
-    Buffer ht_columns_data;          // used by piz_get_ht_permutation_lookups
-
-    Buffer next_gt_in_sample;        // used for reconstructing genotype data by piz
+    Buffer next_gt_in_sample;         // used for reconstructing genotype data by piz
 
     // subfields stuff 
     unsigned num_subfields;
@@ -412,10 +426,10 @@ extern void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file);
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
 extern bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line);
 extern bool vcf_header_genozip_to_vcf (VariantBlock *vb);
-extern bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header);
+extern bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header, bool *encrypted);
 
 #define NUM_VB_POOLS  2 // for zip and piz that can run concurrently during --test
-#define POOL_ID_QUANT 10000
+#define POOL_ID_QUANT 1000000
 #define POOL_ID_ZIP   (1*POOL_ID_QUANT)
 #define POOL_ID_UNZIP (2*POOL_ID_QUANT)
 typedef struct {
@@ -440,7 +454,7 @@ extern void mtf_get_snip_by_word_index (VariantBlock *vb, MtfContext *ctx, const
 extern void mtf_clone_ctx (VariantBlock *vb);
 extern unsigned mtf_merge_in_vb_ctx (VariantBlock *vb);
 extern unsigned mtf_get_sf_i_by_subfield (MtfContext *mtf_ctx, unsigned *num_subfields, SubfieldIdType subfield);
-extern void mtf_integrate_dictionary_fragment (VariantBlock *vb, const char *data);
+extern void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VariantBlock *vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlock *vb);
 extern void mtf_initialize_mutex (File *z_file);
@@ -454,7 +468,7 @@ extern void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nod
 extern void gl_deoptimize_dictionary (char *data, unsigned len);
 
 extern void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
-                            File *z_file, bool test_mode, unsigned max_threads);
+                            File *z_file, bool test_mode, unsigned max_threads, bool is_last_file);
 
 extern void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, 
                             bool test_mode, unsigned max_threads);
@@ -491,12 +505,22 @@ extern bool zfile_read_one_vb (VariantBlock *vb);
 
 // returns offset of header within data, -1 if EOF
 extern int zfile_read_one_section (VariantBlock *vb, 
-                                   Buffer *data /* buffer to append */, 
+                                   Buffer *data /* buffer to append */, const char *buf_name,
                                    unsigned header_size, SectionType section_type,
                                    bool allow_eof);
 
-extern void zfile_uncompress_section(VariantBlock *vb, const void *section_header, Buffer *uncompressed_data, SectionType expected_section_type);
-extern void zfile_update_vcf_header_section_header (File *z_file, uint64_t vcf_data_size, uint64_t vcf_num_lines);
+extern void zfile_uncompress_section(VariantBlock *vb, void *section_header, Buffer *uncompressed_data, SectionType expected_section_type);
+extern void zfile_update_vcf_header_section_header (VariantBlock *vb);
+
+extern void crypt_set_password (char *new_password);
+extern bool crypt_have_password ();
+extern bool crypt_prompt_for_password();
+extern unsigned crypt_padded_len (unsigned len);
+extern bool crypt_get_encrypted_len (unsigned *data_encrypted_len /* in/out */, unsigned *padding_len /* out */);
+extern void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i);
+extern void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len);
+extern void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len);
+extern unsigned crypt_max_padding_len();
 
 extern void squeeze (VariantBlock *vb,
                      uint8_t *dst, // memory should be pre-allocated by caller

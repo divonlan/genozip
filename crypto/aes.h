@@ -1,7 +1,11 @@
 #ifndef _AES_H_
 #define _AES_H_
 
+#ifndef _MSC_VER // Microsoft compiler
 #include <stdint.h>
+#else
+#include "../compatability/visual_c_stdint.h"
+#endif
 
 // #define the macros below to 1/0 to enable/disable the mode of operation.
 //
@@ -46,6 +50,7 @@ struct AES_ctx
 #if (defined(CBC) && (CBC == 1)) || (defined(CTR) && (CTR == 1))
   uint8_t Iv[AES_BLOCKLEN];
 #endif
+  int next_bi;   // added by divon
 };
 
 void AES_init_ctx(struct AES_ctx* ctx, const uint8_t* key);

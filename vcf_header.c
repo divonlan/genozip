@@ -147,7 +147,7 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb)
 {
     static Buffer compressed_vcf_section = EMPTY_BUFFER;
 
-    int ret = zfile_read_one_section(vb, &compressed_vcf_section, sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
+    int ret = zfile_read_one_section(vb, &compressed_vcf_section, "compressed_vcf_section", sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
     if (ret == EOF) {
         buf_free (&compressed_vcf_section);
         return false; // empty file - not an error
@@ -159,15 +159,11 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb)
     ASSERT (header->genozip_version == GENOZIP_VERSION, "Error: file version %u is newer than the latest version supported %u. Please upgrade.",
             header->genozip_version, GENOZIP_VERSION);
 
-    ASSERT (ENDN32 (header->h.compressed_offset) == sizeof(SectionHeaderVCFHeader), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", ENDN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
-
-    unsigned data_compressed_len = compressed_vcf_section.len - sizeof(SectionHeaderVCFHeader);
-    ASSERT (data_compressed_len == ENDN32 (header->h.data_compressed_len), "Error: failed to read VCF header's data. Read %u bytes, expecting %u bytes", data_compressed_len, header->h.data_compressed_len);
+    ASSERT (ENDN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", ENDN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
 
     vb->z_file->num_lines     = vb->vcf_file->num_lines     = ENDN64 (header->num_lines);
     vb->z_file->vcf_data_size = vb->vcf_file->vcf_data_size = ENDN64 (header->vcf_data_size);
-
-
+    
     // now get the text of the VCF header itself
     static Buffer vcf_header_buf = EMPTY_BUFFER;
     zfile_uncompress_section(vb, header, &vcf_header_buf, SEC_VCF_HEADER);
@@ -192,9 +188,27 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb)
 }
 
 // returns the the VCF header section's header from a GENOZIP file
-bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header)
+bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header, bool *encrypted)
 {
-    int bytes = fread ((char*)vcf_header_header, 1, sizeof(SectionHeaderVCFHeader), (FILE *)z_file->file);
+    int bytes = fread ((char*)vcf_header_header, 1, crypt_padded_len (sizeof(SectionHeaderVCFHeader)), (FILE *)z_file->file);
     
-    return (bytes == sizeof(SectionHeaderVCFHeader) && ENDN16 (vcf_header_header->h.magic) == GENOZIP_MAGIC);
+    if (bytes < sizeof(SectionHeaderVCFHeader)) {
+        *encrypted = false; // we can't read for some reason - but its not an encryption issue
+        return false;
+    }
+
+    if (ENDN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
+        return true; // not encrypted
+
+    if (crypt_have_password()) {
+        VariantBlock fake_vb;
+        memset (&fake_vb, 0, sizeof(fake_vb));
+        crypt_do (&fake_vb, (uint8_t *)vcf_header_header, crypt_padded_len (sizeof (SectionHeaderVCFHeader)), 0, -1);
+
+        if (ENDN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
+            return true; // we successfully decrypted it with the user provided password
+    }
+
+    *encrypted = true;
+    return false; // we either don't have a password, or the password we have didn't work
 }

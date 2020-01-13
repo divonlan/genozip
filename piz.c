@@ -562,7 +562,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)(vb->z_data.data + section_index[0]);
     vb->first_line              = ENDN32 (vardata_header->first_line);
-    vb->num_lines               = ENDN16 (vardata_header->num_lines);
+    vb->num_lines               = ENDN32 (vardata_header->num_lines);
     vb->phase_type              = (PhaseType)vardata_header->phase_type;
     vb->has_genotype_data       = vardata_header->has_genotype_data;
     vb->is_sorted_by_pos        = vardata_header->is_sorted_by_pos;

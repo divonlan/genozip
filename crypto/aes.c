@@ -35,8 +35,8 @@ NOTE:   String length must be evenly divisible by 16byte (str_len % 16 == 0)
 /*****************************************************************************/
 /* Includes:                                                                 */
 /*****************************************************************************/
-#include <stdint.h>
-#include <string.h> // CBC mode, for memset
+
+#include <string.h> 
 #include "aes.h"
 
 /*****************************************************************************/
@@ -96,6 +96,7 @@ static const uint8_t sbox[256] = {
   0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf,
   0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16 };
 
+/*
 static const uint8_t rsbox[256] = {
   0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
   0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
@@ -113,6 +114,7 @@ static const uint8_t rsbox[256] = {
   0x60, 0x51, 0x7f, 0xa9, 0x19, 0xb5, 0x4a, 0x0d, 0x2d, 0xe5, 0x7a, 0x9f, 0x93, 0xc9, 0x9c, 0xef,
   0xa0, 0xe0, 0x3b, 0x4d, 0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb, 0xbb, 0x3c, 0x83, 0x53, 0x99, 0x61,
   0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d };
+*/
 
 // The round constant word array, Rcon[i], contains the values given by 
 // x to the power (i-1) being powers of x (x is denoted as {02}) in the field GF(2^8)
@@ -231,6 +233,7 @@ void AES_init_ctx_iv(struct AES_ctx* ctx, const uint8_t* key, const uint8_t* iv)
 {
   KeyExpansion(ctx->RoundKey, key);
   memcpy (ctx->Iv, iv, AES_BLOCKLEN);
+  ctx->next_bi = AES_BLOCKLEN;
 }
 void AES_ctx_set_iv(struct AES_ctx* ctx, const uint8_t* iv)
 {
@@ -540,8 +543,10 @@ void AES_CTR_xcrypt_buffer(struct AES_ctx* ctx, uint8_t* buf, uint32_t length)
   uint8_t buffer[AES_BLOCKLEN];
   
   unsigned i;
-  int bi;
-  for (i = 0, bi = AES_BLOCKLEN; i < length; ++i, ++bi)
+//  int bi;
+//  for (i = 0, bi = AES_BLOCKLEN; i < length; ++i, ++bi)
+  int bi = ctx->next_bi;
+  for (i = 0; i < length; ++i, ++bi)
   {
     if (bi == AES_BLOCKLEN) /* we need to regen xor compliment in buffer */
     {
@@ -566,6 +571,8 @@ void AES_CTR_xcrypt_buffer(struct AES_ctx* ctx, uint8_t* buf, uint32_t length)
 
     buf[i] = (buf[i] ^ buffer[bi]);
   }
+
+  ctx->next_bi = bi; // added by divon
 }
 
 #endif // #if defined(CTR) && (CTR == 1)
