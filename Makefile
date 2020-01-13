@@ -7,7 +7,7 @@
 # Mingw: http://mingw-w64.org/doku.php  (Windows 32 bit version also works)
 # Cygwin: https://www.cygwin.com/
 
-VERSION = 1.0.0
+VERSION = 1.0.1
 
 # use gcc, unless its conda - let it define its own compiler
 ifndef CONDA_BUILD_SYSROOT 
@@ -120,6 +120,7 @@ $(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS)
 	@echo "Archiving to $@"
 	@tar --create --gzip --file $(TARBALL) $^
 	@echo "Committing $(TARBALL) & pushing changes to genozip/master"
+	@(git add $(TARBALL))
 	@(git commit -m "update archive" $(TARBALL) ; git push)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
