@@ -212,7 +212,6 @@ extern uint32_t base250_decode (const uint8_t *str);
 
 // convert index to node pointer or NULL
 #define N(i) ((i) != NIL ? &((MtfNode *)ctx->mtf.data)[i] : NULL) // index to pointer
-#define I(n) ((n) ? (int)((n) - (MtfNode *)ctx->mtf.data) : NIL)      // pointer to index
 
 #define NIL -1
 typedef struct MtfNode_ {
