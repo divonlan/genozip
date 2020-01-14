@@ -6,15 +6,14 @@
 
 #include "genozip.h" 
 
-// The number of columns comprising a state in AES. This is a constant in AES. Value=4
-#define Nb 4
+#define Nb 4 // The number of columns comprising a state in AES. This is a constant in AES.
 #define Nk (AES_KEYLEN/4)
 #define Nr 14 // value is for 256 bit key AES
 
 // state - array holding the intermediate results during decryption. can be viewed as a matrix or vector
 typedef union {
-    uint8_t m[4][4];
-    uint8_t v[16];
+    uint8_t m[Nb][Nb];
+    uint8_t v[Nb*Nb];
 } state_t;
 
 // The lookup-tables are marked const so they can be placed in read-only storage instead of RAM
@@ -43,9 +42,6 @@ static const uint8_t sbox[256] = {
 // x to the power (i-1) being powers of x (x is denoted as {02}) in the field GF(2^8)
 static const uint8_t Rcon[11] = { 0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36 };
 
-#define getSBoxValue(num)  (sbox[(num)])
-#define getSBoxInvert(num) (rsbox[(num)])
-
 // This function shifts the 4 bytes in a word to the left once. [a0,a1,a2,a3] becomes [a1,a2,a3,a0]
 void static inline RotWord (uint8_t *w)
 {
@@ -59,10 +55,10 @@ void static inline RotWord (uint8_t *w)
 // this function that takes a four-byte input word and applies the S-box to each of the four bytes to produce an output word.
 static void inline Subword (uint8_t *w)
 {
-    w[0] = getSBoxValue(w[0]);
-    w[1] = getSBoxValue(w[1]);
-    w[2] = getSBoxValue(w[2]);
-    w[3] = getSBoxValue(w[3]);
+    w[0] = sbox[w[0]];
+    w[1] = sbox[w[1]];
+    w[2] = sbox[w[2]];
+    w[3] = sbox[w[3]];
 }
 
 static void inline AssignWord (uint8_t *dst, const uint8_t *src)
@@ -76,7 +72,7 @@ static void inline XorWord (uint8_t *dst, const uint8_t *w1, const uint8_t *w2)
 }
 
 // This function produces Nb(Nr+1) round keys. The round keys are used in each round to decrypt the states. 
-static void KeyExpansion(uint8_t* aes_round_key, const uint8_t* Key)
+static void inline KeyExpansion(uint8_t* aes_round_key, const uint8_t* Key)
 {
     // The first round key is the key itself.
     memcpy (aes_round_key, Key, AES_KEYLEN);
@@ -102,20 +98,18 @@ static void KeyExpansion(uint8_t* aes_round_key, const uint8_t* Key)
 
 // This function adds the round key to state.
 // The round key is added to the state by an XOR function.
-static void AddRoundKey(uint8_t round, state_t* state, const uint8_t* aes_round_key)
+static inline void AddRoundKey(uint8_t round, state_t* state, const uint8_t* aes_round_key)
 {
-    for (uint8_t i=0; i < 4; ++i) 
-        for (uint8_t j=0; j < 4; ++j)
-            state->m[i][j] ^= aes_round_key[(round * Nb * 4) + (i * Nb) + j];
+    for (uint8_t i=0; i < Nb*Nb; i++) 
+        state->v[i] ^= aes_round_key[(round * Nb * 4) + i];
 }
 
 // The SubBytes Function Substitutes the values in the
 // state matrix with values in an S-box.
-static void SubBytes(state_t* state)
+static inline void SubBytes (state_t* state)
 {
-    for (uint8_t i=0; i < 4; ++i) 
-        for (uint8_t j=0; j < 4; ++j) 
-            state->m[j][i] = getSBoxValue(state->m[j][i]);
+    for (uint8_t i=0; i < Nb*Nb; i++) 
+        state->v[i] = sbox[state->v[i]];
 }
 
 // The ShiftRows() function shifts the rows in the state to the left.
@@ -155,7 +149,7 @@ static inline uint8_t xtime(uint8_t x)
 }
 
 // MixColumns function mixes the columns of the state matrix
-static void MixColumns(state_t* state)
+static void inline MixColumns (state_t* state)
 {
     uint8_t Tmp, Tm, t;
     for (uint8_t i=0; i < 4; ++i) {  
@@ -191,7 +185,7 @@ static void Cipher(state_t* state, const uint8_t* aes_round_key)
     AddRoundKey(Nr, state, aes_round_key);
 }
 
-/* Symmetrical operation: same function for encrypting as for decrypting. Note any IV/nonce should never be reused with the same key */
+// Symmetrical operation: same function for encrypting as for decrypting. Note any IV/nonce should never be reused with the same key 
 void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
 {
     state_t buffer; 
