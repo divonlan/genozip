@@ -1572,9 +1572,3 @@ const char * BZ_API(BZ2_bzerror) (BZFILE *b, int *errnum)
 /*-------------------------------------------------------------*/
 
 
-// this function was added by Divon Lan (c) 2020
-unsigned long long BZ_API(BZ2_bzoffset) (BZFILE* b)
-{
-   return  (((unsigned long long)((bzFile*)b)->strm.total_in_hi32) << 32) |
-            ((unsigned long long)((bzFile*)b)->strm.total_in_lo32);
-}
