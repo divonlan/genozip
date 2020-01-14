@@ -16,9 +16,6 @@ typedef union {
     uint8_t v[Nb*Nb];
 } AesStateType;
 
-// The lookup-tables are marked const so they can be placed in read-only storage instead of RAM
-// The numbers below can be computed dynamically trading ROM for RAM - 
-// This can be useful in (embedded) bootloader applications, where ROM is often limited.
 static const uint8_t sbox[256] = {
     //0     1    2      3     4    5     6     7      8    9     A      B    C     D     E     F
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -43,7 +40,7 @@ static const uint8_t sbox[256] = {
 static const uint8_t Rcon[11] = { 0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36 };
 
 // This function shifts the 4 bytes in a word to the left once. [a0,a1,a2,a3] becomes [a1,a2,a3,a0]
-void static inline aes_rotate_word (uint8_t *w)
+static void inline aes_rotate_word (uint8_t *w)
 {
     const uint8_t u8tmp = w[0];
     w[0] = w[1];
@@ -115,7 +112,7 @@ static inline void aes_sub_bytes (AesStateType* state)
 // The aes_shift_rows() function shifts the rows in the state to the left.
 // Each row is shifted with different offset.
 // Offset = Row number. So the first row is not shifted.
-static void aes_shift_rows(AesStateType* state)
+static inline void aes_shift_rows(AesStateType* state)
 {
     uint8_t temp;
 
@@ -149,7 +146,7 @@ static inline uint8_t xtime(uint8_t x)
 }
 
 // aes_mix_columns function mixes the columns of the state matrix
-static void inline aes_mix_columns (AesStateType* state)
+static inline void aes_mix_columns (AesStateType* state)
 {
     uint8_t Tmp, Tm, t;
     for (uint8_t i=0; i < 4; ++i) {  
