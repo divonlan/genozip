@@ -43,7 +43,7 @@ static const uint8_t sbox[256] = {
 static const uint8_t Rcon[11] = { 0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36 };
 
 // This function shifts the 4 bytes in a word to the left once. [a0,a1,a2,a3] becomes [a1,a2,a3,a0]
-void static inline RotWord (uint8_t *w)
+void static inline aes_rotate_word (uint8_t *w)
 {
     const uint8_t u8tmp = w[0];
     w[0] = w[1];
@@ -53,7 +53,7 @@ void static inline RotWord (uint8_t *w)
 }
 
 // this function that takes a four-byte input word and applies the S-box to each of the four bytes to produce an output word.
-static void inline Subword (uint8_t *w)
+static void inline aes_substitute_word (uint8_t *w)
 {
     w[0] = sbox[w[0]];
     w[1] = sbox[w[1]];
@@ -61,18 +61,18 @@ static void inline Subword (uint8_t *w)
     w[3] = sbox[w[3]];
 }
 
-static void inline AssignWord (uint8_t *dst, const uint8_t *src)
+static void inline aes_assign_word (uint8_t *dst, const uint8_t *src)
 {
     *(uint32_t *)dst = *(uint32_t *)src;
 }
 
-static void inline XorWord (uint8_t *dst, const uint8_t *w1, const uint8_t *w2)
+static void inline aes_xor_word (uint8_t *dst, const uint8_t *w1, const uint8_t *w2)
 {
     *(uint32_t *)dst = *(uint32_t *)w1 ^ *(uint32_t *)w2;
 }
 
 // This function produces Nb(Nr+1) round keys. The round keys are used in each round to decrypt the states. 
-static void inline KeyExpansion(uint8_t* aes_round_key, const uint8_t* Key)
+static void inline aes_expand_key(uint8_t* aes_round_key, const uint8_t* Key)
 {
     // The first round key is the key itself.
     memcpy (aes_round_key, Key, AES_KEYLEN);
@@ -82,40 +82,40 @@ static void inline KeyExpansion(uint8_t* aes_round_key, const uint8_t* Key)
         
         uint8_t tempa[4]; 
   
-        AssignWord (tempa, &aes_round_key[(i-1)*4]);
+        aes_assign_word (tempa, &aes_round_key[(i-1)*4]);
 
         if (i % Nk == 0) {
-            RotWord (tempa);
-            Subword (tempa);
+            aes_rotate_word (tempa);
+            aes_substitute_word (tempa);
             tempa[0] = tempa[0] ^ Rcon[i/Nk];
         }
 
-        if (i % Nk == 4) Subword (tempa);
+        if (i % Nk == 4) aes_substitute_word (tempa);
 
-        XorWord (&aes_round_key[i*4], &aes_round_key[(i-Nk)*4], tempa);
+        aes_xor_word (&aes_round_key[i*4], &aes_round_key[(i-Nk)*4], tempa);
     }
 }
 
 // This function adds the round key to state.
 // The round key is added to the state by an XOR function.
-static inline void AddRoundKey(uint8_t round, state_t* state, const uint8_t* aes_round_key)
+static inline void aes_add_round_key(uint8_t round, state_t* state, const uint8_t* aes_round_key)
 {
     for (uint8_t i=0; i < Nb*Nb; i++) 
         state->v[i] ^= aes_round_key[(round * Nb * 4) + i];
 }
 
-// The SubBytes Function Substitutes the values in the
+// The aes_sub_bytes Function Substitutes the values in the
 // state matrix with values in an S-box.
-static inline void SubBytes (state_t* state)
+static inline void aes_sub_bytes (state_t* state)
 {
     for (uint8_t i=0; i < Nb*Nb; i++) 
         state->v[i] = sbox[state->v[i]];
 }
 
-// The ShiftRows() function shifts the rows in the state to the left.
+// The aes_shift_rows() function shifts the rows in the state to the left.
 // Each row is shifted with different offset.
 // Offset = Row number. So the first row is not shifted.
-static void ShiftRows(state_t* state)
+static void aes_shift_rows(state_t* state)
 {
     uint8_t temp;
 
@@ -148,8 +148,8 @@ static inline uint8_t xtime(uint8_t x)
     return ((x<<1) ^ (((x>>7) & 1) * 0x1b));
 }
 
-// MixColumns function mixes the columns of the state matrix
-static void inline MixColumns (state_t* state)
+// aes_mix_columns function mixes the columns of the state matrix
+static void inline aes_mix_columns (state_t* state)
 {
     uint8_t Tmp, Tm, t;
     for (uint8_t i=0; i < 4; ++i) {  
@@ -162,27 +162,27 @@ static void inline MixColumns (state_t* state)
     }
 }
 
-// Cipher is the main function that encrypts the PlainText.
-static void Cipher(state_t* state, const uint8_t* aes_round_key)
+// aes_cipher is the main function that encrypts the PlainText.
+static void aes_cipher(state_t* state, const uint8_t* aes_round_key)
 {
     // Add the First round key to the state before starting the rounds.
-    AddRoundKey(0, state, aes_round_key); 
+    aes_add_round_key(0, state, aes_round_key); 
     
     // There will be Nr rounds.
     // The first Nr-1 rounds are identical.
     // These Nr-1 rounds are executed in the loop below.
     for (uint8_t round=1; round < Nr; ++round) {
-        SubBytes(state);
-        ShiftRows(state);
-        MixColumns(state);
-        AddRoundKey(round, state, aes_round_key);
+        aes_sub_bytes(state);
+        aes_shift_rows(state);
+        aes_mix_columns(state);
+        aes_add_round_key(round, state, aes_round_key);
     }
     
     // The last round is given below.
-    // The MixColumns function is not here in the last round.
-    SubBytes(state);
-    ShiftRows(state);
-    AddRoundKey(Nr, state, aes_round_key);
+    // The aes_mix_columns function is not here in the last round.
+    aes_sub_bytes(state);
+    aes_shift_rows(state);
+    aes_add_round_key(Nr, state, aes_round_key);
 }
 
 // Symmetrical operation: same function for encrypting as for decrypting. Note any IV/nonce should never be reused with the same key 
@@ -194,7 +194,7 @@ void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
  
         if (vb->bi == AES_BLOCKLEN) { /* we need to regen xor compliment in buffer */
             memcpy (buffer.v, vb->aes_iv, AES_BLOCKLEN);
-            Cipher (&buffer, vb->aes_round_key);
+            aes_cipher (&buffer, vb->aes_round_key);
 
             /* Increment aes_iv and handle overflow */
             for (vb->bi = (AES_BLOCKLEN - 1); vb->bi >= 0; --vb->bi) {
@@ -214,7 +214,7 @@ void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
 
 void aes_initialize (VariantBlock *vb, const uint8_t* key, const uint8_t* iv)
 {
-    KeyExpansion(vb->aes_round_key, key);
+    aes_expand_key(vb->aes_round_key, key);
     memcpy (vb->aes_iv, iv, AES_BLOCKLEN);
     vb->bi = AES_BLOCKLEN;
 }
