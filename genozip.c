@@ -526,12 +526,8 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
 
     const char *head_format = "%5s %8s %10s %10s %6s %*s %s\n";
     const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
-    const char *encr_format = "<encrypted>                                 %s\n";
-#ifdef _MSC_VER        
-    const char *item_format = "%5u %8I64u %10s %10s %5uX %-32s %s\n";
-#else
-    const char *item_format = "%5u %8"PRIu64" %10s %10s %5uX %s%s%*s %s\n";
-#endif
+    const char *encr_format = "<encrypted>                                 %s%s%*s\n";
+    const char *item_format = "%5u %s %10s %10s %5uX %s%s%*s %s\n";
 
     if (finalize) {
         if (files_listed > 1) {
@@ -562,11 +558,16 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     if (!vcf_header_header) vcf_header_header = malloc (crypt_padded_len (sizeof (SectionHeaderVCFHeader)));
     ASSERT0 (vcf_header_header, "failed to malloc vcf_header_header");
 
+    bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
+
     bool encrypted;
     bool success = vcf_header_get_vcf_header (z_file, vcf_header_header, &encrypted);
     if (!success) {
         if (encrypted)
-            printf (encr_format, z_filename);
+            printf (encr_format, 
+                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
+                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+                    z_filename);
         else
             files_ignored++;
         return;
@@ -576,13 +577,21 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     uint32_t num_samples   = ENDN32 (vcf_header_header->num_samples);
     uint64_t num_lines     = ENDN64 (vcf_header_header->num_lines);
 
+    char num_lines_str[50];
+    if (num_lines != NUM_LINES_UNKNOWN)
+#ifdef _MSC_VER        
+        sprintf (num_lines_str, "%8I64u", num_lines);
+#else
+        sprintf (num_lines_str, "%8"PRIu64, num_lines);
+#endif
+    else
+        sprintf (num_lines_str, "%-8s", "N/A");
+
     unsigned ratio = z_file->disk_size ? ((double)vcf_data_size / (double)z_file->disk_size) : 0;
     
-    bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
-
     buf_human_readable_size(z_file->disk_size, c_str);
     buf_human_readable_size(vcf_data_size, u_str);
-    printf (item_format, num_samples, num_lines, 
+    printf (item_format, num_samples, num_lines_str, 
             c_str, u_str, ratio, 
             (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
             is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
