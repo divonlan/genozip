@@ -11,8 +11,11 @@
 #define Nk (AES_KEYLEN/4)
 #define Nr 14 // value is for 256 bit key AES
 
-// state - array holding the intermediate results during decryption.
-typedef uint8_t state_t[4][4];
+// state - array holding the intermediate results during decryption. can be viewed as a matrix or vector
+typedef union {
+    uint8_t m[4][4];
+    uint8_t v[16];
+} state_t;
 
 // The lookup-tables are marked const so they can be placed in read-only storage instead of RAM
 // The numbers below can be computed dynamically trading ROM for RAM - 
@@ -101,10 +104,9 @@ static void KeyExpansion(uint8_t* aes_round_key, const uint8_t* Key)
 // The round key is added to the state by an XOR function.
 static void AddRoundKey(uint8_t round, state_t* state, const uint8_t* aes_round_key)
 {
-    uint8_t i,j;
-    for (i = 0; i < 4; ++i) 
-      for (j = 0; j < 4; ++j)
-          (*state)[i][j] ^= aes_round_key[(round * Nb * 4) + (i * Nb) + j];
+    for (uint8_t i=0; i < 4; ++i) 
+        for (uint8_t j=0; j < 4; ++j)
+            state->m[i][j] ^= aes_round_key[(round * Nb * 4) + (i * Nb) + j];
 }
 
 // The SubBytes Function Substitutes the values in the
@@ -113,7 +115,7 @@ static void SubBytes(state_t* state)
 {
     for (uint8_t i=0; i < 4; ++i) 
         for (uint8_t j=0; j < 4; ++j) 
-            (*state)[j][i] = getSBoxValue((*state)[j][i]);
+            state->m[j][i] = getSBoxValue(state->m[j][i]);
 }
 
 // The ShiftRows() function shifts the rows in the state to the left.
@@ -124,27 +126,27 @@ static void ShiftRows(state_t* state)
     uint8_t temp;
 
     // Rotate first row 1 columns to left  
-    temp           = (*state)[0][1];
-    (*state)[0][1] = (*state)[1][1];
-    (*state)[1][1] = (*state)[2][1];
-    (*state)[2][1] = (*state)[3][1];
-    (*state)[3][1] = temp;
+    temp           = state->m[0][1];
+    state->m[0][1] = state->m[1][1];
+    state->m[1][1] = state->m[2][1];
+    state->m[2][1] = state->m[3][1];
+    state->m[3][1] = temp;
 
     // Rotate second row 2 columns to left  
-    temp           = (*state)[0][2];
-    (*state)[0][2] = (*state)[2][2];
-    (*state)[2][2] = temp;
+    temp           = state->m[0][2];
+    state->m[0][2] = state->m[2][2];
+    state->m[2][2] = temp;
 
-    temp           = (*state)[1][2];
-    (*state)[1][2] = (*state)[3][2];
-    (*state)[3][2] = temp;
+    temp           = state->m[1][2];
+    state->m[1][2] = state->m[3][2];
+    state->m[3][2] = temp;
 
     // Rotate third row 3 columns to left
-    temp           = (*state)[0][3];
-    (*state)[0][3] = (*state)[3][3];
-    (*state)[3][3] = (*state)[2][3];
-    (*state)[2][3] = (*state)[1][3];
-    (*state)[1][3] = temp;
+    temp           = state->m[0][3];
+    state->m[0][3] = state->m[3][3];
+    state->m[3][3] = state->m[2][3];
+    state->m[2][3] = state->m[1][3];
+    state->m[1][3] = temp;
 }
 
 static inline uint8_t xtime(uint8_t x)
@@ -157,23 +159,13 @@ static void MixColumns(state_t* state)
 {
     uint8_t Tmp, Tm, t;
     for (uint8_t i=0; i < 4; ++i) {  
-        t   = (*state)[i][0];
-        Tmp = (*state)[i][0] ^ (*state)[i][1] ^ (*state)[i][2] ^ (*state)[i][3] ;
-        Tm  = (*state)[i][0] ^ (*state)[i][1] ; Tm = xtime(Tm);  (*state)[i][0] ^= Tm ^ Tmp ;
-        Tm  = (*state)[i][1] ^ (*state)[i][2] ; Tm = xtime(Tm);  (*state)[i][1] ^= Tm ^ Tmp ;
-        Tm  = (*state)[i][2] ^ (*state)[i][3] ; Tm = xtime(Tm);  (*state)[i][2] ^= Tm ^ Tmp ;
-        Tm  = (*state)[i][3] ^ t ;              Tm = xtime(Tm);  (*state)[i][3] ^= Tm ^ Tmp ;
+        t   = state->m[i][0];
+        Tmp = state->m[i][0] ^ state->m[i][1] ^ state->m[i][2] ^ state->m[i][3] ;
+        Tm  = state->m[i][0] ^ state->m[i][1] ; Tm = xtime(Tm);  state->m[i][0] ^= Tm ^ Tmp ;
+        Tm  = state->m[i][1] ^ state->m[i][2] ; Tm = xtime(Tm);  state->m[i][1] ^= Tm ^ Tmp ;
+        Tm  = state->m[i][2] ^ state->m[i][3] ; Tm = xtime(Tm);  state->m[i][2] ^= Tm ^ Tmp ;
+        Tm  = state->m[i][3] ^ t ;              Tm = xtime(Tm);  state->m[i][3] ^= Tm ^ Tmp ;
     }
-}
-
-// Multiply is used to multiply numbers in the field GF(2^8)
-static inline uint8_t Multiply(uint8_t x, uint8_t y)
-{
-  return (((y & 1) * x) ^
-       ((y>>1 & 1) * xtime(x)) ^
-       ((y>>2 & 1) * xtime(xtime(x))) ^
-       ((y>>3 & 1) * xtime(xtime(xtime(x)))) ^
-       ((y>>4 & 1) * xtime(xtime(xtime(xtime(x)))))); /* this last call to xtime() can be omitted */
 }
 
 // Cipher is the main function that encrypts the PlainText.
@@ -200,38 +192,36 @@ static void Cipher(state_t* state, const uint8_t* aes_round_key)
 }
 
 /* Symmetrical operation: same function for encrypting as for decrypting. Note any IV/nonce should never be reused with the same key */
-void aes_xcrypt_buffer (VariantBlock *vb, uint8_t* buf, uint32_t length)
+void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
 {
-    uint8_t buffer[AES_BLOCKLEN];
-  
-    int bi = vb->next_bi;
-    for (unsigned i=0; i < length; i++, bi++) {
-        if (bi == AES_BLOCKLEN) { /* we need to regen xor compliment in buffer */
-            memcpy(buffer, vb->aes_iv, AES_BLOCKLEN);
-            Cipher((state_t*)buffer,vb->aes_round_key);
+    state_t buffer; 
+
+    for (unsigned i=0; i < length; i++, vb->bi++) {
+ 
+        if (vb->bi == AES_BLOCKLEN) { /* we need to regen xor compliment in buffer */
+            memcpy (buffer.v, vb->aes_iv, AES_BLOCKLEN);
+            Cipher (&buffer, vb->aes_round_key);
 
             /* Increment aes_iv and handle overflow */
-            for (bi = (AES_BLOCKLEN - 1); bi >= 0; --bi) {
-                if (vb->aes_iv[bi] == 255) {
-                    vb->aes_iv[bi] = 0;
+            for (vb->bi = (AES_BLOCKLEN - 1); vb->bi >= 0; --vb->bi) {
+                if (vb->aes_iv[vb->bi] == 255) {
+                    vb->aes_iv[vb->bi] = 0;
                     continue;
                 } 
-                vb->aes_iv[bi] += 1;
+                vb->aes_iv[vb->bi] += 1;
                 break;   
             }
-            bi = 0;
+            vb->bi = 0;
         }
 
-        buf[i] = (buf[i] ^ buffer[bi]);
+        data[i] = (data[i] ^ buffer.v[vb->bi]);
     }
-
-    vb->next_bi = bi;
 }
 
 void aes_initialize (VariantBlock *vb, const uint8_t* key, const uint8_t* iv)
 {
     KeyExpansion(vb->aes_round_key, key);
     memcpy (vb->aes_iv, iv, AES_BLOCKLEN);
-    vb->next_bi = AES_BLOCKLEN;
+    vb->bi = AES_BLOCKLEN;
 }
 

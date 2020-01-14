@@ -361,7 +361,7 @@ typedef struct variant_block_ {
     Buffer flavored_password;  // used by crypt_generate_aes_key()
     uint8_t aes_round_key[240];// for 256 bit aes
     uint8_t aes_iv[AES_BLOCKLEN];
-    int next_bi;
+    int bi;
 
     // section data - ready to compress
     Buffer variant_data_section_data;    // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0
@@ -527,7 +527,7 @@ extern void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len);
 extern unsigned crypt_max_padding_len();
 
 extern void aes_initialize (VariantBlock *vb, const uint8_t *key, const uint8_t *iv);
-extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *buf, uint32_t length);
+extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length);
 
 extern void squeeze (VariantBlock *vb,
                      uint8_t *dst, // memory should be pre-allocated by caller
