@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#define Z_LARGE64
 #include <zlib.h>
 #include <bzlib.h>
 
@@ -29,7 +30,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
         }
         else if (file_has_ext (file->name, ".vcf.gz")) {
             file->type = VCF_GZ;
-            file->file = gzopen (file->name, mode == READ ? "rb" : "wb");    
+            file->file = gzopen64 (file->name, mode == READ ? "rb" : "wb");    
         }
         else if (file_has_ext (file->name, ".vcf.bz2")) {
             file->type = VCF_BZ2;
