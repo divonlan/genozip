@@ -7,8 +7,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "zlib/zlib.h"
-#include "bzlib/bzlib.h"
+#include <zlib.h>
+#include <bzlib.h>
+
 #include "genozip.h"
 
 File *file_open (const char *filename, FileMode mode, FileType expected_type)

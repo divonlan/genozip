@@ -7,8 +7,8 @@
 #include <sys/stat.h>
 
 #define Z_LARGE64
-#include "zlib/zlib.h"
-#include "bzlib/bzlib.h"
+#include <zlib.h>
+#include <bzlib.h>
 
 #include "genozip.h"
 
