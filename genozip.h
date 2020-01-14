@@ -30,7 +30,6 @@
 #if defined __APPLE__ 
 #include "compatability/mac_gettime.h"
 #endif
-#include "crypto/aes.h"
 
 #define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the genozip file format changes
 
@@ -49,11 +48,14 @@
                                 // explosion in case of an error in the VCF file
 
 #define MAX_SUBFIELDS      32   // maximum number of subfield types (except for GT) that is supported in one GENOZIP file. This constant can be increased if needed.
-#define SUBFIELD_ID_LEN    8 // VCF spec doesn't limit the ID length, we limit it to 8 chars. zero-padded.
+#define SUBFIELD_ID_LEN    8    // VCF spec doesn't limit the ID length, we limit it to 8 chars. zero-padded.
 typedef struct {
-    char id[SUBFIELD_ID_LEN]; // \0-padded IDs 
+    char id[SUBFIELD_ID_LEN];   // \0-padded IDs 
 } SubfieldIdType;
 #define EMPTY_SUBFIELD_ID { {0,0,0,0,0,0,0,0} }
+
+#define AES_BLOCKLEN       16   // aes encrypts blocks of 128 bits
+#define AES_KEYLEN         32   // 256 bit
 
 // Note: the algorithm will use as many cores as it can - but there's no speed penalty for a higher MAX_COMPUTE_THREADS
 // that number of cores - it will not be faster, but also not slower.
@@ -355,7 +357,11 @@ typedef struct variant_block_ {
     Buffer line_ht_data;       // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
 
+    // crypto stuff
     Buffer flavored_password;  // used by crypt_generate_aes_key()
+    uint8_t aes_round_key[240];// for 256 bit aes
+    uint8_t aes_iv[AES_BLOCKLEN];
+    int next_bi;
 
     // section data - ready to compress
     Buffer variant_data_section_data;    // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0
@@ -377,8 +383,6 @@ typedef struct variant_block_ {
     // compresssed file data 
     Buffer z_data;                    // all headers and section data as read from disk
 
-    // encryption stuff
-    struct AES_ctx aes_ctx;
     int16_t z_next_header_i;          // next header of this VB to be encrypted or decrypted
 
     Buffer z_section_headers;         // (used by piz) an array of unsigned offsets of section headers within z_data
@@ -521,6 +525,9 @@ extern void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32
 extern void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len);
 extern void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len);
 extern unsigned crypt_max_padding_len();
+
+extern void aes_initialize (VariantBlock *vb, const uint8_t *key, const uint8_t *iv);
+extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *buf, uint32_t length);
 
 extern void squeeze (VariantBlock *vb,
                      uint8_t *dst, // memory should be pre-allocated by caller

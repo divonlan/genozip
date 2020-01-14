@@ -5,7 +5,6 @@
 
 #include "genozip.h"
 #include "crypto/WjCryptLib_Md5.h"
-#include "crypto/aes.h"
 
 static char *password = NULL;
 
@@ -106,21 +105,21 @@ void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i
 {
     //fprintf (stderr, "id:%u vb_i=%d sec_i=%d data_len=%u\n", vb->id, vb_i, sec_i, data_len);
 
-    // generate an AES key just for this one section
-    uint8_t aes_key[AES_KEYLEN];
+    // generate an AES key just for this one section - combining the pasword with vb_i and sec_i
+    uint8_t aes_key[AES_KEYLEN]; 
     crypt_generate_aes_key (vb, vb_i, sec_i, aes_key);
 
     uint8_t iv_ad_120[AES_BLOCKLEN] = { 0, 1, 2, 10, 11, 12, 20, 21, 22, 100, 101, 102, 110, 111, 112, 120 };
-    AES_init_ctx_iv (&vb->aes_ctx, aes_key, iv_ad_120);
+    aes_initialize (vb, aes_key, iv_ad_120);
 
     // encrypt in-place
-    AES_CTR_xcrypt_buffer (&vb->aes_ctx, data, data_len);
+    aes_xcrypt_buffer (vb, data, data_len);
 }
 
 void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len)
 {
     //fprintf (stderr, "continue: data_len=%u\n", data_len);
-    AES_CTR_xcrypt_buffer (&vb->aes_ctx, data, data_len);
+    aes_xcrypt_buffer (vb, data, data_len);
 }
 
 // pad data to AES_BLOCKLEN boundary

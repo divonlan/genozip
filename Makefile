@@ -35,7 +35,7 @@ DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
 INCS = genozip.h lic-text.h \
        bzlib/bzlib.h bzlib/bzlib_private.h \
 	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
-	   crypto/aes.h crypto/WjCryptLib_Md5.h \
+	   crypto/WjCryptLib_Md5.h \
        compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h\
 	   compatability/mac_gettime.h \
 	   compatability/win32_pthread.h compatability/visual_c_gettime.h \
@@ -43,12 +43,12 @@ INCS = genozip.h lic-text.h \
 
 OLD_C_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
        zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c \
-	   crypto/aes.c crypto/WjCryptLib_Md5.c
+	   crypto/WjCryptLib_Md5.c
        
 C99_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
 	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c \
        compatability/mac_gettime.c compatability/win32_pthread.c compatability/visual_c_gettime.c \
-	   compatability/visual_c_misc_funcs.c
+	   compatability/visual_c_misc_funcs.c aes.c
 
 SRCS = $(C99_SRCS) $(OLD_C_SRCS)
 
