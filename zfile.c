@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "bzlib/bzlib.h"
+#include <bzlib.h>
 #include "genozip.h"
 
 #define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
@@ -241,9 +241,6 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
     zfile_get_metadata (vcf_header.created);
 
-    // copy it to z_file - we might need to update it at the very end
-    memcpy (&vb->z_file->vcf_header, &vcf_header, sizeof (vcf_header));
-
     static Buffer vcf_header_buf = EMPTY_BUFFER;
 
     buf_alloc ((VariantBlock*)vb, &vcf_header_buf, vcf_header_text->len / 3, // generous guess of compressed size
@@ -257,6 +254,9 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     file->vcf_data_so_far  += vcf_header_text->len; // length of the original VCF header
 
     buf_free (&vcf_header_buf); 
+
+    // copy it to z_file - we might need to update it at the very end in zfile_update_vcf_header_section_header()
+    memcpy (&vb->z_file->vcf_header, &vcf_header, sizeof (vcf_header));
 }
 
 void zfile_compress_variant_data (VariantBlock *vb)
@@ -451,7 +451,11 @@ int zfile_read_one_section (VariantBlock *vb,
     }
 
     unsigned compressed_offset   = ENDN32 (header->compressed_offset);
+    ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%u", section_type);
+
     unsigned data_compressed_len = ENDN32 (header->data_compressed_len);
+    ASSERT (data_compressed_len, "Error: header.data_compressed_len is 0 when reading section_type=%u", section_type);
+
     unsigned data_encrypted_len  = ENDN32 (header->data_encrypted_len);
 
     unsigned data_len = MAX (data_compressed_len, data_encrypted_len);
