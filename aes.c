@@ -6,15 +6,15 @@
 
 #include "genozip.h" 
 
-#define Nb 4 // The number of columns comprising a state in AES. This is a constant in AES.
 #define Nk (AES_KEYLEN/4)
 #define Nr 14 // value is for 256 bit key AES
 
 // state - array holding the intermediate results during decryption. can be viewed as a matrix or vector
+#define Nb 4 
 typedef union {
     uint8_t m[Nb][Nb];
     uint8_t v[Nb*Nb];
-} state_t;
+} AesStateType;
 
 // The lookup-tables are marked const so they can be placed in read-only storage instead of RAM
 // The numbers below can be computed dynamically trading ROM for RAM - 
@@ -98,7 +98,7 @@ static void inline aes_expand_key(uint8_t* aes_round_key, const uint8_t* Key)
 
 // This function adds the round key to state.
 // The round key is added to the state by an XOR function.
-static inline void aes_add_round_key(uint8_t round, state_t* state, const uint8_t* aes_round_key)
+static inline void aes_add_round_key(uint8_t round, AesStateType* state, const uint8_t* aes_round_key)
 {
     for (uint8_t i=0; i < Nb*Nb; i++) 
         state->v[i] ^= aes_round_key[(round * Nb * 4) + i];
@@ -106,7 +106,7 @@ static inline void aes_add_round_key(uint8_t round, state_t* state, const uint8_
 
 // The aes_sub_bytes Function Substitutes the values in the
 // state matrix with values in an S-box.
-static inline void aes_sub_bytes (state_t* state)
+static inline void aes_sub_bytes (AesStateType* state)
 {
     for (uint8_t i=0; i < Nb*Nb; i++) 
         state->v[i] = sbox[state->v[i]];
@@ -115,7 +115,7 @@ static inline void aes_sub_bytes (state_t* state)
 // The aes_shift_rows() function shifts the rows in the state to the left.
 // Each row is shifted with different offset.
 // Offset = Row number. So the first row is not shifted.
-static void aes_shift_rows(state_t* state)
+static void aes_shift_rows(AesStateType* state)
 {
     uint8_t temp;
 
@@ -149,7 +149,7 @@ static inline uint8_t xtime(uint8_t x)
 }
 
 // aes_mix_columns function mixes the columns of the state matrix
-static void inline aes_mix_columns (state_t* state)
+static void inline aes_mix_columns (AesStateType* state)
 {
     uint8_t Tmp, Tm, t;
     for (uint8_t i=0; i < 4; ++i) {  
@@ -163,7 +163,7 @@ static void inline aes_mix_columns (state_t* state)
 }
 
 // aes_cipher is the main function that encrypts the PlainText.
-static void aes_cipher(state_t* state, const uint8_t* aes_round_key)
+static void aes_cipher(AesStateType* state, const uint8_t* aes_round_key)
 {
     // Add the First round key to the state before starting the rounds.
     aes_add_round_key(0, state, aes_round_key); 
@@ -188,7 +188,7 @@ static void aes_cipher(state_t* state, const uint8_t* aes_round_key)
 // Symmetrical operation: same function for encrypting as for decrypting. Note any IV/nonce should never be reused with the same key 
 void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
 {
-    state_t buffer; 
+    AesStateType buffer; 
 
     for (unsigned i=0; i < length; i++, vb->bi++) {
  
