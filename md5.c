@@ -1,50 +1,34 @@
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  WjCryptLib_Md5
-//
-//  Implementation of MD5 hash function. Originally written by Alexander Peslyak. Modified by WaterJuice retaining
-//  Public Domain license.
-//
-//  This is free and unencumbered software released into the public domain - June 2013 waterjuice.org
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// This is an implementation of MD5 based on: https://github.com/WaterJuice/WjCryptLib/blob/master/lib/WjCryptLib_Md5.c
+// which has been modified
+// 
+// The original source, as specified there, is "This is free and unencumbered software released into the public domain - June 2013 waterjuice.org". 
+// All modifications are (c) 2020 Divon Lan and are subject to license.
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  IMPORTS
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#include "WjCryptLib_Md5.h"
 #include <memory.h>
+#include "genozip.h"
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  INTERNAL FUNCTIONS
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Md5Context - This must be initialised using Md5Initialised. Do not modify the contents of this structure directly.
+typedef struct {
+    uint32_t     lo;
+    uint32_t     hi;
+    uint32_t     a;
+    uint32_t     b;
+    uint32_t     c;
+    uint32_t     d;
+    uint8_t      buffer[64];
+    uint32_t     block[16];
+} Md5Context;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  F, G, H, I
-//
-//  The basic MD5 functions. F and G are optimised compared to their RFC 1321 definitions for architectures that lack
-//  an AND-NOT instruction, just like in Colin Plumb's implementation.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
 #define G( x, y, z )            ( (y) ^ ((z) & ((x) ^ (y))) )
 #define H( x, y, z )            ( (x) ^ (y) ^ (z) )
 #define I( x, y, z )            ( (y) ^ ((x) | ~(z)) )
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  STEP
-//
-//  The MD5 transformation for all four rounds.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #define STEP( f, a, b, c, d, x, t, s )                          \
     (a) += f((b), (c), (d)) + (x) + (t);                        \
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  TransformFunction
-//
-//  This processes one or more 64-byte data blocks, but does NOT update the bit counters. There are no alignment
-//  requirements.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 static
 void*
     TransformFunction
@@ -176,16 +160,7 @@ void*
     return ptr;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  EXPORTED FUNCTIONS
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  Md5Initialise
-//
-//  Initialises an MD5 Context. Use this to initialise/reset a context.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void
+static void
     Md5Initialise
     (
         Md5Context*         Context         // [out]
@@ -206,7 +181,7 @@ void
 //  Adds data to the MD5 context. This will process the data and update the internal state of the context. Keep on
 //  calling this function until all the data has been added. Then call Md5Finalise to calculate the hash.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void
+static void
     Md5Update
     (
         Md5Context*         Context,        // [in out]
@@ -258,7 +233,7 @@ void
 //  Performs the final calculation of the hash and returns the digest (16 byte buffer containing 128bit hash). After
 //  calling this, Md5Initialised must be used to reuse the context.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void
+static void
     Md5Finalise
     (
         Md5Context*         Context,        // [in out]
@@ -319,17 +294,11 @@ void
 //
 //  Combines Md5Initialise, Md5Update, and Md5Finalise into one function. Calculates the MD5 hash of the buffer.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void
-    Md5Calculate
-    (
-        void  const*        Buffer,         // [in]
-        uint32_t            BufferSize,     // [in]
-        MD5_HASH*           Digest          // [in]
-    )
+void md5_do (const void *data, unsigned len, MD5_HASH *digest)
 {
     Md5Context context;
 
-    Md5Initialise( &context );
-    Md5Update( &context, Buffer, BufferSize );
-    Md5Finalise( &context, Digest );
+    Md5Initialise (&context);
+    Md5Update (&context, data, len);
+    Md5Finalise (&context, digest);
 }

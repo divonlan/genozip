@@ -4,7 +4,6 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "crypto/WjCryptLib_Md5.h"
 
 static char *password = NULL;
 
@@ -89,12 +88,12 @@ static void crypt_generate_aes_key (VariantBlock *vb,
 
     MD5_HASH salty_hash;
     memcpy (next, salt, strlen(salt));
-    Md5Calculate (flavoured_pw, next - flavoured_pw + strlen(salt), &salty_hash);
+    md5_do (flavoured_pw, next - flavoured_pw + strlen(salt), &salty_hash);
 
     // now some pepper
     MD5_HASH peppered_hash;
     memcpy (next, pepper, strlen(pepper));
-    Md5Calculate (flavoured_pw, next - flavoured_pw + strlen(pepper), &peppered_hash);
+    md5_do (flavoured_pw, next - flavoured_pw + strlen(pepper), &peppered_hash);
 
     // get hash
     memcpy (aes_key, salty_hash.bytes, MD5_HASH_SIZE); // first half of key
@@ -130,7 +129,7 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
     // use md5 to generate non-trival padding - the hash of the last 100 bytes of data
     MD5_HASH hash;
     unsigned src_len = MIN (data_len, 100);
-    Md5Calculate (&data[data_len-src_len], src_len, &hash);
+    md5_do (&data[data_len-src_len], src_len, &hash);
     
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }

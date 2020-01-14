@@ -529,6 +529,10 @@ extern unsigned crypt_max_padding_len();
 extern void aes_initialize (VariantBlock *vb, const uint8_t *key, const uint8_t *iv);
 extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length);
 
+#define MD5_HASH_SIZE 16
+typedef struct { uint8_t bytes [MD5_HASH_SIZE]; } MD5_HASH;
+extern void md5_do (const void *data, unsigned len, MD5_HASH *digest);
+
 extern void squeeze (VariantBlock *vb,
                      uint8_t *dst, // memory should be pre-allocated by caller
                      uint16_t *squeezed_checksum,
