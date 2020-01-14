@@ -7,6 +7,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#ifdef __APPLE__
+#define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
+#endif
 #define Z_LARGE64
 #include <zlib.h>
 #include <bzlib.h>

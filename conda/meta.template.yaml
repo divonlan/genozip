@@ -2,6 +2,9 @@
 # See: https://docs.ligo.org/lscsoft/conda/packaging/
 # Example here: https://github.com/conda-forge/nds2-client-feedstock/tree/492436f4fa3c6b8a62dbc86dc68d79f818d251e3/recipe/
 
+{% set posix = 'm2-' if win else '' %}
+{% set native = 'm2w64-' if win else '' %}
+
 package:
   name: genozip
   version: {{ version }}
@@ -15,10 +18,19 @@ build:
 
 requirements:
   build:
-    - {{ compiler('c') }}
-    - make  # [unix]
+    - {{ compiler('c') }}      # [not win]
+    - {{ compiler('m2w64_c') }}  # [win]
+    - {{posix}}make
+    - {{posix}}sed               # [win]
+    - {{posix}}coreutils         # [win]
+    - bzip2
   host:
+    - zlib
+    - bzip2
   run:
+    - {{native}}gcc-libs         # [win]
+    - zlib
+    - bzip2
 
 test:
   source_files: 
@@ -34,14 +46,14 @@ test:
     {% for executable in genozip_executables %}
     - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
     {% endfor %}
-    - genozip -t test-file.vcf  # [unix]
+    - genozip --password abc --test test-file.vcf  # [unix]
 
 about:
   home: https://github.com/divonlan/genozip
   dev_url: https://github.com/divonlan/genozip
 # doc_url: https://genozip.readthedocs.io/
-  license: Apache-2.0, non-commercial only
-  license_family: Apache
+  license: CUSTOM
+  license_family: OTHER
   license_file: 
     - LICENSE.non-commercial.txt
     - LICENSE.commercial.txt

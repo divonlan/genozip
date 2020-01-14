@@ -9,14 +9,31 @@
 
 VERSION = 1.0.1
 
-# use gcc, unless its conda - let it define its own compiler
-ifndef CONDA_BUILD_SYSROOT 
-CC=gcc
+ifdef BUILD_PREFIX
+IS_CONDA=1
 endif
 
-CFLAGS       = -D_LARGEFILE64_SOURCE=1 -Wall 
-CFLAGS_DEBUG = -D_LARGEFILE64_SOURCE=1 -Wall -DDEBUG -g
-LDFLAGS      = -lpthread -lm
+# use gcc, unless its conda - let it define its own compiler
+ifndef IS_CONDA 
+CC=gcc
+endif 
+
+CFLAGS       += -D_LARGEFILE64_SOURCE=1 -Wall -I.
+DEBUG_CLAGS  += -D_LARGEFILE64_SOURCE=1 -Wall -I. -Izlib -Ibzlib -DDEBUG -g
+LDFLAGS      += -lpthread -lm
+
+ifdef IS_CONDA 
+# conda - dynamic linking with bz2 and zlib
+    LDFLAGS += -lbz2 -lz 
+    ifdef LIB
+        LDFLAGS += -ILibrary/lib     # this appears (at least) in the Windows build in conda-forge
+    endif
+	ifdef INCLUDE
+		CFLAGS  += -ILibrary/include  # this appears (at least) in the Windows build in conda-forge
+	endif
+else
+	CFLAGS +=  -Izlib -Ibzlib
+endif
 
 ifeq ($(CC),gcc)
 	CFLAGS += -Ofast
@@ -24,41 +41,32 @@ else
 	CFLAGS += -O2
 endif
 
-DEVS = Makefile .gitignore genozip.code-workspace \
-       .vscode/c_cpp_properties.json .vscode/launch.json .vscode/settings.json .vscode/tasks.json \
-       test-file.vcf 
+MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
+	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c
 
-DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md \
-       bzlib/LICENSE.bzlib bzlib/README.bzlib \
-	   zlib/README.zlib
+CONDA_COMPATIBILITY_SRCS = compatability/win32_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
 
-INCS = genozip.h lic-text.h \
-       bzlib/bzlib.h bzlib/bzlib_private.h \
-	   zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/zlib.h zlib/zutil.h \
+EXT_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
+       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
+                
+CONDA_DEVS = Makefile .gitignore test-file.vcf 
+
+CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
+
+CONDA_INCS = genozip.h lic-text.h \
        compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h\
 	   compatability/mac_gettime.h \
 	   compatability/win32_pthread.h compatability/visual_c_gettime.h \
 	   compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h
 
-EXT_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
-       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
-       
-MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
-	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c \
-       compatability/mac_gettime.c compatability/win32_pthread.c compatability/visual_c_gettime.c \
-	   compatability/visual_c_misc_funcs.c 
-
-ifdef CONDA_BUILD_SYSROOT 
-# conda - use packages for zlib and bzip2
-SRCS = $(MY_SRCS) 
-else 
-# local - static link everything
-SRCS = $(MY_SRCS) $(EXT_SRCS)
+ifeq ($(CC),cl.exe)
+	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c 
 endif
 
 ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
+	MY_SRCS += compatability/win32_pthread.c
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
@@ -67,7 +75,16 @@ else
     endif
     ifeq ($(UNAME_S),Darwin)
 # Mac
+		MY_SRCS += compatability/mac_gettime.c
     endif
+endif
+
+ifndef IS_CONDA 
+# local - static link everything
+SRCS = $(MY_SRCS) $(EXT_SRCS)
+else 
+# conda - use packages for zlib and bzip2
+SRCS = $(MY_SRCS) 
 endif
 
 OBJS       := $(SRCS:.c=.o)
@@ -83,19 +100,19 @@ debug: genozip-debug$(EXE)
 
 %.d: %.c
 	@echo Calculating dependencies $<
-	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
+	$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 %.o: %.c %.d
 	@echo Compiling $<
-	@$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 %.debug-o: %.c %.d
 	@echo "Compiling $< (debug)"
-	@$(CC) -c -o $@ $< $(CFLAGS_DEBUG)
+	@$(CC) -c -o $@ $< $(DEBUG_CLAGS)
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 genozip-debug$(EXE): $(DEBUG_OBJS)
 	@echo Linking $@
@@ -120,7 +137,7 @@ endif
 
 TARBALL := conda/genozip-$(VERSION).tar.gz
 
-$(TARBALL): $(SRCS) $(INCS) $(DOCS) $(DEVS) 
+$(TARBALL): $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
 	@echo "Archiving to $@"
 	@tar --create --gzip --file $(TARBALL) $^
 	@echo "Committing $(TARBALL) & pushing changes to genozip/master"
