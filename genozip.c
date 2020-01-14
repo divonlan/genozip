@@ -522,7 +522,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     static long long total_uncompressed_len=0, total_compressed_len=0;
     char c_str[20], u_str[20];
 
-    const unsigned FILENAME_WIDTH = 35;
+    const unsigned FILENAME_WIDTH = 50;
 
     const char *head_format = "%5s %8s %10s %10s %6s %*s %s\n";
     const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
