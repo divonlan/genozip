@@ -20,7 +20,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
     ASSERT0 (filename, "Error: filename is null");
 
-    ASSERT (mode==WRITE || access(filename, F_OK)==0, "%s: cannot open file for reading: %s", global_cmd, filename);
+    ASSERT (mode==WRITE || access (filename, F_OK)==0, "%s: cannot open %s for reading: %s", global_cmd, filename, strerror(errno));
     
     File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
