@@ -13,8 +13,10 @@ ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
 
-# use gcc, unless its conda - let it define its own compiler
+# use gcc, unless its conda - let it define its own compiler (but for Windows, we override conda's default Visual C with gcc)
 ifndef IS_CONDA 
+CC=gcc
+else ifeq ($(OS),Windows_NT)
 CC=gcc
 endif 
 
@@ -26,13 +28,13 @@ ifdef IS_CONDA
 # conda - dynamic linking with bz2 and zlib
     LDFLAGS += -lbz2 -lz 
     ifdef LIB
-        LDFLAGS += -ILibrary/lib     # this appears (at least) in the Windows build in conda-forge
+        LDFLAGS += -L$(PREFIX)/Library/lib     # this appears (at least) in the Windows build in conda-forge
     endif
 	ifdef INCLUDE
-		CFLAGS  += -ILibrary/include  # this appears (at least) in the Windows build in conda-forge
+		CFLAGS  += -I$(PREFIX)/Library/include  # this appears (at least) in the Windows build in conda-forge
 	endif
 else
-	CFLAGS +=  -Izlib -Ibzlib
+	CFLAGS += -Izlib -Ibzlib
 endif
 
 ifeq ($(CC),gcc)
@@ -59,7 +61,7 @@ CONDA_INCS = genozip.h lic-text.h \
 	   compatability/win32_pthread.h compatability/visual_c_gettime.h \
 	   compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h
 
-ifeq ($(CC),cl.exe)
+ifeq ($(CC),cl)
 	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c 
 endif
 
@@ -100,11 +102,11 @@ debug: genozip-debug$(EXE)
 
 %.d: %.c
 	@echo Calculating dependencies $<
-	$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
+	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 %.o: %.c %.d
 	@echo Compiling $<
-	$(CC) -c -o $@ $< $(CFLAGS)
+	@$(CC) -c -o $@ $< $(CFLAGS)
 
 %.debug-o: %.c %.d
 	@echo "Compiling $< (debug)"
@@ -112,8 +114,8 @@ debug: genozip-debug$(EXE)
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
-	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
-
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+ 
 genozip-debug$(EXE): $(DEBUG_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
@@ -123,9 +125,9 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-# this is used by build.sh and bld.bat to build on conda
+# this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.template.bat
 install: genozip$(EXE)
-	@echo "Installing in $(PREFIX)/bin"
+	@echo Installing in $(PREFIX)/bin
 	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
 	@cp -f genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
 ifneq ($(OS),Windows_NT)

@@ -1,13 +1,13 @@
-cl.exe /D_LARGEFILE64_SOURCE=1 /O2 {{ src }} 
+make all
 
-rem copy genozip.exe %PREFIX%\bin\genozip.exe
-copy genozip.exe genounzip.exe
-copy genozip.exe genocat.exe
-copy genozip.exe genols.exe
+echo in bat
+echo cd is %cd%
+echo LIBRARY_BIN is %LIBRARY_BIN%
+echo LIBRARY_LIB is %LIBRARY_LIB%
+echo PREFIX is %PREFIX%
 
-exit /b 0
-
-rem copy %RECIPE_DIR%\LICENSE.non-commerical.txt %PREFIX%
-rem copy %RECIPE_DIR%\LICENSE.commerical.txt %PREFIX%
-
- 
+dir
+copy genozip.exe %LIBRARY_BIN%
+copy genounzip.exe %LIBRARY_BIN%
+copy genols.exe %LIBRARY_BIN%
+copy genocat.exe %LIBRARY_BIN%
