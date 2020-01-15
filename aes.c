@@ -209,10 +209,12 @@ void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
     }
 }
 
-void aes_initialize (VariantBlock *vb, const uint8_t* key, const uint8_t* iv)
+void aes_initialize (VariantBlock *vb, const uint8_t* key)
 {
+    static const uint8_t iv_ad_120[AES_BLOCKLEN] = { 0, 1, 2, 10, 11, 12, 20, 21, 22, 100, 101, 102, 110, 111, 112, 120 };
+
     aes_expand_key(vb->aes_round_key, key);
-    memcpy (vb->aes_iv, iv, AES_BLOCKLEN);
+    memcpy (vb->aes_iv, iv_ad_120, AES_BLOCKLEN);
     vb->bi = AES_BLOCKLEN;
 }
 

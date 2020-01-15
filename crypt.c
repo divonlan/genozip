@@ -108,8 +108,7 @@ void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i
     uint8_t aes_key[AES_KEYLEN]; 
     crypt_generate_aes_key (vb, vb_i, sec_i, aes_key);
 
-    uint8_t iv_ad_120[AES_BLOCKLEN] = { 0, 1, 2, 10, 11, 12, 20, 21, 22, 100, 101, 102, 110, 111, 112, 120 };
-    aes_initialize (vb, aes_key, iv_ad_120);
+    aes_initialize (vb, aes_key);
 
     // encrypt in-place
     aes_xcrypt_buffer (vb, data, data_len);
