@@ -633,7 +633,7 @@ extern void profiler_add (ProfilerRec *dst, const ProfilerRec *src);
 extern const char *profiler_print_short (const ProfilerRec *p);
 extern void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const char *filename, unsigned num_vbs);
 
-// a hacky addition to bzip2 was added by Divon Lan (c) 2020
+// a hacky addition to bzip2
 extern unsigned long long BZ2_bzoffset (void* b);
 
 // Windows compatibility stuff

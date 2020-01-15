@@ -28,6 +28,21 @@ char *buf_human_readable_size (uint64_t size, char *str /* out */)
     return str; // for convenience so caller can use in printf directly
 }
 
+// get string with buffer's metadata for debug message. this function is NOT thread-safe
+char *buf_display (const Buffer *buf)
+{
+    static char str[200]; // NOT thread-safe
+
+    sprintf (str, 
+#ifdef _MSC_VER
+             "Buffer %s (%u): size=%u len=%u data=0x%I64x memory=0x%I64x",
+#else
+             "Buffer %s (%u): size=%u len=%u data=0x%"PRIx64" memory=0x%"PRIx64,
+#endif
+             buf->name, buf->param, buf->size, buf->len, (uint64_t)buf->data, (uint64_t)buf->memory);
+    return str;    
+}
+
 bool buf_has_overflowed(const Buffer *buf)
 {
     return *((long long*)(buf->memory + buf->size + sizeof(long long))) != OVERFLOW_TRAP;
@@ -342,7 +357,7 @@ void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_
         overlaid_buf->len = regular_buf->len;
 }
 
-static Buffer abandoned_memories = EMPTY_BUFFER; // no thread safety issues - only used by dispatcher thread
+static Buffer abandoned_memories = EMPTY_BUFFER; // no thread safety issues - only used by piz dispatcher thread
 
 // if needed, we extend the buf, but without reallocting memory which could disturb other threads which have their
 // own buffers overlaid on buf. Instead, we abandon the memory used by buf, but without freeing it.
@@ -357,11 +372,11 @@ void buf_extend (VariantBlock *vb, Buffer *buf,
 
     // if we need more space, we abandon the memory used by buf, but without freeing it as VBs are overlaying on it.
     // instead, we add it to an abandoned memory list to be freed at the end of this piz
-    if ((buf->len + num_new_units) * sizeof_unit > buf->size) { 
+    else if ((buf->len + num_new_units) * sizeof_unit > buf->size) { 
 
-        if (!buf_is_allocated (&abandoned_memories) || abandoned_memories.len * sizeof(char *) == abandoned_memories.size)
-            buf_alloc (vb, &abandoned_memories, 1000 * sizeof(char*), 2, "abandoned_memories", 0);
-        
+        if (!buf_is_allocated (&abandoned_memories) || abandoned_memories.len * sizeof(char *) == abandoned_memories.size) 
+            buf_alloc (vb, &abandoned_memories, MAX (100, abandoned_memories.len+1) * sizeof(char*), 2, "abandoned_memories", 0);
+
         unsigned old_len       = buf->len;
         const char *old_memory = buf->memory;
         const char *old_data   = buf->data;
@@ -390,10 +405,14 @@ void buf_append (VariantBlock *vb, Buffer *base,
 
 void buf_free_abandoned_memories()
 {
+    if (!buf_is_allocated (&abandoned_memories)) return; // nothing to do
+
     char **abm = (char**)abandoned_memories.data;
 
-    for (unsigned i=0; i < abandoned_memories.len; i++)
+    for (unsigned i=0; i < abandoned_memories.len; i++) 
         free (abm[i]);
+
+    buf_free (&abandoned_memories);
 }
 
 // free buffer - without freeing memory. A future buf_malloc of this buffer will reuse the memory if possible.
