@@ -12,6 +12,7 @@ typedef struct {
 } Thread;
 
 typedef struct {
+    unsigned pool_id;
     VariantBlockPool *vb_pool;
     VariantBlock *pseudo_vb;
     Buffer compute_threads_buf;
@@ -54,6 +55,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
 
     clock_gettime(CLOCK_REALTIME, &dd->start_time); 
 
+    dd->pool_id       = pool_id;
     dd->max_threads   = max_threads;
     dd->vcf_file      = vcf_file;
     dd->z_file        = z_file;
@@ -95,9 +97,9 @@ void dispatcher_finish (Dispatcher dispatcher)
     // this is only true if the files are being concatenated
     if (!flag_concat_mode) vb_cleanup_memory(dd->vb_pool); 
 
-    // free dictionary memories that were abandoned when dictionary realloced (they were not freed so that they can remain
+    // piz only - free dictionary memories that were abandoned when dictionary realloced (they were not freed so that they can remain
     // with their overlaying buffers) 
-    buf_free_abandoned_memories();
+    if (dd->pool_id == POOL_ID_UNZIP) buf_free_abandoned_memories();
 
     free (dd);
 }
