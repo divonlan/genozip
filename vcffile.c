@@ -131,10 +131,7 @@ unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
     char *next = buf->data;
 
     while (len) {
-        unsigned bytes_written = fwrite (next, 1, len, (FILE *)vcf_file->file);
-        ASSERT (bytes_written, "Error in vcffile_write_to_disk: failed to write %u bytes to %s: %s", 
-                len, vcf_file->name ? vcf_file->name : "(stdout)", strerror(errno));
-
+        unsigned bytes_written = file_write (vcf_file, next, len);
         len  -= bytes_written;
         next += bytes_written;
     }

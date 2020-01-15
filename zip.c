@@ -472,7 +472,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             if (!processed_vb) continue;
             
             START_TIMER;
-            fwrite (processed_vb->z_data.data, 1, processed_vb->z_data.len, (FILE *)z_file->file);
+            file_write (z_file, processed_vb->z_data.data, processed_vb->z_data.len);
             COPY_TIMER (processed_vb->profile.write);
 
             z_file->disk_so_far     += (long long)processed_vb->z_data.len;

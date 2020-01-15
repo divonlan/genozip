@@ -137,6 +137,15 @@ void file_close (File **file_p)
     free (file);
 }
 
+size_t file_write (File *file, const void *data, unsigned len)
+{
+    size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file);
+    ASSERT (bytes_written, "Error: failed to write %u bytes to %s: %s", 
+            len, file->name ? file->name : "(stdout)", strerror(errno));
+
+    return bytes_written;
+}
+
 void file_remove (const char *filename)
 {
     int ret = remove (filename); 

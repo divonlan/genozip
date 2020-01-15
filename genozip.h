@@ -418,6 +418,7 @@ typedef enum {READ, WRITE} FileMode;
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
 extern void file_close (File **vcf_file_p);
+extern size_t file_write (File *file, const void *data, unsigned len);
 extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
 

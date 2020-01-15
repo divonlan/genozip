@@ -248,7 +248,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
 
     zfile_compress ((VariantBlock*)vb, &vcf_header_buf, (SectionHeader*)&vcf_header, vcf_header_text->data, SEC_VCF_HEADER);
 
-    fwrite (vcf_header_buf.data, 1, vcf_header_buf.len, (FILE *)file->file);
+    file_write (file, vcf_header_buf.data, vcf_header_buf.len);
 
     file->disk_so_far      += vcf_header_buf.len;   // length of GENOZIP data writen to disk
     file->vcf_data_so_far  += vcf_header_text->len; // length of the original VCF header
@@ -604,7 +604,6 @@ void zfile_update_vcf_header_section_header (VariantBlock *vb)
 {
     SectionHeaderVCFHeader *header = &vb->z_file->vcf_header;
     unsigned len = crypt_padded_len (sizeof (SectionHeaderVCFHeader));
-    FILE *file = (FILE *)vb->z_file->file;
     
     // update the header contents
     header->vcf_data_size = ENDN64 (vb->z_file->vcf_concat_data_size);
@@ -614,6 +613,6 @@ void zfile_update_vcf_header_section_header (VariantBlock *vb)
     if (crypt_have_password()) crypt_do (vb, (uint8_t *)header, len, 0, -1); // 0,-1 are the VCF header's header
 
     // write back to disk
-    if (fseek (file, 0, SEEK_SET)) return; // rewind to the start
-    fwrite (header, len, 1, file); // ignore errors
+    if (fseek ((FILE *)vb->z_file->file, 0, SEEK_SET)) return; // rewind to the start
+    file_write (vb->z_file, header, len);
 }
