@@ -9,7 +9,7 @@
 #include <bzlib.h>
 
 // note that this struct is not aligned to 32/64 bit. we need to trust that the bzlib compiler
-// is similar and used with similar options to ours...
+// and its options produce a similar alignment to ours...
 typedef struct {
     void *a;
     char  b[5000];
@@ -18,13 +18,8 @@ typedef struct {
     bz_stream strm;
 } bzFile;
 
-// this should go into bzlib.h
-BZ_EXTERN unsigned long long BZ_API(BZ2_bzoffset) (
-      BZFILE* b
-   );
-
 // this should go into bzlib.c
-unsigned long long BZ_API(BZ2_bzoffset) (BZFILE* b)
+unsigned long long BZ2_bzoffset (BZFILE* b)
 {
    return  (((unsigned long long)((bzFile*)b)->strm.total_in_hi32) << 32) |
             ((unsigned long long)((bzFile*)b)->strm.total_in_lo32);
