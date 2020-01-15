@@ -46,7 +46,7 @@ test:
     {% for executable in genozip_executables %}
     - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
     {% endfor %}
-    - genozip --password abc --test test-file.vcf  # [unix]
+    - genozip --password abc --test test-file.vcf  
 
 about:
   home: https://github.com/divonlan/genozip

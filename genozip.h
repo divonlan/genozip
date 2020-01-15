@@ -525,7 +525,7 @@ extern void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len);
 extern void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len);
 extern unsigned crypt_max_padding_len();
 
-extern void aes_initialize (VariantBlock *vb, const uint8_t *key, const uint8_t *iv);
+extern void aes_initialize (VariantBlock *vb, const uint8_t *key);
 extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length);
 
 #define MD5_HASH_SIZE 16
