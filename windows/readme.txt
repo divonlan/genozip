@@ -37,7 +37,7 @@ One or more file names may be given, or if omitted, standard input/output is use
 
 Genozip is available for free for non-commercial use. Commercial use requires a commercial license.
 
-For bug reports: bugs@genozip.com and license inquires: sales@genozip.com
+For bug reports: bugs@genozip.com and license inquiries: sales@genozip.com
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
 WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
