@@ -72,6 +72,9 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
     static Buffer vcf_header_line = EMPTY_BUFFER; // serves to read the header, then its the first line in the data, and again the header when starting the next vcf file
     static Buffer vcf_header_text = EMPTY_BUFFER;
 
+    // in concat mode, we write the header to the genozip file, only for the first vcf file
+    bool use_vcf_header = !flag_concat_mode || !buf_is_allocated (&global_vcf_header_line) /* first vcf */;
+    
     // line might be used as the first line, so it cannot be free at the end of this function
     // however, by the time we come here again, at the next VCF file, it is no longer needed
     if (buf_is_allocated (&vcf_header_line)) buf_free (&vcf_header_line); 
@@ -84,7 +87,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
 
     while (1) 
     {
-        bool success = vcffile_get_line(vb, *line_i + 1, &vcf_header_line, "vcf_header_line");
+        bool success = vcffile_get_line (vb, *line_i + 1, !use_vcf_header, &vcf_header_line, "vcf_header_line");
         if (!success) break; // end of header - no data lines in this VCF file
 
         (*line_i)++;
@@ -110,8 +113,6 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
     // case - vcf header was found 
     if (vcf_header_text.len) {
 
-        bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
-
         bool can_concatenate = vcf_header_set_globals(vb, vb->vcf_file->name, &vcf_header_text);
         if (!can_concatenate) { 
             // this is the second+ file in a concatenation list, but its samples are incompatible
@@ -120,8 +121,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
         }
 
         if (vb->z_file) {
-            // in concat mode, we write the header to the genozip file, only for the first vcf file
-            if (!flag_concat_mode || first_vcf)
+            if (use_vcf_header)
                 zfile_write_vcf_header (vb, &vcf_header_text); 
             else
                 vb->z_file->vcf_data_so_far  += vcf_header_text.len; // length of the original VCF header

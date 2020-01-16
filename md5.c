@@ -17,7 +17,7 @@
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-/*static void display_ctx (const Md5Context *x)
+void md5_display_ctx (const Md5Context *x)
 {
     static unsigned iteration=1;
 
@@ -29,7 +29,7 @@
 
     iteration++;
 }
-*/
+
 
 static void *md5_transform (Md5Context *ctx, void const *data, uintmax_t size)
 {
@@ -170,6 +170,10 @@ static void md5_initialize (Md5Context *ctx)
 
 void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize)
 {
+    printf ("xxx data: len=%u\n", len);
+    //for (unsigned i=0; i<len; i++) printf ("%c", ((uint8_t*)data)[i]);
+    //printf("\n"); 
+
     if (initialize) md5_initialize (ctx);
 
     uint32_t    saved_lo;
@@ -189,7 +193,7 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initializ
 
         if (len < free) {
             memcpy (&ctx->buffer[used], data, len);
-            return;
+            goto finish;
         }
 
         memcpy (&ctx->buffer[used], data, free);
@@ -204,6 +208,10 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initializ
     }
 
     memcpy (ctx->buffer, data, len);
+
+finish:
+    md5_display_ctx (ctx);
+    return;
 }
 
 void md5_finalize (Md5Context *ctx, Md5Hash *digest)
@@ -259,10 +267,6 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
 
 void md5_do (const void *data, unsigned len, Md5Hash *digest)
 {
-//    printf ("data: ");
-//    for (unsigned i=0; i<len; i++) printf ("%2.2x", ((uint8_t*)data)[i]);
-//    printf("\n"); 
-
     Md5Context ctx;
 
     md5_update (&ctx, data, len, true);

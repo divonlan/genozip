@@ -270,7 +270,7 @@ typedef struct {
     double avg_header_line_len, avg_data_line_len;   // average length of data line so far. 
     uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
 
-    // Used for READING & WRITING VCF files:
+    // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)
     bool has_md5;
     Md5Context md5_ctx;
 
@@ -435,7 +435,7 @@ extern size_t file_write (File *file, const void *data, unsigned len);
 extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
 
-extern bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file, Buffer *line, const char *buf_name);
+extern bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file, bool skip_md5_vcf_header, Buffer *line, const char *buf_name);
 extern void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb);
 extern unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf);
 extern void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file);
@@ -474,7 +474,7 @@ extern unsigned mtf_get_sf_i_by_subfield (MtfContext *mtf_ctx, unsigned *num_sub
 extern void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VariantBlock *vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlock *vb);
-extern void mtf_initialize_mutex (File *z_file);
+extern void mtf_initialize_mutex (File *z_file, unsigned next_variant_i_to_merge);
 
 extern void mtf_free_context (MtfContext *ctx);
 #ifdef DEBUG
@@ -494,9 +494,9 @@ extern void piz_reconstruct_line_components (VariantBlock *vb);
 extern void piz_merge_all_lines (VariantBlock *vb);
 
 typedef void *Dispatcher;
-extern Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_file, File *z_file,
+extern Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
                                    bool test_mode, bool show_progress, const char *filename);
-extern void dispatcher_finish (Dispatcher dispatcher);
+extern void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i);
 
 typedef void (*DispatcherFuncType)(VariantBlock *);
 extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func);
@@ -546,6 +546,7 @@ extern void md5_do (const void *data, unsigned len, Md5Hash *digest);
 extern void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize);
 extern void md5_finalize (Md5Context *ctx, Md5Hash *digest);
 const char *md5_display (const Md5Hash *digest, bool prefix_space);
+extern void md5_display_ctx (const Md5Context *x);
 
 extern void squeeze (VariantBlock *vb,
                      uint8_t *dst, // memory should be pre-allocated by caller

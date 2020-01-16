@@ -24,7 +24,7 @@ static void zip_read_variant_block (File *vcf_file,
         if (vb_line_i > 0 || !first_data_line) { // first line might be supplied by caller
 
             // allocate line Buffer and read line from file 
-            bool success = vcffile_get_line (vb, first_line + vb_line_i, &dl->line, "dl->line"); 
+            bool success = vcffile_get_line (vb, first_line + vb_line_i, false, &dl->line, "dl->line"); 
             if (!success) break; // no more lines - we're done
         }
         else {
@@ -421,7 +421,10 @@ static void zip_compress_variant_block (VariantBlock *vb)
 void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
                      File *z_file, bool test_mode, unsigned max_threads, bool is_last_file)
 {
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);
+    static unsigned last_variant_block_i = 0; // used if we're concatenating files - the variant_block_i will continue from one file to the next
+    if (!flag_concat_mode) last_variant_block_i = 0; // reset if we're not concatenating
+
+    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
@@ -436,7 +439,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
     if (!first_data_line) goto finish; // VCF file has only a header or is an empty file - no data - we're done
 
-    mtf_initialize_mutex (z_file);
+    mtf_initialize_mutex (z_file, last_variant_block_i+1);
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In there is a new variant block avaialble, and a compute thread available to take it - dispatch it
@@ -513,5 +516,5 @@ finish:
     z_file->disk_size = z_file->disk_so_far;
     vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far; // just in case its not set already
     
-    dispatcher_finish (dispatcher);
+    dispatcher_finish (dispatcher, &last_variant_block_i);
 }

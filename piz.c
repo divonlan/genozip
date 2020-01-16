@@ -663,7 +663,7 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 
 void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
 {
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, vcf_file, z_file, test_mode, 
+    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, 
                                              !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
                                              z_basename);
 
@@ -711,5 +711,5 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
                 "File integrity error: MD5 of decompressed file %s differs than that of the original file", vcf_file->name);
     }
 finish:
-    dispatcher_finish (dispatcher);
+    dispatcher_finish (dispatcher, NULL);
 }

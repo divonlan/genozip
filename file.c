@@ -99,14 +99,14 @@ File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex)
 
     file->type = type;
     file->last_read = file->next_read = READ_BUFFER_SIZE;
-
+/*
     if (initialize_mutex) {
         unsigned ret = pthread_mutex_init (&file->mutex, NULL);
         file->mutex_initialized = true;
         file->next_variant_i_to_merge = 1;
         ASSERT0 (!ret, "pthread_mutex_init failed");
     }
-    
+  */  
     return file;
 }
 

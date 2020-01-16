@@ -43,7 +43,7 @@ typedef struct {
 
 static TimeSpecType profiler_timer; // wallclock
 
-Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_file, File *z_file,
+Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
                             bool test_mode, bool show_progress, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
@@ -54,6 +54,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
     clock_gettime(CLOCK_REALTIME, &dd->start_time); 
 
     dd->pool_id       = pool_id;
+    dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the variant_block_i will continue from one file to the next
     dd->max_threads   = max_threads;
     dd->vcf_file      = vcf_file;
     dd->z_file        = z_file;
@@ -75,7 +76,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, File *vcf_fi
     return dd;
 }
 
-void dispatcher_finish (Dispatcher dispatcher)
+void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -97,6 +98,8 @@ void dispatcher_finish (Dispatcher dispatcher)
     // piz only - free dictionary memories that were abandoned when dictionary realloced (they were not freed so that they can remain
     // with their overlaying buffers) 
     if (dd->pool_id == POOL_ID_UNZIP) buf_free_abandoned_memories();
+
+    if (last_vb_i) *last_vb_i = dd->next_vb_i-1; // for continuing variant_block_i count between subsequent concatented files
 
     free (dd);
 }

@@ -339,9 +339,6 @@ static void main_genozip (const char *vcf_filename,
     }
     else ABORT0 ("Error: No output channel");
     
-    // in case of contenated files with md5, the 2nd file onwards continue the same md5 context from the previous file
-    if (!is_first_file && flag_md5) vcf_file->has_md5 = true;
-
     const char *basename = get_basename(vcf_filename, false, "(stdin)");
     zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads, is_last_file);
 

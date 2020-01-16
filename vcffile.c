@@ -82,7 +82,7 @@ static inline char vcffile_get_char(VariantBlock *vb)
 // get the next line in a text file terminated by \n or EOF. 
 // Returns the line length (excluding the terminating \0) or 0 if no more lines exist.
 // unlike fgets, the line is not limited by any particular length
-bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, Buffer *line, const char *buf_name)
+bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, bool skip_md5_vcf_header, Buffer *line, const char *buf_name)
 {    
     File *file = vb->vcf_file; // for code readability
 
@@ -122,9 +122,9 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, B
 
     file->vcf_data_so_far += str_len;
 
-    if (flag_md5) {
-        md5_update (&file->md5_ctx, line->data, line->len, !file->has_md5);
-        file->has_md5 = true;
+    if (flag_md5 && (!skip_md5_vcf_header || line->data[0] != '#')) { // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
+        md5_update (&vb->z_file->md5_ctx, line->data, line->len, !vb->z_file->has_md5);
+        vb->z_file->has_md5 = true;
     }
 
     return true;
