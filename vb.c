@@ -84,7 +84,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->ht_columns_data);
-    buf_free(&vb->flavored_password);
+    buf_free(&vb->spiced_pw);
 
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) 
         mtf_free_context (&vb->mtf_ctx[i]);

@@ -668,7 +668,8 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
                                              z_basename);
 
     // read and write VCF header
-    bool success = vcf_header_genozip_to_vcf (dispatcher_get_pseudo_vb (dispatcher));
+    Md5Hash original_file_digest;
+    bool success = vcf_header_genozip_to_vcf (dispatcher_get_pseudo_vb (dispatcher), &original_file_digest);
     if (!success) goto finish; // empty file - not an error
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
@@ -699,6 +700,16 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
 
     } while (!dispatcher_is_done (dispatcher));
 
+    // verify file integrity, if the genozip compress was run with --md5
+    if (vcf_file->has_md5) {
+        Md5Hash decompressed_file_digest;
+        md5_finalize (&vcf_file->md5_ctx, &decompressed_file_digest);
+
+        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (&decompressed_file_digest, false));
+
+        ASSERT (!memcmp (decompressed_file_digest.bytes, original_file_digest.bytes, sizeof(Md5Hash)), 
+                "File integrity error: MD5 of decompressed file %s differs than that of the original file", vcf_file->name);
+    }
 finish:
     dispatcher_finish (dispatcher);
 }

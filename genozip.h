@@ -88,7 +88,7 @@ typedef enum {
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
-typedef struct { uint8_t bytes [16]; } Md5Hash;
+typedef union { uint8_t bytes [16]; } Md5Hash;
 
 typedef struct {
     uint32_t magic; 
@@ -243,6 +243,13 @@ typedef struct {
     Buffer word_list;
 } MtfContext;
 
+typedef struct {
+    uint32_t     lo, hi;
+    uint32_t     a, b,c, d;
+    uint8_t      buffer[64];
+    uint32_t     block[16];
+} Md5Context;
+
 typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
 
 typedef struct {
@@ -262,6 +269,10 @@ typedef struct {
     // Used for READING VCF/VCF_GZ/VCF_BZ2 files: stats used to optimize memory allocation
     double avg_header_line_len, avg_data_line_len;   // average length of data line so far. 
     uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
+
+    // Used for READING & WRITING VCF files:
+    bool has_md5;
+    Md5Context md5_ctx;
 
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_vcf_file;     // the value of disk_size when starting to read this vcf file
@@ -359,7 +370,7 @@ typedef struct variant_block_ {
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
 
     // crypto stuff
-    Buffer flavored_password;  // used by crypt_generate_aes_key()
+    Buffer spiced_pw;  // used by crypt_generate_aes_key()
     uint8_t aes_round_key[240];// for 256 bit aes
     uint8_t aes_iv[AES_BLOCKLEN];
     int bi;
@@ -431,7 +442,7 @@ extern void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file);
 
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
 extern bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line);
-extern bool vcf_header_genozip_to_vcf (VariantBlock *vb);
+extern bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest /* out */);
 extern bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header, bool *encrypted);
 
 #define NUM_VB_POOLS  2 // for zip and piz that can run concurrently during --test
@@ -532,6 +543,9 @@ extern void aes_initialize (VariantBlock *vb, const uint8_t *key);
 extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length);
 
 extern void md5_do (const void *data, unsigned len, Md5Hash *digest);
+extern void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize);
+extern void md5_finalize (Md5Context *ctx, Md5Hash *digest);
+const char *md5_display (const Md5Hash *digest, bool prefix_space);
 
 extern void squeeze (VariantBlock *vb,
                      uint8_t *dst, // memory should be pre-allocated by caller
@@ -566,6 +580,8 @@ extern void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, unsigned bytes
                       unsigned start_entry, unsigned max_entries, // if 0 copies the entire buffer
                       const char *name, unsigned param);
 
+static inline void buf_add (Buffer *buf, const void *data, unsigned len) { memcpy (&buf->data[buf->len], data, len);  buf->len += len; }
+
 extern void buf_test_overflows(const VariantBlock *vb);
 extern bool buf_has_overflowed(const Buffer *buf);
 extern bool buf_has_underflowed(const Buffer *buf);
@@ -579,6 +595,9 @@ extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 extern unsigned    global_num_samples;
 extern const char *global_cmd;            // set once in main()
 extern bool        global_little_endian;  // set in main()
+
+// flags set by user's command line options
+extern int flag_quiet, flag_concat_mode, flag_md5, flag_show_alleles, flag_show_time, flag_multithreaded, flag_show_memory;
 
 // unit tests
 extern void seg_data_line_unit_test();
@@ -618,8 +637,6 @@ typedef struct my_timespec TimeSpecType;
 #else
 typedef struct timespec TimeSpecType;
 #endif
-
-extern int flag_show_time; // set in main()
 
 #define START_TIMER     TimeSpecType profiler_timer; \
                         if (flag_show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 

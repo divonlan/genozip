@@ -11,8 +11,6 @@
 unsigned global_num_samples = 0; // a global param - assigned once before any thread is crated, and never changes - so no thread safety issue
 static Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
 
-extern int flag_concat_mode; // defined in main()
-
 static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffer *vcf_header)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken
@@ -143,7 +141,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
     return true; // everything's good
 }
 
-bool vcf_header_genozip_to_vcf (VariantBlock *vb)
+bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
 {
     static Buffer compressed_vcf_section = EMPTY_BUFFER;
 
@@ -164,6 +162,9 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb)
     vb->z_file->num_lines     = vb->vcf_file->num_lines     = ENDN64 (header->num_lines);
     vb->z_file->vcf_data_size = vb->vcf_file->vcf_data_size = ENDN64 (header->vcf_data_size);
     
+    *digest = header->md5_hash;
+    vb->vcf_file->has_md5 = memcmp (header->md5_hash.bytes, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16); // has_md5 iff not all 0. note: a chance of 1 ~ 10^38 that we will get all-0 by chance in which case will won't perform the md5 comparison
+
     // now get the text of the VCF header itself
     static Buffer vcf_header_buf = EMPTY_BUFFER;
     zfile_uncompress_section(vb, header, &vcf_header_buf, SEC_VCF_HEADER);

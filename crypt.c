@@ -66,38 +66,36 @@ static void crypt_generate_aes_key (VariantBlock *vb,
                                     uint32_t vb_i, int16_t sec_i, // used to generate an aes key unique to each block
                                     uint8_t *aes_key /* out */)
 {
-    const char *salt   = "frome";    
-    const char *pepper = "vaughan";
+    const char *salt   = "frome";     
+    const char *pepper = "vaughan";   
+    static unsigned pw_len=0, salt_len=0, pepper_len=0;
 
-    unsigned pw_len = strlen(password);
-
-    if (!buf_is_allocated (&vb->flavored_password)) {
-        buf_alloc (vb, &vb->flavored_password, pw_len + 4 + 2 + MAX(strlen(salt), strlen(pepper)), 1, "flavored_password", 0);
-        memcpy (vb->flavored_password.data, password, pw_len);
+    if (!pw_len) { // first call
+        pw_len     = strlen (password);
+        salt_len   = strlen (salt);
+        pepper_len = strlen (pepper);
     }
+
+    buf_alloc (vb, &vb->spiced_pw, pw_len + sizeof (uint32_t) + sizeof (int16_t) + salt_len + pepper_len, 1, "spiced_pw", 0);
+    buf_add (&vb->spiced_pw, password, pw_len);
+
+    Md5Hash salty_hash, peppered_hash;
     
-    // add some salt to the password, mixed with data_len for uniqueness
-    char *flavoured_pw = vb->flavored_password.data;
-    char *next = flavoured_pw + pw_len;
+    // add some salt to the password, mixed with vb_i and sec_i for uniqueness
+    buf_add (&vb->spiced_pw, &vb_i, sizeof (uint32_t));
+    buf_add (&vb->spiced_pw, &sec_i, sizeof (int16_t));
+    buf_add (&vb->spiced_pw, salt, salt_len);
+    md5_do (vb->spiced_pw.data, vb->spiced_pw.len, &salty_hash);
 
-    memcpy (next, &vb_i, 4);
-    next += 4;
-
-    memcpy (next, &sec_i, 2);
-    next += 2;
-
-    Md5Hash salty_hash;
-    memcpy (next, salt, strlen(salt));
-    md5_do (flavoured_pw, next - flavoured_pw + strlen(salt), &salty_hash);
-
-    // now some pepper
-    Md5Hash peppered_hash;
-    memcpy (next, pepper, strlen(pepper));
-    md5_do (flavoured_pw, next - flavoured_pw + strlen(pepper), &peppered_hash);
+    // add some pepper
+    buf_add (&vb->spiced_pw, pepper, pepper_len);
+    md5_do (vb->spiced_pw.data, vb->spiced_pw.len, &peppered_hash);
 
     // get hash
     memcpy (aes_key, salty_hash.bytes, sizeof(Md5Hash)); // first half of key
     memcpy (aes_key + sizeof(Md5Hash), peppered_hash.bytes, sizeof(Md5Hash)); // 2nd half of key
+
+    buf_free (&vb->spiced_pw);
 }
 
 void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i) // used to generate an aes key unique to each block

@@ -304,8 +304,6 @@ static bool mtf_merge_in_vb_ctx_one_subfield(VariantBlock *vb, unsigned sf)
 // while holding exclusive access to the z_file dictionaries. returns num_dictionary_sections
 unsigned mtf_merge_in_vb_ctx (VariantBlock *vb)
 {
-    extern int flag_multithreaded; // set in main()
-    
     if (flag_multithreaded) mtf_wait_for_my_turn(vb); // we grab the mutex in the sequencial order of VBs
 
     START_TIMER; // note: careful not to count time spent waiting for the mutex

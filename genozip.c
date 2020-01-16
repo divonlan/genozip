@@ -37,8 +37,7 @@ bool global_little_endian;
 
 // the flags - some are static, some are globals 
 static int flag_stdout=0, flag_force=0, flag_replace=0, flag_show_content=0;
-int flag_quiet=0, flag_concat_mode=0, 
-    flag_show_alleles=0, flag_show_time=0, flag_multithreaded=1, flag_show_memory=0;
+int flag_quiet=0, flag_concat_mode=0, flag_md5=0, flag_show_alleles=0, flag_show_time=0, flag_multithreaded=1, flag_show_memory=0;
 
 int main_print_license(bool for_installer)
 {
@@ -105,11 +104,14 @@ static int main_print_help (bool explicit)
     printf ("   -R --replace      Replace the source file with the result file, rather than leaving it unchanged\n");    
     printf ("   -o --output       Output file name. This option can also be used to concatenate multiple input files\n");
     printf ("                     with the same individuals, into a single concatenated output file\n");
-    printf ("   -p --password     Password-protected - encrypted with 256-bit AES");
+    printf ("   -p --password     Password-protected - encrypted with 256-bit AES\n");
+    printf ("   -m --md5          When compressing - records the MD5 hash of the VCF file in the genozip file header\n");
+    printf ("                     When listing (--list) - shows the MD5 of each file\n");
+    printf ("                     Decompress always compares the MD5 to the uncompressed VCF, if compress was done with --md5\n");
     printf ("   -q --quiet        Don't show the progress indicator\n");    
     printf ("   -@ --threads      Specify the number of threads to use. By default, genozip uses all cores available to it\n");
     printf ("   --show-content    Show the information content of VCF files and the compression ratios of each component\n");
-    printf ("   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file.\n");
+    printf ("   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file\n");
     printf ("                     Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character\n");
     printf ("   --show-time       Show what functions are consuming the most time (useful mostly for developers of genozip)\n");
     printf ("   --show-memory     Show what buffers are consuming the most memory (useful mostly for developers of genozip)\n");
@@ -279,7 +281,7 @@ static void main_genozip (const char *vcf_filename,
                           char *z_filename,
                           int pipefd_zip_to_unzip,  // send output to pipe (used for testing)
                           unsigned max_threads,
-                          bool is_last_file)
+                          bool is_first_file, bool is_last_file)
 {
     File *vcf_file;
     static File *z_file = NULL; // static to support concat mode
@@ -291,7 +293,9 @@ static void main_genozip (const char *vcf_filename,
         vcf_file = file_fdopen (0, READ, STDIN, false);
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
-
+ 
+    ASSERTW (!flag_stdout || !flag_md5, "%s: ignoring --md5 / -m option - it cannot be used when output is redirected", global_cmd);
+  
     ASSERT0 (flag_concat_mode || !z_file, "Error: expecting z_file to be NULL in non-concat mode");
 
     // get output FILE
@@ -335,6 +339,9 @@ static void main_genozip (const char *vcf_filename,
     }
     else ABORT0 ("Error: No output channel");
     
+    // in case of contenated files with md5, the 2nd file onwards continue the same md5 context from the previous file
+    if (!is_first_file && flag_md5) vcf_file->has_md5 = true;
+
     const char *basename = get_basename(vcf_filename, false, "(stdin)");
     zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads, is_last_file);
 
@@ -428,7 +435,7 @@ void *main_test_compress_thread_entry (void *p_)
 {
     TestToCompressData *t2c = (TestToCompressData*)p_;
 
-    main_genozip (t2c->vcf_filename, NULL, t2c->pipe_to_uncompress_thread, t2c->max_threads, true);
+    main_genozip (t2c->vcf_filename, NULL, t2c->pipe_to_uncompress_thread, t2c->max_threads, true, true);
 
     return NULL;
 }
@@ -524,10 +531,10 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
 
     const unsigned FILENAME_WIDTH = 50;
 
-    const char *head_format = "%5s %8s %10s %10s %6s %*s %s\n";
+    const char *head_format = "%5s %8s %10s %10s %6s%s %*s %s\n";
     const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
-    const char *encr_format = "<encrypted>                                 %s%s%*s\n";
-    const char *item_format = "%5u %s %10s %10s %5uX %s%s%*s %s\n";
+    const char *encr_format = "<encrypted>      %s                           %s%s%*s\n";
+    const char *item_format = "%5u %s %10s %10s %5uX%s %s%s%*s %s\n";
 
     if (finalize) {
         if (files_listed > 1) {
@@ -544,7 +551,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     }
 
     if (first_file) {
-        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", -FILENAME_WIDTH, "Name", "Creation"); // follow gzip format
+        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", flag_md5 ? " MD5                             " : "", -FILENAME_WIDTH, "Name", "Creation");
         first_file = false;
     }
     
@@ -565,6 +572,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     if (!success) {
         if (encrypted)
             printf (encr_format, 
+                    flag_md5 ? "                                 " : "",
                     (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                     is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
                     z_filename);
@@ -593,6 +601,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     buf_human_readable_size(vcf_data_size, u_str);
     printf (item_format, num_samples, num_lines_str, 
             c_str, u_str, ratio, 
+            flag_md5 ? md5_display (&vcf_header_header->md5_hash, true) : "",
             (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
             is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
             z_filename, vcf_header_header->created);
@@ -674,6 +683,7 @@ int main (int argc, char **argv)
             {"test",       no_argument,       &command, TEST        },
             {"version",    no_argument,       &command, VERSION     },
             {"compress",   no_argument,       &command, COMPRESS    },
+            {"md5",        no_argument,       &flag_md5, 1          },
             {"threads",    required_argument, 0, '@'                },
             {"output",     required_argument, 0, 'o'                }, 
             {"password",   required_argument, 0, 'p'                }, 
@@ -685,7 +695,7 @@ int main (int argc, char **argv)
         };        
         
         int option_index = 0;
-        int c = getopt_long (argc, argv, "cdfhlLqRtVz@:o:p:", long_options, &option_index);
+        int c = getopt_long (argc, argv, "cdfhlLqRtVzm@:o:p:", long_options, &option_index);
 
         if (c == -1) break; // no more options
 
@@ -700,6 +710,7 @@ int main (int argc, char **argv)
             case 'f' : flag_force         = 1      ; break;
             case 'R' : flag_replace       = 1      ; break;
             case 'q' : flag_quiet         = 1      ; break;
+            case 'm' : flag_md5           = 1      ; break;
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
             case 'p' : crypt_set_password (optarg) ; break;
@@ -751,10 +762,14 @@ int main (int argc, char **argv)
     ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --force / -f option", global_cmd);
     ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --replace / -R option", global_cmd);
     ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --quiet / -q option", global_cmd);
+    ASSERTW (!flag_md5          || command == COMPRESS || command == LIST      , "%s: ignoring --md5 / -m option %s", global_cmd,
+             command==UNCOMPRESS ? "- decompress always verifies MD5 if the file was compressed with --md5" : "");
     ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --threads / -@ option", global_cmd);
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --output / -o option", global_cmd);
     ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with -z or -t", global_cmd);
     ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with -z or -t", global_cmd);
+    
+    if (command != COMPRESS && command != LIST) flag_md5=false;
     
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
@@ -800,7 +815,7 @@ int main (int argc, char **argv)
         ASSERT0 (!count || !flag_show_content, "Error: --showcontent can only work on one file at time");
 
         switch (command) {
-            case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, optind==argc); break;
+            case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, !count, optind==argc); break;
             case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads); break;
             case TEST       : main_test  (next_input_file); break; // returns if successful, displays error and exits if not
             case LIST       : main_list  (next_input_file, false, NULL); break;

@@ -391,10 +391,8 @@ static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len)
 
         unsigned memcpy_len = MIN (len, file->last_read - file->next_read);
 
-        memcpy (&buf->data[buf->len], file->read_buffer + file->next_read, memcpy_len);
-
+        buf_add (buf, file->read_buffer + file->next_read, memcpy_len);
         len             -= memcpy_len;
-        buf->len        += memcpy_len;
         file->next_read += memcpy_len;
 
         memcpyied = true;
@@ -608,6 +606,9 @@ void zfile_update_vcf_header_section_header (VariantBlock *vb)
     // update the header contents
     header->vcf_data_size = ENDN64 (vb->z_file->vcf_concat_data_size);
     header->num_lines     = ENDN64 (vb->z_file->num_lines);
+    if (flag_md5) md5_finalize (&vb->vcf_file->md5_ctx, &header->md5_hash);
+
+    if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (&header->md5_hash, false));
 
     // encrypt if needed
     if (crypt_have_password()) crypt_do (vb, (uint8_t *)header, len, 0, -1); // 0,-1 are the VCF header's header
@@ -616,3 +617,4 @@ void zfile_update_vcf_header_section_header (VariantBlock *vb)
     if (fseek ((FILE *)vb->z_file->file, 0, SEEK_SET)) return; // rewind to the start
     file_write (vb->z_file, header, len);
 }
+

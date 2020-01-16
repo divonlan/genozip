@@ -421,8 +421,9 @@ static void zip_compress_variant_block (VariantBlock *vb)
 void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
                      File *z_file, bool test_mode, unsigned max_threads, bool is_last_file)
 {
-    extern int flag_show_alleles; // defined in main()
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);
+
+    VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
     unsigned line_i = 0; // last line read (first line in file = 1, consistent with script line numbers)
 
@@ -430,7 +431,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     Buffer *first_data_line = NULL; // contains a value only for first variant block, otherwise empty. 
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
-    bool success = vcf_header_vcf_to_genozip (dispatcher_get_pseudo_vb (dispatcher), &line_i, &first_data_line);
+    bool success = vcf_header_vcf_to_genozip (pseudo_vb, &line_i, &first_data_line);
     if (!success) goto finish;
 
     if (!first_data_line) goto finish; // VCF file has only a header or is an empty file - no data - we're done
@@ -505,9 +506,8 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
     // go back and update some fields in the vcf header's section header - only if we can go back
     // (i.e. not output redirected). we might need to re-encrypt.
-    extern int flag_concat_mode; // set in main()
     if ((is_last_file || !flag_concat_mode) && z_file && z_file->type == GENOZIP) 
-        zfile_update_vcf_header_section_header (dispatcher_get_pseudo_vb (dispatcher));
+        zfile_update_vcf_header_section_header (pseudo_vb);
 
 finish:
     z_file->disk_size = z_file->disk_so_far;

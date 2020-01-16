@@ -77,9 +77,9 @@ void buf_test_overflows(const VariantBlock *vb)
             else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
                 fprintf (stderr, 
 #ifdef _MSC_VER
-                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%I64x", 
+                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%I64x\n", 
 #else
-                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64, 
+                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64"\n", 
 #endif
                          vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, (uint64_t)(uintptr_t)buf->data);
                 corruption = true;
@@ -87,21 +87,24 @@ void buf_test_overflows(const VariantBlock *vb)
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, 
 #ifdef _MSC_VER
-                        "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Underflow in buffer %.30s param=%u \"%.8s\"", 
+                        "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Underflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
 #else
-                        "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u \"%.8s\"", 
+                        "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
 #endif
-                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, buf->memory);
+                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, 
+                         buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
+                char *of = &buf->memory[buf->size + sizeof(long long)];
                 fprintf (stderr,
 #ifdef _MSC_VER
-                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x size=%u : Overflow in buffer %.30s param=%u \"%.8s\"", 
+                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x size=%u : Overflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
 #else
-                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u \"%.8s\"", 
+                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
 #endif
-                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, &buf->memory[buf->size + sizeof(long long)]);
+                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, 
+                         of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                 
                 corruption = true;
             }
@@ -209,7 +212,7 @@ long long buf_vb_memory_consumption (const VariantBlock *vb)
     return vb_memory;
 }
 
-static inline void buf_add(VariantBlock *vb, Buffer *buf)
+static inline void buf_add_to_buffer_list (VariantBlock *vb, Buffer *buf)
 {
     extern unsigned global_max_threads;    // set in main()
     Buffer *buffer_list   = &vb->buffer_list;
@@ -311,7 +314,7 @@ unsigned buf_alloc (VariantBlock *vb,
             buf->param = param;
             buf->type  = BUF_REGULAR;
             
-            buf_add(vb, buf);
+            buf_add_to_buffer_list(vb, buf);
 
 #ifdef DISPLAY_ALLOCS_AFTER
             if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)

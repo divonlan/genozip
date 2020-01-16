@@ -122,6 +122,11 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, B
 
     file->vcf_data_so_far += str_len;
 
+    if (flag_md5) {
+        md5_update (&file->md5_ctx, line->data, line->len, !file->has_md5);
+        file->has_md5 = true;
+    }
+
     return true;
 }
 
@@ -135,6 +140,9 @@ unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
         len  -= bytes_written;
         next += bytes_written;
     }
+
+    if (vcf_file->has_md5)
+        md5_update (&vcf_file->md5_ctx, buf->data, buf->len, !vcf_file->vcf_data_so_far);
 
     vcf_file->vcf_data_so_far += buf->len;
     vcf_file->disk_so_far     += buf->len;

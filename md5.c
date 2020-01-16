@@ -7,18 +7,6 @@
 #include <memory.h>
 #include "genozip.h"
 
-// Md5Context - This must be initialised using Md5Initialised. Do not modify the contents of this structure directly.
-typedef struct {
-    uint32_t     lo;
-    uint32_t     hi;
-    uint32_t     a;
-    uint32_t     b;
-    uint32_t     c;
-    uint32_t     d;
-    uint8_t      buffer[64];
-    uint32_t     block[16];
-} Md5Context;
-
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
 #define G( x, y, z )            ( (y) ^ ((z) & ((x) ^ (y))) )
 #define H( x, y, z )            ( (x) ^ (y) ^ (z) )
@@ -29,14 +17,21 @@ typedef struct {
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-static
-void*
-    TransformFunction
-    (
-        Md5Context*     ctx,
-        void const*     data,
-        uintmax_t       size
-    )
+/*static void display_ctx (const Md5Context *x)
+{
+    static unsigned iteration=1;
+
+    printf ("%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
+    for (unsigned i=0; i<64; i++) printf ("%2.2x", x->buffer[i]);
+    printf (" ");
+    for (unsigned i=0; i<16; i++) printf ("%8.8x", x->block[i]);
+    printf ("\n");
+
+    iteration++;
+}
+*/
+
+static void *md5_transform (Md5Context *ctx, void const *data, uintmax_t size)
 {
     uint8_t*     ptr;
     uint32_t     a;
@@ -160,145 +155,129 @@ void*
     return ptr;
 }
 
-static void
-    Md5Initialise
-    (
-        Md5Context*         Context         // [out]
-    )
+static void md5_initialize (Md5Context *ctx)
 {
-    Context->a = 0x67452301;
-    Context->b = 0xefcdab89;
-    Context->c = 0x98badcfe;
-    Context->d = 0x10325476;
+    memset (ctx, 0, sizeof(Md5Context));
 
-    Context->lo = 0;
-    Context->hi = 0;
+    ctx->a = 0x67452301;
+    ctx->b = 0xefcdab89;
+    ctx->c = 0x98badcfe;
+    ctx->d = 0x10325476;
+
+    ctx->lo = 0;
+    ctx->hi = 0;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  Md5Update
-//
-//  Adds data to the MD5 context. This will process the data and update the internal state of the context. Keep on
-//  calling this function until all the data has been added. Then call Md5Finalise to calculate the hash.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-static void
-    Md5Update
-    (
-        Md5Context*         Context,        // [in out]
-        void const*         Buffer,         // [in]
-        uint32_t            BufferSize      // [in]
-    )
+void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize)
 {
+    if (initialize) md5_initialize (ctx);
+
     uint32_t    saved_lo;
     uint32_t    used;
     uint32_t    free;
 
-    saved_lo = Context->lo;
-    if( (Context->lo = (saved_lo + BufferSize) & 0x1fffffff) < saved_lo )
-    {
-        Context->hi++;
-    }
-    Context->hi += (uint32_t)( BufferSize >> 29 );
+    saved_lo = ctx->lo;
+    if ((ctx->lo = (saved_lo + len) & 0x1fffffff) < saved_lo) 
+        ctx->hi++;
+    
+    ctx->hi += (uint32_t)(len >> 29);
 
     used = saved_lo & 0x3f;
 
-    if( used )
-    {
+    if (used) {
         free = 64 - used;
 
-        if( BufferSize < free )
-        {
-            memcpy( &Context->buffer[used], Buffer, BufferSize );
+        if (len < free) {
+            memcpy (&ctx->buffer[used], data, len);
             return;
         }
 
-        memcpy( &Context->buffer[used], Buffer, free );
-        Buffer = (uint8_t*)Buffer + free;
-        BufferSize -= free;
-        TransformFunction(Context, Context->buffer, 64);
+        memcpy (&ctx->buffer[used], data, free);
+        data += free;
+        len -= free;
+        md5_transform (ctx, ctx->buffer, 64);
     }
 
-    if( BufferSize >= 64 )
-    {
-        Buffer = TransformFunction( Context, Buffer, BufferSize & ~(unsigned long)0x3f );
-        BufferSize &= 0x3f;
+    if (len >= 64) {
+        data = md5_transform (ctx, data, len & ~(unsigned long)0x3f);
+        len &= 0x3f;
     }
 
-    memcpy( Context->buffer, Buffer, BufferSize );
+    memcpy (ctx->buffer, data, len);
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  Md5Finalise
-//
-//  Performs the final calculation of the hash and returns the digest (16 byte buffer containing 128bit hash). After
-//  calling this, Md5Initialised must be used to reuse the context.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-static void
-    Md5Finalise
-    (
-        Md5Context*         Context,        // [in out]
-        Md5Hash*           Digest          // [in]
-    )
+void md5_finalize (Md5Context *ctx, Md5Hash *digest)
 {
     uint32_t    used;
     uint32_t    free;
 
-    used = Context->lo & 0x3f;
+    used = ctx->lo & 0x3f;
 
-    Context->buffer[used++] = 0x80;
+    ctx->buffer[used++] = 0x80;
 
     free = 64 - used;
 
     if(free < 8)
     {
-        memset( &Context->buffer[used], 0, free );
-        TransformFunction( Context, Context->buffer, 64 );
+        memset( &ctx->buffer[used], 0, free );
+        md5_transform( ctx, ctx->buffer, 64 );
         used = 0;
         free = 64;
     }
 
-    memset( &Context->buffer[used], 0, free - 8 );
+    memset( &ctx->buffer[used], 0, free - 8 );
 
-    Context->lo <<= 3;
-    Context->buffer[56] = (uint8_t)( Context->lo );
-    Context->buffer[57] = (uint8_t)( Context->lo >> 8 );
-    Context->buffer[58] = (uint8_t)( Context->lo >> 16 );
-    Context->buffer[59] = (uint8_t)( Context->lo >> 24 );
-    Context->buffer[60] = (uint8_t)( Context->hi );
-    Context->buffer[61] = (uint8_t)( Context->hi >> 8 );
-    Context->buffer[62] = (uint8_t)( Context->hi >> 16 );
-    Context->buffer[63] = (uint8_t)( Context->hi >> 24 );
+    ctx->lo <<= 3;
+    ctx->buffer[56] = (uint8_t)( ctx->lo );
+    ctx->buffer[57] = (uint8_t)( ctx->lo >> 8 );
+    ctx->buffer[58] = (uint8_t)( ctx->lo >> 16 );
+    ctx->buffer[59] = (uint8_t)( ctx->lo >> 24 );
+    ctx->buffer[60] = (uint8_t)( ctx->hi );
+    ctx->buffer[61] = (uint8_t)( ctx->hi >> 8 );
+    ctx->buffer[62] = (uint8_t)( ctx->hi >> 16 );
+    ctx->buffer[63] = (uint8_t)( ctx->hi >> 24 );
 
-    TransformFunction( Context, Context->buffer, 64 );
+    md5_transform( ctx, ctx->buffer, 64 );
 
-    Digest->bytes[0]  = (uint8_t)( Context->a );
-    Digest->bytes[1]  = (uint8_t)( Context->a >> 8 );
-    Digest->bytes[2]  = (uint8_t)( Context->a >> 16 );
-    Digest->bytes[3]  = (uint8_t)( Context->a >> 24 );
-    Digest->bytes[4]  = (uint8_t)( Context->b );
-    Digest->bytes[5]  = (uint8_t)( Context->b >> 8 );
-    Digest->bytes[6]  = (uint8_t)( Context->b >> 16 );
-    Digest->bytes[7]  = (uint8_t)( Context->b >> 24 );
-    Digest->bytes[8]  = (uint8_t)( Context->c );
-    Digest->bytes[9]  = (uint8_t)( Context->c >> 8 );
-    Digest->bytes[10] = (uint8_t)( Context->c >> 16 );
-    Digest->bytes[11] = (uint8_t)( Context->c >> 24 );
-    Digest->bytes[12] = (uint8_t)( Context->d );
-    Digest->bytes[13] = (uint8_t)( Context->d >> 8 );
-    Digest->bytes[14] = (uint8_t)( Context->d >> 16 );
-    Digest->bytes[15] = (uint8_t)( Context->d >> 24 );
+    digest->bytes[0]  = (uint8_t)( ctx->a );
+    digest->bytes[1]  = (uint8_t)( ctx->a >> 8 );
+    digest->bytes[2]  = (uint8_t)( ctx->a >> 16 );
+    digest->bytes[3]  = (uint8_t)( ctx->a >> 24 );
+    digest->bytes[4]  = (uint8_t)( ctx->b );
+    digest->bytes[5]  = (uint8_t)( ctx->b >> 8 );
+    digest->bytes[6]  = (uint8_t)( ctx->b >> 16 );
+    digest->bytes[7]  = (uint8_t)( ctx->b >> 24 );
+    digest->bytes[8]  = (uint8_t)( ctx->c );
+    digest->bytes[9]  = (uint8_t)( ctx->c >> 8 );
+    digest->bytes[10] = (uint8_t)( ctx->c >> 16 );
+    digest->bytes[11] = (uint8_t)( ctx->c >> 24 );
+    digest->bytes[12] = (uint8_t)( ctx->d );
+    digest->bytes[13] = (uint8_t)( ctx->d >> 8 );
+    digest->bytes[14] = (uint8_t)( ctx->d >> 16 );
+    digest->bytes[15] = (uint8_t)( ctx->d >> 24 );
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  Md5Calculate
-//
-//  Combines Md5Initialise, Md5Update, and Md5Finalise into one function. Calculates the MD5 hash of the buffer.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void md5_do (const void *data, unsigned len, Md5Hash *digest)
 {
-    Md5Context context;
+//    printf ("data: ");
+//    for (unsigned i=0; i<len; i++) printf ("%2.2x", ((uint8_t*)data)[i]);
+//    printf("\n"); 
 
-    Md5Initialise (&context);
-    Md5Update (&context, data, len);
-    Md5Finalise (&context, digest);
+    Md5Context ctx;
+
+    md5_update (&ctx, data, len, true);
+
+    md5_finalize (&ctx, digest);
+}
+
+const char *md5_display (const Md5Hash *digest, bool prefix_space)
+{
+    static char str[34]; // not thread-safe, but only used by main thread (inc. space and \0)
+
+    const uint8_t *b = digest->bytes; 
+    
+    sprintf (str, "%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", prefix_space ? " " : "",
+             b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+
+    return str;
 }
