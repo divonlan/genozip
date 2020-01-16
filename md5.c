@@ -170,10 +170,6 @@ static void md5_initialize (Md5Context *ctx)
 
 void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize)
 {
-    printf ("xxx data: len=%u\n", len);
-    //for (unsigned i=0; i<len; i++) printf ("%c", ((uint8_t*)data)[i]);
-    //printf("\n"); 
-
     if (initialize) md5_initialize (ctx);
 
     uint32_t    saved_lo;
@@ -210,7 +206,7 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initializ
     memcpy (ctx->buffer, data, len);
 
 finish:
-    md5_display_ctx (ctx);
+    //md5_display_ctx (ctx);
     return;
 }
 
