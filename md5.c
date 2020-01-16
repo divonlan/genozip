@@ -237,7 +237,7 @@ static void
     Md5Finalise
     (
         Md5Context*         Context,        // [in out]
-        MD5_HASH*           Digest          // [in]
+        Md5Hash*           Digest          // [in]
     )
 {
     uint32_t    used;
@@ -294,7 +294,7 @@ static void
 //
 //  Combines Md5Initialise, Md5Update, and Md5Finalise into one function. Calculates the MD5 hash of the buffer.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void md5_do (const void *data, unsigned len, MD5_HASH *digest)
+void md5_do (const void *data, unsigned len, Md5Hash *digest)
 {
     Md5Context context;
 

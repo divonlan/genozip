@@ -88,6 +88,8 @@ typedef enum {
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
+typedef struct { uint8_t bytes [16]; } Md5Hash;
+
 typedef struct {
     uint32_t magic; 
     uint32_t compressed_offset;     // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
@@ -111,7 +113,7 @@ typedef struct {
     uint64_t vcf_data_size;  // number of bytes in the original VCF file
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;      // number of variants (data lines) in the original vCF file
-
+    Md5Hash md5_hash;        // md5 of original VCF file, or 0s if no hash was calculated
     char created[FILE_METADATA_LEN];    
 } SectionHeaderVCFHeader; 
 
@@ -529,9 +531,7 @@ extern unsigned crypt_max_padding_len();
 extern void aes_initialize (VariantBlock *vb, const uint8_t *key);
 extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length);
 
-#define MD5_HASH_SIZE 16
-typedef struct { uint8_t bytes [MD5_HASH_SIZE]; } MD5_HASH;
-extern void md5_do (const void *data, unsigned len, MD5_HASH *digest);
+extern void md5_do (const void *data, unsigned len, Md5Hash *digest);
 
 extern void squeeze (VariantBlock *vb,
                      uint8_t *dst, // memory should be pre-allocated by caller

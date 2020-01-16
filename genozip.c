@@ -802,7 +802,7 @@ int main (int argc, char **argv)
         switch (command) {
             case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, optind==argc); break;
             case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads); break;
-            case TEST       : main_test  (next_input_file); break;
+            case TEST       : main_test  (next_input_file); break; // returns if successful, displays error and exits if not
             case LIST       : main_list  (next_input_file, false, NULL); break;
             
             default         : ASSERT(false, "%s: unrecognized command %c", global_cmd, command);

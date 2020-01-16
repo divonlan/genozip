@@ -86,18 +86,18 @@ static void crypt_generate_aes_key (VariantBlock *vb,
     memcpy (next, &sec_i, 2);
     next += 2;
 
-    MD5_HASH salty_hash;
+    Md5Hash salty_hash;
     memcpy (next, salt, strlen(salt));
     md5_do (flavoured_pw, next - flavoured_pw + strlen(salt), &salty_hash);
 
     // now some pepper
-    MD5_HASH peppered_hash;
+    Md5Hash peppered_hash;
     memcpy (next, pepper, strlen(pepper));
     md5_do (flavoured_pw, next - flavoured_pw + strlen(pepper), &peppered_hash);
 
     // get hash
-    memcpy (aes_key, salty_hash.bytes, MD5_HASH_SIZE); // first half of key
-    memcpy (aes_key + MD5_HASH_SIZE, peppered_hash.bytes, MD5_HASH_SIZE); // 2nd half of key
+    memcpy (aes_key, salty_hash.bytes, sizeof(Md5Hash)); // first half of key
+    memcpy (aes_key + sizeof(Md5Hash), peppered_hash.bytes, sizeof(Md5Hash)); // 2nd half of key
 }
 
 void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i) // used to generate an aes key unique to each block
@@ -126,7 +126,7 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
     if (!padding_len) return; // nothing to do
 
     // use md5 to generate non-trival padding - the hash of the last 100 bytes of data
-    MD5_HASH hash;
+    Md5Hash hash;
     unsigned src_len = MIN (data_len, 100);
     md5_do (&data[data_len-src_len], src_len, &hash);
     
