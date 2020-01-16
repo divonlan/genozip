@@ -18,13 +18,14 @@ build:
 
 requirements:
   build:
-    - {{ compiler('c') }}      # [not win]
+    - {{ compiler('c') }}        # [not win]
     - {{ compiler('m2w64_c') }}  # [win]
     - {{posix}}make
     - {{posix}}sed               # [win]
     - {{posix}}coreutils         # [win]
     - bzip2
   host:
+    - {{native}}gcc-libs         # [win]
     - zlib
     - bzip2
   run:
@@ -46,8 +47,9 @@ test:
     {% for executable in genozip_executables %}
     - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
     {% endfor %}
-    - genozip --password abc --test test-file.vcf  
-
+    - which genozip.exe  # [win]
+    - genozip --password abc --test test-file.vcf 2>&1  
+  
 about:
   home: https://github.com/divonlan/genozip
   dev_url: https://github.com/divonlan/genozip

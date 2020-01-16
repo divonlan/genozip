@@ -7,7 +7,7 @@
 # Mingw: http://mingw-w64.org/doku.php  (Windows 32 bit version also works)
 # Cygwin: https://www.cygwin.com/
 
-VERSION = 1.0.2
+VERSION = 1.0.3
 
 ifdef BUILD_PREFIX
 IS_CONDA=1
