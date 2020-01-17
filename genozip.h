@@ -113,7 +113,8 @@ typedef struct {
     uint64_t vcf_data_size;  // number of bytes in the original VCF file
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;      // number of variants (data lines) in the original vCF file
-    Md5Hash md5_hash;        // md5 of original VCF file, or 0s if no hash was calculated
+    Md5Hash md5_hash;        // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
+    Md5Hash md5_hash_single; // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the single component
     char created[FILE_METADATA_LEN];    
 } SectionHeaderVCFHeader; 
 
