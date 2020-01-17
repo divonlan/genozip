@@ -384,7 +384,7 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
     }
 
     // some sanity checks
-    ASSERT (!area || *c, "Error: last line %u is missing a newline", line_i);
+    ASSERT (area==DONE || *c, "Error: last line %u is missing a newline", line_i);
 
     ASSERT (!area, "Error: line %u ends pre-maturely", line_i);
 
