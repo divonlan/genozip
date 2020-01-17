@@ -166,18 +166,20 @@ C99_WIN_SRCS    := $(shell echo $(C99_COMPILE_AS_CPP) | sed 's/\\//\\\\\\\\\\\\\
 conda/bld.bat: conda/bld.template.bat Makefile
 	@echo "Building $@ (for conda)"
 	@sed s/'{{ src }}'/'$(C99_WIN_SRCS) $(OLD_C_WIN_SRCS)'/ conda/bld.template.bat > $@
-
-# publish to conda-forge
+ 
+# publish to conda-forge 
 conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat
+	@echo rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
+	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)
 	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat ../staged-recipes/recipes/genozip/
-	@echo "Committing files & pushing changes to my forked staged-recipies/genozip-branch"
+	@echo "Committing my files to the branch and pushing them"
 	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo "Submitting pull request to conda-forge"
-	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip-branch)
+#	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
-	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10543"
+	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
 	@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
 
 WINDOWS_INSTALL_FILES = genozip.exe genounzip.exe genocat.exe genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
