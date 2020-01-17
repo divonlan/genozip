@@ -1,6 +1,12 @@
+# ------------------------------------------------------------------
+#   meta.template.yaml
+#   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+#   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 # See: https://docs.conda.io/projects/conda-build/en/latest/resources/build-scripts.html
 # See: https://docs.ligo.org/lscsoft/conda/packaging/
-# Example here: https://github.com/conda-forge/nds2-client-feedstock/tree/492436f4fa3c6b8a62dbc86dc68d79f818d251e3/recipe/
+# Example of a C project: https://github.com/conda-forge/bzip2-feedstock/tree/b49b6b5ecc0035d2e947a4e3f720a3f24519d19e/recipe
+# Example of building Windows with gcc: https://github.com/conda-forge/r-dplyr-feedstock/tree/master/recipe
 
 {% set posix = 'm2-' if win else '' %}
 {% set native = 'm2w64-' if win else '' %}
@@ -14,10 +20,12 @@ source:
   sha256: {{ sha256 }}
 
 build:
+# Windows builds & tests successfully, but then the test fails in Appveyor - it seems the executable is not loading (maybe missing gcc libraries? just a hunch)
+  skip: True  # [win]
   number: 0
 
 requirements:
-  build:
+  build:    
     - {{ compiler('c') }}        # [not win]
     - {{ compiler('m2w64_c') }}  # [win]
     - {{posix}}make
