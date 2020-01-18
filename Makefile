@@ -205,18 +205,28 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) 
 	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
 	@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
 
-WINDOWS_INSTALL_FILES = genozip.exe genounzip.exe genocat.exe genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
+WINDOWS_INSTALL_FILES = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
 
-windows-installer: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
-	@echo 'Copying files to windows'
-	@cp genozip.exe genounzip.exe genocat.exe genols.exe windows
+windows/%.exe: %.exe
+	@echo Copying $<
+	@cp -f $< $@ 
+
+windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
+	@echo 'Committing Windows files and pushing all changes to repo'
+	@git stage $(WINDOWS_INSTALL_FILES) $@
+	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) $@ ; exit 0)
+	@echo Verifying that all files are committed to the repo
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@git push
 	@echo 'Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
-	@echo '  (2) Make sure the version is set to $(VERSION)'
-	@echo '  (3) Make sure the files list, and the license from LICENSE.for-installer.txt are up to date'
-	@echo '  (4) Click Build'
-	@C:\\Program\ Files\ \(x86\)\\solicus\\InstallForge\\InstallForge.exe
-	@echo
+	@echo '  (2) Set General-Program version to $(shell cat .version)'
+	@echo '  (3) Verify the files Setup-Files, and the license from LICENSE.for-installer.txt are up to date'
+	@echo '  (4) Click Save, then click Build'
+	@echo '  (5) Exit the UI (close the window)'
+	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
+	@(git stage windows/genozip.ifp $@ ; exit 0)
+	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) $@ ; exit 0)
 
 
 endif

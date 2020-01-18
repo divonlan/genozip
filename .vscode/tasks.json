@@ -126,10 +126,10 @@
         },
         {
             "type": "shell",
-            "label": "make windows-installer",
+            "label": "make installer for Windows",
             "command": "make.exe",
             "args": [
-                "windows-installer"
+                "windows/genozip-installer.exe"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
