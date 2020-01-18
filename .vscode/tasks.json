@@ -87,10 +87,10 @@
         },
         {
             "type": "shell",
-            "label": "make conda",
+            "label": "Distribution - conda + windows installer",
             "command": "make.exe",
             "args": [
-                "conda/.conda-timestamp"
+                "distribution"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -105,43 +105,6 @@
             "presentation": {
                 "clear": true
             }
-        },
-        {
-            "type": "shell",
-            "label": "make license",
-            "command": "make.exe",
-            "args": [
-                "LICENSE.non-commercial.txt"
-            ],
-            "options": {
-                "cwd": "${workspaceRoot}"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "clear": true
-            }
-        },
-        {
-            "type": "shell",
-            "label": "make installer for Windows",
-            "command": "make.exe",
-            "args": [
-                "windows/genozip-installer.exe"
-            ],
-            "options": {
-                "cwd": "${workspaceRoot}"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "clear": true
-            },
-            "problemMatcher": []
         }
     ]
 }

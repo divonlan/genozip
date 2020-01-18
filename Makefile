@@ -116,6 +116,10 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
+LICENSE.non-commercial.txt: lic-text.h
+	@echo Generating $@
+	@./genozip$(EXE) --license > $@
+
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
 	@echo Installing in $(PREFIX)/bin
@@ -165,7 +169,7 @@ conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
-conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat version.h
+conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo " "
 	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
@@ -219,11 +223,9 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 
 endif
 
-LICENSE.non-commercial.txt: lic-text.h
-	@echo Generating $@
-	@./genozip$(EXE) --license > $@
-
 .PHONY: clean clean-debug clean-all 
+
+distribution: conda/.conda-timestamp windows/genozip-installer.exe
 
 clean:
 	@echo Cleaning up
