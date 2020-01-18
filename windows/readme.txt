@@ -25,10 +25,14 @@ Flags:
    -R --replace      Replace the source file with the result file, rather than leaving it unchanged
    -o --output       Output file name. This option can also be used to concatenate multiple input files
                      with the same individuals, into a single concatenated output file
-   -p --password     Password-protected - encrypted with 256-bit AES   -q --quiet        Don't show the progress indicator
+   -p --password     Password-protected - encrypted with 256-bit AES
+   -m --md5          When compressing - records the MD5 hash of the VCF file in the genozip file header
+                     When listing (--list) - shows the MD5 of each file
+                     Decompress always compares the MD5 to the uncompressed VCF, if compress was done with --md5
+   -q --quiet        Don't show the progress indicator
    -@ --threads      Specify the number of threads to use. By default, genozip uses all cores available to it
    --show-content    Show the information content of VCF files and the compression ratios of each component
-   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file.
+   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file
                      Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character
    --show-time       Show what functions are consuming the most time (useful mostly for developers of genozip)
    --show-memory     Show what buffers are consuming the most memory (useful mostly for developers of genozip)
