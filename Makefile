@@ -46,11 +46,11 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = genozip.h lic-text.h version.h \
+CONDA_INCS = genozip.h lic-text.h  \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
 	         compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
 	         compatability/win32_pthread.h \
-      	     compatability/mac_gettime.h 
+      	     compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency with .version
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c 
@@ -136,7 +136,7 @@ ifeq ($(OS),Windows_NT)
 # and re-compile so that genozip --version gets update
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderVCFHeader.genozip_version
-.version: 
+.version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS)
 # double check that everything is committed (we check several times)
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Verifying that something has changed since version $(shell cat .version)
@@ -169,7 +169,7 @@ conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
-conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
+conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat version.h
 	@exit 1
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo " "
@@ -228,7 +228,7 @@ LICENSE.non-commercial.txt: lic-text.h
 	@echo Generating $@
 	@./genozip$(EXE) --license > $@
 
-.PHONY: clean clean-debug clean-all .version
+.PHONY: clean clean-debug clean-all 
 
 clean:
 	@echo Cleaning up
