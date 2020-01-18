@@ -149,13 +149,24 @@ endif
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
-TAG=genozip-$(VERSION)
+# increments minor version, eg. 1.0.1 -> 1.0.2. 
+# To increment a major version, manually edit .version and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
+.version: 
+# double check that everything is committed (we check several times)
+	@echo Verifying that all files are committed to the repo
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
+	@git commit -m "increment version" .version
 
-.archive.tar.gz:
-	@echo Creating github tag $(TAG) and archive
-	@git tag $(TAG)
-	@git push origin $(TAG)
-	@curl https://github.com/divonlan/genozip/archive/$(TAG).tar.gz --silent --location -o $@
+.archive.tar.gz: .version
+# double check that everything is committed (we check several times)
+	@echo Verifying that all files are committed to the repo
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@echo Creating github tag $(shell cat .version) and archive
+	@git push 
+	@git tag $(shell cat .version)
+	@git push origin $(shell cat .version)
+	@curl https://github.com/divonlan/genozip/archive/genozip-$(shell cat .version).tar.gz --silent --location -o $@
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating meta.yaml (for conda)"
@@ -173,6 +184,9 @@ C99_WIN_SRCS    := $(shell echo $(C99_COMPILE_AS_CPP) | sed 's/\\//\\\\\\\\\\\\\
  
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
+# double check that everything is committed (we check several times)
+	@echo Verifying that all files are committed to the repo
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo " "
 	@echo rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
 	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)
@@ -183,7 +197,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) 
 	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
-	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
+	#@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
 	@touch $@
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
@@ -218,7 +232,7 @@ windows/readme.txt: genozip$(EXE)
 	@echo Generating $@
 	@./genozip$(EXE) --help > $@
 
-.PHONY: clean clean-debug clean-all 
+.PHONY: clean clean-debug clean-all .version
 
 clean:
 	@echo Cleaning up
