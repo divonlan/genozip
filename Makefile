@@ -217,7 +217,6 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) $@ ; exit 0)
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
-	@git push
 	@echo 'Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
 	@echo '  (2) Set General-Program version to $(shell cat .version)'
@@ -227,6 +226,7 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@(git stage windows/genozip.ifp $@ ; exit 0)
 	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) $@ ; exit 0)
+	@git push
 
 
 endif
