@@ -90,7 +90,7 @@
             "label": "make conda",
             "command": "make.exe",
             "args": [
-                "conda"
+                "conda/.conda-timestamp"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

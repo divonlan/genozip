@@ -1,3 +1,5 @@
+.conda-timestamp
+.archive.tar.gz
 *-debug.exe
 *.o
 *.debug-o
@@ -19,7 +21,6 @@ notes.txt
 to do.txt
 junk*
 meta.yaml
-bld.bat
 windows/LICENSE.for-installer.txt
 *.vcf
 !test-file.vcf

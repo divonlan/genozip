@@ -7,7 +7,7 @@
 # Mingw: http://mingw-w64.org/doku.php  (Windows 32 bit version also works)
 # Cygwin: https://www.cygwin.com/
 
-VERSION = 1.0.3
+VERSION = 1.0.5
 
 ifdef BUILD_PREFIX
 IS_CONDA=1
@@ -125,7 +125,7 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-# this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.template.bat
+# this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
 	@echo Installing in $(PREFIX)/bin
 	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
@@ -137,23 +137,31 @@ endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genols$(EXE)
 
-TARBALL := conda/genozip-$(VERSION).tar.gz
+#TARBALL := conda/genozip-$(VERSION).tar.gz
 
-$(TARBALL): $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
-	@echo "Archiving to $@"
-	@tar --create --gzip --file $(TARBALL) $^
-	@echo "Committing $(TARBALL) & pushing changes to genozip/master"
-	@(git add $(TARBALL))
-	@(git commit -m "update archive" $(TARBALL) ; git push)
+#$(TARBALL): $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
+#	@echo "Archiving to $@"
+#	@tar --create --gzip --file $(TARBALL) $^
+#	@echo "Committing $(TARBALL) & pushing changes to genozip/master"
+#	@(git add $(TARBALL))
+#	@(git commit -m "update archive" $(TARBALL) ; git push)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
- 
-conda/meta.yaml: conda/meta.template.yaml $(TARBALL)
+
+TAG=genozip-$(VERSION)
+
+.archive.tar.gz:
+	@echo Creating github tag $(TAG) and archive
+	@git tag $(TAG)
+	@git push origin $(TAG)
+	@curl https://github.com/divonlan/genozip/archive/$(TAG).tar.gz --silent --location -o $@
+
+conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.template.yaml | \
-		sed s/'{{ sha256 }}'/$$(openssl sha256 $(TARBALL)|cut -d= -f2|cut -c2-)/ | \
-		sed s/'{{ version }}'/$(VERSION)/g | \
+		sed s/SHA256/$$(openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
+		sed s/VERSION/$(VERSION)/g | \
 		grep -v "^#" \
 		> $@
 
@@ -162,21 +170,21 @@ C99_COMPILE_AS_CPP := $(shell echo $(C99_SRCS)   | tr ' ' '\n' | sed 's/^/-Tp /g
 
 OLD_C_WIN_SRCS  := $(shell echo $(OLD_C_COMPILE_AS_C) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
 C99_WIN_SRCS    := $(shell echo $(C99_COMPILE_AS_CPP) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) 
-
-conda/bld.bat: conda/bld.template.bat Makefile
-	@echo "Building $@ (for conda)"
-	@sed s/'{{ src }}'/'$(C99_WIN_SRCS) $(OLD_C_WIN_SRCS)'/ conda/bld.template.bat > $@
  
 # publish to conda-forge 
-conda: $(TARBALL) conda/meta.yaml conda/build.sh conda/bld.bat
+conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
+	@echo " "
 	@echo rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
 	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)
+	@echo " "
 	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat ../staged-recipes/recipes/genozip/
 	@echo "Committing my files to the branch and pushing them"
 	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
+	@echo " "
 	@echo "Submitting pull request to conda-forge"
-#	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
+	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
+	@touch $@
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
 	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
