@@ -173,7 +173,7 @@ conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 		sed s/VERSION/$(shell cat .version)/g | \
 		grep -v "^#" \
 		> $@
-
+ 
 OLD_C_COMPILE_AS_C := $(shell echo $(OLD_C_SRCS) | tr ' ' '\n' | sed 's/^/-Tc /g'|tr '\n' ' ')
 C99_COMPILE_AS_CPP := $(shell echo $(C99_SRCS)   | tr ' ' '\n' | sed 's/^/-Tp /g'|tr '\n' ' ')
 
