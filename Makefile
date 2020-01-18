@@ -7,8 +7,6 @@
 # Mingw: http://mingw-w64.org/doku.php  (Windows 32 bit version also works)
 # Cygwin: https://www.cygwin.com/
 
-VERSION = 1.0.5
-
 ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
@@ -168,11 +166,11 @@ ifeq ($(OS),Windows_NT)
 	@git push origin $(shell cat .version)
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(shell cat .version).tar.gz --silent --location -o $@
 
-conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
+conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz 
 	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.template.yaml | \
-		sed s/SHA256/$$(openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
-		sed s/VERSION/$(VERSION)/g | \
+		sed s/SHA256/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
+		sed s/VERSION/$(shell cat .version)/g | \
 		grep -v "^#" \
 		> $@
 
