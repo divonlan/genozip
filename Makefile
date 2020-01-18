@@ -152,7 +152,7 @@ ifeq ($(OS),Windows_NT)
 .version: 
 # double check that everything is committed (we check several times)
 	@echo Verifying that all files are committed to the repo
-	@[ ! `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` ]
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo Verifying that something has changed since version $(shell cat .version)
 	@[ `git log 1.0.9..HEAD --oneline | wc -l` ]
 	#@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
@@ -161,7 +161,7 @@ ifeq ($(OS),Windows_NT)
 .archive.tar.gz: .version
 # double check that everything is committed (we check several times)
 	@echo Verifying that all files are committed to the repo
-	@[ `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` ]
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo Creating github tag $(shell cat .version) and archive
 	@git push 
 	@git tag $(shell cat .version)
@@ -186,7 +186,7 @@ C99_WIN_SRCS    := $(shell echo $(C99_COMPILE_AS_CPP) | sed 's/\\//\\\\\\\\\\\\\
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
 # double check that everything is committed (we check several times)
 	@echo Verifying that all files are committed to the repo
-	@[ `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` ]
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo " "
 	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
 	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)
