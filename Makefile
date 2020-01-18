@@ -151,6 +151,7 @@ ifeq ($(OS),Windows_NT)
 # To increment a major version, manually edit .version and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
 .version: 
 # double check that everything is committed (we check several times)
+	@([ `git log 1.0.9..HEAD --oneline | wc -l` ] ; exit $$?)
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo Verifying that something has changed since version $(shell cat .version)
@@ -197,7 +198,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) 
 	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
-	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
+	#@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
 	@touch $@
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
