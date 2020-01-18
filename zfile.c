@@ -239,6 +239,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     vcf_header.num_samples             = ENDN32 (global_num_samples);
     vcf_header.vcf_data_size           = ENDN64 (vb->vcf_file->vcf_data_size) /* 0 if gzipped - will be updated later*/; 
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
+    file_basename (vb->vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
     zfile_get_metadata (vcf_header.created);
 
     static Buffer vcf_header_buf = EMPTY_BUFFER;

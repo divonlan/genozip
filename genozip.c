@@ -147,30 +147,6 @@ int main_print_version()
     return 0;
 }
 
-// get basename of a filename - we write our own basename for Visual C and Windows compatability
-static const char *get_basename(const char *filename, bool remove_exe, const char *default_basename)
-{
-    if (!filename) return default_basename;
-
-    unsigned len = strlen (filename);
-    if (remove_exe && file_has_ext (filename, ".exe")) len -= 4; // for Windows
-
-    char *basename = (char *)malloc (len); 
-
-    // get start of basename
-    const char *start = filename;
-    for (int i=len-1; i >= 0; i--)
-        if (filename[i]=='/' || filename[i]=='\\') {
-            start = &filename[i+1];
-            break;
-        }
-
-
-    sprintf (basename, "%.*s", (int)(len - (start-filename)), start);
-
-    return basename;
-}
-
 static unsigned main_get_num_cores()
 {
 #ifdef _WIN32
@@ -339,7 +315,7 @@ static void main_genozip (const char *vcf_filename,
     }
     else ABORT0 ("Error: No output channel");
     
-    const char *basename = get_basename(vcf_filename, false, "(stdin)");
+    const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
     zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads, is_last_file);
 
     if (flag_show_content) main_display_section_stats (vcf_file, z_file);
@@ -352,6 +328,8 @@ static void main_genozip (const char *vcf_filename,
         file_close (&z_file); 
 
     if (remove_vcf_file) file_remove (vcf_filename); 
+
+    free ((void *)basename);
 }
 
 static void main_genounzip (const char *z_filename,
@@ -405,13 +383,15 @@ static void main_genounzip (const char *z_filename,
         vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
     }
 
-    const char *basename = get_basename (z_filename, false, "(stdin)");
+    const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
     piz_dispatcher (basename, z_file, vcf_file, pipe_from_zip_thread >= 0, max_threads);
 
     if (!flag_concat_mode) 
         file_close (&vcf_file); // no worries about not closing the concatenated file - it will close with the process exits
 
     file_close (&z_file);
+
+    free ((void *)basename);
 
     if (flag_replace && vcf_filename && z_filename) file_remove (z_filename); 
 }
@@ -652,7 +632,7 @@ int main (int argc, char **argv)
     char *out_filename = NULL;
     char *threads_str = NULL;
 
-    global_cmd = get_basename(argv[0], true, "(executable)"); // global var
+    global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
     
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 

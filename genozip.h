@@ -102,9 +102,7 @@ typedef struct {
     uint8_t  unused;                // padding + for future use
 } SectionHeader; 
 
-// The VCF header section appears once in the file, and includes the VCF file header 
-#define FILE_METADATA_LEN 72
-
+// The VCF header section appears once in the file (or multiple times in case of concatenation), and includes the VCF file header 
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
@@ -115,6 +113,11 @@ typedef struct {
     uint64_t num_lines;      // number of variants (data lines) in the original vCF file
     Md5Hash md5_hash;        // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
     Md5Hash md5_hash_single; // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the single component
+
+#define VCF_FILENAME_LEN 256
+    char vcf_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated.
+
+#define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
 } SectionHeaderVCFHeader; 
 
@@ -435,6 +438,8 @@ extern void file_close (File **vcf_file_p);
 extern size_t file_write (File *file, const void *data, unsigned len);
 extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
+extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
+                                  char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
 
 extern bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file, bool skip_md5_vcf_header, Buffer *line, const char *buf_name);
 extern void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb);

@@ -161,3 +161,32 @@ bool file_has_ext (const char *filename, const char *extension)
     
     return fn_len > ext_len && !strncmp (&filename[fn_len-ext_len], extension, ext_len);
 }
+
+// get basename of a filename - we write our own basename for Visual C and Windows compatability
+const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
+                           char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */)
+{
+    if (!filename) filename = default_basename;
+
+    unsigned len = strlen (filename);
+    if (remove_exe && file_has_ext (filename, ".exe")) len -= 4; // for Windows
+
+    // get start of basename
+    const char *start = filename;
+    for (int i=len-1; i >= 0; i--)
+        if (filename[i]=='/' || filename[i]=='\\') {
+            start = &filename[i+1];
+            break;
+        }
+
+    len = len - (start-filename);
+
+    if (!basename) 
+        basename = (char *)malloc (len + 1); // +1 for \0
+    else
+        len = MIN (len, basename_size-1);
+
+    sprintf (basename, "%.*s", (int)len, start);
+
+    return basename;
+}
