@@ -163,10 +163,10 @@ ifeq ($(OS),Windows_NT)
 # double check that everything is committed (we check several times)
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
-	@echo Creating github tag $(shell cat .version) and archive
+	@echo Creating github tag genozip-$(shell cat .version) and archive
 	@git push 
-	@git tag $(shell cat .version)
-	@git push origin $(shell cat .version)
+	@git tag genozip-$(shell cat .version)
+	@git push origin genozip-$(shell cat .version)
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(shell cat .version).tar.gz --silent --location -o $@
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz 
