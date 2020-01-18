@@ -172,11 +172,11 @@ CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo " "
-	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
-	#@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)  # needed for initial stage-recipes step, keeping here for future reference
+#	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
+#	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)  # needed for initial stage-recipes step, keeping here for future reference
 	@echo " "
-	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
-	@cp conda/meta.yaml conda/build.sh conda/bld.bat ../staged-recipes/recipes/genozip/
+	@echo "Copying meta.yaml build.sh bld.bat to conda-forge"
+	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to the branch and pushing them"
 	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
