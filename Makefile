@@ -203,7 +203,7 @@ windows/LICENSE.for-installer.txt: lic-text.h
 	@echo Generating $@
 	@./genozip$(EXE) --license --force > $@
 
-# this must be run AFTER conda and BEFORE any other changes - or else the version will not yet be updated
+# this must be run ONLY has part of "make distribution" or else versions will be out of sync
 windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
 	@echo 'Committing Windows files and pushing all changes to repo'
 	@git stage $(WINDOWS_INSTALL_FILES) $@
