@@ -154,6 +154,7 @@ ifeq ($(OS),Windows_NT)
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo Verifying that something has changed since version $(shell cat .version)
+## THIS DOESN'T WORK
 	@([ `git log $(shell cat .version)..HEAD --oneline | wc -l` ] ; exit $$?)
 	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
 	@git commit -m "increment version" .version
