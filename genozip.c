@@ -143,7 +143,7 @@ static int main_print_help (bool explicit)
 
 int main_print_version()
 {
-    printf ("version=%s\n", VERSION_2);  // VERSION_2 is passed by a -D options set by Makefile - e.g. 1.0
+    printf ("version=%s\n", GENOZIP_CODE_VERSION);  
     return 0;
 }
 

@@ -30,6 +30,7 @@
 #if defined __APPLE__ 
 #include "compatability/mac_gettime.h"
 #endif
+#include "version.h" // automatically incremented by the make when we create a new distribution
 
 #define GENOZIP_EXT ".genozip"
 

@@ -154,9 +154,8 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     // handle the GENOZIP header of the VCF header section
     SectionHeaderVCFHeader *header = (SectionHeaderVCFHeader *)compressed_vcf_section.data;
 
-    // VERSION_1 is passed from the Makefile as a -D option
-    ASSERT (header->genozip_version == VERSION_1, "Error: file version %u is newer than the latest version supported %u. Please upgrade.",
-            header->genozip_version, VERSION_1);
+    ASSERT (header->genozip_version == GENOZIP_FILE_FORMAT_VERSION, "Error: file version %u is newer than the latest version supported %u. Please upgrade.",
+            header->genozip_version, GENOZIP_FILE_FORMAT_VERSION);
 
     ASSERT (ENDN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", ENDN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
 

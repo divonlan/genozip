@@ -11,32 +11,22 @@ ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
 
-# use gcc, unless its conda - let it define its own compiler (but for Windows, we override conda's default Visual C with gcc)
-ifndef IS_CONDA 
-CC=gcc
-else ifeq ($(OS),Windows_NT)
-CC=gcc
-endif 
-
-VERSION_1 := $(shell cat .version | cut -d. -f1)  # eg 1      -- this goes into the file header as the version of the file format
-VERSION_2 := \"$(shell cat .version)\"            # eg "1.0"  -- this is reported in genozip --version
-
-CFLAGS       += -D_LARGEFILE64_SOURCE=1 -Wall -I. -DVERSION_1=$(VERSION_1) -DVERSION_2=$(VERSION_2)
-DEBUG_CLAGS  += -D_LARGEFILE64_SOURCE=1 -Wall -I. -DVERSION_1=$(VERSION_1) -DVERSION_2=$(VERSION_2) -Izlib -Ibzlib -DDEBUG -g
+CFLAGS       += -D_LARGEFILE64_SOURCE=1 -Wall -I.
+DEBUG_CLAGS  += -D_LARGEFILE64_SOURCE=1 -Wall -I. -Izlib -Ibzlib -DDEBUG -g
 LDFLAGS      += -lpthread -lm
 
 ifdef IS_CONDA 
-# conda - dynamic linking with bz2 and zlib
-    LDFLAGS += -lbz2 -lz 
-    ifdef LIB
-        LDFLAGS += -L$(PREFIX)/Library/lib     # this appears (at least) in the Windows build in conda-forge
-    endif
-	ifdef INCLUDE
-		CFLAGS  += -I$(PREFIX)/Library/include  # this appears (at least) in the Windows build in conda-forge
+	LDFLAGS += -lbz2 -lz  # conda - dynamic linking with bz2 and zlib
+
+	ifeq ($(OS),Windows_NT)
+		CC=gcc # in Windows, override conda's default Visual C with gcc 
+        LDFLAGS += -L$(PREFIX)/Library/lib
+		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
 else
+	CC=gcc
 	CFLAGS += -Izlib -Ibzlib
-endif
+endif 
 
 ifeq ($(CC),gcc)
 	CFLAGS += -Ofast
@@ -45,22 +35,22 @@ else
 endif
 
 MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
-	   vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c
+	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c
 
 CONDA_COMPATIBILITY_SRCS = compatability/win32_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
 
 EXT_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
-       zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
+           zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
                 
-CONDA_DEVS = Makefile .gitignore test-file.vcf .version
+CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = genozip.h lic-text.h \
-       compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h\
-	   compatability/mac_gettime.h \
-	   compatability/win32_pthread.h compatability/visual_c_gettime.h \
-	   compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h
+CONDA_INCS = genozip.h lic-text.h version.h \
+             compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
+	         compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
+	         compatability/win32_pthread.h \
+      	     compatability/mac_gettime.h 
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c 
@@ -148,18 +138,19 @@ ifeq ($(OS),Windows_NT)
 # the genozip file header SectionHeaderVCFHeader.genozip_version
 .version: 
 # double check that everything is committed (we check several times)
-	@echo Verifying that all files are committed to the repo
-	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Verifying that something has changed since version $(shell cat .version)
 ## THIS DOESN'T WORK
-	@([ `git log $(shell cat .version)..HEAD --oneline | wc -l` ] ; exit $$?)
+	@([ `git log $(shell cat .version)..HEAD --oneline | wc -l` ] ; exit $$?) # have any commits been made since last version?
 	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
-	@git commit -m "increment version" .version
 
-.archive.tar.gz: .version
-# double check that everything is committed (we check several times)
-	@echo Verifying that all files are committed to the repo
-	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+version.h : .version
+	@echo \#define GENOZIP_CODE_VERSION \"$(shell cat $<)\"             > $@   # override previous
+	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 $<) >> $@
+	@git commit -m "increment version" $@ $<
+
+.archive.tar.gz: .version.h
+	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Creating github tag genozip-$(shell cat .version) and archive
 	@git push 
 	@git tag genozip-$(shell cat .version)
@@ -174,39 +165,42 @@ conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 		grep -v "^#" \
 		> $@
  
-OLD_C_COMPILE_AS_C := $(shell echo $(OLD_C_SRCS) | tr ' ' '\n' | sed 's/^/-Tc /g'|tr '\n' ' ')
-C99_COMPILE_AS_CPP := $(shell echo $(C99_SRCS)   | tr ' ' '\n' | sed 's/^/-Tp /g'|tr '\n' ' ')
+#CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
+CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
-OLD_C_WIN_SRCS  := $(shell echo $(OLD_C_COMPILE_AS_C) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) # crazy! we need 16 blackslashes to end up with a single one in the bld.bat file
-C99_WIN_SRCS    := $(shell echo $(C99_COMPILE_AS_CPP) | sed 's/\\//\\\\\\\\\\\\\\\\/g' ) 
- 
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
-# double check that everything is committed (we check several times)
-	@echo Verifying that all files are committed to the repo
-	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo " "
 	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
-	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)
+	#@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)  # needed for initial stage-recipes step, keeping here for future reference
 	@echo " "
 	@echo "Copying meta.yaml build.sh bld.bat to staged-recipes"
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat ../staged-recipes/recipes/genozip/
 	@echo "Committing my files to the branch and pushing them"
-	@(cd ../staged-recipes/recipes/genozip; git commit -m "update" meta.yaml build.sh bld.bat; git push)
+	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
-	@(cd ../staged-recipes/recipes/genozip; git request-pull master https://github.com/divonlan/staged-recipes genozip)
+	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/staged-recipes genozip)
 	@touch $@
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
-	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
-	@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
+	#@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
+	#@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
 
 WINDOWS_INSTALL_FILES = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
 
 windows/%.exe: %.exe
 	@echo Copying $<
 	@cp -f $< $@ 
+
+windows/readme.txt: genozip$(EXE)
+	@echo Generating $@
+	@./genozip$(EXE) --help > $@
+	
+windows/LICENSE.for-installer.txt: lic-text.h
+	@echo Generating $@
+	@./genozip$(EXE) --license --force > $@
 
 # this must be run AFTER conda and BEFORE any other changes - or else the version will not yet be updated
 windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
@@ -229,17 +223,9 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 
 endif
 
-windows/LICENSE.for-installer.txt: lic-text.h
-	@echo Generating $@
-	@./genozip$(EXE) --license --force > $@
-
 LICENSE.non-commercial.txt: lic-text.h
 	@echo Generating $@
 	@./genozip$(EXE) --license > $@
-
-windows/readme.txt: genozip$(EXE)
-	@echo Generating $@
-	@./genozip$(EXE) --help > $@
 
 .PHONY: clean clean-debug clean-all .version
 

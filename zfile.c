@@ -235,7 +235,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     vcf_header.h.section_type          = SEC_VCF_HEADER;
     vcf_header.h.data_uncompressed_len = ENDN32 (vcf_header_text->len);
     vcf_header.h.compressed_offset     = ENDN32 (sizeof (SectionHeaderVCFHeader));
-    vcf_header.genozip_version         = VERSION_1;   // VERSION_1 is passed from the Makefile as a -D option
+    vcf_header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;   
     vcf_header.num_samples             = ENDN32 (global_num_samples);
     vcf_header.vcf_data_size           = ENDN64 (vb->vcf_file->vcf_data_size) /* 0 if gzipped - will be updated later*/; 
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
