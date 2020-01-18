@@ -137,11 +137,7 @@ ifeq ($(OS),Windows_NT)
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderVCFHeader.genozip_version
 .version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS)
-# double check that everything is committed (we check several times)
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
-	@echo Verifying that something has changed since version $(shell cat .version)
-## THIS DOESN'T WORK
-	@([ `git log $(shell cat .version)..HEAD --oneline | wc -l` ] ; exit $$?) # have any commits been made since last version?
 	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
 
 version.h : .version
@@ -170,7 +166,6 @@ CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat version.h
-	@exit 1
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo " "
 	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
