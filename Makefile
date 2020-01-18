@@ -149,7 +149,7 @@ version.h : .version
 	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 $<) >> $@
 	@git commit -m "increment version" $@ $<
 
-.archive.tar.gz: .version.h
+.archive.tar.gz: version.h
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Creating github tag genozip-$(shell cat .version) and archive
 	@git push 
