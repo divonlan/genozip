@@ -170,6 +170,7 @@ CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
+	@exit 1
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo " "
 	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
