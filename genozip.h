@@ -31,8 +31,6 @@
 #include "compatability/mac_gettime.h"
 #endif
 
-#define GENOZIP_VERSION 1 // legal value 0-255. this needs to be incremented when the genozip file format changes
-
 #define GENOZIP_EXT ".genozip"
 
 // this was carefully picked as the optimal number based on testing with 1000-genomes chromosome 22 - 1024 samples:

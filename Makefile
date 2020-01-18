@@ -18,8 +18,11 @@ else ifeq ($(OS),Windows_NT)
 CC=gcc
 endif 
 
-CFLAGS       += -D_LARGEFILE64_SOURCE=1 -Wall -I.
-DEBUG_CLAGS  += -D_LARGEFILE64_SOURCE=1 -Wall -I. -Izlib -Ibzlib -DDEBUG -g
+VERSION_1 := $(shell cat .version | cut -d. -f1)  # eg 1      -- this goes into the file header as the version of the file format
+VERSION_2 := \"$(shell cat .version)\"            # eg "1.0"  -- this is reported in genozip --version
+
+CFLAGS       += -D_LARGEFILE64_SOURCE=1 -Wall -I. -DVERSION_1=$(VERSION_1) -DVERSION_2=$(VERSION_2)
+DEBUG_CLAGS  += -D_LARGEFILE64_SOURCE=1 -Wall -I. -DVERSION_1=$(VERSION_1) -DVERSION_2=$(VERSION_2) -Izlib -Ibzlib -DDEBUG -g
 LDFLAGS      += -lpthread -lm
 
 ifdef IS_CONDA 
@@ -49,7 +52,7 @@ CONDA_COMPATIBILITY_SRCS = compatability/win32_pthread.c compatability/visual_c_
 EXT_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
        zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
                 
-CONDA_DEVS = Makefile .gitignore test-file.vcf 
+CONDA_DEVS = Makefile .gitignore test-file.vcf .version
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
@@ -135,20 +138,14 @@ endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genols$(EXE)
 
-#TARBALL := conda/genozip-$(VERSION).tar.gz
-
-#$(TARBALL): $(MY_SRCS) $(CONDA_INCS) $(CONDA_DOCS) $(CONDA_DEVS) $(CONDA_COMPATIBILITY_SRCS)
-#	@echo "Archiving to $@"
-#	@tar --create --gzip --file $(TARBALL) $^
-#	@echo "Committing $(TARBALL) & pushing changes to genozip/master"
-#	@(git add $(TARBALL))
-#	@(git commit -m "update archive" $(TARBALL) ; git push)
-
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit .version and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
+# and re-compile so that genozip --version gets update
+# IMPORTANT: the first number in the version indicates the genozip file format version and goes into
+# the genozip file header SectionHeaderVCFHeader.genozip_version
 .version: 
 # double check that everything is committed (we check several times)
 	@echo Verifying that all files are committed to the repo
@@ -211,6 +208,7 @@ windows/%.exe: %.exe
 	@echo Copying $<
 	@cp -f $< $@ 
 
+# this must be run AFTER conda and BEFORE any other changes - or else the version will not yet be updated
 windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
 	@echo 'Committing Windows files and pushing all changes to repo'
 	@git stage $(WINDOWS_INSTALL_FILES) $@
