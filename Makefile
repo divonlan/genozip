@@ -155,8 +155,8 @@ ifeq ($(OS),Windows_NT)
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo Verifying that something has changed since version $(shell cat .version)
 	@[ `git log 1.0.9..HEAD --oneline | wc -l` ]
-	#@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
-	#@git commit -m "increment version" .version
+	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
+	@git commit -m "increment version" .version
 
 .archive.tar.gz: .version
 # double check that everything is committed (we check several times)
