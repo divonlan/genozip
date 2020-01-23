@@ -12,7 +12,6 @@ IS_CONDA=1
 endif
 
 CFLAGS       += -D_LARGEFILE64_SOURCE=1 -Wall -I.
-DEBUG_CLAGS  += -D_LARGEFILE64_SOURCE=1 -Wall -I. -Izlib -Ibzlib -DDEBUG -g
 LDFLAGS      += -lpthread -lm
 
 ifdef IS_CONDA 
@@ -87,7 +86,8 @@ DEPS       := $(SRCS:.c=.d)
 
 all: genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
 
-debug: genozip-debug$(EXE)
+debug : CFLAGS  += -DDEBUG -g
+debug : genozip-debug$(EXE)
 
 -include $(DEPS)
 
@@ -101,7 +101,7 @@ debug: genozip-debug$(EXE)
 
 %.debug-o: %.c %.d
 	@echo "Compiling $< (debug)"
-	@$(CC) -c -o $@ $< $(DEBUG_CLAGS)
+	@$(CC) -c -o $@ $< $(CFLAGS)
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
@@ -140,17 +140,18 @@ ifeq ($(OS),Windows_NT)
 # and re-compile so that genozip --version gets update
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderVCFHeader.genozip_version
-.version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS)
-	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
-	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@
+increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS)
+	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )) ; then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
+	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@ 
+	@git commit -m "increment version" .version
+	
+version.h :
+	@echo \#define GENOZIP_CODE_VERSION \"$(shell cat .version)\"             > $@   # override previous
+	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 .version) >> $@
+	@git commit -m "increment version" version.h
 
-version.h : .version
-	@echo \#define GENOZIP_CODE_VERSION \"$(shell cat $<)\"             > $@   # override previous
-	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 $<) >> $@
-	@git commit -m "increment version" $@ $<
-
-.archive.tar.gz: version.h
-	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
+.archive.tar.gz : increment-version version.h
+	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Creating github tag genozip-$(shell cat .version) and archive
 	@git push 
 	@git tag genozip-$(shell cat .version)
@@ -170,7 +171,7 @@ CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
-	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "ERROR: Please 'git commit' everything first" ; exit 1 ; fi
+	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo " "
 #	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
 #	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)  # needed for initial stage-recipes step, keeping here for future reference
@@ -186,8 +187,8 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@touch $@
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
-	#@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
-	#@echo "(if you don't see it there, try https://github.com/divonlan/staged-recipes - select Branch: genozip-branch + New pull request)"
+#	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
+	@echo "and: https://github.com/conda-forge/genozip-feedstock/pulls
 
 WINDOWS_INSTALL_FILES = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
 
@@ -224,7 +225,7 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 
 endif
 
-.PHONY: clean clean-debug clean-all 
+.PHONY: clean clean-debug clean-all increment-version
 
 distribution: conda/.conda-timestamp windows/genozip-installer.exe
 
