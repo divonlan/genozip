@@ -182,7 +182,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
-#	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/staged-recipes genozip)
+	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/staged-recipes genozip)
 	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
 	@echo " "
@@ -219,7 +219,7 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 	@echo '  (5) Exit the UI (close the window)'
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@(git stage windows/genozip.ifp $@ ; exit 0)
-	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) genozip.ifp $@ ; exit 0)
+	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) windows/genozip.ifp $@ ; exit 0)
 	@git push
 
 
