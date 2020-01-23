@@ -142,7 +142,7 @@ ifeq ($(OS),Windows_NT)
 # the genozip file header SectionHeaderVCFHeader.genozip_version
 increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS)
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )) ; then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
-	@echo $(shell cut -d. -f1-2 $@).$(shell expr 1 + `cut -d. -f3 $@`) > $@ 
+	@echo $(shell cut -d. -f1-2 .version).$(shell expr 1 + `cut -d. -f3 .version`) > .version 
 	@git commit -m "increment version" .version
 	
 version.h :
