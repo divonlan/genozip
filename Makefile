@@ -188,7 +188,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
 #	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
-	@echo "and: https://github.com/conda-forge/genozip-feedstock/pulls
+	@echo "and: https://github.com/conda-forge/genozip-feedstock/pulls"
 
 WINDOWS_INSTALL_FILES = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
 
