@@ -145,7 +145,7 @@ increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DE
 	@echo $(shell cut -d. -f1-2 .version).$(shell expr 1 + `cut -d. -f3 .version`) > .version 
 	@git commit -m "increment version" .version
 	
-version.h :
+version.h : .version
 	@echo \#define GENOZIP_CODE_VERSION \"$(shell cat .version)\"             > $@   # override previous
 	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 .version) >> $@
 	@git commit -m "increment version" version.h
