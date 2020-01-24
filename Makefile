@@ -49,7 +49,7 @@ CONDA_INCS = genozip.h lic-text.h  \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
 	         compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
 	         compatability/win32_pthread.h \
-      	     compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency with .version
+      	     compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency 
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c 
@@ -136,35 +136,29 @@ endif
 ifeq ($(OS),Windows_NT)
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
-# To increment a major version, manually edit .version and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
-# and re-compile so that genozip --version gets update
+# To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
+# and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderVCFHeader.genozip_version
-increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS)
-	@echo "Incrementing .version"
+version.h: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+	@echo "Incrementing version.h"
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )) ; then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
-	@echo $(shell cut -d. -f1-2 .version).$(shell expr 1 + `cut -d. -f3 .version`) > .version 
-	@git commit -m "increment version" .version
+	@bash increment-version.sh
+	@git commit -m "increment version" version.h 
 	
-version.h : .version
-	@echo "Generating version.h"
-	@echo \#define GENOZIP_CODE_VERSION \"$(shell cat .version)\"             > $@   # override previous
-	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 .version) >> $@
-	@git commit -m "increment version" version.h
-
-.archive.tar.gz : increment-version version.h 
+.archive.tar.gz : version.h $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
-	@echo Creating github tag genozip-$(shell cat .version) and archive
-	#@git push 
-	#@git tag genozip-$(shell cat .version)
-	#@git push origin genozip-$(shell cat .version)
-	#@curl https://github.com/divonlan/genozip/archive/genozip-$(shell cat .version).tar.gz --silent --location -o $@
+	@echo Creating github tag genozip-$(shell head -n1 version.h |cut -d\" -f2) and archive
+	@git push 
+	@git tag genozip-$(shell head -n1 version.h |cut -d\" -f2)
+	@git push origin genozip-$(shell head -n1 version.h |cut -d\" -f2)
+	@curl https://github.com/divonlan/genozip/archive/genozip-$(shell head -n1 version.h |cut -d\" -f2).tar.gz --silent --location -o $@
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz 
 	@echo "Generating meta.yaml (for conda)"
 	@cat conda/meta.template.yaml | \
 		sed s/SHA256/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
-		sed s/VERSION/$(shell cat .version)/g | \
+		sed s/VERSION/$(shell head -n1 version.h |cut -d\" -f2)/g | \
 		grep -v "^#" \
 		> $@
  
@@ -210,24 +204,24 @@ windows/LICENSE.for-installer.txt: lic-text.h
 windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
 	@echo 'Committing Windows files and pushing all changes to repo'
 	@git stage $(WINDOWS_INSTALL_FILES) $@
-	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) $@ ; exit 0)
+	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) $(WINDOWS_INSTALL_FILES) $@ ; exit 0)
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo 'Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
-	@echo '  (2) Set General-Program version to $(shell cat .version)'
+	@echo '  (2) Set General-Program version to $(shell head -n1 version.h |cut -d\" -f2)'
 	@echo '  (3) Verify the files Setup-Files, and the license from LICENSE.for-installer.txt are up to date'
 	@echo '  (4) Click Save, then click Build, then click No to the popup question'
 	@echo '  (5) Exit the UI (close the window)'
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@(git stage windows/genozip.ifp $@ ; exit 0)
-	@(git commit -m windows_files_for_version_$(shell cat .version) $(WINDOWS_INSTALL_FILES) windows/genozip.ifp $@ ; exit 0)
+	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) $(WINDOWS_INSTALL_FILES) windows/genozip.ifp $@ ; exit 0)
 	@git push
 
 
 endif
 
-.PHONY: clean clean-debug clean-all increment-version
+.PHONY: clean clean-debug clean-all
 
 distribution: conda/.conda-timestamp windows/genozip-installer.exe
 
