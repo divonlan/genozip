@@ -146,17 +146,18 @@ increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DE
 	@git commit -m "increment version" .version
 	
 version.h : .version
+	@echo "Generating version.h"
 	@echo \#define GENOZIP_CODE_VERSION \"$(shell cat .version)\"             > $@   # override previous
 	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 .version) >> $@
 	@git commit -m "increment version" version.h
 
-.archive.tar.gz : increment-version version.h
+.archive.tar.gz : version.h increment-version
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Creating github tag genozip-$(shell cat .version) and archive
-	@git push 
-	@git tag genozip-$(shell cat .version)
-	@git push origin genozip-$(shell cat .version)
-	@curl https://github.com/divonlan/genozip/archive/genozip-$(shell cat .version).tar.gz --silent --location -o $@
+	#@git push 
+	#@git tag genozip-$(shell cat .version)
+	#@git push origin genozip-$(shell cat .version)
+	#@curl https://github.com/divonlan/genozip/archive/genozip-$(shell cat .version).tar.gz --silent --location -o $@
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz 
 	@echo "Generating meta.yaml (for conda)"
