@@ -8,5 +8,5 @@ new_big=`echo $new_version | cut -d. -f1`
 
 echo \#define GENOZIP_CODE_VERSION \"$new_version\" > version.h   # override previous
 echo \#define GENOZIP_FILE_FORMAT_VERSION $new_big >> version.h
-
+echo New version is $new_version
 
