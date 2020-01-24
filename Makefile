@@ -141,6 +141,7 @@ ifeq ($(OS),Windows_NT)
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderVCFHeader.genozip_version
 increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS)
+	@echo "Incrementing .version"
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )) ; then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo $(shell cut -d. -f1-2 .version).$(shell expr 1 + `cut -d. -f3 .version`) > .version 
 	@git commit -m "increment version" .version
@@ -151,7 +152,7 @@ version.h : .version
 	@echo \#define GENOZIP_FILE_FORMAT_VERSION $(shell cut -d. -f1 .version) >> $@
 	@git commit -m "increment version" version.h
 
-.archive.tar.gz : version.h increment-version
+.archive.tar.gz : increment-version version.h 
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Creating github tag genozip-$(shell cat .version) and archive
 	#@git push 
