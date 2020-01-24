@@ -799,7 +799,7 @@ int main (int argc, char **argv)
             
             default         : ASSERT(false, "%s: unrecognized command %c", global_cmd, command);
         }
-
+ 
         count++;
     } while (optind < argc);
             
