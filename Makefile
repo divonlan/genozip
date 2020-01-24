@@ -140,7 +140,7 @@ ifeq ($(OS),Windows_NT)
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderVCFHeader.genozip_version
-increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )) ; then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@bash increment-version.sh
