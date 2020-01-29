@@ -56,7 +56,7 @@ const char *profiler_print_short (const ProfilerRec *p)
     return str;
 }
 
-void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const char *filename, unsigned num_vbs)
+void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
 {
 #if defined _WIN32 && defined _WIN64
     static const char *os ="Windows (64 bit)";
@@ -75,7 +75,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const ch
 #else
     fprintf (stderr, "Build=Optimized\n");
 #endif
-    fprintf (stderr, "max_threads=%u\n", max_threads);
+    fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
     fprintf (stderr, "file=%s\n\n", filename ? filename : "(not file)");
     
     fprintf (stderr, "Wallclock: %u milliseconds\n", ms (p->wallclock));

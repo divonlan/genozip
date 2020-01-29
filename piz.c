@@ -659,6 +659,8 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 #ifdef DEBUG
     buf_test_overflows(vb);
 #endif
+
+    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
 void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
@@ -688,8 +690,8 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
         }
 
         // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
-        else {
-            VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher, NULL); // NULL if there is no computing thread
+        else if (dispatcher_has_processed_vb (dispatcher, NULL)) {
+            VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
     
             vcffile_write_one_variant_block (vcf_file, processed_vb);
 

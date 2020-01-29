@@ -412,6 +412,8 @@ static void zip_compress_variant_block (VariantBlock *vb)
     }
     
     COPY_TIMER (vb->profile.compute);
+
+    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
 static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file, File *z_file, bool is_final)
@@ -453,6 +455,8 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     static unsigned last_variant_block_i = 0; // used if we're concatenating files - the variant_block_i will continue from one file to the next
     if (!flag_concat_mode) last_variant_block_i = 0; // reset if we're not concatenating
 
+    // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
+    // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
@@ -481,8 +485,21 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
         if (next_vb && next_vb->ready_to_dispatch && dispatcher_has_free_thread (dispatcher)) 
             dispatcher_compute (dispatcher, zip_compress_variant_block);
+
+        // PRIORITY 2: output completed vbs, so they can be released and re-used
+        else if (dispatcher_has_processed_vb (dispatcher, NULL)) {
+            bool is_final;
+            VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, &is_final);
+            if (!processed_vb) continue; // no running compute threads or vb processing not completed
+            
+            zip_output_processed_vb (processed_vb, vcf_file, z_file, is_final);
+
+            dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
+                                        z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
+
+        }        
         
-        // PRIORITY 2: If there is no new variant block available, but input is not exhausted yet - read one
+        // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - read one
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
             next_vb = dispatcher_generate_next_vb (dispatcher);
@@ -496,20 +513,6 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
                 next_vb->ready_to_dispatch = true;
             else
                 dispatcher_input_exhausted (dispatcher);
-        }
-
-        // PRIORITY 3: Wait for the first thread (by sequential order) to complete the compute and output the results
-        // dispatch computing the compressed to a separate compute thread
-        else {
-            bool is_final;
-            VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher, &is_final);
-            if (!processed_vb) continue; // no running compute threads
-            
-            zip_output_processed_vb (processed_vb, vcf_file, z_file, is_final);
-
-            dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
-                                        z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
-
         }
     } while (!dispatcher_is_done (dispatcher));
 

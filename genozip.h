@@ -334,6 +334,7 @@ typedef struct variant_block_ {
     Buffer buffer_list;        // a buffer containing an array of pointers to all buffers allocated for this VB (either by the I/O thread or its compute thread)
 
     bool ready_to_dispatch;    // line data is read, and dispatcher can dispatch this VB to a compute thread
+    bool is_processed;         // thread completed processing this VB - it is ready for outputting
     bool in_use;               // this vb is in use
         
     DataLine data_lines[VARIANTS_PER_BLOCK];
@@ -354,7 +355,6 @@ typedef struct variant_block_ {
     uint32_t num_haplotypes_per_line;
     bool has_genotype_data;    // if any variant has genotype data, then the block is considered to have it
     bool has_haplotype_data;   // ditto for haplotype data
-    bool optimize_gl;          // do we apply the GL subfield optimization to this VB
     PhaseType phase_type;      // phase type of this variant block
 
     // chrom and pos
@@ -503,8 +503,9 @@ extern void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i);
 
 typedef void (*DispatcherFuncType)(VariantBlock *);
 extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func);
-extern VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher);                                         
-extern VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher, bool *is_final);
+extern VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher);       
+extern bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final);                                  
+extern VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final);
 extern bool dispatcher_has_free_thread (Dispatcher dispatcher);
 extern VariantBlock *dispatcher_get_pseudo_vb (Dispatcher dispatcher);
 extern VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher);
@@ -652,7 +653,7 @@ typedef struct timespec TimeSpecType;
 
 extern void profiler_add (ProfilerRec *dst, const ProfilerRec *src);
 extern const char *profiler_print_short (const ProfilerRec *p);
-extern void profiler_print_report (const ProfilerRec *p, unsigned max_threads, const char *filename, unsigned num_vbs);
+extern void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs);
 
 // a hacky addition to bzip2
 extern unsigned long long BZ2_bzoffset (void* b);

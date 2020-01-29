@@ -15,6 +15,7 @@ typedef struct {
     unsigned pool_id;
     VariantBlockPool *vb_pool;
     VariantBlock *pseudo_vb;
+    unsigned max_vb_id_so_far; 
     Buffer compute_threads_buf;
     Thread *compute_threads;
     VariantBlock *next_vb; // next vb to be dispatched
@@ -83,7 +84,9 @@ void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i)
     COPY_TIMER (dd->pseudo_vb->profile.wallclock);
 
     if (flag_show_time) 
-        profiler_print_report (&dd->pseudo_vb->profile, dd->max_threads, dd->filename, dd->next_vb_i-1);
+        profiler_print_report (&dd->pseudo_vb->profile, 
+                               dd->max_threads, dd->max_vb_id_so_far - dd->vb_pool->pool_id,
+                               dd->filename, dd->next_vb_i-1);
 
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (dd->vb_pool->pool_id, false);    
@@ -120,6 +123,8 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher)
     dd->next_vb_i++;
 
     dd->next_vb = vb_get_vb (dd->vb_pool, dd->vcf_file, dd->z_file, dd->next_vb_i);
+    dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
+
     return dd->next_vb;
 }
 
@@ -165,11 +170,28 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
     dd->num_running_compute_threads++;
 }
 
-VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher, bool *is_final)
+bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final) 
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+
+    if (dd->max_threads > 1 && !dd->num_running_compute_threads) return false; // no running compute threads 
+
+    Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
+
+    bool my_is_final = dd->input_exhausted && !dd->next_vb && dd->num_running_compute_threads == 1; // this is the last vb to be processed
+
+    if (is_final) *is_final = my_is_final;
+
+    return my_is_final || th->vb->is_processed;
+}
+
+VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     if (dd->max_threads > 1 && !dd->num_running_compute_threads) return NULL; // no running compute threads 
+
+    ASSERT0 (dispatcher_has_processed_vb (dispatcher, is_final), "Dispatcher has no processed vb ready");
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 
@@ -182,8 +204,6 @@ VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher, bool *is_
     memset (th, 0, sizeof(Thread));
     dd->num_running_compute_threads--;
     dd->next_thread_to_be_joined = (dd->next_thread_to_be_joined + 1) % MAX (1, dd->max_threads-1);
-
-    if (is_final) *is_final = dd->input_exhausted && !dd->next_vb && !dd->num_running_compute_threads;
 
     return dd->processed_vb;
 }
