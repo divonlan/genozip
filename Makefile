@@ -52,13 +52,12 @@ CONDA_INCS = genozip.h lic-text.h  \
       	     compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency 
 
 ifeq ($(CC),cl)
-	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c 
+	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/visual_c_pthread.c
 endif
 
 ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
-	MY_SRCS += compatability/win32_pthread.c
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
