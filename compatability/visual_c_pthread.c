@@ -41,6 +41,11 @@ int pthread_join (pthread_t th, void **unused)
     return 0;
 }
 
+int pthread_tryjoin_np (pthread_t thread, void **retval)
+{
+    // TO DO
+}
+
 int pthread_mutex_init (pthread_mutex_t *mutex, void *unused)
 {
     *mutex = CreateMutex (NULL, false, NULL);
