@@ -145,10 +145,10 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % (dd->max_threads-1);
     }
-    else {     // single thread
+    else {     // single thread or (Windows 32bit and first VB)
         func(dd->next_vb);            
 
-#ifdef _WIN32
+#if defined _WIN32 && ! defined _WIN64 // note: _WIN32 is defined for both Windows 32 & 64 bit
         if (dd->max_threads > 1) {
             // adjust max_threads and/or num_lines, now that we know how memory a vb consumes
             unsigned vb_memory = buf_vb_memory_consumption (dd->next_vb);
