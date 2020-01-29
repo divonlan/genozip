@@ -14,9 +14,6 @@
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
 #define OVERFLOW_TRAP  0x776F6C667265766FULL // "OVERFLOW" - inserted at the end of each memory block to detected overflows
 
-static Buffer **buffer_lists = NULL; 
-static unsigned num_buffer_lists = 0;
-
 char *buf_human_readable_size (uint64_t size, char *str /* out */)
 {
     if      (size > (1ULL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1ULL << 40));
@@ -124,7 +121,7 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
 }
 
-void buf_display_memory_usage(bool memory_full)
+void buf_display_memory_usage (unsigned pool_id, bool memory_full)
 {
     #define MAX_MEMORY_STATS 100
     static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
@@ -135,15 +132,17 @@ void buf_display_memory_usage(bool memory_full)
     else
         fprintf (stderr, "\n-------------------------------------------------------------------------------------\n");
 
-    for (unsigned buf_list_i=0; buf_list_i < num_buffer_lists; buf_list_i++ ) {
+    VariantBlockPool *vb_pool = vb_get_pool (0, pool_id);
 
-        Buffer *buf_list = buffer_lists[buf_list_i]; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
+    for (unsigned vb_i=0; vb_i < vb_pool->num_vbs; vb_i++) {
+
+        Buffer *buf_list = &vb_pool->vb[vb_i].buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
 
         if (!buf_list->len) continue; // no buffers allocated yet for this VB
 
         for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
     
-            ASSERT (buf_list->memory, "Error: buf_list[%u] memory is not allocated", buf_list_i); // this should never happen
+            ASSERT (buf_list->memory, "Error: memory of buffer_list of vb_i=%u is not allocated", vb_i); // this should never happen
 
             Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
             
@@ -180,7 +179,7 @@ void buf_display_memory_usage(bool memory_full)
 
     char str[30];
     buf_human_readable_size (total_bytes, str);
-    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, num_buffer_lists);
+    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
 
     for (unsigned i=0; i < num_stats; i++) {
         buf_human_readable_size (stats[i].bytes, str);
@@ -214,32 +213,17 @@ long long buf_vb_memory_consumption (const VariantBlock *vb)
 
 static inline void buf_add_to_buffer_list (VariantBlock *vb, Buffer *buf)
 {
-    extern unsigned global_max_threads;    // set in main()
-    Buffer *buffer_list   = &vb->buffer_list;
-    unsigned max_num_buffers = buffer_list->size / sizeof (Buffer *);
-
 #define INITIAL_MAX_MEM_NUM_BUFFERS (VARIANTS_PER_BLOCK*3) /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
-    if (!buf_is_allocated (buffer_list)) {
+    Buffer *bl = &vb->buffer_list;
 
-        static unsigned buffer_lists_len = 0;
-
-        if (!buffer_lists) {
-            buffer_lists_len = global_max_threads + 2; // +2 for psuedo vbs of zip/piz (in case of --test)
-            buffer_lists = (Buffer **)malloc (sizeof (Buffer *) * buffer_lists_len); 
-        }
-
-        ASSERT (num_buffer_lists < buffer_lists_len, 
-                "Error: buffer_lists maxed out global_max_threads=%u num_buffer_lists=%u buffer_lists_len=%u", global_max_threads, num_buffer_lists, buffer_lists_len);
-
+    if (!buf_is_allocated (bl)) 
         // malloc - this will call this function recursively - that's ok bc that point buffer_list is already allocated
-        buf_alloc (vb, buffer_list, INITIAL_MAX_MEM_NUM_BUFFERS * sizeof(Buffer *), false, "buffer_list", vb ? vb->id : 0);
-        
-        buffer_lists[num_buffer_lists++] = buffer_list;
-    }
-    else if (buffer_list->len && buffer_list->len == max_num_buffers) 
-        buf_alloc (vb, buffer_list, buffer_list->size * 2, 1, "buffer_list realloc", vb ? vb->id : 0);
+        buf_alloc (vb, bl, INITIAL_MAX_MEM_NUM_BUFFERS * sizeof(Buffer *), false, "buffer_list", vb ? vb->id : 0);
+    
+    else if (bl->len && bl->len == bl->size / sizeof (Buffer *)) 
+        buf_alloc (vb, bl, bl->size * 2, 1, "buffer_list realloc", vb ? vb->id : 0);
 
-    ((Buffer **)buffer_list->data)[buffer_list->len++] = buf;
+    ((Buffer **)bl->data)[bl->len++] = buf;
 }
 
 // allocates or enlarges buffer. if this buffer is not already allocated, then it behaves like malloc.
@@ -278,7 +262,7 @@ unsigned buf_alloc (VariantBlock *vb,
             if (!buf->memory) {
                 buf_test_overflows(vb);
 #ifdef DEBUG
-                    buf_display_memory_usage(true);
+                buf_display_memory_usage(vb->id & POOL_ID_MASK, true);
 #endif
             }
 
@@ -297,9 +281,9 @@ unsigned buf_alloc (VariantBlock *vb,
             if (!buf->memory) {
                 buf_test_overflows(vb);
     
-#               ifdef DEBUG
-                    buf_display_memory_usage(true);
-#               endif
+#ifdef DEBUG
+                buf_display_memory_usage(vb->id & POOL_ID_MASK, true);
+#endif
             }
 
             ASSERT (buf->memory, "Error: buf_alloc failed to malloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);

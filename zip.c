@@ -414,6 +414,35 @@ static void zip_compress_variant_block (VariantBlock *vb)
     COPY_TIMER (vb->profile.compute);
 }
 
+static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file, File *z_file, bool is_final)
+{
+    START_TIMER;
+    file_write (z_file, processed_vb->z_data.data, processed_vb->z_data.len);
+    COPY_TIMER (processed_vb->profile.write);
+
+    z_file->disk_so_far     += (long long)processed_vb->z_data.len;
+    z_file->vcf_data_so_far += (long long)processed_vb->vb_data_size;
+    z_file->num_lines       += (long long)processed_vb->num_lines;
+
+    // update section stats
+    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
+        z_file->section_bytes[sec_i]   += processed_vb->z_section_bytes[sec_i];
+        vcf_file->section_bytes[sec_i] += processed_vb->vcf_section_bytes[sec_i];
+    }
+
+    if (is_final) {
+
+        ASSERT (!z_file->vcf_data_size || 
+                z_file->vcf_data_size /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
+                "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
+                z_file->vcf_data_size, z_file->vcf_data_so_far);
+
+        vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
+
+        z_file->vcf_concat_data_size += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
+    }
+}
+
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
@@ -472,34 +501,11 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
         // PRIORITY 3: Wait for the first thread (by sequential order) to complete the compute and output the results
         // dispatch computing the compressed to a separate compute thread
         else {
-            VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher);
-            if (!processed_vb) continue;
+            bool is_final;
+            VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher, &is_final);
+            if (!processed_vb) continue; // no running compute threads
             
-            START_TIMER;
-            file_write (z_file, processed_vb->z_data.data, processed_vb->z_data.len);
-            COPY_TIMER (processed_vb->profile.write);
-
-            z_file->disk_so_far     += (long long)processed_vb->z_data.len;
-            z_file->vcf_data_so_far += (long long)processed_vb->vb_data_size;
-            z_file->num_lines       += (long long)processed_vb->num_lines;
-
-            // update section stats
-            for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-                z_file->section_bytes[sec_i]   += processed_vb->z_section_bytes[sec_i];
-                vcf_file->section_bytes[sec_i] += processed_vb->vcf_section_bytes[sec_i];
-            }
-
-            if (dispatcher_is_final_processed_vb (dispatcher)) {
-
-                ASSERT (!z_file->vcf_data_size || 
-                        z_file->vcf_data_size /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
-                        "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
-                        z_file->vcf_data_size, z_file->vcf_data_so_far);
-
-                vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
-
-                z_file->vcf_concat_data_size += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
-            }
+            zip_output_processed_vb (processed_vb, vcf_file, z_file, is_final);
 
             dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
                                         z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);

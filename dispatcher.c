@@ -86,7 +86,7 @@ void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i)
         profiler_print_report (&dd->pseudo_vb->profile, dd->max_threads, dd->filename, dd->next_vb_i-1);
 
     // must be before vb_cleanup_memory() 
-    if (flag_show_memory) buf_display_memory_usage (false);    
+    if (flag_show_memory) buf_display_memory_usage (dd->vb_pool->pool_id, false);    
 
     buf_free (&dd->compute_threads_buf);
     vb_release_vb (&dd->pseudo_vb);
@@ -165,7 +165,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
     dd->num_running_compute_threads++;
 }
 
-VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher)
+VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher, bool *is_final)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -182,6 +182,8 @@ VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher)
     memset (th, 0, sizeof(Thread));
     dd->num_running_compute_threads--;
     dd->next_thread_to_be_joined = (dd->next_thread_to_be_joined + 1) % MAX (1, dd->max_threads-1);
+
+    if (is_final) *is_final = dd->input_exhausted && !dd->next_vb && !dd->num_running_compute_threads;
 
     return dd->processed_vb;
 }
@@ -325,13 +327,6 @@ bool dispatcher_is_done (Dispatcher dispatcher)
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     return dd->input_exhausted && !dd->next_vb && !dd->processed_vb && !dd->num_running_compute_threads;
-}
-
-bool dispatcher_is_final_processed_vb (Dispatcher dispatcher)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-
-    return dd->input_exhausted && !dd->next_vb && !dd->num_running_compute_threads;
 }
 
 bool dispatcher_is_input_exhausted (Dispatcher dispatcher)

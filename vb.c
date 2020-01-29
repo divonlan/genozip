@@ -104,18 +104,20 @@ void vb_release_vb (VariantBlock **vb_p)
 
 }
 
-VariantBlockPool *vb_get_pool (unsigned num_vbs, unsigned pool_id)
+VariantBlockPool *vb_get_pool (unsigned num_vbs /* optional */, unsigned pool_id)
 {
     static VariantBlockPool *pools[NUM_VB_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
-    const unsigned pool_index = (pool_id - POOL_ID_QUANT) / POOL_ID_QUANT;
+    const unsigned pool_index = (pool_id - POOL_ID_MASK) / POOL_ID_MASK;
 
     if (!pools[pool_index])
         pools[pool_index] = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
 
     ASSERT0 (pools[pool_index], "Error: failed to calloc pool");
 
-    pools[pool_index]->num_vbs      = num_vbs;
-    pools[pool_index]->vb_id_prefix = pool_id;
+    if (num_vbs) {
+        pools[pool_index]->num_vbs = num_vbs; 
+        pools[pool_index]->pool_id = pool_id;
+    }
 
     return pools[pool_index];
 }
@@ -138,12 +140,12 @@ VariantBlock *vb_get_vb(VariantBlockPool *pool,
             vb = &pool->vb[vb_i];
         
             if (!vb->in_use) {
-                vb->id = pool->vb_id_prefix + vb_i;
+                vb->id = pool->pool_id + vb_i;
                 break;
             }
         }
 
-        ASSERT (vb_i < pool->num_vbs, "Error: VB pool vb_id_prefix=%u maxed out", pool->vb_id_prefix)
+        ASSERT (vb_i < pool->num_vbs, "Error: VB pool pool_id=%u is full - it already has %u VBs", pool->pool_id, pool->num_vbs)
     }
 
     vb->in_use           = true;

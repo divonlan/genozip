@@ -15,18 +15,16 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <pthread.h>
 #else
 #include "compatability/visual_c_stdint.h"
 #include "compatability/visual_c_stdbool.h"
 #include "compatability/visual_c_unistd.h"
 #include "compatability/visual_c_gettime.h"
 #include "compatability/visual_c_misc_funcs.h"
+#include "compatability/visual_c_pthread.h"
 #endif
-#ifndef _WIN32
-#include <pthread.h>
-#else
-#include "compatability/win32_pthread.h"
-#endif
+
 #if defined __APPLE__ 
 #include "compatability/mac_gettime.h"
 #endif
@@ -451,12 +449,12 @@ extern bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest /* out 
 extern bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header, bool *encrypted);
 
 #define NUM_VB_POOLS  2 // for zip and piz that can run concurrently during --test
-#define POOL_ID_QUANT 1000000
-#define POOL_ID_ZIP   (1*POOL_ID_QUANT)
-#define POOL_ID_UNZIP (2*POOL_ID_QUANT)
+#define POOL_ID_MASK 0x00100000 // 1 Mega
+#define POOL_ID_ZIP   (POOL_ID_MASK * 1)
+#define POOL_ID_UNZIP (POOL_ID_MASK * 2)
 typedef struct {
+    unsigned pool_id;
     unsigned num_vbs;
-    unsigned vb_id_prefix;
     VariantBlock vb[];
 } VariantBlockPool;
 
@@ -506,14 +504,13 @@ extern void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i);
 typedef void (*DispatcherFuncType)(VariantBlock *);
 extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func);
 extern VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher);                                         
-extern VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher);
+extern VariantBlock *dispatcher_get_next_processed_vb (Dispatcher dispatcher, bool *is_final);
 extern bool dispatcher_has_free_thread (Dispatcher dispatcher);
 extern VariantBlock *dispatcher_get_pseudo_vb (Dispatcher dispatcher);
 extern VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher);
 extern void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far, uint64_t bytes_compressed);
 extern void dispatcher_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
-extern bool dispatcher_is_final_processed_vb (Dispatcher dispatcher);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 
 extern void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text);
@@ -593,7 +590,7 @@ extern bool buf_has_overflowed(const Buffer *buf);
 extern bool buf_has_underflowed(const Buffer *buf);
 
 extern long long buf_vb_memory_consumption (const VariantBlock *vb);
-extern void buf_display_memory_usage(bool memory_full);
+extern void buf_display_memory_usage(unsigned pool_id, bool memory_full);
 
 extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 

@@ -689,7 +689,7 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
 
         // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
         else {
-            VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher); // NULL if there is no computing thread
+            VariantBlock *processed_vb = dispatcher_get_next_processed_vb (dispatcher, NULL); // NULL if there is no computing thread
     
             vcffile_write_one_variant_block (vcf_file, processed_vb);
 
