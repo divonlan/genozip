@@ -85,7 +85,7 @@ DEPS       := $(SRCS:.c=.d)
 
 all: genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
 
-debug : CFLAGS  += -DDEBUG -g
+debug : CFLAGS  += -DDEBUG -g -O0
 debug : genozip-debug$(EXE)
 
 -include $(DEPS)

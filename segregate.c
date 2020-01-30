@@ -265,7 +265,8 @@ static void seg_genotype_area (VariantBlock *vb, DataLine *dl,
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data);
 
         MtfContext *ctx = &vb->mtf_ctx[dl->sf_i[sf]];
-        uint32_t node_index = mtf_evaluate_snip (vb, ctx, cell_gt_data, len);
+        MtfNode *node;
+        uint32_t node_index = mtf_evaluate_snip (vb, ctx, cell_gt_data, len, false, &node);
         *(next++) = node_index;
 
         if (node_index != SEG_MISSING_SF) // don't skip the \t if we might have more missing subfields
@@ -274,7 +275,7 @@ static void seg_genotype_area (VariantBlock *vb, DataLine *dl,
         end_of_cell = end_of_cell || cell_gt_data[-1] != ':'; // a \t or \n encountered
 
         if (vb->variant_block_i == 1 && node_index <= SEG_MAX_INDEX) 
-            ((MtfNode *)ctx->mtf.data)[node_index].count++;
+            ((SorterEnt *)ctx->sorter.data)[node_index].count++;
     }
     ASSERT0 (end_of_cell, "Error: invalid reading of genotype data");
 
@@ -527,6 +528,7 @@ void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
     unsigned num_ploidy_overlows = 0;
 
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+
         //printf ("vb_line_i=%u\n", vb_line_i);
         DataLine *dl = &vb->data_lines[vb_line_i];
 

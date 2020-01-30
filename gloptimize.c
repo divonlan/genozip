@@ -169,8 +169,7 @@ cleanup:
     return;
 }
 
-void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, 
-                             unsigned dict_start_char, unsigned num_words)
+const char *gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words)
 {
     START_TIMER;
 
@@ -182,9 +181,11 @@ void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes,
     }
 
     COPY_TIMER (vb->profile.gl_optimize_dictionary);
+
+    return vb->optimized_gl_dict.data;
 }
 
-void gl_deoptimize_dictionary (char *data, unsigned len)
+void gl_deoptimize_dictionary (char *data, int len)
 {
     while (len) {
         // get the missing data and its location and length
@@ -204,6 +205,7 @@ void gl_deoptimize_dictionary (char *data, unsigned len)
             gl_start[0] = '-';
         }
         // move to next dictionary entry - after \t
-        do { data++; len--; } while (data[-1] != '\t');
+        do { data++; len--; } while (data[-1] != '\t' && len);
+        ASSERT0 (data[-1] == '\t', "Error: missing \\t at end of dictionary");
     }
 }

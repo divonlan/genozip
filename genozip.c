@@ -37,7 +37,7 @@ bool global_little_endian;
 
 // the flags - some are static, some are globals 
 static int flag_stdout=0, flag_force=0, flag_replace=0, flag_show_content=0;
-int flag_quiet=0, flag_concat_mode=0, flag_md5=0, flag_show_alleles=0, flag_show_time=0, flag_multithreaded=1, flag_show_memory=0;
+int flag_quiet=0, flag_concat_mode=0, flag_md5=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
 
 int main_print_license(bool for_installer)
 {
@@ -628,6 +628,8 @@ int main (int argc, char **argv)
 #   define VERSION    'V'
 #   define HELP       'h'
 
+    buf_initialize();
+
     static int command = -1;  // must be static to initialize list_options 
     char *out_filename = NULL;
     char *threads_str = NULL;
@@ -753,9 +755,6 @@ int main (int argc, char **argv)
         int ret = sscanf (threads_str, "%u", &global_max_threads);
         ASSERT (ret == 1 && global_max_threads >= 1, "%s: --threads / -@ option requires an integer value of at least 1", global_cmd);
         ASSERT (command != TEST || (global_max_threads >= 3 && global_max_threads != 4), "%s invalid --threads / -@ value: number of threads for --test / -t should be at least 3 (but not 4)", global_cmd);
-
-        // note: we don't support 4 threads for TEST, because then zip and piz will have inconsistent flag_multithreaded
-        flag_multithreaded = global_max_threads > (command == TEST ? 3 : 1);
     }
     else {
         global_max_threads = main_get_num_cores();

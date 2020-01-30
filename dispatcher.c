@@ -12,8 +12,7 @@ typedef struct {
 } Thread;
 
 typedef struct {
-    unsigned pool_id;
-    VariantBlockPool *vb_pool;
+    VariantBlockPoolID pool_id;
     VariantBlock *pseudo_vb;
     unsigned max_vb_id_so_far; 
     Buffer compute_threads_buf;
@@ -44,7 +43,7 @@ typedef struct {
 
 static TimeSpecType profiler_timer; // wallclock
 
-Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
+Dispatcher dispatcher_init (unsigned max_threads, VariantBlockPoolID pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
                             bool test_mode, bool show_progress, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
@@ -64,9 +63,9 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, unsigned pre
     dd->filename      = filename;
     dd->last_len      = 2;
 
-    dd->vb_pool = vb_get_pool (MAX (2,max_threads)+1 /* +1 for pseudo-vb */, pool_id);
+    vb_create_pool (pool_id, MAX (2,max_threads)+1 /* +1 for pseudo-vb */);
 
-    dd->pseudo_vb = vb_get_vb (dd->vb_pool, vcf_file, z_file, 0);
+    dd->pseudo_vb = vb_get_vb (dd->pool_id, vcf_file, z_file, 0);
 
     buf_alloc (dd->pseudo_vb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
@@ -85,22 +84,18 @@ void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i)
 
     if (flag_show_time) 
         profiler_print_report (&dd->pseudo_vb->profile, 
-                               dd->max_threads, dd->max_vb_id_so_far - dd->vb_pool->pool_id,
+                               dd->max_threads, dd->max_vb_id_so_far,
                                dd->filename, dd->next_vb_i-1);
 
     // must be before vb_cleanup_memory() 
-    if (flag_show_memory) buf_display_memory_usage (dd->vb_pool->pool_id, false);    
+    if (flag_show_memory) buf_display_memory_usage (dd->pool_id, false);    
 
     buf_free (&dd->compute_threads_buf);
     vb_release_vb (&dd->pseudo_vb);
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // this is only true if the files are being concatenated
-    if (!flag_concat_mode) vb_cleanup_memory(dd->vb_pool); 
-
-    // piz only - free dictionary memories that were abandoned when dictionary realloced (they were not freed so that they can remain
-    // with their overlaying buffers) 
-    if (dd->pool_id == POOL_ID_UNZIP) buf_free_abandoned_memories();
+    if (!flag_concat_mode) vb_cleanup_memory(dd->pool_id); 
 
     if (last_vb_i) *last_vb_i = dd->next_vb_i-1; // for continuing variant_block_i count between subsequent concatented files
 
@@ -122,7 +117,7 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher)
 
     dd->next_vb_i++;
 
-    dd->next_vb = vb_get_vb (dd->vb_pool, dd->vcf_file, dd->z_file, dd->next_vb_i);
+    dd->next_vb = vb_get_vb (dd->pool_id, dd->vcf_file, dd->z_file, dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
 
     return dd->next_vb;
@@ -174,7 +169,7 @@ bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
-    if (dd->max_threads > 1 && !dd->num_running_compute_threads) return false; // no running compute threads 
+    if (!dd->num_running_compute_threads) return false; // no running compute threads 
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 

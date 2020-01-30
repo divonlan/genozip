@@ -87,7 +87,8 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->spiced_pw);
 
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) 
-        mtf_free_context (&vb->mtf_ctx[i]);
+        if (vb->mtf_ctx[i].subfield.num)
+            mtf_free_context (&vb->mtf_ctx[i]);
 
     for (unsigned i=0; i < NUM_COMPRESS_BUFS; i++)
         buf_free (&vb->compress_bufs[i]);
@@ -104,48 +105,49 @@ void vb_release_vb (VariantBlock **vb_p)
 
 }
 
-VariantBlockPool *vb_get_pool (unsigned num_vbs /* optional */, unsigned pool_id)
+static VariantBlockPool *pools[NUM_VB_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
+
+void vb_create_pool (VariantBlockPoolID pool_id, unsigned num_vbs)
 {
-    static VariantBlockPool *pools[NUM_VB_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
-    const unsigned pool_index = (pool_id - POOL_ID_MASK) / POOL_ID_MASK;
+    ASSERT (!pools[pool_id], "Error: pool %u already exists", pool_id);
 
-    if (!pools[pool_index])
-        pools[pool_index] = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
+    pools[pool_id] = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
+    ASSERT0 (pools[pool_id], "Error: failed to calloc pool");
 
-    ASSERT0 (pools[pool_index], "Error: failed to calloc pool");
+    pools[pool_id]->num_vbs = num_vbs; 
+}
 
-    if (num_vbs) {
-        pools[pool_index]->num_vbs = num_vbs; 
-        pools[pool_index]->pool_id = pool_id;
-    }
-
-    return pools[pool_index];
+VariantBlockPool *vb_get_pool (VariantBlockPoolID pool_id)
+{
+    ASSERT (pool_id < NUM_VB_POOLS && pools[pool_id], "Error: pool %u doesn't exists", pool_id);
+    return pools[pool_id];
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
-VariantBlock *vb_get_vb(VariantBlockPool *pool, 
-                        File *vcf_file, File *z_file,
-                        unsigned variant_block_i)
+VariantBlock *vb_get_vb (VariantBlockPoolID pool_id, 
+                         File *vcf_file, File *z_file,
+                         unsigned variant_block_i)
 {
     VariantBlock *vb=NULL;
 
-    if (!pool) { // should only be used for unit testing - memory-leaks a VB
+    if (pool_id == POOL_ID_UNIT_TEST) { // should only be used for unit testing - memory-leaks a VB
         vb = (VariantBlock *)calloc (1, sizeof(VariantBlock));
         ASSERT0 (vb, "Error: failed to calloc vb");
     }
     else {
         // see if there's a VB avaiable for recycling
-        unsigned vb_i; for (vb_i=0; vb_i < pool->num_vbs; vb_i++) {
+        unsigned vb_i; for (vb_i=0; vb_i < pools[pool_id]->num_vbs; vb_i++) {
         
-            vb = &pool->vb[vb_i];
+            vb = &pools[pool_id]->vb[vb_i];
         
             if (!vb->in_use) {
-                vb->id = pool->pool_id + vb_i;
+                vb->id = vb_i;
+                vb->pool_id = pool_id;
                 break;
             }
         }
 
-        ASSERT (vb_i < pool->num_vbs, "Error: VB pool pool_id=%u is full - it already has %u VBs", pool->pool_id, pool->num_vbs)
+        ASSERT (vb_i < pools[pool_id]->num_vbs, "Error: VB pool pool_id=%u is full - it already has %u VBs", pool_id, pools[pool_id]->num_vbs)
     }
 
     vb->in_use           = true;
@@ -171,11 +173,11 @@ static void vb_free_buffer_array (VariantBlock *vb, Buffer **buf_array, unsigned
     *buf_array = NULL;
 }
 
-void vb_cleanup_memory(VariantBlockPool *pool)
+void vb_cleanup_memory(VariantBlockPoolID pool_id)
 {
     // see if there's a VB avaiable for recycling
-    for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
-        VariantBlock *vb = &pool->vb[vb_i];
+    for (unsigned vb_i=0; vb_i < pools[pool_id]->num_vbs; vb_i++) {
+        VariantBlock *vb = &pools[pool_id]->vb[vb_i];
      
         vb_free_buffer_array (vb, &vb->genotype_sections_data, vb->num_sample_blocks);
         vb_free_buffer_array (vb, &vb->haplotype_sections_data, vb->num_sample_blocks);

@@ -9,10 +9,21 @@
 
 #include "genozip.h"
 
-//#define DISPLAY_ALLOCS_AFTER 4100 // display allocations, except the first X allocations. reallocs are always displayed
+//#define DISPLAY_ALLOCS_AFTER 4090 // display allocations, except the first X allocations. reallocs are always displayed
 
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
 #define OVERFLOW_TRAP  0x776F6C667265766FULL // "OVERFLOW" - inserted at the end of each memory block to detected overflows
+
+static const unsigned overhead_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
+
+static pthread_mutex_t overlay_mutex; // used to thread-protect overlay counters
+static uint64_t abandoned_mem_current = 0;
+static uint64_t abandoned_mem_high_watermark = 0;
+
+void buf_initialize()
+{
+    pthread_mutex_init (&overlay_mutex, NULL);
+}
 
 char *buf_human_readable_size (uint64_t size, char *str /* out */)
 {
@@ -40,14 +51,14 @@ char *buf_display (const Buffer *buf)
     return str;    
 }
 
-bool buf_has_overflowed(const Buffer *buf)
+static inline bool buf_has_overflowed (const Buffer *buf)
 {
-    return *((long long*)(buf->memory + buf->size + sizeof(long long))) != OVERFLOW_TRAP;
+    return *((uint64_t*)(buf->memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP;
 }
 
-bool buf_has_underflowed(const Buffer *buf)
+static inline bool buf_has_underflowed (const Buffer *buf)
 {
-    return *(long long*)buf->memory != UNDERFLOW_TRAP;
+    return *(uint64_t*)buf->memory != UNDERFLOW_TRAP;
 }
 
 void buf_test_overflows(const VariantBlock *vb)
@@ -71,7 +82,7 @@ void buf_test_overflows(const VariantBlock *vb)
                          (uint64_t)(uintptr_t)buf);
                 corruption = true;
             }
-            else if (buf->data && buf->data != buf->memory + sizeof(long long)) {
+            else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
                 fprintf (stderr, 
 #ifdef _MSC_VER
                          "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%I64x\n", 
@@ -93,7 +104,7 @@ void buf_test_overflows(const VariantBlock *vb)
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
-                char *of = &buf->memory[buf->size + sizeof(long long)];
+                char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
 #ifdef _MSC_VER
                          "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x size=%u : Overflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
@@ -121,7 +132,7 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
 }
 
-void buf_display_memory_usage (unsigned pool_id, bool memory_full)
+void buf_display_memory_usage (VariantBlockPoolID pool_id, bool memory_full)
 {
     #define MAX_MEMORY_STATS 100
     static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
@@ -132,7 +143,7 @@ void buf_display_memory_usage (unsigned pool_id, bool memory_full)
     else
         fprintf (stderr, "\n-------------------------------------------------------------------------------------\n");
 
-    VariantBlockPool *vb_pool = vb_get_pool (0, pool_id);
+    VariantBlockPool *vb_pool = vb_get_pool (pool_id);
 
     for (unsigned vb_i=0; vb_i < vb_pool->num_vbs; vb_i++) {
 
@@ -146,7 +157,7 @@ void buf_display_memory_usage (unsigned pool_id, bool memory_full)
 
             Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
             
-            if (!buf || !buf->memory) continue; // exclude destroyed or not-yet-allocated buffers
+            if (!buf || !buf->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
 
             bool found = false;
             for (unsigned st_i=0; st_i < num_stats && !found; st_i++) {
@@ -154,14 +165,14 @@ void buf_display_memory_usage (unsigned pool_id, bool memory_full)
 
                 if (!strcmp (st->name, buf->name)) {
                     st->buffers++;
-                    st->bytes += buf->size + 2*(sizeof(long long));
+                    st->bytes += buf->size + overhead_size;
                     found = true;
                 }
             }
 
             if (!found) {
                 stats[num_stats].name    = buf->name;
-                stats[num_stats].bytes   = buf->size + 2*(sizeof(long long));
+                stats[num_stats].bytes   = buf->size + overhead_size;
                 stats[num_stats].buffers = 1;
                 num_stats++;
                 ASSERT (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing MAX_MEMORY_STATS", MAX_MEMORY_STATS);
@@ -170,6 +181,11 @@ void buf_display_memory_usage (unsigned pool_id, bool memory_full)
             num_buffers++;
         }
     }
+
+    stats[num_stats].name    = "abandoned_mem_high_watermark";
+    stats[num_stats].bytes   = abandoned_mem_high_watermark;
+    stats[num_stats].buffers = 0;
+    num_stats++;
 
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);
@@ -226,89 +242,117 @@ static inline void buf_add_to_buffer_list (VariantBlock *vb, Buffer *buf)
     ((Buffer **)bl->data)[bl->len++] = buf;
 }
 
-// allocates or enlarges buffer. if this buffer is not already allocated, then it behaves like malloc.
+static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old_size, const char *name, unsigned param)
+{
+    if (!buf->memory) {
+        buf_test_overflows(vb);
+#ifdef DEBUG
+        buf_display_memory_usage (vb->pool_id, true);
+#endif
+        ABORT ("Error: Failed to allocate %u bytes", size + overhead_size);
+    }
+
+    buf->data        = buf->memory + sizeof (uint64_t);
+    buf->size        = size;
+    buf->overlayable = false;
+
+    if (name) {
+        buf->name = name;
+        buf->param = param;
+    } 
+    ASSERT0 (buf->name, "Error: buffer has no name");
+
+    *(uint64_t *)buf->memory        = UNDERFLOW_TRAP;        // underflow protection
+    *(uint64_t *)(buf->data + size) = OVERFLOW_TRAP;         // overflow prortection (underflow protection was copied with realloc)
+    *(uint16_t *)(buf->data + size + sizeof (uint64_t)) = 1; // counter of buffers that use of this memory (0 or 1 main buffer + any number of overlays)
+
+#ifdef DISPLAY_ALLOCS_AFTER
+    if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
+        fprintf (stderr, "%s (%u): old_size=%u new_size=%u\n", buf->name, buf->param, old_size, size);
+#endif
+}
+
+// allocates or enlarges buffer
+// if it needs to enlarge a buffer fully overlaid by an overlay buffer - it abandons its memory (leaving it to
+// the overlaid buffer) and allocates new memory
 unsigned buf_alloc (VariantBlock *vb,
                     Buffer *buf, 
                     unsigned requested_size,
                     float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
-                    const char *name, unsigned param)      // for debugging
+                    const char *name, unsigned param)      
 {
     START_TIMER;
 
     if (!requested_size) return 0; // nothing to do
 
     // sanity checks
-    ASSERT (buf->type != BUF_OVERLAYED, "Error: cannot buf_alloc an overlayed buffer. name=%s", buf->name ? buf->name : "");
+    ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "Error: cannot buf_alloc an overlayed buffer. name=%s", buf->name ? buf->name : "");
     ASSERT0 (vb, "Error: null vb");
 
     // case 1: we have enough memory already
-    if (requested_size <= buf->size) 
-        buf->data = buf->memory + sizeof (long long); // allocate if not already allocated
+    if (requested_size <= buf->size) {
+        buf->data = buf->memory + sizeof (uint64_t); // allocate if not already allocated
+        goto finish;
+    }
 
-    else { // not enough memory
-        unsigned new_size = requested_size * MAX (grow_at_least_factor, 1);
+    unsigned new_size = requested_size * MAX (grow_at_least_factor, 1);
 
-        // case 2: we need to allocate memory - buffer is already allocated so copy over the data
-        if (buf->memory) {
-#ifdef DISPLAY_ALLOCS_AFTER
-            unsigned  old_size = buf->size;
-#endif
-            buf->memory = (char *)realloc (buf->memory, new_size + 2*sizeof (long long));
-            ASSERT (buf->memory, "Error: buf_alloc failed to realloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
+    // case 2: we need to allocate memory - buffer is already allocated so copy over the data
+    if (buf->memory) {
 
-            buf->data = buf->memory + sizeof (long long);
-            buf->size = new_size;
+        unsigned old_size = buf->size;
 
-            if (!buf->memory) {
-                buf_test_overflows(vb);
-#ifdef DEBUG
-                buf_display_memory_usage(vb->id & POOL_ID_MASK, true);
-#endif
+        // special handing if we have an overlaying buffer
+        if (buf->overlayable) {
+            pthread_mutex_lock (&overlay_mutex);
+            uint16_t *overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
+
+            char *old_data = buf->data;
+            uint32_t old_len = buf->len;
+
+            // if there is currently an overlay buffer on top of our buffer - abandon the memory
+            // (leave it to the overlay buffer(s) that will eventually free() it), and allocate fresh memory
+            if (*overlay_count > 1) {
+
+                abandoned_mem_current += buf->size;
+                abandoned_mem_high_watermark = MAX (abandoned_mem_high_watermark, abandoned_mem_current);
+
+                (*overlay_count)--; // overlaying buffers are now on their own - no regular buffer
+                buf->memory = buf->data = NULL;
+                buf->size = buf->len = 0;
+                buf_alloc (vb, buf, new_size, 1, name, param); // recursive call - simple alloc
+                
+                // copy old data
+                memcpy (buf->data, old_data, old_size);
+                buf->len = old_len;
             }
-
-            *(long long *)(buf->data + new_size) = OVERFLOW_TRAP; // overflow prortection (underflow protection was copied with realloc)
-
-#ifdef DISPLAY_ALLOCS_AFTER
-                if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-                    fprintf (stderr, "%s (%u): old_size=%u requested_size=%u growth_factor=%f new_size=%u\n", name, param, old_size, requested_size, grow_at_least_factor, new_size);
-#endif
+            else {
+                // buffer is overlayable - but no current overlayers - regular realloc - however,
+                // still within mutex to prevent another thread from overlaying while we're at it
+                buf->memory = (char *)realloc (buf->memory, new_size + overhead_size);
+                buf_init (vb, buf, new_size, old_size, name, param);
+            }
+            buf->overlayable = true;
+            pthread_mutex_unlock (&overlay_mutex);
         }
 
-        // case 3: we need to allocate memory - buffer is not yet allocated, so no need to copy data
-        else {
-            buf->memory = (char *)malloc (new_size + 2*sizeof (long long));
-
-            if (!buf->memory) {
-                buf_test_overflows(vb);
-    
-#ifdef DEBUG
-                buf_display_memory_usage(vb->id & POOL_ID_MASK, true);
-#endif
-            }
-
-            ASSERT (buf->memory, "Error: buf_alloc failed to malloc %u bytes. name=%s param=%u", new_size + 2*(unsigned)sizeof (long long), name, param);
-
-            buf->data = buf->memory + sizeof (long long);
-            buf->size = new_size;
-
-            *(long long *)buf->memory            = UNDERFLOW_TRAP; // underflow protection
-            *(long long *)(buf->data + new_size) = OVERFLOW_TRAP;  // overflow protection
-
-            buf->name  = name;
-            buf->param = param;
-            buf->type  = BUF_REGULAR;
-            
-            buf_add_to_buffer_list(vb, buf);
-
-#ifdef DISPLAY_ALLOCS_AFTER
-            if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-                fprintf (stderr, "%s (%u) (malloc): %u\n", name, param, new_size);
-#endif
+        else { // non-overlayable buffer - regular realloc without mutex
+            buf->memory = (char *)realloc (buf->memory, new_size + overhead_size);
+            buf_init (vb, buf, new_size, old_size, name, param);
         }
     }
 
-    if (vb) COPY_TIMER (vb->profile.buf_alloc);
+    // case 3: we need to allocate memory - buffer is not yet allocated, so no need to copy data
+    else {
+        buf->memory = (char *)malloc (new_size + overhead_size);
+        buf->type  = BUF_REGULAR;
 
+        buf_init (vb, buf, new_size, 0, name, param);
+        buf_add_to_buffer_list(vb, buf);
+    }
+
+finish:
+    if (vb) COPY_TIMER (vb->profile.buf_alloc);
     return buf->size;
 }
 
@@ -316,110 +360,139 @@ unsigned buf_alloc (VariantBlock *vb,
 void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_from /* optional */, 
                   unsigned *regular_buf_offset, const char *name, unsigned param)
 {
+    bool full_overlay = !regular_buf_offset && !copy_from;
+
     ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error: cannot buf_overlay to a buffer already in use. overlaid_buf->name=%s", overlaid_buf->name ? overlaid_buf->name : "");
     ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
-    ASSERT (!copy_from || (regular_buf_offset ? *regular_buf_offset : 0) + copy_from->len <= regular_buf->size, "Error: buf_overlay exceeds the size of the regular buffer: offset=%u size=%u regular_buf.size=%u", *regular_buf_offset, copy_from->len, regular_buf->size);
-
-    overlaid_buf->data   = regular_buf->data + (regular_buf_offset ? *regular_buf_offset : 0);
-
-    if (copy_from && copy_from->len)
-        memcpy (overlaid_buf->data, copy_from->data, copy_from->len);
+    ASSERT (!full_overlay || regular_buf->overlayable, "Error: buf_overlay: only overlayble buffers can be fully overlaid. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
 
     overlaid_buf->size   = 0;
     overlaid_buf->len    = copy_from ? copy_from->len : 0;
-    overlaid_buf->type   = BUF_OVERLAYED;
+    overlaid_buf->type   = full_overlay ? BUF_FULL_OVERLAY : BUF_PARTIAL_OVERLAY;
     overlaid_buf->memory = 0;
-    overlaid_buf->name   = name;
-    overlaid_buf->param  = param;
+    overlaid_buf->overlayable = false;
 
-    // new data was copied to overlaid buffer - move the offset forward and update the len of the regular buffer
-    // to enable to the next buffer to be overlaid subsequently
-    if (regular_buf_offset) {
-        *regular_buf_offset += overlaid_buf->len;
-        regular_buf->len = *regular_buf_offset;
+    if (name) {
+        overlaid_buf->name   = name;
+        overlaid_buf->param  = param;
     }
-    
-    // full buffer overlay - copy len too
-    if (!regular_buf_offset && !copy_from)
-        overlaid_buf->len = regular_buf->len;
-}
+    else {
+        overlaid_buf->name  = regular_buf->name;
+        overlaid_buf->param = regular_buf->param;
+    }
 
-static Buffer abandoned_memories = EMPTY_BUFFER; // no thread safety issues - only used by piz dispatcher thread
+    if (!full_overlay) {
+        overlaid_buf->data = regular_buf->data + (regular_buf_offset ? *regular_buf_offset : 0);
 
-// if needed, we extend the buf, but without reallocting memory which could disturb other threads which have their
-// own buffers overlaid on buf. Instead, we abandon the memory used by buf, but without freeing it.
-// We add the abandoned memory to an abandoned memory list to be freed at the end of this operation (piz). Then,
-// we allocate new memory (at least double) and copy the old data and len to it.
-void buf_extend (VariantBlock *vb, Buffer *buf, 
-                 unsigned num_new_units, unsigned sizeof_unit, /* len is measured in these units */
-                 const char *name, unsigned param)
-{
-    if (!buf_is_allocated (buf)) 
-        buf_alloc (vb, buf, num_new_units * sizeof_unit, 1, name, param);
+        if (copy_from && copy_from->len) {
 
-    // if we need more space, we abandon the memory used by buf, but without freeing it as VBs are overlaying on it.
-    // instead, we add it to an abandoned memory list to be freed at the end of this piz
-    else if ((buf->len + num_new_units) * sizeof_unit > buf->size) { 
+            ASSERT ((regular_buf_offset ? *regular_buf_offset : 0) + copy_from->len <= regular_buf->size, 
+                    "Error: buf_overlay exceeds the size of the regular buffer: offset=%u size=%u regular_buf.size=%u", 
+                    *regular_buf_offset, copy_from->len, regular_buf->size);
+        
+            memcpy (overlaid_buf->data, copy_from->data, copy_from->len);
 
-        if (!buf_is_allocated (&abandoned_memories) || abandoned_memories.len * sizeof(char *) == abandoned_memories.size) 
-            buf_alloc (vb, &abandoned_memories, MAX (100, abandoned_memories.len+1) * sizeof(char*), 2, "abandoned_memories", 0);
+            // new data was copied to overlaid buffer - move the offset forward and update the len of the regular buffer
+            // to enable to the next buffer to be overlaid subsequently
+            if (regular_buf_offset) {
+                *regular_buf_offset += overlaid_buf->len;
+                regular_buf->len = *regular_buf_offset;
+            }
+        }
+    }
 
-        unsigned old_len       = buf->len;
-        const char *old_memory = buf->memory;
-        const char *old_data   = buf->data;
+    // full buffer overlay - copy len too and update overlay counter
+    else {
+        pthread_mutex_lock (&overlay_mutex);
 
-        ((const char**)abandoned_memories.data)[abandoned_memories.len++] = old_memory;
+        overlaid_buf->size = regular_buf->size;
+        overlaid_buf->len  = regular_buf->len;
+        overlaid_buf->data = regular_buf->data;
+        uint16_t *overlay_count = (uint16_t*)(regular_buf->data + regular_buf->size + sizeof(uint64_t));
+        (*overlay_count)++; // counter of users of this memory
 
-        memset (buf, 0, sizeof (Buffer));
-        buf_alloc (vb, buf, sizeof_unit * MAX (old_len * 2, old_len + num_new_units), 1, name, param);
-        memcpy (buf->data, old_data, old_len * sizeof_unit);
-        buf->len = old_len;
+        pthread_mutex_unlock (&overlay_mutex);
     }
 }
 
-// if there is space, the fragment is just appended to the base and len is updated. 
-// If not, we extend the memory without disturbing other VBs that are overlaying on it, and add
-// the fragment
-void buf_append (VariantBlock *vb, Buffer *base, 
-                 Buffer *fragment, unsigned sizeof_unit, // len is measured in these units 
-                 const char *name, unsigned param)
+// free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
+void buf_free (Buffer *buf) 
 {
-    buf_extend (vb, base, fragment->len, sizeof_unit, name, param);
+    uint16_t *overlay_count; // number of buffers (overlay and regular) sharing buf->memory
 
-    memcpy (&base->data[base->len * sizeof_unit], fragment->data, fragment->len * sizeof_unit);
-    base->len += fragment->len;
-}
+    switch (buf->type) {
 
-void buf_free_abandoned_memories()
-{
-    if (!buf_is_allocated (&abandoned_memories)) return; // nothing to do
+        case BUF_UNALLOCATED:
+            return; // nothing to do
 
-    char **abm = (char**)abandoned_memories.data;
+        case BUF_REGULAR: 
 
-    for (unsigned i=0; i < abandoned_memories.len; i++) 
-        free (abm[i]);
+            if (buf->overlayable) {
+                pthread_mutex_lock (&overlay_mutex);
+                overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
 
-    buf_free (&abandoned_memories);
-}
+                if (*overlay_count > 1) { // current overlays exist - abandon memory - leave it to the overlaid buffer(s) which will free() this memory when they're done with it
+                    (*overlay_count)--;
+             
+                    abandoned_mem_current += buf->size;
+                    abandoned_mem_high_watermark = MAX (abandoned_mem_high_watermark, abandoned_mem_current);
 
-// free buffer - without freeing memory. A future buf_malloc of this buffer will reuse the memory if possible.
-void buf_free(Buffer *buf) 
-{
-    if (buf->type == BUF_REGULAR) {
-        buf->data = NULL ; 
-        buf->len = 0;
-        // name, memory and size are not changed
+                    memset (buf, 0, sizeof (Buffer)); // make this buffer UNALLOCATED
+                }
+                // if no overlay exists then we just keep .memory and reuse it in future allocations
+
+                pthread_mutex_unlock (&overlay_mutex);            
+            }
+            
+            buf->data = NULL; 
+            buf->len = 0;
+            // name, param, memory and size are not changed
+
+            break;
+
+        case BUF_FULL_OVERLAY:
+            pthread_mutex_lock (&overlay_mutex);
+            overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
+            (*overlay_count)--;
+            pthread_mutex_unlock (&overlay_mutex);            
+
+            // we are the last user - we can free the memory now.
+            // do this outside of the mutex - free is a system call and can take some time.
+            // this is safe because if we ever observe *overlay_count==0, it means that no buffer has this memory,
+            // therefore there is no possibility it would be subsequently overlayed between the test and the free().
+            if (! (*overlay_count)) {
+                free (buf->data - sizeof(uint64_t)); // the original buf->memory
+                abandoned_mem_current -= buf->size;
+            }
+            
+            // fall through
+
+        case BUF_PARTIAL_OVERLAY:
+            memset (buf, 0, sizeof (Buffer));
+            break;
+
+        default:
+            ABORT0 ("Error: invalid buf->type");
     }
-    else
-        memset (buf, 0, sizeof (Buffer));
 } 
 
-// destroy buffer complete
 void buf_destroy (VariantBlock *vb, Buffer *buf)
 {
     if (!buf) return; // nothing to do
 
-    if (buf->memory) free (buf->memory);
+    if (buf->memory) {
+
+        uint16_t overlay_count = 1;
+        if (buf->overlayable) {
+            pthread_mutex_lock (&overlay_mutex);
+            overlay_count = (*(uint16_t*)(buf->data + buf->size + sizeof(uint64_t)));
+            pthread_mutex_unlock (&overlay_mutex);            
+        }
+
+        ASSERT (overlay_count==1, "Error: cannot destroy buffer %s because it is currently overlaid", buf->name);
+
+        free (buf->memory);
+    }
 
     // remove from buffer_list of this vb
     unsigned i=0; for (; i < vb->buffer_list.len; i++) 
@@ -432,7 +505,7 @@ void buf_destroy (VariantBlock *vb, Buffer *buf)
     ASSERT0 (i < vb->buffer_list.len, "Error: cannot find buffer in buffer_list");
 }
 
-void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, 
+void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src, 
                unsigned bytes_per_entry, // how many bytes are counted by a unit of .len
                unsigned start_entry, unsigned max_entries,  // if 0 copies the entire buffer 
                const char *name, unsigned param)
@@ -441,9 +514,19 @@ void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src,
     
     unsigned num_entries = max_entries ? MIN (max_entries, src->len - start_entry) : src->len - start_entry;
 
-    buf_alloc(vb, dst, num_entries * bytes_per_entry, 1, name, param); // use realloc rather than malloc to allocate exact size
+    buf_alloc(vb, dst, num_entries * bytes_per_entry, 1, 
+              name ? name : src->name, name ? param : src->param); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 
     dst->len = num_entries;  
 }   
+
+// moves all the data from one buffer to another, leaving the source buffer unallocated
+void buf_move (VariantBlock *vb, Buffer *dst, Buffer *src)
+{
+    memcpy (dst, src, sizeof(Buffer));
+    memset (src, 0, sizeof(Buffer));
+
+    buf_add_to_buffer_list (vb, dst);
+}

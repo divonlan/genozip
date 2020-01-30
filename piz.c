@@ -105,7 +105,7 @@ static void piz_get_line_subfields (VariantBlock *vb, unsigned line_i, // line i
 
         // the dictionaries were already read, so all subfields are expected to have a ctx
         unsigned sf_i=0 ; for (; sf_i < vb->z_file->num_subfields; sf_i++) 
-            if (!memcmp (subfield.id, vb->z_file->mtf_ctx[sf_i].subfield.id, SUBFIELD_ID_LEN)) {
+            if (subfield.num == vb->z_file->mtf_ctx[sf_i].subfield.num) {
                 // entry i corresponds to subfield i in FORMAT (excluding GT), and contains the index in mtf_ctx of this subfield
                 line_subfields[i] = sf_i;
                 break;

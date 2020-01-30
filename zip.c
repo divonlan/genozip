@@ -139,25 +139,23 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
                 if (node_index <= SEG_MAX_INDEX) { // normal index
                     MtfContext *ctx = &vb->mtf_ctx[dl->sf_i[sf]];
-                    ASSERT (node_index < ctx->mtf.len, 
-                            "Error: node index out of range: node_index=%u len=%u", node_index, ctx->mtf.len);
-                    
-                    MtfNode *node = &((MtfNode*)ctx->mtf.data)[node_index];
+                    MtfNode *node = mtf_node (ctx, node_index, NULL);
                     Base250 index = node->word_index;
 
-                    if (index.num_numerals == 1) // shortcut for most common case
+                    if (index.num_numerals == 1) { // shortcut for most common case
                         *(dst_next++) = index.numerals[0];
-                    
+                    }
                     else {
                         memcpy (dst_next, &index.numerals, index.num_numerals);
                         dst_next += index.num_numerals;
                     }
                 }
-                else if (node_index == SEG_MISSING_SF) 
+                else if (node_index == SEG_MISSING_SF) {
                     *(dst_next++) = BASE250_MISSING_SF;
-
-                else  // node_index == SEG_EMPTY_SF
+                }
+                else {  // node_index == SEG_EMPTY_SF
                     *(dst_next++) = BASE250_EMPTY_SF;
+                }
             }
             
             vb->genotype_one_section_data.len += dst_next - dst_start;

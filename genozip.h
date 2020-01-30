@@ -45,9 +45,10 @@
                                 // explosion in case of an error in the VCF file
 
 #define MAX_SUBFIELDS      32   // maximum number of subfield types (except for GT) that is supported in one GENOZIP file. This constant can be increased if needed.
-#define SUBFIELD_ID_LEN    8    // VCF spec doesn't limit the ID length, we limit it to 8 chars. zero-padded.
-typedef struct {
+#define SUBFIELD_ID_LEN    ((int)sizeof(uint64_t))    // VCF spec doesn't limit the ID length, we limit it to 8 chars. zero-padded.
+typedef union {
     char id[SUBFIELD_ID_LEN];   // \0-padded IDs 
+    uint64_t num;
 } SubfieldIdType;
 #define EMPTY_SUBFIELD_ID { {0,0,0,0,0,0,0,0} }
 
@@ -168,10 +169,11 @@ typedef struct {
 
 #pragma pack(pop)
 
-typedef enum {BUF_UNALLOCATED, BUF_REGULAR, BUF_OVERLAYED} BufferType;
+typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_FULL_OVERLAY, BUF_PARTIAL_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
 
 typedef struct {
     BufferType type;
+    bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     const char *name; // name of allocator - used for memory debugging & statistics
     unsigned param;   // parameter provided by allocator - used for memory debugging & statistics
     unsigned size;    // number of bytes allocated to memory
@@ -179,7 +181,10 @@ typedef struct {
     char *data;       // =memory+2*sizeof(long long) if buffer is allocated or NULL if not
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 } Buffer;
-#define EMPTY_BUFFER {BUF_UNALLOCATED,NULL,0,0,0,NULL,NULL}
+#define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL}
+
+#define NUM_VB_POOLS 2 
+typedef enum { POOL_ID_UNIT_TEST=-1, POOL_ID_ZIP=0, POOL_ID_UNZIP=1 } VariantBlockPoolID;
 
 typedef struct {
     long long wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 
@@ -193,6 +198,8 @@ typedef struct {
         tmp1, tmp2, tmp3, tmp4, tmp5;
 } ProfilerRec;
 
+#pragma pack(push, 1) // packing Base250, HashEnt, MtfNode - as these might consume the majority of RAM when zipping in really big files
+
 // values 0 to 249 are used as numerals in base-250. 
 // The remaining 6 values below are control characters, and can only appear in numerals[0].
 #define BASE250_EMPTY_SF   250 // subfield declared in FORMAT is empty, terminating : present
@@ -201,8 +208,9 @@ typedef struct {
 #define BASE250_3_NUMERALS 254 // this number has 3 numerals
 #define BASE250_4_NUMERALS 255 // this number has 4 numerals
 typedef struct {
-    uint8_t numerals[5];   // number in base-250 (i.e. 0-249), digit[0] is least significant digit. If num_numerals=2,3 or 4 then numerals[1] is 250,251 or 252
-    unsigned num_numerals; // legal values - 1,2,3,4
+    uint8_t numerals[5];       // number in base-250 (i.e. 0-249), digit[0] is least significant digit. If num_numerals=2,3 or 4 then numerals[1] is 250,251 or 252
+    uint8_t num_numerals;      // legal values - 1,2,3,4
+    uint8_t unused[2];         // padding to 64 bit
 } Base250;
 
 extern Base250 base250_encode (uint32_t n);
@@ -213,35 +221,37 @@ extern uint32_t base250_decode (const uint8_t *str);
 #define SEG_EMPTY_SF   0xfffffffeUL // subfield is missing, terminating : present
 #define SEG_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
-// convert index to node pointer or NULL
-#define N(i) ((i) != NIL ? &((MtfNode *)ctx->mtf.data)[i] : NULL) // index to pointer
-
 #define NIL -1
-typedef struct MtfNode_ {
-    uint32_t char_index;        // character index into dictionary array
-    Base250 word_index;         // word index into dictionary to be written to gt section 
-    uint32_t snip_len;          // not including \t terminator present in dictionary array
-    int next;                   // index of next mtf node on the link list of this hash entry, or NIL
-    uint32_t count;             // used by variant_block_i=1 to collect frequency statistics
+typedef struct {
+    uint32_t char_index;       // character index into dictionary array
+    uint32_t snip_len;         // not including \t terminator present in dictionary array
+    Base250 word_index;        // word index into dictionary to be written to gt section
 } MtfNode;
 
+typedef struct {        
+    int32_t mtf_i;             // index into MtfContext.ol_mtf (if < ol_mtf.len) or MtfContext.mtf or NIL
+    int32_t next;              // linked list - index into MtfContext.hash or NIL
+} HashEnt;
+
+// used by variant_block_i=1 to collect frequency statistics
 typedef struct {
-    uint32_t char_index;
-    uint32_t snip_len;
-} MtfWord;
+    int32_t mtf_i;             // index into MtfContext.mtf
+    uint32_t count;            // number of times this snip has been encoutered so far
+} SorterEnt;
+
+#pragma pack(pop)
 
 typedef struct {
     SubfieldIdType subfield;   // which subfield is this MTF dealing with
-    Buffer dict;               // this is a tab-delimited list of all snips (unique), sorted from highest frequency to lowest, optionally optimized, and outputed to GENOZIP
 
-    // red black tree - used for ZIP only
-    Buffer mtf;                // data is an array of MtfNode;
-    unsigned cloned_mtf_len;   // length of mtf as cloned, before new snips were added
-
-    Buffer hash;               // hash table hash(snip) -> mtf index 
-
-    // word list - used for PIZ only
-    Buffer word_list;
+    Buffer ol_dict;            // tab-delimited list of all unique snips - overlayed all previous VB dictionaries
+    Buffer ol_mtf;             // MTF nodes - overlayed all previous VB dictionaries. char/word indeces are into ol_dict.
+    Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
+    Buffer mtf;                // array of MtfNode - in this VB that don't exist in ol_mtf. char/word indeces are into dict.
+    Buffer hash;               // hash table of entries HashEnt - initialized as a copy of all previous VBs. For entries are
+                               // obtained by hash function hash(snip) and the rest of linked to them by linked list
+    Buffer sorter;             // used by the first VB only of ZIP to sort the dictionary - entries of SorterEnt
+    Buffer word_list;          // word list - used for PIZ only
 } MtfContext;
 
 typedef struct {
@@ -326,7 +336,8 @@ typedef struct {
 // IMPORTANT: if changing fields in VariantBlock, also update vb_release_vb
 typedef struct variant_block_ {
 
-    unsigned id;               // id of vb within the vb pool. compress vbs start with 100 and decompress 200
+    unsigned id;               // id of vb within the vb pool
+    VariantBlockPoolID pool_id; 
 
     File *vcf_file, *z_file;  // pointers to objects that span multiple VBs
 
@@ -448,30 +459,27 @@ extern bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffe
 extern bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest /* out */);
 extern bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header, bool *encrypted);
 
-#define NUM_VB_POOLS  2 // for zip and piz that can run concurrently during --test
-#define POOL_ID_MASK 0x00100000 // 1 Mega
-#define POOL_ID_ZIP   (POOL_ID_MASK * 1)
-#define POOL_ID_UNZIP (POOL_ID_MASK * 2)
-typedef struct {
-    unsigned pool_id;
-    unsigned num_vbs;
-    VariantBlock vb[];
-} VariantBlockPool;
-
-extern VariantBlockPool *vb_get_pool (unsigned num_vbs, unsigned pool_id);
-extern void vb_cleanup_memory(VariantBlockPool *pool);
-extern VariantBlock *vb_get_vb(VariantBlockPool *pool, File *vcf_file, File *z_file, unsigned variant_block_i);
+extern void vb_cleanup_memory (VariantBlockPoolID pool_id);
+extern VariantBlock *vb_get_vb (VariantBlockPoolID pool_id, File *vcf_file, File *z_file, unsigned variant_block_i);
 extern unsigned vb_num_samples_in_sb (const VariantBlock *vb, unsigned sb_i);
 extern unsigned vb_num_sections(VariantBlock *vb);
 extern void vb_release_vb (VariantBlock **vb_p);
 
+typedef struct {
+    unsigned num_vbs;
+    VariantBlock vb[]; // variable length
+} VariantBlockPool;
+extern void vb_create_pool (VariantBlockPoolID pool_id, unsigned num_vbs);
+extern VariantBlockPool *vb_get_pool (VariantBlockPoolID pool_id);
+
+
 extern void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */);
 extern SubfieldIdType seg_get_subfield (const char **data, unsigned len, unsigned line_i);
 
-extern uint32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len);
-extern Base250 mtf_get_index_by_snip (VariantBlock *vb, MtfContext *ctx, char **src, uint32_t snip_len);
+extern int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len, bool overlayable, MtfNode **node /* out */);
 extern void mtf_get_snip_by_word_index (VariantBlock *vb, MtfContext *ctx, const uint8_t *word_index_base250, char **snip, uint32_t *snip_len);
 extern void mtf_clone_ctx (VariantBlock *vb);
+extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional out */);
 extern unsigned mtf_merge_in_vb_ctx (VariantBlock *vb);
 extern unsigned mtf_get_sf_i_by_subfield (MtfContext *mtf_ctx, unsigned *num_subfields, SubfieldIdType subfield);
 extern void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *data);
@@ -484,8 +492,8 @@ extern void mtf_free_context (MtfContext *ctx);
 extern void mtf_tree_test (const MtfContext *ctx);
 #endif
 
-extern void gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words);
-extern void gl_deoptimize_dictionary (char *data, unsigned len);
+extern const char *gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words);
+extern void gl_deoptimize_dictionary (char *data, int len);
 
 extern void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
                             File *z_file, bool test_mode, unsigned max_threads, bool is_last_file);
@@ -497,7 +505,7 @@ extern void piz_reconstruct_line_components (VariantBlock *vb);
 extern void piz_merge_all_lines (VariantBlock *vb);
 
 typedef void *Dispatcher;
-extern Dispatcher dispatcher_init (unsigned max_threads, unsigned pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
+extern Dispatcher dispatcher_init (unsigned max_threads, VariantBlockPoolID pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
                                    bool test_mode, bool show_progress, const char *filename);
 extern void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i);
 
@@ -565,33 +573,31 @@ extern void unsqueeze (VariantBlock *vb,
 
 extern unsigned squeeze_len(unsigned int len);
 
+extern void buf_initialize();
 extern unsigned buf_alloc (VariantBlock *vb,
                            Buffer *buf, 
                            unsigned requested_size, // whether contents of memory should be zeroed
                            float grow_at_least_factor, // grow more than new_size    
                            const char *name, unsigned param); // for debugging
-
+static inline void buf_set_overlayable (Buffer *buf) { buf->overlayable = true;}
 extern void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_from, unsigned *regular_buf_offset, const char *name, unsigned param);
-extern void buf_extend (VariantBlock *vb, Buffer *buf, unsigned num_new_units, unsigned sizeof_unit, const char *name, unsigned param);
-extern void buf_append(VariantBlock *vb, Buffer *base, Buffer *fragment, unsigned sizeof_unit, const char *name, unsigned param);
-extern void buf_free_abandoned_memories();
-extern void buf_free(Buffer *buf); // free buffer - without freeing memory. A future buf_malloc of this buffer will reuse the memory if possible.
+extern void buf_free (Buffer *buf); // free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
 extern void buf_destroy (VariantBlock *vb, Buffer *buf);
 
-static inline bool buf_is_allocated(Buffer *buf) {return buf->data != NULL && buf->type == BUF_REGULAR;}
+static inline bool buf_is_allocated (const Buffer *buf) {return buf->data != NULL && (buf->type == BUF_REGULAR || buf->type == BUF_FULL_OVERLAY || buf->type == BUF_PARTIAL_OVERLAY);}
 
-extern void buf_copy (VariantBlock *vb, Buffer *dst, Buffer *src, unsigned bytes_per_entry,
+extern void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src, unsigned bytes_per_entry,
                       unsigned start_entry, unsigned max_entries, // if 0 copies the entire buffer
                       const char *name, unsigned param);
+
+extern void buf_move (VariantBlock *vb, Buffer *dst, Buffer *src);
 
 static inline void buf_add (Buffer *buf, const void *data, unsigned len) { memcpy (&buf->data[buf->len], data, len);  buf->len += len; }
 
 extern void buf_test_overflows(const VariantBlock *vb);
-extern bool buf_has_overflowed(const Buffer *buf);
-extern bool buf_has_underflowed(const Buffer *buf);
 
 extern long long buf_vb_memory_consumption (const VariantBlock *vb);
-extern void buf_display_memory_usage(unsigned pool_id, bool memory_full);
+extern void buf_display_memory_usage (VariantBlockPoolID pool_id, bool memory_full);
 
 extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 
@@ -601,7 +607,7 @@ extern const char *global_cmd;            // set once in main()
 extern bool        global_little_endian;  // set in main()
 
 // flags set by user's command line options
-extern int flag_quiet, flag_concat_mode, flag_md5, flag_show_alleles, flag_show_time, flag_multithreaded, flag_show_memory;
+extern int flag_quiet, flag_concat_mode, flag_md5, flag_show_alleles, flag_show_time, flag_show_memory;
 
 // unit tests
 extern void seg_data_line_unit_test();
