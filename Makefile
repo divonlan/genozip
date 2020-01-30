@@ -24,7 +24,7 @@ ifdef IS_CONDA
 	endif
 else
 	CC=gcc
-	CFLAGS += -Izlib -Ibzlib
+	CFLAGS += -Izlib -Ibzlib -std=c99
 endif 
 
 ifeq ($(CC),gcc)
