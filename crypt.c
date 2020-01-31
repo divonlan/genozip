@@ -22,7 +22,7 @@ bool crypt_prompt_for_password()
     // to do: consider canceling tty echo while getting password: https://stackoverflow.com/questions/1196418/getting-a-password-in-c-without-using-getpass-3
 
     // we can only ask for the password if the user hasn't redirected stdin or stdout
-    ASSERT0 (isatty (1) && isatty(2), "Error: the file is decrypted, please use --password");
+    ASSERT0 (isatty (1) && isatty(2), "Error: this file is encrypted, please use --password");
 
 #define MAX_PASSWORD_LEN 100
     password = calloc (MAX_PASSWORD_LEN+1, 1); // allocated once, never freed
