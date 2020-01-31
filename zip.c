@@ -11,8 +11,6 @@ static void zip_read_variant_block (File *vcf_file,
                                     Buffer *first_data_line,    // first line might be supplied by caller 
                                     VariantBlock *vb)
 {
-    START_TIMER;
-
     unsigned first_line= *line_i;
 
     unsigned vb_line_i;
@@ -40,8 +38,6 @@ static void zip_read_variant_block (File *vcf_file,
     }
 
     vb->num_lines = vb_line_i;
-
-    COPY_TIMER (vb->profile.zip_read_variant_block);
 }
 
 // concatenated variant data (up to and including the FORMAT field) into a single string
