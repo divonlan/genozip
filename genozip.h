@@ -609,11 +609,6 @@ extern bool        global_little_endian;  // set in main()
 // flags set by user's command line options
 extern int flag_quiet, flag_concat_mode, flag_md5, flag_show_alleles, flag_show_time, flag_show_memory;
 
-// unit tests
-extern void seg_data_line_unit_test();
-extern void squeeze_unit_test();
-extern void zip_compress_fp_unit_test();
-
 // macros
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b) )
