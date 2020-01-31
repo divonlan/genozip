@@ -109,7 +109,8 @@ static int main_print_help (bool explicit)
     printf ("                     When listing (--list) - shows the MD5 of each file\n");
     printf ("                     Decompress always compares the MD5 to the uncompressed VCF, if compress was done with --md5\n");
     printf ("   -q --quiet        Don't show the progress indicator\n");    
-    printf ("   -@ --threads      Specify the number of threads to use. By default, genozip uses all cores available to it\n");
+    printf ("   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available.\n"); 
+    printf ("                     The number of threads actually used may be less, if sufficient to balance CPU and I/O\n");
     printf ("   --show-content    Show the information content of VCF files and the compression ratios of each component\n");
     printf ("   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file\n");
     printf ("                     Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character\n");
