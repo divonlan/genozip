@@ -525,7 +525,7 @@ void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
 {
     START_TIMER;
 
-    unsigned num_ploidy_overlows = 0;
+    unsigned num_ploidy_overflows = 0;
 
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
@@ -542,9 +542,9 @@ void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
         // 2. a X chromosome has male samples followed by female
         if (ploidy_overflow) {
             // just to be safe, we will limit the number of ploidy increases to 5
-            ASSERT (num_ploidy_overlows < MAX_PLOIDY_OVERFLOWS, "Error: too many ploidy overflows, line_i=%u", vb->first_line + vb_line_i);
+            ASSERT (num_ploidy_overflows < MAX_PLOIDY_OVERFLOWS, "Error: too many ploidy overflows, line_i=%u", vb->first_line + vb_line_i);
             vb_line_i = -1; // next line is 0
-            num_ploidy_overlows++;
+            num_ploidy_overflows++;
 
             continue;
         }
