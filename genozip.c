@@ -28,6 +28,10 @@
 #endif
 
 #include "genozip.h"
+#include "text_license.h"
+#include "text_help.h"
+
+typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -39,96 +43,47 @@ bool global_little_endian;
 static int flag_stdout=0, flag_force=0, flag_replace=0, flag_show_content=0;
 int flag_quiet=0, flag_concat_mode=0, flag_md5=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
 
-int main_print_license(bool for_installer)
-{
-#include "lic-text.h"
-    unsigned line_width = 0;
-    if (for_installer)
-        line_width = 60; // width of InstallForge license text field
-
-    else {
+static int main_print (const char **text, unsigned num_lines,
+                       const char *wrapped_line_prefix, 
+                       const char *newline_separator, 
+                       unsigned line_width /* 0=calcuate optimal */)
+{                       
+    if (!line_width) {
 #ifdef _WIN32
-        line_width = 100;
+        line_width = 120; // default width of cmd window in Windows 10
 #else
-        // in Linux, we can get the actual terminal width
+        // in Linux and Mac, we can get the actual terminal width
         struct winsize w;
         ioctl(0, TIOCGWINSZ, &w);
         line_width = w.ws_col;
 #endif
     }
 
-    unsigned num_lines = sizeof(license) / sizeof(char*);
-    
     for (unsigned i=0; i < num_lines; i++)  {
-        char *line = license[i];
+        const char *line = text[i];
         unsigned line_len = strlen (line);
         
         // print line with line wraps
-        while (line_len > line_width) {
-            int c; for (c=line_width-1; c>=0 && line[c] != ' '; c--); // find 
-            printf ("%.*s\n", c, line);
+        bool wrapped = false;
+        while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
+            int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); c>=0 && line[c] != ' '; c--); // find 
+            printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + 1; // skip space too
             line_len -= c + 1;
+            wrapped = true;
         }
-        printf ("%s\n\n", line);
+        printf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
     }
     return 0;
 }
 
-static int main_print_help (bool explicit)
+static int main_print_help (ExeType exe_type, bool explicit)
 {
-    printf ("\n");
-    printf ("Compress or uncompress VCF (Variant Call Format) files\n");
-    printf ("\n");
-    printf ("Usage: genozip [options]... [files]...\n");
-    printf ("       genounzip [options]... [files]...\n");
-    printf ("       genocat [options]... [files]...\n");
-    printf ("       genols files\n");
-    printf ("\n");
-    printf ("Actions - use at most one of these actions:\n");
-    printf ("   -z --compress     Compress a .vcf, .vcf.gz or .vcf.bz2 file (Yes! You can compress an already-compressed file).\n");
-    printf ("                     The source file is left unchanged. This is the default action of genozip\n");
-    printf ("   -d --decompress   Decompress a .vcf" GENOZIP_EXT " file. The .vcf " GENOZIP_EXT " file is left unchanged.\n");
-    printf ("                     This is the default action of genounzip\n");
-    printf ("   -l --list         List the compression ratios of the .vcf" GENOZIP_EXT " files\n");
-    printf ("                     This is the default action of genols\n");
-    printf ("   -t --test         Test genozip. Compress the .vcf file(s), uncompress, and then compare the\n");
-    printf ("                     result to the original .vcf - all in memory without writing to any file\n");
-    printf ("   -h --help         Show this help page\n");
-    printf ("   -L --license      Show the license terms and conditions for this product\n");
-    printf ("   -V --version      Display version number\n");
-    printf ("\n");    
-    printf ("Flags:\n");    
-    printf ("   -c --stdout       Send output to standard output instead of a file. -dc is the default action of genocat\n");    
-    printf ("   -f --force        Force overwrite of the output file, or force writing .vcf" GENOZIP_EXT " data to standard output\n");    
-    printf ("   -R --replace      Replace the source file with the result file, rather than leaving it unchanged\n");    
-    printf ("   -o --output       Output file name. This option can also be used to concatenate multiple input files\n");
-    printf ("                     with the same individuals, into a single concatenated output file\n");
-    printf ("   -p --password     Password-protected - encrypted with 256-bit AES\n");
-    printf ("   -m --md5          When compressing - records the MD5 hash of the VCF file in the genozip file header\n");
-    printf ("                     When listing (--list) - shows the MD5 of each file\n");
-    printf ("                     Decompress always compares the MD5 to the uncompressed VCF, if compress was done with --md5\n");
-    printf ("   -q --quiet        Don't show the progress indicator\n");    
-    printf ("   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available.\n"); 
-    printf ("                     The number of threads actually used may be less, if sufficient to balance CPU and I/O\n");
-    printf ("   --show-content    Show the information content of VCF files and the compression ratios of each component\n");
-    printf ("   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file\n");
-    printf ("                     Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character\n");
-    printf ("   --show-time       Show what functions are consuming the most time (useful mostly for developers of genozip)\n");
-    printf ("   --show-memory     Show what buffers are consuming the most memory (useful mostly for developers of genozip)\n");
-
-    printf ("\n");
-    printf ("One or more file names may be given, or if omitted, standard input/output is used instead\n");
-    printf ("\n");
-    printf ("Genozip is available for free for non-commercial use. Commercial use requires a commercial license.\n");
-    printf ("\n");
-    printf ("For bug reports: bugs@genozip.com and license inquiries: sales@genozip.com\n");
-    printf ("\n");
-    printf ("THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE\n");
-    printf ("WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE\n");
-    printf ("COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT,\n");
-    printf ("TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n");
-    printf ("\n");
+    static const char **texts[] = {help_genozip, help_genounzip, help_genols, help_genocat}; // same order as ExeType
+    static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat)};
+    
+    main_print (texts[exe_type], sizes[exe_type] / sizeof(char*), "                     ",  "\n", 0);
+    main_print (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
 
 // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
 // from Windows Explorer - the terminal will open and he will see the help
@@ -629,6 +584,12 @@ int main (int argc, char **argv)
 #   define VERSION    'V'
 #   define HELP       'h'
 
+    ExeType exe_type;
+    if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
+    else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
+    else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
+    else                                    exe_type = EXE_GENOZIP; // default
+    
     buf_initialize();
 
     static int command = -1;  // must be static to initialize list_options 
@@ -648,34 +609,44 @@ int main (int argc, char **argv)
     // process command line options
     while (1) {
 
-        static struct option long_options[] =
-        {
-            // options that set a flag
-            {"stdout",     no_argument,       &flag_stdout,  1      },
-            {"decompress", no_argument,       &command, UNCOMPRESS  },
-            {"force",      no_argument,       &flag_force,   1      },
-            {"help",       no_argument,       &command, HELP        },
-            {"list",       required_argument, &command, LIST        },
-            {"license",    no_argument,       &command, LICENSE     }, // US spelling
-            {"licence",    no_argument,       &command, LICENSE     }, // British spelling
-            {"quiet",      no_argument,       &flag_quiet, 1        },
-            {"replace",    no_argument,       &flag_replace, 1      },
-            {"test",       no_argument,       &command, TEST        },
-            {"version",    no_argument,       &command, VERSION     },
-            {"compress",   no_argument,       &command, COMPRESS    },
-            {"md5",        no_argument,       &flag_md5, 1          },
-            {"threads",    required_argument, 0, '@'                },
-            {"output",     required_argument, 0, 'o'                }, 
-            {"password",   required_argument, 0, 'p'                }, 
-            {"show-content",no_argument,      &flag_show_content, 1 }, 
-            {"show-alleles",no_argument,      &flag_show_alleles, 1 }, 
-            {"show-time"   ,no_argument,      &flag_show_time   , 1 }, 
-            {"show-memory" ,no_argument,      &flag_show_memory , 1 }, 
-            {0, 0, 0, 0                                             },
-        };        
-        
+        typedef const struct option Option;
+        static Option _c  = {"stdout",     no_argument,       &flag_stdout,  1      };
+        static Option _d  = {"decompress", no_argument,       &command, UNCOMPRESS  };
+        static Option _f  = {"force",      no_argument,       &flag_force,   1      };
+        static Option _h  = {"help",       no_argument,       &command, HELP        };
+        static Option _l  = {"list",       required_argument, &command, LIST        };
+        static Option _L1 = {"license",    no_argument,       &command, LICENSE     }; // US spelling
+        static Option _L2 = {"licence",    no_argument,       &command, LICENSE     }; // British spelling
+        static Option _q  = {"quiet",      no_argument,       &flag_quiet, 1        };
+        static Option _R  = {"replace",    no_argument,       &flag_replace, 1      };
+        static Option _t  = {"test",       no_argument,       &command, TEST        };
+        static Option _V  = {"version",    no_argument,       &command, VERSION     };
+        static Option _z  = {"compress",   no_argument,       &command, COMPRESS    };
+        static Option _m  = {"md5",        no_argument,       &flag_md5, 1          };
+        static Option __  = {"threads",    required_argument, 0, '@'                };
+        static Option _o  = {"output",     required_argument, 0, 'o'                };
+        static Option _p  = {"password",   required_argument, 0, 'p'                };
+        static Option _sc = {"show-content",no_argument,      &flag_show_content, 1 }; 
+        static Option _sa = {"show-alleles",no_argument,      &flag_show_alleles, 1 };
+        static Option _st = {"show-time"   ,no_argument,      &flag_show_time   , 1 }; 
+        static Option _sm = {"show-memory" ,no_argument,      &flag_show_memory , 1 }; 
+        static Option _00 = {0, 0, 0, 0                                             };
+
+        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _R, _t, _V, _z, _m, __, _o, _p, _sc, _sa, _st, _sm, _00 };
+        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _R,     _V,         __, _o, _p,           _st, _sm, _00 };
+        static Option genols_lo[]    = {             _h,     _L1, _L2,             _V,     _m,         _p,                     _00 };
+        static Option genocat_lo[]   = {             _h,     _L1, _L2,             _V,         __,     _p,                     _00 };
+        static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
+
+        static const char *short_options[] = { // same order as ExeType
+            "cdfhlLqRtVzm@:o:p:", // genozip
+            "cfhLqRV@:o:p:",      // genounzip
+            "hLVmp:",             // genols
+            "hLV@:p:"             // genocat
+        };
+
         int option_index = 0;
-        int c = getopt_long (argc, argv, "cdfhlLqRtVzm@:o:p:", long_options, &option_index);
+        int c = getopt_long (argc, argv, short_options[exe_type], long_options[exe_type], &option_index);
 
         if (c == -1) break; // no more options
 
@@ -696,20 +667,20 @@ int main (int argc, char **argv)
             case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
-                if (long_options[option_index].val == 'o') 
+                if (long_options[exe_type][option_index].val == 'o') 
                     out_filename = optarg;
 
-                if (long_options[option_index].val == 'p') 
+                if (long_options[exe_type][option_index].val == 'p') 
                     crypt_set_password (optarg);
 
-                else if (long_options[option_index].val == '@') 
+                else if (long_options[exe_type][option_index].val == '@') 
                     threads_str = optarg;
 
                 else 
-                    ASSERT (long_options[option_index].flag != &command || 
-                            long_options[option_index].val  == command ||
+                    ASSERT (long_options[exe_type][option_index].flag != &command || 
+                            long_options[exe_type][option_index].val  == command ||
                             command < 0, 
-                            "%s: can't have both --%s and -%c", global_cmd, long_options[option_index].name, command);
+                            "%s: can't have both --%s and -%c", global_cmd, long_options[exe_type][option_index].name, command);
                 break; 
 
             case '?' : // unrecognized option - error message already displayed by libc
@@ -723,14 +694,14 @@ int main (int argc, char **argv)
     if (command < 0) { 
 
         // genozip with no input filename, no output filename, and no output or input redirection - show help
-        if (strstr (argv[0], "genols"))         command = LIST; // genols can be run without arguments
+        if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
         
         else if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) 
-            return main_print_help (false);
+            return main_print_help (exe_type, false);
 
-        else if (strstr (argv[0], "genounzip")) command = UNCOMPRESS;
-        else if (strstr (argv[0], "genocat")) { command = UNCOMPRESS; flag_stdout=1 ; }
-        else                                    command = COMPRESS; // default 
+        else if (exe_type == EXE_GENOUNZIP) command = UNCOMPRESS;
+        else if (exe_type == EXE_GENOCAT) { command = UNCOMPRESS; flag_stdout=1 ; }
+        else command = COMPRESS; // default 
     }
 
     // sanity checks
@@ -774,10 +745,11 @@ int main (int argc, char **argv)
         return main_print_version();
 
     if (command == LICENSE) 
-        return main_print_license (flag_force); // --license --force means output license in Windows installer format (used by Makefile)
+        return main_print (license, sizeof(license) / sizeof(char*), "", "\n\n", 
+                           flag_force ? 60 : 0); // --license --force means output license in Windows installer format (used by Makefile) - 60 is width of InstallForge license text field
 
-    if (command == HELP)    
-        return main_print_help (true);
+    if (command == HELP) 
+        return main_print_help (exe_type, true);
 
     flag_concat_mode = (out_filename != NULL);
 
@@ -789,7 +761,7 @@ int main (int argc, char **argv)
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring --replace / -R option", global_cmd);
         
-        ASSERT0 (!count || !flag_show_content, "Error: --showcontent can only work on one file at time");
+        ASSERT0 (!count || !flag_show_content, "Error: --show-content can only work on one file at time");
 
         switch (command) {
             case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, !count, optind==argc); break;

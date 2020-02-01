@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-static char *license[] = {
+static const char *license[] = {
     "This program, \"genozip\", and all documentation, are copyright (C) 2019-2020 Divon M Lan.  All rights reserved.",
     "This license covers NON-COMMERCIAL use only. For a commercial license, please contact sales@genozip.com",
     

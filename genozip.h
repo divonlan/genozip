@@ -86,7 +86,8 @@ typedef enum {
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
-typedef union { uint8_t bytes [16]; } Md5Hash;
+typedef union { uint8_t bytes [16]; 
+                uint64_t ulls[2];} Md5Hash;
 
 typedef struct {
     uint32_t magic; 
