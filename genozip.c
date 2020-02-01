@@ -729,6 +729,8 @@ int main (int argc, char **argv)
     
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
+    if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
+
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
         int ret = sscanf (threads_str, "%u", &global_max_threads);
