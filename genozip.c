@@ -576,13 +576,13 @@ static void main_list_dir(const char *dirname)
 
 int main (int argc, char **argv)
 {
-#   define COMPRESS   'z'
-#   define UNCOMPRESS 'd'
-#   define TEST       't'
-#   define LIST       'l'
-#   define LICENSE    'L'
-#   define VERSION    'V'
-#   define HELP       'h'
+    #define COMPRESS   'z'
+    #define UNCOMPRESS 'd'
+    #define TEST       't'
+    #define LIST       'l'
+    #define LICENSE    'L'
+    #define VERSION    'V'
+    #define HELP       'h'
 
     ExeType exe_type;
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
@@ -611,29 +611,29 @@ int main (int argc, char **argv)
     // process command line options
     while (1) {
 
-        typedef const struct option Option;
-        static Option _c  = {"stdout",     no_argument,       &flag_stdout,  1      };
-        static Option _d  = {"decompress", no_argument,       &command, UNCOMPRESS  };
-        static Option _f  = {"force",      no_argument,       &flag_force,   1      };
-        static Option _h  = {"help",       no_argument,       &command, HELP        };
-        static Option _l  = {"list",       required_argument, &command, LIST        };
-        static Option _L1 = {"license",    no_argument,       &command, LICENSE     }; // US spelling
-        static Option _L2 = {"licence",    no_argument,       &command, LICENSE     }; // British spelling
-        static Option _q  = {"quiet",      no_argument,       &flag_quiet, 1        };
-        static Option _DL = {"replace",    no_argument,       &flag_replace, 1      };
-        static Option _t  = {"test",       no_argument,       &command, TEST        };
-        static Option _V  = {"version",    no_argument,       &command, VERSION     };
-        static Option _z  = {"compress",   no_argument,       &command, COMPRESS    };
-        static Option _m  = {"md5",        no_argument,       &flag_md5, 1          };
-        static Option __  = {"threads",    required_argument, 0, '@'                };
-        static Option _o  = {"output",     required_argument, 0, 'o'                };
-        static Option _p  = {"password",   required_argument, 0, 'p'                };
-        static Option _sc = {"show-content",no_argument,      &flag_show_content, 1 }; 
-        static Option _sa = {"show-alleles",no_argument,      &flag_show_alleles, 1 };
-        static Option _st = {"show-time"   ,no_argument,      &flag_show_time   , 1 }; 
-        static Option _sm = {"show-memory" ,no_argument,      &flag_show_memory , 1 }; 
-        static Option _00 = {0, 0, 0, 0                                             };
+        #define _c  {"stdout",     no_argument,       &flag_stdout,  1      }
+        #define _d  {"decompress", no_argument,       &command, UNCOMPRESS  }
+        #define _f  {"force",      no_argument,       &flag_force,   1      }
+        #define _h  {"help",       no_argument,       &command, HELP        }
+        #define _l  {"list",       required_argument, &command, LIST        }
+        #define _L1 {"license",    no_argument,       &command, LICENSE     } // US spelling
+        #define _L2 {"licence",    no_argument,       &command, LICENSE     } // British spelling
+        #define _q  {"quiet",      no_argument,       &flag_quiet, 1        }
+        #define _DL {"replace",    no_argument,       &flag_replace, 1      }
+        #define _t  {"test",       no_argument,       &command, TEST        }
+        #define _V  {"version",    no_argument,       &command, VERSION     }
+        #define _z  {"compress",   no_argument,       &command, COMPRESS    }
+        #define _m  {"md5",        no_argument,       &flag_md5, 1          }
+        #define __  {"threads",    required_argument, 0, '@'                }
+        #define _o  {"output",     required_argument, 0, 'o'                }
+        #define _p  {"password",   required_argument, 0, 'p'                }
+        #define _sc {"show-content",no_argument,      &flag_show_content, 1 } 
+        #define _sa {"show-alleles",no_argument,      &flag_show_alleles, 1 }
+        #define _st {"show-time"   ,no_argument,      &flag_show_time   , 1 } 
+        #define _sm {"show-memory" ,no_argument,      &flag_show_memory , 1 } 
+        #define _00 {0, 0, 0, 0                                             }
 
+        typedef const struct option Option;
         static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, __, _o, _p, _sc, _sa, _st, _sm, _00 };
         static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         __, _o, _p,           _st, _sm, _00 };
         static Option genols_lo[]    = {             _h,     _L1, _L2,              _V,     _m,         _p,                     _00 };
