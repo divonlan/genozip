@@ -606,6 +606,8 @@ int main (int argc, char **argv)
     unsigned test_endianity = 0x01020304;
     global_little_endian = *(uint8_t*)&test_endianity==0x04; // in big endian it is 0x01;
 
+    bool is_short[256]; // indexed by character of short option.
+
     // process command line options
     while (1) {
 
@@ -645,10 +647,12 @@ int main (int argc, char **argv)
             "hLV@:p:"             // genocat
         };
 
-        int option_index = 0;
+        int option_index = -1;
         int c = getopt_long (argc, argv, short_options[exe_type], long_options[exe_type], &option_index);
 
         if (c == -1) break; // no more options
+
+        is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
 
         switch (c) {
             case COMPRESS : case UNCOMPRESS : case LIST : case LICENSE : 
@@ -667,6 +671,7 @@ int main (int argc, char **argv)
             case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
+
                 if (long_options[exe_type][option_index].val == 'o') 
                     out_filename = optarg;
 
@@ -705,28 +710,30 @@ int main (int argc, char **argv)
     }
 
     // sanity checks
-    ASSERT (!flag_stdout || !out_filename, "%s: option --stdout / -c is incompatable with --output / -o", global_cmd);
-    ASSERT (!flag_stdout || !flag_replace, "%s: option --stdout / -c is incompatable with --replace / -R", global_cmd);
-    ASSERT (!flag_stdout || !flag_show_content, "%s: option --stdout / -c is incompatable with --show-content", global_cmd);
-    ASSERT (!flag_stdout || !flag_show_alleles, "%s: option --stdout / -c is incompatable with --show-alleles", global_cmd);
-    ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --stdout / -c option", global_cmd);
-    ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --force / -f option", global_cmd);
-    ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --replace / -R option", global_cmd);
-    ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --quiet / -q option", global_cmd);
-    ASSERTW (!flag_md5          || command == COMPRESS || command == LIST      , "%s: ignoring --md5 / -m option %s", global_cmd,
+    #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
+
+    ASSERT (!flag_stdout || !out_filename, "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
+    ASSERT (!flag_stdout || !flag_replace, "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "R"));
+    ASSERT (!flag_stdout || !flag_show_content, "%s: option %s is incompatable with --show-content", global_cmd, OT("stdout", "c"));
+    ASSERT (!flag_stdout || !flag_show_alleles, "%s: option %s is incompatable with --show-alleles", global_cmd, OT("stdout", "c"));
+    ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("stdout", "c"));
+    ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("force", "f"));
+    ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("replace", "R"));
+    ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring %s option", global_cmd, OT("quiet", "q"));
+    ASSERTW (!flag_md5          || command == COMPRESS || command == LIST      , "%s: ignoring %s option %s", global_cmd, OT("md5","m"),
              command==UNCOMPRESS ? "- decompress always verifies MD5 if the file was compressed with --md5" : "");
-    ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring --threads / -@ option", global_cmd);
-    ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring --output / -o option", global_cmd);
-    ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with -z or -t", global_cmd);
-    ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with -z or -t", global_cmd);
+    ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring %s option", global_cmd, OT("threads", "@"));
+    ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("output", "o"));
+    ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with --compress or --test", global_cmd);
+    ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with --compress or --test", global_cmd);
     
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
         int ret = sscanf (threads_str, "%u", &global_max_threads);
-        ASSERT (ret == 1 && global_max_threads >= 1, "%s: --threads / -@ option requires an integer value of at least 1", global_cmd);
-        ASSERT (command != TEST || (global_max_threads >= 3 && global_max_threads != 4), "%s invalid --threads / -@ value: number of threads for --test / -t should be at least 3 (but not 4)", global_cmd);
+        ASSERT (ret == 1 && global_max_threads >= 1, "%s: %s requires an integer value of at least 1", global_cmd, OT("threads", "@"));
+        ASSERT (command != TEST || (global_max_threads >= 3 && global_max_threads != 4), "%s invalid %s value: number of threads for %s should be at least 3 (but not 4)", global_cmd, OT("threads", "@"), OT("test", "t"));
     }
     else {
         global_max_threads = main_get_num_cores();
@@ -759,7 +766,7 @@ int main (int argc, char **argv)
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
-        ASSERTW (next_input_file || !flag_replace, "%s: ignoring --replace / -R option", global_cmd);
+        ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "R"));
         
         ASSERT0 (!count || !flag_show_content, "Error: --show-content can only work on one file at time");
 
