@@ -193,7 +193,13 @@ windows/%.exe: %.exe
 
 windows/readme.txt: genozip$(EXE)
 	@echo Generating $@
-	@./genozip$(EXE) --help > $@
+	@./genozip$(EXE)   --help  > $@
+	@printf '%.s-' {1..120}   >> $@
+	@./genounzip$(EXE) --help >> $@
+	@printf '%.s-' {1..120}   >> $@
+	@./genols$(EXE)    --help >> $@
+	@printf '%.s-' {1..120}   >> $@
+	@./genocat$(EXE)   --help >> $@
 	
 windows/LICENSE.for-installer.txt: lic-text.h
 	@echo Generating $@
