@@ -620,7 +620,7 @@ int main (int argc, char **argv)
         static Option _L1 = {"license",    no_argument,       &command, LICENSE     }; // US spelling
         static Option _L2 = {"licence",    no_argument,       &command, LICENSE     }; // British spelling
         static Option _q  = {"quiet",      no_argument,       &flag_quiet, 1        };
-        static Option _R  = {"replace",    no_argument,       &flag_replace, 1      };
+        static Option _DL = {"replace",    no_argument,       &flag_replace, 1      };
         static Option _t  = {"test",       no_argument,       &command, TEST        };
         static Option _V  = {"version",    no_argument,       &command, VERSION     };
         static Option _z  = {"compress",   no_argument,       &command, COMPRESS    };
@@ -634,15 +634,15 @@ int main (int argc, char **argv)
         static Option _sm = {"show-memory" ,no_argument,      &flag_show_memory , 1 }; 
         static Option _00 = {0, 0, 0, 0                                             };
 
-        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _R, _t, _V, _z, _m, __, _o, _p, _sc, _sa, _st, _sm, _00 };
-        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _R,     _V,         __, _o, _p,           _st, _sm, _00 };
-        static Option genols_lo[]    = {             _h,     _L1, _L2,             _V,     _m,         _p,                     _00 };
-        static Option genocat_lo[]   = {             _h,     _L1, _L2,             _V,         __,     _p,                     _00 };
+        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, __, _o, _p, _sc, _sa, _st, _sm, _00 };
+        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         __, _o, _p,           _st, _sm, _00 };
+        static Option genols_lo[]    = {             _h,     _L1, _L2,              _V,     _m,         _p,                     _00 };
+        static Option genocat_lo[]   = {             _h,     _L1, _L2,              _V,         __,     _p,                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLqRtVzm@:o:p:", // genozip
-            "cfhLqRV@:o:p:",      // genounzip
+            "cdfhlLq^tVzm@:o:p:", // genozip
+            "cfhLq^V@:o:p:",      // genounzip
             "hLVmp:",             // genols
             "hLV@:p:"             // genocat
         };
@@ -663,7 +663,7 @@ int main (int argc, char **argv)
 
             case 'c' : flag_stdout        = 1      ; break;
             case 'f' : flag_force         = 1      ; break;
-            case 'R' : flag_replace       = 1      ; break;
+            case '^' : flag_replace       = 1      ; break;
             case 'q' : flag_quiet         = 1      ; break;
             case 'm' : flag_md5           = 1      ; break;
             case '@' : threads_str  = optarg       ; break;
@@ -713,12 +713,12 @@ int main (int argc, char **argv)
     #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
 
     ASSERT (!flag_stdout || !out_filename, "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
-    ASSERT (!flag_stdout || !flag_replace, "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "R"));
+    ASSERT (!flag_stdout || !flag_replace, "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
     ASSERT (!flag_stdout || !flag_show_content, "%s: option %s is incompatable with --show-content", global_cmd, OT("stdout", "c"));
     ASSERT (!flag_stdout || !flag_show_alleles, "%s: option %s is incompatable with --show-alleles", global_cmd, OT("stdout", "c"));
     ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("stdout", "c"));
     ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("force", "f"));
-    ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("replace", "R"));
+    ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("replace", "^"));
     ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring %s option", global_cmd, OT("quiet", "q"));
     ASSERTW (!flag_md5          || command == COMPRESS || command == LIST      , "%s: ignoring %s option %s", global_cmd, OT("md5","m"),
              command==UNCOMPRESS ? "- decompress always verifies MD5 if the file was compressed with --md5" : "");
@@ -768,7 +768,7 @@ int main (int argc, char **argv)
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
-        ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "R")); 
+        ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
         
         ASSERT0 (!count || !flag_show_content, "Error: --show-content can only work on one file at time");
 
