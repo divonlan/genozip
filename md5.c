@@ -221,15 +221,14 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
 
     free = 64 - used;
 
-    if(free < 8)
-    {
-        memset( &ctx->buffer[used], 0, free );
-        md5_transform( ctx, ctx->buffer, 64 );
+    if (free < 8) {
+        memset (&ctx->buffer[used], 0, free);
+        md5_transform (ctx, ctx->buffer, 64);
         used = 0;
         free = 64;
     }
 
-    memset( &ctx->buffer[used], 0, free - 8 );
+    memset (&ctx->buffer[used], 0, free - 8);
 
     ctx->lo <<= 3;
     ctx->buffer[56] = (uint8_t)( ctx->lo );
@@ -241,7 +240,7 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
     ctx->buffer[62] = (uint8_t)( ctx->hi >> 16 );
     ctx->buffer[63] = (uint8_t)( ctx->hi >> 24 );
 
-    md5_transform( ctx, ctx->buffer, 64 );
+    md5_transform (ctx, ctx->buffer, 64);
 
     digest->bytes[0]  = (uint8_t)( ctx->a );
     digest->bytes[1]  = (uint8_t)( ctx->a >> 8 );
@@ -276,8 +275,11 @@ const char *md5_display (const Md5Hash *digest, bool prefix_space)
 
     const uint8_t *b = digest->bytes; 
     
-    sprintf (str, "%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", prefix_space ? " " : "",
-             b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
-
+    if (digest->ulls[0] || digest->ulls[1])
+        sprintf (str, "%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", prefix_space ? " " : "",
+                 b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+    else
+        sprintf (str, "%sN/A                             ", prefix_space ? " " : "");
+    
     return str;
 }
