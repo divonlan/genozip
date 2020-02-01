@@ -109,12 +109,15 @@ static VariantBlockPool *pools[NUM_VB_POOLS] = {NULL, NULL}; // the pools remain
 
 void vb_create_pool (VariantBlockPoolID pool_id, unsigned num_vbs)
 {
-    ASSERT (!pools[pool_id], "Error: pool %u already exists", pool_id);
+    ASSERT (!pools[pool_id] || num_vbs==pools[pool_id]->num_vbs, 
+            "Error: pool %u already exists, but with the wrong number of vbs - expected %u but it has %u", pool_id, num_vbs, pools[pool_id]->num_vbs);
 
-    pools[pool_id] = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
-    ASSERT0 (pools[pool_id], "Error: failed to calloc pool");
+    if (!pools[pool_id])  {
+        pools[pool_id] = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
+        ASSERT0 (pools[pool_id], "Error: failed to calloc pool");
 
-    pools[pool_id]->num_vbs = num_vbs; 
+        pools[pool_id]->num_vbs = num_vbs; 
+    }
 }
 
 VariantBlockPool *vb_get_pool (VariantBlockPoolID pool_id)
