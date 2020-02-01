@@ -31,38 +31,23 @@ void md5_display_ctx (const Md5Context *x)
 }
 
 
-static void *md5_transform (Md5Context *ctx, void const *data, uintmax_t size)
+static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t size)
 {
-    uint8_t*     ptr;
-    uint32_t     a;
-    uint32_t     b;
-    uint32_t     c;
-    uint32_t     d;
-    uint32_t     saved_a;
-    uint32_t     saved_b;
-    uint32_t     saved_c;
-    uint32_t     saved_d;
-
     #define GET(n) (ctx->block[(n)])
-    #define SET(n) (ctx->block[(n)] =             \
-            ((uint32_t)ptr[(n)*4 + 0] << 0 )      \
-        |   ((uint32_t)ptr[(n)*4 + 1] << 8 )      \
-        |   ((uint32_t)ptr[(n)*4 + 2] << 16)      \
-        |   ((uint32_t)ptr[(n)*4 + 3] << 24) )
+    #define SET(n) (ctx->block[(n)] = LTEN32(ptr[n]))
+    
+    const uint32_t *ptr = (uint32_t *)data;
 
-    ptr = (uint8_t*)data;
+    uint32_t a = ctx->a;
+    uint32_t b = ctx->b;
+    uint32_t c = ctx->c;
+    uint32_t d = ctx->d;
 
-    a = ctx->a;
-    b = ctx->b;
-    c = ctx->c;
-    d = ctx->d;
-
-    do
-    {
-        saved_a = a;
-        saved_b = b;
-        saved_c = c;
-        saved_d = d;
+    do {
+        uint32_t saved_a = a;
+        uint32_t saved_b = b;
+        uint32_t saved_c = c;
+        uint32_t saved_d = d;
 
         // Round 1
         STEP( F, a, b, c, d, SET(0),  0xd76aa478, 7 )
@@ -73,14 +58,14 @@ static void *md5_transform (Md5Context *ctx, void const *data, uintmax_t size)
         STEP( F, d, a, b, c, SET(5),  0x4787c62a, 12 )
         STEP( F, c, d, a, b, SET(6),  0xa8304613, 17 )
         STEP( F, b, c, d, a, SET(7),  0xfd469501, 22 )
-        STEP( F, a, b, c, d, SET(8 ),  0x698098d8, 7 )
-        STEP( F, d, a, b, c, SET(9 ),  0x8b44f7af, 12 )
-        STEP( F, c, d, a, b, SET(10 ), 0xffff5bb1, 17 )
-        STEP( F, b, c, d, a, SET(11 ), 0x895cd7be, 22 )
-        STEP( F, a, b, c, d, SET(12 ), 0x6b901122, 7 )
-        STEP( F, d, a, b, c, SET(13 ), 0xfd987193, 12 )
-        STEP( F, c, d, a, b, SET(14 ), 0xa679438e, 17 )
-        STEP( F, b, c, d, a, SET(15 ), 0x49b40821, 22 )
+        STEP( F, a, b, c, d, SET(8),  0x698098d8, 7 )
+        STEP( F, d, a, b, c, SET(9),  0x8b44f7af, 12 )
+        STEP( F, c, d, a, b, SET(10), 0xffff5bb1, 17 )
+        STEP( F, b, c, d, a, SET(11), 0x895cd7be, 22 )
+        STEP( F, a, b, c, d, SET(12), 0x6b901122, 7 )
+        STEP( F, d, a, b, c, SET(13), 0xfd987193, 12 )
+        STEP( F, c, d, a, b, SET(14), 0xa679438e, 17 )
+        STEP( F, b, c, d, a, SET(15), 0x49b40821, 22 )
 
         // Round 2
         STEP( G, a, b, c, d, GET(1),  0xf61e2562, 5 )
@@ -141,7 +126,7 @@ static void *md5_transform (Md5Context *ctx, void const *data, uintmax_t size)
         c += saved_c;
         d += saved_d;
 
-        ptr += 64;
+        ptr += 16;
     } while( size -= 64 );
 
     ctx->a = a;
@@ -231,33 +216,14 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
     memset (&ctx->buffer[used], 0, free - 8);
 
     ctx->lo <<= 3;
-    ctx->buffer[56] = (uint8_t)( ctx->lo );
-    ctx->buffer[57] = (uint8_t)( ctx->lo >> 8 );
-    ctx->buffer[58] = (uint8_t)( ctx->lo >> 16 );
-    ctx->buffer[59] = (uint8_t)( ctx->lo >> 24 );
-    ctx->buffer[60] = (uint8_t)( ctx->hi );
-    ctx->buffer[61] = (uint8_t)( ctx->hi >> 8 );
-    ctx->buffer[62] = (uint8_t)( ctx->hi >> 16 );
-    ctx->buffer[63] = (uint8_t)( ctx->hi >> 24 );
+    *(uint32_t *)&ctx->buffer[56] = LTEN32 (ctx->lo);
+    *(uint32_t *)&ctx->buffer[60] = LTEN32 (ctx->hi);
 
     md5_transform (ctx, ctx->buffer, 64);
-
-    digest->bytes[0]  = (uint8_t)( ctx->a );
-    digest->bytes[1]  = (uint8_t)( ctx->a >> 8 );
-    digest->bytes[2]  = (uint8_t)( ctx->a >> 16 );
-    digest->bytes[3]  = (uint8_t)( ctx->a >> 24 );
-    digest->bytes[4]  = (uint8_t)( ctx->b );
-    digest->bytes[5]  = (uint8_t)( ctx->b >> 8 );
-    digest->bytes[6]  = (uint8_t)( ctx->b >> 16 );
-    digest->bytes[7]  = (uint8_t)( ctx->b >> 24 );
-    digest->bytes[8]  = (uint8_t)( ctx->c );
-    digest->bytes[9]  = (uint8_t)( ctx->c >> 8 );
-    digest->bytes[10] = (uint8_t)( ctx->c >> 16 );
-    digest->bytes[11] = (uint8_t)( ctx->c >> 24 );
-    digest->bytes[12] = (uint8_t)( ctx->d );
-    digest->bytes[13] = (uint8_t)( ctx->d >> 8 );
-    digest->bytes[14] = (uint8_t)( ctx->d >> 16 );
-    digest->bytes[15] = (uint8_t)( ctx->d >> 24 );
+    digest->words[0] = LTEN32 (ctx->a);
+    digest->words[1] = LTEN32 (ctx->b);
+    digest->words[2] = LTEN32 (ctx->c);
+    digest->words[3] = LTEN32 (ctx->d);
 }
 
 void md5_do (const void *data, unsigned len, Md5Hash *digest)
