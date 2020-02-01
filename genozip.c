@@ -280,7 +280,7 @@ static void main_genozip (const char *vcf_filename,
 
     file_close (&vcf_file);
 
-    if ((is_last_file || !flag_concat_mode) && z_file) 
+    if ((is_last_file || !flag_concat_mode) && !flag_stdout && z_file) 
         file_close (&z_file); 
 
     if (remove_vcf_file) file_remove (vcf_filename); 
