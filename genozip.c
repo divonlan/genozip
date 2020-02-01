@@ -514,9 +514,9 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
         return;
     }   
 
-    uint64_t vcf_data_size = ENDN64 (vcf_header_header->vcf_data_size);
-    uint32_t num_samples   = ENDN32 (vcf_header_header->num_samples);
-    uint64_t num_lines     = ENDN64 (vcf_header_header->num_lines);
+    uint64_t vcf_data_size = BGEN64 (vcf_header_header->vcf_data_size);
+    uint32_t num_samples   = BGEN32 (vcf_header_header->num_samples);
+    uint64_t num_lines     = BGEN64 (vcf_header_header->num_lines);
 
     char num_lines_str[50];
     if (num_lines != NUM_LINES_UNKNOWN)

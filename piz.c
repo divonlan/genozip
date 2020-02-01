@@ -561,25 +561,25 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     zfile_uncompress_section (vb, vb->z_data.data + section_index[0], &vb->variant_data_section_data, SEC_VARIANT_DATA);
     
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)(vb->z_data.data + section_index[0]);
-    vb->first_line              = ENDN32 (vardata_header->first_line);
-    vb->num_lines               = ENDN32 (vardata_header->num_lines);
+    vb->first_line              = BGEN32 (vardata_header->first_line);
+    vb->num_lines               = BGEN32 (vardata_header->num_lines);
     vb->phase_type              = (PhaseType)vardata_header->phase_type;
     vb->has_genotype_data       = vardata_header->has_genotype_data;
     vb->is_sorted_by_pos        = vardata_header->is_sorted_by_pos;
-    vb->num_haplotypes_per_line = ENDN32 (vardata_header->num_haplotypes_per_line);
+    vb->num_haplotypes_per_line = BGEN32 (vardata_header->num_haplotypes_per_line);
     vb->has_haplotype_data      = vb->num_haplotypes_per_line > 0;
-    vb->num_sample_blocks       = ENDN32 (vardata_header->num_sample_blocks);
-    vb->num_samples_per_block   = ENDN32 (vardata_header->num_samples_per_block);
-    vb->ploidy                  = ENDN16 (vardata_header->ploidy);
-    vb->num_subfields           = ENDN16 (vardata_header->num_subfields);
+    vb->num_sample_blocks       = BGEN32 (vardata_header->num_sample_blocks);
+    vb->num_samples_per_block   = BGEN32 (vardata_header->num_samples_per_block);
+    vb->ploidy                  = BGEN16 (vardata_header->ploidy);
+    vb->num_subfields           = BGEN16 (vardata_header->num_subfields);
     // num_dictionary_sections is read in zfile_read_one_vb()
-    vb->max_gt_line_len         = ENDN32 (vardata_header->max_gt_line_len);
+    vb->max_gt_line_len         = BGEN32 (vardata_header->max_gt_line_len);
     memcpy(vb->chrom, vardata_header->chrom, MAX_CHROM_LEN);
-    vb->min_pos                 = ENDN64 (vardata_header->min_pos);
-    vb->max_pos                 = ENDN64 (vardata_header->max_pos);
-    vb->vb_data_size            = ENDN32 (vardata_header->vb_data_size);
+    vb->min_pos                 = BGEN64 (vardata_header->min_pos);
+    vb->max_pos                 = BGEN64 (vardata_header->max_pos);
+    vb->vb_data_size            = BGEN32 (vardata_header->vb_data_size);
     
-    ASSERT (global_num_samples == ENDN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, vardata_header->num_samples);
+    ASSERT (global_num_samples == BGEN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, vardata_header->num_samples);
 
     // we allocate memory for the Buffer arrays only once the first time this VariantBlock
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
@@ -601,7 +601,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         unsqueeze (vb,
                    (unsigned *)vb->haplotype_permutation_index.data, 
                    vardata_header->haplotype_index, 
-                   ENDN16 (vardata_header->haplotype_index_checksum),
+                   BGEN16 (vardata_header->haplotype_index_checksum),
                    vb->num_haplotypes_per_line);
     }
 

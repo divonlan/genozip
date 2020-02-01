@@ -86,8 +86,11 @@ typedef enum {
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
-typedef union { uint8_t bytes [16]; 
-                uint64_t ulls[2];} Md5Hash;
+typedef union { 
+    uint8_t  bytes[16]; 
+    uint32_t words[4];
+    uint64_t ulls[2];
+} Md5Hash;
 
 typedef struct {
     uint32_t magic; 
@@ -619,15 +622,19 @@ extern int flag_quiet, flag_concat_mode, flag_md5, flag_show_alleles, flag_show_
 // encode section headers in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
-#ifndef _MSC_VER
-#define ENDN16(x) (global_little_endian ? __builtin_bswap16(x) : (x))
-#define ENDN32(x) (global_little_endian ? __builtin_bswap32(x) : (x))
-#define ENDN64(x) (global_little_endian ? __builtin_bswap64(x) : (x))
-#else
-#define ENDN16(x) (global_little_endian ? _byteswap_ushort(x) : (x))
-#define ENDN32(x) (global_little_endian ? _byteswap_ulong (x) : (x))
-#define ENDN64(x) (global_little_endian ? _byteswap_uint64(x) : (x))
+#ifdef _MSC_VER
+#define __builtin_bswap16 _byteswap_ushort
+#define __builtin_bswap32 _byteswap_ulong
+#define __builtin_bswap64 _byteswap_uint64
 #endif
+
+#define BGEN16(x) (global_little_endian ? __builtin_bswap16(x) : (x))
+#define BGEN32(x) (global_little_endian ? __builtin_bswap32(x) : (x))
+#define BGEN64(x) (global_little_endian ? __builtin_bswap64(x) : (x))
+
+#define LTEN16(x) (global_little_endian ? (x) : __builtin_bswap16(x))
+#define LTEN32(x) (global_little_endian ? (x) : __builtin_bswap32(x))
+#define LTEN64(x) (global_little_endian ? (x) : __builtin_bswap64(x))
 
 // sanity checks
 static inline void my_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits

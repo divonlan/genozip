@@ -81,8 +81,8 @@ static int zfile_compress_do (VariantBlock *vb, Buffer *z_data, const char *data
 static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *header, 
                             const char *data, SectionType section_type) 
 { 
-    unsigned compressed_offset     = ENDN32 (header->compressed_offset);
-    unsigned data_uncompressed_len = ENDN32 (header->data_uncompressed_len);
+    unsigned compressed_offset     = BGEN32 (header->compressed_offset);
+    unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
     
     unsigned header_padding=0;
     bool is_encrypted = crypt_get_encrypted_len (&compressed_offset, &header_padding); // set to 0 if no encryption
@@ -116,9 +116,9 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
     }
 
     // finalize & copy header
-    header->compressed_offset   = ENDN32 (compressed_offset);  // updated value to include header padding
-    header->data_compressed_len = ENDN32 (data_compressed_len);   
-    header->data_encrypted_len  = ENDN32 (data_encrypted_len); 
+    header->compressed_offset   = BGEN32 (compressed_offset);  // updated value to include header padding
+    header->data_compressed_len = BGEN32 (data_compressed_len);   
+    header->data_encrypted_len  = BGEN32 (data_encrypted_len); 
     memcpy (&z_data->data[z_data->len], header, compressed_offset);
 
     // encrypt if needed - header & body separately
@@ -130,8 +130,8 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
 
         // encrypt the header - except the variant data header that we encrypt later in zfile_update_compressed_variant_data_header()
         // we use section_i to generate a different AES key for each section
-        uint32_t vb_i  = ENDN32 (header->variant_block_i);
-        uint16_t sec_i = ENDN16 (header->section_i);
+        uint32_t vb_i  = BGEN32 (header->variant_block_i);
+        uint16_t sec_i = BGEN16 (header->section_i);
 
         if (section_type != SEC_VARIANT_DATA)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, -1-sec_i); // (use (-1-section_i) - different than header's +section_i)
@@ -161,12 +161,12 @@ void zfile_uncompress_section (VariantBlock *vb,
     START_TIMER;
     SectionHeader *section_header = (SectionHeader *)section_header_p;
     
-    uint32_t compressed_offset     = ENDN32 (section_header->compressed_offset);
-    uint32_t data_encrypted_len    = ENDN32 (section_header->data_encrypted_len);
-    uint32_t data_compressed_len   = ENDN32 (section_header->data_compressed_len);
-    uint32_t data_uncompressed_len = ENDN32 (section_header->data_uncompressed_len);
-    uint32_t variant_block_i       = ENDN32 (section_header->variant_block_i);
-    uint16_t section_i             = ENDN16 (section_header->section_i);
+    uint32_t compressed_offset     = BGEN32 (section_header->compressed_offset);
+    uint32_t data_encrypted_len    = BGEN32 (section_header->data_encrypted_len);
+    uint32_t data_compressed_len   = BGEN32 (section_header->data_compressed_len);
+    uint32_t data_uncompressed_len = BGEN32 (section_header->data_uncompressed_len);
+    uint32_t variant_block_i       = BGEN32 (section_header->variant_block_i);
+    uint16_t section_i             = BGEN16 (section_header->section_i);
 
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %u but seeing %u", expected_section_type, section_header->section_type);
@@ -231,13 +231,13 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     SectionHeaderVCFHeader vcf_header;
     memset (&vcf_header, 0, sizeof(vcf_header)); // safety
 
-    vcf_header.h.magic                 = ENDN32 (GENOZIP_MAGIC);
+    vcf_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     vcf_header.h.section_type          = SEC_VCF_HEADER;
-    vcf_header.h.data_uncompressed_len = ENDN32 (vcf_header_text->len);
-    vcf_header.h.compressed_offset     = ENDN32 (sizeof (SectionHeaderVCFHeader));
+    vcf_header.h.data_uncompressed_len = BGEN32 (vcf_header_text->len);
+    vcf_header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderVCFHeader));
     vcf_header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;   
-    vcf_header.num_samples             = ENDN32 (global_num_samples);
-    vcf_header.vcf_data_size           = ENDN64 (vb->vcf_file->vcf_data_size) /* 0 if gzipped - will be updated later*/; 
+    vcf_header.num_samples             = BGEN32 (global_num_samples);
+    vcf_header.vcf_data_size           = BGEN64 (vb->vcf_file->vcf_data_size) /* 0 if gzipped - will be updated later*/; 
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
     file_basename (vb->vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
     zfile_get_metadata (vcf_header.created);
@@ -269,26 +269,26 @@ void zfile_compress_variant_data (VariantBlock *vb)
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)vb->vardata_header_buf.data;
     memset (vardata_header, 0, sizeof(SectionHeaderVariantData)); // safety
     
-    vardata_header->h.magic                 = ENDN32 (GENOZIP_MAGIC);
+    vardata_header->h.magic                 = BGEN32 (GENOZIP_MAGIC);
     vardata_header->h.section_type          = SEC_VARIANT_DATA;
-    vardata_header->h.data_uncompressed_len = ENDN32 (vb->variant_data_section_data.len);
-    vardata_header->h.compressed_offset     = ENDN32 (sizeof_header);
-    vardata_header->h.variant_block_i       = ENDN32 (vb->variant_block_i);
-    vardata_header->h.section_i             = ENDN16 (vb->z_next_header_i++); // always 0
-    vardata_header->first_line              = ENDN32 (vb->first_line);
-    vardata_header->num_lines               = ENDN32 (vb->num_lines);
+    vardata_header->h.data_uncompressed_len = BGEN32 (vb->variant_data_section_data.len);
+    vardata_header->h.compressed_offset     = BGEN32 (sizeof_header);
+    vardata_header->h.variant_block_i       = BGEN32 (vb->variant_block_i);
+    vardata_header->h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
+    vardata_header->first_line              = BGEN32 (vb->first_line);
+    vardata_header->num_lines               = BGEN32 (vb->num_lines);
     vardata_header->phase_type              = (char)vb->phase_type; 
     vardata_header->has_genotype_data       = vb->has_genotype_data;
-    vardata_header->num_samples             = ENDN32 (global_num_samples);
-    vardata_header->num_haplotypes_per_line = ENDN32 (vb->num_haplotypes_per_line);
-    vardata_header->num_samples_per_block   = ENDN32 (vb->num_samples_per_block);
-    vardata_header->num_sample_blocks       = ENDN32 (vb->num_sample_blocks);
-    vardata_header->ploidy                  = ENDN16 (vb->ploidy);
-    vardata_header->vb_data_size            = ENDN32 (vb->vb_data_size);
-    vardata_header->max_gt_line_len         = ENDN32 (vb->max_gt_line_len);
-    vardata_header->num_subfields           = ENDN16 (vb->num_subfields);
-    vardata_header->min_pos                 = ENDN64 (vb->min_pos);
-    vardata_header->max_pos                 = ENDN64 (vb->max_pos);
+    vardata_header->num_samples             = BGEN32 (global_num_samples);
+    vardata_header->num_haplotypes_per_line = BGEN32 (vb->num_haplotypes_per_line);
+    vardata_header->num_samples_per_block   = BGEN32 (vb->num_samples_per_block);
+    vardata_header->num_sample_blocks       = BGEN32 (vb->num_sample_blocks);
+    vardata_header->ploidy                  = BGEN16 (vb->ploidy);
+    vardata_header->vb_data_size            = BGEN32 (vb->vb_data_size);
+    vardata_header->max_gt_line_len         = BGEN32 (vb->max_gt_line_len);
+    vardata_header->num_subfields           = BGEN16 (vb->num_subfields);
+    vardata_header->min_pos                 = BGEN64 (vb->min_pos);
+    vardata_header->max_pos                 = BGEN64 (vb->max_pos);
     vardata_header->is_sorted_by_pos        = vb->is_sorted_by_pos;
     memcpy (vardata_header->chrom, vb->chrom, MAX_CHROM_LEN);
 
@@ -297,7 +297,7 @@ void zfile_compress_variant_data (VariantBlock *vb)
              (unsigned *)vb->haplotype_permutation_index.data, 
              vb->num_haplotypes_per_line);
 
-    vardata_header->haplotype_index_checksum = ENDN16(haplotype_index_checksum);
+    vardata_header->haplotype_index_checksum = BGEN16(haplotype_index_checksum);
 
     zfile_compress (vb, &vb->z_data, (SectionHeader*)vardata_header, vb->variant_data_section_data.data, SEC_VARIANT_DATA);
 
@@ -316,13 +316,13 @@ void zfile_update_compressed_variant_data_header (VariantBlock *vb,
                                                   unsigned num_dictionary_sections)
 {
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)&vb->z_data.data[pos];
-    vardata_header->num_dictionary_sections = ENDN16 ((uint16_t)num_dictionary_sections);
-    vardata_header->z_data_bytes            = ENDN32 ((uint32_t)vb->z_data.len);
+    vardata_header->num_dictionary_sections = BGEN16 ((uint16_t)num_dictionary_sections);
+    vardata_header->z_data_bytes            = BGEN32 ((uint32_t)vb->z_data.len);
 
     // now we can finally encrypt the header - if needed
     if (vardata_header->h.data_encrypted_len)  // non-zero if encrypted
-        crypt_do (vb, (uint8_t*)vardata_header, ENDN32 (vardata_header->h.compressed_offset),
-                  ENDN32 (vardata_header->h.variant_block_i), -1-ENDN16 (vardata_header->h.section_i)); // negative section_i for a header
+        crypt_do (vb, (uint8_t*)vardata_header, BGEN32 (vardata_header->h.compressed_offset),
+                  BGEN32 (vardata_header->h.variant_block_i), -1-BGEN16 (vardata_header->h.section_i)); // negative section_i for a header
 }
 
 void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield, 
@@ -331,13 +331,13 @@ void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield,
     SectionHeaderDictionary header;
     memset (&header, 0, sizeof(header)); // safety
 
-    header.h.magic                 = ENDN32 (GENOZIP_MAGIC);
+    header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.section_type          = SEC_DICTIONARY;
-    header.h.data_uncompressed_len = ENDN32 (num_chars);
-    header.h.compressed_offset     = ENDN32 (sizeof(SectionHeaderDictionary));
-    header.h.variant_block_i       = ENDN32 (vb->variant_block_i);
-    header.h.section_i             = ENDN16 (vb->z_next_header_i++);
-    header.num_snips               = ENDN32 (num_words);
+    header.h.data_uncompressed_len = BGEN32 (num_chars);
+    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary));
+    header.h.variant_block_i       = BGEN32 (vb->variant_block_i);
+    header.h.section_i             = BGEN16 (vb->z_next_header_i++);
+    header.num_snips               = BGEN32 (num_words);
     memcpy (header.subfield_id, subfield.id, SUBFIELD_ID_LEN);
 
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, data, SEC_DICTIONARY);
@@ -348,12 +348,12 @@ void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Bu
     SectionHeader header;
     memset (&header, 0, sizeof(header)); // safety
 
-    header.magic                 = ENDN32 (GENOZIP_MAGIC);
+    header.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.section_type          = section_type;
-    header.data_uncompressed_len = ENDN32 (section_data->len);
-    header.compressed_offset     = ENDN32 (sizeof(header));
-    header.variant_block_i       = ENDN32 (vb->variant_block_i);
-    header.section_i             = ENDN16 (vb->z_next_header_i++);
+    header.data_uncompressed_len = BGEN32 (section_data->len);
+    header.compressed_offset     = BGEN32 (sizeof(header));
+    header.variant_block_i       = BGEN32 (vb->variant_block_i);
+    header.section_i             = BGEN16 (vb->z_next_header_i++);
     
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, section_data->data, section_type);
 }
@@ -425,7 +425,7 @@ int zfile_read_one_section (VariantBlock *vb,
     if (is_encrypted)
         crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
 
-    bool is_magical = ENDN32 (header->magic) == GENOZIP_MAGIC;
+    bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
     if (!is_magical && !is_encrypted && section_type == SEC_VCF_HEADER) {
 
         // file appears to be encrypted but user hasn't provided a password    
@@ -440,7 +440,7 @@ int zfile_read_one_section (VariantBlock *vb,
         }
 
         crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i);
-        is_magical = ENDN32 (header->magic) == GENOZIP_MAGIC;
+        is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
     }
 
     if (is_encrypted && section_type == SEC_VCF_HEADER) {
@@ -449,13 +449,13 @@ int zfile_read_one_section (VariantBlock *vb,
         ASSERT (is_magical, "Error: corrupt data (magic is wrong) when reading file %s", vb->vcf_file->name ? vb->vcf_file->name : "(stdin)");
     }
 
-    unsigned compressed_offset   = ENDN32 (header->compressed_offset);
+    unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%u", section_type);
 
-    unsigned data_compressed_len = ENDN32 (header->data_compressed_len);
+    unsigned data_compressed_len = BGEN32 (header->data_compressed_len);
     ASSERT (data_compressed_len, "Error: header.data_compressed_len is 0 when reading section_type=%u", section_type);
 
-    unsigned data_encrypted_len  = ENDN32 (header->data_encrypted_len);
+    unsigned data_encrypted_len  = BGEN32 (header->data_encrypted_len);
 
     unsigned data_len = MAX (data_compressed_len, data_encrypted_len);
 
@@ -533,11 +533,11 @@ bool zfile_read_one_vb (VariantBlock *vb)
 
     // note - copying values here z_data.data can get reallocated each call to zfile_read_one_section
     SectionHeaderVariantData *vardata_header = (SectionHeaderVariantData *)&vb->z_data.data[vardata_header_offset];
-    unsigned num_sample_blocks       = ENDN32 (vardata_header->num_sample_blocks);
+    unsigned num_sample_blocks       = BGEN32 (vardata_header->num_sample_blocks);
     bool has_genotype_data           = vardata_header->has_genotype_data;
     PhaseType phase_type             = (PhaseType)vardata_header->phase_type;
-    unsigned num_haplotypes_per_line = ENDN32 (vardata_header->num_haplotypes_per_line);
-    unsigned num_dictionary_sections = ENDN16 (vardata_header->num_dictionary_sections);
+    unsigned num_haplotypes_per_line = BGEN32 (vardata_header->num_haplotypes_per_line);
+    unsigned num_dictionary_sections = BGEN16 (vardata_header->num_dictionary_sections);
 
     // dictionaries are processed right here by the dispatcher thread - the compute
     // thread only access the dictionaries on the z_file->mtf_ctx
@@ -605,8 +605,8 @@ void zfile_update_vcf_header_section_header (VariantBlock *vb)
     unsigned len = crypt_padded_len (sizeof (SectionHeaderVCFHeader));
     
     // update the header contents
-    header->vcf_data_size = ENDN64 (vb->z_file->vcf_concat_data_size);
-    header->num_lines     = ENDN64 (vb->z_file->num_lines);
+    header->vcf_data_size = BGEN64 (vb->z_file->vcf_concat_data_size);
+    header->num_lines     = BGEN64 (vb->z_file->num_lines);
     if (flag_md5) {
         md5_finalize (&vb->z_file->md5_ctx, &header->md5_hash);
 

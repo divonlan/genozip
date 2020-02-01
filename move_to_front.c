@@ -398,7 +398,7 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
     // vcf_header_genozip_to_vcf() so that they don't need to be realloced. dict.len may be accessed
     // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
-    uint32_t num_snips = ENDN32 (header->num_snips);
+    uint32_t num_snips = BGEN32 (header->num_snips);
     SubfieldIdType subfield; memcpy (subfield.id, header->subfield_id, SUBFIELD_ID_LEN);
 
     zfile_uncompress_section (vb, section_data, &fragment, SEC_DICTIONARY);

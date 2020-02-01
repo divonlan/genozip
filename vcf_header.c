@@ -157,10 +157,10 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     ASSERT (header->genozip_version == GENOZIP_FILE_FORMAT_VERSION, "Error: file version %u is newer than the latest version supported %u. Please upgrade.",
             header->genozip_version, GENOZIP_FILE_FORMAT_VERSION);
 
-    ASSERT (ENDN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", ENDN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
+    ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
 
-    vb->z_file->num_lines     = vb->vcf_file->num_lines     = ENDN64 (header->num_lines);
-    vb->z_file->vcf_data_size = vb->vcf_file->vcf_data_size = ENDN64 (header->vcf_data_size);
+    vb->z_file->num_lines     = vb->vcf_file->num_lines     = BGEN64 (header->num_lines);
+    vb->z_file->vcf_data_size = vb->vcf_file->vcf_data_size = BGEN64 (header->vcf_data_size);
     
     *digest = header->md5_hash;
     vb->vcf_file->has_md5 = memcmp (header->md5_hash.bytes, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16); // has_md5 iff not all 0. note: a chance of 1 ~ 10^38 that we will get all-0 by chance in which case will won't perform the md5 comparison
@@ -198,7 +198,7 @@ bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header
         return false;
     }
 
-    if (ENDN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
+    if (BGEN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
         return true; // not encrypted
 
     if (crypt_have_password()) {
@@ -206,7 +206,7 @@ bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header
         memset (&fake_vb, 0, sizeof(fake_vb));
         crypt_do (&fake_vb, (uint8_t *)vcf_header_header, crypt_padded_len (sizeof (SectionHeaderVCFHeader)), 0, -1);
 
-        if (ENDN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
+        if (BGEN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
             return true; // we successfully decrypted it with the user provided password
     }
 
