@@ -296,7 +296,7 @@ static void main_genounzip (const char *z_filename,
 {
     static File *vcf_file = NULL; // static to support concat mode
     File *z_file;
-
+    
     // get input FILE
     if (z_filename) {
         unsigned fn_len = strlen (z_filename);
@@ -342,7 +342,7 @@ static void main_genounzip (const char *z_filename,
     const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
     piz_dispatcher (basename, z_file, vcf_file, pipe_from_zip_thread >= 0, max_threads);
 
-    if (!flag_concat_mode) 
+    if (!flag_concat_mode && !flag_stdout) 
         file_close (&vcf_file); // no worries about not closing the concatenated file - it will close with the process exits
 
     file_close (&z_file);
@@ -768,7 +768,7 @@ int main (int argc, char **argv)
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
-        ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "R"));
+        ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "R")); 
         
         ASSERT0 (!count || !flag_show_content, "Error: --show-content can only work on one file at time");
 
