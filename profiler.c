@@ -8,7 +8,6 @@
 void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
 {
     dst->read                              += src->read;
-    dst->vcffile_get_line                  += src->vcffile_get_line;
     dst->compute                           += src->compute;
     dst->write                             += src->write;
     dst->compressor                        += src->compressor;
@@ -103,8 +102,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     }
     else { // compress
         fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
-        fprintf (stderr, "   vcffile_get_line: %u\n", ms(p->vcffile_get_line));
-        fprintf (stderr, "      read: %u\n", ms(p->read));
+        fprintf (stderr, "   read: %u\n", ms(p->read));
         fprintf (stderr, "   write: %u\n", ms(p->write));
         fprintf (stderr, "GENOZIP compute threads (zip_compress_variant_block): %u\n", ms(p->compute));
         fprintf (stderr, "   compressor: %u\n", ms(p->compressor));

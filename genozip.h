@@ -191,7 +191,7 @@ typedef struct {
 typedef enum { POOL_ID_UNIT_TEST=-1, POOL_ID_ZIP=0, POOL_ID_UNZIP=1 } VariantBlockPoolID;
 
 typedef struct {
-    long long wallclock, read, compute, compressor, write, vcffile_get_line, zfile_read_one_vb, piz_get_variant_data_line, 
+    long long wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 
         piz_get_haplotype_data_line, piz_get_line_get_num_subfields,
         piz_get_genotype_sample_starts, piz_get_line_subfields, piz_merge_line, 
         piz_get_phase_data_line, piz_get_genotype_data_line, zfile_uncompress_section,

@@ -53,13 +53,13 @@ static inline char vcffile_get_char(VariantBlock *vb)
 
         }
         else if (file->type == VCF_GZ) { 
-            file->last_read   = gzfread (file->read_buffer, 1, READ_BUFFER_SIZE, (gzFile)file->file);
+            file->last_read = gzfread (file->read_buffer, 1, READ_BUFFER_SIZE, (gzFile)file->file);
             
             if (file->last_read)
                 file->disk_so_far = gzoffset64 ((gzFile)file->file); // for compressed files, we update by block read
         }
         else if (file->type == VCF_BZ2) { 
-            file->last_read   = BZ2_bzread ((BZFILE *)file->file, file->read_buffer, READ_BUFFER_SIZE);
+            file->last_read = BZ2_bzread ((BZFILE *)file->file, file->read_buffer, READ_BUFFER_SIZE);
 
             if (file->last_read)
                 file->disk_so_far = BZ2_bzoffset ((BZFILE *)file->file); // for compressed files, we update by block read
@@ -84,8 +84,6 @@ static inline char vcffile_get_char(VariantBlock *vb)
 // unlike fgets, the line is not limited by any particular length
 bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, bool skip_md5_vcf_header, Buffer *line, const char *buf_name)
 {    
-    START_TIMER;
-
     File *file = vb->vcf_file; // for code readability
 
     double *avg_line_len_so_far = vb ? &file->avg_data_line_len : &file->avg_header_line_len;
@@ -105,8 +103,6 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
             file->eof = true;
 
             buf_free(line);
-            
-            COPY_TIMER (vb->profile.vcffile_get_line);
             return false;
         }
         line->data[str_len] = c;
@@ -130,8 +126,6 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
         md5_update (&vb->z_file->md5_ctx, line->data, line->len, !vb->z_file->has_md5);
         vb->z_file->has_md5 = true;
     }
-
-    COPY_TIMER (vb->profile.vcffile_get_line);
 
     return true;
 }
