@@ -41,7 +41,7 @@ bool global_little_endian;
 
 // the flags - some are static, some are globals 
 static int flag_stdout=0, flag_force=0, flag_replace=0, flag_show_content=0;
-int flag_quiet=0, flag_concat_mode=0, flag_md5=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
+int flag_quiet=0, flag_concat_mode=0, flag_md5=0, flag_split=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
 
 static int main_print (const char **text, unsigned num_lines,
                        const char *wrapped_line_prefix, 
@@ -294,7 +294,7 @@ static void main_genounzip (const char *z_filename,
                             int pipe_to_test_thread,
                             unsigned max_threads)
 {
-    static File *vcf_file = NULL; // static to support concat mode
+    static File *vcf_file = NULL; 
     File *z_file;
     
     // get input FILE
@@ -326,6 +326,8 @@ static void main_genounzip (const char *z_filename,
     // get output FILE
     if (vcf_filename) {
 
+        ASSERT0 (!vcf_file || flag_concat_mode, "Error: vcf_file is open but not in concat mode");
+
         if (!vcf_file) { // in concat mode, for second file onwards, vcf_file is already open
             ASSERT (flag_force || access(vcf_filename, F_OK), "%s: output file %s already exists", global_cmd, vcf_filename);
 
@@ -335,10 +337,16 @@ static void main_genounzip (const char *z_filename,
     else if (pipe_to_test_thread >= 0) {
         vcf_file = file_fdopen (pipe_to_test_thread, WRITE, VCF, false);
     }
-    else { // stdout
+    else if (flag_stdout) { // stdout
         vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
     }
-
+    else if (flag_split) {
+        // do nothing - the files will be opened by zip_dispatcher
+    }
+    else {
+        ABORT0 ("Error: unrecognized configuration for the vcf_file");
+    }
+    
     const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
     piz_dispatcher (basename, z_file, vcf_file, pipe_from_zip_thread >= 0, max_threads);
 
@@ -534,7 +542,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     buf_human_readable_size(vcf_data_size, u_str);
     printf (item_format, num_samples, num_lines_str, 
             c_str, u_str, ratio, 
-            flag_md5 ? md5_display (&vcf_header_header->md5_hash, true) : "",
+            flag_md5 ? md5_display (vcf_header_header->md5_hash, true) : "",
             (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
             is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
             z_filename, vcf_header_header->created);
@@ -624,7 +632,8 @@ int main (int argc, char **argv)
         #define _V  {"version",    no_argument,       &command, VERSION     }
         #define _z  {"compress",   no_argument,       &command, COMPRESS    }
         #define _m  {"md5",        no_argument,       &flag_md5, 1          }
-        #define __  {"threads",    required_argument, 0, '@'                }
+        #define _th {"threads",    required_argument, 0, '@'                }
+        #define _O  {"split",      no_argument,       &flag_split, 1        }
         #define _o  {"output",     required_argument, 0, 'o'                }
         #define _p  {"password",   required_argument, 0, 'p'                }
         #define _sc {"show-content",no_argument,      &flag_show_content, 1 } 
@@ -634,15 +643,15 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                             }
 
         typedef const struct option Option;
-        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, __, _o, _p, _sc, _sa, _st, _sm, _00 };
-        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         __, _o, _p,           _st, _sm, _00 };
-        static Option genols_lo[]    = {             _h,     _L1, _L2,              _V,     _m,         _p,                     _00 };
-        static Option genocat_lo[]   = {             _h,     _L1, _L2,              _V,         __,     _p,                     _00 };
+        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th,     _o, _p, _sc, _sa, _st, _sm, _00 };
+        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _st, _sm, _00 };
+        static Option genols_lo[]    = {             _h,     _L1, _L2,              _V,     _m,              _p,                     _00 };
+        static Option genocat_lo[]   = {             _h,     _L1, _L2,              _V,         _th,         _p,                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
             "cdfhlLq^tVzm@:o:p:", // genozip
-            "cfhLq^V@:o:p:",      // genounzip
+            "cfhLq^V@:Oo:p:",     // genounzip
             "hLVmp:",             // genols
             "hLV@:p:"             // genocat
         };
@@ -666,6 +675,7 @@ int main (int argc, char **argv)
             case '^' : flag_replace       = 1      ; break;
             case 'q' : flag_quiet         = 1      ; break;
             case 'm' : flag_md5           = 1      ; break;
+            case 'O' : flag_split         = 1      ; break;
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
             case 'p' : crypt_set_password (optarg) ; break;
@@ -711,9 +721,11 @@ int main (int argc, char **argv)
 
     // sanity checks
     #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
-
-    ASSERT (!flag_stdout || !out_filename, "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
-    ASSERT (!flag_stdout || !flag_replace, "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
+    
+    ASSERT (!flag_stdout || !out_filename,      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
+    ASSERT (!flag_stdout || !flag_split,        "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
+    ASSERT (!flag_split  || !out_filename,      "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
+    ASSERT (!flag_stdout || !flag_replace,      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
     ASSERT (!flag_stdout || !flag_show_content, "%s: option %s is incompatable with --show-content", global_cmd, OT("stdout", "c"));
     ASSERT (!flag_stdout || !flag_show_alleles, "%s: option %s is incompatable with --show-alleles", global_cmd, OT("stdout", "c"));
     ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("stdout", "c"));

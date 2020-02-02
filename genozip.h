@@ -558,9 +558,10 @@ extern void aes_initialize (VariantBlock *vb, const uint8_t *key);
 extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length);
 
 extern void md5_do (const void *data, unsigned len, Md5Hash *digest);
+extern void md5_initialize (Md5Context *ctx);
 extern void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize);
 extern void md5_finalize (Md5Context *ctx, Md5Hash *digest);
-const char *md5_display (const Md5Hash *digest, bool prefix_space);
+const char *md5_display (const Md5Hash digest, bool prefix_space);
 extern void md5_display_ctx (const Md5Context *x);
 
 extern void squeeze (VariantBlock *vb,
@@ -611,7 +612,7 @@ extern const char *global_cmd;            // set once in main()
 extern bool        global_little_endian;  // set in main()
 
 // flags set by user's command line options
-extern int flag_quiet, flag_concat_mode, flag_md5, flag_show_alleles, flag_show_time, flag_show_memory;
+extern int flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_show_memory;
 
 // macros
 #ifndef MIN

@@ -140,7 +140,7 @@ static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t s
     return ptr;
 }
 
-static void md5_initialize (Md5Context *ctx)
+void md5_initialize (Md5Context *ctx)
 {
     memset (ctx, 0, sizeof(Md5Context));
 
@@ -235,13 +235,13 @@ void md5_do (const void *data, unsigned len, Md5Hash *digest)
     md5_finalize (&ctx, digest);
 }
 
-const char *md5_display (const Md5Hash *digest, bool prefix_space)
+const char *md5_display (Md5Hash digest, bool prefix_space)
 {
-    static char str[34]; // not thread-safe, but only used by main thread (inc. space and \0)
+    char *str = malloc (34); // we're going to leak this memory - nevermind, it is small and rare
 
-    const uint8_t *b = digest->bytes; 
+    const uint8_t *b = digest.bytes; 
     
-    if (digest->ulls[0] || digest->ulls[1])
+    if (digest.ulls[0] || digest.ulls[1])
         sprintf (str, "%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", prefix_space ? " " : "",
                  b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
     else

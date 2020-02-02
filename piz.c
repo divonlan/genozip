@@ -707,10 +707,12 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
         Md5Hash decompressed_file_digest;
         md5_finalize (&vcf_file->md5_ctx, &decompressed_file_digest);
 
-        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (&decompressed_file_digest, false));
+        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (decompressed_file_digest, false));
 
-        ASSERT (!memcmp (decompressed_file_digest.bytes, original_file_digest.bytes, sizeof(Md5Hash)), 
-                "File integrity error: MD5 of decompressed file %s differs than that of the original file", vcf_file->name);
+        ASSERT (decompressed_file_digest.ulls[0] == original_file_digest.ulls[0] &&
+                decompressed_file_digest.ulls[1] == original_file_digest.ulls[1],
+                "File integrity error: MD5 of decompressed file %s is %s, original file's was %s", 
+                vcf_file->name, md5_display (decompressed_file_digest, false), md5_display (original_file_digest, false));
     }
 finish:
     dispatcher_finish (dispatcher, NULL);

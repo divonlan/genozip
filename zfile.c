@@ -610,7 +610,7 @@ void zfile_update_vcf_header_section_header (VariantBlock *vb)
     if (flag_md5) {
         md5_finalize (&vb->z_file->md5_ctx, &header->md5_hash);
 
-        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (&header->md5_hash, false));
+        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (header->md5_hash, false));
     }
     
     // encrypt if needed

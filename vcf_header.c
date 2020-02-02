@@ -163,7 +163,7 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     vb->z_file->vcf_data_size = vb->vcf_file->vcf_data_size = BGEN64 (header->vcf_data_size);
     
     *digest = header->md5_hash;
-    vb->vcf_file->has_md5 = memcmp (header->md5_hash.bytes, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16); // has_md5 iff not all 0. note: a chance of 1 ~ 10^38 that we will get all-0 by chance in which case will won't perform the md5 comparison
+    vb->vcf_file->has_md5 = header->md5_hash.ulls[0] || header->md5_hash.ulls[1]; // has_md5 iff not all 0. note: a chance of 1 in about 10^38 that we will get all-0 by chance in which case will won't perform the md5 comparison
 
     // now get the text of the VCF header itself
     static Buffer vcf_header_buf = EMPTY_BUFFER;
@@ -178,9 +178,13 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
         return false;
     }
 
-    // in concat mode, we write the vcf header, only for the first genozip file
+    // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
     if (first_vcf || !flag_concat_mode)
         vcffile_write_to_disk (vb->vcf_file, &vcf_header_buf);
+    
+    // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 if needed (this is normally done by vcffile_write_to_disk())
+    else if (vb->vcf_file->has_md5)
+        md5_update (&vb->vcf_file->md5_ctx, vcf_header_buf.data, vcf_header_buf.len, true);
 
     buf_free(&compressed_vcf_section);
     buf_free(&vcf_header_buf);
