@@ -133,6 +133,8 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
         uint32_t vb_i  = BGEN32 (header->variant_block_i);
         uint16_t sec_i = BGEN16 (header->section_i);
 
+        // note: for SEC_VARIANT_DATA we will encrypt at the end of calculating this VB when the index data is
+        // known, and we will then update z_data in memory prior to writing the encrypted data to disk
         if (section_type != SEC_VARIANT_DATA)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, -1-sec_i); // (use (-1-section_i) - different than header's +section_i)
 
@@ -224,7 +226,7 @@ static void zfile_get_metadata(char *metadata)
     ASSERT0 (strlen (metadata) < FILE_METADATA_LEN, "Error: metadata too long");
 }
 
-void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
+void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_first_vcf)
 {
     File *file = vb->z_file;
     
@@ -237,7 +239,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     vcf_header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderVCFHeader));
     vcf_header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;   
     vcf_header.num_samples             = BGEN32 (global_num_samples);
-    vcf_header.vcf_data_size           = BGEN64 (vb->vcf_file->vcf_data_size) /* 0 if gzipped - will be updated later*/; 
+    vcf_header.vcf_data_size           = BGEN64 (vb->vcf_file->vcf_data_size_single) /* 0 if gzipped - will be updated later. */; 
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
     file_basename (vb->vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
     zfile_get_metadata (vcf_header.created);
@@ -257,7 +259,10 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text)
     buf_free (&vcf_header_buf); 
 
     // copy it to z_file - we might need to update it at the very end in zfile_update_vcf_header_section_header()
-    memcpy (&vb->z_file->vcf_header, &vcf_header, sizeof (vcf_header));
+    if (is_first_vcf)
+        memcpy (&vb->z_file->vcf_header_first, &vcf_header, sizeof (vcf_header));
+
+    memcpy (&vb->z_file->vcf_header_single, &vcf_header, sizeof (vcf_header));
 }
 
 void zfile_compress_variant_data (VariantBlock *vb)
@@ -361,7 +366,7 @@ void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Bu
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
 // this doesn't make a big difference for SSD, but makes a huge difference for HD
 // return true if data was read as requested, false if file has reached EOF and error otherwise
-static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len)
+static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len, bool fail_quietly_if_not_enough_data)
 {
     START_TIMER;
 
@@ -369,16 +374,23 @@ static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len)
 
     void *start = (void *)&buf->data[buf->len];
 
-    bool memcpyied = false;
+    unsigned memcpyied = 0;
+    unsigned len_save  = len;
+
     File *file = vb->z_file; // for code readability
 
     while (len) {
 
         if (file->next_read == file->last_read) { // nothing left in read_buffer - replenish it from disk
 
-            if (file->last_read != READ_BUFFER_SIZE && !memcpyied) return false; // EOF reached last time, nothing more to read
+            if (file->last_read != READ_BUFFER_SIZE && !memcpyied) return NULL; // EOF reached last time, nothing more to read
 
-            ASSERT (file->last_read == READ_BUFFER_SIZE, "Error: end-of-file of input file, read %"PRIu64" bytes", file->disk_so_far)
+            if (file->last_read != READ_BUFFER_SIZE && memcpyied && fail_quietly_if_not_enough_data) return NULL; // partial read = quiet error as requested
+            
+            ASSERT (file->last_read == READ_BUFFER_SIZE, 
+                    "Error: end-of-file while reading %s, read %u bytes, but wanted to read %u bytes", 
+                    vb->z_file->name ? vb->z_file->name : "(stdin)", memcpyied, len_save);
+
             file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)file->file);
             file->next_read = 0;
             file->disk_so_far += file->last_read;
@@ -396,7 +408,7 @@ static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len)
         len             -= memcpy_len;
         file->next_read += memcpy_len;
 
-        memcpyied = true;
+        memcpyied += memcpy_len;
     }
 
     COPY_TIMER (vb->profile.read);
@@ -408,7 +420,7 @@ static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len)
 // returns offset of header within data, EOF if end of file
 int zfile_read_one_section (VariantBlock *vb,
                             Buffer *data, const char *buf_name, /* buffer to append */
-                            unsigned header_size, SectionType section_type,
+                            unsigned header_size, SectionType expected_sec_type,
                             bool allow_eof)
 {
     bool is_encrypted = crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
@@ -416,17 +428,20 @@ int zfile_read_one_section (VariantBlock *vb,
     unsigned header_offset = data->len;
     buf_alloc (vb, data, header_offset + header_size, 2, buf_name, 1);
 
-    SectionHeader *header = zfile_read_from_disk (vb, data, header_size);
+    SectionHeader *header = zfile_read_from_disk (vb, data, header_size, false);
     ASSERT0 (header || allow_eof, "Failed to read header");
     
     if (!header) return EOF; 
 
     // decrypt header
-    if (is_encrypted)
-        crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
+    if (is_encrypted) {
+        ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
+                "Error: password provided, but file %s is not encrypted", vb->z_file->name ? vb->z_file->name : "(stdin)");
 
+        crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
+    }
     bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
-    if (!is_magical && !is_encrypted && section_type == SEC_VCF_HEADER) {
+    if (!is_magical && !is_encrypted && expected_sec_type == SEC_VCF_HEADER) {
 
         // file appears to be encrypted but user hasn't provided a password    
         crypt_prompt_for_password();
@@ -435,80 +450,126 @@ int zfile_read_one_section (VariantBlock *vb,
         is_encrypted = crypt_get_encrypted_len (&header_size, &padding); // update header size if encrypted
             
         if (padding) {
-            char *header_extra_bytes = zfile_read_from_disk (vb, data, padding);
-            ASSERT0 (header_extra_bytes, "Failed to read header padding");
+            char *header_extra_bytes = zfile_read_from_disk (vb, data, padding, false);
+            ASSERT0 (header_extra_bytes, "Error: Failed to read header padding");
         }
 
         crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i);
         is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
     }
 
-    if (is_encrypted && section_type == SEC_VCF_HEADER) {
-        ASSERT0 (is_magical, "Error: decryption failed - password is wrong"); // mostly likely its because of a wrong password
-    } else {
-        ASSERT (is_magical, "Error: corrupt data (magic is wrong) when reading file %s", vb->vcf_file->name ? vb->vcf_file->name : "(stdin)");
+    if (!is_magical && is_encrypted && expected_sec_type == SEC_VCF_HEADER) {
+        ABORT ("Error: password is wrong for file %s", vb->z_file->name ? vb->z_file->name : "(stdin)"); // mostly likely its because of a wrong password
     }
 
+    // case: encryption failed because this is actually a SEC_VCF_HEADER of a new vcf component of a concatenated file
+    bool new_vcf_component = false;
+    unsigned new_header_size=0;
+
+    if (!is_magical && is_encrypted && expected_sec_type == SEC_VARIANT_DATA) {
+    
+        // reverse failed decryption
+        crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, vb->z_next_header_i);
+
+        new_header_size = sizeof (SectionHeaderVCFHeader);
+        unsigned padding;
+        crypt_get_encrypted_len (&new_header_size, &padding); // adjust header size with encryption block size
+
+        // read additional bytes - if we need to
+        int additional_bytes = new_header_size - header_size;
+
+        bool success;
+        if (additional_bytes > 0) {
+            buf_alloc (vb, data, data->len + additional_bytes, 1, 0, 0);
+            header = (SectionHeader *)&data->data[header_offset]; // update after realloc
+            success = (bool)zfile_read_from_disk (vb, data, new_header_size - header_size, true);
+        }
+        else 
+            success = true; // we don't need any extra bytes
+
+        if (success) { // success
+            // attempt to re-decrypt, with a key for the vcf header
+            crypt_do (vb, (uint8_t*)header, new_header_size, 0, -1); // vb_i=0 and sec_i=-1 always, for all VCFHeader section headers
+            is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
+
+            vb->z_next_header_i++; // roll back
+            new_vcf_component = true; 
+        }
+    } 
+
+    ASSERT (is_magical, "Error: corrupt data (magic is wrong) when reading file %s", vb->vcf_file->name ? vb->vcf_file->name : "(stdin)");
+
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
-    ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%u", section_type);
+    ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%u", expected_sec_type);
 
     unsigned data_compressed_len = BGEN32 (header->data_compressed_len);
-    ASSERT (data_compressed_len, "Error: header.data_compressed_len is 0 when reading section_type=%u", section_type);
+    ASSERT (data_compressed_len, "Error: header.data_compressed_len is 0 when reading section_type=%u", expected_sec_type);
 
     unsigned data_encrypted_len  = BGEN32 (header->data_encrypted_len);
 
     unsigned data_len = MAX (data_compressed_len, data_encrypted_len);
 
-    // if we expected a new VB and got a VCF header - that's ok - we allow concatenated GENOZIP files
-    bool skip_this_vcf_header = (header->section_type == SEC_VCF_HEADER && section_type == SEC_VARIANT_DATA);
-
-    ASSERT0 (section_type != SEC_VCF_HEADER || header->section_type == section_type || skip_this_vcf_header,  
-             "Error: Input file is not a genozip file");
-
+    // We found a VCF header - possibly a result of concatenating files:
+    // if regular mode (no split) - we will just read the data from disk to skip this header (unless its expected)
+    // if in split mode - we will end processing this output file here and store the header for the next output vcf file
+    bool found_a_vcf_header = header->section_type == SEC_VCF_HEADER;
+    
     // check that we received the section type we expect, 
-    ASSERT (header->section_type == section_type || skip_this_vcf_header,  
-            "Error: when reading file: expecting section type %u, but seeing %u", section_type, header->section_type);
+    ASSERT (header->section_type == expected_sec_type || (found_a_vcf_header && expected_sec_type == SEC_VARIANT_DATA),
+            "Error: Unexpected section type: expecting %u, found %u", expected_sec_type, header->section_type);
 
-    ASSERT (compressed_offset == crypt_padded_len (header_size) || section_type == SEC_VARIANT_DATA, // for variant data, we also have the permutation index
-            "Error: invalid header - expecting compressed_offset to be %u but found %u", header_size, compressed_offset);
+    unsigned expected_header_size = new_vcf_component ? new_header_size : header_size;
+    ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VARIANT_DATA, // for variant data, we also have the permutation index
+            "Error: invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
     buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_one_section", 2);
+    header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
-    // read the rest of the header (eg variant header has the haplotype index after the header)
-    // if skip_this_vcf_header, VCF header is bigger than Variant Data header that was read
-    if (section_type == SEC_VARIANT_DATA || skip_this_vcf_header) {
+    // in case we're expecting SEC_VARIANT_DATA - read the rest of the header: 
+    // if we found SEC_VARIANT_DATA, we need to read haplotype index, and if we found a SEC_VCF_HEADER of a concatenated
+    // file componented - we need to read the read of the header as it is biffer than Variant Data header that was read
+    if (expected_sec_type == SEC_VARIANT_DATA && !new_vcf_component) {
 
         int bytes_left_over = compressed_offset - header_size;
         ASSERT (bytes_left_over >= 0, "Error: expected bytes_left_over=%d to be >=0", bytes_left_over)
 
         if (bytes_left_over) { // there will be an Index only if this VCF has samples
-            uint8_t *left_over_data = zfile_read_from_disk (vb, data, bytes_left_over);
-            ASSERT (left_over_data, "Failed to read variant header left over. bytes_left_over=%u", bytes_left_over);
+            
+            uint8_t *left_over_data = zfile_read_from_disk (vb, data, bytes_left_over, false);
+            ASSERT (left_over_data, "Failed to read left over bytes. bytes_left_over=%u", bytes_left_over);
 
-            if (is_encrypted) {
-                ASSERT (bytes_left_over == crypt_padded_len(bytes_left_over), "Error: bad length of bytes_left_over=%u", bytes_left_over); // we expected it to be aligned, bc the total encryption block is aligned and header_size is aligned 
+            if (is_encrypted) { // this is just for the ht index - we've already handle encrypted vcf header and set new_vcf_component=true 
+                ASSERT (bytes_left_over == crypt_padded_len (bytes_left_over), "Error: bad length of bytes_left_over=%u", bytes_left_over); // we expected it to be aligned, bc the total encryption block is aligned and header_size is aligned 
                 
                 // for the haplotype index - it is part of the header so we just continue the encryption stream
-                if (section_type == SEC_VARIANT_DATA)
-                    crypt_continue (vb, left_over_data, bytes_left_over);
-
-                // for reading the VCF header's data - its a new encryption of the section's body
-                else
-                    crypt_do (vb, left_over_data, bytes_left_over, 0, 0);
+                crypt_continue (vb, left_over_data, bytes_left_over);
             }
+            if (header->section_type == SEC_VCF_HEADER) 
+                new_vcf_component = true;
         }
     }
 
-    // read section data. note: if this is a encrypted section, the remaining data might be up to 15
-    // bytes longer than data_compressed_len, due to padding to encryption block boundary (16 bytes)
-    ASSERT (zfile_read_from_disk (vb, data, data_len), 
-            "Error: failed to read section data, section_type=%u", section_type);
+    // read section data
+    ASSERT (zfile_read_from_disk (vb, data, data_len, false), 
+            "Error: failed to read section data, section_type=%u", header->section_type);
 
-    // if we need to skip this section, return the next section to the user instead
-    // note: even though skipped, we read the section data into z_data, or else our progress stats get messed up
-    if (skip_this_vcf_header)
-        return zfile_read_one_section (vb, data, buf_name, header_size, section_type, allow_eof);
+    // deal with a VCF header that was encountered while expecting a SEC_VARIANT_DATA (i.e. 2nd+ component of a concatenated file)
+    if (new_vcf_component) {
+
+        if (flag_split) {
+            // move the header from vb->z_data to z_file->next_vcf_header
+            buf_copy (vb, &vb->z_file->next_vcf_header, data, 1, header_offset, data->len - header_offset, "z_file->next_vcf_header", 0);
+            data->len = header_offset; // shrink - remove the vcf header that doesn't belong to this component
+
+            return EOF; // end of VCF component in flag_split mode
+        }
+        else {
+printf ("recursive!\n");
+            // since we're not in split mode, so we can skip this vcf header section - just return the next section instead
+            return zfile_read_one_section (vb, data, buf_name, header_size, expected_sec_type, allow_eof);
+        }
+    }
 
     return header_offset;
 }
@@ -599,25 +660,59 @@ bool zfile_read_one_vb (VariantBlock *vb)
 // the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
 // when we're done. num_lines can only be known after we're done.
 // if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
-void zfile_update_vcf_header_section_header (VariantBlock *vb)
+void zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t vcf_header_header_pos_single, bool final_for_concat)
 {
-    SectionHeaderVCFHeader *header = &vb->z_file->vcf_header;
     unsigned len = crypt_padded_len (sizeof (SectionHeaderVCFHeader));
-    
-    // update the header contents
-    header->vcf_data_size = BGEN64 (vb->z_file->vcf_concat_data_size);
-    header->num_lines     = BGEN64 (vb->z_file->num_lines);
-    if (flag_md5) {
-        md5_finalize (&vb->z_file->md5_ctx, &header->md5_hash);
 
-        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (header->md5_hash, false));
+    // first, update the header of the single (current) vcf. 
+    SectionHeaderVCFHeader *curr_header = &vb->z_file->vcf_header_single;
+    curr_header->vcf_data_size = BGEN64 (vb->z_file->vcf_data_size_single);
+    curr_header->num_lines     = BGEN64 (vb->z_file->num_lines_single);
+    if (flag_md5) {
+        md5_finalize (&vb->z_file->md5_ctx_single, &curr_header->md5_hash_single);
+
+        if (!flag_concat_mode || vcf_header_header_pos_single == 0) 
+            curr_header->md5_hash_concat = curr_header->md5_hash_single; // update md5_hash_concat in case there's a chance we will be not update later
+
+        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
     }
-    
+
+    if (vcf_header_header_pos_single == 0) 
+        vb->z_file->vcf_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 
+
     // encrypt if needed
-    if (crypt_have_password()) crypt_do (vb, (uint8_t *)header, len, 0, -1); // 0,-1 are the VCF header's header
+    if (crypt_have_password()) 
+        crypt_do (vb, (uint8_t *)curr_header, len, 0, -1); // 0,-1 are the VCF header's header
 
     // write back to disk
-    if (fseek ((FILE *)vb->z_file->file, 0, SEEK_SET)) return; // rewind to the start
-    file_write (vb->z_file, header, len);
+    if (fseeko ((FILE *)vb->z_file->file, vcf_header_header_pos_single, SEEK_SET)) return; // rewind to the start of the current vcf_header
+
+    file_write (vb->z_file, curr_header, len);
+    fflush ((FILE*)vb->z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
+
+    // update the header contents - if user specified -o, this is the last file, and this isn't the only file
+    if (final_for_concat && vcf_header_header_pos_single > 0) { // we're in concat mode which has more than one vcf file, and this is the final call to update the first VCF header
+        SectionHeaderVCFHeader *first_header = &vb->z_file->vcf_header_first;
+        first_header->vcf_data_size = BGEN64 (vb->z_file->vcf_data_size_concat);
+        first_header->num_lines     = BGEN64 (vb->z_file->num_lines_concat);
+        if (flag_md5) {
+
+            md5_finalize (&vb->z_file->md5_ctx_concat, &first_header->md5_hash_concat);
+
+            if (!flag_quiet) fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&first_header->md5_hash_concat, false));
+        }
+
+        // encrypt if needed
+        if (crypt_have_password()) 
+            crypt_do (vb, (uint8_t *)first_header, len, 0, -1); // 0,-1 are the VCF header's header
+
+        // write back to disk
+        if (fseeko ((FILE *)vb->z_file->file, 0, SEEK_SET)) return; // rewind to the start of the first vcf_header (return if fseeko failed)
+
+        file_write (vb->z_file, first_header, len);
+        fflush ((FILE*)vb->z_file->file);
+    }
+    
+    fseeko ((FILE *)vb->z_file->file, 0, SEEK_END); // return to the end of the file
 }
 

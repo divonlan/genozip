@@ -53,7 +53,8 @@ static const char *help_genounzip[] = {
     "   -c --stdout       Send output to standard output instead of a file",
     "   -f --force        Force overwrite of the output file",
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    
-    "   -o --output       Output file name",
+    "   -O --split        Split a concatenated file back to its original components",
+    "   -o --output       Output file name. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
     "   -p --password     Provide password to access file(s) that were compressed with --password",
     "   -q --quiet        Don't show the progress indicator",    
     "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
@@ -104,7 +105,8 @@ static const char *help_genocat[] = {
 
 static const char *help_footer[] = {
     "",
-    "For bug reports: bugs@genozip.com and license inquiries: sales@genozip.com",
+    "Bug reports and feature requests: bugs@genozip.com",
+    "Commercial license inquiries: sales@genozip.com",
     "",
     "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
     ""

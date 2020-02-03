@@ -416,9 +416,10 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file,
     file_write (z_file, processed_vb->z_data.data, processed_vb->z_data.len);
     COPY_TIMER (processed_vb->profile.write);
 
-    z_file->disk_so_far     += (long long)processed_vb->z_data.len;
-    z_file->vcf_data_so_far += (long long)processed_vb->vb_data_size;
-    z_file->num_lines       += (long long)processed_vb->num_lines;
+    z_file->disk_so_far      += (long long)processed_vb->z_data.len;
+    z_file->vcf_data_so_far  += (long long)processed_vb->vb_data_size;
+    z_file->num_lines_single += (long long)processed_vb->num_lines;
+    z_file->num_lines_concat += (long long)processed_vb->num_lines;
 
     // update section stats
     for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
@@ -428,14 +429,14 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file,
 
     if (is_final) {
 
-        ASSERT (!z_file->vcf_data_size || 
-                z_file->vcf_data_size /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
+        ASSERT (!z_file->vcf_data_size_single || 
+                z_file->vcf_data_size_single /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
                 "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
-                z_file->vcf_data_size, z_file->vcf_data_so_far);
+                z_file->vcf_data_size_single, z_file->vcf_data_so_far);
 
-        vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far;
+        vcf_file->vcf_data_size_single = z_file->vcf_data_size_single = vcf_file->vcf_data_so_far;
 
-        z_file->vcf_concat_data_size += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
+        z_file->vcf_data_size_concat += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
     }
 }
 
@@ -461,10 +462,9 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     Buffer *first_data_line = NULL; // contains a value only for first variant block, otherwise empty. 
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
+    off64_t vcf_header_header_pos = z_file->disk_so_far;
     bool success = vcf_header_vcf_to_genozip (pseudo_vb, &line_i, &first_data_line);
     if (!success) goto finish;
-
-    if (!first_data_line) goto finish; // VCF file has only a header or is an empty file - no data - we're done
 
     mtf_initialize_mutex (z_file, last_variant_block_i+1);
 
@@ -505,19 +505,28 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
             if (next_vb->num_lines)  // we found some data 
                 next_vb->ready_to_dispatch = true;
-            else
+            else {
+                // this vb has no data
                 dispatcher_input_exhausted (dispatcher);
+                
+                dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
+                                            z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
+            }
         }
     } while (!dispatcher_is_done (dispatcher));
 
     // go back and update some fields in the vcf header's section header - only if we can go back
     // (i.e. not output redirected). we might need to re-encrypt.
-    if ((is_last_file || !flag_concat_mode) && z_file && z_file->type == GENOZIP) 
-        zfile_update_vcf_header_section_header (pseudo_vb);
+    if (z_file && z_file->type == GENOZIP && vcf_header_header_pos >= 0) 
+        zfile_update_vcf_header_section_header (pseudo_vb, vcf_header_header_pos, is_last_file && flag_concat_mode);
 
 finish:
     z_file->disk_size = z_file->disk_so_far;
-    vcf_file->vcf_data_size = z_file->vcf_data_size = vcf_file->vcf_data_so_far; // just in case its not set already
+    z_file->num_lines_single     = 0;
+    z_file->vcf_data_size_single = 0;
+    memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));
+
+    //vcf_file->vcf_data_size_concat = z_file->vcf_data_size_concat = vcf_file->vcf_data_so_far; // just in case its not set already
     
-    dispatcher_finish (dispatcher, &last_variant_block_i);
+    dispatcher_finish (&dispatcher, &last_variant_block_i);
 }

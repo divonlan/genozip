@@ -76,16 +76,34 @@ Dispatcher dispatcher_init (unsigned max_threads, VariantBlockPoolID pool_id, un
     return dd;
 }
 
-void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i)
+void dispatcher_pause (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
+    dd->next_vb_i--;
+}
+
+// reinit dispatcher, used when splitting a genozip to its vcf components, using a single dispatcher object
+void dispatcher_resume (Dispatcher dispatcher, File *vcf_file)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+
+    dd->input_exhausted = false;
+    dd->vcf_file = vcf_file;
+}
+
+void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
+{
+    DispatcherData *dd = (DispatcherData *)*dispatcher;
+
     COPY_TIMER (dd->pseudo_vb->profile.wallclock);
+
+    dd->next_vb_i--;
 
     if (flag_show_time) 
         profiler_print_report (&dd->pseudo_vb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far,
-                               dd->filename, dd->next_vb_i-1);
+                               dd->filename, dd->next_vb_i);
 
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (dd->pool_id, false);    
@@ -97,9 +115,11 @@ void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i)
     // this is only true if the files are being concatenated
     if (!flag_concat_mode) vb_cleanup_memory(dd->pool_id); 
 
-    if (last_vb_i) *last_vb_i = dd->next_vb_i-1; // for continuing variant_block_i count between subsequent concatented files
+    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing variant_block_i count between subsequent concatented files
 
     free (dd);
+
+    *dispatcher = NULL;
 }
 
 static void *dispatcher_thread_entry (void *thread_)
@@ -250,8 +270,8 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     static double ratio_so_far = 1;
 
     uint64_t total, sofar;
-    if (file->vcf_data_size) { // if we have the VCF data size, go by it 
-        total = file->vcf_data_size;
+    if (file->vcf_data_size_concat) { // if we have the VCF data size, go by it 
+        total = file->vcf_data_size_concat;
         sofar = vcf_data_written_so_far;
     
     } else if (file->disk_size) {
@@ -268,14 +288,22 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     else // in case of a file over a pipe
         return; // we can't show anything if we don't know the file size
 
-    double percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
-
+    double percent;
+    if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
+        percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
+    else
+        percent = MIN (((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
+    
     // need to update progress indicator, max once a second or if 100% is reached
-    if (percent && (dd->last_seconds_so_far < seconds_so_far || percent == 100)) { 
+    const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
-        const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+    // in split mode - dispatcher is not done if there's another component after this one
+    bool done = (percent==100 || dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&dd->z_file->next_vcf_header));
 
-        if (!dispatcher_is_done (dispatcher)) {
+    if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
+
+        if (!dispatcher_is_done (dispatcher) ||
+            (flag_split && buf_is_allocated (&dd->z_file->next_vcf_header))) { 
 
             // time remaining
             char time_str[70], progress[100];
@@ -288,19 +316,23 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
             fprintf (stderr, "%.*s%s        %.8s", dd->last_len, eraser, progress, eraser);
 
             dd->last_len = strlen (progress);
+        }
+    }
 
-        } else if (!dd->test_mode) {
+    if (done) {
+    
+        if (!dd->test_mode) {
             char time_str[70];
             dispatcher_human_time (seconds_so_far, time_str);
 
             if (bytes_compressed) {
-                if (file->vcf_data_size == file->disk_size) // source file was plain VCF
+                if (file->vcf_data_size_concat == file->disk_size) // source file was plain VCF
                     fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
                 else // source was .vcf.gz
                     fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs gzip: %1.1f)\n", 
                              dd->last_len, eraser, time_str, 
-                             (double)file->vcf_data_size / (double)bytes_compressed,  // compression vs vcf data size
-                             (double)file->disk_size     / (double)bytes_compressed); // compression vs gzipped size
+                             (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
+                             (double)file->disk_size / (double)bytes_compressed);            // compression vs gzipped size
             } else
                 fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);
 
@@ -318,13 +350,14 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
 #ifdef DEBUG
-    buf_test_overflows(dd->processed_vb);
+    if (dd->processed_vb) buf_test_overflows(dd->processed_vb);
 #endif
 
     if (flag_show_time) 
         profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
 
-    vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+    if (dd->processed_vb)
+        vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
 
     dispatcher_show_progress (dispatcher, file, vcf_data_written_so_far, bytes_compressed);
 }                           

@@ -663,30 +663,48 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
-void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
+// returns true is successfully outputted a vcf file
+bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
 {
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, 
-                                             !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
-                                             z_basename);
+    // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
+    static Dispatcher dispatcher = NULL;
 
-    // read and write VCF header
+    if (!dispatcher) 
+        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, 
+                                      !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
+                                      z_basename);
+
+    // read and write VCF header. in split mode this also opens vcf_file
     Md5Hash original_file_digest;
-    bool success = vcf_header_genozip_to_vcf (dispatcher_get_pseudo_vb (dispatcher), &original_file_digest);
-    if (!success) goto finish; // empty file - not an error
+    VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
+    bool piz_successful = vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest);
+    if (!piz_successful) goto finish; // empty file - not an error
+    
+    vcf_file = pseudo_vb->vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
+
+    if (flag_split) 
+        dispatcher_resume (dispatcher, vcf_file); // accept more input 
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
     // 2. Wait for the first thread (by sequential order) to complete and write data
 
+    bool header_only_file = true; // initialize
     do {
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a variant block and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
             bool success = zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher));
-            if (success)
+            if (success) {
+                header_only_file = false;
                 dispatcher_compute (dispatcher, piz_uncompress_variant_block);
-            else
+            }
+            else {
                 dispatcher_input_exhausted (dispatcher);
+
+                if (header_only_file)
+                    dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far, 0);
+            }
         }
 
         // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
@@ -703,17 +721,41 @@ void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     } while (!dispatcher_is_done (dispatcher));
 
     // verify file integrity, if the genozip compress was run with --md5
+    static Buffer md5_verif_str = EMPTY_BUFFER;
     if (vcf_file->has_md5) {
         Md5Hash decompressed_file_digest;
-        md5_finalize (&vcf_file->md5_ctx, &decompressed_file_digest);
-
-        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (decompressed_file_digest, false));
+        md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
         ASSERT (decompressed_file_digest.ulls[0] == original_file_digest.ulls[0] &&
                 decompressed_file_digest.ulls[1] == original_file_digest.ulls[1],
                 "File integrity error: MD5 of decompressed file %s is %s, original file's was %s", 
-                vcf_file->name, md5_display (decompressed_file_digest, false), md5_display (original_file_digest, false));
+                vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
+
+        // store verifications strings in a buffer to printed later - not to interfere with the progress indicator
+        if (!flag_quiet) {
+            buf_alloc (pseudo_vb, &md5_verif_str, MAX (1000, md5_verif_str.len + 200), 2, "md5_verif_str", 0);
+            buf_add (&md5_verif_str, md5_display (&decompressed_file_digest, false), 32);
+            buf_add_string (&md5_verif_str, " - MD5 has been verified for ");
+            buf_add_string (&md5_verif_str, vcf_file->name);
+            buf_add_string (&md5_verif_str, "\n");
+        }
     }
+
+    if (flag_split) file_close (&pseudo_vb->vcf_file); // close this component file
+
 finish:
-    dispatcher_finish (dispatcher, NULL);
+    // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
+    if (!flag_split || !piz_successful) {
+
+        dispatcher_finish (&dispatcher, NULL);
+
+        if (buf_is_allocated (&md5_verif_str)) {
+            fprintf (stderr, "%.*s", md5_verif_str.len, md5_verif_str.data);
+            buf_free (&md5_verif_str);
+        }
+    }
+    else
+        dispatcher_pause (dispatcher);
+
+    return piz_successful;
 }

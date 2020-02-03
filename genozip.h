@@ -6,6 +6,7 @@
 #ifndef GENOZIP_INCLUDED
 #define GENOZIP_INCLUDED
 
+#define _FILE_OFFSET_BITS 64
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,11 +111,11 @@ typedef struct {
     uint8_t  genozip_version;
     uint32_t num_samples;    // number of samples in the original VCF file
 
-    uint64_t vcf_data_size;  // number of bytes in the original VCF file
+    uint64_t vcf_data_size;  // number of bytes in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
-    uint64_t num_lines;      // number of variants (data lines) in the original vCF file
-    Md5Hash md5_hash;        // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
-    Md5Hash md5_hash_single; // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the single component
+    uint64_t num_lines;      // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
+    Md5Hash md5_hash_concat; // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
+    Md5Hash md5_hash_single; // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
 
 #define VCF_FILENAME_LEN 256
     char vcf_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated.
@@ -269,15 +270,16 @@ typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN,
 
 typedef struct {
     void *file;
-    const char *name;
+    char *name;                        // allocated by file_open(), freed by file_close()
     FileType type;
     // these relate to actual bytes on the disk
     uint64_t disk_size;                // 0 if not known (eg stdin)
     uint64_t disk_so_far;              // data read/write to/from "disk" (using fread/fwrite)
 
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
-    uint64_t vcf_data_size;            // VCF: size of the VCF data (if known)
+    uint64_t vcf_data_size_single;     // VCF: size of the VCF data (if known)
                                        // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
+    uint64_t vcf_data_size_concat;     // concatenated vcf_data_size of all files compressed
     uint64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
                                        // GENOZIP: VCF data so far of original VCF file currently being processed
 
@@ -287,15 +289,22 @@ typedef struct {
 
     // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)
     bool has_md5;
-    Md5Context md5_ctx;
+    Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
+    Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single vcf component
 
+    // Used for READING GENOZIP files
+    Buffer next_vcf_header;            // next VCF header - used when reading in --split mode
+    
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_vcf_file;     // the value of disk_size when starting to read this vcf file
-    uint64_t vcf_concat_data_size;     // concatenated vcf_data_size of all files compressed
-    uint64_t num_lines;                // number of lines in concatenated (or single) vcf file
+    uint64_t num_lines_concat;                // number of lines in concatenated vcf file
+    uint64_t num_lines_single;                // number of lines in single vcf file
     
-    SectionHeaderVCFHeader vcf_header; // store the VCF header - we might need to update it at the very end;
+    SectionHeaderVCFHeader vcf_header_first;  // store the first VCF header - we might need to update it at the very end;
     uint8_t vcf_header_enc_padding[AES_BLOCKLEN-1]; // just so we can overwrite vcf_header with encryption padding
+
+    SectionHeaderVCFHeader vcf_header_single; // store the VCF header of single component in concat mode
+    uint8_t vcf_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     pthread_mutex_t mutex;
@@ -502,7 +511,8 @@ extern void gl_deoptimize_dictionary (char *data, int len);
 extern void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
                             File *z_file, bool test_mode, unsigned max_threads, bool is_last_file);
 
-extern void piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, 
+// returns true is successfully outputted a vcf file
+extern bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, 
                             bool test_mode, unsigned max_threads);
 
 extern void piz_reconstruct_line_components (VariantBlock *vb);
@@ -511,7 +521,9 @@ extern void piz_merge_all_lines (VariantBlock *vb);
 typedef void *Dispatcher;
 extern Dispatcher dispatcher_init (unsigned max_threads, VariantBlockPoolID pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
                                    bool test_mode, bool show_progress, const char *filename);
-extern void dispatcher_finish (Dispatcher dispatcher, unsigned *last_vb_i);
+extern void dispatcher_pause (Dispatcher dispatcher);
+extern void dispatcher_resume (Dispatcher dispatcher, File *vcf_file);
+extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i);
 
 typedef void (*DispatcherFuncType)(VariantBlock *);
 extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func);
@@ -526,7 +538,7 @@ extern void dispatcher_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 
-extern void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text);
+extern void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_first_vcf);
 extern void zfile_compress_variant_data (VariantBlock *vb);
 extern void zfile_update_compressed_variant_data_header (VariantBlock *vb, unsigned pos, unsigned num_dictionary_sections);
 extern void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Buffer *section_data);
@@ -535,14 +547,14 @@ extern void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType sub
 
 extern bool zfile_read_one_vb (VariantBlock *vb);
 
-// returns offset of header within data, -1 if EOF
+// returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
 extern int zfile_read_one_section (VariantBlock *vb, 
                                    Buffer *data /* buffer to append */, const char *buf_name,
-                                   unsigned header_size, SectionType section_type,
+                                   unsigned header_size, SectionType expected_sec_type,
                                    bool allow_eof);
 
 extern void zfile_uncompress_section(VariantBlock *vb, void *section_header, Buffer *uncompressed_data, SectionType expected_section_type);
-extern void zfile_update_vcf_header_section_header (VariantBlock *vb);
+extern void zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t vcf_header_header_pos_single, bool final_for_concat);
 
 extern void crypt_set_password (char *new_password);
 extern bool crypt_have_password ();
@@ -556,12 +568,13 @@ extern unsigned crypt_max_padding_len();
 
 extern void aes_initialize (VariantBlock *vb, const uint8_t *key);
 extern void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length);
+extern char *aes_display_key (const uint8_t* key);
+extern char *aes_display_data (const uint8_t *data, unsigned data_len);
 
 extern void md5_do (const void *data, unsigned len, Md5Hash *digest);
-extern void md5_initialize (Md5Context *ctx);
 extern void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize);
 extern void md5_finalize (Md5Context *ctx, Md5Hash *digest);
-const char *md5_display (const Md5Hash digest, bool prefix_space);
+const char *md5_display (const Md5Hash *digest, bool prefix_space);
 extern void md5_display_ctx (const Md5Context *x);
 
 extern void squeeze (VariantBlock *vb,
@@ -598,6 +611,7 @@ extern void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src, unsigned
 extern void buf_move (VariantBlock *vb, Buffer *dst, Buffer *src);
 
 static inline void buf_add (Buffer *buf, const void *data, unsigned len) { memcpy (&buf->data[buf->len], data, len);  buf->len += len; }
+#define buf_add_string(buf,str) buf_add (buf, str, strlen (str));
 
 extern void buf_test_overflows(const VariantBlock *vb);
 
@@ -612,7 +626,7 @@ extern const char *global_cmd;            // set once in main()
 extern bool        global_little_endian;  // set in main()
 
 // flags set by user's command line options
-extern int flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_show_memory;
+extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_show_memory;
 
 // macros
 #ifndef MIN

@@ -218,3 +218,16 @@ void aes_initialize (VariantBlock *vb, const uint8_t* key)
     vb->bi = AES_BLOCKLEN;
 }
 
+char *aes_display_data (const uint8_t *data, unsigned data_len)
+{
+    char *str = malloc (data_len * 2 + 1);
+
+    for (unsigned i=0; i < data_len; i++) 
+        sprintf (&str[i*2], "%2.2x", data[i]);
+
+    str[data_len*2] = 0;
+
+    return str;
+}
+
+char *aes_display_key (const uint8_t* key) { return aes_display_data (key, AES_KEYLEN); }

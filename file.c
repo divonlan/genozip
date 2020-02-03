@@ -20,11 +20,17 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
     ASSERT0 (filename, "Error: filename is null");
 
-    ASSERT (mode==WRITE || access (filename, F_OK)==0, "%s: cannot open %s for reading: %s", global_cmd, filename, strerror(errno));
-    
+    bool file_exists = (access (filename, F_OK) == 0);
+
+    ASSERT (mode != READ  || file_exists, "%s: cannot open %s for reading: %s", global_cmd, filename, strerror(errno));
+    ASSERT (mode != WRITE || !file_exists || flag_force, "%s: output file %s already exists: you may use --force to overwrite it", global_cmd, filename);
+
     File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
-    file->name = filename; // usually comes from the command line - cannot be freed
+    // copy filename 
+    unsigned fn_size = strlen (filename) + 1; // inc. \0
+    file->name = malloc (fn_size);
+    memcpy (file->name, filename, fn_size);
 
     if (expected_type == VCF) {
         if (file_has_ext (file->name, ".vcf")) {
@@ -81,7 +87,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
         file->disk_size = ret ? 0 : st.st_size;
 
         if (file->type == VCF)
-            file->vcf_data_size = file->disk_size; 
+            file->vcf_data_size_single = file->vcf_data_size_concat = file->disk_size; 
 
         // initialize read buffer indices
         file->last_read = file->next_read = READ_BUFFER_SIZE;
@@ -126,6 +132,8 @@ void file_close (File **file_p)
     if (file->mutex_initialized) 
         pthread_mutex_destroy (&file->mutex);
 
+    if (file->name) free (file->name);
+    
     // note: we don't free file->name, because it might come from getopt - and should not be freed
     free (file);
 }

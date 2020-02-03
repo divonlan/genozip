@@ -98,6 +98,11 @@ static void crypt_generate_aes_key (VariantBlock *vb,
     buf_free (&vb->spiced_pw);
 }
 
+// we generate a different key for each block by salting the password with vb_i and sec_i
+// for sec_i we use (-1-section_i) for the section header and section_i for the section body
+// the VCF header section: vb_i=0 (for all components) and sec_i=0 (i.e: 0 for the body, (-1 - 0)=-1 for header)
+// the Variant Data section: vb_i={global consecutive number starting at 1}, sec_i=0 (body=0, header=-1)
+// Other sections: vb_i same as Variant Data, sec_i consecutive running starting at 1 
 void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i) // used to generate an aes key unique to each block
 {
     //fprintf (stderr, "id:%u vb_i=%d sec_i=%d data_len=%u\n", vb->id, vb_i, sec_i, data_len);
@@ -106,10 +111,14 @@ void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i
     uint8_t aes_key[AES_KEYLEN]; 
     crypt_generate_aes_key (vb, vb_i, sec_i, aes_key);
 
+    //printf ("vb_i=%u sec_i=%d key= %s\n", vb_i, sec_i, aes_display_key (aes_key)); // DEBUG
+
     aes_initialize (vb, aes_key);
 
     // encrypt in-place
+    //printf ("BFRE: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
     aes_xcrypt_buffer (vb, data, data_len);
+    //printf ("AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
 }
 
 void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len)
