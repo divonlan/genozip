@@ -331,8 +331,8 @@ static bool seg_data_line (VariantBlock *vb, /* may be NULL if testing */
                     continue;
                 }
 
-                // we arrived at the FORMAT column - figure out if we have haplotype and genotype data for this line
-                if (num_tabs == 8) { 
+                // we arrived at the FORMAT (optional) column - figure out if we have haplotype and genotype data for this line
+                if (num_tabs == 8 && *c != '\n') { 
                     seg_format_field (vb, dl, c+1, dl->line.len - ((c+1)-dl->line.data),line_i);                 
                     continue;
                 }
