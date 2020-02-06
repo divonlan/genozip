@@ -22,7 +22,7 @@ void md5_display_ctx (const Md5Context *x)
     static unsigned iteration=1;
 
     printf ("%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
-    for (unsigned i=0; i<64; i++) printf ("%2.2x", x->buffer[i]);
+    for (unsigned i=0; i<64; i++) printf ("%2.2x", x->buffer.bytes[i]);
     printf (" ");
     for (unsigned i=0; i<16; i++) printf ("%8.8x", x->block[i]);
     printf ("\n");
@@ -173,14 +173,14 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initializ
         free = 64 - used;
 
         if (len < free) {
-            memcpy (&ctx->buffer[used], data, len);
+            memcpy (&ctx->buffer.bytes[used], data, len);
             goto finish;
         }
 
-        memcpy (&ctx->buffer[used], data, free);
+        memcpy (&ctx->buffer.bytes[used], data, free);
         data += free;
         len -= free;
-        md5_transform (ctx, ctx->buffer, 64);
+        md5_transform (ctx, ctx->buffer.bytes, 64);
     }
 
     if (len >= 64) {
@@ -188,7 +188,7 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initializ
         len &= 0x3f;
     }
 
-    memcpy (ctx->buffer, data, len);
+    memcpy (ctx->buffer.bytes, data, len);
 
 finish:
     //md5_display_ctx (ctx);
@@ -202,24 +202,24 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
 
     used = ctx->lo & 0x3f;
 
-    ctx->buffer[used++] = 0x80;
+    ctx->buffer.bytes[used++] = 0x80;
 
     free = 64 - used;
 
     if (free < 8) {
-        memset (&ctx->buffer[used], 0, free);
-        md5_transform (ctx, ctx->buffer, 64);
+        memset (&ctx->buffer.bytes[used], 0, free);
+        md5_transform (ctx, ctx->buffer.bytes, 64);
         used = 0;
         free = 64;
     }
 
-    memset (&ctx->buffer[used], 0, free - 8);
+    memset (&ctx->buffer.bytes[used], 0, free - 8);
 
     ctx->lo <<= 3;
-    *(uint32_t *)&ctx->buffer[56] = LTEN32 (ctx->lo);
-    *(uint32_t *)&ctx->buffer[60] = LTEN32 (ctx->hi);
+    ctx->buffer.words[14] = LTEN32 (ctx->lo);
+    ctx->buffer.words[15] = LTEN32 (ctx->hi);
 
-    md5_transform (ctx, ctx->buffer, 64);
+    md5_transform (ctx, ctx->buffer.bytes, 64);
     digest->words[0] = LTEN32 (ctx->a);
     digest->words[1] = LTEN32 (ctx->b);
     digest->words[2] = LTEN32 (ctx->c);

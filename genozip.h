@@ -262,7 +262,10 @@ typedef struct {
 typedef struct {
     uint32_t     lo, hi;
     uint32_t     a, b,c, d;
-    uint8_t      buffer[64];
+    union {
+        uint8_t  bytes[64];
+        uint32_t words[16];
+    } buffer;
     uint32_t     block[16];
 } Md5Context;
 
