@@ -226,6 +226,7 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
     digest->words[3] = LTEN32 (ctx->d);
 }
 
+// note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)
 void md5_do (const void *data, unsigned len, Md5Hash *digest)
 {
     Md5Context ctx;
