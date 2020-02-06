@@ -29,6 +29,7 @@
 #if defined __APPLE__ 
 #include "compatability/mac_gettime.h"
 #endif
+#include "endianness.h"
 #include "version.h" // automatically incremented by the make when we create a new distribution
 
 #define GENOZIP_EXT ".genozip"
@@ -266,7 +267,9 @@ typedef struct {
         uint8_t  bytes[64];
         uint32_t words[16];
     } buffer;
-    uint32_t     block[16];
+#ifdef __BIG_ENDIAN__
+    uint32_t     block[16]; // used only if this is a big endian machine
+#endif
 } Md5Context;
 
 typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
@@ -644,19 +647,23 @@ extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_
 // encode section headers in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
-#ifdef _MSC_VER
-#define __builtin_bswap16 _byteswap_ushort
-#define __builtin_bswap32 _byteswap_ulong
-#define __builtin_bswap64 _byteswap_uint64
+
+#ifdef __LITTLE_ENDIAN__
+#define BGEN16(x) bswap16(x)
+#define BGEN32(x) bswap32(x)
+#define BGEN64(x) bswap64(x)
+#define LTEN16(x) (x)
+#define LTEN32(x) (x)
+#define LTEN64(x) (x)
+#else
+#define LTEN16(x) bswap16(x))
+#define LTEN32(x) bswap32(x))
+#define LTEN64(x) bswap64(x))
+#define BGEN16(x) (x)
+#define BGEN32(x) (x)
+#define BGEN64(x) (x)
 #endif
 
-#define BGEN16(x) (global_little_endian ? __builtin_bswap16(x) : (x))
-#define BGEN32(x) (global_little_endian ? __builtin_bswap32(x) : (x))
-#define BGEN64(x) (global_little_endian ? __builtin_bswap64(x) : (x))
-
-#define LTEN16(x) (global_little_endian ? (x) : __builtin_bswap16(x))
-#define LTEN32(x) (global_little_endian ? (x) : __builtin_bswap32(x))
-#define LTEN64(x) (global_little_endian ? (x) : __builtin_bswap64(x))
 
 // sanity checks
 static inline void my_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits

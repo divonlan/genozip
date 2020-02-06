@@ -37,7 +37,6 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 const char *global_cmd = NULL; 
 
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
-bool global_little_endian;
 
 // the flags - some are static, some are globals 
 static int flag_stdout=0, flag_replace=0, flag_show_content=0;
@@ -618,10 +617,6 @@ int main (int argc, char **argv)
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
              "Error: Unsupported C type lengths, check compiler options");
     
-    // runtime endianity (byte order) detection - safer than compile-time
-    unsigned test_endianity = 0x01020304;
-    global_little_endian = *(uint8_t*)&test_endianity==0x04; // in big endian it is 0x01;
-
     bool is_short[256]; // indexed by character of short option.
 
     // process command line options
