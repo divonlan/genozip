@@ -122,7 +122,7 @@ void vb_create_pool (VariantBlockPoolID pool_id, unsigned num_vbs)
 
 VariantBlockPool *vb_get_pool (VariantBlockPoolID pool_id)
 {
-    ASSERT (pool_id < NUM_VB_POOLS && pools[pool_id], "Error: pool %u doesn't exists", pool_id);
+    ASSERT ((int)pool_id < NUM_VB_POOLS && pools[pool_id], "Error: pool %u doesn't exists", pool_id);
     return pools[pool_id];
 }
 
