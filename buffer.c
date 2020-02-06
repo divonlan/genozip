@@ -295,7 +295,8 @@ unsigned buf_alloc (VariantBlock *vb,
         goto finish;
     }
 
-    unsigned new_size = requested_size * MAX (grow_at_least_factor, 1);
+    // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
+    uint32_t new_size = (uint32_t)(requested_size * MAX (grow_at_least_factor, 1) + 7) & 0xfffffff8; 
 
     // case 2: we need to allocate memory - buffer is already allocated so copy over the data
     if (buf->memory) {
