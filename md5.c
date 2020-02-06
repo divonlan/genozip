@@ -46,7 +46,7 @@ static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t s
 
 #ifdef __LITTLE_ENDIAN__
         // in little endian machines, we can access the data directly - we don't need to copy memory
-        const uint32_t *block = ptr;
+        #define block ptr
 #else
         // in big endian machines - we need to flip the data to little endian - so we do it in a copy
         uint32_t block[16]; 
