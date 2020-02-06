@@ -94,6 +94,10 @@ typedef union {
     uint64_t ulls[2];
 } Md5Hash;
 
+// section headers are encoded in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
+// the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
+// endianity bugs will be discovered more readily this way
+
 typedef struct {
     uint32_t magic; 
     uint32_t compressed_offset;     // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
@@ -639,27 +643,6 @@ extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_
 #define MIN(a, b) (((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
 #endif
-
-// encode section headers in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
-// the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
-// endianity bugs will be discovered more readily this way
-
-#ifdef __LITTLE_ENDIAN__
-#define BGEN16(x) bswap16(x)
-#define BGEN32(x) bswap32(x)
-#define BGEN64(x) bswap64(x)
-#define LTEN16(x) (x)
-#define LTEN32(x) (x)
-#define LTEN64(x) (x)
-#else
-#define LTEN16(x) bswap16(x))
-#define LTEN32(x) bswap32(x))
-#define LTEN64(x) bswap64(x))
-#define BGEN16(x) (x)
-#define BGEN32(x) (x)
-#define BGEN64(x) (x)
-#endif
-
 
 // sanity checks
 static inline void my_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
