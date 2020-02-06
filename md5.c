@@ -44,12 +44,12 @@ static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t s
         uint32_t saved_c = c;
         uint32_t saved_d = d;
 
+#ifdef __LITTLE_ENDIAN__
         // in little endian machines, we can access the data directly - we don't need to copy memory
-        // in big endian machines - we need to flip the data to little endian - so we do it in a copy
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
         const uint32_t *block = ptr;
 #else
-        uint32_t *block = ctx->block;
+        // in big endian machines - we need to flip the data to little endian - so we do it in a copy
+        uint32_t block[16]; 
         for (unsigned i=0; i < 16; i++) block[i] = LTEN32(ptr[i]);
 #endif
         // Round 1

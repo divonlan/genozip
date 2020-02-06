@@ -267,9 +267,6 @@ typedef struct {
         uint8_t  bytes[64];
         uint32_t words[16];
     } buffer;
-#ifdef __BIG_ENDIAN__
-    uint32_t     block[16]; // used only if this is a big endian machine
-#endif
 } Md5Context;
 
 typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
