@@ -554,6 +554,10 @@ extern int zfile_read_one_section (VariantBlock *vb,
                                    bool allow_eof);
 
 extern void zfile_uncompress_section(VariantBlock *vb, void *section_header, Buffer *uncompressed_data, SectionType expected_section_type);
+
+#ifdef __APPLE__
+#define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
+#endif
 extern void zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t vcf_header_header_pos_single, bool final_for_concat);
 
 extern void crypt_set_password (char *new_password);
