@@ -298,7 +298,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
     // in split mode - dispatcher is not done if there's another component after this one
-    bool done = (percent==100 || dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&dd->z_file->next_vcf_header));
+    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&dd->z_file->next_vcf_header));
 
     if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
 
@@ -349,16 +349,17 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
+    if (dd->processed_vb) {
 #ifdef DEBUG
-    if (dd->processed_vb) buf_test_overflows(dd->processed_vb);
+        buf_test_overflows(dd->processed_vb);
 #endif
 
-    if (flag_show_time) 
-        profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
+        if (flag_show_time) 
+            profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
 
-    if (dd->processed_vb)
         vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
-
+    }
+    
     dispatcher_show_progress (dispatcher, file, vcf_data_written_so_far, bytes_compressed);
 }                           
 
