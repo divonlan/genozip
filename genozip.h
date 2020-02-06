@@ -633,7 +633,6 @@ extern char *buf_human_readable_size (uint64_t size, char *str /* out */);
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples;
 extern const char *global_cmd;            // set once in main()
-extern bool        global_little_endian;  // set in main()
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_show_memory;
