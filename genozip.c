@@ -593,6 +593,13 @@ int main (int argc, char **argv)
     #define VERSION    'V'
     #define HELP       'h'
 
+#ifdef _WIN32
+    // lowercase argv to allow case-insensitive comparison in Windows
+    for (char *c=argv[0]; *c; c++) 
+        if (*c >= 'A' && *c <= 'Z') 
+            *c += 'a' - 'A';
+#endif
+
     ExeType exe_type;
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
     else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
