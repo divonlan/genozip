@@ -8,6 +8,9 @@
 #include <sys/stat.h>
 
 #define Z_LARGE64
+#ifdef __APPLE__
+    #define off64_t __int64_t
+#endif
 #include <zlib.h>
 #include <bzlib.h>
 
