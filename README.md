@@ -31,7 +31,7 @@ __genozip__ _file.vcf_ --password _abc_
 
 Feature requests and bug reports: __bugs@genozip.com__
 
-Genozip is free for non-commercial use. For a commercial license, please contact __sales@genozip.com__
+__genozip__ is free for non-commercial use. For a commercial license, please contact __sales@genozip.com__
 
 Usage is subject to terms and conditions, see the LICENSE.commercial.txt and LICENSE.non-commercial.txt file.
 
