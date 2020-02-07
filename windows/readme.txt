@@ -19,7 +19,7 @@ Actions - use at most one of these actions:
 Flags:
    -c --stdout       Send output to standard output instead of a file
    -f --force        Force overwrite of the output file, or force writing .vcf.genozip data to standard output
-   -R --replace      Replace the source file with the result file, rather than leaving it unchanged
+   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged
    -o --output       Output file name. This option can also be used to concatenate multiple input files with the same
                      individuals, into a single concatenated output file
    -p --password     Password-protected - encrypted with 256-bit AES
@@ -38,7 +38,8 @@ One or more file names may be given, or if omitted, standard input is used inste
 
 Genozip is available for free for non-commercial use. Commercial use requires a commercial license.
 
-For bug reports: bugs@genozip.com and license inquiries: sales@genozip.com
+Bug reports and feature requests: bugs@genozip.com
+Commercial license inquiries: sales@genozip.com
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
 WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
@@ -56,8 +57,10 @@ See also: genozip genocat genols
 Options:
    -c --stdout       Send output to standard output instead of a file
    -f --force        Force overwrite of the output file
-   -R --replace      Replace the source file with the result file, rather than leaving it unchanged
-   -o --output       Output file name
+   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged
+   -O --split        Split a concatenated file back to its original components
+   -o --output       Output file name. This option can also be used to concatenate multiple input files with the same
+                     individuals, into a single concatenated output file
    -p --password     Provide password to access file(s) that were compressed with --password
    -q --quiet        Don't show the progress indicator
    -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available.
@@ -70,7 +73,8 @@ Options:
 
 One or more file names may be given, or if omitted, standard input is used instead
 
-For bug reports: bugs@genozip.com and license inquiries: sales@genozip.com
+Bug reports and feature requests: bugs@genozip.com
+Commercial license inquiries: sales@genozip.com
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
 WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
@@ -94,7 +98,8 @@ Options:
 
 One or more file or directory names may be given, or if omitted, genols runs on the current directory
 
-For bug reports: bugs@genozip.com and license inquiries: sales@genozip.com
+Bug reports and feature requests: bugs@genozip.com
+Commercial license inquiries: sales@genozip.com
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
 WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
@@ -109,9 +114,7 @@ Usage: genocat [options]... [files]...
 
 See also: genozip genounzip genols
 
-Actions - use at most one of these actions:
-
-Flags:
+Options:
    -p --password     Provide password to access file(s) that were compressed with --password
    -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available.
                      The number of threads actually used may be less, if sufficient to balance CPU and I/O
@@ -121,7 +124,8 @@ Flags:
 
 One or more file names may be given, or if omitted, standard input is used instead
 
-For bug reports: bugs@genozip.com and license inquiries: sales@genozip.com
+Bug reports and feature requests: bugs@genozip.com
+Commercial license inquiries: sales@genozip.com
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
 WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
