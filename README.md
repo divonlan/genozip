@@ -16,7 +16,7 @@ __genols__    - show metadata of files or the entire directory \
 __genocat__   - view one or more files
 
 ***Some advanced options***:
-
+ 
 ***Concatenating & splitting***: \
 __genozip__ _file1.vcf file2.vcf_ -o _concat.vcf.genozip_ \
 __genounzip__ _concat.vcf.genozip_ -O 
