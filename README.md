@@ -27,7 +27,7 @@ __genols__ --md5 _file.vcf.genozip_ \
 Note: The md5 hash is automatically verified during _genounzip_
 
 ***Encryption***: \
-__genozip__ --password _abc file.vcf_
+__genozip__ _file.vcf_ --password _abc_
 
 Feature requests and bug reports: __bugs@genozip.com__
 
