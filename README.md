@@ -1,5 +1,5 @@
 # genozip
-_genozip_ is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz or .vcf.bz2 files). 
+__genozip__ is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz or .vcf.bz2 files). 
 
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties of the genomic data, such as linkage disequilibrium, to compress better. It is also a lot faster than gzip. 
 
@@ -7,31 +7,31 @@ It is very easy to use - in fact, if you're familiar with gzip, it works pretty 
     
 The compression is lossless - the decompressed VCF file is 100% identical to the original VCF file.
 
-The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. Try _genozip --help_ to get started.
+The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. Try __genozip__ --help to get started.
 
-__Commands__: \
-_genozip_   - compress one or more files \
-_genounzip_ - decompress one ore more files \
-_genols_    - show metadata of files or the entire directory \
-_genocat_   - view one or more files
+_Commands_: \
+__genozip__   - compress one or more files \
+__genounzip__ - decompress one ore more files \
+__genols__    - show metadata of files or the entire directory \
+__genocat__   - view one or more files
 
-Some advanced options:
+_Some advanced options_:
 
 __Concatenating & splitting__: \
-_genozip_ file1.vcf file2.vcf _-o_ concat.vcf.genozip \
-_genounzip_ concat.vcf.genozip _-O_ 
+__genozip__ _file1.vcf file2.vcf_ -o _concat.vcf.genozip_ \
+__genounzip__ _concat.vcf.genozip_ -O 
 
 __MD5 hash__: \
-_genozip --md5_ file.vcf \
-_genols --md5_ file.vcf.genozip \
+__genozip__ --md5 _file.vcf_ \
+__genols__ --md5 _file.vcf.genozip_ \
 Note: The md5 hash is automatically verified during _genounzip_
 
 __Encryption__: 
-_genozip --password_ abc file.vcf
+__genozip__ --password _abc file.vcf_
 
-Feedback and bug reports: _bugs@genozip.com_ 
+Feedback and bug reports: __bugs@genozip.com__
 
-Genozip is free for non-commercial use. For a commercial license, please contact _sales@genozip.com_
+Genozip is free for non-commercial use. For a commercial license, please contact __sales@genozip.com__
 
 Usage is subject to terms and conditions, see the LICENSE.commercial.txt and LICENSE.non-commercial.txt file.
 
