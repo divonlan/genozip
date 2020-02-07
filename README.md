@@ -9,24 +9,24 @@ The compression is lossless - the decompressed VCF file is 100% identical to the
 
 The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. Try __genozip__ --help to get started.
 
-_Commands_: \
+***Commands***: \
 __genozip__   - compress one or more files \
 __genounzip__ - decompress one ore more files \
 __genols__    - show metadata of files or the entire directory \
 __genocat__   - view one or more files
 
-_Some advanced options_:
+***Some advanced options***:
 
-__Concatenating & splitting__: \
+***Concatenating & splitting***: \
 __genozip__ _file1.vcf file2.vcf_ -o _concat.vcf.genozip_ \
 __genounzip__ _concat.vcf.genozip_ -O 
 
-__MD5 hash__: \
+***MD5 hash***: \
 __genozip__ --md5 _file.vcf_ \
 __genols__ --md5 _file.vcf.genozip_ \
 Note: The md5 hash is automatically verified during _genounzip_
 
-__Encryption__: 
+***Encryption***: 
 __genozip__ --password _abc file.vcf_
 
 Feedback and bug reports: __bugs@genozip.com__
