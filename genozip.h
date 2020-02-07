@@ -208,8 +208,6 @@ typedef struct {
         tmp1, tmp2, tmp3, tmp4, tmp5;
 } ProfilerRec;
 
-#pragma pack(push, 1) // packing Base250, HashEnt, MtfNode - as these might consume the majority of RAM when zipping in really big files
-
 // values 0 to 249 are used as numerals in base-250. 
 // The remaining 6 values below are control characters, and can only appear in numerals[0].
 #define BASE250_EMPTY_SF   250 // subfield declared in FORMAT is empty, terminating : present
@@ -248,8 +246,6 @@ typedef struct {
     int32_t mtf_i;             // index into MtfContext.mtf
     uint32_t count;            // number of times this snip has been encoutered so far
 } SorterEnt;
-
-#pragma pack(pop)
 
 typedef struct {
     SubfieldIdType subfield;   // which subfield is this MTF dealing with
