@@ -582,6 +582,21 @@ static void main_list_dir(const char *dirname)
     ASSERT0 (!ret, "Error: failed to chdir(..)");
 }
 
+void verify_architecture()
+{
+    // verify CPU architecture and compiler is supported
+    ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
+             "Error: Unsupported C type lengths, check compiler options");
+    
+    // verify endianity is as expected
+    uint16_t test_endianity = 0x0102;
+#ifdef __LITTLE_ENDIAN__
+    ASSERT0 (*(uint8_t*)&test_endianity==0x02, "Error: expected CPU to be Little Endian but it is not");
+#else
+    ASSERT0 (*(uint8_t*)&test_endianity==0x01, "Error: expected CPU to be Big Endian but it is not");
+#endif
+}
+
 int main (int argc, char **argv)
 {
     #define COMPRESS   'z'
@@ -605,18 +620,16 @@ int main (int argc, char **argv)
     else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
     else                                    exe_type = EXE_GENOZIP; // default
     
+    verify_architecture();
+
     buf_initialize();
 
     static int command = -1;  // must be static to initialize list_options 
     char *out_filename = NULL;
-    char *threads_str = NULL;
+    char *threads_str  = NULL;
 
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
-    
-    // verify CPU architecture and compiler is supported
-    ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
-             "Error: Unsupported C type lengths, check compiler options");
-    
+
     bool is_short[256]; // indexed by character of short option.
 
     // process command line options
