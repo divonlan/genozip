@@ -200,7 +200,9 @@ windows/readme.txt: genozip$(EXE)
 	@./genols$(EXE)    --help >> $@
 	@printf '%.s-' {1..120}   >> $@
 	@./genocat$(EXE)   --help >> $@
-	
+	@git stage $@
+	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) windows/readme.txt $@ ; exit 0)
+
 windows/LICENSE.for-installer.txt: text_license.h
 	@echo Generating $@
 	@./genozip$(EXE) --license --force > $@
@@ -208,8 +210,6 @@ windows/LICENSE.for-installer.txt: text_license.h
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
 windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
 	@echo 'Committing Windows files and pushing all changes to repo'
-	@git stage $(WINDOWS_INSTALL_FILES) $@
-	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) $(WINDOWS_INSTALL_FILES) $@ ; exit 0)
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo 'Using the UI:'
@@ -220,7 +220,7 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 	@echo '  (5) Exit the UI (close the window)'
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@(git stage windows/genozip.ifp $@ ; exit 0)
-	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) $(WINDOWS_INSTALL_FILES) windows/genozip.ifp $@ ; exit 0)
+	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) windows/genozip.ifp $@ ; exit 0)
 	@git push
 
 
