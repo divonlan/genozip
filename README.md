@@ -3,8 +3,6 @@ __genozip__ is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz
 
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties of the genomic data, such as linkage disequilibrium, to compress better. It is also a lot faster than gzip. 
 
-It is very easy to use - in fact, if you're familiar with gzip, it works pretty much the same.
-    
 The compression is lossless - the decompressed VCF file is 100% identical to the original VCF file.
 
 The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. To get started, try: __genozip__ --help
