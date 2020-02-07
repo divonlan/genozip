@@ -7,6 +7,7 @@
         "visual_c_stdbool.h": "c",
         "mac_gettime.h": "c",
         "visual_c_gettime.h": "c",
-        "cmath": "c"
+        "cmath": "c",
+        "visual_c_misc_funcs.h": "c"
     },
 }

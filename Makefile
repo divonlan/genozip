@@ -144,7 +144,12 @@ increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DE
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )) ; then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@bash increment-version.sh
 	@git commit -m "increment version" version.h 
-	
+
+decrement-version:
+	@echo "Do manually:"
+	@echo "Remove tag: git push --delete origin genozip-a.b.c"
+	@echo "Change version.h to the last version that still has a tag"
+
 .archive.tar.gz : increment-version $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
 	@echo Creating github tag genozip-$(shell head -n1 version.h |cut -d\" -f2) and archive
