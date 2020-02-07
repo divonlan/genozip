@@ -21,10 +21,10 @@ __genocat__   - view one or more files
 __genozip__ _file1.vcf file2.vcf_ -o _concat.vcf.genozip_ \
 __genounzip__ _concat.vcf.genozip_ -O 
 
-***MD5 hash***: \
+***MD5 of the VCF file***: \
 __genozip__ --md5 _file.vcf_ \
 __genols__ --md5 _file.vcf.genozip_ \
-Note: The md5 hash is automatically verified during _genounzip_
+Note: The md5 of the VCF file is automatically verified during _genounzip_
 
 ***Encryption***: \
 __genozip__ _file.vcf_ --password _abc_
