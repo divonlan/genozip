@@ -9,6 +9,15 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/genozip-debug.exe",
+            "args": [ "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-f", "--show-time"],
+            //"args": [ "test-file3.vcf","-m", "-f"],
+            //"args": [ "test-file3.vcf.genozip", "-d", "-f", "-q", "-o", "junk.vcf"],
+            //"args": [ "test-file1.vcf",  "-o", "concat3.vcf.genozip", "-q", "-f", "-m", "-p", "abc"],
+            //"args": [ "-d", "concat3.vcf.genozip", "-f", "-O", "-p", "abc", "-q"],
+            //"args": [ "-d", "test-file.vcf.genozip", "test-file.vcf.genozip",  "-o", "junk.vcf", "-f"],
+
+            //"args": [ "minimal.vcf", "minimal2.vcf", "-o", "mc.vcf.genozip", "-f", "-p", "abc", "-q"],
+            //"args": [ "-d", "ttt-pw.vcf.genozip", "-f", "-@", "1", "-p", "abc"],
             
             // for benchmark files used in the paper
 
@@ -21,7 +30,7 @@
             // benchmark file2:
             // file2 can be downloaded here: ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/
             //"args": ["-t", "--show-content", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz"],
-            "args": ["-f", "-z", "--show-memory", "--show-time", "--show-content", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz"],
+            //"args": ["-f", "-z", "--show-memory", "--show-time", "--show-content", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz"],
             //"args": ["-f", "-d", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip", "-o", "ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.test.vcf"],
             
             //"args": ["-f", "-z", "-m", "data/minimal.vcf", "data/minimal copy.vcf", "-o", "xxx.vcf.genozip"],
