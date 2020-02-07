@@ -7,7 +7,7 @@ It is very easy to use - in fact, if you're familiar with gzip, it works pretty 
     
 The compression is lossless - the decompressed VCF file is 100% identical to the original VCF file.
 
-The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. Try __genozip__ --help to get started.
+The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. To get started, try: __genozip__ --help
 
 ***Commands***: \
 __genozip__   - compress one or more files \
