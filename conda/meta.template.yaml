@@ -59,6 +59,10 @@ test:
     {% endfor %}
     - which genozip.exe  # [win]
     - genozip --password abc --test test-file.vcf 2>&1  
+
+    extra:
+  recipe-maintainers:
+    - divonlan
   
 about:
   home: https://github.com/divonlan/genozip
@@ -71,14 +75,4 @@ about:
     - LICENSE.commercial.txt
   summary: Compressor for VCF genomic files, up to 5x better than gzip and faster too
   description: |
-    genozip is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz or .vcf.bz2 files). 
-    It is very easy to use - in fact, if you're familiar with gzip, it works pretty much the same.
-    It achieves x2 to x5 better compression ratios than gzip because it leverages some properties
-    of the genomic data, such as linkage disequilibrium, to compress better. 
-    It is also a lot faster than gzip. 
-    The compression is lossless - the decompressed file is identical to the original file.
-    Contact: info@genozip.com
-
-extra:
-  recipe-maintainers:
-    - divonlan
+# Makefile copies README.md as the description here

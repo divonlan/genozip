@@ -36,7 +36,7 @@ endif
 MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
 	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c
 
-CONDA_COMPATIBILITY_SRCS = compatability/win32_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
+CONDA_COMPATIBILITY_SRCS = compatability/visual_c_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
 
 EXT_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
            zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
@@ -45,10 +45,10 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = genozip.h lic-text.h  \
+CONDA_INCS = genozip.h text_license.h  \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
 	         compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
-	         compatability/win32_pthread.h \
+	         compatability/visual_c_pthread.h \
       	     compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency 
 
 ifeq ($(CC),cl)
@@ -115,7 +115,7 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
-LICENSE.non-commercial.txt: lic-text.h
+LICENSE.non-commercial.txt: text_license.h
 	@echo Generating $@
 	@./genozip$(EXE) --license > $@
 
@@ -153,9 +153,9 @@ increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DE
 	@git push origin genozip-$(shell head -n1 version.h |cut -d\" -f2)
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(shell head -n1 version.h |cut -d\" -f2).tar.gz --silent --location -o $@
 
-conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz 
+conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating meta.yaml (for conda)"
-	@cat conda/meta.template.yaml | \
+	@(cat conda/meta.template.yaml ; grep -v "^#" README.md | sed 's/^/    /') | \
 		sed s/SHA256/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
 		sed s/VERSION/$(shell head -n1 version.h |cut -d\" -f2)/g | \
 		grep -v "^#" \
@@ -201,7 +201,7 @@ windows/readme.txt: genozip$(EXE)
 	@printf '%.s-' {1..120}   >> $@
 	@./genocat$(EXE)   --help >> $@
 	
-windows/LICENSE.for-installer.txt: lic-text.h
+windows/LICENSE.for-installer.txt: text_license.h
 	@echo Generating $@
 	@./genozip$(EXE) --license --force > $@
 
