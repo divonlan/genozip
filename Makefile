@@ -173,7 +173,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo " "
 	@echo "Copying meta.yaml build.sh bld.bat to conda-forge"
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
-	@echo "Committing my files to master on my fork"
+	@echo "Committing my files to branch genozip on my fork"
 	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"

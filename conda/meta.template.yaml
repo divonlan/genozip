@@ -63,7 +63,7 @@ test:
     extra:
   recipe-maintainers:
     - divonlan
-  
+   
 about:
   home: https://github.com/divonlan/genozip
   dev_url: https://github.com/divonlan/genozip
