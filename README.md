@@ -26,10 +26,10 @@ __genozip__ --md5 _file.vcf_ \
 __genols__ --md5 _file.vcf.genozip_ \
 Note: The md5 hash is automatically verified during _genounzip_
 
-***Encryption***: 
+***Encryption***: \
 __genozip__ --password _abc file.vcf_
 
-Feedback and bug reports: __bugs@genozip.com__
+Feature requests and bug reports: __bugs@genozip.com__
 
 Genozip is free for non-commercial use. For a commercial license, please contact __sales@genozip.com__
 
