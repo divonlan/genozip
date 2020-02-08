@@ -214,7 +214,6 @@ windows/LICENSE.for-installer.txt: text_license.h
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
 windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
-	@echo 'Committing Windows files and pushing all changes to repo'
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo 'Using the UI:'
@@ -224,17 +223,29 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-inst
 	@echo '  (4) Click Save, then click Build, then click No to the popup question'
 	@echo '  (5) Exit the UI (close the window)'
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
+	@echo 'Committing Windows installer and pushing to repo'
 	@(git stage windows/genozip.ifp $@ ; exit 0)
 	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) windows/genozip.ifp $@ ; exit 0)
 	@git push
 
-
 endif
 
-.PHONY: clean clean-debug clean-all
+MAC_INSTALL_FILES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE) LICENSE.non-commercial.txt README.md \
+                    mac/Distribution mac/postinstall mac/uninstall.sh mac/welcome.html
 
-distribution: conda/.conda-timestamp windows/genozip-installer.exe
+mac/genozip-installer.pkg: $(MAC_INSTALL_FILES)
+	@echo Verifying that all files are committed to the repo
+	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@mac-pkg-build.sh
+	@echo 'Committing Mac installer and pushing to repo'
+	@(git stage $@ ; exit 0)
+	@(git commit -m mac_installer_for_version_$(shell head -n1 version.h |cut -d\" -f2) $@ ; exit 0)
+	@git push
 
+distribution: conda/.conda-timestamp windows/genozip-installer.exe mac/genozip-installer.pkg
+
+macos: mac/genozip-installer.pkg
+	
 clean:
 	@echo Cleaning up
 	@rm -f $(DEPS) $(OBJS) genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE) 
@@ -242,3 +253,6 @@ clean:
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEPS) $(DEBUG_OBJS) genozip-debug$(EXE) 
+
+.PHONY: clean clean-debug clean-all
+
