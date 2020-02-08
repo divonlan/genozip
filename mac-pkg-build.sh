@@ -8,11 +8,13 @@
 # loosely based on https://github.com/KosalaHerath/macos-installer-builder which is licensed under Apache 2.0 license
 
 if [[ `uname` != 'Dawrin' ]]; then
+    echo " "
     echo "To create the Mac installer, you must be on Mac:"
     echo "   1. git pull OR git clone"
     echo "   2. make clean"
     echo "   3. make macos"
-    exit 0
+    echo " "
+    exit 1
 fi
 
 MAC_DIR=mac
