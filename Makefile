@@ -236,6 +236,7 @@ MAC_INSTALL_FILES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE) LIC
 mac/genozip-installer.pkg: $(MAC_INSTALL_FILES)
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@chmod +x mac-pkg-build.sh
 	@mac-pkg-build.sh
 	@echo 'Committing Mac installer and pushing to repo'
 	@(git stage $@ ; exit 0)
