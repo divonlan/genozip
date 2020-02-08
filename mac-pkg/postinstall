@@ -1,14 +1,19 @@
-#!/bin/bash
+#!/bin/bash --norc
 
-PRODUCT_HOME=/Library/genozip/
+# ------------------------------------------------------------------
+#   postinstall
+#   Copyright (C) 2020 Divon Lan <divon@genozip.com> 
+#   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 FILES=(__FILES__)
 
-chmod -R 755 {PRODUCT_HOME}
 [ -d /usr/local/bin ] || mkdir /usr/local/bin
+
+chmod -R 755 /Library/genozip
 
 for file in "${FILES[@]}"
 do
     rm -f /usr/local/bin/${file}
-    ln -s ${PRODUCT_HOME}/${file} /usr/local/bin/${file}
+    ln -s /Library/genozip/${file} /usr/local/bin/${file}
 done
 

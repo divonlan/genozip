@@ -1,5 +1,12 @@
 #!/bin/bash --norc
 
+# ------------------------------------------------------------------
+#   uninstall.sh
+#   Copyright (C) 2020 Divon Lan <divon@genozip.com> where applies
+#   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
+# loosely based on https://github.com/KosalaHerath/macos-installer-builder which is licensed under Apache 2.0 license
+
 if (( $EUID != 0 )); then
     echo "Please run as root."
     exit
