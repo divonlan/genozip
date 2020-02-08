@@ -10,6 +10,7 @@ genozip
 genounzip*
 genocat*
 genols*
+genozip-debug*
 1000genomes/*
 data/*
 benchmark.txt
@@ -18,7 +19,9 @@ to do.txt
 junk*
 meta.yaml
 windows/LICENSE.for-installer.txt
-mac-pkg/target/***
+mac/target/***
+mac/genozip.pkg
+.DS_Store
 *.vcf
 !test-file.vcf
 *stackdump

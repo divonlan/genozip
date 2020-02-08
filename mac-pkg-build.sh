@@ -7,7 +7,7 @@
 
 # loosely based on https://github.com/KosalaHerath/macos-installer-builder which is licensed under Apache 2.0 license
 
-MAC_DIR=mac-pkg
+MAC_DIR=mac
 TARGET_DIR=${MAC_DIR}/target
 VERSION=`head -n1 version.h |cut -d\" -f2`
 FILES=(genozip genounzip genols genocat) # array
