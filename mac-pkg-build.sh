@@ -9,7 +9,7 @@
 
 if [[ `uname` != 'Dawrin' ]]; then
     echo " "
-    echo "To create the Mac installer, you must be on Mac:"
+    echo "To create the Mac installer, you must be on a Mac:"
     echo "   1. git pull OR git clone"
     echo "   2. make clean"
     echo "   3. make macos"
