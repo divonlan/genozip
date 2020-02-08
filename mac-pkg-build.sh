@@ -19,7 +19,7 @@ mkdir -p ${TARGET_DIR}/darwinpkg/Library/genozip ${TARGET_DIR}/Resources ${TARGE
 
 cp ${FILES[@]} ${TARGET_DIR}/darwinpkg/Library/genozip || exit 1
 cp ${MAC_DIR}/Distribution ${TARGET_DIR} || exit 1
-cp ${MAC_DIR}/banner.png ${MAC_DIR}/uninstall.sh ${TARGET_DIR}/Resources || exit 1
+cp ${MAC_DIR}/uninstall.sh ${TARGET_DIR}/Resources || exit 1
 sed -e "s/__VERSION__/${VERSION}/g" ${MAC_DIR}/welcome.html > ${TARGET_DIR}/Resources/welcome.html || exit 1
 cp README.md ${TARGET_DIR}/Resources/README.html || exit 1
 cp LICENSE.non-commercial.txt ${TARGET_DIR}/Resources/ || exit 1
