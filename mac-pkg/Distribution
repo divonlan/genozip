@@ -3,7 +3,9 @@
     <title>genozip</title>
     <background mime-type="image/png" file="banner.png" scaling="proportional"/>
     <welcome file="welcome.html" mime-type="text/html" />
-    <conclusion file="README.html" mime-type="text/html" />
+    <readme file="README.html" />
+    <license file="LICENSE.non-commercial.txt" />
+    <conclusion file="README.html" />
     <options customize="never" allow-external-scripts="no"/>
     <domains enable_localSystem="true" />
     <installation-check script="installCheck();"/>

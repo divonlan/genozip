@@ -25,7 +25,8 @@ cp ${FILES[@]} ${TARGET_DIR}/darwinpkg/Library/genozip
 cp ${MAC_DIR}/Distribution ${TARGET_DIR}
 cp ${MAC_DIR}/banner.png ${MAC_DIR}/uninstall.sh ${TARGET_DIR}/Resources 
 sed -e "s/__VERSION__/${VERSION}/g" ${MAC_DIR}/welcome.html > ${TARGET_DIR}/Resources/welcome.html
-cp README.md ${TARGET_DIR}/Resources/README.html # this serves as the conclusion HTML
+cp README.md ${TARGET_DIR}/Resources/README.html 
+cp LICENSE.non-commercial.txt ${TARGET_DIR}/Resources/
 sed -e "s/__FILES__/${FILES_STR}/g" ${MAC_DIR}/postinstall > ${TARGET_DIR}/scripts/postinstall
 sed -e "s/__VERSION__/${VERSION}/g" ${MAC_DIR}/uninstall.sh | sed -e "s/__FILES__/${FILES_STR}/g" > ${TARGET_DIR}/darwinpkg/Library/genozip/uninstall.sh
 

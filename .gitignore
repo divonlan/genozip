@@ -18,6 +18,7 @@ to do.txt
 junk*
 meta.yaml
 windows/LICENSE.for-installer.txt
+mac-pkg/target/***
 *.vcf
 !test-file.vcf
 *stackdump
