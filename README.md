@@ -16,24 +16,24 @@ The compression is lossless - the decompressed VCF file is 100% identical to the
 <br>
 The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. To get started, try: <b>genozip</b> --help<br>
 <br>
-<b><i>Commands</b></i>: <br>
+<b><i>Commands</i></b>: <br>
 <b>genozip</b>   - compress one or more files <br>
 <b>genounzip</b> - decompress one or more files <br>
 <b>genols</b>    - show metadata of files or the entire directory <br>
 <b>genocat</b>   - view one or more files <br>
 <br>
-<b><i>Some advanced options:</b></i><br>
+<b><i>Some advanced options:</i></b><br>
 <br>
-<b><i>Concatenating & splitting:</b></i><br>
+<b><i>Concatenating & splitting:</i></b><br>
 <b>genozip</b> <i>file1.vcf file2.vcf</i> -o <i>concat.vcf.genozip</i> <br>
 <b>genounzip</b> <i>concat.vcf.genozip</i> -O <br>
 <br>
-<b><i>Calculate MD5 of the VCF file during compression:</b></i><br>
+<b><i>Calculate MD5 of the VCF file during compression:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
 <b>genols</b> <i>file.vcf.genozip</i> --md5 <br>
 Note: When compressing with --md5, the md5 is automatically verified during <b>genounzip</b> <br>
 <br>
-<b><i>Encryption:</b></i><br>
+<b><i>Encryption:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>
 <br>
 Feature requests and bug reports: <b>bugs@genozip.com</b> <br>
