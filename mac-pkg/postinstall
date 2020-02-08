@@ -1,0 +1,14 @@
+#!/bin/bash
+
+PRODUCT_HOME=/Library/genozip/
+FILES=(__FILES__)
+
+chmod -R 755 {PRODUCT_HOME}
+[ -d /usr/local/bin ] || mkdir /usr/local/bin
+
+for file in "${FILES[@]}"
+do
+    rm -f /usr/local/bin/${file}
+    ln -s ${PRODUCT_HOME}/${file} /usr/local/bin/${file}
+done
+

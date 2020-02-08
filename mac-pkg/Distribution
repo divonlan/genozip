@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<installer-script minSpecVersion="1.000000">
+    <title>genozip</title>
+    <background mime-type="image/png" file="banner.png" scaling="proportional"/>
+    <welcome file="welcome.html" mime-type="text/html" />
+    <conclusion file="conclusion.html" mime-type="text/html" />
+    <options customize="never" allow-external-scripts="no"/>
+    <domains enable_localSystem="true" />
+    <installation-check script="installCheck();"/>
+    <script>
+function installCheck() {
+    if(!(system.compareVersions(system.version.ProductVersion, '10.6.0') >= 0)) {
+        my.result.title = 'Unable to install';
+        my.result.message = 'genozip requires Mac OS X 10.6 or later.';
+        my.result.type = 'Fatal';
+        return false;
+    }
+    return true;
+}
+    </script>
+    <choices-outline>
+        <line choice="genozip"/>
+    </choices-outline>
+    <choice id="genozip" title="genozip">
+        <pkg-ref id="genozip.pkg"/>
+    </choice>
+    <pkg-ref id="genozip.pkg" auth="Root">genozip.pkg</pkg-ref>
+</installer-script>
