@@ -23,31 +23,27 @@ mkdir -p ${TARGET_DIR}/darwinpkg/Library/genozip ${TARGET_DIR}/Resources ${TARGE
 # copy and adjust files
 cp ${FILES[@]} ${TARGET_DIR}/darwinpkg/Library/genozip
 cp ${MAC_DIR}/Distribution ${TARGET_DIR}
-cp ${MAC_DIR}/welcome.html ${MAC_DIR}/conclusion.html ${MAC_DIR}/banner.png ${MAC_DIR}/uninstall.sh ${TARGET_DIR}/Resources 
+cp ${MAC_DIR}/banner.png ${MAC_DIR}/uninstall.sh ${TARGET_DIR}/Resources 
+sed -e "s/__VERSION__/${VERSION}/g" ${MAC_DIR}/welcome.html > ${TARGET_DIR}/Resources/welcome.html
+cp README.md ${TARGET_DIR}/Resources # this serves as the conclusion HTML
 sed -e "s/__FILES__/${FILES_STR}/g" ${MAC_DIR}/postinstall > ${TARGET_DIR}/scripts/postinstall
-
-cp ${MAC_DIR}/uninstall.sh ${TARGET_DIR}/darwinpkg/Library/genozip
-sed -i '' -e "s/__VERSION__/${VERSION}/g" "${TARGET_DIR}/darwinpkg/Library/genozip/uninstall.sh"
-sed -i '' -e "s/__FILES__/${FILES_STR}/g" "${TARGET_DIR}/darwinpkg/Library/genozip/uninstall.sh"
+sed -e "s/__VERSION__/${VERSION}/g" ${MAC_DIR}/uninstall.sh | sed -e "s/__FILES__/${FILES_STR}/g" > ${TARGET_DIR}/darwinpkg/Library/genozip/uninstall.sh
 
 chmod -R 755 ${TARGET_DIR}
 
-# build package
-echo Building package
 pkgbuild --identifier org.genozip.${VERSION} --version ${VERSION} --scripts ${TARGET_DIR}/scripts --root ${TARGET_DIR}/darwinpkg ${MAC_DIR}/genozip.pkg > /dev/null 2>&1
 
-# build product
-echo Building product
-PRODUCT=${MAC_DIR}/genozip-macos-installer-x64-${VERSION}.pkg
+PRODUCT=${MAC_DIR}/genozip-installer.pkg
 productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}/Resources --package-path ${MAC_DIR} ${PRODUCT} > /dev/null 2>&1
 
 # sign product - IF we have a certificate from Apple
 if [ -f apple_developer_certificate_id ]; then
-    echo Signing the product
     APPLE_DEVELOPER_CERTIFICATE_ID=`cat apple_developer_certificate_id`
     productsign --sign "Developer ID Installer: ${APPLE_DEVELOPER_CERTIFICATE_ID}" ${PRODUCT} ${PRODUCT}.signed
     pkgutil --check-signature ${PRODUCT}.signed
     mv -f ${PRODUCT}.signed ${PRODUCT}
 fi
+
+echo Built mac installer
 
 exit 0
