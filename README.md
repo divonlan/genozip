@@ -8,7 +8,7 @@ The compression is lossless - the decompressed VCF file is 100% identical to the
 The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. To get started, try: __genozip__ --help
 
 ***Commands***: \
-__genozip__   - compress one or more files \
+<b>genozip</b>   - compress one or more files \
 __genounzip__ - decompress one or more files \
 __genols__    - show metadata of files or the entire directory \
 __genocat__   - view one or more files
