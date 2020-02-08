@@ -1,3 +1,11 @@
+<!-- Makefile                                                                                           -->
+<!-- Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>                                              -->
+<!-- Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt -->
+<!--                                                                                                    -->
+<!-- This file needs to be compliant to both Markdown and HTML. It is rendered as README.md by github   -->
+<!-- and it is copied as HTML to the Mac installer                                                      -->
+
+Read more: https://html.com/tags/comment-tag/#ixzz6DKiIQkDw
 <h1>genozip</h1>
 <b>genozip</b> is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz or .vcf.bz2 files).<br>
 <br>
