@@ -74,11 +74,15 @@
 #  define bswap16(x)     __builtin_bswap16((x))
 #  define bswap32(x)     __builtin_bswap32((x))
 #  define bswap64(x)     __builtin_bswap64((x))
-#elif defined(__has_builtin) && __has_builtin(__builtin_bswap64)  /* for clang; gcc 5 fails on this and && shortcircuit fails; must be after GCC check */
-#  define bswap16(x)     __builtin_bswap16((x))
-#  define bswap32(x)     __builtin_bswap32((x))
-#  define bswap64(x)     __builtin_bswap64((x))
-#else
+#elif defined(__has_builtin) 
+#  if __has_builtin(__builtin_bswap64)  /* for clang; gcc 5 fails on this and && shortcircuit fails; must be after GCC check */
+#     define bswap16(x)     __builtin_bswap16((x))
+#     define bswap32(x)     __builtin_bswap32((x))
+#     define bswap64(x)     __builtin_bswap64((x))
+#  endif
+#endif
+
+#ifndef bswap64 
     /* even in this case, compilers often optimize by using native instructions */
     static inline uint16_t bswap16(uint16_t x) {
 		return ((( x  >> 8 ) & 0xffu ) | (( x  & 0xffu ) << 8 ));
