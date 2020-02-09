@@ -12,7 +12,7 @@ IS_CONDA=1
 CFLAGS       += -Wall -I.
 endif
 
-CFLAGS        = -Wall -I.
+CFLAGS        = -Wall -I. -D_LARGEFILE64_SOURCE=1
 LDFLAGS      += -lpthread -lm
 
 ifdef IS_CONDA 
@@ -29,7 +29,7 @@ else
 endif 
 
 ifeq ($(CC),gcc)
-	CFLAGS += -Ofast
+	CFLAGS += -Ofast -std=gnu99
 else
 	CFLAGS += -O2
 endif
