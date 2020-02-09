@@ -42,15 +42,16 @@ chmod -R 755 ${TARGET_DIR} || exit 1
 pkgbuild --identifier org.genozip.${VERSION} --version ${VERSION} --scripts ${TARGET_DIR}/scripts --root ${TARGET_DIR}/darwinpkg ${MAC_DIR}/genozip.pkg || exit 1
 
 PRODUCT=${MAC_DIR}/genozip-installer.pkg
+PRODUCT_SIGNED=${MAC_DIR}/genozip-installer.signed.pkg
 productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}/Resources --package-path ${MAC_DIR} ${PRODUCT} || exit 1
 
 # sign product - note: I need a "3rd party mac developer" certificate installed in the keychain to run this.
 # see how to obtain a certificate: https://developer.apple.com/developer-id/
-productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT}.signed || exit 1
-pkgutil --check-signature ${PRODUCT}.signed || exit 1
-rm ${PRODUCT}
-mv ${PRODUCT}.signed ${PRODUCT} || exit 1
+productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT_SIGNED} || exit 1
+pkgutil --check-signature ${PRODUCT_SIGNED}  # doesn't exit with 0 on success
+rm ${PRODUCT} || exit 1
+mv ${PRODUCT_SIGNED} ${PRODUCT} || exit 1
 
-echo Built mac installer
+echo Built ${PRODUCT_SIGNED}
  
 exit 0 
