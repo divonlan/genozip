@@ -46,7 +46,7 @@ productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}
 
 # sign product - IF we have a certificate from Apple
 if [ -f apple_developer_certificate_id ]; then
-    APPLE_DEVELOPER_CERTIFICATE_ID=`cat apple_developer_certificate_id`
+    APPLE_DEVELOPER_CERTIFICATE_ID=`cat mac/apple_developer_certificate_id`
     productsign --sign "Developer ID Installer: ${APPLE_DEVELOPER_CERTIFICATE_ID}" ${PRODUCT} ${PRODUCT}.signed || exit 1
     pkgutil --check-signature ${PRODUCT}.signed || exit 1
     mv -f ${PRODUCT}.signed ${PRODUCT} || exit 1
