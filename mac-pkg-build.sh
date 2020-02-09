@@ -49,7 +49,7 @@ productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}
 echo AAA
 productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT}.signed || exit 1
 echo 000
-pkgutil --check-signature ${PRODUCT}.signed || exit 1
+pkgutil --check-signature ${PRODUCT}.signed 
 echo 111
 rm -f ${PRODUCT} || exit
 echo 222
