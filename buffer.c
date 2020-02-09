@@ -8,6 +8,14 @@
 // be very time consuming.
 
 #include "genozip.h"
+#include "profiler.h"
+#include "buffer.h"
+#include "vb.h"
+#ifndef _MSC_VER // Microsoft compiler
+#include <pthread.h>
+#else
+#include "compatability/visual_c_pthread.h"
+#endif
 
 //#define DISPLAY_ALLOCS_AFTER 4090 // display allocations, except the first X allocations. reallocs are always displayed
 
@@ -132,7 +140,7 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
 }
 
-void buf_display_memory_usage (VariantBlockPoolID pool_id, bool memory_full)
+void buf_display_memory_usage (PoolId pool_id, bool memory_full)
 {
     #define MAX_MEMORY_STATS 100
     static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc

@@ -5,6 +5,7 @@
  
 #include <sys/types.h>
 #include <sys/stat.h>
+#include "profiler.h"
 
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for for conda mac - otherwise zlib.h throws compilation errors
@@ -14,6 +15,9 @@
 #include <bzlib.h>
 
 #include "genozip.h"
+#include "vcffile.h"
+#include "vb.h"
+#include "file.h"
 
 // we implement our own "getc" which manages read buffers a lot more efficiently
 static inline char vcffile_get_char(VariantBlock *vb)

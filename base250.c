@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "base250.h"
 
 Base250 base250_encode (uint32_t n)
 {

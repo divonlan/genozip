@@ -4,6 +4,19 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "profiler.h"
+#include "zfile.h"
+#include "vcffile.h"
+#include "vcf_header.h"
+#include "segregate.h"
+#include "vb.h"
+#include "base250.h"
+#include "dispatcher.h"
+#include "move_to_front.h"
+#include "file.h"
+#include "endianness.h"
+#include "squeeze.h"
+#include "piz.h"
 
 // decode the delta-encouded value of the POS field
 static inline void piz_decode_pos (VariantBlock *vb,

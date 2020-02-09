@@ -6,6 +6,8 @@
 // vb stands for VariantBlock - i.e. one block of VARIANTS_PER_BLOCK data lines in the vcf file
 
 #include "genozip.h"
+#include "vb.h"
+#include "move_to_front.h"
 
 unsigned vb_num_samples_in_sb(const VariantBlock *vb, unsigned sb_i)
 {
@@ -105,9 +107,9 @@ void vb_release_vb (VariantBlock **vb_p)
 
 }
 
-static VariantBlockPool *pools[NUM_VB_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
+static VariantBlockPool *pools[NUM_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
 
-void vb_create_pool (VariantBlockPoolID pool_id, unsigned num_vbs)
+void vb_create_pool (PoolId pool_id, unsigned num_vbs)
 {
     ASSERT (!pools[pool_id] || num_vbs==pools[pool_id]->num_vbs, 
             "Error: pool %u already exists, but with the wrong number of vbs - expected %u but it has %u", pool_id, num_vbs, pools[pool_id]->num_vbs);
@@ -120,15 +122,15 @@ void vb_create_pool (VariantBlockPoolID pool_id, unsigned num_vbs)
     }
 }
 
-VariantBlockPool *vb_get_pool (VariantBlockPoolID pool_id)
+VariantBlockPool *vb_get_pool (PoolId pool_id)
 {
-    ASSERT ((int)pool_id < NUM_VB_POOLS && pools[pool_id], "Error: pool %u doesn't exists", pool_id);
+    ASSERT ((int)pool_id < NUM_POOLS && pools[pool_id], "Error: pool %u doesn't exists", pool_id);
     return pools[pool_id];
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
-VariantBlock *vb_get_vb (VariantBlockPoolID pool_id, 
-                         File *vcf_file, File *z_file,
+VariantBlock *vb_get_vb (PoolId pool_id, 
+                         FileP vcf_file, FileP z_file,
                          unsigned variant_block_i)
 {
     VariantBlock *vb=NULL;
@@ -176,7 +178,7 @@ static void vb_free_buffer_array (VariantBlock *vb, Buffer **buf_array, unsigned
     *buf_array = NULL;
 }
 
-void vb_cleanup_memory(VariantBlockPoolID pool_id)
+void vb_cleanup_memory(PoolId pool_id)
 {
     // see if there's a VB avaiable for recycling
     for (unsigned vb_i=0; vb_i < pools[pool_id]->num_vbs; vb_i++) {

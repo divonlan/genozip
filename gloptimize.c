@@ -17,6 +17,9 @@
 // integer digit, up to 9 digits after the decimal point)
 
 #include "genozip.h"
+#include "profiler.h"
+#include "vb.h"
+#include "gloptimize.h"
 
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */
 

@@ -4,6 +4,10 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "profiler.h"
+#include "segregate.h"
+#include "vb.h"
+#include "move_to_front.h"
 
 // returns true if this line has the same chrom as this VB, or if it is the first line
 static bool seg_chrom_field (VariantBlock *vb, const char *str)

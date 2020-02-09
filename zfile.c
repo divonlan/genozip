@@ -5,6 +5,16 @@
 
 #include <bzlib.h>
 #include "genozip.h"
+#include "profiler.h"
+#include "zfile.h"
+#include "squeeze.h"
+#include "vcf_header.h"
+#include "crypt.h"
+#include "vb.h"
+#include "move_to_front.h"
+#include "file.h"
+#include "endianness.h"
+#include "version.h"
 
 #define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
 
@@ -343,7 +353,7 @@ void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield,
     header.h.variant_block_i       = BGEN32 (vb->variant_block_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.num_snips               = BGEN32 (num_words);
-    memcpy (header.subfield_id, subfield.id, SUBFIELD_ID_LEN);
+    header.subfield                = subfield;
 
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, data, SEC_DICTIONARY);
 }

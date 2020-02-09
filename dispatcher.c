@@ -3,7 +3,16 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#ifndef _MSC_VER // Microsoft compiler
+#include <pthread.h>
+#else
+#include "compatability/visual_c_pthread.h"
+#endif
+
 #include "genozip.h"
+#include "dispatcher.h"
+#include "vb.h"
+#include "file.h"
 
 typedef struct {
     pthread_t thread_id;
@@ -12,7 +21,7 @@ typedef struct {
 } Thread;
 
 typedef struct {
-    VariantBlockPoolID pool_id;
+    PoolId pool_id;
     VariantBlock *pseudo_vb;
     unsigned max_vb_id_so_far; 
     Buffer compute_threads_buf;
@@ -43,7 +52,7 @@ typedef struct {
 
 static TimeSpecType profiler_timer; // wallclock
 
-Dispatcher dispatcher_init (unsigned max_threads, VariantBlockPoolID pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
+Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
                             bool test_mode, bool show_progress, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);

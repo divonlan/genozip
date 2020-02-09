@@ -15,6 +15,8 @@
 #include <bzlib.h>
 
 #include "genozip.h"
+#include "move_to_front.h"
+#include "file.h"
 
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {

@@ -4,6 +4,7 @@
 *.debug-o
 *.d
 *.genozip
+!backward-compatability-test/*.genozip
 *.exe
 !windows/genozip-installer.exe
 genozip

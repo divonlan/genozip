@@ -4,8 +4,18 @@
 // The original source, as specified there, is "This is free and unencumbered software released into the public domain - June 2013 waterjuice.org". 
 // All modifications are (c) 2020 Divon Lan and are subject to license.
 
+#include <stdio.h>
 #include <memory.h>
-#include "genozip.h"
+#ifndef _MSC_VER // Microsoft compiler
+#include <inttypes.h>
+#include <stdbool.h>
+#else
+#include "compatability/visual_c_stdint.h"
+#include "compatability/visual_c_stdbool.h"
+#endif
+
+#include "md5.h"
+#include "endianness.h"
 
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
 #define G( x, y, z )            ( (y) ^ ((z) & ((x) ^ (y))) )
@@ -17,7 +27,7 @@
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-void md5_display_ctx (const Md5Context *x)
+void md5_display_ctx (const Md5Context *x) // we're make this non-static to avoid compiler warning that it is not being used
 {
     static unsigned iteration=1;
 

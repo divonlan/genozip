@@ -30,6 +30,14 @@
 #include "genozip.h"
 #include "text_license.h"
 #include "text_help.h"
+#include "version.h" // automatically incremented by the make when we create a new distribution
+#include "vcffile.h"
+#include "vcf_header.h"
+#include "zip.h"
+#include "piz.h"
+#include "crypt.h"
+#include "endianness.h"
+#include "file.h"
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 

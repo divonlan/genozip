@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "profiler.h"
 
 void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
 {

@@ -7,6 +7,14 @@
 #include <sys/stat.h>
 
 #include "genozip.h"
+#include "zfile.h"
+#include "vcffile.h"
+#include "vcf_header.h"
+#include "vb.h"
+#include "crypt.h"
+#include "version.h"
+#include "endianness.h"
+#include "file.h"
 
 unsigned global_num_samples = 0; // a global param - assigned once before any thread is crated, and never changes - so no thread safety issue
 static Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat

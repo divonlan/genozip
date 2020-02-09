@@ -8,6 +8,10 @@
         "mac_gettime.h": "c",
         "visual_c_gettime.h": "c",
         "cmath": "c",
-        "visual_c_misc_funcs.h": "c"
+        "visual_c_misc_funcs.h": "c",
+        "crypt.h": "c",
+        "vb.h": "c",
+        "endianness.h": "c",
+        "zfile.h": "c"
     },
 }

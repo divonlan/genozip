@@ -4,6 +4,18 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "profiler.h"
+#include "vb.h"
+#include "buffer.h"
+#include "file.h"
+#include "zfile.h"
+#include "vcffile.h"
+#include "vcf_header.h"
+#include "segregate.h"
+#include "vb.h"
+#include "dispatcher.h"
+#include "move_to_front.h"
+#include "zip.h"
 
 // read entire variant block to memory. this is called from the dispatcher thread
 static void zip_read_variant_block (File *vcf_file,

@@ -5,6 +5,8 @@
 // public domain". All modifications are (c) 2020 Divon Lan and are subject to license.
 
 #include "genozip.h" 
+#include "vb.h"
+#include "aes.h"
 
 #define Nk (AES_KEYLEN/4)
 #define Nr 14 // value is for 256 bit key AES

@@ -7,6 +7,9 @@
 // Squeezing the array means using the minimal number of bits for each entry.
 
 #include "genozip.h"
+#include "profiler.h"
+#include "squeeze.h"
+#include "vb.h"
 
 unsigned squeeze_bits_per_entry (unsigned len)
 {

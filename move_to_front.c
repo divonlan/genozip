@@ -24,6 +24,15 @@ unzip:
 */
 
 #include "genozip.h"
+#include "profiler.h"
+#include "sections.h"
+#include "gloptimize.h"
+#include "base250.h"
+#include "vb.h"
+#include "move_to_front.h"
+#include "zfile.h"
+#include "endianness.h"
+#include "file.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -399,12 +408,12 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
     // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
     uint32_t num_snips = BGEN32 (header->num_snips);
-    SubfieldIdType subfield; memcpy (subfield.id, header->subfield_id, SUBFIELD_ID_LEN);
+    SubfieldIdType subfield = header->subfield;
 
     zfile_uncompress_section (vb, section_data, &fragment, SEC_DICTIONARY);
 
     // special treatment if this is GL - de-optimize
-    if (!memcmp (header->subfield_id, "GL\0\0\0\0\0\0", SUBFIELD_ID_LEN))
+    if (!memcmp (header->subfield.id, "GL\0\0\0\0\0\0", SUBFIELD_ID_LEN))
         gl_deoptimize_dictionary (fragment.data, fragment.len);
 
     // in piz, the same sf_i is used for z_file and vb contexts, meaning that in vbs there could be
