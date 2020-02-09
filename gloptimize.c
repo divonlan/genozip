@@ -16,6 +16,7 @@
 // We skip optimizing a GL field in which not all numbers are of the format -[0-9].[0-9]+ (negative, one 
 // integer digit, up to 9 digits after the decimal point)
 
+#include <math.h>
 #include "genozip.h"
 #include "profiler.h"
 #include "vb.h"

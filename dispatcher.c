@@ -3,10 +3,15 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <time.h>
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
 #include "compatability/visual_c_pthread.h"
+#include "compatability/visual_c_gettime.h"
+#endif
+#if defined __APPLE__ 
+#include "compatability/mac_gettime.h"
 #endif
 
 #include "genozip.h"

@@ -7,6 +7,12 @@
 #define PROFILER_INCLUDED
 
 #include "genozip.h"
+#include <time.h>
+#if defined _MSC_VER // Microsoft compiler
+#include "compatability/visual_c_gettime.h"
+#elif defined __APPLE__ 
+#include "compatability/mac_gettime.h"
+#endif
 
 typedef struct {
     long long wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 

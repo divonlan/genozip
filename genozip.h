@@ -10,24 +10,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <time.h>
 #ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
 #include <stdbool.h>
 #include <unistd.h>
-//#include <pthread.h>
 #else
 #include "compatability/visual_c_stdint.h"
 #include "compatability/visual_c_stdbool.h"
 #include "compatability/visual_c_unistd.h"
-#include "compatability/visual_c_gettime.h"
 #include "compatability/visual_c_misc_funcs.h"
-#include "compatability/visual_c_pthread.h"
-#endif
-
-#if defined __APPLE__ 
-#include "compatability/mac_gettime.h"
 #endif
 
 #define GENOZIP_EXT ".genozip"

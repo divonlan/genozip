@@ -6,6 +6,7 @@
 // A module for squeezing an index array. An index array of length len, in an array in which each entry containing a unique number 0->(len-1). 
 // Squeezing the array means using the minimal number of bits for each entry.
 
+#include <math.h>
 #include "genozip.h"
 #include "profiler.h"
 #include "squeeze.h"
