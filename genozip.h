@@ -7,6 +7,7 @@
 #define GENOZIP_INCLUDED
 
 #define _FILE_OFFSET_BITS 64
+#define D_LARGEFILE64_SOURCE 1
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

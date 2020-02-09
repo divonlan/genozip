@@ -9,9 +9,10 @@
 
 ifdef BUILD_PREFIX
 IS_CONDA=1
+CFLAGS       += -Wall -I.
 endif
 
-CFLAGS       += -D_LARGEFILE64_SOURCE=1 -Wall -I.
+CFLAGS        = -Wall -I.
 LDFLAGS      += -lpthread -lm
 
 ifdef IS_CONDA 
