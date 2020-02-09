@@ -52,5 +52,5 @@ if [ -f apple_developer_certificate_id ]; then
 fi
 
 echo Built mac installer
-
+ 
 exit 0
