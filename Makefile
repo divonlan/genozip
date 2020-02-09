@@ -9,23 +9,22 @@
 
 ifdef BUILD_PREFIX
 IS_CONDA=1
-CFLAGS       += -Wall -I.
 endif
 
-CFLAGS        = -Wall -I. -D_LARGEFILE64_SOURCE=1
 LDFLAGS      += -lpthread -lm
 
 ifdef IS_CONDA 
+	CFLAGS       += -Wall -I. -D_LARGEFILE64_SOURCE=1
 	LDFLAGS += -lbz2 -lz  # conda - dynamic linking with bz2 and zlib
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
         LDFLAGS += -L$(PREFIX)/Library/lib
-		CFLAGS  += -I$(PREFIX)/Library/include 
+	CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
 else
 	CC=gcc
-	CFLAGS += -Izlib -Ibzlib
+	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1
 endif 
 
 ifeq ($(CC),gcc)
