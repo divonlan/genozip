@@ -46,7 +46,9 @@ productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}
 
 # sign product - note: I need a "3rd party mac developer" certificate installed in the keychain to run this.
 # see how to obtain a certificate: https://developer.apple.com/developer-id/
+echo AAA
 productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT}.signed || exit 1
+echo 000
 pkgutil --check-signature ${PRODUCT}.signed || exit 1
 echo 111
 rm -f ${PRODUCT} || exit
