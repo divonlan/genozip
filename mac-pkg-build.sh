@@ -48,7 +48,9 @@ productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}
 # see how to obtain a certificate: https://developer.apple.com/developer-id/
 productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT}.signed || exit 1
 pkgutil --check-signature ${PRODUCT}.signed || exit 1
-rm ${PRODUCT}
+echo 111
+rm -f ${PRODUCT} || exit
+echo 222
 mv ${PRODUCT}.signed ${PRODUCT} || exit 1
 
 echo Built mac installer
