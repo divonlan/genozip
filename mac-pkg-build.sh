@@ -46,7 +46,7 @@ productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}
 
 # sign product - IF we have a certificate from Apple
 if [ -f apple_developer_certificate_id ]; then
-    productsign --sign "`cat mac/apple_developer_certificate_id`" ${PRODUCT} ${PRODUCT}.signed || exit 1
+    productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT}.signed || exit 1
     pkgutil --check-signature ${PRODUCT}.signed || exit 1
     mv -f ${PRODUCT}.signed ${PRODUCT} || exit 1
 fi
