@@ -44,12 +44,11 @@ pkgbuild --identifier org.genozip.${VERSION} --version ${VERSION} --scripts ${TA
 PRODUCT=${MAC_DIR}/genozip-installer.pkg
 productbuild --distribution ${TARGET_DIR}/Distribution --resources ${TARGET_DIR}/Resources --package-path ${MAC_DIR} ${PRODUCT} || exit 1
 
-# sign product - IF we have a certificate from Apple
-if [ -f apple_developer_certificate_id ]; then
-    productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT}.signed || exit 1
-    pkgutil --check-signature ${PRODUCT}.signed || exit 1
-    mv -f ${PRODUCT}.signed ${PRODUCT} || exit 1
-fi
+# sign product - note: I need a "3rd party mac developer" certificate installed in the keychain to run this.
+# see how to obtain a certificate: https://developer.apple.com/developer-id/
+productsign --sign "Divon Lan" ${PRODUCT} ${PRODUCT}.signed || exit 1
+pkgutil --check-signature ${PRODUCT}.signed || exit 1
+mv -f ${PRODUCT}.signed ${PRODUCT} || exit 1
 
 echo Built mac installer
  
