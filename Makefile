@@ -45,7 +45,10 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = genozip.h text_license.h  \
+CONDA_INCS = aes.h      dispatcher.h  gloptimize.h     profiler.h   subfield.h      vcffile.h     zip.h \
+			 base250.h  endianness.h  md5.h            sections.h   text_help.h     vcf_header.h \
+			 buffer.h   file.h        move_to_front.h  segregate.h  text_license.h  version.h \
+			 crypt.h    genozip.h     piz.h            squeeze.h    vb.h            zfile.h \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
 	         compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
 	         compatability/visual_c_pthread.h \
