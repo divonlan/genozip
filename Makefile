@@ -326,5 +326,5 @@ clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEPS) $(DEBUG_OBJS) genozip-debug$(EXE) 
 
-.PHONY: clean clean-debug clean-all git-pull macos
+.PHONY: clean clean-debug clean-all git-pull macos mac/.remote_mac_timestamp
 
