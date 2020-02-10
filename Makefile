@@ -263,9 +263,12 @@ $(MACLIBDIR)/%: %
 	@cp -f $< $@
 
 pkg_identifier  := genozip_$(version)
+
 app_specific_pw := $(shell cat .altool_app_specifc_password)
+
 apple_id        := $(shell /usr/libexec/PlistBuddy -c "print :Accounts:0:AccountID" ~/Library/Preferences/MobileMeAccounts.plist)
-signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Developer Installer" | cut -d ":" -f2 | cut -d"(" -f1 | sed -e 's/^ //g' | sed -e 's/ $$//g'} # curly brackets bc of (
+
+signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Developer Installer" | cut -d ":" -f2 | cut -d"(" -f1 }
 
 mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
                  $(MACSCTDIR)/postinstall
@@ -281,6 +284,8 @@ mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
 	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
 
 mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
+	@echo "Unlocking the keychain"
+	@(echo "Your mac login password (press enter TWICE after): "; security -v unlock-keychain -p `cat - |head -n1` `security list-keychains|grep login|cut -d\" -f2`) 
 	@echo "Signing Mac product $@"
 	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
 	productsign --sign "$(signer_name)" $< $@
