@@ -283,7 +283,7 @@ signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Develop
 
 mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
                  $(MACSCTDIR)/postinstall
-	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
+	@(( `git status|grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@echo "Building Mac package $@"
 	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
 	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
