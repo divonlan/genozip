@@ -238,7 +238,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Pushing all committed changes to github"
 	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || \
 	 (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
-	@git push 2>&1 | grep Total
+	@git push 
 	@echo "Logging in to remote mac" 
 	@read -r -p 'IP Address: 192.168.43.' ip ; echo 192.168.43.$$ip > mac/.mac_ip_address # assuming both are on the same android hotspot
 	@[ -f mac/.mac_username ] || ( echo Error: file mac/.mac_username missing && exit 1 )
