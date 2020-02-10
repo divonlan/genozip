@@ -6,7 +6,7 @@
 # See: https://docs.conda.io/projects/conda-build/en/latest/resources/build-scripts.html
 # See: https://docs.ligo.org/lscsoft/conda/packaging/
 # Note: VERSION and SHA256 are replaced by Makefile
-{% set version = "VERSION" %}
+{% set version = "__VERSION__" %}
 #
 # Example of building Windows with gcc: https://github.com/conda-forge/r-dplyr-feedstock/tree/master/recipe
 {% set posix = 'm2-' if win else '' %}
@@ -18,7 +18,7 @@ package:
 
 source:
   url: https://github.com/divonlan/genozip/archive/genozip-{{ version }}.tar.gz
-  sha256: SHA256
+  sha256: __SHA256__
  
 build:
 # Windows builds & tests successfully, but then the test fails in Appveyor - it seems the executable is not loading (maybe missing gcc libraries? just a hunch)

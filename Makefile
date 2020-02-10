@@ -62,12 +62,12 @@ ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
 else
-    UNAME_S := $(shell uname -s)
-    ifeq ($(UNAME_S),Linux)
+    uname := $(shell uname -s)
+    ifeq ($(uname),Linux)
 # Linux
         LDFLAGS += -lrt -s
     endif
-    ifeq ($(UNAME_S),Darwin)
+    ifeq ($(uname),Darwin)
 # Mac
 		MY_SRCS += compatability/mac_gettime.c
     endif
@@ -86,7 +86,9 @@ DEBUG_OBJS := $(SRCS:.c=.debug-o)
 
 DEPS       := $(SRCS:.c=.d)
 
-all: genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
+EXECUTABLES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
+
+all: $(EXECUTABLES)
 
 debug : CFLAGS  += -DDEBUG -g -O0
 debug : genozip-debug$(EXE)
@@ -134,6 +136,8 @@ endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genols$(EXE)
 
+version := $(shell head -n1 version.h |cut -d\" -f2)
+
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
@@ -155,17 +159,17 @@ decrement-version:
 
 .archive.tar.gz : increment-version $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
-	@echo Creating github tag genozip-$(shell head -n1 version.h |cut -d\" -f2) and archive
+	@echo Creating github tag genozip-$(version) and archive
 	@git push 
-	@git tag genozip-$(shell head -n1 version.h |cut -d\" -f2)
-	@git push origin genozip-$(shell head -n1 version.h |cut -d\" -f2)
-	@curl https://github.com/divonlan/genozip/archive/genozip-$(shell head -n1 version.h |cut -d\" -f2).tar.gz --silent --location -o $@
+	@git tag genozip-$(version)
+	@git push origin genozip-$(version)
+	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating meta.yaml (for conda)"
 	@(cat conda/meta.template.yaml ; grep -v "^#" README.md | sed 's/^/    /') | \
-		sed s/SHA256/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
-		sed s/VERSION/$(shell head -n1 version.h |cut -d\" -f2)/g | \
+		sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
+		sed s/__VERSION__/$(version)/g | \
 		grep -v "^#" \
 		> $@
  
@@ -193,8 +197,6 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 #	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
 	@echo "and: https://github.com/conda-forge/genozip-feedstock/pulls"
 
-WINDOWS_INSTALL_FILES = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe LICENSE.commercial.txt LICENSE.non-commercial.txt windows/readme.txt test-file.vcf
-
 windows/%.exe: %.exe
 	@echo Copying $<
 	@cp -f $< $@ 
@@ -209,45 +211,93 @@ windows/readme.txt: genozip$(EXE)
 	@printf '%.s-' {1..120}   >> $@
 	@./genocat$(EXE)   --help >> $@
 	@git stage $@
-	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) windows/readme.txt $@ ; exit 0)
+	@(git commit -m windows_files_for_version_$(version) windows/readme.txt $@ ; exit 0)
 
 windows/LICENSE.for-installer.txt: text_license.h
 	@echo Generating $@
 	@./genozip$(EXE) --license --force > $@
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-windows/genozip-installer.exe: $(WINDOWS_INSTALL_FILES) windows/LICENSE.for-installer.txt
+windows/genozip-installer.exe: windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
+                               LICENSE.commercial.txt LICENSE.non-commercial.txt windows/LICENSE.for-installer.txt \
+							   windows/readme.txt test-file.vcf
 	@echo Verifying that all files are committed to the repo
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
 	@echo 'Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
-	@echo '  (2) Set General-Program version to $(shell head -n1 version.h |cut -d\" -f2)'
+	@echo '  (2) Set General-Program version to $(version)'
 	@echo '  (3) Verify the files Setup-Files, and the license from LICENSE.for-installer.txt are up to date'
 	@echo '  (4) Click Save, then click Build, then click No to the popup question'
 	@echo '  (5) Exit the UI (close the window)'
 	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
 	@echo 'Committing Windows installer and pushing to repo'
 	@(git stage windows/genozip.ifp $@ ; exit 0)
-	@(git commit -m windows_files_for_version_$(shell head -n1 version.h |cut -d\" -f2) windows/genozip.ifp $@ ; exit 0)
+	@(git commit -m windows_files_for_version_$(version) windows/genozip.ifp $@ ; exit 0)
 	@git push
 
-endif
+endif # Windows
 
-MAC_INSTALL_FILES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE) LICENSE.non-commercial.txt README.md \
-                    mac/Distribution mac/postinstall mac/uninstall.sh mac/welcome.html
+ifeq ($(uname),Darwin)
 
-mac/genozip-installer.pkg: $(MAC_INSTALL_FILES)
-	@echo Verifying that all files are committed to the repo
+MACDWNDIR = mac/darwinpkg
+MACLIBDIR = $(MACDWNDIR)/Library/genozip
+MACSCTDIR = mac/scripts
+MACRSSDIR = mac/Resources
+
+$(MACRSSDIR)/welcome.html: mac/welcome.template.html
+	@sed -e "s/__VERSION__/$(version)/g" $< > $@ 
+
+$(MACSCTDIR)/postinstall: mac/postinstall.template.sh
+	@sed -e "s/__FILES__/$(EXECUTABLES)/g" $< > $@
+
+$(MACLIBDIR)/uninstall.sh: mac/uninstall.template.sh
+	@sed -e "s/__VERSION__/$(version)/g" $< | sed -e "s/__FILES__/$(EXECUTABLES)/g" > $@ 
+
+$(MACRSSDIR)/README.html: README.md
+	@cp -f $< $@
+
+$(MACRSSDIR)/LICENSE.non-commercial.txt: LICENSE.non-commercial.txt
+	@cp -f $< $@
+
+$(MACLIBDIR)/%: %
+	@cp -f $< $@
+
+pkg_identifier  := genozip_$(version)
+app_specific_pw := $(shell cat .altool_app_specifc_password)
+apple_id        := $(shell /usr/libexec/PlistBuddy -c "print :Accounts:0:AccountID" ~/Library/Preferences/MobileMeAccounts.plist)
+signer_name     := $(shell security find-identity -v|grep "3rd Party Mac Developer Installer"|cut -d ":" -f2|cut -d\( -f1|sed -e 's/^ //'|sed -e 's/ $//')
+
+mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
+                 $(MACSCTDIR)/postinstall
+	@echo "Verifying that all files are committed to the repo"
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
-	@bash mac-pkg-build.sh
-	@echo 'Committing Mac installer and pushing to repo'
-	@(git stage $@ ; exit 0)
-	@(git commit -m mac_installer_for_version_$(shell head -n1 version.h |cut -d\" -f2) $@ ; exit 0)
-	@git push
+	@echo "Building Mac package"
+	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
+	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg
 
-distribution: conda/.conda-timestamp windows/genozip-installer.exe mac/genozip-installer.pkg
+mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
+                                    $(MACRSSDIR)/welcome.html $(MACRSSDIR)/README.html $(MACRSSDIR)/LICENSE.non-commercial.txt
+	@echo "Building Mac product"
+	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@
+
+mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
+	@echo "Signing Mac product"
+	# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
+	@productsign --sign $(signer_name) --timepstamp $< $@
+	@echo "Verifying the signature"
+	@pkgutil --check-signature $@
+	#@echo 'Committing Mac installer and pushing to repo'
+	#@(git stage $@ ; exit 0)
+	#@(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
+	#@git push
 
 macos: mac/genozip-installer.pkg
+	@echo "Notarizing Mac app"
+	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< --verbose
+
+endif # Darwin
+
+distribution: conda/.conda-timestamp windows/genozip-installer.exe mac/genozip-installer.pkg
 	
 clean:
 	@echo Cleaning up
