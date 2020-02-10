@@ -285,6 +285,7 @@ mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
 
 mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 	@echo "Unlocking the keychain"
+	@# note: keychain requires unlocking if logged in remotely (through SSH)
 	@(echo "Your mac login password (press enter TWICE after): "; security -v unlock-keychain -p `cat - |head -n1` `security list-keychains|grep login|cut -d\" -f2`) 
 	@echo "Signing Mac product $@"
 	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
