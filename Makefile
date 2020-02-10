@@ -281,9 +281,9 @@ mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
 	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
 
 mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
-	@echo "Signing Mac product"
+	@echo "Signing Mac product $@"
 	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
-	@productsign --sign $(signer_name) --timestamp $< $@
+	productsign --sign $(signer_name) --timestamp $< $@
 	@echo "Verifying the signature"
 	@pkgutil --check-signature $@
 	@#@echo 'Committing Mac installer and pushing to repo'
