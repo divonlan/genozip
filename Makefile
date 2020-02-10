@@ -297,7 +297,7 @@ mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
 	@#git push
 
-macos: mac/genozip-installer.pkg
+macos: mac/genozip_installer.pkg
 	@echo "Notarizing Mac app"
 	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< --verbose
 
