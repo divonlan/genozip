@@ -309,7 +309,7 @@ mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 
 macos: mac/genozip_installer.pkg
 	@echo "Notarizing Mac app"
-	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< --verbose
+	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< --verbose | grep -i error
 
 endif # Darwin
 
