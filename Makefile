@@ -243,8 +243,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@# Get IP address - check if the previous IP address still works or ask for a new one. Assuming a LAN on an Android hotspot.
 	@ip=`cat mac/.mac_ip_address` ; a=`echo $$ip|cut -d. -f4`; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a ; echo $$ip > mac/.mac_ip_address
 	@[ -f mac/.mac_username ] || ( echo Error: file mac/.mac_username missing && exit 1 )
-	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; make macos"
-	@rm -f mac/.mac_ip_address
+	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull ; make macos" # pull before make as Makefile might have to be pulled
 	@touch $@
 
 endif # Windows
@@ -308,15 +307,12 @@ mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
 	@#git push
 
-git-pull:
-	@echo Pulling from git
-	@git pull > /dev/null 2>&1 
-
-macos: git-pull mac/genozip_installer.pkg
+mac/.from_remote_timestamp: mac/genozip_installer.pkg
 	@echo "Notarizing Mac app"
-	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file mac/genozip_installer.pkg >& .notarize.out ; exit 0
+	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
 	@grep ERROR\: .notarize.out
 	@(( `grep ERROR\: .notarize.out | wc -l` == 0 )) || (echo "See .notarize.out" ; exit 1)
+	@touch $@
 
 endif # Darwin
 
