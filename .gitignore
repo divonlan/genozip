@@ -33,6 +33,7 @@ mac/scripts/*
 mac/.mac_username
 mac/.mac_ip_address
 mac/.remote_mac_timestamp
+mac/.from_remote_timestamp
 *.swp
 .notarize.out
 mac/*.pkg
