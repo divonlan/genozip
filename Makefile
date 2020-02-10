@@ -238,7 +238,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Pushing all committed changes to github"
 	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || \
 	 (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
-	@git push 
+	@git push > dev/null 2>&1
 	@echo "Logging in to remote mac" 
 	@# Get IP address - check if the previous IP address still works or ask for a new one. Assuming a LAN on an Android hotspot.
 	@ip=`cat mac/.mac_ip_address` ; a=`echo $$ip|cut -d. -f4`; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a ; echo $$ip > mac/.mac_ip_address
@@ -308,7 +308,11 @@ mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
 	@#git push
 
-macos: mac/genozip_installer.pkg
+git-pull:
+	@echo Pulling from git
+	@git pull > /dev/null 2>&1 
+
+macos: git-pull mac/genozip_installer.pkg
 	@echo "Notarizing Mac app"
 	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
 	@grep ERROR\: .notarize.out
@@ -326,5 +330,5 @@ clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEPS) $(DEBUG_OBJS) genozip-debug$(EXE) 
 
-.PHONY: clean clean-debug clean-all macos
+.PHONY: clean clean-debug clean-all git-pull macos
 
