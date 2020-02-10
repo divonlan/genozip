@@ -20,8 +20,11 @@ to do.txt
 junk*
 meta.yaml
 windows/LICENSE.for-installer.txt
-mac/target/***
-mac/genozip.pkg
+mac/darwinpkg/Library/genozip/*
+!mac/darwinpkg/Library/genozip
+mac/Resources/*
+mac/scripts/*
+!.gitkeep
 .DS_Store
 *.vcf
 !test-file.vcf
