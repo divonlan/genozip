@@ -241,7 +241,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@git push 
 	@echo "Logging in to remote mac" 
 	@# Get IP address - check if the previous IP address still works or ask for a new one. Assuming a LAN on an Android hotspot.
-	@ip=`cat mac/.mac_ip_address` ; a=echo $$ip|cut -d. -f4 ; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a && echo $$ip > mac/.mac_ip_address
+	@ip=`cat mac/.mac_ip_address` ; a=`echo $$ip|cut -d. -f4`; echo a=$$a ; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a ; echo $$ip > mac/.mac_ip_address
 	@[ -f mac/.mac_username ] || ( echo Error: file mac/.mac_username missing && exit 1 )
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; git pull ; make macos"
 	@rm -f mac/.mac_ip_address
