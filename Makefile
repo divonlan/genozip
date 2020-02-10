@@ -45,14 +45,14 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = aes.h      dispatcher.h  gloptimize.h     profiler.h   subfield.h      vcffile.h     zip.h \
-			 base250.h  endianness.h  md5.h            sections.h   text_help.h     vcf_header.h \
-			 buffer.h   file.h        move_to_front.h  segregate.h  text_license.h  version.h \
-			 crypt.h    genozip.h     piz.h            squeeze.h    vb.h            zfile.h \
+CONDA_INCS = aes.h dispatcher.h gloptimize.h profiler.h subfield.h vcffile.h zip.h \
+             base250.h endianness.h md5.h sections.h text_help.h vcf_header.h \
+             buffer.h file.h move_to_front.h segregate.h text_license.h version.h \
+             crypt.h genozip.h piz.h squeeze.h vb.h zfile.h \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
-	         compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
-	         compatability/visual_c_pthread.h \
-      	     compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency 
+             compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
+             compatability/visual_c_pthread.h \
+             compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency 
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/visual_c_pthread.c
@@ -271,25 +271,25 @@ mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genoca
                  $(MACSCTDIR)/postinstall
 	@echo "Verifying that all files are committed to the repo"
 	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
-	@echo "Building Mac package"
+	@echo "Building Mac package $@"
 	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
-	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg
+	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
 
 mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
                                     $(MACRSSDIR)/welcome.html $(MACRSSDIR)/README.html $(MACRSSDIR)/LICENSE.non-commercial.txt
-	@echo "Building Mac product"
-	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@
+	@echo "Building Mac product $@"
+	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
 
 mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 	@echo "Signing Mac product"
-	# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
-	@productsign --sign $(signer_name) --timepstamp $< $@
+	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
+	@productsign --sign $(signer_name) --timestamp $< $@
 	@echo "Verifying the signature"
 	@pkgutil --check-signature $@
-	#@echo 'Committing Mac installer and pushing to repo'
-	#@(git stage $@ ; exit 0)
-	#@(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
-	#@git push
+	@#@echo 'Committing Mac installer and pushing to repo'
+	@#@(git stage $@ ; exit 0)
+	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
+	@#git push
 
 macos: mac/genozip-installer.pkg
 	@echo "Notarizing Mac app"
