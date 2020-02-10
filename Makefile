@@ -314,7 +314,7 @@ git-pull:
 
 macos: git-pull mac/genozip_installer.pkg
 	@echo "Notarizing Mac app"
-	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
+	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file mac/genozip_installer.pkg >& .notarize.out ; exit 0
 	@grep ERROR\: .notarize.out
 	@(( `grep ERROR\: .notarize.out | wc -l` == 0 )) || (echo "See .notarize.out" ; exit 1)
 
