@@ -30,4 +30,7 @@ mac/scripts/*
 !test-file.vcf
 *stackdump
 .altool_app_specifc_password
+mac/.mac_username
+mac/.mac_ip_address
+mac/.remote_mac_timestamp
 

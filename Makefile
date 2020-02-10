@@ -148,7 +148,7 @@ ifeq ($(OS),Windows_NT)
 # the genozip file header SectionHeaderVCFHeader.genozip_version
 increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
-	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )) ; then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
+	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@bash increment-version.sh
 	@git commit -m "increment version" version.h 
 
@@ -158,7 +158,7 @@ decrement-version:
 	@echo "Change version.h to the last version that still has a tag"
 
 .archive.tar.gz : increment-version $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
-	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
+	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@echo Creating github tag genozip-$(version) and archive
 	@git push 
 	@git tag genozip-$(version)
@@ -178,7 +178,7 @@ CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
-	@if (( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l` > 0 )); then echo "Making $@: ERROR: Please 'git commit' everything first" ; exit 1 ; fi
+	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@echo " "
 #	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
 #	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)  # needed for initial stage-recipes step, keeping here for future reference
@@ -221,8 +221,7 @@ windows/LICENSE.for-installer.txt: text_license.h
 windows/genozip-installer.exe: windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
                                LICENSE.commercial.txt LICENSE.non-commercial.txt windows/LICENSE.for-installer.txt \
 							   windows/readme.txt test-file.vcf
-	@echo Verifying that all files are committed to the repo
-	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@echo 'Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
@@ -234,6 +233,16 @@ windows/genozip-installer.exe: windows/genozip.exe windows/genounzip.exe windows
 	@(git stage windows/genozip.ifp $@ ; exit 0)
 	@(git commit -m windows_files_for_version_$(version) windows/genozip.ifp $@ ; exit 0)
 	@git push
+
+mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
+	@echo "Logging in to remote mac"
+	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || \
+	 (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
+	@read -r -p 'IP Address: 192.168.43.' ip ; echo 192.168.43.$$ip > mac/.mac_ip_address # assuming both are on the same android hotspot
+	@[ -f mac/.mac_username ] || ( echo Error: file mac/.mac_username missing && exit 1 )
+	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; git pull ; make macos"
+	@rm -f mac/.mac_ip_address
+	@touch $@
 
 endif # Windows
 
@@ -272,8 +281,7 @@ signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Develop
 
 mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
                  $(MACSCTDIR)/postinstall
-	@echo "Verifying that all files are committed to the repo"
-	@(exit `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l`)
+	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@echo "Building Mac package $@"
 	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
 	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
@@ -286,12 +294,12 @@ mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
 mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 	@echo "Unlocking the keychain"
 	@# note: keychain requires unlocking if logged in remotely (through SSH)
-	@(echo "Your mac login password (press enter TWICE after): "; security -v unlock-keychain -p `cat - |head -n1` `security list-keychains|grep login|cut -d\" -f2`) 
+	@read -p "Your mac login password: " pw ; security -v unlock-keychain -p $$pw `security list-keychains|grep login|cut -d\" -f2`
 	@echo "Signing Mac product $@"
 	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
-	productsign --sign "$(signer_name)" $< $@
+	@productsign --sign "$(signer_name)" $< $@ > /dev/null
 	@echo "Verifying the signature"
-	@pkgutil --check-signature $@
+	@(( `pkgutil --check-signature $@ | grep "signed by a developer certificate issued by Apple (Development)" | wc -l ` > 0 )) || (echo Error: signature verification failed ; exit 1)
 	@#@echo 'Committing Mac installer and pushing to repo'
 	@#@(git stage $@ ; exit 0)
 	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
@@ -313,5 +321,5 @@ clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEPS) $(DEBUG_OBJS) genozip-debug$(EXE) 
 
-.PHONY: clean clean-debug clean-all
+.PHONY: clean clean-debug clean-all macos
 
