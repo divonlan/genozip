@@ -29,3 +29,5 @@ mac/scripts/*
 *.vcf
 !test-file.vcf
 *stackdump
+.altool_app_specifc_password
+

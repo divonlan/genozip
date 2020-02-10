@@ -265,7 +265,7 @@ $(MACLIBDIR)/%: %
 pkg_identifier  := genozip_$(version)
 app_specific_pw := $(shell cat .altool_app_specifc_password)
 apple_id        := $(shell /usr/libexec/PlistBuddy -c "print :Accounts:0:AccountID" ~/Library/Preferences/MobileMeAccounts.plist)
-signer_name     := $(shell security find-identity -v|grep "3rd Party Mac Developer Installer"|cut -d ":" -f2|cut -d\( -f1|sed -e 's/^ //'|sed -e 's/ $//'))
+signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Developer Installer" | cut -d ":" -f2 | cut -d"(" -f1 | sed -e 's/^ //g' | sed -e 's/ $$//g'} # curly brackets bc of (
 
 mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
                  $(MACSCTDIR)/postinstall
