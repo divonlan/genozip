@@ -148,7 +148,7 @@ ifeq ($(OS),Windows_NT)
 # the genozip file header SectionHeaderVCFHeader.genozip_version
 increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
-	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
+	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` = 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@bash increment-version.sh
 	@git commit -m "increment version" version.h 
 
@@ -309,7 +309,9 @@ mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 
 macos: mac/genozip_installer.pkg
 	@echo "Notarizing Mac app"
-	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< --verbose | grep -i error
+	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
+	@grep ERROR\: .notarize.out
+	@(( `grep ERROR\: .notarize.out | wc -l` == 0 )) || (echo "See .notarize.out" ; exit 1)
 
 endif # Darwin
 
