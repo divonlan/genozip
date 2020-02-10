@@ -273,7 +273,7 @@ $(MACRSSDIR)/LICENSE.non-commercial.txt: LICENSE.non-commercial.txt
 $(MACLIBDIR)/%: %
 	@cp -f $< $@
 
-pkg_identifier  := genozip_$(version)
+pkg_identifier  := genozip-$(version)
 
 app_specific_pw := $(shell cat .altool_app_specifc_password)
 
