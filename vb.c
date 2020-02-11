@@ -87,6 +87,9 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->z_section_headers);
     buf_free(&vb->ht_columns_data);
     buf_free(&vb->spiced_pw);
+    buf_free(&vb->subfields_start_buf);        
+    buf_free(&vb->subfields_len_buf);
+    buf_free(&vb->num_subfields_buf);
 
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) 
         if (vb->mtf_ctx[i].subfield.num)

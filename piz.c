@@ -339,7 +339,7 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
         ht_columns_data[ht_i] = &vb->haplotype_sections_data[sb_i].data[sb_ht_i];
     }
 
-    // provide 7 extra zero-columns for the convenience of the permuting loop (suppoting 32bit and 64bit assignments)
+    // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 32bit and 64bit assignments)
     static char *column_of_zeros = NULL; // this static is allocated once and never changed, so no thread safety issues here
     if (!column_of_zeros) column_of_zeros = (char *)calloc (VARIANTS_PER_BLOCK, 1);
 
@@ -517,9 +517,14 @@ void piz_reconstruct_line_components (VariantBlock *vb)
 
     const char *variant_data_next_line = vb->variant_data_section_data.data;
     unsigned variant_data_length_remaining = vb->variant_data_section_data.len;
-    const char *subfields_start[VARIANTS_PER_BLOCK]; // pointer within the FORMAT field
-    unsigned subfields_len[VARIANTS_PER_BLOCK];      // length of the FORMAT field, excluding GT, including the separator
-    int num_subfields[VARIANTS_PER_BLOCK];           // number of subfields excluding GT
+    
+    buf_alloc (vb, &vb->subfields_start_buf, VARIANTS_PER_BLOCK * sizeof (char *),   1, "subfields_start_buf", 0);
+    buf_alloc (vb, &vb->subfields_len_buf,   VARIANTS_PER_BLOCK * sizeof (unsigned), 1, "subfields_len_buf", 0);
+    buf_alloc (vb, &vb->num_subfields_buf,   VARIANTS_PER_BLOCK * sizeof (int),      1, "num_subfields_buf", 0);
+    
+    const char **subfields_start = (const char **) vb->subfields_start_buf.data; // pointer within the FORMAT field
+    unsigned *subfields_len      = (unsigned *)    vb->subfields_len_buf.data;   // length of the FORMAT field, excluding GT, including the separator
+    int *num_subfields           = (int *)         vb->num_subfields_buf.data;   // number of subfields excluding GT
         
     // initialize genotype stuff
     if (vb->has_genotype_data) {

@@ -133,6 +133,10 @@ typedef struct variant_block_ {
 
     Buffer next_gt_in_sample;         // used for reconstructing genotype data by piz
 
+    Buffer subfields_start_buf;       // these 3 are used by piz_reconstruct_line_components
+    Buffer subfields_len_buf;
+    Buffer num_subfields_buf;
+
     // subfields stuff 
     unsigned num_subfields;
     MtfContext mtf_ctx[MAX_SUBFIELDS];
