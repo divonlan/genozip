@@ -45,6 +45,7 @@ typedef struct {
     File *vcf_file;
     File *z_file;
     bool test_mode;
+    bool is_last_file;
 
     // progress indicator stuff
     TimeSpecType start_time; 
@@ -58,7 +59,7 @@ typedef struct {
 static TimeSpecType profiler_timer; // wallclock
 
 Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
-                            bool test_mode, bool show_progress, const char *filename)
+                            bool test_mode, bool is_last_file, bool show_progress, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
@@ -73,6 +74,7 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
     dd->vcf_file      = vcf_file;
     dd->z_file        = z_file;
     dd->test_mode     = test_mode;
+    dd->is_last_file  = is_last_file;
     dd->show_progress = show_progress && !flag_quiet && !!isatty(2);
     dd->filename      = filename;
     dd->last_len      = 2;
@@ -126,8 +128,8 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     vb_release_vb (&dd->pseudo_vb);
 
     // free memory allocations that assume subsequent files will have the same number of samples.
-    // this is only true if the files are being concatenated
-    if (!flag_concat_mode) vb_cleanup_memory(dd->pool_id); 
+    // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
+    if (!flag_concat_mode && !dd->is_last_file) vb_cleanup_memory (dd->pool_id); 
 
     if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing variant_block_i count between subsequent concatented files
 

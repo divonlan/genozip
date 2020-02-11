@@ -93,9 +93,9 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
     double *avg_line_len_so_far = vb ? &file->avg_data_line_len : &file->avg_header_line_len;
     unsigned *lines_so_far      = vb ? &file->data_lines_so_far : &file->header_lines_so_far;
 
-    // allocate only if buffer not allocated already - otherwise try to make do with what we have first
+    // note: we start small with only 100, to support single-individual files with global_max_lines_per_vb=128K  
     unsigned buf_len = line->size ? buf_alloc (vb, line, line->size, 1, buf_name, line_i_in_file) // just make buffer allocated, without mallocing new memory
-                                  : buf_alloc (vb, line, MAX(1000, (unsigned)(*avg_line_len_so_far * 1.2)), 1, buf_name, line_i_in_file); // we reuse the same buffer for every line
+                                  : buf_alloc (vb, line, MAX(100, (unsigned)(*avg_line_len_so_far * 1.2)), 1, buf_name, line_i_in_file); // we reuse the same buffer for every line
     unsigned str_len = 0;
 
     do {

@@ -12,6 +12,7 @@
         "crypt.h": "c",
         "vb.h": "c",
         "endianness.h": "c",
-        "zfile.h": "c"
+        "zfile.h": "c",
+        "typeinfo": "c"
     },
 }

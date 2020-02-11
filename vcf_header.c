@@ -16,7 +16,9 @@
 #include "endianness.h"
 #include "file.h"
 
-unsigned global_num_samples = 0; // a global param - assigned once before any thread is crated, and never changes - so no thread safety issue
+unsigned global_num_samples      = 0; // a global param - assigned once before any thread is created, and never changes - so no thread safety issue
+unsigned global_max_lines_per_vb = 0; // for ZIP this is determined by as a function of the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
+
 static Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
 
 static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffer *vcf_header)
@@ -56,16 +58,23 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
             }
 
             //count samples
-            if (tab_count >= 9) {
-                global_num_samples = tab_count-8; // number of samples;
-                return true;
+            global_num_samples = (tab_count >= 9) ? tab_count-8 : 0; // note: a VCF file without samples would have tab_count==7 (8 fields) and is perfectly legal
+
+            // set global_max_lines_per_vb when compressing. we decompressing, it will be determined by the input file.
+            if (!global_max_lines_per_vb) {
+                // if we have fewer samples, we can afford (memory and speed wise) larger variant blocks
+                if      (global_num_samples >= 1024) global_max_lines_per_vb = 4   * 1024;
+                else if (global_num_samples >= 512)  global_max_lines_per_vb = 8   * 1024;
+                else if (global_num_samples >= 256)  global_max_lines_per_vb = 16  * 1024;
+                else if (global_num_samples >= 64)   global_max_lines_per_vb = 32  * 1024;
+                else if (global_num_samples >= 32)   global_max_lines_per_vb = 64  * 1024;
+                else                                 global_max_lines_per_vb = 128 * 1024;
             }
 
             ASSERT0 (tab_count != 8, "Error: invalid VCF file - field header line contains a FORMAT field but no samples");
 
-            ASSERT (tab_count == 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
+            ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 
-            global_num_samples = 0; // a VCF file without samples - that's perfectly fine
             return true; 
         }
     }
@@ -159,7 +168,7 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     // (it would have been read by previous component and stored for us)
     if (!buf_is_allocated (&vb->z_file->next_vcf_header)) {
         int ret = zfile_read_one_section (vb, &vb->z_file->next_vcf_header, "z_file->next_vcf_header", 
-                                        sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
+                                          sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
         if (ret == EOF) {
             buf_free (&vb->z_file->next_vcf_header);
             return false; // empty file (or in case of split mode - no more components) - not an error
@@ -173,7 +182,11 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
             "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x). Please upgrade genozip",
             vb->z_file->name ? vb->z_file->name : "(stdin)", header->genozip_version);
 
-    ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
+    if (header->genozip_version == 1) {
+        ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeaderV1)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeaderV1));
+    } else {  
+        ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
+    }
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
@@ -183,9 +196,27 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
 
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
 
+    if (header->genozip_version == 1)
+        global_max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
+
+    static uint32_t POW2[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 
+                              524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 
+                              536870912, 1073741824, 2147483648};
+
     if (first_vcf || !flag_concat_mode) {
         vb->z_file->num_lines_concat     = vb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
         vb->z_file->vcf_data_size_concat = vb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
+
+        if (header->genozip_version >= 2)
+            global_max_lines_per_vb = POW2[header->max_lines_per_vb_log2];
+    }
+    else {
+        if (header->genozip_version >= 2) {
+            // 2nd+ concatenated file is expected to have the same number of max_lines_per_vb
+            ASSERT (POW2[header->max_lines_per_vb_log2] == global_max_lines_per_vb, 
+                    "ERROR: invalidly, a 2nd+ concatenated file has max_lines_per_vb_log2=%u different than global_max_lines_per_vb=%u",
+                    header->max_lines_per_vb_log2, global_max_lines_per_vb)
+        }
     }
 
     *digest = flag_split ? header->md5_hash_single : header->md5_hash_concat;

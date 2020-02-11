@@ -218,6 +218,8 @@ long long buf_vb_memory_consumption (const VariantBlock *vb)
     // memory of the structure itself
     long long vb_memory = sizeof (*vb);
 
+    if (vb->data_lines) vb_memory += global_max_lines_per_vb * sizeof (DataLine);
+
     // memory allocated outside of Buffer (direct calloc)
     if (vb->haplotype_sections_data) vb_memory += vb->num_sample_blocks * sizeof (Buffer);
     if (vb->genotype_sections_data)  vb_memory += vb->num_sample_blocks * sizeof (Buffer);
@@ -237,15 +239,10 @@ long long buf_vb_memory_consumption (const VariantBlock *vb)
 
 static inline void buf_add_to_buffer_list (VariantBlock *vb, Buffer *buf)
 {
-#define INITIAL_MAX_MEM_NUM_BUFFERS (VARIANTS_PER_BLOCK*3) /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
+#define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
 
-    if (!buf_is_allocated (bl)) 
-        // malloc - this will call this function recursively - that's ok bc that point buffer_list is already allocated
-        buf_alloc (vb, bl, INITIAL_MAX_MEM_NUM_BUFFERS * sizeof(Buffer *), false, "buffer_list", vb ? vb->id : 0);
-    
-    else if (bl->len && bl->len == bl->size / sizeof (Buffer *)) 
-        buf_alloc (vb, bl, bl->size * 2, 1, "buffer_list realloc", vb ? vb->id : 0);
+    buf_alloc (vb, bl, MAX (INITIAL_MAX_MEM_NUM_BUFFERS, bl->len+1) * sizeof(Buffer *), 2, "buffer_list", vb->id);
 
     ((Buffer **)bl->data)[bl->len++] = buf;
 }
@@ -510,8 +507,8 @@ void buf_destroy (VariantBlock *vb, Buffer *buf)
             break;
         }
 
-    // sanity
-    ASSERT0 (i < vb->buffer_list.len, "Error: cannot find buffer in buffer_list");
+    // sanity (note: it is possible that a buffer is not in the list if it was never allocated)
+    ASSERT0 (!buf->memory || i < vb->buffer_list.len, "Error: cannot find buffer in buffer_list");
 }
 
 void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src, 

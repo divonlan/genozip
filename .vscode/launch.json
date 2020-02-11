@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/genozip-debug.exe",
-            "args": [ "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-f", "--show-time"],
+            //"args": [ "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-f", "--show-time"],
             //"args": [ "test-file3.vcf","-m", "-f"],
             //"args": [ "test-file3.vcf.genozip", "-d", "-f", "-q", "-o", "junk.vcf"],
             //"args": [ "test-file1.vcf",  "-o", "concat3.vcf.genozip", "-q", "-f", "-m", "-p", "abc"],
@@ -17,7 +17,7 @@
             //"args": [ "-d", "test-file.vcf.genozip", "test-file.vcf.genozip",  "-o", "junk.vcf", "-f"],
 
             //"args": [ "minimal.vcf", "minimal2.vcf", "-o", "mc.vcf.genozip", "-f", "-p", "abc", "-q"],
-            //"args": [ "-d", "ttt-pw.vcf.genozip", "-f", "-@", "1", "-p", "abc"],
+            "args": [ "-d", "data/1200Cattles_biallelic_SNPs_autosoms__5000lines.vcf.genozip", "-o", "testcattle.vcf", "-f"],
             
             // for benchmark files used in the paper
 

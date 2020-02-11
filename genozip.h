@@ -30,7 +30,6 @@
 // variants in the block (assuming the VCF is sorted by POS), resulting in our sorting by number of 1s more likely to result
 // in similar haplotypes grouped together - improving the compression.
 
-#define VARIANTS_PER_BLOCK 4096 // Max legal value 65535. tradeoff: larger is better compression, but in some cases might be slower retrieval speed
 #define SAMPLES_PER_BLOCK  1024 // tradeoff: larger is better compression, but in some cases might be slower retrieval speed
 #define MAX_PLOIDY         100  // this can be any number up to 65535, it is set to 100 to avoid memory allocation
                                 // explosion in case of an error in the VCF file
@@ -65,7 +64,7 @@ typedef struct file_ *FileP;
 typedef const struct file_ *ConstFileP;
 
 // global parameters - set before any thread is created, and never change
-extern unsigned    global_num_samples;
+extern unsigned    global_num_samples, global_max_lines_per_vb;
 extern const char *global_cmd;            // set once in main()
 
 // flags set by user's command line options

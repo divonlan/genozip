@@ -26,9 +26,12 @@ static void zip_read_variant_block (File *vcf_file,
 {
     unsigned first_line= *line_i;
 
+    if (!vb->data_lines) 
+        vb->data_lines = calloc (global_max_lines_per_vb, sizeof (DataLine));
+    
     unsigned vb_line_i;
     vb->vb_data_size = 0; // size of variant block as it appears in the source file
-    for (vb_line_i=0; vb_line_i < VARIANTS_PER_BLOCK; vb_line_i++) 
+    for (vb_line_i=0; vb_line_i < global_max_lines_per_vb; vb_line_i++) 
     {
         DataLine *dl = &vb->data_lines[vb_line_i];
 
@@ -191,7 +194,7 @@ static void zip_generate_phase_sections (VariantBlock *vb)
     
         // allocate memory for phase data for each sample block - one character per sample
         buf_alloc (vb, &vb->phase_sections_data[sb_i], vb->num_lines * num_samples_in_sb, 
-                   0, "phase_sections_data[sb_i]", vb->first_line);
+                   0, "phase_sections_data", vb->first_line);
 
         // build sample block genetype data
         char *next = vb->phase_sections_data[sb_i].data;
@@ -465,7 +468,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, test_mode, !flag_show_alleles, vcf_basename);
+    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, test_mode, is_last_file, !flag_show_alleles, vcf_basename);
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 

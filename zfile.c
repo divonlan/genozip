@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <time.h>
+#include <math.h>
 #include <bzlib.h>
 #include "genozip.h"
 #include "profiler.h"
@@ -70,7 +71,7 @@ static int zfile_compress_do (VariantBlock *vb, Buffer *z_data, const char *data
     strm.opaque  = vb; // just passed to malloc/free
 
     int ret = BZ2_bzCompressInit (&strm, BZLIB_BLOCKSIZE100K, 0, 30);
-    ASSERT (ret == BZ_OK, "Error: BZ2_bzCompressInit failed, ret=%d", ret);
+    ASSERT (ret == BZ_OK, "Error: BZ2_bzCompressInit failed: %s", BZ2_errstr(ret));
 
     strm.next_in   = (char*)data;
     strm.next_out  = &z_data->data[z_data->len + compressed_offset];
@@ -78,7 +79,7 @@ static int zfile_compress_do (VariantBlock *vb, Buffer *z_data, const char *data
     strm.avail_out = *data_compressed_len;
 
     ret = BZ2_bzCompress (&strm, BZ_FINISH);
-    ASSERT ((ok_is_ok && ret == BZ_FINISH_OK) || ret == BZ_STREAM_END, "Error: BZ2_bzCompress failed, ret=%d", ret);
+    ASSERT ((ok_is_ok && ret == BZ_FINISH_OK) || ret == BZ_STREAM_END, "Error: BZ2_bzCompress failed: %s", BZ2_errstr(ret));
 
     BZ2_bzCompressEnd (&strm);
 
@@ -207,7 +208,7 @@ void zfile_uncompress_section (VariantBlock *vb,
     strm.avail_out = uncompressed_data->len;
 
     ret = BZ2_bzDecompress (&strm);
-    ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed, ret=%d, avail_in=%d, avail_out=%d", ret, strm.avail_in, strm.avail_out);
+    ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
 
     BZ2_bzDecompressEnd (&strm);
 
@@ -252,6 +253,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_
     vcf_header.num_samples             = BGEN32 (global_num_samples);
     vcf_header.vcf_data_size           = BGEN64 (vb->vcf_file->vcf_data_size_single) /* 0 if gzipped - will be updated later. */; 
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
+    vcf_header.max_lines_per_vb_log2   = log2 (global_max_lines_per_vb);
     file_basename (vb->vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
     zfile_get_metadata (vcf_header.created);
 
@@ -439,7 +441,7 @@ int zfile_read_one_section (VariantBlock *vb,
     unsigned header_offset = data->len;
     buf_alloc (vb, data, header_offset + header_size, 2, buf_name, 1);
 
-    SectionHeader *header = zfile_read_from_disk (vb, data, header_size, false);
+    SectionHeader *header = zfile_read_from_disk (vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
     ASSERT0 (header || allow_eof, "Failed to read header");
     
     if (!header) return EOF; 
@@ -530,6 +532,22 @@ int zfile_read_one_section (VariantBlock *vb,
             "Error: Unexpected section type: expecting %u, found %u", expected_sec_type, header->section_type);
 
     unsigned expected_header_size = new_vcf_component ? new_header_size : header_size;
+
+    unsigned data_remaining_to_read;
+    // backward compatability with GENOZIP_FILE_FORMAT_VERSION==1
+    if (header->section_type == SEC_VCF_HEADER && ((SectionHeaderVCFHeaderV1*)header)->genozip_version == 1) {
+        expected_header_size = crypt_padded_len (sizeof (SectionHeaderVCFHeaderV1));
+        // this is an old header - we read too much - so we need to read a bit less of the data
+        unsigned header_size_delta = crypt_padded_len (sizeof (SectionHeaderVCFHeader)) - crypt_padded_len (sizeof (SectionHeaderVCFHeaderV1));
+
+        // note: the difference between the header sizes is 1 byte, and the vcf header text is expected to be more, but we check to be safe
+        ASSERT (data_len >= header_size_delta, "Error: VCF Header text is too short. data_len=%u", data_len);
+
+        data_remaining_to_read = data_len - header_size_delta;
+    }
+    else
+        data_remaining_to_read = data_len;
+
     ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VARIANT_DATA, // for variant data, we also have the permutation index
             "Error: invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
 
@@ -539,7 +557,7 @@ int zfile_read_one_section (VariantBlock *vb,
 
     // in case we're expecting SEC_VARIANT_DATA - read the rest of the header: 
     // if we found SEC_VARIANT_DATA, we need to read haplotype index, and if we found a SEC_VCF_HEADER of a concatenated
-    // file componented - we need to read the read of the header as it is biffer than Variant Data header that was read
+    // file componented - we need to read the read of the header as it is bigger than Variant Data header that was read
     if (expected_sec_type == SEC_VARIANT_DATA && !new_vcf_component) {
 
         int bytes_left_over = compressed_offset - header_size;
@@ -562,8 +580,10 @@ int zfile_read_one_section (VariantBlock *vb,
     }
 
     // read section data
-    ASSERT (zfile_read_from_disk (vb, data, data_len, false), 
-            "Error: failed to read section data, section_type=%u", header->section_type);
+    if (data_remaining_to_read) {
+        ASSERT (zfile_read_from_disk (vb, data, data_remaining_to_read, false), 
+                "Error: failed to read section data, section_type=%u", header->section_type);
+    }
 
     // deal with a VCF header that was encountered while expecting a SEC_VARIANT_DATA (i.e. 2nd+ component of a concatenated file)
     if (new_vcf_component) {
@@ -576,7 +596,6 @@ int zfile_read_one_section (VariantBlock *vb,
             return EOF; // end of VCF component in flag_split mode
         }
         else {
-printf ("recursive!\n");
             // since we're not in split mode, so we can skip this vcf header section - just return the next section instead
             return zfile_read_one_section (vb, data, buf_name, header_size, expected_sec_type, allow_eof);
         }

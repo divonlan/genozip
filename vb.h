@@ -56,7 +56,7 @@ typedef struct variant_block_ {
     bool is_processed;         // thread completed processing this VB - it is ready for outputting
     bool in_use;               // this vb is in use
         
-    DataLine data_lines[VARIANTS_PER_BLOCK];
+    DataLine *data_lines;      // if allocated, this array is of length global_max_lines_per_vb. for ZIP this is determined by the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
     uint32_t num_lines;        // number of lines in this variant block
     uint32_t first_line;       // line number in VCF file (counting from 1), of this variant block
     uint32_t variant_block_i;  // number of variant block within VCF file
@@ -136,6 +136,8 @@ typedef struct variant_block_ {
     Buffer subfields_start_buf;       // these 3 are used by piz_reconstruct_line_components
     Buffer subfields_len_buf;
     Buffer num_subfields_buf;
+
+    Buffer column_of_zeros;           // used by piz_get_ht_columns_data
 
     // subfields stuff 
     unsigned num_subfields;

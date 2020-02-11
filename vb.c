@@ -29,20 +29,25 @@ void vb_release_vb (VariantBlock **vb_p)
     VariantBlock *vb = *vb_p;
     *vb_p = NULL;
 
-    for (unsigned i=0; i < VARIANTS_PER_BLOCK; i++) {
-        DataLine *dl = &vb->data_lines[i];
-         
-        dl->line_i = dl->num_subfields = dl->genotype_data.len = 0;
-        dl->phase_type = PHASE_UNKNOWN;
-        dl->has_haplotype_data = dl->has_genotype_data = 0;
+    if (vb->data_lines) {
+        for (unsigned i=0; i < global_max_lines_per_vb; i++) {
+            DataLine *dl = &vb->data_lines[i];
+            
+            dl->line_i = dl->num_subfields = dl->genotype_data.len = 0;
+            dl->phase_type = PHASE_UNKNOWN;
+            dl->has_haplotype_data = dl->has_genotype_data = 0;
 
-        memset (dl->sf_i, 0, MAX_SUBFIELDS * sizeof(dl->sf_i[0]));
+            memset (dl->sf_i, 0, MAX_SUBFIELDS * sizeof(dl->sf_i[0]));
 
-        buf_free(&dl->line);
-        buf_free(&dl->variant_data);
-        buf_free(&dl->genotype_data);
-        buf_free(&dl->haplotype_data);
-        buf_free(&dl->phase_data);
+            buf_free(&dl->line);
+            buf_free(&dl->variant_data);
+            buf_free(&dl->genotype_data);
+            buf_free(&dl->haplotype_data);
+            buf_free(&dl->phase_data);
+        }
+
+        // note: vb->data_line is not freed but rather used by subsequent vbs
+        // all VBs for a specific file (including concatenated files) have the same number of data_lines which is global_max_lines_per_vb
     }
 
     for (unsigned i=0; i < vb->num_sample_blocks; i++) {
@@ -107,6 +112,8 @@ void vb_release_vb (VariantBlock **vb_p)
     
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change
     // between VBs of a file or concatenated files.
+
+    // vb->column_of_zeros : we don't free this as its a constant array of zeros, of size global_max_lines_per_vb
 
 }
 
@@ -181,7 +188,8 @@ static void vb_free_buffer_array (VariantBlock *vb, Buffer **buf_array, unsigned
     *buf_array = NULL;
 }
 
-void vb_cleanup_memory(PoolId pool_id)
+// free memory allocations that assume subsequent files will have the same number of samples.
+void vb_cleanup_memory (PoolId pool_id)
 {
     // see if there's a VB avaiable for recycling
     for (unsigned vb_i=0; vb_i < pools[pool_id]->num_vbs; vb_i++) {
@@ -190,7 +198,26 @@ void vb_cleanup_memory(PoolId pool_id)
         vb_free_buffer_array (vb, &vb->genotype_sections_data, vb->num_sample_blocks);
         vb_free_buffer_array (vb, &vb->haplotype_sections_data, vb->num_sample_blocks);
         vb_free_buffer_array (vb, &vb->phase_sections_data, vb->num_sample_blocks);
-     
+
+        if (vb->data_lines) {
+            for (unsigned i=0; i < global_max_lines_per_vb; i++) {
+                DataLine *dl = &vb->data_lines[i];
+                
+                buf_destroy(vb, &dl->line);
+                buf_destroy(vb, &dl->variant_data);
+                buf_destroy(vb, &dl->genotype_data);
+                buf_destroy(vb, &dl->haplotype_data);
+                buf_destroy(vb, &dl->phase_data);
+            }
+            free (vb->data_lines);
+            vb->data_lines = NULL;
+        }
+
         vb->num_sample_blocks = 0;
+        buf_free (&vb->column_of_zeros); // a constant array of 0 of length global_max_lines_per_vb - free only when global_max_lines_per_vb changes
     }
+
+    // note: this function is never called in test mode because it is always is_last_file. this is lucky, bc both sides use these globals
+    global_max_lines_per_vb = 0;
+    global_num_samples = 0;
 }

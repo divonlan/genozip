@@ -334,17 +334,20 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
         unsigned permuted_ht_i = permutatation_index[ht_i];
         unsigned sb_i    = permuted_ht_i / max_ht_per_block; // get haplotype sample block per this ht is
         unsigned row     = permuted_ht_i % max_ht_per_block; // get row transposed haplotype sample block. column=line_i
-        unsigned sb_ht_i = row * vb->num_lines;     // index within haplotype block 
+        unsigned sb_ht_i = row * vb->num_lines;              // index within haplotype block 
 
         ht_columns_data[ht_i] = &vb->haplotype_sections_data[sb_i].data[sb_ht_i];
     }
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 32bit and 64bit assignments)
-    static char *column_of_zeros = NULL; // this static is allocated once and never changed, so no thread safety issues here
-    if (!column_of_zeros) column_of_zeros = (char *)calloc (VARIANTS_PER_BLOCK, 1);
+    if (!buf_is_allocated (&vb->column_of_zeros)) {
+        // a constant array of zero, preserved between VBs and concatenated files - as global_max_lines_per_vb is not changed
+        buf_alloc (vb, &vb->column_of_zeros, global_max_lines_per_vb, 1, "column_of_zeros", 0);
+        memset (vb->column_of_zeros.data, 0, global_max_lines_per_vb);
+    } 
 
     for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 7; ht_i++)
-        ht_columns_data[ht_i] = column_of_zeros;
+        ht_columns_data[ht_i] = vb->column_of_zeros.data;
 
     return ht_columns_data;
 }
@@ -498,6 +501,9 @@ void piz_reconstruct_line_components (VariantBlock *vb)
 {
     START_TIMER;
 
+    if (!vb->data_lines) 
+        vb->data_lines = calloc (global_max_lines_per_vb, sizeof (DataLine));
+
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED) 
         buf_alloc (vb, &vb->line_phase_data, global_num_samples, 1, "line_phase_data", 0);
@@ -518,9 +524,9 @@ void piz_reconstruct_line_components (VariantBlock *vb)
     const char *variant_data_next_line = vb->variant_data_section_data.data;
     unsigned variant_data_length_remaining = vb->variant_data_section_data.len;
     
-    buf_alloc (vb, &vb->subfields_start_buf, VARIANTS_PER_BLOCK * sizeof (char *),   1, "subfields_start_buf", 0);
-    buf_alloc (vb, &vb->subfields_len_buf,   VARIANTS_PER_BLOCK * sizeof (unsigned), 1, "subfields_len_buf", 0);
-    buf_alloc (vb, &vb->num_subfields_buf,   VARIANTS_PER_BLOCK * sizeof (int),      1, "num_subfields_buf", 0);
+    buf_alloc (vb, &vb->subfields_start_buf, vb->num_lines * sizeof (char *),   1, "subfields_start_buf", 0);
+    buf_alloc (vb, &vb->subfields_len_buf,   vb->num_lines * sizeof (unsigned), 1, "subfields_len_buf", 0);
+    buf_alloc (vb, &vb->num_subfields_buf,   vb->num_lines * sizeof (int),      1, "num_subfields_buf", 0);
     
     const char **subfields_start = (const char **) vb->subfields_start_buf.data; // pointer within the FORMAT field
     unsigned *subfields_len      = (unsigned *)    vb->subfields_len_buf.data;   // length of the FORMAT field, excluding GT, including the separator
@@ -597,7 +603,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->max_pos                 = BGEN64 (vardata_header->max_pos);
     vb->vb_data_size            = BGEN32 (vardata_header->vb_data_size);
     
-    ASSERT (global_num_samples == BGEN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, vardata_header->num_samples);
+    ASSERT (global_num_samples == BGEN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, BGEN32 (vardata_header->num_samples));
 
     // we allocate memory for the Buffer arrays only once the first time this VariantBlock
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
@@ -682,13 +688,13 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 }
 
 // returns true is successfully outputted a vcf file
-bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads)
+bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads, bool is_last_file)
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, 
+        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, is_last_file,
                                       !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
                                       z_basename);
 

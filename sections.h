@@ -56,7 +56,23 @@ typedef struct {
 
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
+
+    // Added in genozip GENOZIP_FILE_FORMAT_VERSION=2
+    uint8_t max_lines_per_vb_log2;  // log2 of the upper bound on how many variants (data lines) a VB can have in this file
 } SectionHeaderVCFHeader; 
+
+// GENOZIP_FILE_FORMAT_VERSION==1 historical version - we support uncomrpessing old version files
+typedef struct {
+    SectionHeader h;
+    uint8_t  genozip_version;
+    uint32_t num_samples;    // number of samples in the original VCF file
+    uint64_t vcf_data_size;  // number of bytes in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
+    uint64_t num_lines;      // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
+    Md5Hash md5_hash_concat; // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
+    Md5Hash md5_hash_single; // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
+    char vcf_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated.
+    char created[FILE_METADATA_LEN];    
+} SectionHeaderVCFHeaderV1; 
 
 // The variant data section appears for each variant block
 

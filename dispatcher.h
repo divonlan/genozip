@@ -11,7 +11,7 @@
 
 typedef void *Dispatcher;
 extern Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previous_vb_i, FileP vcf_file, FileP z_file,
-                                   bool test_mode, bool show_progress, const char *filename);
+                                   bool test_mode, bool is_last_file, bool show_progress, const char *filename);
 extern void dispatcher_pause (Dispatcher dispatcher);
 extern void dispatcher_resume (Dispatcher dispatcher, FileP vcf_file);
 extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i);

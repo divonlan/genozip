@@ -297,7 +297,8 @@ static void main_genounzip (const char *z_filename,
                             char *vcf_filename, 
                             int pipe_from_zip_thread, 
                             int pipe_to_test_thread,
-                            unsigned max_threads)
+                            unsigned max_threads,
+                            bool is_last_file)
 {
     static File *vcf_file = NULL; 
     File *z_file;
@@ -352,7 +353,7 @@ static void main_genounzip (const char *z_filename,
     
     bool piz_successful;
     do {
-        piz_successful = piz_dispatcher (basename, z_file, vcf_file, pipe_from_zip_thread >= 0, max_threads);
+        piz_successful = piz_dispatcher (basename, z_file, vcf_file, pipe_from_zip_thread >= 0, max_threads, is_last_file);
     } while (flag_split && piz_successful); // do only once in non-split mode, but possibly multiple times in split mode
 
     if (!flag_concat_mode && !flag_stdout && !flag_split) 
@@ -393,7 +394,7 @@ void *main_test_uncompress_thread_entry (void *p_)
 {
     TestToUncompressData *t2u = (TestToUncompressData*)p_;
 
-    main_genounzip (NULL, NULL, t2u->pipe_from_zip_thread, t2u->pipe_to_test_thread, t2u->max_threads);
+    main_genounzip (NULL, NULL, t2u->pipe_from_zip_thread, t2u->pipe_to_test_thread, t2u->max_threads, true);
 
     return NULL;
 }
@@ -417,14 +418,14 @@ static void main_test (const char *vcf_filename)
     // open 2 threads - one for compression and for decompression - and the main thread and compares to the original
     // they are connected by two pipes compress thread | decompress thread | main thread
 
-    // thread allocation: 1 thread for this control thread, and the remaining divided between compress (60%+) and uncompress (up to 40%)
+    // thread allocation: 1 thread for this control thread, and the remaining divided between compress  and uncompress
 
     pthread_t test_compress_thread, test_uncompress_thread;
     
     TestToUncompressData t2u;
     t2u.pipe_from_zip_thread      = pipefd_zip_to_unzip[0];
     t2u.pipe_to_test_thread       = pipefd_unzip_to_main[1];
-    t2u.max_threads               = (global_max_threads-1) * 0.4;
+    t2u.max_threads               = (global_max_threads-1) / 2;
 
     TestToCompressData t2c;
     t2c.vcf_filename              = vcf_filename;
@@ -811,7 +812,7 @@ int main (int argc, char **argv)
 
         switch (command) {
             case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, !count, optind==argc); break;
-            case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads); break;
+            case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads, optind==argc); break;
             case TEST       : main_test  (next_input_file); break; // returns if successful, displays error and exits if not
             case LIST       : main_list  (next_input_file, false, NULL); break;
             

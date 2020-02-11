@@ -90,6 +90,7 @@ extern const char *file_basename (const char *filename, bool remove_exe, const c
 
 // a hacky addition to bzip2
 extern unsigned long long BZ2_bzoffset (void* b);
+extern const char *BZ2_errstr (int err);
 
 // Windows compatibility stuff
 #ifdef _WIN32
