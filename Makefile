@@ -246,6 +246,8 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
+distribution: conda/.conda-timestamp windows/genozip-installer.exe mac/.remote_mac_timestamp
+	
 endif # Windows
 
 ifeq ($(uname),Darwin)
@@ -317,8 +319,6 @@ mac/.from_remote_timestamp: mac/genozip_installer.pkg
 
 endif # Darwin
 
-distribution: conda/.conda-timestamp windows/genozip-installer.exe mac/genozip-installer.pkg
-	
 clean:
 	@echo Cleaning up
 	@rm -f $(DEPS) $(OBJS) genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE) 
