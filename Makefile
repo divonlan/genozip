@@ -294,9 +294,9 @@ mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
 	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
 
 mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
-	@echo "Unlocking the keychain"
+	@bash -c "echo -n Unlocking the keychain. Password:"
 	@# note: keychain requires unlocking if logged in remotely (through SSH)
-	@read -p "Your mac login password: " pw ; security -v unlock-keychain -p $$pw `security list-keychains|grep login|cut -d\" -f2`
+	@read pw ; security -v unlock-keychain -p $$pw `security list-keychains|grep login|cut -d\" -f2`
 	@echo "Signing Mac product $@"
 	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
 	@productsign --sign "$(signer_name)" $< $@ > /dev/null
@@ -310,8 +310,9 @@ mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
 mac/.from_remote_timestamp: mac/genozip_installer.pkg
 	@echo "Notarizing Mac app"
 	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
-	@grep ERROR\: .notarize.out
+	@grep ERROR\: .notarize.out ; exit 0
 	@(( `grep ERROR\: .notarize.out | wc -l` == 0 )) || (echo "See .notarize.out" ; exit 1)
+	@(( `grep "No errors uploading" .notarize.out | wc -l` == 0 )) || (grep "RequestUUID" .notarize.out ; exit 0)
 	@touch $@
 
 endif # Darwin
