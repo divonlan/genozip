@@ -169,8 +169,9 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     // handle the GENOZIP header of the VCF header section
     SectionHeaderVCFHeader *header = (SectionHeaderVCFHeader *)vb->z_file->next_vcf_header.data;
 
-    ASSERT (header->genozip_version == GENOZIP_FILE_FORMAT_VERSION, "Error: file version %u is newer than the latest version supported %u. Please upgrade.",
-            header->genozip_version, GENOZIP_FILE_FORMAT_VERSION);
+    ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
+            "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x). Please upgrade genozip",
+            vb->z_file->name ? vb->z_file->name : "(stdin)", header->genozip_version);
 
     ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
 
