@@ -417,19 +417,19 @@ static void main_test (const char *vcf_filename)
     // open 2 threads - one for compression and for decompression - and the main thread and compares to the original
     // they are connected by two pipes compress thread | decompress thread | main thread
 
-    // thread allocation: 1 thread for this control thread, and the remaining divided between compress and uncompress
+    // thread allocation: 1 thread for this control thread, and the remaining divided between compress (60%+) and uncompress (up to 40%)
 
     pthread_t test_compress_thread, test_uncompress_thread;
     
-    TestToCompressData t2c;
-    t2c.vcf_filename              = vcf_filename;
-    t2c.pipe_to_uncompress_thread = pipefd_zip_to_unzip[1];
-    t2c.max_threads               = (global_max_threads-1) / 2; 
-
     TestToUncompressData t2u;
     t2u.pipe_from_zip_thread      = pipefd_zip_to_unzip[0];
     t2u.pipe_to_test_thread       = pipefd_unzip_to_main[1];
-    t2u.max_threads               = (global_max_threads-1) / 2;
+    t2u.max_threads               = (global_max_threads-1) * 0.4;
+
+    TestToCompressData t2c;
+    t2c.vcf_filename              = vcf_filename;
+    t2c.pipe_to_uncompress_thread = pipefd_zip_to_unzip[1];
+    t2c.max_threads               = global_max_threads-1 - t2u.max_threads; 
 
     unsigned err = pthread_create(&test_compress_thread, NULL, main_test_compress_thread_entry, &t2c);
     ASSERT (!err, "Error: failed to create test compress thread, err=%u", err);
