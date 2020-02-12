@@ -33,8 +33,11 @@ static const char *help_genozip[] = {
     "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
     "   --show-content    Show the information content of VCF files and the compression ratios of each component",
     "   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
-    "   --show-time       Show what functions are consuming the most time (useful mostly for developers of genozip)",
-    "   --show-memory     Show what buffers are consuming the most memory (useful mostly for developers of genozip)",
+    "",
+    "Options useful mostly for developers of genozip:"
+    "   --show-time       Show what functions are consuming the most time",
+    "   --show-memory     Show what buffers are consuming the most memory",
+    "   --show-sections   Shows the section types of the output genozip file and the compression ratios of each component",
     "",
     "One or more file names may be given, or if omitted, standard input is used instead",
     "",

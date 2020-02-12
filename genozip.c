@@ -47,7 +47,7 @@ const char *global_cmd = NULL;
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 
 // the flags - some are static, some are globals 
-static int flag_stdout=0, flag_replace=0, flag_show_content=0;
+static int flag_stdout=0, flag_replace=0, flag_show_content=0, flag_show_sections=0;
 int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
 
 static int main_print (const char **text, unsigned num_lines,
@@ -144,7 +144,7 @@ static unsigned main_get_num_cores()
 #endif
 }
 
-static void main_display_section_stats (const File *vcf_file, const File *z_file)
+static void main_display_section_stats (const File *vcf_file, const File *z_file, bool full)
 {
     char vsize[30], zsize[30];
     uint64_t total_vcf=0, total_z=0;
@@ -163,37 +163,44 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
     fprintf (stderr, "                               VCF     %%       GENOZIP     %%  Ratio\n");
     const char *format = "%22s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
 
-#ifdef DEBUG
-    // the order in which we want them displayed
-    const SectionType secs[] = {SEC_VCF_HEADER, SEC_VARIANT_DATA, 
-                                SEC_HAPLOTYPE_DATA, SEC_PHASE_DATA, SEC_STATS_HT_SEPERATOR, 
-                                SEC_GENOTYPE_DATA, SEC_DICTIONARY};
-
-    const char *categories[] = {"VCF header", "Columns 1-9", 
-                                "Haplotype data", "Phasing char", "HT separator char", 
-                                "Other subfields", "Other subfields: dicts"};
-
+    const char **categories;
     uint64_t vbytes[NUM_SEC_TYPES], zbytes[NUM_SEC_TYPES];
-    for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
-        vbytes[sec_i] = vcf_file->section_bytes[secs[sec_i]];
-        zbytes[sec_i] = z_file->section_bytes[secs[sec_i]];
+    int len;
+
+    if (full) {
+        // the order in which we want them displayed
+        const SectionType secs[NUM_SEC_TYPES] = {
+            SEC_VCF_HEADER, SEC_VARIANT_DATA, SEC_HAPLOTYPE_DATA, SEC_PHASE_DATA, SEC_STATS_HT_SEPERATOR, 
+            SEC_GENOTYPE_DATA, SEC_DICTIONARY
+        };
+
+        static const char *full_categories[NUM_SEC_TYPES] = {
+            "VCF header", "Columns 1-9", "Haplotype data", "Phasing char", "HT separator char", 
+            "Other subfields", "Other subfields: dicts"
+        };
+        categories = full_categories;
+        len = NUM_SEC_TYPES;
+
+        for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
+            vbytes[sec_i] = vcf_file->section_bytes[secs[sec_i]];
+            zbytes[sec_i] = z_file->section_bytes[secs[sec_i]];
+        }
     }
+    else { // show a summary only
+        static const char *summary_categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9"};
+        categories = summary_categories;
+        len = 3;
 
-#else // show a summary only
-    const char *categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9"};
+        vbytes[0] = vcf_file->section_bytes[SEC_HAPLOTYPE_DATA];
+        vbytes[1] = vcf_file->section_bytes[SEC_PHASE_DATA] + vcf_file->section_bytes[SEC_GENOTYPE_DATA] + vcf_file->section_bytes[SEC_STATS_HT_SEPERATOR];
+        vbytes[2] = vcf_file->section_bytes[SEC_VCF_HEADER] + vcf_file->section_bytes[SEC_VARIANT_DATA];
+
+        zbytes[0] = z_file->section_bytes[SEC_HAPLOTYPE_DATA];
+        zbytes[1] = z_file->section_bytes[SEC_PHASE_DATA] + z_file->section_bytes[SEC_GENOTYPE_DATA] + z_file->section_bytes[SEC_DICTIONARY];
+        zbytes[2] = z_file->section_bytes[SEC_VCF_HEADER] + z_file->section_bytes[SEC_VARIANT_DATA];
+    }
     
-    uint64_t vbytes[] = {vcf_file->section_bytes[SEC_HAPLOTYPE_DATA],
-                         vcf_file->section_bytes[SEC_PHASE_DATA] + vcf_file->section_bytes[SEC_GENOTYPE_DATA] + vcf_file->section_bytes[SEC_STATS_HT_SEPERATOR],
-                         vcf_file->section_bytes[SEC_VCF_HEADER] + vcf_file->section_bytes[SEC_VARIANT_DATA]
-                        };
-
-    uint64_t zbytes[] = {z_file->section_bytes[SEC_HAPLOTYPE_DATA],
-                         z_file->section_bytes[SEC_PHASE_DATA] + z_file->section_bytes[SEC_GENOTYPE_DATA] + z_file->section_bytes[SEC_DICTIONARY],
-                         z_file->section_bytes[SEC_VCF_HEADER] + z_file->section_bytes[SEC_VARIANT_DATA]
-                        };
-#endif
-
-    for (unsigned i=0; i < sizeof(vbytes)/sizeof(vbytes[0]); i++) {
+    for (unsigned i=0; i < len; i++) {
         fprintf (stderr, format, categories[i], 
                  buf_human_readable_size(vbytes[i], vsize), 100.0 * (double)vbytes[i] / (double)vcf_file->vcf_data_size_single,
                  buf_human_readable_size(zbytes[i], zsize), 100.0 * (double)zbytes[i] / (double)z_file->disk_size,
@@ -279,7 +286,8 @@ static void main_genozip (const char *vcf_filename,
     const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
     zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads, is_last_file);
 
-    if (flag_show_content) main_display_section_stats (vcf_file, z_file);
+    if (flag_show_sections) main_display_section_stats (vcf_file, z_file, true);
+    if (flag_show_content)  main_display_section_stats (vcf_file, z_file, false);
 
     bool remove_vcf_file = z_file && flag_replace && vcf_filename;
 
@@ -644,34 +652,35 @@ int main (int argc, char **argv)
     // process command line options
     while (1) {
 
-        #define _c  {"stdout",     no_argument,       &flag_stdout,  1      }
-        #define _d  {"decompress", no_argument,       &command, UNCOMPRESS  }
-        #define _f  {"force",      no_argument,       &flag_force,   1      }
-        #define _h  {"help",       no_argument,       &command, HELP        }
-        #define _l  {"list",       required_argument, &command, LIST        }
-        #define _L1 {"license",    no_argument,       &command, LICENSE     } // US spelling
-        #define _L2 {"licence",    no_argument,       &command, LICENSE     } // British spelling
-        #define _q  {"quiet",      no_argument,       &flag_quiet, 1        }
-        #define _DL {"replace",    no_argument,       &flag_replace, 1      }
-        #define _t  {"test",       no_argument,       &command, TEST        }
-        #define _V  {"version",    no_argument,       &command, VERSION     }
-        #define _z  {"compress",   no_argument,       &command, COMPRESS    }
-        #define _m  {"md5",        no_argument,       &flag_md5, 1          }
-        #define _th {"threads",    required_argument, 0, '@'                }
-        #define _O  {"split",      no_argument,       &flag_split, 1        }
-        #define _o  {"output",     required_argument, 0, 'o'                }
-        #define _p  {"password",   required_argument, 0, 'p'                }
-        #define _sc {"show-content",no_argument,      &flag_show_content, 1 } 
-        #define _sa {"show-alleles",no_argument,      &flag_show_alleles, 1 }
-        #define _st {"show-time"   ,no_argument,      &flag_show_time   , 1 } 
-        #define _sm {"show-memory" ,no_argument,      &flag_show_memory , 1 } 
-        #define _00 {0, 0, 0, 0                                             }
+        #define _c  {"stdout",        no_argument,       &flag_stdout,  1      }
+        #define _d  {"decompress",    no_argument,       &command, UNCOMPRESS  }
+        #define _f  {"force",         no_argument,       &flag_force,   1      }
+        #define _h  {"help",          no_argument,       &command, HELP        }
+        #define _l  {"list",          required_argument, &command, LIST        }
+        #define _L1 {"license",       no_argument,       &command, LICENSE     } // US spelling
+        #define _L2 {"licence",       no_argument,       &command, LICENSE     } // British spelling
+        #define _q  {"quiet",         no_argument,       &flag_quiet, 1        }
+        #define _DL {"replace",       no_argument,       &flag_replace, 1      }
+        #define _t  {"test",          no_argument,       &command, TEST        }
+        #define _V  {"version",       no_argument,       &command, VERSION     }
+        #define _z  {"compress",      no_argument,       &command, COMPRESS    }
+        #define _m  {"md5",           no_argument,       &flag_md5, 1          }
+        #define _th {"threads",       required_argument, 0, '@'                }
+        #define _O  {"split",         no_argument,       &flag_split, 1        }
+        #define _o  {"output",        required_argument, 0, 'o'                }
+        #define _p  {"password",      required_argument, 0, 'p'                }
+        #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
+        #define _ss {"show-sections", no_argument,       &flag_show_sections, 1} 
+        #define _sa {"show-alleles",  no_argument,       &flag_show_alleles, 1 }
+        #define _st {"show-time",     no_argument,       &flag_show_time   , 1 } 
+        #define _sm {"show-memory",   no_argument,       &flag_show_memory , 1 } 
+        #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _sa, _st, _sm, _00 };
-        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _st, _sm, _00 };
-        static Option genols_lo[]    = {             _h,     _L1, _L2,              _V,     _m,              _p,                     _00 };
-        static Option genocat_lo[]   = {             _h,     _L1, _L2,              _V,         _th,         _p,                     _00 };
+        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sa, _st, _sm, _00 };
+        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,                _st, _sm, _00 };
+        static Option genols_lo[]    = {             _h,     _L1, _L2,              _V,     _m,              _p,                          _00 };
+        static Option genocat_lo[]   = {             _h,     _L1, _L2,              _V,         _th,         _p,                          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
@@ -752,6 +761,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_split  || !out_filename,      "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
     ASSERT (!flag_stdout || !flag_replace,      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
     ASSERT (!flag_stdout || !flag_show_content, "%s: option %s is incompatable with --show-content", global_cmd, OT("stdout", "c"));
+    ASSERT (!flag_stdout || !flag_show_sections,"%s: option %s is incompatable with --show-sections", global_cmd, OT("stdout", "c"));
     ASSERT (!flag_stdout || !flag_show_alleles, "%s: option %s is incompatable with --show-alleles", global_cmd, OT("stdout", "c"));
     ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("stdout", "c"));
     ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("force", "f"));
@@ -763,6 +773,7 @@ int main (int argc, char **argv)
     ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring %s option", global_cmd, OT("threads", "@"));
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("output", "o"));
     ASSERTW (!flag_show_content || command == COMPRESS || command == TEST      , "%s: ignoring --show-content, it only works with --compress or --test", global_cmd);
+    ASSERTW (!flag_show_sections|| command == COMPRESS || command == TEST      , "%s: ignoring --show-sections, it only works with --compress or --test", global_cmd);
     ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with --compress or --test", global_cmd);
     
     if (command != COMPRESS && command != LIST) flag_md5=false;
@@ -808,7 +819,8 @@ int main (int argc, char **argv)
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
         
-        ASSERT0 (!count || !flag_show_content, "Error: --show-content can only work on one file at time");
+        ASSERT0 (!count || !flag_show_sections, "Error: --show-content can only work on one file at time");
+        ASSERT0 (!count || !flag_show_content,  "Error: --show-sections can only work on one file at time");
 
         switch (command) {
             case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, !count, optind==argc); break;
