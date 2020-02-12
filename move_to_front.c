@@ -367,7 +367,9 @@ unsigned mtf_merge_in_vb_ctx (VariantBlock *vb)
     return num_dictionary_sections;
 }
 
-unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, DictIdType dict_id)
+unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, 
+                                   unsigned *num_subfields, // used only if dict_id is a subfield
+                                   DictIdType dict_id)
 {
     // check if we have this dict_id already
     unsigned did_i=0 ; for (; did_i < *num_dict_ids; did_i++) 
@@ -386,6 +388,8 @@ unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, 
         // might be reading this data at the same time as the piz dispatcher thread adding more
         // dictionaries
         (*num_dict_ids)++; 
+
+        if (num_subfields) (*num_subfields)++;
     }
 
     return did_i;
@@ -393,7 +397,7 @@ unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, 
 
 // this is called by the piz dispatcher thread after reading a dictionary section 
 void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
-{
+{    
     START_TIMER;
 
     // thread safety note: this function is called only from the piz dispatcher thread,
@@ -408,7 +412,6 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
     // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
     uint32_t num_snips = BGEN32 (header->num_snips);
-    DictIdType dict_id = header->dict_id;
 
     zfile_uncompress_section (vb, section_data, &fragment, SEC_DICTIONARY);
 
@@ -416,9 +419,12 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
     if (!memcmp (header->dict_id.id, "GL\0\0\0\0\0\0", DICT_ID_LEN))
         gl_deoptimize_dictionary (fragment.data, fragment.len);
 
+    if (flag_show_dict) 
+        fprintf (stderr, "%*.*s (vb_i=%u):\t%.*s\n", -DICT_ID_LEN, DICT_ID_LEN, header->dict_id.id, vb->variant_block_i, fragment.len, fragment.data);
+
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
-    unsigned did_i = mtf_get_did_i_by_dict_id (vb->z_file->mtf_ctx, &vb->z_file->num_dict_ids, dict_id);
+    unsigned did_i = mtf_get_did_i_by_dict_id (vb->z_file->mtf_ctx, &vb->z_file->num_dict_ids, NULL, header->dict_id);
     
     Buffer *dict = &vb->z_file->mtf_ctx[did_i].dict;
 
@@ -472,6 +478,14 @@ void mtf_overlay_dictionaries_to_vb (VariantBlock *vb)
             vb_ctx->dict_id = zf_ctx->dict_id;
             buf_overlay (&vb_ctx->dict, &zf_ctx->dict, 0,0,0,0);    
             buf_overlay (&vb_ctx->word_list, &zf_ctx->word_list, 0,0,0,0);
+
+            // count dictionaries of genotype data subfields
+            if (dict_id_is_gt_subfield (vb_ctx->dict_id)) {
+                vb->num_subfields++;
+                ASSERT (vb->num_subfields <= MAX_SUBFIELDS, 
+                        "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 
+                        file_printname (vb->z_file), MAX_SUBFIELDS, vb->variant_block_i);
+            }
         }
     }
 }

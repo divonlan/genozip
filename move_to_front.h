@@ -52,7 +52,7 @@ extern void mtf_get_snip_by_word_index (VariantBlockP vb, MtfContext *ctx, const
 extern void mtf_clone_ctx (VariantBlockP vb);
 extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional out */);
 extern unsigned mtf_merge_in_vb_ctx (VariantBlockP vb);
-extern unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, DictIdType dict_id);
+extern unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, unsigned *num_subfields, DictIdType dict_id);
 extern void mtf_integrate_dictionary_fragment (VariantBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VariantBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlockP vb);

@@ -54,7 +54,7 @@ static void seg_pos_field (VariantBlock *vb, const char *str,
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
 DictIdType seg_get_subfield (const char **str, unsigned len, // remaining length of line
-                                 unsigned line_i) // line in original vcf file
+                             unsigned line_i) // line in original vcf file
 {
     DictIdType subfield = EMPTY_DICT_ID;
 
@@ -70,6 +70,7 @@ DictIdType seg_get_subfield (const char **str, unsigned len, // remaining length
         }
     }
     // we reached the end of the line without encountering a : or \t OR this is piz and we reached \n
+    // Divon 12/2/2020: is this ASSERT a bug? isn't it supposed to be ABORT?
     ASSERT ((*str)[-1]=='\n', "Error: invalid FORMAT field in line %u", line_i); 
     return subfield; // never reach here, just to avoid a compiler warning
 }
@@ -84,7 +85,7 @@ static void seg_format_field(VariantBlock *vb, DataLine *dl,
 
     ASSERT(str[0] && str[1] && str[2], "Error: missing samples in line %u, expected by VCF file sample name header line", line_i);
 
-    if (str[0] == 'G' && str[1] == 'T') // GT field in FORMAT columns - must always appear first per VCF spec (if at appears)
+    if (str[0] == 'G' && str[1] == 'T' && (str[2] == ':' || str[2] == '\t' || str[2] == '\n')) // GT field in FORMAT columns - must always appear first per VCF spec (if at appears)
         dl->has_haplotype_data = true; 
 
     if (str[2] == ':' || !dl->has_haplotype_data) {
@@ -95,7 +96,10 @@ static void seg_format_field(VariantBlock *vb, DataLine *dl,
         do {
             DictIdType subfield = seg_get_subfield (&str, len, line_i);
 
-            unsigned sf_i = mtf_get_did_i_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, subfield);
+            ASSERT (dict_id_is_gt_subfield (subfield), 
+                    "Error: string %.*s in the FORMAT field of line=%u is not a legal subfield", DICT_ID_LEN, subfield.id, line_i);
+
+            unsigned sf_i = mtf_get_did_i_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_subfields, subfield);
 
             dl->sf_i[dl->num_subfields++] = sf_i;
         } 

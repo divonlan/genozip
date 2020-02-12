@@ -48,7 +48,8 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 
 // the flags - some are static, some are globals 
 static int flag_stdout=0, flag_replace=0, flag_show_content=0, flag_show_sections=0;
-int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, flag_show_alleles=0, flag_show_time=0, flag_show_memory=0;
+int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, 
+    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0;
 
 static int main_print (const char **text, unsigned num_lines,
                        const char *wrapped_line_prefix, 
@@ -86,9 +87,11 @@ static int main_print (const char **text, unsigned num_lines,
 
 static int main_print_help (ExeType exe_type, bool explicit)
 {
-    static const char **texts[] = {help_genozip, help_genounzip, help_genols, help_genocat}; // same order as ExeType
-    static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat)};
+    static const char **texts[] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
+    static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
     
+    if (exe_type == EXE_GENOZIP && flag_force) exe_type = (ExeType)4;
+
     main_print (texts[exe_type], sizes[exe_type] / sizeof(char*), "                     ",  "\n", 0);
     main_print (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
 
@@ -671,16 +674,18 @@ int main (int argc, char **argv)
         #define _p  {"password",      required_argument, 0, 'p'                }
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
         #define _ss {"show-sections", no_argument,       &flag_show_sections, 1} 
+        #define _sd {"show-dict",     no_argument,       &flag_show_dict, 1    } 
+        #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes, 1} 
         #define _sa {"show-alleles",  no_argument,       &flag_show_alleles, 1 }
         #define _st {"show-time",     no_argument,       &flag_show_time   , 1 } 
         #define _sm {"show-memory",   no_argument,       &flag_show_memory , 1 } 
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]   = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sa, _st, _sm, _00 };
-        static Option genounzip_lo[] = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,                _st, _sm, _00 };
-        static Option genols_lo[]    = {             _h,     _L1, _L2,              _V,     _m,              _p,                          _00 };
-        static Option genocat_lo[]   = {             _h,     _L1, _L2,              _V,         _th,         _p,                          _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _sa, _st, _sm, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,           _st, _sm, _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                    _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                    _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
@@ -764,7 +769,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_stdout || !flag_show_sections,"%s: option %s is incompatable with --show-sections", global_cmd, OT("stdout", "c"));
     ASSERT (!flag_stdout || !flag_show_alleles, "%s: option %s is incompatable with --show-alleles", global_cmd, OT("stdout", "c"));
     ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("stdout", "c"));
-    ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("force", "f"));
+    ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS || command == HELP, "%s: ignoring %s option", global_cmd, OT("force", "f"));
     ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("replace", "^"));
     ASSERTW (!flag_split        || command == LIST     || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("split", "O"));
     ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring %s option", global_cmd, OT("quiet", "q"));
@@ -779,6 +784,7 @@ int main (int argc, char **argv)
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
     if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
+    if (flag_show_dict || flag_show_gt_nodes) flag_quiet=true; // don't show progress when showing data
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

@@ -137,6 +137,9 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
     // the gt data for all the variants for sample 1, then all of samples 2 etc.
     unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
     for (unsigned sample_i=0; sample_i < num_samples_in_sb; sample_i++) {
+
+        if (flag_show_gt_nodes) printf ("vb_i=%u sample_i=%u: ", vb->variant_block_i, sb_i * SAMPLES_PER_BLOCK + sample_i);
+
         for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
 
             DataLine *dl = &vb->data_lines[line_i];
@@ -154,6 +157,8 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
                     MtfNode *node = mtf_node (ctx, node_index, NULL);
                     Base250 index = node->word_index;
 
+                    if (flag_show_gt_nodes) printf ("L%u-%.*s:%u ", line_i, DICT_ID_LEN, ctx->dict_id.id, base250_decode (index.numerals));
+
                     if (index.num_numerals == 1) { // shortcut for most common case
                         *(dst_next++) = index.numerals[0];
                     }
@@ -169,10 +174,12 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
                     *(dst_next++) = BASE250_EMPTY_SF;
                 }
             }
-            
+
             vb->genotype_one_section_data.len += dst_next - dst_start;
             vb->add_bytes[SEC_GENOTYPE_DATA] += dst_next - dst_start - sizeof(uint32_t) * dl->num_subfields; 
         }
+
+        if (flag_show_gt_nodes) printf ("\n");
     }
 
     COPY_TIMER (vb->profile.zip_generate_genotype_sections)

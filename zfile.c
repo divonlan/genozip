@@ -358,6 +358,9 @@ void zfile_compress_dictionary_data (VariantBlock *vb, DictIdType dict_id,
     header.num_snips               = BGEN32 (num_words);
     header.dict_id                 = dict_id;
 
+    if (flag_show_dict) 
+        fprintf (stderr, "%*.*s (vb_i=%u):\t%.*s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id.id, vb->variant_block_i, num_chars, data);
+
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, data, SEC_DICTIONARY);
 }
 
@@ -402,7 +405,7 @@ static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len, 
             
             ASSERT (file->last_read == READ_BUFFER_SIZE, 
                     "Error: end-of-file while reading %s, read %u bytes, but wanted to read %u bytes", 
-                    vb->z_file->name ? vb->z_file->name : "(stdin)", memcpyied, len_save);
+                    file_printname (vb->z_file), memcpyied, len_save);
 
             file->last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)file->file);
             file->next_read = 0;
@@ -449,7 +452,7 @@ int zfile_read_one_section (VariantBlock *vb,
     // decrypt header
     if (is_encrypted) {
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
-                "Error: password provided, but file %s is not encrypted", vb->z_file->name ? vb->z_file->name : "(stdin)");
+                "Error: password provided, but file %s is not encrypted", file_printname (vb->z_file));
 
         crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
     }
@@ -472,7 +475,7 @@ int zfile_read_one_section (VariantBlock *vb,
     }
 
     if (!is_magical && is_encrypted && expected_sec_type == SEC_VCF_HEADER) {
-        ABORT ("Error: password is wrong for file %s", vb->z_file->name ? vb->z_file->name : "(stdin)"); // mostly likely its because of a wrong password
+        ABORT ("Error: password is wrong for file %s", file_printname (vb->z_file)); // mostly likely its because of a wrong password
     }
 
     // case: encryption failed because this is actually a SEC_VCF_HEADER of a new vcf component of a concatenated file
@@ -510,7 +513,7 @@ int zfile_read_one_section (VariantBlock *vb,
         }
     } 
 
-    ASSERT (is_magical, "Error: corrupt data (magic is wrong) when reading file %s", vb->vcf_file->name ? vb->vcf_file->name : "(stdin)");
+    ASSERT (is_magical, "Error: corrupt data (magic is wrong) when reading file %s", file_printname (vb->z_file));
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%u", expected_sec_type);
@@ -637,7 +640,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
         unsigned start_dictionary_sections = vb->z_data.len;
 
         // read all sections into memory
-        for (unsigned sf_i=0; sf_i < num_dictionary_sections; sf_i++) {
+        for (unsigned did_i=0; did_i < num_dictionary_sections; did_i++) {
 
             unsigned start_i = vb->z_data.len; // vb->z_data.len is updated next, by zfile_read_one_section()
             zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_DICTIONARY, false);    

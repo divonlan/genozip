@@ -24,4 +24,9 @@ typedef union {
 
 #pragma pack(pop)
 
+// 2 MSb of first byte determine dictionary type
+#define dict_id_is_gt_subfield(dict_id)   ((dict_id.id[0] >> 6) == 1)
+#define dict_id_is_vardata_field(dict_id) ((dict_id.id[0] >> 6) == 0)
+#define dict_id_is_info_subfield(dict_id) ((dict_id.id[0] >> 6) == 3)
+
 #endif

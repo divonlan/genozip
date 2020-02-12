@@ -70,7 +70,8 @@ extern unsigned    global_num_samples, global_max_lines_per_vb;
 extern const char *global_cmd;            // set once in main()
 
 // flags set by user's command line options
-extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_show_memory;
+extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
+           flag_show_memory, flag_show_dict, flag_show_gt_nodes;
 
 // macros
 #ifndef MIN

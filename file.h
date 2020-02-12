@@ -88,6 +88,8 @@ extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
 
+#define file_printname(file) (file->name ? file->name : "(stdin)")
+
 // a hacky addition to bzip2
 extern unsigned long long BZ2_bzoffset (void* b);
 extern const char *BZ2_errstr (int err);

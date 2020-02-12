@@ -73,7 +73,9 @@ static void piz_get_line_get_num_subfields (VariantBlock *vb, unsigned line_i, /
         (*line)++; // past the newline
         goto cleanup;
     }
-    if ((*line)[0] == 'G' && (*line)[1] == 'T') { // GT field in FORMAT columns - must always appear first per VCF spec (if at appears)
+    
+    // Check for GT field in FORMAT columns - must always appear first per VCF spec (if at appears)
+    if ((*line)[0] == 'G' && (*line)[1] == 'T' && ((*line)[2] == ':' || (*line)[2] == '\n')) { 
         *line += 3; // past the GT and : or \n
         if ((*line)[-1] == '\n') { // no subfields in this line
             *num_subfields = (unsigned)vb->has_genotype_data; // if we have genotype, then zip inserted BASE250_MISSING_SF 
@@ -83,6 +85,7 @@ static void piz_get_line_get_num_subfields (VariantBlock *vb, unsigned line_i, /
 
     *subfields_start = *line;
 
+    // count the number of subfields in the line
     for (*num_subfields = 1; *num_subfields <= MAX_SUBFIELDS; (*num_subfields)++) {
         seg_get_subfield (line, after-*line, line_i);
         if ((*line)[-1] == '\n') break;
@@ -525,8 +528,13 @@ void piz_reconstruct_line_components (VariantBlock *vb)
     unsigned variant_data_length_remaining = vb->variant_data_section_data.len;
     
     buf_alloc (vb, &vb->subfields_start_buf, vb->num_lines * sizeof (char *),   1, "subfields_start_buf", 0);
+    memset (vb->subfields_start_buf.data, 0, vb->subfields_start_buf.size);
+
     buf_alloc (vb, &vb->subfields_len_buf,   vb->num_lines * sizeof (unsigned), 1, "subfields_len_buf", 0);
+    memset (vb->subfields_len_buf.data, 0, vb->subfields_len_buf.size);
+
     buf_alloc (vb, &vb->num_subfields_buf,   vb->num_lines * sizeof (int),      1, "num_subfields_buf", 0);
+    memset (vb->num_subfields_buf.data, 0, vb->num_subfields_buf.size);
     
     const char **subfields_start = (const char **) vb->subfields_start_buf.data; // pointer within the FORMAT field
     unsigned *subfields_len      = (unsigned *)    vb->subfields_len_buf.data;   // length of the FORMAT field, excluding GT, including the separator
@@ -595,7 +603,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->num_sample_blocks       = BGEN32 (vardata_header->num_sample_blocks);
     vb->num_samples_per_block   = BGEN32 (vardata_header->num_samples_per_block);
     vb->ploidy                  = BGEN16 (vardata_header->ploidy);
-    vb->num_dict_ids           = BGEN16 (vardata_header->num_dict_ids);
+    vb->num_dict_ids            = BGEN16 (vardata_header->num_dict_ids);
     // num_dictionary_sections is read in zfile_read_one_vb()
     vb->max_gt_line_len         = BGEN32 (vardata_header->max_gt_line_len);
     memcpy(vb->chrom, vardata_header->chrom, MAX_CHROM_LEN);

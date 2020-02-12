@@ -18,7 +18,7 @@ static const char *help_genozip[] = {
     "   -d --decompress   Same as running genounzip. For more details, run: genounzip --help",
     "   -l --list         Same as running genols. For more details, run: genols --help",
     "   -t --test         Test genozip. Compress the .vcf file(s), uncompress, and then compare the result to the original .vcf - all in memory without writing to any file",
-    "   -h --help         Show this help page",
+    "   -h --help         Show this help page. Use with -f to see developer options.",
     "   -L --license      Show the license terms and conditions for this product",
     "   -V --version      Display version number",
     "",    
@@ -34,14 +34,18 @@ static const char *help_genozip[] = {
     "   --show-content    Show the information content of VCF files and the compression ratios of each component",
     "   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
     "",
-    "Options useful mostly for developers of genozip:"
-    "   --show-time       Show what functions are consuming the most time",
-    "   --show-memory     Show what buffers are consuming the most memory",
-    "   --show-sections   Shows the section types of the output genozip file and the compression ratios of each component",
-    "",
     "One or more file names may be given, or if omitted, standard input is used instead",
     "",
     "Genozip is available for free for non-commercial use. Commercial use requires a commercial license.",
+};
+
+static const char *help_genozip_developer[] = {
+    "Options useful mostly for developers of genozip:",
+    "   --show-time       Show what functions are consuming the most time",
+    "   --show-memory     Show what buffers are consuming the most memory",
+    "   --show-sections   Shows the section types of the output genozip file and the compression ratios of each component",
+    "   --show-dict       Show dictionary fragments written for each variant block (works for genounzip too)",
+    "   --show-gt-nodes   Show transposed GT matrix - each value is an index into its dictionary"
 };
 
 static const char *help_genounzip[] = {

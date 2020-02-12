@@ -64,6 +64,7 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->vcf_file = vb->z_file = NULL;
     vb->z_next_header_i = 0;
     vb->min_pos = vb->max_pos = vb->last_pos = vb->chrom[0] = vb->is_sorted_by_pos = 0;
+    vb->num_dict_ids = vb->num_subfields = 0;
 
     memset(vb->add_bytes, 0, sizeof(vb->add_bytes));
     memset(vb->vcf_section_bytes, 0, sizeof(vb->vcf_section_bytes));
