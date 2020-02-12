@@ -35,6 +35,8 @@
                                 // explosion in case of an error in the VCF file
 
 #define MAX_SUBFIELDS      32   // maximum number of subfield types (except for GT) that is supported in one GENOZIP file. This constant can be increased if needed.
+#define MAX_INFOS          32   // maximum number of INFO types that is supported in one GENOZIP file. This constant can be increased if needed.
+#define MAX_DICTS          (MAX_SUBFIELDS + MAX_INFOS + 9)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file
 
 #define MAX_CHROM_LEN      64   // maximum length of chromosome (contig) name
 

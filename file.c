@@ -128,7 +128,7 @@ void file_close (File **file_p)
         ASSERTW (!ret, "Warning: failed to close vcf file %s: %s", file->name ? file->name : "", strerror(errno));
     } 
 
-    for (unsigned i=0; i < file->num_subfields; i++) 
+    for (unsigned i=0; i < file->num_dict_ids; i++) 
         mtf_free_context (&file->mtf_ctx[i]);
 
     if (file->mutex_initialized) 

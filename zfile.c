@@ -304,7 +304,7 @@ void zfile_compress_variant_data (VariantBlock *vb)
     vardata_header->ploidy                  = BGEN16 (vb->ploidy);
     vardata_header->vb_data_size            = BGEN32 (vb->vb_data_size);
     vardata_header->max_gt_line_len         = BGEN32 (vb->max_gt_line_len);
-    vardata_header->num_subfields           = BGEN16 (vb->num_subfields);
+    vardata_header->num_dict_ids            = BGEN16 (vb->num_dict_ids);
     vardata_header->min_pos                 = BGEN64 (vb->min_pos);
     vardata_header->max_pos                 = BGEN64 (vb->max_pos);
     vardata_header->is_sorted_by_pos        = vb->is_sorted_by_pos;
@@ -343,7 +343,7 @@ void zfile_update_compressed_variant_data_header (VariantBlock *vb,
                   BGEN32 (vardata_header->h.variant_block_i), -1-BGEN16 (vardata_header->h.section_i)); // negative section_i for a header
 }
 
-void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield, 
+void zfile_compress_dictionary_data (VariantBlock *vb, DictIdType dict_id, 
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
     SectionHeaderDictionary header;
@@ -356,7 +356,7 @@ void zfile_compress_dictionary_data (VariantBlock *vb, SubfieldIdType subfield,
     header.h.variant_block_i       = BGEN32 (vb->variant_block_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.num_snips               = BGEN32 (num_words);
-    header.subfield                = subfield;
+    header.dict_id                 = dict_id;
 
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, data, SEC_DICTIONARY);
 }

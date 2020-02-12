@@ -157,7 +157,7 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
 #else
              "Individuals: %u   Variants: %"PRIu64"   Non-GT subfields: %u\n", 
 #endif
-             global_num_samples, z_file->num_lines_concat, z_file->num_subfields);
+             global_num_samples, z_file->num_lines_concat, z_file->num_dict_ids);
 
     fprintf (stderr, "Compression stats:\n");
     fprintf (stderr, "                               VCF     %%       GENOZIP     %%  Ratio\n");

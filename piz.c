@@ -114,18 +114,18 @@ static void piz_get_line_subfields (VariantBlock *vb, unsigned line_i, // line i
 
     const char *after = subfields_start + subfields_len;
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) {
-        SubfieldIdType subfield = seg_get_subfield (&subfields_start, after-subfields_start, line_i);
+        DictIdType subfield = seg_get_subfield (&subfields_start, after-subfields_start, line_i);
 
         // the dictionaries were already read, so all subfields are expected to have a ctx
-        unsigned sf_i=0 ; for (; sf_i < vb->z_file->num_subfields; sf_i++) 
-            if (subfield.num == vb->z_file->mtf_ctx[sf_i].subfield.num) {
+        unsigned did_i=0 ; for (; did_i < vb->z_file->num_dict_ids; did_i++) 
+            if (subfield.num == vb->z_file->mtf_ctx[did_i].dict_id.num) {
                 // entry i corresponds to subfield i in FORMAT (excluding GT), and contains the index in mtf_ctx of this subfield
-                line_subfields[i] = sf_i;
+                line_subfields[i] = did_i;
                 break;
             }
 #ifdef DEBUG
-        ASSERTW (sf_i < vb->z_file->num_subfields, 
-                 "Warning: subfield %.*s not found in dictionaries, line=%u. This can happen legitimately if the subfield is declared in FORMAT, but a value is never provided in any sample", SUBFIELD_ID_LEN, subfield.id, line_i);
+        ASSERTW (did_i < vb->z_file->num_dict_ids, 
+                 "Warning: subfield %.*s not found in dictionaries, line=%u. This can happen legitimately if the subfield is declared in FORMAT, but a value is never provided in any sample", DICT_ID_LEN, subfield.id, line_i);
 #endif
         if (subfields_start[-1] == '\t' || subfields_start[-1] == '\n') break;
     } 
@@ -595,7 +595,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->num_sample_blocks       = BGEN32 (vardata_header->num_sample_blocks);
     vb->num_samples_per_block   = BGEN32 (vardata_header->num_samples_per_block);
     vb->ploidy                  = BGEN16 (vardata_header->ploidy);
-    vb->num_subfields           = BGEN16 (vardata_header->num_subfields);
+    vb->num_dict_ids           = BGEN16 (vardata_header->num_dict_ids);
     // num_dictionary_sections is read in zfile_read_one_vb()
     vb->max_gt_line_len         = BGEN32 (vardata_header->max_gt_line_len);
     memcpy(vb->chrom, vardata_header->chrom, MAX_CHROM_LEN);

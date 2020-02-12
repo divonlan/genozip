@@ -9,7 +9,7 @@
 #include "genozip.h"
 #include "buffer.h"
 #include "base250.h"
-#include "subfield.h"
+#include "dict_id.h"
 
 // fake mtf index values that go into genotype_data after segregation if subfields are missing
 #define SEG_MAX_INDEX  0xfffffffdUL // the number just smaller than all the special values below
@@ -35,7 +35,7 @@ typedef struct {
 } SorterEnt;
 
 typedef struct {
-    SubfieldIdType subfield;   // which subfield is this MTF dealing with
+    DictIdType dict_id;        // which dict_id is this MTF dealing with
 
     Buffer ol_dict;            // tab-delimited list of all unique snips - overlayed all previous VB dictionaries
     Buffer ol_mtf;             // MTF nodes - overlayed all previous VB dictionaries. char/word indeces are into ol_dict.
@@ -52,7 +52,7 @@ extern void mtf_get_snip_by_word_index (VariantBlockP vb, MtfContext *ctx, const
 extern void mtf_clone_ctx (VariantBlockP vb);
 extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional out */);
 extern unsigned mtf_merge_in_vb_ctx (VariantBlockP vb);
-extern unsigned mtf_get_sf_i_by_subfield (MtfContext *mtf_ctx, unsigned *num_subfields, SubfieldIdType subfield);
+extern unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, DictIdType dict_id);
 extern void mtf_integrate_dictionary_fragment (VariantBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VariantBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlockP vb);

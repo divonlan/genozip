@@ -5,7 +5,7 @@
 
 /*
 zip:
-    1) during segregate - build mtf_context + dictionary for each subfield
+    1) during segregate - build mtf_context + dictionary for each dict_id
 
     2) during generate - convert snips in vcf to indexes into ctx->mtf
 
@@ -141,7 +141,7 @@ void mtf_get_snip_by_word_index (VariantBlock *vb, MtfContext *ctx, const uint8_
                                  char **snip, uint32_t *snip_len) // out
 {
     if (word_index_base250[0] == BASE250_MISSING_SF) 
-        *snip = NULL; // ignore this subfield - don't even output a separator
+        *snip = NULL; // ignore this dict_id - don't even output a separator
 
     else if (word_index_base250[0] == BASE250_EMPTY_SF) {
         *snip = ""; // pointer to static empty string
@@ -151,7 +151,7 @@ void mtf_get_snip_by_word_index (VariantBlock *vb, MtfContext *ctx, const uint8_
         uint32_t word_index = base250_decode (word_index_base250);
 
         ASSERT (word_index < ctx->word_list.len, "Error: word_index=%u is out of bounds - %.*s dictionary has only %u entries",
-                word_index, SUBFIELD_ID_LEN, ctx->subfield.id, ctx->word_list.len);
+                word_index, DICT_ID_LEN, ctx->dict_id.id, ctx->word_list.len);
 
         MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
 
@@ -161,7 +161,7 @@ void mtf_get_snip_by_word_index (VariantBlock *vb, MtfContext *ctx, const uint8_
 }
 
 // process a snip as it is segregated during zip. if its the first time its seen, it is added to the dictionary
-// also used for adding snips to z_file->mtf_ctx during mtf_merge_in_vb_ctx_one_subfield()
+// also used for adding snips to z_file->mtf_ctx during mtf_merge_in_vb_ctx_one_dict_id()
 int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len, bool overlayable,
                            MtfNode **node /* out */) 
 {
@@ -213,11 +213,11 @@ void mtf_clone_ctx (VariantBlock *vb)
 
     START_TIMER;
 
-    for (unsigned sf=0; sf < vb->z_file->num_subfields; sf++) {
-        MtfContext *vb_ctx = &vb->mtf_ctx[sf];
-        MtfContext *zf_ctx = &vb->z_file->mtf_ctx[sf];
+    for (unsigned did_i=0; did_i < vb->z_file->num_dict_ids; did_i++) {
+        MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
+        MtfContext *zf_ctx = &vb->z_file->mtf_ctx[did_i];
 
-        if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this subfield
+        if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
             // overlay the global dict and mtf - these will not change by this (or any other) VB
             buf_overlay (&vb_ctx->ol_dict, &zf_ctx->dict, 0,0,0,0);   
             buf_overlay (&vb_ctx->ol_mtf, &zf_ctx->mtf, 0,0,0,0);   
@@ -226,33 +226,33 @@ void mtf_clone_ctx (VariantBlock *vb)
             buf_copy (vb, &vb_ctx->hash, &zf_ctx->hash, sizeof(HashEnt), 0, zf_ctx->hash.len, 0, 0);
         }
 
-        vb_ctx->subfield = zf_ctx->subfield;
+        vb_ctx->dict_id = zf_ctx->dict_id;
     }
 
-    vb->num_subfields = vb->z_file->num_subfields;
+    vb->num_dict_ids = vb->z_file->num_dict_ids;
 
     COPY_TIMER (vb->profile.mtf_clone_ctx)
 
     pthread_mutex_unlock (&vb->z_file->mutex);
 }
 
-// find the z_file context that corresponds to subfield. It could be possibly a different sf_i
-// than in the vb - in case this subfield is new to this vb, but another vb already inserted
+// find the z_file context that corresponds to dict_id. It could be possibly a different did_i
+// than in the vb - in case this dict_id is new to this vb, but another vb already inserted
 // it to z_file
-static unsigned mtf_get_z_file_sf_i (VariantBlock *vb, SubfieldIdType subfield)
+static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id)
 {
-    for (unsigned sf_i=0; sf_i < vb->z_file->num_subfields; sf_i++)
-        if (subfield.num == vb->z_file->mtf_ctx[sf_i].subfield.num)
-            return sf_i;
+    for (unsigned did_i=0; did_i < vb->z_file->num_dict_ids; did_i++)
+        if (dict_id.num == vb->z_file->mtf_ctx[did_i].dict_id.num)
+            return did_i;
 
-    // z_file doesn't yet have this subfield - add it now
-    ASSERT (vb->z_file->num_subfields+1 < MAX_SUBFIELDS, 
-            "Error: z_file has more subfield types than MAX_SUBFIELDS=%u", MAX_SUBFIELDS);
+    // z_file doesn't yet have this dict_id - add it now
+    ASSERT (vb->z_file->num_dict_ids+1 < MAX_DICTS, 
+            "Error: z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
 
-    vb->z_file->mtf_ctx[vb->z_file->num_subfields].subfield = subfield;
-    vb->z_file->num_subfields++;
+    vb->z_file->mtf_ctx[vb->z_file->num_dict_ids].dict_id = dict_id;
+    vb->z_file->num_dict_ids++;
 
-    return vb->z_file->num_subfields-1;
+    return vb->z_file->num_dict_ids-1;
 }
 
 void mtf_initialize_mutex (File *z_file, unsigned next_variant_i_to_merge)
@@ -283,14 +283,14 @@ static void mtf_wait_for_my_turn(VariantBlock *vb)
 }
 
 // this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
-static bool mtf_merge_in_vb_ctx_one_subfield (VariantBlock *vb, unsigned sf)
+static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did)
 {
-    MtfContext *vb_ctx = &vb->mtf_ctx[sf];
+    MtfContext *vb_ctx = &vb->mtf_ctx[did];
 
-    unsigned z_sf_i = mtf_get_z_file_sf_i (vb, vb_ctx->subfield);
-    MtfContext *zf_ctx = &vb->z_file->mtf_ctx[z_sf_i];
+    unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id);
+    MtfContext *zf_ctx = &vb->z_file->mtf_ctx[z_did_i];
 
-    if (!buf_is_allocated (&vb_ctx->dict)) return false; // nothing yet for this subfield
+    if (!buf_is_allocated (&vb_ctx->dict)) return false; // nothing yet for this dict_id
 
     uint32_t start_dict_len = zf_ctx->dict.len;
     uint32_t start_mtf_len  = zf_ctx->mtf.len;
@@ -308,7 +308,7 @@ static bool mtf_merge_in_vb_ctx_one_subfield (VariantBlock *vb, unsigned sf)
 
         buf_move (vb, &zf_ctx->hash, &vb_ctx->hash); // vb_ctx no longer needs the hash table - zf_ctx can take it
 
-        zf_ctx->subfield = vb_ctx->subfield;
+        zf_ctx->dict_id = vb_ctx->dict_id;
     }
     else {
         // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
@@ -335,10 +335,10 @@ static bool mtf_merge_in_vb_ctx_one_subfield (VariantBlock *vb, unsigned sf)
     if (added_chars) {
 
         // special optimization for the GL dictionary
-        if (!memcmp (&zf_ctx->subfield.id, "GL\0\0\0\0\0\0", SUBFIELD_ID_LEN)) 
+        if (!memcmp (&zf_ctx->dict_id.id, "GL\0\0\0\0\0\0", DICT_ID_LEN)) 
             start_dict = gl_optimize_dictionary (vb, &zf_ctx->dict, &((MtfNode *)zf_ctx->mtf.data)[start_mtf_len], start_dict_len, added_words);
      
-        zfile_compress_dictionary_data (vb, zf_ctx->subfield, added_words, start_dict, added_chars);
+        zfile_compress_dictionary_data (vb, zf_ctx->dict_id, added_words, start_dict, added_chars);
 
         vb->add_bytes[SEC_DICTIONARY] += added_chars;
     }
@@ -355,8 +355,8 @@ unsigned mtf_merge_in_vb_ctx (VariantBlock *vb)
     START_TIMER; // note: careful not to count time spent waiting for the mutex
 
     unsigned num_dictionary_sections = 0;
-    for (unsigned sf=0; sf < vb->num_subfields; sf++) 
-        num_dictionary_sections += mtf_merge_in_vb_ctx_one_subfield (vb, sf);
+    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) 
+        num_dictionary_sections += mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
 
     vb->z_file->next_variant_i_to_merge++;
 
@@ -367,28 +367,28 @@ unsigned mtf_merge_in_vb_ctx (VariantBlock *vb)
     return num_dictionary_sections;
 }
 
-unsigned mtf_get_sf_i_by_subfield (MtfContext *mtf_ctx, unsigned *num_subfields, SubfieldIdType subfield)
+unsigned mtf_get_did_i_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, DictIdType dict_id)
 {
-    // check if we have this subfield already
-    unsigned sf_i=0 ; for (; sf_i < *num_subfields; sf_i++) 
-        if (subfield.num == mtf_ctx[sf_i].subfield.num) break;
+    // check if we have this dict_id already
+    unsigned did_i=0 ; for (; did_i < *num_dict_ids; did_i++) 
+        if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
 
-    // case: subfield encountered for this first time - initialize a mtf_ctx
-    if (sf_i == *num_subfields) {
+    // case: dict_id encountered for this first time - initialize a mtf_ctx
+    if (did_i == *num_dict_ids) {
 
-        ASSERT (*num_subfields+1 < MAX_SUBFIELDS, 
-                "Error: number of subfield types than MAX_SUBFIELDS=%u", MAX_SUBFIELDS);
+        ASSERT (*num_dict_ids+1 < MAX_DICTS, 
+                "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
 
 
-        mtf_ctx[*num_subfields].subfield = subfield;
+        mtf_ctx[*num_dict_ids].dict_id = dict_id;
 
         // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields
         // might be reading this data at the same time as the piz dispatcher thread adding more
         // dictionaries
-        (*num_subfields)++; 
+        (*num_dict_ids)++; 
     }
 
-    return sf_i;
+    return did_i;
 }
 
 // this is called by the piz dispatcher thread after reading a dictionary section 
@@ -408,34 +408,34 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
     // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
     uint32_t num_snips = BGEN32 (header->num_snips);
-    SubfieldIdType subfield = header->subfield;
+    DictIdType dict_id = header->dict_id;
 
     zfile_uncompress_section (vb, section_data, &fragment, SEC_DICTIONARY);
 
     // special treatment if this is GL - de-optimize
-    if (!memcmp (header->subfield.id, "GL\0\0\0\0\0\0", SUBFIELD_ID_LEN))
+    if (!memcmp (header->dict_id.id, "GL\0\0\0\0\0\0", DICT_ID_LEN))
         gl_deoptimize_dictionary (fragment.data, fragment.len);
 
-    // in piz, the same sf_i is used for z_file and vb contexts, meaning that in vbs there could be
+    // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
-    unsigned sf_i = mtf_get_sf_i_by_subfield (vb->z_file->mtf_ctx, &vb->z_file->num_subfields, subfield);
+    unsigned did_i = mtf_get_did_i_by_dict_id (vb->z_file->mtf_ctx, &vb->z_file->num_dict_ids, dict_id);
     
-    Buffer *dict = &vb->z_file->mtf_ctx[sf_i].dict;
+    Buffer *dict = &vb->z_file->mtf_ctx[did_i].dict;
 
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
     unsigned dict_old_len = dict->len;
-    buf_alloc (vb, dict, dict->len + fragment.len, 2, "mtf_ctx->dict", sf_i);
+    buf_alloc (vb, dict, dict->len + fragment.len, 2, "mtf_ctx->dict", did_i);
     buf_set_overlayable (dict);
 
     memcpy (&dict->data[dict->len], fragment.data, fragment.len);
     dict->len += fragment.len;
 
-    Buffer *word_list_buf = &vb->z_file->mtf_ctx[sf_i].word_list;
+    Buffer *word_list_buf = &vb->z_file->mtf_ctx[did_i].word_list;
 
     // extend word list memory - and calculate the new words. If there is no room - old memory is abandoned 
     // (so that VBs that are overlaying it continue to work uninterrupted) and a new memory is allocated
-    buf_alloc (vb, word_list_buf, (word_list_buf->len + num_snips) * sizeof (MtfWord), 2, "mtf_ctx->word_list", sf_i);
+    buf_alloc (vb, word_list_buf, (word_list_buf->len + num_snips) * sizeof (MtfWord), 2, "mtf_ctx->word_list", did_i);
     buf_set_overlayable (word_list_buf);
 
     char *start = fragment.data;
@@ -462,14 +462,14 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
 // while starting a larger dict/word_list on a fresh memory allocation.
 void mtf_overlay_dictionaries_to_vb (VariantBlock *vb)
 {
-    for (unsigned sf=0; sf < MAX_SUBFIELDS; sf++) {
-        MtfContext *zf_ctx = &vb->z_file->mtf_ctx[sf];
-        MtfContext *vb_ctx = &vb->mtf_ctx[sf];
+    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
+        MtfContext *zf_ctx = &vb->z_file->mtf_ctx[did_i];
+        MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
 
-        if (!zf_ctx->subfield.id[0]) break;
+        if (!zf_ctx->dict_id.id[0]) break;
 
         if (buf_is_allocated (&zf_ctx->dict) && buf_is_allocated (&zf_ctx->word_list)) { 
-            vb_ctx->subfield = zf_ctx->subfield;
+            vb_ctx->dict_id = zf_ctx->dict_id;
             buf_overlay (&vb_ctx->dict, &zf_ctx->dict, 0,0,0,0);    
             buf_overlay (&vb_ctx->word_list, &zf_ctx->word_list, 0,0,0,0);
         }
@@ -487,9 +487,9 @@ static int sorter_cmp(const void *a_, const void *b_)
 void mtf_sort_dictionaries_vb_1(VariantBlock *vb)
 {
     // thread safety note: no issues here, as this is run only by the compute thread of variant_block_i=1
-    for (unsigned sf=0; sf < vb->num_subfields; sf++) {
+    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
 
-        MtfContext *ctx = &vb->mtf_ctx[sf];
+        MtfContext *ctx = &vb->mtf_ctx[did_i];
 
         // sort in ascending order of mtf->count
         qsort (ctx->sorter.data, ctx->mtf.len, sizeof(SorterEnt), sorter_cmp);
@@ -498,7 +498,7 @@ void mtf_sort_dictionaries_vb_1(VariantBlock *vb)
         static Buffer old_dict = EMPTY_BUFFER;
         buf_move (vb, &old_dict, &ctx->dict);
 
-        buf_alloc (vb, &ctx->dict, old_dict.size, 1, "mtf_ctx->dict", sf);
+        buf_alloc (vb, &ctx->dict, old_dict.size, 1, "mtf_ctx->dict", did_i);
         ctx->dict.len = old_dict.len;
 
         char *next = ctx->dict.data;
@@ -526,6 +526,6 @@ void mtf_free_context (MtfContext *ctx)
     buf_free (&ctx->word_list);
     buf_free (&ctx->hash);
     buf_free (&ctx->sorter);
-    ctx->subfield.num = 0;
+    ctx->dict_id.num = 0;
 }
 

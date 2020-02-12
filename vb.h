@@ -139,9 +139,10 @@ typedef struct variant_block_ {
 
     Buffer column_of_zeros;           // used by piz_get_ht_columns_data
 
-    // subfields stuff 
-    unsigned num_subfields;
-    MtfContext mtf_ctx[MAX_SUBFIELDS];
+    // dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field
+    unsigned num_dict_ids;            // total number of dictionaries of all types
+    unsigned num_subfields;           // number of subfields in this VB. num_subfields <= num_dict_ids-9.
+    MtfContext mtf_ctx[MAX_DICTS];    
 
     // Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
     int add_bytes[NUM_SEC_TYPES];                

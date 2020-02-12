@@ -15,7 +15,7 @@
 #endif
 
 #include "md5.h"
-#include "subfield.h"
+#include "dict_id.h"
 
 // Section headers - big endian
 
@@ -102,8 +102,8 @@ typedef struct {
     uint32_t num_sample_blocks;
     uint32_t num_samples_per_block;
     uint16_t ploidy;
-    uint16_t num_subfields;            // number of subfields used in this VB. the actual fields are deduced from the FORMAT column on each line
-    uint16_t num_dictionary_sections;  // we have a dictionary for each subfield, in which new words were introduced in this VB that weren't already in the dictionary. so num_dictionary_sections <= num_subfields
+    uint16_t num_dict_ids;            // number of subfields used in this VB. the actual fields are deduced from the FORMAT column on each line
+    uint16_t num_dictionary_sections;  // we have a dictionary for each dict_id, in which new words were introduced in this VB that weren't already in the dictionary. so num_dictionary_sections <= num_dict_ids
     uint32_t max_gt_line_len;
 
     char chrom[MAX_CHROM_LEN];         // a null-terminated ID of the chromosome
@@ -118,7 +118,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint32_t num_snips;                // number of items in dictionary
-    SubfieldIdType subfield;           // \0-padded id
+    DictIdType dict_id;           // \0-padded id
 } SectionHeaderDictionary; 
 
 #pragma pack(pop)

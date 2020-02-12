@@ -37,7 +37,7 @@ void vb_release_vb (VariantBlock **vb_p)
             dl->phase_type = PHASE_UNKNOWN;
             dl->has_haplotype_data = dl->has_genotype_data = 0;
 
-            memset (dl->sf_i, 0, MAX_SUBFIELDS * sizeof(dl->sf_i[0]));
+            memset (dl->sf_i, 0, MAX_DICTS * sizeof(dl->sf_i[0]));
 
             buf_free(&dl->line);
             buf_free(&dl->variant_data);
@@ -96,8 +96,8 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->subfields_len_buf);
     buf_free(&vb->num_subfields_buf);
 
-    for (unsigned i=0; i < MAX_SUBFIELDS; i++) 
-        if (vb->mtf_ctx[i].subfield.num)
+    for (unsigned i=0; i < MAX_DICTS; i++) 
+        if (vb->mtf_ctx[i].dict_id.num)
             mtf_free_context (&vb->mtf_ctx[i]);
 
     for (unsigned i=0; i < NUM_COMPRESS_BUFS; i++)

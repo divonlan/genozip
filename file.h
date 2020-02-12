@@ -65,8 +65,8 @@ typedef struct file_ {
     pthread_mutex_t mutex;
     bool mutex_initialized;
     unsigned next_variant_i_to_merge;  // merging vb's dictionaries into mtf_ctx needs to be in the variant_block_i order
-    unsigned num_subfields;            // length of populated subfield_ids and mtx_ctx;
-    MtfContext mtf_ctx[MAX_SUBFIELDS]; // a merge of dictionaries of all VBs
+    unsigned num_dict_ids;            // length of populated subfield_ids and mtx_ctx;
+    MtfContext mtf_ctx[MAX_DICTS];     // a merge of dictionaries of all VBs
 
     // Information content stats - how many bytes does this file have in each section type
     uint64_t section_bytes[NUM_SEC_TYPES];   

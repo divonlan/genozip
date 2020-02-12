@@ -29,7 +29,7 @@ static bool seg_chrom_field (VariantBlock *vb, const char *str)
 }
 
 static void seg_pos_field (VariantBlock *vb, const char *str, 
-                                 int64_t *pos_delta, const char **pos_start, unsigned *pos_len)
+                           int64_t *pos_delta, const char **pos_start, unsigned *pos_len)
 {
     *pos_start = str;
 
@@ -53,15 +53,15 @@ static void seg_pos_field (VariantBlock *vb, const char *str,
 }
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
-SubfieldIdType seg_get_subfield (const char **str, unsigned len, // remaining length of line
+DictIdType seg_get_subfield (const char **str, unsigned len, // remaining length of line
                                  unsigned line_i) // line in original vcf file
 {
-    SubfieldIdType subfield = EMPTY_SUBFIELD_ID;
+    DictIdType subfield = EMPTY_DICT_ID;
 
     for (unsigned i=0; i < len; i++) {
         if ((*str)[i] != ':' && (*str)[i] != '\t' && (*str)[i] != '\n') { // note: in vcf files, we will see \t at end of FORMAT, but in variant data sections of piz files, we will see a \n
             
-            if (i < SUBFIELD_ID_LEN)
+            if (i < DICT_ID_LEN)
                 subfield.id[i] = (*str)[i];
 
         } else {
@@ -93,9 +93,9 @@ static void seg_format_field(VariantBlock *vb, DataLine *dl,
         if (dl->has_haplotype_data) str +=3; // skip over GT
 
         do {
-            SubfieldIdType subfield = seg_get_subfield (&str, len, line_i);
+            DictIdType subfield = seg_get_subfield (&str, len, line_i);
 
-            unsigned sf_i = mtf_get_sf_i_by_subfield (vb->mtf_ctx, &vb->num_subfields, subfield);
+            unsigned sf_i = mtf_get_did_i_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, subfield);
 
             dl->sf_i[dl->num_subfields++] = sf_i;
         } 
@@ -107,7 +107,7 @@ static void seg_format_field(VariantBlock *vb, DataLine *dl,
 }
 
 static void seg_variant_area(VariantBlock *vb, DataLine *dl, const char *str, unsigned len,
-                                   int64_t pos_delta, const char *pos_start, unsigned pos_len)
+                             int64_t pos_delta, const char *pos_start, unsigned pos_len)
 {
     char pos_delta_str[30];
     sprintf (pos_delta_str, 
