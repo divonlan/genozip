@@ -28,7 +28,7 @@ static const char *help_genozip[] = {
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    
     "   -o --output       Output file name. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
     "   -p --password     Password-protected - encrypted with 256-bit AES",
-    "   -m --md5          Records the MD5 hash of the VCF file in the genozip file header. When the resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF",
+    "   -m --md5          Records the MD5 hash of the VCF file in the genozip file header. When the resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF. Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file",
     "   -q --quiet        Don't show the progress indicator",    
     "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
     "   --show-content    Show the information content of VCF files and the compression ratios of each component",
@@ -45,7 +45,8 @@ static const char *help_genozip_developer[] = {
     "   --show-memory     Show what buffers are consuming the most memory",
     "   --show-sections   Shows the section types of the output genozip file and the compression ratios of each component",
     "   --show-dict       Show dictionary fragments written for each variant block (works for genounzip too)",
-    "   --show-gt-nodes   Show transposed GT matrix - each value is an index into its dictionary"
+    "   --show-gt-nodes   Show transposed GT matrix - each value is an index into its dictionary",
+    "   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as the subfields of INFO - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers."
 };
 
 static const char *help_genounzip[] = {

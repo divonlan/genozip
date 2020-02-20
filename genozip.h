@@ -34,9 +34,8 @@
 #define MAX_PLOIDY         100  // this can be any number up to 65535, it is set to 100 to avoid memory allocation
                                 // explosion in case of an error in the VCF file
 
-#define MAX_SUBFIELDS      32   // maximum number of subfield types (except for GT) that is supported in one GENOZIP file. This constant can be increased if needed.
-#define MAX_INFOS          32   // maximum number of INFO types that is supported in one GENOZIP file. This constant can be increased if needed.
-#define MAX_DICTS          (MAX_SUBFIELDS + MAX_INFOS + 9)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file
+#define MAX_SUBFIELDS      32   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file. This constant can be increased if needed.
+#define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined)
 
 #define MAX_CHROM_LEN      64   // maximum length of chromosome (contig) name
 
@@ -53,11 +52,58 @@
  
 #define MAX_32BIT_WINDOWS_MEMORY (1.7*1024*1024*1024) // 1.7GB - so Windows 32bit code doesn't explode at 2GB. TO DO - make this platform specific or get ulimits
 
+// note: the numbering of the sections cannot be modified, for backward compatability
 typedef enum {
-    SEC_VCF_HEADER, SEC_VARIANT_DATA, SEC_DICTIONARY, SEC_GENOTYPE_DATA, SEC_PHASE_DATA, SEC_HAPLOTYPE_DATA,
-    SEC_STATS_HT_SEPERATOR // not a real section, just for stats
+    // data sections - statring in v1
+    SEC_VCF_HEADER         = 0,  SEC_VB_HEADER           = 1, 
+    SEC_GENOTYPE_DICT      = 2,  SEC_GENOTYPE_DATA       = 3, 
+    SEC_PHASE_DATA         = 4,  SEC_HAPLOTYPE_DATA      = 5,
+
+    // data sections added in v2
+    SEC_GENOZIP_HEADER     = 6,
+
+    SEC_CHROM_DICT         = 7,   SEC_CHROM_B250         = 8,
+    SEC_POS_DICT           = 9,   SEC_POS_B250           = 10,
+    SEC_ID_DICT            = 11,  SEC_ID_B250            = 12,  
+    SEC_REFALT_DICT        = 13,  SEC_REFALT_B250        = 14,  
+    SEC_QUAL_DICT          = 15,  SEC_QUAL_B250          = 16, 
+    SEC_FILTER_DICT        = 17,  SEC_FILTER_B250        = 18, 
+    SEC_INFO_DICT          = 19,  SEC_INFO_B250          = 20, 
+    SEC_FORMAT_DICT        = 21,  SEC_FORMAT_B250        = 22,
+    SEC_INFO_SUBFIELD_DICT = 23,  SEC_INFO_SUBFIELD_B250 = 24,
+    
+    // These sections are not real sections - they don't appear in the genozip file - just for stats. They can be changed if needed.
+    SEC_STATS_HT_SEPERATOR
 } SectionType;
+
+// we put the names here in a #define so we can eyeball their identicality to SectionType
+#define SECTIONTYPE_NAMES { \
+    "SEC_VCF_HEADER"        ,  "SEC_VB_HEADER",\
+    "SEC_GENOTYPE_DICT"     ,  "SEC_GENOTYPE_DATA",\
+    "SEC_PHASE_DATA"        ,  "SEC_HAPLOTYPE_DATA",\
+    \
+    "SEC_GENOZIP_HEADER"    ,\
+    \
+    "SEC_CHROM_DICT"        ,   "SEC_CHROM_B250",\
+    "SEC_POS_DICT"          ,   "SEC_POS_B250",\
+    "SEC_ID_DICT"           ,  "SEC_ID_B250",\
+    "SEC_REFALT_DICT"       ,  "SEC_REFALT_B250",\
+    "SEC_QUAL_DICT"         ,  "SEC_QUAL_B250",\
+    "SEC_FILTER_DICT"       ,  "SEC_FILTER_B250",\
+    "SEC_INFO_DICT"         ,  "SEC_INFO_B250",\
+    "SEC_FORMAT_DICT"       ,  "SEC_FORMAT_B250",\
+    "SEC_INFO_SUBFIELD_DICT",  "SEC_INFO_SUBFIELD_B250",\
+    \
+    "SEC_STATS_HT_SEPERATOR" \
+}
+
 #define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) // put this here and not in sections.h as its used in vb.h that is widely used
+
+#define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_FORMAT_DICT && (s % 2 == 1)) ||       \
+                                        (s) == SEC_INFO_SUBFIELD_DICT || (s) == SEC_GENOTYPE_DICT)
+
+#define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_FORMAT_B250 && (s % 2 == 0)) ||       \
+                                        (s) == SEC_INFO_SUBFIELD_B250)
 
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity)
 typedef struct variant_block_ *VariantBlockP;
@@ -71,7 +117,7 @@ extern const char *global_cmd;            // set once in main()
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
-           flag_show_memory, flag_show_dict, flag_show_gt_nodes;
+           flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections;
 
 // macros
 #ifndef MIN

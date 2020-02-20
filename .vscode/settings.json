@@ -13,6 +13,8 @@
         "vb.h": "c",
         "endianness.h": "c",
         "zfile.h": "c",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "sstream": "c",
+        "cstddef": "c"
     },
 }

@@ -28,14 +28,14 @@ typedef struct file_ {
     char *name;                        // allocated by file_open(), freed by file_close()
     FileType type;
     // these relate to actual bytes on the disk
-    uint64_t disk_size;                // 0 if not known (eg stdin)
-    uint64_t disk_so_far;              // data read/write to/from "disk" (using fread/fwrite)
+    int64_t disk_size;                // 0 if not known (eg stdin)
+    int64_t disk_so_far;              // data read/write to/from "disk" (using fread/fwrite)
 
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
-    uint64_t vcf_data_size_single;     // VCF: size of the VCF data (if known)
+    int64_t vcf_data_size_single;     // VCF: size of the VCF data (if known)
                                        // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
-    uint64_t vcf_data_size_concat;     // concatenated vcf_data_size of all files compressed
-    uint64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
+    int64_t vcf_data_size_concat;     // concatenated vcf_data_size of all files compressed
+    int64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
                                        // GENOZIP: VCF data so far of original VCF file currently being processed
 
     // Used for READING VCF/VCF_GZ/VCF_BZ2 files: stats used to optimize memory allocation
@@ -48,8 +48,9 @@ typedef struct file_ {
     Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single vcf component
 
     // Used for READING GENOZIP files
-    Buffer next_vcf_header;            // next VCF header - used when reading in --split mode
-    
+    Buffer v1_next_vcf_header;         // genozip v1 only: next VCF header - used when reading in --split mode
+    uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
+
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_vcf_file;     // the value of disk_size when starting to read this vcf file
     uint64_t num_lines_concat;                // number of lines in concatenated vcf file
@@ -68,8 +69,10 @@ typedef struct file_ {
     unsigned num_dict_ids;            // length of populated subfield_ids and mtx_ctx;
     MtfContext mtf_ctx[MAX_DICTS];     // a merge of dictionaries of all VBs
 
-    // Information content stats - how many bytes does this file have in each section type
-    uint64_t section_bytes[NUM_SEC_TYPES];   
+    // Information content stats - how many bytes and how many sections does this file have in each section type
+    int64_t section_bytes[NUM_SEC_TYPES];   
+    int64_t section_entries[NUM_SEC_TYPES]; // used only for Z files - number of entries of this type (dictionary entries or base250 entries)
+    uint32_t num_sections[NUM_SEC_TYPES];    // used only for Z files - number of sections of this type
 
     // USED FOR READING ALL FILES
 #   define READ_BUFFER_SIZE (1<<19)    // 512KB
@@ -87,7 +90,6 @@ extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
-
 #define file_printname(file) (file->name ? file->name : "(stdin)")
 
 // a hacky addition to bzip2

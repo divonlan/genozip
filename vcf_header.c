@@ -19,7 +19,10 @@
 unsigned global_num_samples      = 0; // a global param - assigned once before any thread is created, and never changes - so no thread safety issue
 unsigned global_max_lines_per_vb = 0; // for ZIP this is determined by as a function of the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
 
-static Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
+Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
+
+// global - this names go into the dictionary names on disk. to preserve backward compatability, they should not be changed.
+const char *vcf_field_names[] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
 
 static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffer *vcf_header)
 {
@@ -149,6 +152,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
 
         vb->vcf_file->section_bytes[SEC_VCF_HEADER] = vcf_header_text.len;
         vb->z_file  ->section_bytes[SEC_VCF_HEADER] = vb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
+        vb->z_file  ->num_sections [SEC_VCF_HEADER]++;
     }
 
     // case : header not found, but data line found
@@ -164,29 +168,22 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
 // returns true if there's a file or false if its an empty file
 bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
 {
-    // read vcf header if its not already read. it maybe already read, if we're in flag_split mode, for second component onwards
-    // (it would have been read by previous component and stored for us)
-    if (!buf_is_allocated (&vb->z_file->next_vcf_header)) {
-        int ret = zfile_read_one_section (vb, &vb->z_file->next_vcf_header, "z_file->next_vcf_header", 
-                                          sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
-        if (ret == EOF) {
-            buf_free (&vb->z_file->next_vcf_header);
-            return false; // empty file (or in case of split mode - no more components) - not an error
-        }
+    vb->z_file->disk_at_beginning_of_this_vcf_file = vb->z_file->disk_so_far;
+
+    static Buffer vcf_header_section = EMPTY_BUFFER;
+
+    // note: for v1, we will use this function only for the very first VCF header (which will tell us this is v1)
+    int ret = zfile_read_one_section (vb, &vcf_header_section, "vcf_header_section", 
+                                      sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER);
+    if (ret == EOF) {
+        buf_free (&vcf_header_section);
+        return false; // empty file (or in case of split mode - no more components) - not an error
     }
 
     // handle the GENOZIP header of the VCF header section
-    SectionHeaderVCFHeader *header = (SectionHeaderVCFHeader *)vb->z_file->next_vcf_header.data;
+    SectionHeaderVCFHeader *header = (SectionHeaderVCFHeader *)vcf_header_section.data;
 
-    ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
-            "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x). Please upgrade genozip",
-            file_printname (vb->z_file), header->genozip_version);
-
-    if (header->genozip_version == 1) {
-        ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeaderV1)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeaderV1));
-    } else {  
-        ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
-    }
+    ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
@@ -196,39 +193,33 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
 
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
 
-    if (header->genozip_version == 1)
-        global_max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
-
-    static uint32_t POW2[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 
-                              524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 
-                              536870912, 1073741824, 2147483648};
+    uint32_t max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
 
     if (first_vcf || !flag_concat_mode) {
         vb->z_file->num_lines_concat     = vb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
         vb->z_file->vcf_data_size_concat = vb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
 
-        if (header->genozip_version >= 2)
-            global_max_lines_per_vb = POW2[header->max_lines_per_vb_log2];
+        global_max_lines_per_vb = max_lines_per_vb;
     }
     else {
-        if (header->genozip_version >= 2) {
-            // 2nd+ concatenated file is expected to have the same number of max_lines_per_vb
-            ASSERT (POW2[header->max_lines_per_vb_log2] == global_max_lines_per_vb, 
-                    "ERROR: invalidly, a 2nd+ concatenated file has max_lines_per_vb_log2=%u different than global_max_lines_per_vb=%u",
-                    header->max_lines_per_vb_log2, global_max_lines_per_vb)
-        }
+        // 2nd+ concatenated file is expected to have the same number of max_lines_per_vb
+        ASSERT (max_lines_per_vb == global_max_lines_per_vb, 
+                "ERROR: invalidly, a 2nd+ concatenated file has max_lines_per_vb=%u different than global_max_lines_per_vb=%u",
+                max_lines_per_vb, global_max_lines_per_vb)
     }
 
-    *digest = flag_split ? header->md5_hash_single : header->md5_hash_concat;
-    vb->vcf_file->has_md5 = digest->ulls[0] || digest->ulls[1]; // has_md5 iff not all 0. note: a chance of 1 in about 10^38 that we will get all-0 by chance in which case will won't perform the md5 comparison
+    if (flag_split) {
+        vb->vcf_file->has_md5 = !md5_is_zero (header->md5_hash_single); // has_md5 iff not 0. note: a chance of 1 in about 10^38 that we will get all-0 by chance in which case will won't perform the md5 comparison
+        *digest = header->md5_hash_single; // override md5 from genozip header
+    }
         
     // now get the text of the VCF header itself
     static Buffer vcf_header_buf = EMPTY_BUFFER;
-    zfile_uncompress_section (vb, header, &vcf_header_buf, SEC_VCF_HEADER);
+    zfile_uncompress_section (vb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
 
     bool can_concatenate = vcf_header_set_globals (vb, vb->z_file->name, &vcf_header_buf);
     if (!can_concatenate) {
-        buf_free (&vb->z_file->next_vcf_header);
+        buf_free (&vcf_header_section);
         buf_free (&vcf_header_buf);
         return false;
     }
@@ -241,34 +232,11 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     else if (vb->vcf_file->has_md5)
         md5_update (&vb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len, true);
 
-    buf_free (&vb->z_file->next_vcf_header);
+    buf_free (&vcf_header_section);
     buf_free (&vcf_header_buf);
 
     return true;
 }
 
-// returns the the VCF header section's header from a GENOZIP file - used by main_list
-bool vcf_header_get_vcf_header (File *z_file, SectionHeaderVCFHeader *vcf_header_header, bool *encrypted)
-{
-    int bytes = fread ((char*)vcf_header_header, 1, crypt_padded_len (sizeof(SectionHeaderVCFHeader)), (FILE *)z_file->file);
-    
-    if (bytes < sizeof(SectionHeaderVCFHeader)) {
-        *encrypted = false; // we can't read for some reason - but its not an encryption issue
-        return false;
-    }
-
-    if (BGEN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
-        return true; // not encrypted
-
-    if (crypt_have_password()) {
-        VariantBlock fake_vb;
-        memset (&fake_vb, 0, sizeof(fake_vb));
-        crypt_do (&fake_vb, (uint8_t *)vcf_header_header, crypt_padded_len (sizeof (SectionHeaderVCFHeader)), 0, -1);
-
-        if (BGEN32 (vcf_header_header->h.magic) == GENOZIP_MAGIC)
-            return true; // we successfully decrypted it with the user provided password
-    }
-
-    *encrypted = true;
-    return false; // we either don't have a password, or the password we have didn't work
-}
+#define V1_VCF_HEADER // select the vcf_header functions of v1.c
+#include "v1.c"

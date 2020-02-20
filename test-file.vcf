@@ -1,9 +1,29 @@
 ##fileformat=VCFv4.1
-##what a beautiful day
+## Things tested in this file
+# 1. lines with and without non-GT subfields
+# 2. lines with and without GT subfields
+# 3. GL fields - GL optimization
+# 4. lines that are missing samples
+# 5. subfields that start with "GT" but are not GT ("GTNOT" here)
+# 6. samples that are missing the first subfield declared in FORMAT
+# 7. samples that are missing the last subfield declared in FORMAT
+# 8. INFO fields with multiple info subfields
+# 9. INFO fields with subfields that have a name but no value
+# 10. Two-digit allele value 
+# 11. Missing (.) allele value 
+# 12. Increase in ploidy between lines
+# 13. Increase in ploidy mid-line
+# 14. Positive, negative and zero POS field deltas
+# 15. Change in CHROM value between lines
+# 16. Format and info subfield names that exceed 8 characters (DictIdType size)
+# 17. Lines with different ploidy types: HAPLO, PHASED, NOT_PHASED and MIXED 
+# 18. No FORMAT and samples in a line, despite file having samples
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	Person1	Person2	Person3	Person4	Person5
-12	207237233	rs1	G	A	100	PASS	Info1	GT:GL	1:-0.5,-.1,-2.	0|.|0:-0.9,-.1,-2.	0|.|11	17|4|55	18|4|55
-1	207237234	rs1	G	A	100	PASS	Info1	GT:GL	0|0:0,-.1,-2.	10|4|55	0|0:-0.7,-.1,-2.,-2	1|1:-0.8,-.1,-2.	10|4|55
-13	207237235	rs2	T	T	100	PASS	Info2	GT	./99/92	0|.|0	0|.|11	10|4|55	10|4|55
-13	207237500	rs3	A	C	100	PASS	Info3	ABCDEFGHJ:GL	xx	yy	zz	qq	ww
-13	207237510	rs4	C	A	100	PASS	Info4	GT	./99/92	0/./0	0/./11	10/4/55	10/4/55
-13	207237509	rs3	A	C	100	PASS	Info3	GL:ABCDEFGHI	-2.90,-0.46,-0.20:xx	:yy	:zz	:qq	:ww
+12	207237233	rs1	G	A	100	PASS	I12345678=A;I2=a	GT:GL	1:-0.5,-.1,-2.	0:-0.9,-.1,-2.	0	17	18
+1	207237234	rs1	G	A	100	PASS	I12345678=A;I2=b	GT:GL	0|0:0,-.1,-2.	10|4	0|.	1	10|4
+13	207237235	rs2	T	T	100	PASS	I2=a;I3=x	GT	./99	0|.|0	0|.|11	10|4|55	10|4|55
+13	207237500	rs3	A	C	100	PASS	Info3	ABCDEFGHJ:GL	xx				
+13	207237510	rs4	C	A	100	PASS	Info1	GT	./99/92	0/./0	0/./11	10/4/55	10/4/55
+13	207237510	rs4	C	A	100	PASS	Info1	GTNOT
+13	207237509	rs3	A	C	100	PASS	Info3	GL:ABCDEFGHI
+14	207237512	rs3	A	C	100	PASS	Info3	GL

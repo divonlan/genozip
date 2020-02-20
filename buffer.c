@@ -33,13 +33,13 @@ void buf_initialize()
     pthread_mutex_init (&overlay_mutex, NULL);
 }
 
-char *buf_human_readable_size (uint64_t size, char *str /* out */)
+char *buf_human_readable_size (int64_t size, char *str /* out */)
 {
-    if      (size > (1ULL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1ULL << 40));
-    else if (size > (1ULL << 30)) sprintf (str, "%3.1lf GB", ((double)size) / (double)(1ULL << 30));
-    else if (size > (1ULL << 20)) sprintf (str, "%3.1lf MB", ((double)size) / (double)(1ULL << 20));
-    else if (size > (1ULL << 10)) sprintf (str, "%3.1lf KB", ((double)size) / (double)(1ULL << 10));
-    else                          sprintf (str, "%3u B"    ,(unsigned)size)                        ;
+    if      (size > (1LL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
+    else if (size > (1LL << 30)) sprintf (str, "%3.1lf GB", ((double)size) / (double)(1LL << 30));
+    else if (size > (1LL << 20)) sprintf (str, "%3.1lf MB", ((double)size) / (double)(1LL << 20));
+    else if (size > (1LL << 10)) sprintf (str, "%3.1lf KB", ((double)size) / (double)(1LL << 10));
+    else                         sprintf (str, "%3d B"    ,     (int)size)                       ;
 
     return str; // for convenience so caller can use in printf directly
 }
@@ -254,7 +254,7 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
 #ifdef DEBUG
         buf_display_memory_usage (vb->pool_id, true);
 #endif
-        ABORT ("Error: Failed to allocate %u bytes", size + overhead_size);
+        ABORT ("Error: Failed to allocate %u bytes name=%s param=%u", size + overhead_size, name, param);
     }
 
     buf->data        = buf->memory + sizeof (uint64_t);
@@ -280,11 +280,11 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
 // allocates or enlarges buffer
 // if it needs to enlarge a buffer fully overlaid by an overlay buffer - it abandons its memory (leaving it to
 // the overlaid buffer) and allocates new memory
-unsigned buf_alloc (VariantBlock *vb,
-                    Buffer *buf, 
-                    unsigned requested_size,
-                    float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
-                    const char *name, unsigned param)      
+unsigned buf_alloc_do (VariantBlock *vb,
+                       Buffer *buf, 
+                       unsigned requested_size,
+                       float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
+                       const char *name, unsigned param)      
 {
     START_TIMER;
 
@@ -367,6 +367,9 @@ void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_
                   unsigned *regular_buf_offset, const char *name, unsigned param)
 {
     bool full_overlay = !regular_buf_offset && !copy_from;
+
+//printf ("Overlaying onto buffer old_name=%s old_param=%u new_name=%s new_param=%u\n", 
+//        overlaid_buf->name, overlaid_buf->param, regular_buf->name, regular_buf->param);      
 
     ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error: cannot buf_overlay to a buffer already in use. overlaid_buf->name=%s", overlaid_buf->name ? overlaid_buf->name : "");
     ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
@@ -457,6 +460,7 @@ void buf_free (Buffer *buf)
             break;
 
         case BUF_FULL_OVERLAY:
+//printf ("Freeing overlay buffer name=%s param=%u\n", buf->name, buf->param);      
             pthread_mutex_lock (&overlay_mutex);
             overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
             (*overlay_count)--;
@@ -535,4 +539,9 @@ void buf_move (VariantBlock *vb, Buffer *dst, Buffer *src)
     memset (src, 0, sizeof(Buffer));
 
     buf_add_to_buffer_list (vb, dst);
+}
+
+void buf_set_overlayable (Buffer *buf) 
+{ 
+    buf->overlayable = true;
 }

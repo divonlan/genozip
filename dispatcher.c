@@ -167,7 +167,6 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
     th->vb = dd->next_vb;
     th->func = func;
 
-    //printf ("dispatching line = %u\n", next_vb->first_line);
     if (dd->max_threads > 1 
 #if defined _WIN32 && ! defined _WIN64 // note: _WIN32 is defined for both Windows 32 & 64 bit
         // note: in 32bit Windows, the first variant block is always done on the main thread, so we can measure
@@ -314,12 +313,12 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
     // in split mode - dispatcher is not done if there's another component after this one
-    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&dd->z_file->next_vcf_header));
+    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&dd->z_file->v1_next_vcf_header));
 
     if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
 
         if (!dispatcher_is_done (dispatcher) ||
-            (flag_split && buf_is_allocated (&dd->z_file->next_vcf_header))) { 
+            (flag_split && buf_is_allocated (&dd->z_file->v1_next_vcf_header))) { 
 
             // time remaining
             char time_str[70], progress[100];

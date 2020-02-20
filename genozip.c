@@ -32,12 +32,13 @@
 #include "text_help.h"
 #include "version.h" // automatically incremented by the make when we create a new distribution
 #include "vcffile.h"
-#include "vcf_header.h"
+#include "zfile.h"
 #include "zip.h"
 #include "piz.h"
 #include "crypt.h"
 #include "endianness.h"
 #include "file.h"
+#include "dict_id.h"
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
@@ -47,9 +48,12 @@ const char *global_cmd = NULL;
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 
 // the flags - some are static, some are globals 
-static int flag_stdout=0, flag_replace=0, flag_show_content=0, flag_show_sections=0;
+static int flag_stdout=0, flag_replace=0, flag_show_content=0;
 int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, 
-    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0;
+    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
+    flag_show_b250=0, flag_show_sections=0;
+
+DictIdType dict_id_show_one_b250= { 0 };  // argument of --show-b250-one
 
 static int main_print (const char **text, unsigned num_lines,
                        const char *wrapped_line_prefix, 
@@ -147,11 +151,8 @@ static unsigned main_get_num_cores()
 #endif
 }
 
-static void main_display_section_stats (const File *vcf_file, const File *z_file, bool full)
+static void main_show_file_metadata (const File *vcf_file, const File *z_file)
 {
-    char vsize[30], zsize[30];
-    uint64_t total_vcf=0, total_z=0;
-
     fprintf (stderr, "\n\n");
     if (vcf_file->name) fprintf (stderr, "File name: %s\n", vcf_file->name);
     fprintf (stderr, 
@@ -161,57 +162,115 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
              "Individuals: %u   Variants: %"PRIu64"   Non-GT subfields: %u\n", 
 #endif
              global_num_samples, z_file->num_lines_concat, z_file->num_dict_ids);
+}
+
+static void main_show_sections (const File *vcf_file, const File *z_file)
+{
+    main_show_file_metadata (vcf_file, z_file);
+
+    char vsize[30], zsize[30];
+
+    fprintf (stderr, "Sections stats:\n");
+    fprintf (stderr, "                           #Sec  #Entries         VCF     %%       GENOZIP     %%   Ratio\n");
+    const char *format = "%22s    %5u  %10u  %8s %5.1f      %8s %5.1f  %6.1f%s\n";
+
+    // the order in which we want them displayed
+    const SectionType secs[] = {
+        SEC_GENOZIP_HEADER,
+        SEC_VCF_HEADER, SEC_VB_HEADER,
+        SEC_CHROM_B250, SEC_CHROM_DICT, SEC_POS_B250, SEC_POS_DICT, 
+        SEC_ID_B250, SEC_ID_DICT, SEC_REFALT_B250, SEC_REFALT_DICT, SEC_QUAL_B250, SEC_QUAL_DICT,
+        SEC_FILTER_B250, SEC_FILTER_DICT, SEC_INFO_B250, SEC_INFO_DICT,
+        SEC_INFO_SUBFIELD_B250, SEC_INFO_SUBFIELD_DICT, SEC_FORMAT_B250, SEC_FORMAT_DICT,
+        SEC_GENOTYPE_DATA, SEC_GENOTYPE_DICT,
+        SEC_HAPLOTYPE_DATA, SEC_STATS_HT_SEPERATOR, SEC_PHASE_DATA
+    };
+
+    static const char *categories[] = {
+        "Genozip header", "VCF header", "Variant block metadata", 
+        "CHROM b250", "CHROM dict", "POS b250", "POS dict", "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
+        "QUAL b250", "QUAL dict", "FILTER b250", "FILTER dict",
+        "INFO names b250", "INFO names dict", "INFO values b250", "INFO values dict", 
+        "FORMAT b250", "FORMAT dict", "Non-GT b250", "Non-GT dict",
+        "Haplotype data", "HT separator char", "Phasing char"
+    };
+
+    unsigned num_secs = sizeof(secs)/sizeof(secs[0]);
+    ASSERT0 (sizeof(categories)/sizeof(categories[0]) == num_secs, "Error: categories and secs are not the same length");
+
+    int64_t total_vcf=0, total_z=0, total_entries=0;
+    uint32_t total_sections=0;
+
+    for (unsigned sec_i=0; sec_i < num_secs; sec_i++) {
+        int64_t vbytes    = vcf_file->section_bytes[secs[sec_i]];
+        int64_t zbytes    = z_file->section_bytes[secs[sec_i]];
+        int64_t zentries  = z_file->section_entries[secs[sec_i]];
+        int32_t zsections = z_file->num_sections[secs[sec_i]];
+
+        char *vcf_size_str = (vbytes || (sec_i % 2)) ? buf_human_readable_size(vbytes, vsize) : "       ";
+        fprintf (stderr, format, categories[sec_i], zsections, zentries,
+                 vcf_size_str, 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
+                 buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
+                 zbytes ? (double)vbytes / (double)zbytes : 0,
+                 !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
+
+        total_sections += zsections;
+        total_entries  += zentries;
+        total_vcf      += vbytes;
+        total_z        += zbytes;
+    }
+
+    fprintf (stderr, format, "TOTAL", total_sections, total_entries,
+             buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
+             buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
+             (double)total_vcf / (double)total_z, "");
+
+    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
+             total_z, z_file->disk_size, z_file->disk_size - total_z);
+
+    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
+             total_vcf, vcf_file->vcf_data_size_single, vcf_file->vcf_data_size_single - total_vcf);
+
+}
+
+static void main_show_content (const File *vcf_file, const File *z_file)
+{
+    main_show_file_metadata (vcf_file, z_file);
+
+    char vsize[30], zsize[30];
+    int64_t total_vcf=0, total_z=0;
 
     fprintf (stderr, "Compression stats:\n");
-    fprintf (stderr, "                               VCF     %%       GENOZIP     %%  Ratio\n");
-    const char *format = "%22s    %8s %5.1f      %8s %5.1f  %5.1f%s\n";
+    fprintf (stderr, "                              VCF     %%       GENOZIP     %%  Ratio\n");
+    const char *format = "%22s   %8s %5.1f      %8s %5.1f  %5.1f%s\n";
 
-    const char **categories;
-    uint64_t vbytes[NUM_SEC_TYPES], zbytes[NUM_SEC_TYPES];
-    int len;
+    const char *categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9"};
 
-    if (full) {
-        // the order in which we want them displayed
-        const SectionType secs[NUM_SEC_TYPES] = {
-            SEC_VCF_HEADER, SEC_VARIANT_DATA, SEC_HAPLOTYPE_DATA, SEC_PHASE_DATA, SEC_STATS_HT_SEPERATOR, 
-            SEC_GENOTYPE_DATA, SEC_DICTIONARY
-        };
+    int sections_per_category[3][30] = { 
+        { SEC_HAPLOTYPE_DATA, NIL },
+        { SEC_PHASE_DATA, SEC_GENOTYPE_DATA, SEC_GENOTYPE_DICT, SEC_STATS_HT_SEPERATOR, NIL},
+        { SEC_GENOZIP_HEADER, SEC_VCF_HEADER, SEC_VB_HEADER, SEC_CHROM_B250, SEC_POS_B250, SEC_ID_B250, SEC_REFALT_B250, 
+          SEC_QUAL_B250, SEC_FILTER_B250, SEC_INFO_B250, SEC_FORMAT_B250, SEC_INFO_SUBFIELD_B250, 
+          SEC_CHROM_DICT, SEC_POS_DICT, SEC_ID_DICT, SEC_REFALT_DICT, SEC_QUAL_DICT,
+          SEC_FILTER_DICT, SEC_INFO_DICT, SEC_INFO_SUBFIELD_DICT, SEC_FORMAT_DICT, NIL }
+    };
 
-        static const char *full_categories[NUM_SEC_TYPES] = {
-            "VCF header", "Columns 1-9", "Haplotype data", "Phasing char", "HT separator char", 
-            "Other subfields", "Other subfields: dicts"
-        };
-        categories = full_categories;
-        len = NUM_SEC_TYPES;
+    for (unsigned i=0; i < 3; i++) {
 
-        for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
-            vbytes[sec_i] = vcf_file->section_bytes[secs[sec_i]];
-            zbytes[sec_i] = z_file->section_bytes[secs[sec_i]];
+        int64_t vbytes=0, zbytes=0;
+        for (int *sec_i = sections_per_category[i]; *sec_i != NIL; sec_i++) {
+            vbytes += vcf_file->section_bytes[*sec_i];
+            zbytes += z_file->section_bytes[*sec_i];
         }
-    }
-    else { // show a summary only
-        static const char *summary_categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9"};
-        categories = summary_categories;
-        len = 3;
 
-        vbytes[0] = vcf_file->section_bytes[SEC_HAPLOTYPE_DATA];
-        vbytes[1] = vcf_file->section_bytes[SEC_PHASE_DATA] + vcf_file->section_bytes[SEC_GENOTYPE_DATA] + vcf_file->section_bytes[SEC_STATS_HT_SEPERATOR];
-        vbytes[2] = vcf_file->section_bytes[SEC_VCF_HEADER] + vcf_file->section_bytes[SEC_VARIANT_DATA];
-
-        zbytes[0] = z_file->section_bytes[SEC_HAPLOTYPE_DATA];
-        zbytes[1] = z_file->section_bytes[SEC_PHASE_DATA] + z_file->section_bytes[SEC_GENOTYPE_DATA] + z_file->section_bytes[SEC_DICTIONARY];
-        zbytes[2] = z_file->section_bytes[SEC_VCF_HEADER] + z_file->section_bytes[SEC_VARIANT_DATA];
-    }
-    
-    for (unsigned i=0; i < len; i++) {
         fprintf (stderr, format, categories[i], 
-                 buf_human_readable_size(vbytes[i], vsize), 100.0 * (double)vbytes[i] / (double)vcf_file->vcf_data_size_single,
-                 buf_human_readable_size(zbytes[i], zsize), 100.0 * (double)zbytes[i] / (double)z_file->disk_size,
-                 zbytes[i] ? (double)vbytes[i] / (double)zbytes[i] : 0,
-                 !zbytes[i] ? (vbytes[i] ? "\b\b\bInf" : "\b\b\b---") : "");
+                 buf_human_readable_size(vbytes, vsize), 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
+                 buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
+                 zbytes ? (double)vbytes / (double)zbytes : 0,
+                 !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
 
-        total_vcf += vbytes[i];
-        total_z   += zbytes[i];
+        total_vcf      += vbytes;
+        total_z        += zbytes;
     }
 
     fprintf (stderr, format, "TOTAL", 
@@ -219,11 +278,12 @@ static void main_display_section_stats (const File *vcf_file, const File *z_file
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
 
-    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRIu64" but file size is %"PRIu64" (diff=%"PRId64")", 
+    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);
 
-    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRIu64" but file size is %"PRIu64" (diff=%"PRId64")", 
+    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              total_vcf, vcf_file->vcf_data_size_single, vcf_file->vcf_data_size_single - total_vcf);
+
 }
 
 static void main_genozip (const char *vcf_filename, 
@@ -268,7 +328,7 @@ static void main_genozip (const char *vcf_filename,
 
             z_file = file_open (z_filename, WRITE, GENOZIP);
         }
-        z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
+
         z_file->vcf_data_so_far                    = 0; // reset these as they relate to the VCF data of the VCF file currently being processed
         z_file->vcf_data_size_single               = vcf_file->vcf_data_size_single; // 0 if vcf is .gz or a pipe or stdin
     }
@@ -289,8 +349,8 @@ static void main_genozip (const char *vcf_filename,
     const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
     zip_dispatcher (basename, vcf_file, z_file, pipefd_zip_to_unzip >= 0, max_threads, is_last_file);
 
-    if (flag_show_sections) main_display_section_stats (vcf_file, z_file, true);
-    if (flag_show_content)  main_display_section_stats (vcf_file, z_file, false);
+    if (flag_show_sections) main_show_sections (vcf_file, z_file);
+    if (flag_show_content)  main_show_content  (vcf_file, z_file);
 
     bool remove_vcf_file = z_file && flag_replace && vcf_filename;
 
@@ -494,7 +554,6 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
 
     const char *head_format = "%5s %8s %10s %10s %6s%s %*s %s\n";
     const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
-    const char *encr_format = "<encrypted>      %s                           %s%s%*s\n";
     const char *item_format = "%5u %s %10s %10s %5uX%s %s%s%*s %s\n";
 
     if (finalize) {
@@ -522,29 +581,19 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
         return;
     }
 
-    static SectionHeaderVCFHeader *vcf_header_header = NULL;
-    if (!vcf_header_header) vcf_header_header = malloc (crypt_padded_len (sizeof (SectionHeaderVCFHeader)));
-    ASSERT0 (vcf_header_header, "failed to malloc vcf_header_header");
+    SectionHeaderGenozipHeader header;
 
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
-    bool encrypted;
-    bool success = vcf_header_get_vcf_header (z_file, vcf_header_header, &encrypted);
+    bool success = zfile_get_genozip_header (z_file, &header);
     if (!success) {
-        if (encrypted)
-            printf (encr_format, 
-                    flag_md5 ? "                                 " : "",
-                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-                    is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-                    z_filename);
-        else
-            files_ignored++;
+        files_ignored++;
         return;
     }   
 
-    uint64_t vcf_data_size = BGEN64 (vcf_header_header->vcf_data_size);
-    uint32_t num_samples   = BGEN32 (vcf_header_header->num_samples);
-    uint64_t num_lines     = BGEN64 (vcf_header_header->num_lines);
+    uint64_t vcf_data_size = BGEN64 (header.uncompressed_data_size);
+    uint32_t num_samples   = BGEN32 (header.num_samples);
+    uint64_t num_lines     = BGEN64 (header.num_items_concat);
 
     char num_lines_str[50];
     if (num_lines != NUM_LINES_UNKNOWN)
@@ -562,10 +611,10 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     buf_human_readable_size(vcf_data_size, u_str);
     printf (item_format, num_samples, num_lines_str, 
             c_str, u_str, ratio, 
-            flag_md5 ? md5_display (&vcf_header_header->md5_hash_concat, true) : "",
+            flag_md5 ? md5_display (&header.md5_hash_concat, true) : "",
             (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
             is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-            z_filename, vcf_header_header->created);
+            z_filename, header.created);
             
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += vcf_data_size;
@@ -655,37 +704,40 @@ int main (int argc, char **argv)
     // process command line options
     while (1) {
 
-        #define _c  {"stdout",        no_argument,       &flag_stdout,  1      }
+        #define _c  {"stdout",        no_argument,       &flag_stdout,       1 }
         #define _d  {"decompress",    no_argument,       &command, UNCOMPRESS  }
-        #define _f  {"force",         no_argument,       &flag_force,   1      }
+        #define _f  {"force",         no_argument,       &flag_force,        1 }
         #define _h  {"help",          no_argument,       &command, HELP        }
         #define _l  {"list",          required_argument, &command, LIST        }
         #define _L1 {"license",       no_argument,       &command, LICENSE     } // US spelling
         #define _L2 {"licence",       no_argument,       &command, LICENSE     } // British spelling
-        #define _q  {"quiet",         no_argument,       &flag_quiet, 1        }
-        #define _DL {"replace",       no_argument,       &flag_replace, 1      }
+        #define _q  {"quiet",         no_argument,       &flag_quiet,        1 }
+        #define _DL {"replace",       no_argument,       &flag_replace,      1 }
         #define _t  {"test",          no_argument,       &command, TEST        }
         #define _V  {"version",       no_argument,       &command, VERSION     }
         #define _z  {"compress",      no_argument,       &command, COMPRESS    }
-        #define _m  {"md5",           no_argument,       &flag_md5, 1          }
+        #define _m  {"md5",           no_argument,       &flag_md5,          1 }
         #define _th {"threads",       required_argument, 0, '@'                }
-        #define _O  {"split",         no_argument,       &flag_split, 1        }
+        #define _O  {"split",         no_argument,       &flag_split,        1 }
         #define _o  {"output",        required_argument, 0, 'o'                }
         #define _p  {"password",      required_argument, 0, 'p'                }
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
-        #define _ss {"show-sections", no_argument,       &flag_show_sections, 1} 
-        #define _sd {"show-dict",     no_argument,       &flag_show_dict, 1    } 
-        #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes, 1} 
+        #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
+        #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
+        #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes,1 } 
+        #define _s2 {"show-b250",     no_argument,       &flag_show_b250,    1 } 
+        #define _s5 {"show-one-b250", required_argument, 0, '2'                }
+        #define _s6 {"show-b250-one", required_argument, 0, '2'                }
         #define _sa {"show-alleles",  no_argument,       &flag_show_alleles, 1 }
         #define _st {"show-time",     no_argument,       &flag_show_time   , 1 } 
         #define _sm {"show-memory",   no_argument,       &flag_show_memory , 1 } 
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _sa, _st, _sm, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,           _st, _sm, _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                    _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                    _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _s2, _s5, _s6, _sa, _st, _sm, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,      _s2, _s5, _s6, _st, _sm, _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                         _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                         _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
@@ -717,6 +769,7 @@ int main (int argc, char **argv)
             case 'O' : flag_split         = 1      ; break;
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
+            case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
@@ -784,7 +837,7 @@ int main (int argc, char **argv)
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
     if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
-    if (flag_show_dict || flag_show_gt_nodes) flag_quiet=true; // don't show progress when showing data
+    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || dict_id_show_one_b250.num) flag_quiet=true; // don't show progress when showing data
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

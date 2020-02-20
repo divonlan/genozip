@@ -252,7 +252,7 @@ const char *md5_display (const Md5Hash *digest, bool prefix_space)
 
     const uint8_t *b = digest->bytes; 
     
-    if (digest->ulls[0] || digest->ulls[1])
+    if (!md5_is_zero (*digest))
         sprintf (str, "%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", prefix_space ? " " : "",
                  b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
     else

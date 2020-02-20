@@ -11,6 +11,7 @@
 #include "profiler.h"
 #include "aes.h"
 #include "move_to_front.h"
+#include "vcf_header.h"
 
 typedef enum { PHASE_UNKNOWN      = '-',
                PHASE_HAPLO        = '1',
@@ -18,16 +19,28 @@ typedef enum { PHASE_UNKNOWN      = '-',
                PHASE_NOT_PHASED   = '/',
                PHASE_MIXED_PHASED = '+'    } PhaseType;
 
+typedef struct {
+    int num_subfields; // NIL if this mapper is not defined
+    MtfContext *ctx[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]
+} SubfieldMapperZip;
+
+// mapping data for info names - appears once per unique INFO field names in vb
+typedef struct {
+    int num_subfields;                            // number of subfields in this INFO names - NIL if this mapper is not defined
+    MtfContext *ctx[MAX_SUBFIELDS];               // context of the all the subfields for this INFO name - pointers to vb->mtf_ctx
+    const char *names[MAX_SUBFIELDS];             // names of all subfields of this INFO fields - pointer into the INFO dictionary
+    uint8_t name_lens[MAX_SUBFIELDS];             // lengths of names including the '='. 
+} SubfieldInfoMapperPiz;
+
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
 
-    uint32_t line_i;
+    uint32_t line_i;         // line in VCF file (starting from 1)
 
     // initially, data from vcf file line, later segregated to components "stored" in the overlay buffers below
     Buffer line;             
 
-    // the following 4 buffers are overlay buffers onto line, so that they don't consume memory
-    Buffer variant_data;     // string terminated by a newline. len includes the newline.
+    // the following 3 buffers are overlay buffers onto line, so that they don't consume memory
     Buffer genotype_data;    // \t separated genotype data for the line. last one has \t too. no \0. exists if any variant in the variant blck has FORMAT other that "GT"
     Buffer haplotype_data;   // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
 
@@ -37,8 +50,12 @@ typedef struct {
     bool has_haplotype_data; // FORMAT field contains GT
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
-    unsigned num_subfields;
-    unsigned sf_i[MAX_SUBFIELDS]; // array in the order it appears in FORMAT - each an index into vb->mtf_ctx[]
+    uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    uint32_t info_mtf_i;     // the mtf_i into mtx_ctx[INFO].mtf   and also iname_mapper_buf   that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
+
+    // backward compatability with genozip v1
+    Buffer v1_variant_data;
+
 } DataLine;
 
 // IMPORTANT: if changing fields in VariantBlock, also update vb_release_vb
@@ -62,13 +79,14 @@ typedef struct variant_block_ {
     uint32_t variant_block_i;  // number of variant block within VCF file
 
     // tracking execution
-    uint32_t vb_data_size;     // size of variant block as it appears in the source file
+    int32_t vb_data_size;      // size of variant block as it appears in the source file
     uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation
 
     ProfilerRec profile;
 
     // charactaristics of the data
     uint16_t ploidy;
+    
     uint32_t num_sample_blocks;
     uint32_t num_samples_per_block; // except last sample block that may have less
     uint32_t num_haplotypes_per_line;
@@ -78,13 +96,13 @@ typedef struct variant_block_ {
 
     // chrom and pos
     char chrom[MAX_CHROM_LEN]; // a null-terminated ID of the chromosome
-    int64_t min_pos, max_pos;  // minimum and maximum POS values in this VB. -1 if unknown
-    uint64_t last_pos;         // value of POS field of the previous line, to do delta encoding
+    int32_t min_pos, max_pos;  // minimum and maximum POS values in this VB. -1 if unknown
+    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding
     bool is_sorted_by_pos;     // true if it this variant block is sorted by POS    
 
     // working memory for segregate - we segregate a line components into these buffers, and when done
     // we copy it back to DataLine - the buffers overlaying the line field
-    Buffer line_variant_data;  // string terminated by a newline. len includes the newline.
+    Buffer line_variant_data;  // string terminated by a newline. len includes the newline. (used for decompressing)
     Buffer line_gt_data;       // \t separated genotype data for the line. last one has \t too. no \0. exists if any variant in the variant blck has FORMAT other that "GT"
     Buffer line_ht_data;       // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
@@ -96,8 +114,8 @@ typedef struct variant_block_ {
     int bi;
 
     // section data - ready to compress
-    Buffer variant_data_section_data;    // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0
     Buffer haplotype_permutation_index;
+    Buffer haplotype_permutation_index_squeezed; // used by piz to unsqueeze the index and zfile to compress it
     Buffer optimized_gl_dict;  // GL dictionary data after extra optimization
 
     // these are Buffer arrays of size vb->num_sample_blocks allocated once when used for the first time and never freed. 
@@ -111,7 +129,9 @@ typedef struct variant_block_ {
     Buffer *phase_sections_data;      // this is the phase character for each genotype in the sample group
     Buffer *genotype_sections_data;   // this is for piz - each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
     Buffer genotype_one_section_data; // for zip we need only one section data
-
+    
+    uint32_t num_info_subfields;      // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
+                                      // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     // compresssed file data 
     Buffer z_data;                    // all headers and section data as read from disk
 
@@ -125,17 +145,13 @@ typedef struct variant_block_ {
 
     Buffer helper_index_buf;          // used by zip_do_haplotypes
 
-    Buffer vardata_header_buf;        // used by zfile_compress_variant_data
-
     Buffer compressed;                // used by various zfile functions
  
     Buffer ht_columns_data;           // used by piz_get_ht_permutation_lookups
 
-    Buffer next_gt_in_sample;         // used for reconstructing genotype data by piz
-
-    Buffer subfields_start_buf;       // these 3 are used by piz_reconstruct_line_components
-    Buffer subfields_len_buf;
-    Buffer num_subfields_buf;
+    Buffer sample_iterator;           // an array of SnipIterator - one for each sample. used for iterate on gt samples to get one snip at a time 
+     
+    Buffer format_info_buf;           // used by piz, contains a FormatInfo entry for each unique FORMAT snip in a vb 
 
     Buffer column_of_zeros;           // used by piz_get_ht_columns_data
 
@@ -144,14 +160,23 @@ typedef struct variant_block_ {
     unsigned num_subfields;           // number of subfields in this VB. num_subfields <= num_dict_ids-9.
     MtfContext mtf_ctx[MAX_DICTS];    
 
+    Buffer iname_mapper_buf;           // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[INFO].mtf
+    Buffer format_mapper_buf;         // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[FORMAT].mtf
+
     // Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
-    int add_bytes[NUM_SEC_TYPES];                
-    uint32_t vcf_section_bytes[NUM_SEC_TYPES];  // how many bytes did each section have in the original vcf file - should add up to the file size
-    uint32_t z_section_bytes[NUM_SEC_TYPES];    // how many bytes does each section type have (including headers) in the genozip file - should add up to the file size
+    int32_t vcf_section_bytes[NUM_SEC_TYPES];  // how many bytes did each section have in the original vcf file - should add up to the file size
+    int32_t z_section_bytes[NUM_SEC_TYPES];    // how many bytes does each section type have (including headers) in the genozip file - should add up to the file size
+    int32_t z_num_sections[NUM_SEC_TYPES];     // how many sections where written to .genozip of this type
+    int32_t z_section_entries[NUM_SEC_TYPES];      // how many entries (dictionary or base250) where written to .genozip of this type
 
 #   define NUM_COMPRESS_BUFS 4                  // bzlib2 compress requires 4 and decompress requires 2
     Buffer compress_bufs[NUM_COMPRESS_BUFS];    // memory allocation for compressor so it doesn't do its own malloc/free
 
+    // backward compatability with genozip v1 
+    Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)
+    Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by piz_reconstruct_line_components
+    Buffer v1_subfields_len_buf;
+    Buffer v1_num_subfields_buf;
 } VariantBlock;
 
 extern void vb_cleanup_memory (PoolId pool_id);

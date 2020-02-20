@@ -37,4 +37,8 @@ extern void md5_update (Md5Context *ctx, const void *data, unsigned len, bool in
 extern void md5_finalize (Md5Context *ctx, Md5Hash *digest);
 extern const char *md5_display (const Md5Hash *digest, bool prefix_space);
 
+#define md5_is_equal(digest1,digest2) ((digest1).ulls[0] == (digest2).ulls[0] && (digest1).ulls[1] == (digest2).ulls[1])
+#define md5_is_zero(digest) (!(digest).ulls[0] && !(digest).ulls[1])
+#define md5_set_zero(digest) { (digest)->ulls[0] = (digest)->ulls[1] = 0; }
+
 #endif

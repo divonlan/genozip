@@ -16,8 +16,8 @@
 
 typedef struct {
     long long wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 
-        piz_get_haplotype_data_line, piz_get_line_get_num_subfields,
-        piz_get_genotype_sample_starts, piz_get_line_subfields, piz_merge_line, 
+        piz_get_haplotype_data_line, piz_get_format_info,
+        piz_initialize_sample_iterators, piz_get_line_subfields, piz_merge_line, 
         piz_get_phase_data_line, piz_get_genotype_data_line, zfile_uncompress_section,
         piz_reconstruct_line_components, squeeze, piz_decode_pos, buf_alloc,
         seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,

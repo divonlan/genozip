@@ -33,14 +33,13 @@ void vb_release_vb (VariantBlock **vb_p)
         for (unsigned i=0; i < global_max_lines_per_vb; i++) {
             DataLine *dl = &vb->data_lines[i];
             
-            dl->line_i = dl->num_subfields = dl->genotype_data.len = 0;
+            dl->line_i = dl->genotype_data.len = 0;
             dl->phase_type = PHASE_UNKNOWN;
             dl->has_haplotype_data = dl->has_genotype_data = 0;
-
-            memset (dl->sf_i, 0, MAX_DICTS * sizeof(dl->sf_i[0]));
+            dl->format_mtf_i = dl->info_mtf_i = 0;
 
             buf_free(&dl->line);
-            buf_free(&dl->variant_data);
+            buf_free(&dl->v1_variant_data);
             buf_free(&dl->genotype_data);
             buf_free(&dl->haplotype_data);
             buf_free(&dl->phase_data);
@@ -66,9 +65,10 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->min_pos = vb->max_pos = vb->last_pos = vb->chrom[0] = vb->is_sorted_by_pos = 0;
     vb->num_dict_ids = vb->num_subfields = 0;
 
-    memset(vb->add_bytes, 0, sizeof(vb->add_bytes));
     memset(vb->vcf_section_bytes, 0, sizeof(vb->vcf_section_bytes));
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
+    memset(vb->z_num_sections, 0, sizeof(vb->z_num_sections));
+    memset(vb->z_section_entries, 0, sizeof(vb->z_section_entries));
 
     memset (&vb->profile, 0, sizeof (vb->profile));
 
@@ -77,25 +77,28 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->line_ht_data);
     buf_free(&vb->line_phase_data);
 
-    buf_free(&vb->next_gt_in_sample);
+    buf_free(&vb->sample_iterator);
     buf_free(&vb->genotype_one_section_data);
     buf_free(&vb->genotype_section_lens_buf);
 
+    buf_free (&vb->format_mapper_buf);
+    buf_free (&vb->iname_mapper_buf);
+
+    vb->num_info_subfields=0;
+
     buf_free(&vb->optimized_gl_dict);
-    buf_free(&vb->variant_data_section_data);
     buf_free(&vb->haplotype_permutation_index);
+    buf_free(&vb->haplotype_permutation_index_squeezed);
+    
     buf_free(&vb->gt_sb_line_starts_buf);
     buf_free(&vb->gt_sb_line_lengths_buf);
     buf_free(&vb->helper_index_buf);
-    buf_free(&vb->vardata_header_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->ht_columns_data);
     buf_free(&vb->spiced_pw);
-    buf_free(&vb->subfields_start_buf);        
-    buf_free(&vb->subfields_len_buf);
-    buf_free(&vb->num_subfields_buf);
+    buf_free(&vb->format_info_buf);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
@@ -107,15 +110,18 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->z_file = vb->vcf_file = NULL; // we're not freeing them, must setting the point to null
 
     vb->in_use = false; // released the VB back into the pool - it may now be reused
-    // things that persist:
-    
+
+    // backward compatability with genozip v1
+    buf_free(&vb->v1_subfields_start_buf);        
+    buf_free(&vb->v1_subfields_len_buf);
+    buf_free(&vb->v1_num_subfields_buf);
+    buf_free(&vb->v1_variant_data_section_data);
+
+    // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used
-    
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change
-    // between VBs of a file or concatenated files.
-
+    //                         between VBs of a file or concatenated files.
     // vb->column_of_zeros : we don't free this as its a constant array of zeros, of size global_max_lines_per_vb
-
 }
 
 static VariantBlockPool *pools[NUM_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
@@ -205,7 +211,7 @@ void vb_cleanup_memory (PoolId pool_id)
                 DataLine *dl = &vb->data_lines[i];
                 
                 buf_destroy(vb, &dl->line);
-                buf_destroy(vb, &dl->variant_data);
+                buf_destroy(vb, &dl->v1_variant_data);
                 buf_destroy(vb, &dl->genotype_data);
                 buf_destroy(vb, &dl->haplotype_data);
                 buf_destroy(vb, &dl->phase_data);
