@@ -440,8 +440,6 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb,
     *field_dictionary_sections_bitmap = 0;
     *num_info_dictionary_sections = *num_gt_dictionary_sections = 0;
 
-    unsigned z_file_num_dict_ids_before = vb->z_file->num_dict_ids;
-    
     // first, all field dictionaries    
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
         if (!buf_is_allocated (&vb->mtf_ctx[did_i].dict)) continue;

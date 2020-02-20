@@ -271,6 +271,8 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
 
 #ifdef V1_PIZ
 
+#define V1_SAMPLES_PER_BLOCK 4096
+
 // decode the delta-encoded value of the POS field
 static inline void v1_piz_decode_pos (VariantBlock *vb, const char *str,
                                       char *pos_str, const char **delta_pos_start, unsigned *delta_pos_len, int *add_len /* out */)
@@ -471,7 +473,7 @@ static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, in
     char *next = vb->line_gt_data.data;
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        unsigned first_sample = sb_i*SAMPLES_PER_BLOCK;
+        unsigned first_sample = sb_i*V1_SAMPLES_PER_BLOCK;
         unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
 
         for (unsigned sample_i=first_sample; 
@@ -545,9 +547,9 @@ static void v1_piz_initialize_next_gt_in_sample (VariantBlock *vb, int *num_subf
         const uint8_t *next = (const uint8_t *)vb->genotype_sections_data[sb_i].data;
         const uint8_t *after = next + vb->genotype_sections_data[sb_i].len;
 
-        unsigned sample_after = sb_i * SAMPLES_PER_BLOCK + num_samples_in_sb;
+        unsigned sample_after = sb_i * V1_SAMPLES_PER_BLOCK + num_samples_in_sb;
         
-        unsigned sample_i = sb_i * SAMPLES_PER_BLOCK; 
+        unsigned sample_i = sb_i * V1_SAMPLES_PER_BLOCK; 
         for (;sample_i < sample_after && next < after; sample_i++) {
             
             sample_iterator[sample_i].next_b250 = next; // line=0 of each sample_i (column)
@@ -562,7 +564,7 @@ static void v1_piz_initialize_next_gt_in_sample (VariantBlock *vb, int *num_subf
 
         // sanity checks to see we read the correct amount of genotypes
         ASSERT (sample_i == sample_after, "Error: expected to find %u genotypes in sb_i=%u of variant_block_i=%u, but found only %u",
-                vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i, vb->num_lines * (sample_i - sb_i * SAMPLES_PER_BLOCK));
+                vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i, vb->num_lines * (sample_i - sb_i * V1_SAMPLES_PER_BLOCK));
 
         ASSERT (next == after, "Error: expected to find %u genotypes in sb_i=%u of variant_block_i=%u, but found more. ",
                 vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i);
