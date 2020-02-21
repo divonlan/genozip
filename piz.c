@@ -307,7 +307,7 @@ static void piz_initialize_sample_iterators (VariantBlock *vb)
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
-                    next += base250_len (next, line_format_info->ctx[sf]->encoding); 
+                    next += base250_len (next, line_format_info->ctx[sf] ? line_format_info->ctx[sf]->encoding : BASE250_ENCODING_UNKNOWN); // if this format has no non-GT subfields, it will not have a ctx 
             }
         }
 
@@ -755,10 +755,10 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         if (vb->has_genotype_data) {
             zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_GENOTYPE_DATA);
 
-            // all genotype dictionaries are 16bit - for now
+            // all genotype dictionaries are 8bit - for now (set during compression in seg_decide_encodings())
             for (unsigned did_i=0; did_i < MAX_DICTS; did_i++)
                 if (vb->mtf_ctx[did_i].b250_section_type == SEC_GENOTYPE_DATA)
-                    vb->mtf_ctx[did_i].encoding = BASE250_ENCODING_16BIT;
+                    vb->mtf_ctx[did_i].encoding = BASE250_ENCODING_8BIT;
         }
         
         // next, comes phase data

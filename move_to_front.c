@@ -148,7 +148,7 @@ uint32_t mtf_get_next_snip (VariantBlock *vb, MtfContext *ctx,
     if (!override_iterator && !iterator->next_b250) // INFO and Field1-9 data (GT data uses override_next_b250)
         iterator->next_b250 = (uint8_t *)ctx->b250.data; // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
 
-    uint32_t word_index = base250_decode (&iterator->next_b250, ctx->encoding);
+    uint32_t word_index = base250_decode (&iterator->next_b250, ctx ? ctx->encoding : BASE250_ENCODING_UNKNOWN); // if this line has no non-GT subfields, it will not have a ctx 
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {

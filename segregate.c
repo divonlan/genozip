@@ -724,10 +724,12 @@ static void seg_decide_encodings (VariantBlock *vb)
     for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
         MtfContext *ctx = &vb->mtf_ctx[did_i];
         if (ctx->mtf.len + ctx->ol_mtf.len) {
-            //ctx->encoding = (ctx->mtf.len + ctx->ol_mtf.len <= 250) ? BASE250_ENCODING_8BIT : BASE250_ENCODING_16BIT;
-            ctx->encoding =  BASE250_ENCODING_8BIT;
-            //fprintf (stderr, "encoding of %.*s is %u\n", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->encoding);
-        } 
+            if (ctx->mtf.len + ctx->ol_mtf.len <= 250 || 
+                ctx->b250_section_type == SEC_GENOTYPE_DATA) 
+                ctx->encoding = BASE250_ENCODING_8BIT; // all genotype dictionaries are 8bit - for now
+            else
+                ctx->encoding = BASE250_ENCODING_16BIT; 
+        }
     }
 }
 

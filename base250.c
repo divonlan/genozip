@@ -61,45 +61,14 @@ Base250 base250_encode (uint32_t n, Base250Encoding encoding)
 */
     return result;
 }
-/*
-static inline uint32_t base250_decode_do_v1 (const uint8_t *str, unsigned *num_numerals)
-{
-    if (str[0] < 250) {
-        *num_numerals = 1;
-        return str[0]; // single numeral 
-    }
-    else if (str[0] == BASE250_EMPTY_SF) {
-        *num_numerals = 1;
-        return WORD_INDEX_EMPTY_SF;
-    }
-
-    else if (str[0] == BASE250_MISSING_SF) {
-        *num_numerals = 1;
-        return WORD_INDEX_MISSING_SF;
-    }
-
-    else if (str[0] == BASE250_ONE_UP) {
-        *num_numerals = 1;
-        return WORD_INDEX_ONE_UP;
-    }
-
-    uint32_t result = 0;
-    uint32_t factor = 1;
-    *num_numerals = str[0] - BASE250_2_NUMERALS + 2; // 2, 3 or 4
-    for (unsigned i=1; i <= *num_numerals; i++) {
-        result += str[i] * factor;
-        factor *= 250;
-    }
-
-    return result;
-}
-*/
-
 
 uint32_t base250_decode (const uint8_t **str, Base250Encoding encoding)
 {
-    ASSERT (encoding == BASE250_ENCODING_16BIT || encoding == BASE250_ENCODING_8BIT, "Error: invalid encoding=%u", encoding);
-    
+    ASSERT ((encoding == BASE250_ENCODING_16BIT) || 
+            (encoding == BASE250_ENCODING_8BIT)  ||
+            (encoding == BASE250_ENCODING_UNKNOWN && (*str)[0] == BASE250_MISSING_SF), // if line format has no non-GT subfields 
+            "Error: invalid encoding=%u", encoding);
+
     uint32_t ret, bytes_consumed=1;
 
     if (encoding == BASE250_ENCODING_16BIT && (*str)[0] == BASE250_MOST_FREQ) // note BASE250_MOST_FREQ is the same value as BASE250_2_NUMERALS
@@ -128,14 +97,19 @@ uint32_t base250_decode (const uint8_t **str, Base250Encoding encoding)
 
 unsigned base250_len (const uint8_t *data, Base250Encoding encoding)
 {
-    if (encoding == BASE250_ENCODING_16BIT) {
-        if (*data <= 249) return 2;
-        else if (*data >= 250 && *data <= 253) return 1;
-        else return *data - 250; // 4 or 5
-    }
-    else if (encoding == BASE250_ENCODING_8BIT) {
-        if (*data <= 252) return 1;
-        else return *data - 250; // 3 or 4 or 5
+    switch (encoding) {
+        case BASE250_ENCODING_16BIT:
+            if (*data <= 249) return 2;
+            else if (*data >= 250 && *data <= 253) return 1;
+            else return *data - 250; // 4 or 5
+
+        case BASE250_ENCODING_8BIT:
+            if (*data <= 252) return 1;
+            else return *data - 250; // 3 or 4 or 5
+
+        case BASE250_ENCODING_UNKNOWN: // happens when called for a line that has no non-GT subfields
+            ASSERT0 (*data == BASE250_MISSING_SF, "Error: data has no encoding, but a byte other than BASE250_MISSING_SF was found");
+            return 1;
     }
     
     ABORT ("Invalid encoding type: %u", encoding);

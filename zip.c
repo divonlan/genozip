@@ -194,7 +194,9 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
                     MtfContext *ctx = format_mapper->ctx[sf];
                     MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
-                    Base250 index = node->word_index_16b; // TO DO - use best encoding. currently we don't a place to specify the encoding in the SectionHeader
+                    
+                    // note: the choice of encoding is set in seg_decide_encodings()
+                    Base250 index = (ctx->encoding == BASE250_ENCODING_8BIT) ? node->word_index_8b : node->word_index_16b; 
 
                     if (flag_show_gt_nodes) printf ("%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
 
