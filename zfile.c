@@ -105,6 +105,15 @@ static int zfile_compress_do (VariantBlock *vb, Buffer *z_data, const char *data
     return ret;
 }
 
+static void zfile_display_header (const SectionHeader *header)
+{
+    fprintf (stderr, "%-22s vb_i=%-3u sec_i=%-2u comp_offset=%-9u dt_uncomp_len=%-9u dt_comp_len=%-9u dt_enc_len=%-9u magic=%8.8x flags=%u\n",
+             st_name(header->section_type), BGEN32 (header->variant_block_i), BGEN16 (header->section_i), 
+             BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
+             BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic),
+             header->flags);
+}
+
 static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *header, 
                             const char *data /* NULL if section has no data */) 
 { 
@@ -184,13 +193,15 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
     // do calculations for --show-content and --show-sections options
     vb->z_section_bytes[header->section_type] += total_z_len;
     vb->z_num_sections [header->section_type] ++;
+
+    if (flag_show_headers) zfile_display_header (header);
 }
 
 void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 {
     SectionHeaderBase250 *header = (SectionHeaderBase250 *)section_header_p;
 
-    if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
+    if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) ;
 
     fprintf (stderr, "%*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
 
@@ -228,10 +239,6 @@ void zfile_uncompress_section (VariantBlock *vb,
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
 
-    // if we're starting a new vcf component in a concatenated file - the I/O thread already skipped the VB terminator
-    // of the previous block - so we need to update variant_block_i
-    if (!flag_split && variant_block_i == vb->variant_block_i + 1) vb->variant_block_i++;
-    
     ASSERT (variant_block_i == vb->variant_block_i, "Error: bad variant_block_i: in file=%u in vb=%u", variant_block_i, vb->variant_block_i);
 
     // decrypt data (in-place) if needed
@@ -263,7 +270,7 @@ void zfile_uncompress_section (VariantBlock *vb,
         BZ2_bzDecompressEnd (&strm);
     }
 
-    if (section_type_is_b250 (expected_section_type)) 
+    if (flag_show_b250 && section_type_is_b250 (expected_section_type)) 
         zfile_show_b250_section (section_header_p, uncompressed_data);
     
     if (vb) COPY_TIMER(vb->profile.zfile_uncompress_section);
@@ -577,6 +584,8 @@ int zfile_read_one_section (VariantBlock *vb,
     // case: we're done! no more concatenated files
     if (!header && expected_sec_type == SEC_VCF_HEADER) return EOF; 
 
+    if (flag_show_headers) zfile_display_header (header);
+
     // case: empty genozip file
     if (!header && expected_sec_type == SEC_GENOZIP_HEADER) {
         if (!flag_quiet) fprintf (stderr, "\nSkipping empty file %s", file_printname (vb->z_file));
@@ -692,6 +701,10 @@ bool zfile_read_one_vb (VariantBlock *vb)
         COPY_TIMER (vb->profile.zfile_read_one_vb);
         return false; // end of file
     }
+
+    // handle the case of the terminating VB section in case of --split (we handle the case of non-split in zfile_read_one_section())
+    if (flag_split && vb_header->h.flags == 1)
+        return false; // end of vcf component
 
     // dictionaries are processed right here by the dispatcher thread - the compute
     // thread only access the dictionaries on the z_file->mtf_ctx
@@ -860,6 +873,8 @@ void zfile_write_genozip_header (VariantBlock *vb, uint16_t data_type, Md5Hash *
         file->disk_so_far += sizeof (header);   // length of GENOZIP data writen to disk
         vb->z_file->section_bytes[SEC_GENOZIP_HEADER] = sizeof(header);
         vb->z_file->num_sections [SEC_GENOZIP_HEADER]++;
+
+        if (flag_show_headers) zfile_display_header ((SectionHeader *)&header);
     }
 }
 
@@ -868,6 +883,8 @@ bool zfile_get_genozip_header (File *z_file, SectionHeaderGenozipHeader *header)
 {
     int bytes = fread ((char*)header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)z_file->file);
     if (bytes < sizeof(SectionHeaderGenozipHeader)) return false;
+
+    if (flag_show_headers) zfile_display_header ((SectionHeader *)header);
 
     return BGEN32 (header->h.magic) == GENOZIP_MAGIC;
 }

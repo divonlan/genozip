@@ -46,7 +46,8 @@ static const char *help_genozip_developer[] = {
     "   --show-sections   Shows the section types of the output genozip file and the compression ratios of each component",
     "   --show-dict       Show dictionary fragments written for each variant block (works for genounzip too)",
     "   --show-gt-nodes   Show transposed GT matrix - each value is an index into its dictionary",
-    "   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as the subfields of INFO - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers."
+    "   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as the subfields of INFO - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers.",
+    "   --show-headers    Show the sections headers (works for genounzip too)",
 };
 
 static const char *help_genounzip[] = {

@@ -117,7 +117,7 @@ extern const char *global_cmd;            // set once in main()
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
-           flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections;
+           flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers;
 
 // macros
 #ifndef MIN
@@ -129,8 +129,8 @@ extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_
 static inline void my_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
 #define ASSERT(condition, format, ...)  { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit(); }}
 #define ASSERT0(condition, string)      { if (!(condition)) { fprintf (stderr, "\n%s\n", string); my_exit(); }}
-#define ASSERTW(condition, format, ...) { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
-#define ASSERTW0(condition, string)     { if (!(condition)) { fprintf (stderr, "\n%s\n", string); } }
+#define ASSERTW(condition, format, ...) { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
+#define ASSERTW0(condition, string)     { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n%s\n", string); } }
 #define ABORT(format, ...)              { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit();}
 #define ABORT0(string)                  { fprintf (stderr, "\n%s\n", string); my_exit();}
 

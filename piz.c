@@ -668,33 +668,43 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
 
     unsigned *section_index = (unsigned *)vb->z_section_headers.data;
 
-    SectionHeaderVbHeader *vardata_header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-    vb->first_line              = BGEN32 (vardata_header->first_line);
-    vb->num_lines               = BGEN32 (vardata_header->num_lines);
-    vb->phase_type              = (PhaseType)vardata_header->phase_type;
-    vb->has_genotype_data       = vardata_header->has_genotype_data;
-    vb->is_sorted_by_pos        = vardata_header->is_sorted_by_pos;
-    vb->num_haplotypes_per_line = BGEN32 (vardata_header->num_haplotypes_per_line);
+    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
+    vb->first_line              = BGEN32 (header->first_line);
+    vb->num_lines               = BGEN32 (header->num_lines);
+    vb->phase_type              = (PhaseType)header->phase_type;
+    vb->has_genotype_data       = header->has_genotype_data;
+    vb->is_sorted_by_pos        = header->is_sorted_by_pos;
+    vb->num_haplotypes_per_line = BGEN32 (header->num_haplotypes_per_line);
     vb->has_haplotype_data      = vb->num_haplotypes_per_line > 0;
-    vb->num_sample_blocks       = BGEN32 (vardata_header->num_sample_blocks);
-    vb->num_samples_per_block   = BGEN32 (vardata_header->num_samples_per_block);
-    vb->num_info_subfields      = BGEN32 (vardata_header->num_info_subfields);
-    vb->ploidy                  = BGEN16 (vardata_header->ploidy);
-    vb->num_dict_ids            = BGEN32 (vardata_header->num_dict_ids);
+    vb->num_sample_blocks       = BGEN32 (header->num_sample_blocks);
+    vb->num_samples_per_block   = BGEN32 (header->num_samples_per_block);
+    vb->num_info_subfields      = BGEN32 (header->num_info_subfields);
+    vb->ploidy                  = BGEN16 (header->ploidy);
+    vb->num_dict_ids            = BGEN32 (header->num_dict_ids);
     // num_dictionary_sections is read in zfile_read_one_vb()
-    vb->max_gt_line_len         = BGEN32 (vardata_header->max_gt_line_len);
-    memcpy(vb->chrom, vardata_header->chrom, MAX_CHROM_LEN);
-    vb->min_pos                 = (uint32_t)BGEN64 (vardata_header->min_pos);
-    vb->max_pos                 = (uint32_t)BGEN64 (vardata_header->max_pos);
-    vb->vb_data_size            = BGEN32 (vardata_header->vb_data_size);
+    vb->max_gt_line_len         = BGEN32 (header->max_gt_line_len);
+    memcpy(vb->chrom, header->chrom, MAX_CHROM_LEN);
+    vb->min_pos                 = (uint32_t)BGEN64 (header->min_pos);
+    vb->max_pos                 = (uint32_t)BGEN64 (header->max_pos);
+    vb->vb_data_size            = BGEN32 (header->vb_data_size);
     
     // this can if 1. VCF has no samples or 2. num_samples was not re-written to genozip header (for example if we were writing to stdout)
     if (!global_num_samples) 
-        global_num_samples = BGEN32 (vardata_header->num_samples);
+        global_num_samples = BGEN32 (header->num_samples);
     else {
-        ASSERT (global_num_samples == BGEN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, BGEN32 (vardata_header->num_samples));
+        ASSERT (global_num_samples == BGEN32 (header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, BGEN32 (header->num_samples));
     }
 
+    // if we're starting a new vcf component in a concatenated file - the I/O thread already skipped the VB terminator
+    // of the previous block - so we need to update variant_block_i
+    if (!flag_split && BGEN32 (header->h.variant_block_i) == vb->variant_block_i + 1) 
+        vb->variant_block_i++;
+    
+    // in case of --split, the variant_block_i in the 2nd+ component will be different than that assigned by the dispatcher
+    // because the dispatcher is re-initialized for every vcf component
+    if (flag_split) 
+        vb->variant_block_i = BGEN32 (header->h.variant_block_i);
+    
     // unsqueeze permutation index - if this VCF has samples
     if (global_num_samples) {
 
@@ -707,7 +717,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         unsqueeze (vb,
                    (unsigned *)vb->haplotype_permutation_index.data, 
                    (uint8_t *)vb->haplotype_permutation_index_squeezed.data, 
-                   BGEN16 (vardata_header->haplotype_index_checksum),
+                   BGEN16 (header->haplotype_index_checksum),
                    vb->num_haplotypes_per_line);
     }
 
@@ -816,7 +826,8 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 }
 
 // returns true is successfully outputted a vcf file
-bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads, bool is_last_file)
+bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads, 
+                     bool is_first_vcf_component, bool is_last_file)
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
@@ -829,7 +840,12 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
 
     // read genozip header
     Md5Hash original_file_digest;
-    int16_t data_type = zfile_read_genozip_header (pseudo_vb, &original_file_digest);
+    
+    // read genozip header and set the data type when reading the first vcf component of in case of --split, 
+    static int16_t data_type=-1; 
+    if (is_first_vcf_component) 
+        data_type = zfile_read_genozip_header (pseudo_vb, &original_file_digest);
+
     ASSERT (data_type == MAYBE_V1 || data_type == DATA_TYPE_VCF, "Error: unrecognized data_type=%u", data_type);
 
     // read and write VCF header. in split mode this also opens vcf_file
