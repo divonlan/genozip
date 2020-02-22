@@ -179,6 +179,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
             // lookup word indices in the global dictionary for all the subfields
             const uint8_t *dst_start = dst_next;
 
+            // IS THIS A BUG? WE DON'T SEEM TO EVER USE THIS VARIABLE num_subfields
             int num_subfields = format_mapper->num_subfields;
             ASSERT (num_subfields >= 0, "Error: format_mapper->num_subfields=%d", format_mapper->num_subfields);
 
@@ -186,7 +187,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
             // therefore we have 1 fake subfield
             if (vb->num_subfields > 0 && num_subfields==0) num_subfields = 1;
 
-                for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
+            for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
             
                 uint32_t node_index = this_line[format_mapper->num_subfields * sample_i + sf];
 
@@ -479,7 +480,7 @@ static void zip_compress_one_vb (VariantBlock *vb)
             zfile_compress_section_data (vb, SEC_HAPLOTYPE_DATA, &vb->haplotype_sections_data[sb_i]);
     }
 
-    // note: this updates the z_data in memory (not on disk)
+    // update z_data in memory (its not written to disk yet)
     zfile_update_compressed_vb_header (vb, variant_data_header_pos, field_dictionary_sections_bitmap, 
                                        num_info_dictionary_sections, num_gt_dictionary_sections, num_info_subfields);
     
@@ -536,7 +537,8 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
-    zfile_write_genozip_header (pseudo_vb, DATA_TYPE_VCF, NULL, false);
+    if (!z_file->disk_so_far) // write the genozip header only if this is the first vcf component
+        zfile_write_genozip_header (pseudo_vb, DATA_TYPE_VCF, NULL, false);
 
     unsigned line_i = 0; // last line read (first line in file = 1, consistent with script line numbers)
 
@@ -600,7 +602,6 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     next_vb = dispatcher_generate_next_vb (dispatcher);
     zfile_compress_terminator_section (next_vb);
     zip_output_processed_vb (next_vb, vcf_file, z_file, true);
-    dispatcher_input_exhausted (dispatcher);
 
     // go back and update some fields in the vcf header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
@@ -617,7 +618,7 @@ finish:
     z_file->vcf_data_size_single = 0;
     memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));
 
-    //vcf_file->vcf_data_size_concat = z_file->vcf_data_size_concat = vcf_file->vcf_data_so_far; // just in case its not set already
+    vcf_file->vcf_data_size_concat = z_file->vcf_data_size_concat = vcf_file->vcf_data_so_far; // just in case its not set already
     
     dispatcher_finish (&dispatcher, &last_variant_block_i);
 }

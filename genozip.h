@@ -73,7 +73,7 @@ typedef enum {
     SEC_INFO_SUBFIELD_DICT = 23,  SEC_INFO_SUBFIELD_B250 = 24,
     
     // These sections are not real sections - they don't appear in the genozip file - just for stats. They can be changed if needed.
-    SEC_STATS_HT_SEPERATOR
+    SEC_STATS_HT_SEPERATOR, 
 } SectionType;
 
 // we put the names here in a #define so we can eyeball their identicality to SectionType
@@ -84,8 +84,8 @@ typedef enum {
     \
     "SEC_GENOZIP_HEADER"    ,\
     \
-    "SEC_CHROM_DICT"        ,   "SEC_CHROM_B250",\
-    "SEC_POS_DICT"          ,   "SEC_POS_B250",\
+    "SEC_CHROM_DICT"        ,  "SEC_CHROM_B250",\
+    "SEC_POS_DICT"          ,  "SEC_POS_B250",\
     "SEC_ID_DICT"           ,  "SEC_ID_B250",\
     "SEC_REFALT_DICT"       ,  "SEC_REFALT_B250",\
     "SEC_QUAL_DICT"         ,  "SEC_QUAL_B250",\

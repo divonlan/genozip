@@ -114,8 +114,6 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     COPY_TIMER (dd->pseudo_vb->profile.wallclock);
 
-    dd->next_vb_i--;
-
     if (flag_show_time) 
         profiler_print_report (&dd->pseudo_vb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far,
@@ -126,6 +124,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     buf_free (&dd->compute_threads_buf);
     vb_release_vb (&dd->pseudo_vb);
+    vb_release_vb (&dd->next_vb); // possibly used by terminator VB
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
@@ -384,6 +383,8 @@ void dispatcher_input_exhausted (Dispatcher dispatcher)
     dd->input_exhausted = true;
 
     vb_release_vb (&dd->next_vb);
+
+    dd->next_vb_i--; // we didn't use this vb_i
 }    
 
 bool dispatcher_is_done (Dispatcher dispatcher)

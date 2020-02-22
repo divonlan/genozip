@@ -36,7 +36,7 @@ typedef struct {
     uint32_t variant_block_i;       // VB with in file starting from 1 ; 0 for VCF Header
     uint16_t section_i;             // section within VB - 0 for Variant Data
     uint8_t  section_type;          
-    uint8_t  unused;
+    uint8_t  flags;                 // section-type specific flags
 } SectionHeader; 
 
 // data types genozip can compress

@@ -106,7 +106,7 @@ static int zfile_compress_do (VariantBlock *vb, Buffer *z_data, const char *data
 }
 
 static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *header, 
-                            const char *data /* NULL if section has no data */, SectionType section_type) 
+                            const char *data /* NULL if section has no data */) 
 { 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
@@ -167,7 +167,7 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
 
         // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB when the index data is
         // known, and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (section_type != SEC_VB_HEADER)
+        if (header->section_type != SEC_VB_HEADER || header->flags /* terminator vb header */)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, -1-sec_i); // (use (-1-section_i) - different than header's +section_i)
 
         // encrypt the data body 
@@ -182,8 +182,8 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
     z_data->len += total_z_len;
 
     // do calculations for --show-content and --show-sections options
-    vb->z_section_bytes[section_type] += total_z_len;
-    vb->z_num_sections [section_type] ++;
+    vb->z_section_bytes[header->section_type] += total_z_len;
+    vb->z_num_sections [header->section_type] ++;
 }
 
 void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
@@ -227,6 +227,11 @@ void zfile_uncompress_section (VariantBlock *vb,
 
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
+
+    // if we're starting a new vcf component in a concatenated file - the I/O thread already skipped the VB terminator
+    // of the previous block - so we need to update variant_block_i
+    if (!flag_split && variant_block_i == vb->variant_block_i + 1) vb->variant_block_i++;
+    
     ASSERT (variant_block_i == vb->variant_block_i, "Error: bad variant_block_i: in file=%u in vb=%u", variant_block_i, vb->variant_block_i);
 
     // decrypt data (in-place) if needed
@@ -317,7 +322,7 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_
     buf_alloc ((VariantBlock*)vb, &vcf_header_buf, vcf_header_text->len / 3, // generous guess of compressed size
                1, "vcf_header_buf", 0); 
 
-    zfile_compress ((VariantBlock*)vb, &vcf_header_buf, (SectionHeader*)&vcf_header, vcf_header_text->data, SEC_VCF_HEADER);
+    zfile_compress ((VariantBlock*)vb, &vcf_header_buf, (SectionHeader*)&vcf_header, vcf_header_text->data);
 
     file_write (file, vcf_header_buf.data, vcf_header_buf.len);
 
@@ -379,7 +384,7 @@ void zfile_compress_vb_header (VariantBlock *vb)
     
     // compress section into z_data - to be eventually written to disk by the I/O thread
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&vb_header, 
-                    my_squeeze_len ? vb->haplotype_permutation_index_squeezed.data : NULL, SEC_VB_HEADER);
+                    my_squeeze_len ? vb->haplotype_permutation_index_squeezed.data : NULL);
 
     // account for haplotype_index as part of the haplotype_data for compression statistics
     // even though we store it in the variant_data header
@@ -398,15 +403,15 @@ void zfile_compress_terminator_section (VariantBlock *vb)
     
     vb_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     vb_header.h.section_type          = SEC_VB_HEADER;
+    vb_header.h.flags                 = 1;   // terminator section
     vb_header.h.data_uncompressed_len = 0;
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
-    vb_header.first_line              = 0;  // terminator section
-
+    vb_header.h.variant_block_i       = BGEN32 (vb->variant_block_i);
+    
     buf_alloc (vb, &vb->z_data, sizeof(SectionHeaderVbHeader), 1, "z_data", 0);
 
     // compress section into z_data - to be eventually written to disk by the I/O thread
-    zfile_compress (vb, &vb->z_data, (SectionHeader*)&vb_header, 
-                    vb->haplotype_permutation_index_squeezed.data, SEC_VB_HEADER);
+    zfile_compress (vb, &vb->z_data, (SectionHeader*)&vb_header, vb->haplotype_permutation_index_squeezed.data);
 }
 
 // ZIP only: updating of the already compressed variant data section, after completion of all other sections
@@ -457,7 +462,7 @@ void zfile_compress_dictionary_data (VariantBlock *vb, SectionType dict_section_
                  ctx->did_i, num_words, num_chars, data);
    }
 
-    zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, data, dict_section_type);
+    zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, data);
 }
 
 void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
@@ -479,7 +484,7 @@ void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
     ASSERT (ctx->encoding == BASE250_ENCODING_8BIT || ctx->encoding == BASE250_ENCODING_16BIT, 
             "Error: invalid base250 encoding: %u", ctx->encoding);
             
-    zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data, ctx->b250_section_type);
+    zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data);
 }
 
 void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Buffer *section_data)
@@ -494,7 +499,7 @@ void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Bu
     header.variant_block_i       = BGEN32 (vb->variant_block_i);
     header.section_i             = BGEN16 (vb->z_next_header_i++);
     
-    zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, section_data->data, section_type);
+    zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, section_data->data);
 }
 
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
@@ -594,7 +599,7 @@ int zfile_read_one_section (VariantBlock *vb,
     // decrypt header (note: except for SEC_GENOZIP_HEADER - this header is never encrypted)
     if (is_encrypted) {
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
-                "Error: password provided, but file %s is not encrypted", file_printname (vb->z_file));
+                "Error: password provided, but file  %s is not encrypted", file_printname (vb->z_file));
 
         crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
     
@@ -629,11 +634,19 @@ int zfile_read_one_section (VariantBlock *vb,
                 "Error: failed to read section data, section_type=%s: %s", st_name(header->section_type), strerror (errno));
     }
 
-    // when showing the concatenated file, skip the 2nd+ VCF header
-    if (!flag_split &&
-        vb->z_file->vcf_data_so_far > 0 && // not first VCF component in file 
-        expected_sec_type == SEC_VCF_HEADER) 
-        return zfile_read_one_section (vb, data, buf_name, header_size, expected_sec_type);
+    // when showing the concatenated file, ignore the VCF component terminator and after that, ignore the 
+    // next component's VCF header
+    if (!flag_split) {
+        if (expected_sec_type == SEC_VB_HEADER && header->flags == 1) { // this VB header is a VCF component terminator
+            data->len = header_offset; // rewind data
+            return zfile_read_one_section (vb, data, buf_name, sizeof (SectionHeaderVCFHeader), SEC_VCF_HEADER);
+        }
+
+        if (vb->z_file->vcf_data_size_concat > 0 && expected_sec_type == SEC_VCF_HEADER) { // not first VCF component in file 
+            data->len = header_offset; // rewind data
+            return zfile_read_one_section (vb, data, buf_name, sizeof (SectionHeaderVbHeader), SEC_VB_HEADER);
+        }
+    }
 
     return header_offset;
 }
@@ -666,11 +679,10 @@ bool zfile_read_one_vb (VariantBlock *vb)
     int vb_header_offset = zfile_read_one_section (vb, &vb->z_data, "z_data",
                                                    sizeof(SectionHeaderVbHeader), SEC_VB_HEADER);
 
-    // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read
-    // more data
+    // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
     #define vb_header ((SectionHeaderVbHeader *)&vb->z_data.data[vb_header_offset])
 
-    if (!vb_header->first_line) { // this is the terminator VB header indicating the end of this VCF component
+    if (vb_header_offset == EOF) { // end of file, or end of vcf component, and we're splitting
         // update size - in case they were not known (pipe, gzip etc)
         if (!vb->z_file->disk_size) 
             vb->z_file->disk_size = vb->z_file->disk_so_far;

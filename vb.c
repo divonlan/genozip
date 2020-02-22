@@ -25,7 +25,6 @@ void vb_release_vb (VariantBlock **vb_p)
 {
     if (! *vb_p) return; // nothing to release
 
-
     VariantBlock *vb = *vb_p;
     *vb_p = NULL;
 

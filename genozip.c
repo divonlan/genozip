@@ -666,6 +666,27 @@ void verify_architecture()
 #endif
 }
 
+void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
+{
+    int num_files = argc - optind;
+    if (num_files <= 1) return; // nothing to do
+
+    # define BASENAME_LEN 256
+    char *basenames = malloc (num_files * BASENAME_LEN);
+
+    for (unsigned i=0; i < num_files; i++)
+        file_basename (argv[optind + i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
+
+    qsort (basenames, num_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
+
+    for (unsigned i=1; i < num_files; i++) 
+        ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
+                 "Warning: two files with the same name '%s' - if you later split with 'genounzip --split %s', these files will overwrite each other", 
+                 &basenames[i * BASENAME_LEN], out_filename);
+
+    free (basenames);    
+}
+
 int main (int argc, char **argv)
 {
     #define COMPRESS   'z'
@@ -834,6 +855,10 @@ int main (int argc, char **argv)
     ASSERTW (!flag_show_sections|| command == COMPRESS || command == TEST      , "%s: ignoring --show-sections, it only works with --compress or --test", global_cmd);
     ASSERTW (!flag_show_alleles || command == COMPRESS || command == TEST      , "%s: ignoring --show-alleles, it only works with --compress or --test", global_cmd);
     
+    // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
+    // will overwrite each other if extract with -o
+    if (out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
+
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
     if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
