@@ -207,7 +207,8 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
         int64_t zentries  = z_file->section_entries[secs[sec_i]];
         int32_t zsections = z_file->num_sections[secs[sec_i]];
 
-        char *vcf_size_str = (vbytes || (sec_i % 2)) ? buf_human_readable_size(vbytes, vsize) : "       ";
+        char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_human_readable_size(vbytes, vsize) : "       ";
+        
         fprintf (stderr, format, categories[sec_i], zsections, zentries,
                  vcf_size_str, 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
                  buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
@@ -363,10 +364,10 @@ static void main_genozip (const char *vcf_filename,
 
     bool remove_vcf_file = z_file && flag_replace && vcf_filename;
 
-    file_close (&vcf_file);
+    file_close (&vcf_file, NULL);
 
     if ((is_last_file || !flag_concat_mode) && !flag_stdout && z_file) 
-        file_close (&z_file); 
+        file_close (&z_file, NULL); 
 
     if (remove_vcf_file) file_remove (vcf_filename); 
 
@@ -443,9 +444,9 @@ static void main_genounzip (const char *z_filename,
         // don't close the concatenated file - it will close with the process exits
         // don't close in split mode - piz_dispatcher() opens and closes each component
         // don't close stdout - in concat mode, we might still need it for the next file
-        file_close (&vcf_file); 
+        file_close (&vcf_file, NULL); 
 
-    file_close (&z_file);
+    file_close (&z_file, NULL);
 
     free ((void *)basename);
 
@@ -528,7 +529,7 @@ static void main_test (const char *vcf_filename)
 
     fclose (from_pipe);
 
-    file_close(&vcf_file);
+    file_close(&vcf_file, NULL);
 
     return;
 }
@@ -633,7 +634,7 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     
     files_listed++;
 
-    file_close (&z_file);
+    file_close (&z_file, NULL);
 }
 
 static void main_list_dir(const char *dirname)

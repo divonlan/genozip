@@ -111,7 +111,8 @@ File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex)
     return file;
 }
 
-void file_close (File **file_p)
+void file_close (File **file_p, 
+                 VariantBlockP pseudo_vb) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with splitting concatenated files
 {
     File *file = *file_p;
     *file_p = NULL;
@@ -133,6 +134,12 @@ void file_close (File **file_p)
 
     if (file->mutex_initialized) 
         pthread_mutex_destroy (&file->mutex);
+
+    if (pseudo_vb) {
+        if (file->ra_buf.memory) buf_destroy (pseudo_vb, &file->ra_buf);
+        if (file->section_list_buf.memory) buf_destroy (pseudo_vb, &file->section_list_buf);
+        if (file->v1_next_vcf_header.memory) buf_destroy (pseudo_vb, &file->v1_next_vcf_header);
+    }
 
     if (file->name) free (file->name);
     

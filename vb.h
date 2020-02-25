@@ -94,11 +94,9 @@ typedef struct variant_block_ {
     bool has_haplotype_data;   // ditto for haplotype data
     PhaseType phase_type;      // phase type of this variant block
 
-    // chrom and pos
-    char chrom[MAX_CHROM_LEN]; // a null-terminated ID of the chromosome
-    int32_t min_pos, max_pos;  // minimum and maximum POS values in this VB. -1 if unknown
-    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding
-    bool is_sorted_by_pos;     // true if it this variant block is sorted by POS    
+    // random access, chrom and pos
+    Buffer ra_buf;             // ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file        
+    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes
 
     // working memory for segregate - we segregate a line components into these buffers, and when done
     // we copy it back to DataLine - the buffers overlaying the line field
@@ -161,8 +159,8 @@ typedef struct variant_block_ {
     MtfContext mtf_ctx[MAX_DICTS];    
 
     Buffer iname_mapper_buf;           // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[INFO].mtf
-    Buffer format_mapper_buf;         // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[FORMAT].mtf
-
+    Buffer format_mapper_buf;          // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[FORMAT].mtf
+    
     // Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
     int32_t vcf_section_bytes[NUM_SEC_TYPES];  // how many bytes did each section have in the original vcf file - should add up to the file size
     int32_t z_section_bytes[NUM_SEC_TYPES];    // how many bytes does each section type have (including headers) in the genozip file - should add up to the file size

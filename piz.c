@@ -673,7 +673,6 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->num_lines               = BGEN32 (header->num_lines);
     vb->phase_type              = (PhaseType)header->phase_type;
     vb->has_genotype_data       = header->has_genotype_data;
-    vb->is_sorted_by_pos        = header->is_sorted_by_pos;
     vb->num_haplotypes_per_line = BGEN32 (header->num_haplotypes_per_line);
     vb->has_haplotype_data      = vb->num_haplotypes_per_line > 0;
     vb->num_sample_blocks       = BGEN32 (header->num_sample_blocks);
@@ -683,9 +682,6 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->num_dict_ids            = BGEN32 (header->num_dict_ids);
     // num_dictionary_sections is read in zfile_read_one_vb()
     vb->max_gt_line_len         = BGEN32 (header->max_gt_line_len);
-    memcpy(vb->chrom, header->chrom, MAX_CHROM_LEN);
-    vb->min_pos                 = (uint32_t)BGEN64 (header->min_pos);
-    vb->max_pos                 = (uint32_t)BGEN64 (header->max_pos);
     vb->vb_data_size            = BGEN32 (header->vb_data_size);
     
     // this can if 1. VCF has no samples or 2. num_samples was not re-written to genozip header (for example if we were writing to stdout)
@@ -915,7 +911,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
         }
     }
 
-    if (flag_split) file_close (&pseudo_vb->vcf_file); // close this component file
+    if (flag_split) file_close (&pseudo_vb->vcf_file, pseudo_vb); // close this component file
 
 finish:
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

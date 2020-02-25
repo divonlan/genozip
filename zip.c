@@ -78,7 +78,7 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
 
         MtfNode *node = mtf_node (ctx, ((const uint32_t *)ctx->mtf_i.data)[i], NULL, NULL);
         
-        Base250 index = (ctx->encoding == BASE250_ENCODING_8BIT) ? node->word_index_8b : node->word_index_16b;
+        Base250 index = node->word_index;
 
         bool one_up = (index.n == prev + 1) && (ctx->b250_section_type != SEC_GENOTYPE_DATA) && (i > 0);
 
@@ -195,9 +195,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
                     MtfContext *ctx = format_mapper->ctx[sf];
                     MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
-                    
-                    // note: the choice of encoding is set in seg_decide_encodings()
-                    Base250 index = (ctx->encoding == BASE250_ENCODING_8BIT) ? node->word_index_8b : node->word_index_16b; 
+                    Base250 index = node->word_index;
 
                     if (flag_show_gt_nodes) printf ("%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
 
@@ -429,7 +427,9 @@ static void zip_compress_one_vb (VariantBlock *vb)
 
     // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
     // zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
-    // all this is done while holding exclusive access to the z_file dictionaries
+    // all this is done while holding exclusive access to the z_file dictionaries.
+    // at the same time, we also merge in ra_buf (random access index) into z_file
+    
     uint8_t field_dictionary_sections_bitmap;
     uint32_t num_info_dictionary_sections;
     uint32_t num_gt_dictionary_sections;
@@ -521,6 +521,11 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file,
     }
 }
 
+void zip_wrap_up()
+{
+
+}
+
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
@@ -609,8 +614,12 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     if (z_file && z_file->type == GENOZIP && vcf_header_header_pos >= 0) 
         success = zfile_update_vcf_header_section_header (pseudo_vb, vcf_header_header_pos, &md5);
 
-    // go back and update the genozip header
-    if (is_last_file && success) zfile_write_genozip_header (pseudo_vb, DATA_TYPE_VCF, &md5, true);    
+    // if this last file - write the sections, random access and dictionaries
+    if (is_last_file) {
+        zfile_write_dictionaries (pseudo_vb);
+        zfile_write_random_access (pseudo_vb);
+        zfile_write_sections (pseudo_vb, DATA_TYPE_VCF, &md5, true);    
+    }
 
 finish:
     z_file->disk_size = z_file->disk_so_far;

@@ -22,8 +22,7 @@
 typedef struct {
     uint32_t char_index;       // character index into dictionary array
     uint32_t snip_len;         // not including \t terminator present in dictionary array
-    Base250 word_index_8b;     // word index into dictionary (8 bit encoding)
-    Base250 word_index_16b;    // word index into dictionary (16 bit encoding)
+    Base250 word_index;        // word index into dictionary (8 or 16 bit - depending on ctx->encoding)
 } MtfNode;
 
 typedef struct {
@@ -73,7 +72,7 @@ typedef struct {
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
 
-extern int32_t mtf_evaluate_snip (VariantBlockP vb, MtfContext *ctx, const char *snip, uint32_t snip_len, bool overlayable, MtfNode **node, bool *is_new);
+extern int32_t mtf_evaluate_snip (VariantBlockP vb, MtfContext *ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
 extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
 extern void mtf_clone_ctx (VariantBlockP vb);
 extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional */, uint32_t *snip_len /* optional */);

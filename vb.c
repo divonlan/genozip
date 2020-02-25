@@ -53,7 +53,6 @@ void vb_release_vb (VariantBlock **vb_p)
         if (vb->genotype_sections_data)  buf_free(&vb->genotype_sections_data[i]);
         if (vb->phase_sections_data)     buf_free(&vb->phase_sections_data[i]);
     }
-            
 
     vb->num_lines = vb->first_line = vb->variant_block_i = 0;
     vb->vb_data_size = vb->ploidy = vb->num_haplotypes_per_line = 0;
@@ -61,8 +60,8 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->phase_type = PHASE_UNKNOWN;
     vb->vcf_file = vb->z_file = NULL;
     vb->z_next_header_i = 0;
-    vb->min_pos = vb->max_pos = vb->last_pos = vb->chrom[0] = vb->is_sorted_by_pos = 0;
     vb->num_dict_ids = vb->num_subfields = 0;
+    vb->last_pos = 0;
 
     memset(vb->vcf_section_bytes, 0, sizeof(vb->vcf_section_bytes));
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
@@ -98,7 +97,8 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->ht_columns_data);
     buf_free(&vb->spiced_pw);
     buf_free(&vb->format_info_buf);
-
+    buf_free(&vb->ra_buf);
+    
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
             mtf_free_context (&vb->mtf_ctx[i]);
@@ -175,9 +175,7 @@ VariantBlock *vb_get_vb (PoolId pool_id,
     vb->variant_block_i  = variant_block_i;
     vb->vcf_file         = vcf_file;
     vb->z_file           = z_file;
-    vb->is_sorted_by_pos = true;
-    vb->min_pos = vb->max_pos = -1;
-
+    
     return vb;
 }
 

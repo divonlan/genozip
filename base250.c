@@ -34,7 +34,7 @@ Base250 base250_encode (uint32_t n, Base250Encoding encoding)
             result.numerals[0] = result.numerals[1];
     }
 
-    else { // BASE250_ENCODING_16BIT
+    else if (encoding == BASE250_ENCODING_16BIT) {
         if (result.num_numerals >= 3) 
             result.numerals[0] = (BASE250_2_NUMERALS-2) + result.num_numerals++; // 253, 254 or 255 for 2,3 or 4
 
@@ -53,6 +53,7 @@ Base250 base250_encode (uint32_t n, Base250Encoding encoding)
             }
         }
     }
+    else ABORT ("Error: Invalid encoding %u", encoding);
 /*
     printf ("n=%u numerals=%u: ", result.n, result.num_numerals);
     for (unsigned i=0; i<result.num_numerals; i++) 

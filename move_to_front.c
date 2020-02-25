@@ -33,6 +33,7 @@ unzip:
 #include "zfile.h"
 #include "endianness.h"
 #include "file.h"
+#include "random_access.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -51,10 +52,10 @@ static inline int32_t mtf_hash (const MtfContext *ctx, const char *snip, unsigne
 
 // add a snip to the dictionary the first time it is encountered in the VCF file.
 // the dictionary will be written to GENOZIP and used to reconstruct the MTF during decompression
-static inline uint32_t mtf_insert_to_dict (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len, bool overlayable)
+static inline uint32_t mtf_insert_to_dict (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len)
 {
     buf_alloc (vb, &ctx->dict, MAX ((ctx->dict.len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 2, "mtf_ctx->dict", ctx->did_i);
-    if (overlayable) buf_set_overlayable (&ctx->dict);
+    if (ctx->encoding) buf_set_overlayable (&ctx->dict); // during merge
 
     unsigned char_index = ctx->dict.len;
     char *dict_p = &ctx->dict.data[char_index];
@@ -191,9 +192,10 @@ uint32_t mtf_get_next_snip (VariantBlock *vb, MtfContext *ctx,
     return word_index;
 }
 
-// process a snip as it is segregated during zip. if its the first time its seen, it is added to the dictionary
-// also used for adding snips to z_file->mtf_ctx during mtf_merge_in_vb_ctx_one_dict_id()
-int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len, bool overlayable,
+// Process and snip - return its node index, and enter it into the directory if its not already there. Called
+// 1. During segregate - as snips are encountered in the data. No base250 encoding yet
+// 2. During mtf_merge_in_vb_ctx_one_dict_id() - to enter snips into z_file->mtf_ctx - also encoding in base250
+int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len,
                            MtfNode **node /* out */, bool *is_new /* optional out */) 
 {
     vb->z_section_entries[ctx->b250_section_type]++; 
@@ -225,21 +227,21 @@ int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, 
     }
     
     // this snip isn't in the hash table - its a new snip
+
+    ASSERT (ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %.*s", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
+
     vb->z_section_entries[ctx->dict_section_type]++; 
 
     buf_alloc (vb, &ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, 1+ctx->mtf.len), 2, "mtf_ctx->mtf", ctx->did_i);
-    if (overlayable) buf_set_overlayable (&ctx->mtf);
+    if (ctx->encoding != BASE250_ENCODING_UNKNOWN) buf_set_overlayable (&ctx->mtf); // when called from merge
 
     new_hashent->mtf_i = ctx->ol_mtf.len + ctx->mtf.len++; // new hash entry or extend linked list
     new_hashent->next  = NIL;
 
     *node = mtf_node (ctx, new_hashent->mtf_i, NULL, NULL);
+    memset (*node, 0, sizeof(MtfNode)); // safety
     (*node)->snip_len   = snip_len;
-    (*node)->char_index = mtf_insert_to_dict (vb, ctx, snip, snip_len, overlayable);
- 
-    // we don't know yet which encoding we will actually use, so we encoding both
-    (*node)->word_index_8b  = base250_encode (new_hashent->mtf_i, BASE250_ENCODING_8BIT);
-    (*node)->word_index_16b = base250_encode (new_hashent->mtf_i, BASE250_ENCODING_16BIT);
+    (*node)->char_index = mtf_insert_to_dict (vb, ctx, snip, snip_len);
     
     // if this is the first variant block - allocate/grow sorter to contain exactly the same number of entries as mtf
     if (vb->variant_block_i == 1) {
@@ -378,7 +380,9 @@ static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
         zf_ctx->b250_section_type = vb_ctx->b250_section_type;
         zf_ctx->dict_section_type = vb_ctx->dict_section_type;
-        
+        zf_ctx->encoding          = vb_ctx->encoding;
+        zf_ctx->dict_id           = vb_ctx->dict_id;
+
         buf_move (vb, &zf_ctx->dict, &vb_ctx->dict);
         buf_set_overlayable (&zf_ctx->dict);
         buf_overlay (&vb_ctx->ol_dict, &zf_ctx->dict, 0,0,0,0);
@@ -389,7 +393,11 @@ static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
         buf_move (vb, &zf_ctx->hash, &vb_ctx->hash); // vb_ctx no longer needs the hash table - zf_ctx can take it
 
-        zf_ctx->dict_id = vb_ctx->dict_id;
+        // encode in base250 - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
+        for (unsigned i=0; i < zf_ctx->mtf.len; i++) {
+            MtfNode *zf_node = &((MtfNode *)zf_ctx->mtf.data)[i];
+            zf_node->word_index = base250_encode (i, zf_ctx->encoding);
+        }
     }
     else {
         // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
@@ -397,12 +405,11 @@ static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
             MtfNode *vb_node = &((MtfNode *)vb_ctx->mtf.data)[i];
             
             MtfNode *zf_node;
-            uint32_t zf_node_index = mtf_evaluate_snip (vb, zf_ctx, &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len, true, &zf_node, NULL);
+            uint32_t zf_node_index = mtf_evaluate_snip (vb, zf_ctx, &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len, &zf_node, NULL);
             ASSERT (zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%u out of range - len=%i", zf_node_index, vb_ctx->mtf.len);
 
-            // set word_index to be indexing the global dict - to be used by zip_generate_genotype_one_section()
-            vb_node->word_index_8b  = zf_node->word_index_8b;
-            vb_node->word_index_16b = zf_node->word_index_16b;
+            // set word_index to be indexing the global dict - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
+            vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index, zf_ctx->encoding);
         }        
     }
 
@@ -477,6 +484,9 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb,
     // vb_i=2 started, z_file is empty, created 10 contexts
     // vb_i=1 completes, merges 20 contexts to z_file, which has 20 contexts after
     // vb_i=2 completes, merges 10 contexts, of which 5 (for example) are shared with vb_i=1. Now z_file has 25 contexts after.
+
+    // now, we merge vb->ra_buf into z_file->ra_buf
+    random_access_merge_in_vb (vb);
 
     pthread_mutex_unlock (&vb->z_file->mutex);
 
@@ -679,8 +689,6 @@ void mtf_sort_dictionaries_vb_1(VariantBlock *vb)
             MtfNode *node = &((MtfNode *)ctx->mtf.data)[mtf_i];
             memcpy (next, &old_dict.data[node->char_index], node->snip_len + 1 /* +1 for \t */);
             
-            node->word_index_8b  = base250_encode (i, BASE250_ENCODING_8BIT);
-            node->word_index_16b = base250_encode (i, BASE250_ENCODING_16BIT);
             node->char_index = next - ctx->dict.data;
             
             next += node->snip_len + 1;

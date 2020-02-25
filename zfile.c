@@ -17,6 +17,7 @@
 #include "file.h"
 #include "endianness.h"
 #include "version.h"
+#include "sections.h"
 
 #define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
 
@@ -188,12 +189,15 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
     else
         total_z_len = compressed_offset + data_compressed_len;
 
+    if (section_type_is_vb (header->section_type)) 
+        sections_add_to_list (vb, header, vb->z_file->disk_so_far + z_data->len);
+
     z_data->len += total_z_len;
 
     // do calculations for --show-content and --show-sections options
     vb->z_section_bytes[header->section_type] += total_z_len;
     vb->z_num_sections [header->section_type] ++;
-
+    
     if (flag_show_headers) zfile_display_header (header);
 }
 
@@ -372,10 +376,6 @@ void zfile_compress_vb_header (VariantBlock *vb)
     vb_header.max_gt_line_len         = BGEN32 (vb->max_gt_line_len);
     vb_header.num_dict_ids            = BGEN32 (vb->num_dict_ids);
     vb_header.num_info_subfields      = BGEN32 (vb->num_info_subfields);
-    vb_header.min_pos                 = BGEN64 ((uint64_t)vb->min_pos);
-    vb_header.max_pos                 = BGEN64 ((uint64_t)vb->max_pos);
-    vb_header.is_sorted_by_pos        = vb->is_sorted_by_pos;
-    memcpy (vb_header.chrom, vb->chrom, MAX_CHROM_LEN);
 
     // create squeezed index - IF we have haplotype data (i.e. my_squeeze_len > 0)
     if (my_squeeze_len) {

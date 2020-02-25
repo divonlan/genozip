@@ -15,8 +15,8 @@
             //"args": ["-z", "GFX0241869.filtered.snp.vcf", "-f", "-o", "GFX0241869.filtered.snp.b250gt.vcf.genozip"],   
             //"args": ["-d", "GFX0241869.filtered.snp.vcf.genozip", "-o", "GFX0241869.filtered.snp.test.vcf", "-f"],
 
-            //"args": ["-f", "test-file.vcf","junk.vcf", "-o", "concat.vcf.genozip", "--show-headers"],
-            "args": ["-d", "concat.vcf.genozip", "-f", "--show-headers"],
+            "args": ["-f", "test-file.vcf"],
+            //"args": ["-d", "concat.vcf.genozip", "-f", "--show-headers"],
 
             //"args": ["-f", "-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "junk.vcf"],   
 

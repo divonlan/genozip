@@ -25,7 +25,7 @@ typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN,
 
 typedef struct file_ {
     void *file;
-    char *name;                        // allocated by file_open(), freed by file_close()
+    char *name;                       // allocated by file_open(), freed by file_close()
     FileType type;
     // these relate to actual bytes on the disk
     int64_t disk_size;                // 0 if not known (eg stdin)
@@ -33,10 +33,10 @@ typedef struct file_ {
 
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t vcf_data_size_single;     // VCF: size of the VCF data (if known)
-                                       // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
+                                      // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
     int64_t vcf_data_size_concat;     // concatenated vcf_data_size of all files compressed
     int64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
-                                       // GENOZIP: VCF data so far of original VCF file currently being processed
+                                      // GENOZIP: VCF data so far of original VCF file currently being processed
 
     // Used for READING VCF/VCF_GZ/VCF_BZ2 files: stats used to optimize memory allocation
     double avg_header_line_len, avg_data_line_len;   // average length of data line so far. 
@@ -66,8 +66,12 @@ typedef struct file_ {
     pthread_mutex_t mutex;
     bool mutex_initialized;
     unsigned next_variant_i_to_merge;  // merging vb's dictionaries into mtf_ctx needs to be in the variant_block_i order
-    unsigned num_dict_ids;            // length of populated subfield_ids and mtx_ctx;
+    unsigned num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
     MtfContext mtf_ctx[MAX_DICTS];     // a merge of dictionaries of all VBs
+    Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
+    
+    // section list - used for READING and WRITING genozip files
+    Buffer section_list_buf;
 
     // Information content stats - how many bytes and how many sections does this file have in each section type
     int64_t section_bytes[NUM_SEC_TYPES];   
@@ -84,7 +88,7 @@ typedef struct file_ {
 typedef enum {READ, WRITE} FileMode;
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
-extern void file_close (FileP *vcf_file_p);
+extern void file_close (FileP *vcf_file_p, VariantBlockP pseudo_vb /* optional */);
 extern size_t file_write (FileP file, const void *data, unsigned len);
 extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);

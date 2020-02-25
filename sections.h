@@ -17,6 +17,65 @@
 #include "md5.h"
 #include "dict_id.h"
 
+// note: the numbering of the sections cannot be modified, for backward compatability
+typedef enum {
+    // data sections - statring in v1
+    SEC_VCF_HEADER         = 0,  SEC_VB_HEADER           = 1, 
+    SEC_GENOTYPE_DICT      = 2,  SEC_GENOTYPE_DATA       = 3, 
+    SEC_PHASE_DATA         = 4,  SEC_HAPLOTYPE_DATA      = 5,
+
+    // data sections added in v2
+    SEC_GENOZIP_HEADER     = 6,
+    SEC_SECTION_LIST       = 7,   SEC_RANDOM_ACCESS      = 8,
+
+    SEC_CHROM_DICT         = 9,   SEC_CHROM_B250         = 10,
+    SEC_POS_DICT           = 11,  SEC_POS_B250           = 12,
+    SEC_ID_DICT            = 13,  SEC_ID_B250            = 14,  
+    SEC_REFALT_DICT        = 15,  SEC_REFALT_B250        = 16,  
+    SEC_QUAL_DICT          = 17,  SEC_QUAL_B250          = 18, 
+    SEC_FILTER_DICT        = 19,  SEC_FILTER_B250        = 20, 
+    SEC_INFO_DICT          = 21,  SEC_INFO_B250          = 22, 
+    SEC_FORMAT_DICT        = 23,  SEC_FORMAT_B250        = 24,
+    SEC_INFO_SUBFIELD_DICT = 25,  SEC_INFO_SUBFIELD_B250 = 26,
+    
+    // These sections are not real sections - they don't appear in the genozip file - just for stats. They can be changed if needed.
+    SEC_STATS_HT_SEPERATOR, 
+} SectionType;
+
+// we put the names here in a #define so we can eyeball their identicality to SectionType
+#define SECTIONTYPE_NAMES { \
+    "SEC_VCF_HEADER"        ,  "SEC_VB_HEADER",\
+    "SEC_GENOTYPE_DICT"     ,  "SEC_GENOTYPE_DATA",\
+    "SEC_PHASE_DATA"        ,  "SEC_HAPLOTYPE_DATA",\
+    \
+    "SEC_GENOZIP_HEADER"    ,\
+    "SEC_SECTION_LIST"      , "SEC_RANDOM_ACCESS",\
+    \
+    "SEC_CHROM_DICT"        ,  "SEC_CHROM_B250",\
+    "SEC_POS_DICT"          ,  "SEC_POS_B250",\
+    "SEC_ID_DICT"           ,  "SEC_ID_B250",\
+    "SEC_REFALT_DICT"       ,  "SEC_REFALT_B250",\
+    "SEC_QUAL_DICT"         ,  "SEC_QUAL_B250",\
+    "SEC_FILTER_DICT"       ,  "SEC_FILTER_B250",\
+    "SEC_INFO_DICT"         ,  "SEC_INFO_B250",\
+    "SEC_FORMAT_DICT"       ,  "SEC_FORMAT_B250",\
+    "SEC_INFO_SUBFIELD_DICT",  "SEC_INFO_SUBFIELD_B250",\
+    \
+    "SEC_STATS_HT_SEPERATOR" \
+}
+
+#define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) // put this here and not in sections.h as its used in vb.h that is widely used
+
+#define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_FORMAT_DICT && (s % 2 == 1)) ||       \
+                                        (s) == SEC_INFO_SUBFIELD_DICT || \
+                                        (s) == SEC_GENOTYPE_DICT)
+
+#define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_FORMAT_B250 && (s % 2 == 0)) ||       \
+                                        (s) == SEC_INFO_SUBFIELD_B250)
+
+#define section_type_is_vb(s)         (((s) >= SEC_CHROM_DICT && (s) <= SEC_INFO_SUBFIELD_B250) || \
+                                       ((s) >= SEC_VB_HEADER && (s) <= SEC_HAPLOTYPE_DATA))
+
 // Section headers - big endian
 
 #define GENOZIP_MAGIC 0x27052012
@@ -103,8 +162,7 @@ typedef struct {
     
     // flags
     uint8_t has_genotype_data : 1;     // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
-    uint8_t is_sorted_by_pos  : 1;     // 1 if variant block is sorted by POS
-    uint8_t for_future_use    : 6;
+    uint8_t for_future_use    : 7;
     uint16_t unused1;                  // new in v2: padding / ffu
 
     // features of the data
@@ -123,9 +181,6 @@ typedef struct {
     uint32_t num_info_subfields;       // v2 addition: number INFO subfields present in this VB. each subfield has a dictionary. the dictionary for each subfield is deduced from the INFO names, in the order the appear in the VB. Eg. the first INFO name, is subfield=0, and its dictionary is looked up by the name.
     uint32_t max_gt_line_len;
 
-    char chrom[MAX_CHROM_LEN];         // a null-terminated ID of the chromosome
-    int64_t min_pos, max_pos;          // minimum and maximum POS values in this VB. -1 if unknown. Note: our format support 64bit POS, but VCF specification as well as the POS dictionary supports 32bit (values 0 to 2M-1)
-
     uint32_t vb_data_size;             // size of variant block as it appears in the source file
     uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
@@ -140,8 +195,7 @@ typedef struct {
     DictIdType dict_id;           
 } SectionHeaderDictionary; 
 
-
-// new in v2 - b250 data encoded according to a dictionary
+// b250 data encoded according to a dictionary
 typedef struct {
     SectionHeader h;
     uint32_t num_b250_items;           // number of items in b250 items
@@ -150,6 +204,17 @@ typedef struct {
     DictIdType dict_id;           
 } SectionHeaderBase250;     
 
+// the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
+typedef struct {
+    uint64_t offset;              // offset of this section in the file
+    DictIdType dict_id;           // used if this section is a DICT or a B250 section
+    uint32_t variant_block_i;
+    uint8_t section_type;
+    uint8_t include         : 1;  // include this variant block in zcat
+    uint8_t for_future_use  : 7;
+} SectionListEntry;
+
+extern void sections_add_to_list (VariantBlockP pseudo_vb, const SectionHeader *header, uint64_t offset);
 
 // ------------------------------------------------------------------------------------------------------
 // GENOZIP_FILE_FORMAT_VERSION==1 historical version - we support uncomrpessing old version files
