@@ -359,8 +359,22 @@ static void mtf_wait_for_my_turn(VariantBlock *vb)
     }
 }
 
+// Called by ZIP (I/O thread) to compress all the dictionaries to pseudo_vb->z_data
+/*void mtf_compress_all_dictionaries (VariantBlock *pseudo_vb)
+{
+    File *zfile = pseudo_vb->z_file;
+
+    for (unsigned did_i=0; did_i < zfile->num_dict_ids; did_i++) {
+
+        MtfContext *ctx = &zfile->mtf_ctx[did_i];
+        if (!buf_is_allocated (&ctx->dict)) continue;
+
+        zfile_compress_dictionary_data (pseudo_vb, ctx->dict_section_type, ctx->dict_id, ctx->mtf.len, ctx->dict.data, ctx->dict.len);
+    }
+}
+*/
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
-static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
+static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 {
     MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
 
@@ -369,7 +383,7 @@ static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
     //printf ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, vb->variant_block_i, did_i, z_did_i);
 
-    if (!buf_is_allocated (&vb_ctx->dict)) return false; // nothing yet for this dict_id
+    if (!buf_is_allocated (&vb_ctx->dict)) return; // nothing yet for this dict_id
 
     uint32_t start_dict_len = zf_ctx->dict.len;
     uint32_t start_mtf_len  = zf_ctx->mtf.len;
@@ -420,6 +434,10 @@ static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     unsigned added_chars = zf_ctx->dict.len - start_dict_len;
     unsigned added_words = zf_ctx->mtf.len  - start_mtf_len;
 
+ /*   // special optimization for the GL dictionary
+    if (added_chars && dict_id_is (zf_ctx->dict_id, "GL")) 
+        gl_optimize_dictionary (vb, &zf_ctx->dict, &((MtfNode *)zf_ctx->mtf.data)[start_mtf_len], start_dict_len, added_words);
+*/
     // compress incremental part of dictionary added by this vb. note: dispatcher calls this function in the correct order of VBs.
     if (added_chars) {
 
@@ -430,22 +448,16 @@ static bool mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
         zfile_compress_dictionary_data (vb, zf_ctx->dict_section_type, zf_ctx->dict_id, added_words, start_dict, added_chars);
     }
 
-    return added_chars > 0;
+    //return added_chars > 0;
 }
 
 // ZIP only: merge new words added in this vb into the z_file.mtf_ctx, and compresses dictionaries
 // while holding exclusive access to the z_file dictionaries. returns num_dictionary_sections
-void mtf_merge_in_vb_ctx (VariantBlock *vb, 
-                          uint8_t  *field_dictionary_sections_bitmap,
-                          uint32_t *num_info_dictionary_sections,
-                          uint32_t *num_gt_dictionary_sections)
+void mtf_merge_in_vb_ctx (VariantBlock *vb)
 {
     mtf_wait_for_my_turn(vb); // we grab the mutex in the sequencial order of VBs
 
     START_TIMER; // note: careful not to count time spent waiting for the mutex
-
-    *field_dictionary_sections_bitmap = 0;
-    *num_info_dictionary_sections = *num_gt_dictionary_sections = 0;
 
     // first, all field dictionaries    
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
@@ -455,27 +467,21 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb,
 
         ASSERT (section_type_is_dictionary(dict_sec_type), "Error: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
 
-        if (dict_sec_type != SEC_INFO_SUBFIELD_DICT && dict_sec_type != SEC_GENOTYPE_DICT) {
-            bool dict_merged = mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
-            
-            if (dict_merged) {
-                unsigned f = (dict_sec_type - SEC_CHROM_DICT) / 2;
-                (*field_dictionary_sections_bitmap) |= (1 << f); // set bit in bitmap
-            }
-        }
+        if (dict_sec_type != SEC_INFO_SUBFIELD_DICT && dict_sec_type != SEC_GENOTYPE_DICT) 
+            mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
     }
 
     // second, all the info subfield dictionaries
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++)         
         if (buf_is_allocated (&vb->mtf_ctx[did_i].dict) && 
             vb->mtf_ctx[did_i].dict_section_type == SEC_INFO_SUBFIELD_DICT) 
-            (*num_info_dictionary_sections) += mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
+            mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
 
     // third, all the genotype subfield dictionaries
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++)         
         if (buf_is_allocated (&vb->mtf_ctx[did_i].dict) && 
             vb->mtf_ctx[did_i].dict_section_type == SEC_GENOTYPE_DICT) 
-            (*num_gt_dictionary_sections) += mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
+            mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
 
     vb->z_file->next_variant_i_to_merge++;
 

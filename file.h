@@ -50,6 +50,7 @@ typedef struct file_ {
     // Used for READING GENOZIP files
     Buffer v1_next_vcf_header;         // genozip v1 only: next VCF header - used when reading in --split mode
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
+    uint32_t num_vcf_components;       // set from genozip header
 
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_vcf_file;     // the value of disk_size when starting to read this vcf file
@@ -69,10 +70,12 @@ typedef struct file_ {
     unsigned num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
     MtfContext mtf_ctx[MAX_DICTS];     // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
-    
+    Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file
+
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;
-
+    uint32_t num_vcf_components_so_far;
+    
     // Information content stats - how many bytes and how many sections does this file have in each section type
     int64_t section_bytes[NUM_SEC_TYPES];   
     int64_t section_entries[NUM_SEC_TYPES]; // used only for Z files - number of entries of this type (dictionary entries or base250 entries)
@@ -90,6 +93,7 @@ extern File *file_open (const char *filename, FileMode mode, FileType expected_t
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
 extern void file_close (FileP *vcf_file_p, VariantBlockP pseudo_vb /* optional */);
 extern size_t file_write (FileP file, const void *data, unsigned len);
+extern void file_seek (FileP file, int64_t offset, int whence);
 extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,

@@ -136,6 +136,7 @@ void file_close (File **file_p,
         pthread_mutex_destroy (&file->mutex);
 
     if (pseudo_vb) {
+        if (file->dict_data.memory) buf_destroy (pseudo_vb, &file->dict_data);
         if (file->ra_buf.memory) buf_destroy (pseudo_vb, &file->ra_buf);
         if (file->section_list_buf.memory) buf_destroy (pseudo_vb, &file->section_list_buf);
         if (file->v1_next_vcf_header.memory) buf_destroy (pseudo_vb, &file->v1_next_vcf_header);
@@ -199,4 +200,13 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
     sprintf (basename, "%.*s", (int)len, start);
 
     return basename;
+}
+
+void file_seek (File *file, int64_t offset, int whence)
+{
+    ASSERT (!fseeko ((FILE *)file->file, offset, whence), 
+            "Error: fseeko failed on file %s: %s", file_printname (file), strerror (errno));
+
+    // reset the read buffers
+    file->next_read = file->last_read = READ_BUFFER_SIZE;
 }

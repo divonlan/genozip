@@ -17,15 +17,31 @@ void random_access_merge_in_vb (VariantBlock *vb)
     RAEntry *dst_ra = &((RAEntry *)vb->z_file->ra_buf.data)[vb->z_file->ra_buf.len];
     RAEntry *src_ra = ((RAEntry *)vb->ra_buf.data);
 
-    MtfNode *chrom_mtf = (MtfNode *)vb->mtf_ctx[CHROM].mtf.data;
+    MtfNode *chrom_mtf = (MtfNode *)vb->mtf_ctx[CHROM].ol_mtf.data;
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
-        dst_ra->is_sorted       = src_ra->is_sorted;
-        dst_ra->variant_block_i = BGEN32 (vb->variant_block_i);
-        dst_ra->chrom           = BGEN32 (chrom_mtf[src_ra->chrom].word_index.n);
-        dst_ra->first_pos       = BGEN32 (src_ra->first_pos);
-        dst_ra->last_pos        = BGEN32 (src_ra->last_pos - src_ra->first_pos); // delta compresses better ?? check
-        dst_ra->start_vb_line   = BGEN32 (src_ra->start_vb_line);
-        dst_ra->num_vb_lines    = BGEN32 (src_ra->num_vb_lines);
+        dst_ra[i].is_sorted       = src_ra[i].is_sorted;
+        dst_ra[i].variant_block_i = BGEN32 (vb->variant_block_i);
+        dst_ra[i].chrom           = BGEN32 (chrom_mtf[src_ra[i].chrom].word_index.n);
+        dst_ra[i].first_pos       = BGEN32 (src_ra[i].first_pos);
+        dst_ra[i].last_pos        = BGEN32 (src_ra[i].last_pos - src_ra[i].first_pos); // delta compresses better ?? check
+        dst_ra[i].start_vb_line   = BGEN32 (src_ra[i].start_vb_line);
+        dst_ra[i].num_vb_lines    = BGEN32 (src_ra[i].num_vb_lines);
+    }
+
+    vb->z_file->ra_buf.len += vb->ra_buf.len;
+}
+
+void BGEN_random_access (Buffer *ra_buf)
+{
+    RAEntry *ra = (RAEntry *)ra_buf->data;
+
+    for (unsigned i=0; i < ra_buf->len; i++) {
+        ra[i].variant_block_i = BGEN32 (ra[i].variant_block_i);
+        ra[i].chrom           = BGEN32 (ra[i].chrom);
+        ra[i].first_pos       = BGEN32 (ra[i].first_pos);
+        ra[i].last_pos        = BGEN32 (ra[i].last_pos) + ra[i].first_pos; // restore from delta
+        ra[i].start_vb_line   = BGEN32 (ra[i].start_vb_line);
+        ra[i].num_vb_lines    = BGEN32 (ra[i].num_vb_lines);
     }
 }

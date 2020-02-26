@@ -18,7 +18,7 @@ typedef enum { POOL_ID_UNIT_TEST=-1, POOL_ID_ZIP=0, POOL_ID_UNZIP=1 } PoolId;
 
 typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_FULL_OVERLAY, BUF_PARTIAL_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
 
-typedef struct {
+typedef struct buffer_ {
     BufferType type;
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     const char *name; // name of allocator - used for memory debugging & statistics

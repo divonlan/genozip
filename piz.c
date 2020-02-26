@@ -18,6 +18,7 @@
 #include "squeeze.h"
 #include "piz.h"
 #include "sections.h"
+#include "random_access.h"
 
 typedef struct {
     unsigned num_subfields;         // number of subfields this FORMAT has
@@ -821,6 +822,35 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
+// read all the sections at the end of the file, before starting to process VBs
+static int16_t piz_read_global_area (VariantBlock *pseudo_vb, bool need_random_access,
+                                     Md5Hash *original_file_digest) // out
+{
+    File *zfile = pseudo_vb->z_file;
+
+    uint16_t data_type = zfile_read_genozip_header (pseudo_vb, original_file_digest);
+    if (data_type == MAYBE_V1 || data_type == EOF) return data_type;
+
+    // read dictionaries
+    zfile_read_all_dictionaries (pseudo_vb, 0);
+   
+    // read random access, but only if we are going to need it
+    if (need_random_access) {
+        zfile_read_one_section (pseudo_vb, &pseudo_vb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
+
+        zfile_uncompress_section (pseudo_vb, pseudo_vb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
+
+        zfile->ra_buf.len /= sizeof (RAEntry);
+        BGEN_random_access (&zfile->ra_buf);
+
+        buf_free (&pseudo_vb->z_data);
+    }
+
+    file_seek (zfile, 0, SEEK_SET);
+    
+    return DATA_TYPE_VCF;
+}
+
 // returns true is successfully outputted a vcf file
 bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads, 
                      bool is_first_vcf_component, bool is_last_file)
@@ -840,9 +870,9 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     // read genozip header and set the data type when reading the first vcf component of in case of --split, 
     static int16_t data_type=-1; 
     if (is_first_vcf_component) 
-        data_type = zfile_read_genozip_header (pseudo_vb, &original_file_digest);
+        data_type = piz_read_global_area (pseudo_vb, true, &original_file_digest);
 
-    ASSERT (data_type == MAYBE_V1 || data_type == DATA_TYPE_VCF, "Error: unrecognized data_type=%u", data_type);
+    if (data_type == EOF) goto finish;
 
     // read and write VCF header. in split mode this also opens vcf_file
     bool piz_successful = data_type != MAYBE_V1 ? vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest)

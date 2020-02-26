@@ -7,10 +7,9 @@
 #define SEGREGATE_INCLUDED
 
 #include "genozip.h"
-#include "buffer.h"
 #include "dict_id.h"
 
-extern void seg_all_data_lines (VariantBlockP vb, Buffer *lines_orig /* for testing */);
+extern void seg_all_data_lines (VariantBlockP vb, BufferP lines_orig /* for testing */);
 extern DictIdType seg_get_format_subfield (const char **data, uint32_t *len, unsigned line_i);
 
 #endif

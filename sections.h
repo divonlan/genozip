@@ -25,18 +25,17 @@ typedef enum {
     SEC_PHASE_DATA         = 4,  SEC_HAPLOTYPE_DATA      = 5,
 
     // data sections added in v2
-    SEC_GENOZIP_HEADER     = 6,
-    SEC_SECTION_LIST       = 7,   SEC_RANDOM_ACCESS      = 8,
+    SEC_GENOZIP_HEADER     = 6,   SEC_RANDOM_ACCESS      = 7,
 
-    SEC_CHROM_DICT         = 9,   SEC_CHROM_B250         = 10,
-    SEC_POS_DICT           = 11,  SEC_POS_B250           = 12,
-    SEC_ID_DICT            = 13,  SEC_ID_B250            = 14,  
-    SEC_REFALT_DICT        = 15,  SEC_REFALT_B250        = 16,  
-    SEC_QUAL_DICT          = 17,  SEC_QUAL_B250          = 18, 
-    SEC_FILTER_DICT        = 19,  SEC_FILTER_B250        = 20, 
-    SEC_INFO_DICT          = 21,  SEC_INFO_B250          = 22, 
-    SEC_FORMAT_DICT        = 23,  SEC_FORMAT_B250        = 24,
-    SEC_INFO_SUBFIELD_DICT = 25,  SEC_INFO_SUBFIELD_B250 = 26,
+    SEC_CHROM_DICT         = 8,   SEC_CHROM_B250         = 9,
+    SEC_POS_DICT           = 10,  SEC_POS_B250           = 11,
+    SEC_ID_DICT            = 12,  SEC_ID_B250            = 13,  
+    SEC_REFALT_DICT        = 14,  SEC_REFALT_B250        = 15,  
+    SEC_QUAL_DICT          = 16,  SEC_QUAL_B250          = 17, 
+    SEC_FILTER_DICT        = 18,  SEC_FILTER_B250        = 19, 
+    SEC_INFO_DICT          = 20,  SEC_INFO_B250          = 21, 
+    SEC_FORMAT_DICT        = 22,  SEC_FORMAT_B250        = 23,
+    SEC_INFO_SUBFIELD_DICT = 24,  SEC_INFO_SUBFIELD_B250 = 25,
     
     // These sections are not real sections - they don't appear in the genozip file - just for stats. They can be changed if needed.
     SEC_STATS_HT_SEPERATOR, 
@@ -48,8 +47,7 @@ typedef enum {
     "SEC_GENOTYPE_DICT"     ,  "SEC_GENOTYPE_DATA",\
     "SEC_PHASE_DATA"        ,  "SEC_HAPLOTYPE_DATA",\
     \
-    "SEC_GENOZIP_HEADER"    ,\
-    "SEC_SECTION_LIST"      , "SEC_RANDOM_ACCESS",\
+    "SEC_GENOZIP_HEADER"    ,  "SEC_RANDOM_ACCESS",\
     \
     "SEC_CHROM_DICT"        ,  "SEC_CHROM_B250",\
     "SEC_POS_DICT"          ,  "SEC_POS_B250",\
@@ -66,11 +64,11 @@ typedef enum {
 
 #define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) // put this here and not in sections.h as its used in vb.h that is widely used
 
-#define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_FORMAT_DICT && (s % 2 == 1)) ||       \
+#define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_FORMAT_DICT && (s) % 2 == SEC_CHROM_DICT % 2) ||       \
                                         (s) == SEC_INFO_SUBFIELD_DICT || \
                                         (s) == SEC_GENOTYPE_DICT)
 
-#define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_FORMAT_B250 && (s % 2 == 0)) ||       \
+#define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_FORMAT_B250 && (s) % 2 == SEC_CHROM_B250 % 2) ||       \
                                         (s) == SEC_INFO_SUBFIELD_B250)
 
 #define section_type_is_vb(s)         (((s) >= SEC_CHROM_DICT && (s) <= SEC_INFO_SUBFIELD_B250) || \
@@ -109,17 +107,29 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint8_t genozip_version;
-    uint8_t encryption_type;   // one of ENC_TYPE_*
-    uint16_t data_type;        // one of DATA_TYPE_*
-    uint32_t num_samples;      // number of samples. "samples" is data_type-dependent. 
+    uint8_t encryption_type;          // one of ENC_TYPE_*
+    uint16_t data_type;               // one of DATA_TYPE_*
+    uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
     uint64_t uncompressed_data_size;  // data size of uncompressed file, if uncompressed as a single file
-    uint64_t num_items_concat; // number of items in a concatenated file. "item" is data_type-dependent. For VCF, it is lines.
+    uint64_t num_items_concat;        // number of items in a concatenated file. "item" is data_type-dependent. For VCF, it is lines.
+    uint32_t num_sections;            // number sections in this file (including this one)
+    uint32_t num_vcf_components;      // number of vcf concatenated components in this file (1 if no concatenation)
+    uint32_t num_info_dictionary_sections;  // DO WE NEED THIS?
+    uint32_t num_gt_dictionary_sections;    // AND THIS?
+
     Md5Hash md5_hash_concat;   // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
 
     uint8_t password_test[16]; // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
-} SectionHeaderGenozipHeader;
+} 
+SectionHeaderGenozipHeader;
+
+// this footer appears AFTER the genozip header data, facilitating reading the genozip header in reverse from the end of the file
+typedef struct {
+    uint64_t genozip_header_offset;
+    uint32_t magic;
+} SectionFooterGenozipHeader;
 
 #define COMPRESSION_TYPE_NONE  0
 #define COMPRESSION_TYPE_GZIP  1
@@ -172,12 +182,12 @@ typedef struct {
     uint32_t num_samples_per_block;
     uint16_t ploidy;
     uint8_t  unused2;                  // new in v2: padding / ffu
-    uint8_t  field_dictionary_sections_bitmap; // new in v2: bitmap on the existance of field dictionaries: from LSb=CHROM to MSb=FORMAT
+/*    uint8_t  field_dictionary_sections_bitmap; // new in v2: bitmap on the existance of field dictionaries: from LSb=CHROM to MSb=FORMAT
                                        // note: each section corresponds to a dict_id, BUT not all dict_ids have sections - 
                                        // they won't, if all their snips have already been entered to the dictionary by previous VBs
     uint32_t num_info_dictionary_sections;  // new in v2
     uint32_t num_gt_dictionary_sections;    // rename from num_dictionary_sections in v1
-    uint32_t num_dict_ids;             // v2 change: uint16_t->uint32_t. number of dict_ids used in this VB. the actual fields are deduced from the FORMAT column on each line
+*/    uint32_t num_dict_ids;             // v2 change: uint16_t->uint32_t. number of dict_ids used in this VB. the actual fields are deduced from the FORMAT column on each line
     uint32_t num_info_subfields;       // v2 addition: number INFO subfields present in this VB. each subfield has a dictionary. the dictionary for each subfield is deduced from the INFO names, in the order the appear in the VB. Eg. the first INFO name, is subfield=0, and its dictionary is looked up by the name.
     uint32_t max_gt_line_len;
 
@@ -215,6 +225,9 @@ typedef struct {
 } SectionListEntry;
 
 extern void sections_add_to_list (VariantBlockP pseudo_vb, const SectionHeader *header, uint64_t offset);
+extern void sections_update_list (VariantBlockP vb, bool is_z_data);
+extern void BGEN_sections_list (BufferP sections_list_buf);
+extern const char *st_name (unsigned sec_type);
 
 // ------------------------------------------------------------------------------------------------------
 // GENOZIP_FILE_FORMAT_VERSION==1 historical version - we support uncomrpessing old version files

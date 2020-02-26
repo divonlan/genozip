@@ -18,6 +18,8 @@
 #include "move_to_front.h"
 #include "zip.h"
 #include "base250.h"
+#include "random_access.h"
+#include "endianness.h"
 
 // read entire variant block to memory. this is called from the dispatcher thread
 static void zip_read_variant_block (File *vcf_file,
@@ -430,10 +432,7 @@ static void zip_compress_one_vb (VariantBlock *vb)
     // all this is done while holding exclusive access to the z_file dictionaries.
     // at the same time, we also merge in ra_buf (random access index) into z_file
     
-    uint8_t field_dictionary_sections_bitmap;
-    uint32_t num_info_dictionary_sections;
-    uint32_t num_gt_dictionary_sections;
-    mtf_merge_in_vb_ctx(vb, &field_dictionary_sections_bitmap, &num_info_dictionary_sections, &num_gt_dictionary_sections);
+    mtf_merge_in_vb_ctx(vb);
 
     // generate & write b250 data for all fields (CHROM to FORMAT)
     for (VcfFields f=CHROM ; f <= FORMAT ; f++) {
@@ -481,28 +480,37 @@ static void zip_compress_one_vb (VariantBlock *vb)
     }
 
     // update z_data in memory (its not written to disk yet)
-    zfile_update_compressed_vb_header (vb, variant_data_header_pos, field_dictionary_sections_bitmap, 
-                                       num_info_dictionary_sections, num_gt_dictionary_sections, num_info_subfields);
+    zfile_update_compressed_vb_header (vb, variant_data_header_pos, num_info_subfields);
     
     COPY_TIMER (vb->profile.compute);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
-static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file, File *z_file, bool is_final)
+static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file, bool is_final, bool is_z_data)
 {
+    File *z_file = processed_vb->z_file;
+    Buffer *data_buf = is_z_data ? &processed_vb->z_data : &z_file->dict_data;
+
+    // update offsets - compress sets the offset of each section to the offset within its data_buf, and
+    // here we update it to be the offset within the file
+    sections_update_list (processed_vb, is_z_data);
+
     START_TIMER;
-    file_write (z_file, processed_vb->z_data.data, processed_vb->z_data.len);
+    file_write (z_file, data_buf->data, data_buf->len);
     COPY_TIMER (processed_vb->profile.write);
 
-    z_file->disk_so_far      += (long long)processed_vb->z_data.len;
-    z_file->vcf_data_so_far  += (long long)processed_vb->vb_data_size;
-    z_file->num_lines_single += (long long)processed_vb->num_lines;
-    z_file->num_lines_concat += (long long)processed_vb->num_lines;
+    z_file->disk_so_far += (long long)data_buf->len;
+    
+    if (is_z_data) {
+        z_file->vcf_data_so_far  += (long long)processed_vb->vb_data_size;
+        z_file->num_lines_single += (long long)processed_vb->num_lines;
+        z_file->num_lines_concat += (long long)processed_vb->num_lines;
+    }
 
     // update section stats
     for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        vcf_file->section_bytes[sec_i]  += processed_vb->vcf_section_bytes[sec_i];
+        if (vcf_file) vcf_file->section_bytes[sec_i]  += processed_vb->vcf_section_bytes[sec_i];
         z_file->num_sections[sec_i]     += processed_vb->z_num_sections[sec_i];
         z_file->section_bytes[sec_i]    += processed_vb->z_section_bytes[sec_i];
         z_file->section_entries[sec_i]  += processed_vb->z_section_entries[sec_i];
@@ -521,9 +529,23 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file,
     }
 }
 
-void zip_wrap_up()
+// write all the sections at the end of the file, after all VB stuff has been written
+static void zip_write_global_area (VariantBlock *pseudo_vb, const Md5Hash *single_component_md5)
 {
+    File *file = pseudo_vb->z_file;
 
+    // output dictionaries to disk
+    zip_output_processed_vb (pseudo_vb, NULL, false, false);  
+    
+    // compress all random access records into pseudo_vb->z_data
+    file->ra_buf.len *= sizeof (RAEntry); // change len to count bytes
+    zfile_compress_section_data (pseudo_vb, SEC_RANDOM_ACCESS, &file->ra_buf);
+
+    // compress genozip header (including section records and footer) into pseudo_vb->z_data
+    zfile_compress_genozip_header (pseudo_vb, DATA_TYPE_VCF, single_component_md5);    
+
+    // output to disk random access and genozip header sections to disk
+    zip_output_processed_vb (pseudo_vb, NULL, false, true);    
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
@@ -542,8 +564,8 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
-    if (!z_file->disk_so_far) // write the genozip header only if this is the first vcf component
-        zfile_write_genozip_header (pseudo_vb, DATA_TYPE_VCF, NULL, false);
+//    if (!z_file->disk_so_far) // write the genozip header only if this is the first vcf component
+//        zfile_write_genozip_header (pseudo_vb, DATA_TYPE_VCF, NULL, false);
 
     unsigned line_i = 0; // last line read (first line in file = 1, consistent with script line numbers)
 
@@ -574,7 +596,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL);
             if (!processed_vb) continue; // no running compute threads or vb processing not completed
             
-            zip_output_processed_vb (processed_vb, vcf_file, z_file, false);
+            zip_output_processed_vb (processed_vb, vcf_file, false, true);
 
             dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
                                         z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
@@ -606,20 +628,16 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     // write terminator section to disk - this will mark the end of this VCF component
     next_vb = dispatcher_generate_next_vb (dispatcher);
     zfile_compress_terminator_section (next_vb);
-    zip_output_processed_vb (next_vb, vcf_file, z_file, true);
+    zip_output_processed_vb (next_vb, vcf_file, true, true);
 
     // go back and update some fields in the vcf header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
-    Md5Hash md5;
+    Md5Hash single_component_md5;
     if (z_file && z_file->type == GENOZIP && vcf_header_header_pos >= 0) 
-        success = zfile_update_vcf_header_section_header (pseudo_vb, vcf_header_header_pos, &md5);
+        success = zfile_update_vcf_header_section_header (pseudo_vb, vcf_header_header_pos, &single_component_md5);
 
-    // if this last file - write the sections, random access and dictionaries
-    if (is_last_file) {
-        zfile_write_dictionaries (pseudo_vb);
-        zfile_write_random_access (pseudo_vb);
-        zfile_write_sections (pseudo_vb, DATA_TYPE_VCF, &md5, true);    
-    }
+    // if this last file - write the genozip header, random access and dictionaries
+    if (is_last_file) zip_write_global_area (pseudo_vb, &single_component_md5);
 
 finish:
     z_file->disk_size = z_file->disk_so_far;

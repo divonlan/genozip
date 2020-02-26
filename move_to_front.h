@@ -11,6 +11,7 @@
 #include "base250.h"
 #include "dict_id.h"
 #include "base250.h"
+#include "sections.h"
 
 // fake mtf index values that go into genotype_data after segregation if subfields are missing
 #define WORD_INDEX_MAX_INDEX  0xfffffffcUL // the number just smaller than all the special values below
@@ -76,7 +77,8 @@ extern int32_t mtf_evaluate_snip (VariantBlockP vb, MtfContext *ctx, const char 
 extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
 extern void mtf_clone_ctx (VariantBlockP vb);
 extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional */, uint32_t *snip_len /* optional */);
-extern void mtf_merge_in_vb_ctx (VariantBlockP vb, uint8_t  *field_dictionary_sections_bitmap, uint32_t *num_info_dictionary_sections, uint32_t *num_gt_dictionary_sections);
+extern void mtf_merge_in_vb_ctx (VariantBlockP vb);
+//extern void mtf_compress_all_dictionaries (VariantBlockP pseudo_vb);
 extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, unsigned *num_subfields, DictIdType dict_id, SectionType dict_section_type);
 extern int mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id, bool error_if_absent);
 extern void mtf_integrate_dictionary_fragment (VariantBlockP vb, char *data);

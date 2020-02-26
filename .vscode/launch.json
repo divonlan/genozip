@@ -12,11 +12,11 @@
 
             //"args": ["-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "test.vcf", "-f", "-@1"],
 
-            //"args": ["-z", "GFX0241869.filtered.snp.vcf", "-f", "-o", "GFX0241869.filtered.snp.b250gt.vcf.genozip"],   
-            //"args": ["-d", "GFX0241869.filtered.snp.vcf.genozip", "-o", "GFX0241869.filtered.snp.test.vcf", "-f"],
+            //"args": ["-z", "GFX0241869.filtered.snp.vcf", "-f", "-o", "GFX0241869.filtered.snp.ra.vcf.genozip"],   
+            //"args": ["-d", "GFX0241869.filtered.snp.ra.vcf.genozip", "-f"],
 
-            "args": ["-f", "test-file.vcf"],
-            //"args": ["-d", "concat.vcf.genozip", "-f", "--show-headers"],
+            //"args": ["-f", "test-file.vcf", "--show-headers", "--show-sections"],
+            "args": ["-d", "test-file.vcf.genozip", "-o", "test-file.test.vcf", "-f", "--show-headers"],
 
             //"args": ["-f", "-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "junk.vcf"],   
 

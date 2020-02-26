@@ -437,6 +437,7 @@ void buf_free (Buffer *buf)
         case BUF_REGULAR: 
 
             if (buf->overlayable) {
+
                 pthread_mutex_lock (&overlay_mutex);
                 overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
 
@@ -455,6 +456,8 @@ void buf_free (Buffer *buf)
             
             buf->data = NULL; 
             buf->len = 0;
+            buf->overlayable = false;
+            
             // name, param, memory and size are not changed
 
             break;

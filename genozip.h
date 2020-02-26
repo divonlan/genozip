@@ -58,6 +58,8 @@ typedef struct variant_block_ *VariantBlockP;
 typedef const struct variant_block_ *ConstVariantBlockP;
 typedef struct file_ *FileP;
 typedef const struct file_ *ConstFileP;
+typedef struct buffer_ *BufferP;
+typedef const struct buffer_ *ConstBufferP;
 
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples, global_max_lines_per_vb;

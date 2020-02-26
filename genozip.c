@@ -176,7 +176,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 
     // the order in which we want them displayed
     const SectionType secs[] = {
-        SEC_GENOZIP_HEADER,
+        SEC_GENOZIP_HEADER, SEC_RANDOM_ACCESS,
         SEC_VCF_HEADER, SEC_VB_HEADER,
         SEC_CHROM_B250, SEC_CHROM_DICT, SEC_POS_B250, SEC_POS_DICT, 
         SEC_ID_B250, SEC_ID_DICT, SEC_REFALT_B250, SEC_REFALT_DICT, SEC_QUAL_B250, SEC_QUAL_DICT,
@@ -187,7 +187,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
     };
 
     static const char *categories[] = {
-        "Genozip header", "VCF header", "Variant block metadata", 
+        "Genozip header", "Random access index", "VCF header", "Variant block metadata", 
         "CHROM b250", "CHROM dict", "POS b250", "POS dict", "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
         "QUAL b250", "QUAL dict", "FILTER b250", "FILTER dict",
         "INFO names b250", "INFO names dict", "INFO values b250", "INFO values dict", 
@@ -403,11 +403,9 @@ static void main_genounzip (const char *z_filename,
         z_file = file_fdopen (pipe_from_zip_thread, READ, GENOZIP, false);
     }
     else { // stdin
-#ifdef _WIN32
-        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the input stream...
-        ABORT ("%s: redirecting binary input is not supported on Windows", global_cmd);
-#endif
-        z_file = file_fdopen (0, READ, STDIN, false);
+        // we don't allow reading the genozip file from stdin, because we need to random-access it - e.g. start by
+        // reading the genozip header in its end
+        ABORT ("%s: missing a genozip file name, please see '%s --help' for more details", global_cmd, global_cmd);
     }
 
     // get output FILE

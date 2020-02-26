@@ -153,7 +153,8 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
         vb->vcf_file->section_bytes[SEC_VCF_HEADER] = vcf_header_text.len;
         vb->z_file  ->section_bytes[SEC_VCF_HEADER] = vb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
         vb->z_file  ->num_sections [SEC_VCF_HEADER]++;
-    }
+        vb->z_file  ->num_vcf_components_so_far++;
+   }
 
     // case : header not found, but data line found
     else 
@@ -161,7 +162,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
 
     // case : empty file - not an error (caller will see that *first_data_line is NULL)
     buf_free (&vcf_header_text);
-
+    
     return true; // everything's good
 }
 
@@ -234,6 +235,8 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
 
     buf_free (&vcf_header_section);
     buf_free (&vcf_header_buf);
+
+    vb->z_file->num_vcf_components_so_far++;
 
     return true;
 }
