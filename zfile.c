@@ -381,8 +381,8 @@ void zfile_compress_vb_header (VariantBlock *vb)
     vb_header.ploidy                  = BGEN16 (vb->ploidy);
     vb_header.vb_data_size            = BGEN32 (vb->vb_data_size);
     vb_header.max_gt_line_len         = BGEN32 (vb->max_gt_line_len);
-    vb_header.num_dict_ids            = BGEN32 (vb->num_dict_ids);
-    vb_header.num_info_subfields      = BGEN32 (vb->num_info_subfields);
+//    vb_header.num_dict_ids            = BGEN32 (vb->num_dict_ids);
+//    vb_header.num_info_subfields      = BGEN32 (vb->num_info_subfields);
 
     // create squeezed index - IF we have haplotype data AND more than one haplotype per line (i.e. my_squeeze_len > 0)
     if (my_squeeze_len) {
@@ -435,7 +435,7 @@ void zfile_update_compressed_vb_header (VariantBlock *vb,
                                         uint32_t num_info_subfields)
 {
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)&vb->z_data.data[pos];
-    vb_header->num_info_subfields               = BGEN32 (num_info_subfields);
+//    vb_header->num_info_subfields               = BGEN32 (num_info_subfields);
     vb_header->z_data_bytes                     = BGEN32 ((uint32_t)vb->z_data.len);
 
     // now we can finally encrypt the header - if needed
@@ -760,8 +760,8 @@ bool zfile_read_one_vb (VariantBlock *vb)
     }
 
     // read the info subfield sections into memory (if any)
-    uint32_t num_info_subfields = BGEN32 (vb_header->num_info_subfields);
-    for (unsigned sf_i=0; sf_i < num_info_subfields; sf_i++) {
+    vb->num_info_subfields = sections_get_num_info_b250s (vb->z_file, vb->variant_block_i); // also used later in piz_uncompress_all_sections()
+    for (unsigned sf_i=0; sf_i < vb->num_info_subfields; sf_i++) {
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
         zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_INFO_SUBFIELD_B250);    
     }

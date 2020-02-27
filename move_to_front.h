@@ -79,7 +79,7 @@ extern void mtf_clone_ctx (VariantBlockP vb);
 extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional */, uint32_t *snip_len /* optional */);
 extern void mtf_merge_in_vb_ctx (VariantBlockP vb);
 extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, unsigned *num_subfields, DictIdType dict_id, SectionType dict_section_type);
-extern int mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id, bool error_if_absent);
+extern int mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id);
 extern void mtf_integrate_dictionary_fragment (VariantBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VariantBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlockP vb);

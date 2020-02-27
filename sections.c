@@ -77,6 +77,18 @@ void sections_list_concat (VariantBlock *vb, BufferP section_list_buf)
     buf_free (section_list_buf);
 }
 
+// called by PIZ I/O thread: zfile_read_on_vb
+uint32_t sections_get_num_info_b250s (const File *z_file, uint32_t variant_block_i)
+{
+    SectionListEntry *ent = ((SectionListEntry *)z_file->section_list_buf.data);
+    uint32_t counter=0;
+
+    for (unsigned i=0; i < z_file->section_list_buf.len; i++, ent++)
+        counter += (variant_block_i == ent->variant_block_i) && (ent->section_type == SEC_INFO_SUBFIELD_B250);
+
+    return counter;
+}
+
 void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozipHeader *header)
 {
     unsigned num_sections = BGEN32 (header->num_sections);

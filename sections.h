@@ -21,7 +21,7 @@
 typedef enum {
     // data sections - statring in v1
     SEC_VCF_HEADER         = 0,  SEC_VB_HEADER           = 1, 
-    SEC_FRMT_SUBFIELD_DICT      = 2,  SEC_GENOTYPE_DATA       = 3, 
+    SEC_FRMT_SUBFIELD_DICT = 2,  SEC_GENOTYPE_DATA       = 3, 
     SEC_PHASE_DATA         = 4,  SEC_HAPLOTYPE_DATA      = 5,
 
     // data sections added in v2
@@ -44,7 +44,7 @@ typedef enum {
 // we put the names here in a #define so we can eyeball their identicality to SectionType
 #define SECTIONTYPE_NAMES { \
     "SEC_VCF_HEADER"        ,  "SEC_VB_HEADER",\
-    "SEC_FRMT_SUBFIELD_DICT"     ,  "SEC_GENOTYPE_DATA",\
+    "SEC_FRMT_SUBFIELD_DICT",  "SEC_GENOTYPE_DATA",\
     "SEC_PHASE_DATA"        ,  "SEC_HAPLOTYPE_DATA",\
     \
     "SEC_GENOZIP_HEADER"    ,  "SEC_RANDOM_ACCESS",\
@@ -173,22 +173,13 @@ typedef struct {
     // flags
     uint8_t has_genotype_data : 1;     // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
     uint8_t for_future_use    : 7;
-    uint16_t unused1;                  // new in v2: padding / ffu
+    uint16_t ploidy;
 
     // features of the data
     uint32_t num_samples;
     uint32_t num_haplotypes_per_line;  // 0 if no haplotypes
     uint32_t num_sample_blocks;
     uint32_t num_samples_per_block;
-    uint16_t ploidy;
-    uint8_t  unused2;                  // new in v2: padding / ffu
-/*    uint8_t  field_dictionary_sections_bitmap; // new in v2: bitmap on the existance of field dictionaries: from LSb=CHROM to MSb=FORMAT
-                                       // note: each section corresponds to a dict_id, BUT not all dict_ids have sections - 
-                                       // they won't, if all their snips have already been entered to the dictionary by previous VBs
-    uint32_t num_info_dictionary_sections;  // new in v2
-    uint32_t num_gt_dictionary_sections;    // rename from num_dictionary_sections in v1
-*/    uint32_t num_dict_ids;             // v2 change: uint16_t->uint32_t. number of dict_ids used in this VB. the actual fields are deduced from the FORMAT column on each line
-    uint32_t num_info_subfields;       // v2 addition: number INFO subfields present in this VB. each subfield has a dictionary. the dictionary for each subfield is deduced from the INFO names, in the order the appear in the VB. Eg. the first INFO name, is subfield=0, and its dictionary is looked up by the name.
     uint32_t max_gt_line_len;
 
     uint32_t vb_data_size;             // size of variant block as it appears in the source file
@@ -224,6 +215,7 @@ typedef struct {
 
 extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VariantBlockP vb, BufferP section_list_buf);
+extern uint32_t sections_get_num_info_b250s (ConstFileP z_file, uint32_t variant_block_i);
 extern void BGEN_sections_list (BufferP sections_list_buf);
 extern const char *st_name (unsigned sec_type);
 extern void sections_show_genozip_header (VariantBlockP pseudo_vb, SectionHeaderGenozipHeader *header);

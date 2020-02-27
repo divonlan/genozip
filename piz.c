@@ -116,7 +116,7 @@ static void piz_get_format_info (VariantBlock *vb)
 
             // get the did_i of this subfield. note: did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
-            int did_i = mtf_get_existing_did_i_by_dict_id (vb, dict_id, false);
+            int did_i = mtf_get_existing_did_i_by_dict_id (vb, dict_id);
             format_num_subfields[format_i].ctx[sf_i] = (did_i != NIL) ? &vb->mtf_ctx[did_i] : NULL;
         }
     }
@@ -177,7 +177,7 @@ static void piz_map_iname_subfields (VariantBlock *vb)
 
             iname_mapper->name_lens[iname_mapper->num_subfields] = j + (iname[i] == '='); // including the '='
 
-            int did_i = mtf_get_existing_did_i_by_dict_id (vb, dict_id, false); // it will be NIL if this is an INFO name without values            
+            int did_i = mtf_get_existing_did_i_by_dict_id (vb, dict_id); // it will be NIL if this is an INFO name without values            
             if (did_i != NIL) {
                 iname_mapper->ctx[iname_mapper->num_subfields] = &vb->mtf_ctx[did_i];
 
@@ -678,10 +678,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->has_haplotype_data      = vb->num_haplotypes_per_line > 0;
     vb->num_sample_blocks       = BGEN32 (header->num_sample_blocks);
     vb->num_samples_per_block   = BGEN32 (header->num_samples_per_block);
-    vb->num_info_subfields      = BGEN32 (header->num_info_subfields);
     vb->ploidy                  = BGEN16 (header->ploidy);
-    vb->num_dict_ids            = BGEN32 (header->num_dict_ids);
-    // num_dictionary_sections is read in zfile_read_one_vb()
     vb->max_gt_line_len         = BGEN32 (header->max_gt_line_len);
     vb->vb_data_size            = BGEN32 (header->vb_data_size);
     
