@@ -702,8 +702,8 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     if (flag_split) 
         vb->variant_block_i = BGEN32 (header->h.variant_block_i);
     
-    // unsqueeze permutation index - if this VCF has samples
-    if (global_num_samples) {
+    // unsqueeze permutation index - if this VCF has samples, AND this vb has any haplotype data
+    if (global_num_samples && vb->num_haplotypes_per_line) {
 
        zfile_uncompress_section (vb, &vb->z_data.data[section_index[0]], &vb->haplotype_permutation_index_squeezed, 
                                  "haplotype_permutation_index_squeezed", SEC_VB_HEADER);

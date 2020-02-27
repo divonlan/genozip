@@ -564,11 +564,6 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
 
     MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->z_file->mtf_ctx, &vb->z_file->num_dict_ids, NULL, header->dict_id, header->h.section_type);
     
-    if (flag_show_dict) 
-        fprintf (stderr, "%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
-                 dict_id_printable (header->dict_id).id, vb->variant_block_i, st_name(header->h.section_type), 
-                                    (unsigned)(ctx->did_i), num_snips, fragment.len, fragment.data);
-
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
     unsigned dict_old_len = ctx->dict.len;

@@ -447,7 +447,7 @@ static void seg_genotype_area (VariantBlock *vb, DataLine *dl,
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data);
 
         MtfNode *node;
-        uint32_t node_index = mtf_evaluate_snip (vb, format_mapper->ctx[sf], cell_gt_data, len, &node, NULL);
+        int32_t node_index = mtf_evaluate_snip (vb, format_mapper->ctx[sf], cell_gt_data, len, &node, NULL);
         *(next++) = node_index;
 
         if (node_index != WORD_INDEX_MISSING_SF) // don't skip the \t if we might have more missing subfields
@@ -607,6 +607,9 @@ static void seg_data_line (VariantBlock *vb, /* may be NULL if testing */
             if (has_genotype_data) { // FORMAT declares other subfields, we may have them or not
                 field_start = next_field;
                 next_field = seg_get_next_item (field_start, &len, true, true, false, vcf_line_i, &field_len, &separator, "Non-GT");
+                ASSERT (field_len, "Error: invalid VCF file - expecting sample data for sample # %u on line %u, but found a tab character", 
+                        sample_i+1, vcf_line_i);
+
                 seg_genotype_area (vb, dl, field_start, field_len, vcf_line_i, true);
                 gt_line_len += field_len + 1; // including the \t or \n
             }
@@ -614,6 +617,9 @@ static void seg_data_line (VariantBlock *vb, /* may be NULL if testing */
             sample_i++;
 
             vb->vcf_section_bytes[SEC_STATS_HT_SEPERATOR]++; // the \t or \n following a sample
+
+            ASSERT (sample_i < global_num_samples || separator == '\n',
+                    "Error: invalid VCF file - expecting a newline after the last sample (sample #%u) on line %u", global_num_samples, vcf_line_i);
         }
     }
 

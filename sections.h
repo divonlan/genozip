@@ -195,8 +195,6 @@ typedef struct {
     uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
     uint16_t unused3;                  // new in v2: padding / ffu
-
-    // uint8_t haplotype_index[];      // removed in V2 - haplotype_index is now the data of this section rather than part of the header
 } SectionHeaderVbHeader; 
 
 typedef struct {

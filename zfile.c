@@ -384,7 +384,7 @@ void zfile_compress_vb_header (VariantBlock *vb)
     vb_header.num_dict_ids            = BGEN32 (vb->num_dict_ids);
     vb_header.num_info_subfields      = BGEN32 (vb->num_info_subfields);
 
-    // create squeezed index - IF we have haplotype data (i.e. my_squeeze_len > 0)
+    // create squeezed index - IF we have haplotype data AND more than one haplotype per line (i.e. my_squeeze_len > 0)
     if (my_squeeze_len) {
         buf_alloc (vb, &vb->haplotype_permutation_index_squeezed, my_squeeze_len, 1, "haplotype_permutation_index_squeezed", 0);
 
@@ -676,6 +676,14 @@ void zfile_read_all_dictionaries (VariantBlock *pseudo_vb, uint32_t last_vb_i /*
 
         buf_free (&pseudo_vb->z_data);
     }
+
+    if (flag_show_dict) 
+        for (uint32_t did_i=0; did_i < pseudo_vb->z_file->num_dict_ids; did_i++) {
+            MtfContext *ctx = &pseudo_vb->z_file->mtf_ctx[did_i];
+            fprintf (stderr, "%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
+                     dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
+                                        did_i, ctx->word_list.len, ctx->dict.len, ctx->dict.data);
+        }
 }
 
 bool zfile_read_one_vb (VariantBlock *vb)

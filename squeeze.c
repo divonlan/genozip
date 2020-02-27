@@ -121,6 +121,15 @@ void unsqueeze (VariantBlock *vb,
 {
     START_TIMER;
     
+    // handle the trivial case where there is only one haplotype per line, and therefore no need for an index.
+    // we construct an index for consistency anyway
+    if (vb->num_haplotypes_per_line == 1) {
+        normal[0] = 0;
+        return;
+    }    
+    
+    ASSERT (squeezed, "Error: squeezed is NULL in variant_block_i=%u", vb->variant_block_i);
+
     unsigned squeezed_len = squeeze_len (normal_len);
 
     uint16_t my_squeezed_checksum = 0;

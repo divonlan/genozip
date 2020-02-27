@@ -364,9 +364,8 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     if (dd->processed_vb) {
-#ifdef DEBUG
-        buf_test_overflows(dd->processed_vb);
-#endif
+
+        buf_test_overflows(dd->processed_vb); // just to be safe, this isn't very expensive
 
         if (flag_show_time) 
             profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
