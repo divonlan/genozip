@@ -20,12 +20,6 @@ int v1_zfile_read_one_section (VariantBlock *vb,
 {
     bool is_encrypted = crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
-    // note: if this is a VCF header section, then:
-    // for the 1st vcf component, zfile_read_genozip_header() will read a bit of the header and put it in a buffer
-    //       that is called "data" here. we need to read the remaining bytes of the header.
-    // for the 2nd+ component, data->len is guarantees to be 0 when calling this functoin
-    // in both cases, the header starts at offset 0
-
     unsigned header_offset = expected_sec_type == SEC_VCF_HEADER ? 0 : data->len;
     
     unsigned requested_bytes = header_size;
@@ -221,7 +215,7 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
         for (unsigned did_i=0; did_i < num_dictionary_sections; did_i++) {
 
             unsigned start_i = vb->z_data.len; // vb->z_data.len is updated next, by v1_zfile_read_one_section()
-            v1_zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_GENOTYPE_DICT, false);    
+            v1_zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_FRMT_SUBFIELD_DICT, false);    
 
             // update dictionaries in z_file->mtf_ctx with dictionary data from this VB
             mtf_integrate_dictionary_fragment (vb, &vb->z_data.data[start_i]);

@@ -7,10 +7,8 @@
 #define GLOPTIMIZE_INCLUDED
 
 #include "genozip.h"
-#include "buffer.h"
-#include "move_to_front.h"
 
-extern const char *gl_optimize_dictionary (VariantBlockP vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words);
+extern const char *gl_optimize_dictionary (VariantBlockP vb, BufferP dict, MtfNodeP nodes, unsigned dict_start_char, unsigned num_words);
 extern void gl_deoptimize_dictionary (char *data, int len);
 
 #endif

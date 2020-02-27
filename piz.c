@@ -822,7 +822,7 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
-// read all the sections at the end of the file, before starting to process VBs
+// Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
 static int16_t piz_read_global_area (VariantBlock *pseudo_vb, bool need_random_access,
                                      Md5Hash *original_file_digest) // out
 {
@@ -840,14 +840,14 @@ static int16_t piz_read_global_area (VariantBlock *pseudo_vb, bool need_random_a
 
         zfile_uncompress_section (pseudo_vb, pseudo_vb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
 
-        zfile->ra_buf.len /= sizeof (RAEntry);
+        zfile->ra_buf.len /= random_access_sizeof_entry();
         BGEN_random_access (&zfile->ra_buf);
 
         buf_free (&pseudo_vb->z_data);
     }
 
     file_seek (zfile, 0, SEEK_SET);
-    
+
     return DATA_TYPE_VCF;
 }
 
@@ -857,7 +857,8 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
-
+    bool piz_successful = false;
+    
     if (!dispatcher) 
         dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, is_last_file,
                                       !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
@@ -875,7 +876,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     if (data_type == EOF) goto finish;
 
     // read and write VCF header. in split mode this also opens vcf_file
-    bool piz_successful = data_type != MAYBE_V1 ? vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest)
+    piz_successful = data_type != MAYBE_V1 ? vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest)
                                                 : v1_vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest);
 
     if (!piz_successful) goto finish; // empty file - not an error

@@ -135,7 +135,7 @@ typedef struct variant_block_ {
 
     int16_t z_next_header_i;          // next header of this VB to be encrypted or decrypted
 
-    Buffer z_section_headers;         // (used by piz) an array of unsigned offsets of section headers within z_data
+    Buffer z_section_headers;         // PIZ only: an array of unsigned offsets of section headers within z_data
 
     Buffer gt_sb_line_starts_buf,     // used by zip_get_genotype_vb_start_len 
            gt_sb_line_lengths_buf,
@@ -165,10 +165,12 @@ typedef struct variant_block_ {
     int32_t vcf_section_bytes[NUM_SEC_TYPES];  // how many bytes did each section have in the original vcf file - should add up to the file size
     int32_t z_section_bytes[NUM_SEC_TYPES];    // how many bytes does each section type have (including headers) in the genozip file - should add up to the file size
     int32_t z_num_sections[NUM_SEC_TYPES];     // how many sections where written to .genozip of this type
-    int32_t z_section_entries[NUM_SEC_TYPES];      // how many entries (dictionary or base250) where written to .genozip of this type
+    int32_t z_section_entries[NUM_SEC_TYPES];  // how many entries (dictionary or base250) where written to .genozip of this type
+    Buffer show_headers_buf;                   // ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk
+    Buffer section_list_buf;                   // ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs.
 
-#   define NUM_COMPRESS_BUFS 4                  // bzlib2 compress requires 4 and decompress requires 2
-    Buffer compress_bufs[NUM_COMPRESS_BUFS];    // memory allocation for compressor so it doesn't do its own malloc/free
+#   define NUM_COMPRESS_BUFS 4                 // bzlib2 compress requires 4 and decompress requires 2
+    Buffer compress_bufs[NUM_COMPRESS_BUFS];   // memory allocation for compressor so it doesn't do its own malloc/free
 
     // backward compatability with genozip v1 
     Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)

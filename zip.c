@@ -446,11 +446,12 @@ static void zip_compress_one_vb (VariantBlock *vb)
     for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
                 
         MtfContext *ctx = &vb->mtf_ctx[did_i];
-        if (ctx->dict_section_type != SEC_INFO_SUBFIELD_DICT) continue; // not an info subfield
-
-        zip_generate_b250_section (vb, ctx);
-        zfile_compress_b250_data (vb, ctx);
-        num_info_subfields++;
+        
+        if (ctx->dict_section_type == SEC_INFO_SUBFIELD_DICT && ctx->mtf_i.len) {
+            zip_generate_b250_section (vb, ctx);
+            zfile_compress_b250_data (vb, ctx);
+            num_info_subfields++;
+        }
     }
     ASSERT (num_info_subfields <= MAX_SUBFIELDS, "Error: vb_i=%u has %u INFO subfields, which exceeds the maximum of %u",
             vb->variant_block_i, num_info_subfields, MAX_SUBFIELDS);
@@ -487,16 +488,16 @@ static void zip_compress_one_vb (VariantBlock *vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
-static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file, bool is_final, bool is_z_data)
+static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section_list_buf, File *vcf_file, 
+                                     bool is_final, bool is_z_data)
 {
+    START_TIMER;
+
     File *z_file = processed_vb->z_file;
     Buffer *data_buf = is_z_data ? &processed_vb->z_data : &z_file->dict_data;
 
-    // update offsets - compress sets the offset of each section to the offset within its data_buf, and
-    // here we update it to be the offset within the file
-    sections_update_list (processed_vb, is_z_data);
+    if (section_list_buf) sections_list_concat (processed_vb, section_list_buf);
 
-    START_TIMER;
     file_write (z_file, data_buf->data, data_buf->len);
     COPY_TIMER (processed_vb->profile.write);
 
@@ -527,6 +528,9 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, File *vcf_file,
 
         z_file->vcf_data_size_concat += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
     }
+
+    if (flag_show_headers && buf_is_allocated (&processed_vb->show_headers_buf))
+        fprintf (stderr, processed_vb->show_headers_buf.data);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -535,17 +539,21 @@ static void zip_write_global_area (VariantBlock *pseudo_vb, const Md5Hash *singl
     File *file = pseudo_vb->z_file;
 
     // output dictionaries to disk
-    zip_output_processed_vb (pseudo_vb, NULL, false, false);  
+    zip_output_processed_vb (pseudo_vb, &file->section_list_dict_buf, NULL, false, false);  
     
     // compress all random access records into pseudo_vb->z_data
-    file->ra_buf.len *= sizeof (RAEntry); // change len to count bytes
+    if (flag_show_index) random_access_show (&file->ra_buf, true);
+    file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
     zfile_compress_section_data (pseudo_vb, SEC_RANDOM_ACCESS, &file->ra_buf);
 
     // compress genozip header (including section records and footer) into pseudo_vb->z_data
-    zfile_compress_genozip_header (pseudo_vb, DATA_TYPE_VCF, single_component_md5);    
+    SectionHeaderGenozipHeader *genozip_header_header = 
+        zfile_compress_genozip_header (pseudo_vb, DATA_TYPE_VCF, single_component_md5);    
 
     // output to disk random access and genozip header sections to disk
-    zip_output_processed_vb (pseudo_vb, NULL, false, true);    
+    zip_output_processed_vb (pseudo_vb, NULL, NULL, false, true);  
+
+    if (flag_show_gheader) sections_show_genozip_header (pseudo_vb, genozip_header_header);
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
@@ -563,9 +571,6 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, test_mode, is_last_file, !flag_show_alleles, vcf_basename);
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
-
-//    if (!z_file->disk_so_far) // write the genozip header only if this is the first vcf component
-//        zfile_write_genozip_header (pseudo_vb, DATA_TYPE_VCF, NULL, false);
 
     unsigned line_i = 0; // last line read (first line in file = 1, consistent with script line numbers)
 
@@ -596,7 +601,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL);
             if (!processed_vb) continue; // no running compute threads or vb processing not completed
             
-            zip_output_processed_vb (processed_vb, vcf_file, false, true);
+            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, vcf_file, false, true);
 
             dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
                                         z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
@@ -628,7 +633,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
     // write terminator section to disk - this will mark the end of this VCF component
     next_vb = dispatcher_generate_next_vb (dispatcher);
     zfile_compress_terminator_section (next_vb);
-    zip_output_processed_vb (next_vb, vcf_file, true, true);
+    zip_output_processed_vb (next_vb, &next_vb->section_list_buf, vcf_file, true, true);
 
     // go back and update some fields in the vcf header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected

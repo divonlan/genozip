@@ -21,7 +21,7 @@
 typedef enum {
     // data sections - statring in v1
     SEC_VCF_HEADER         = 0,  SEC_VB_HEADER           = 1, 
-    SEC_GENOTYPE_DICT      = 2,  SEC_GENOTYPE_DATA       = 3, 
+    SEC_FRMT_SUBFIELD_DICT      = 2,  SEC_GENOTYPE_DATA       = 3, 
     SEC_PHASE_DATA         = 4,  SEC_HAPLOTYPE_DATA      = 5,
 
     // data sections added in v2
@@ -44,7 +44,7 @@ typedef enum {
 // we put the names here in a #define so we can eyeball their identicality to SectionType
 #define SECTIONTYPE_NAMES { \
     "SEC_VCF_HEADER"        ,  "SEC_VB_HEADER",\
-    "SEC_GENOTYPE_DICT"     ,  "SEC_GENOTYPE_DATA",\
+    "SEC_FRMT_SUBFIELD_DICT"     ,  "SEC_GENOTYPE_DATA",\
     "SEC_PHASE_DATA"        ,  "SEC_HAPLOTYPE_DATA",\
     \
     "SEC_GENOZIP_HEADER"    ,  "SEC_RANDOM_ACCESS",\
@@ -66,7 +66,7 @@ typedef enum {
 
 #define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_FORMAT_DICT && (s) % 2 == SEC_CHROM_DICT % 2) ||       \
                                         (s) == SEC_INFO_SUBFIELD_DICT || \
-                                        (s) == SEC_GENOTYPE_DICT)
+                                        (s) == SEC_FRMT_SUBFIELD_DICT)
 
 #define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_FORMAT_B250 && (s) % 2 == SEC_CHROM_B250 % 2) ||       \
                                         (s) == SEC_INFO_SUBFIELD_B250)
@@ -224,10 +224,11 @@ typedef struct {
     uint8_t for_future_use  : 7;
 } SectionListEntry;
 
-extern void sections_add_to_list (VariantBlockP pseudo_vb, const SectionHeader *header, uint64_t offset);
-extern void sections_update_list (VariantBlockP vb, bool is_z_data);
+extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);
+extern void sections_list_concat (VariantBlockP vb, BufferP section_list_buf);
 extern void BGEN_sections_list (BufferP sections_list_buf);
 extern const char *st_name (unsigned sec_type);
+extern void sections_show_genozip_header (VariantBlockP pseudo_vb, SectionHeaderGenozipHeader *header);
 
 // ------------------------------------------------------------------------------------------------------
 // GENOZIP_FILE_FORMAT_VERSION==1 historical version - we support uncomrpessing old version files

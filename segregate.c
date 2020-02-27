@@ -34,20 +34,9 @@ static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned c
     int32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vcf_line_i, CHROM, NULL);
     uint32_t vb_line_i = vcf_line_i - vb->first_line;
     
-    // case: first vb line or change in chrom - start new RAEntry
-    RAEntry *ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len-1];
-    if (!vb_line_i || chrom_node_index != ra_ent->chrom) {
-
-        buf_alloc (vb, &vb->ra_buf, sizeof (RAEntry) * (vb->ra_buf.len + 1), 2, "ra_buf", vb->variant_block_i);
-
-        RAEntry *ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len++];
-        memset (ra_ent, 0, sizeof(RAEntry));
-
-        ra_ent->chrom           = (chrom_node_index >= 0) ? chrom_node_index : (ra_ent-1)->chrom; // copy previous chrom if -1 (=unchanged)
-        ra_ent->start_vb_line   = vb_line_i;
-        ra_ent->is_sorted       = true; // sorted until proven otherwise
-        ra_ent->variant_block_i = vb->variant_block_i;
-    }
+    // case: first vb line or change in chrom - start new entry
+    if (!vb_line_i || chrom_node_index != random_access_get_last_chrom_node_index(vb)) 
+        random_access_new_entry (vb, vb_line_i, chrom_node_index);
 }
 
 static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_len, unsigned vcf_line_i)
@@ -93,12 +82,7 @@ static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_l
 
     vb->last_pos = this_pos;
 
-    // update "random access" entry
-    RAEntry *ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len-1];
-    if (this_pos < ra_ent->last_pos) ra_ent->is_sorted = false;
-    if (ra_ent->first_pos == 0) ra_ent->first_pos = this_pos; // new vb or new new chrom 
-    ra_ent->last_pos = this_pos;
-    ra_ent->num_vb_lines++;
+    random_access_update_last_entry (vb, this_pos);
 }
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
@@ -156,7 +140,7 @@ static void seg_format_field (VariantBlock *vb, DataLine *dl,
                     "Error: string %.*s in the FORMAT field of line=%u is not a legal subfield", DICT_ID_LEN, subfield.id, vcf_line_i);
 
             format_mapper.ctx[format_mapper.num_subfields++] = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_subfields,
-                                                                         subfield, SEC_GENOTYPE_DICT);
+                                                                         subfield, SEC_FRMT_SUBFIELD_DICT);
         } 
         while (str[-1] != '\t' && str[-1] != '\n' && len > 0);
     }

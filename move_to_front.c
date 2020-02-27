@@ -242,7 +242,8 @@ int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, 
     memset (*node, 0, sizeof(MtfNode)); // safety
     (*node)->snip_len   = snip_len;
     (*node)->char_index = mtf_insert_to_dict (vb, ctx, snip, snip_len);
-    
+    (*node)->word_index.n = new_hashent->mtf_i;
+
     // if this is the first variant block - allocate/grow sorter to contain exactly the same number of entries as mtf
     if (vb->variant_block_i == 1) {
         unsigned prev_size = ctx->sorter.size;
@@ -359,20 +360,6 @@ static void mtf_wait_for_my_turn(VariantBlock *vb)
     }
 }
 
-// Called by ZIP (I/O thread) to compress all the dictionaries to pseudo_vb->z_data
-/*void mtf_compress_all_dictionaries (VariantBlock *pseudo_vb)
-{
-    File *zfile = pseudo_vb->z_file;
-
-    for (unsigned did_i=0; did_i < zfile->num_dict_ids; did_i++) {
-
-        MtfContext *ctx = &zfile->mtf_ctx[did_i];
-        if (!buf_is_allocated (&ctx->dict)) continue;
-
-        zfile_compress_dictionary_data (pseudo_vb, ctx->dict_section_type, ctx->dict_id, ctx->mtf.len, ctx->dict.data, ctx->dict.len);
-    }
-}
-*/
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 {
@@ -410,7 +397,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
         // encode in base250 - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
         for (unsigned i=0; i < zf_ctx->mtf.len; i++) {
             MtfNode *zf_node = &((MtfNode *)zf_ctx->mtf.data)[i];
-            zf_node->word_index = base250_encode (i, zf_ctx->encoding);
+            zf_node->word_index = base250_encode (zf_node->word_index.n, zf_ctx->encoding);
         }
     }
     else {
@@ -434,10 +421,6 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     unsigned added_chars = zf_ctx->dict.len - start_dict_len;
     unsigned added_words = zf_ctx->mtf.len  - start_mtf_len;
 
- /*   // special optimization for the GL dictionary
-    if (added_chars && dict_id_is (zf_ctx->dict_id, "GL")) 
-        gl_optimize_dictionary (vb, &zf_ctx->dict, &((MtfNode *)zf_ctx->mtf.data)[start_mtf_len], start_dict_len, added_words);
-*/
     // compress incremental part of dictionary added by this vb. note: dispatcher calls this function in the correct order of VBs.
     if (added_chars) {
 
@@ -445,10 +428,8 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
        if (dict_id_is (zf_ctx->dict_id, "GL")) 
             start_dict = gl_optimize_dictionary (vb, &zf_ctx->dict, &((MtfNode *)zf_ctx->mtf.data)[start_mtf_len], start_dict_len, added_words);
      
-        zfile_compress_dictionary_data (vb, zf_ctx->dict_section_type, zf_ctx->dict_id, added_words, start_dict, added_chars);
+        zfile_compress_dictionary_data (vb, zf_ctx, added_words, start_dict, added_chars);
     }
-
-    //return added_chars > 0;
 }
 
 // ZIP only: merge new words added in this vb into the z_file.mtf_ctx, and compresses dictionaries
@@ -467,7 +448,7 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
 
         ASSERT (section_type_is_dictionary(dict_sec_type), "Error: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
 
-        if (dict_sec_type != SEC_INFO_SUBFIELD_DICT && dict_sec_type != SEC_GENOTYPE_DICT) 
+        if (dict_sec_type != SEC_INFO_SUBFIELD_DICT && dict_sec_type != SEC_FRMT_SUBFIELD_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
     }
 
@@ -480,7 +461,7 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
     // third, all the genotype subfield dictionaries
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++)         
         if (buf_is_allocated (&vb->mtf_ctx[did_i].dict) && 
-            vb->mtf_ctx[did_i].dict_section_type == SEC_GENOTYPE_DICT) 
+            vb->mtf_ctx[did_i].dict_section_type == SEC_FRMT_SUBFIELD_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
 
     vb->z_file->next_variant_i_to_merge++;
@@ -695,8 +676,9 @@ void mtf_sort_dictionaries_vb_1(VariantBlock *vb)
             MtfNode *node = &((MtfNode *)ctx->mtf.data)[mtf_i];
             memcpy (next, &old_dict.data[node->char_index], node->snip_len + 1 /* +1 for \t */);
             
-            node->char_index = next - ctx->dict.data;
-            
+            node->char_index   = next - ctx->dict.data;
+            node->word_index.n = i;
+
             next += node->snip_len + 1;
         }
 

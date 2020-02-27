@@ -10,10 +10,9 @@
 #include "sections.h"
 #include "dict_id.h"
 #include "md5.h"
-#include "move_to_front.h"
 
 extern int16_t zfile_read_genozip_header (VariantBlockP vb, Md5Hash *digest);
-extern void zfile_compress_genozip_header (VariantBlockP vb, uint16_t data_type, const Md5Hash *single_component_md5);
+extern SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlockP vb, uint16_t data_type, const Md5Hash *single_component_md5);
 extern bool zfile_get_genozip_header (FileP z_file, SectionHeaderGenozipHeader *header);
 
 extern void zfile_write_vcf_header (VariantBlockP vb, BufferP vcf_header_text, bool is_first_vcf);
@@ -23,9 +22,9 @@ extern void zfile_compress_vb_header (VariantBlockP vb);
 extern void zfile_update_compressed_vb_header (VariantBlockP vb, uint32_t pos, uint32_t num_info_subfields);
 
 extern void zfile_read_all_dictionaries (VariantBlockP pseudo_vb, uint32_t last_vb_i /* 0 means all VBs */);
-extern void zfile_compress_dictionary_data (VariantBlockP vb, SectionType dict_section_type, DictIdType dict_id, 
+extern void zfile_compress_dictionary_data (VariantBlockP vb, MtfContextP ctx, 
                                             uint32_t num_words, const char *data, uint32_t num_chars);
-extern void zfile_compress_b250_data (VariantBlockP vb, MtfContext *ctx);
+extern void zfile_compress_b250_data (VariantBlockP vb, MtfContextP ctx);
 
 extern bool zfile_read_one_vb (VariantBlockP vb);
 

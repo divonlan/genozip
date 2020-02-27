@@ -93,13 +93,30 @@ static int zfile_compress_do (VariantBlock *vb, Buffer *z_data, const char *data
     return ret;
 }
 
-static void zfile_display_header (const SectionHeader *header)
+static void zfile_show_header (const SectionHeader *header, VariantBlock *vb /* optional if output to buffer */)
 {
-    fprintf (stderr, "%-22s vb_i=%-3u sec_i=%-2u comp_offset=%-9u dt_uncomp_len=%-9u dt_comp_len=%-9u dt_enc_len=%-9u magic=%8.8x flags=%u\n",
-             st_name(header->section_type), BGEN32 (header->variant_block_i), BGEN16 (header->section_i), 
+    DictIdType dict_id = {0};
+
+    if (section_type_is_dictionary (header->section_type)) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
+    if (section_type_is_b250       (header->section_type)) dict_id = ((SectionHeaderBase250    *)header)->dict_id;
+
+    char str[1000];
+
+    sprintf (str, "%-22s %*.*s vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x flags=%u\n",
+             st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
+             BGEN32 (header->variant_block_i), BGEN16 (header->section_i), 
              BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
              BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic),
              header->flags);
+
+    if (vb) {
+        unsigned len = strlen (str);
+        buf_alloc (vb, &vb->show_headers_buf, vb->show_headers_buf.len + len + 1, 2, "show_headers_buf", 0);
+        strcpy (&vb->show_headers_buf.data[vb->show_headers_buf.len], str);
+        vb->show_headers_buf.len += len;
+    }
+    else 
+        fprintf (stderr, str);
 }
 
 static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *header, 
@@ -176,9 +193,9 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
     else
         total_z_len = compressed_offset + data_compressed_len;
 
-    // we add this section to the section list, with the offset for now being the offset within the z_data.
-    // when we write this z_data to disk, we will add the disk offset at the beginning of the writing
-    sections_add_to_list (vb, header, z_data->len);
+    // add section to the list - except for genozip header which we already added in zfile_compress_genozip_header()
+    if (header->section_type != SEC_GENOZIP_HEADER)
+        sections_add_to_list (vb, header);
 
     z_data->len += total_z_len;
 
@@ -186,7 +203,7 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
     vb->z_section_bytes[header->section_type] += total_z_len;
     vb->z_num_sections [header->section_type] ++;
     
-    if (flag_show_headers) zfile_display_header (header);
+    if (flag_show_headers) zfile_show_header (header, vb->variant_block_i ? vb : NULL); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 
 void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
@@ -427,31 +444,28 @@ void zfile_update_compressed_vb_header (VariantBlock *vb,
                   BGEN32 (vb_header->h.variant_block_i), -1-BGEN16 (vb_header->h.section_i)); // negative section_i for a header
 }
 
-void zfile_compress_dictionary_data (VariantBlock *vb, SectionType dict_section_type, DictIdType dict_id, 
+void zfile_compress_dictionary_data (VariantBlock *vb, MtfContext *ctx, 
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
-    ASSERT (section_type_is_dictionary(dict_section_type),
-            "Error: dict_section_type=%s is not a dictionary section", st_name(dict_section_type));
+    ASSERT (section_type_is_dictionary(ctx->dict_section_type),
+            "Error: dict_section_type=%s is not a dictionary section", st_name(ctx->dict_section_type));
 
     SectionHeaderDictionary header;
     memset (&header, 0, sizeof(header)); // safety
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    header.h.section_type          = dict_section_type;
+    header.h.section_type          = ctx->dict_section_type;
     header.h.data_uncompressed_len = BGEN32 (num_chars);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary));
     header.h.variant_block_i       = BGEN32 (vb->variant_block_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.num_snips               = BGEN32 (num_words);
-    header.dict_id                 = dict_id;
+    header.dict_id                 = ctx->dict_id;
 
-    if (flag_show_dict) {
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, dict_id, dict_section_type);
-
+    if (flag_show_dict) 
         fprintf (stderr, "%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
-                 dict_id_printable (dict_id).id, vb->variant_block_i, st_name(header.h.section_type), 
+                 dict_id_printable (ctx->dict_id).id, vb->variant_block_i, st_name(ctx->dict_section_type), 
                  ctx->did_i, num_words, num_chars, data);
-   }
 
     zfile_compress (vb, &vb->z_file->dict_data, (SectionHeader*)&header, data);
 }
@@ -573,7 +587,7 @@ int zfile_read_one_section (VariantBlock *vb,
     ASSERT (header, "Error: Failed to read data from file %s while expecting section type %s: %s", 
             file_printname (zfile), st_name(expected_sec_type), strerror (errno));
     
-    if (flag_show_headers) zfile_display_header (header);
+    if (flag_show_headers) zfile_show_header (header, NULL);
 
     bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
 
@@ -715,7 +729,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
 
     uint32_t num_gt_dictionary_sections    = BGEN32 (vb_header->num_gt_dictionary_sections);
     for (unsigned i=0; i < num_gt_dictionary_sections; i++)
-        zfile_read_and_integrate_dictionary (vb, SEC_GENOTYPE_DICT);
+        zfile_read_and_integrate_dictionary (vb, SEC_FRMT_SUBFIELD_DICT);
 
     // dictionaries are not included in z_data sent to the compute thread - shrink z_data back, effectively deleting them
     vb->z_data.len = start_dictionary_sections; 
@@ -837,25 +851,29 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
     return data_type;
 }
 
-void zfile_compress_genozip_header (VariantBlock *pseudo_vb, uint16_t data_type, const Md5Hash *single_component_md5)
+SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_vb, uint16_t data_type, 
+                                                           const Md5Hash *single_component_md5)
 {
     File *zfile = pseudo_vb->z_file;
 
+    // start with just the fields needed by sections_add_to_list
+    SectionHeaderGenozipHeader header;
+    memset (&header, 0, sizeof(header)); // safety
+    header.h.section_type               = SEC_GENOZIP_HEADER;
+
+    // "manually" add the genozip section to the section list - normally it is added in zfile_compress()
+    // but in this case the genozip section containing the list will already be ready...
+    sections_add_to_list (pseudo_vb, &header.h);
+
     bool is_encrypted = crypt_have_password();
 
-    uint32_t num_sections=0;
-    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) 
-        num_sections += zfile->num_sections[sec_i];
+    uint32_t num_sections = zfile->section_list_buf.len;
 
     BGEN_sections_list (&zfile->section_list_buf);
 
     zfile->section_list_buf.len *= sizeof (SectionListEntry); // change to counting bytes
 
-    SectionHeaderGenozipHeader header;
-    memset (&header, 0, sizeof(header)); // safety
-
     header.h.magic                      = BGEN32 (GENOZIP_MAGIC);
-    header.h.section_type               = SEC_GENOZIP_HEADER;
     header.h.compressed_offset          = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len      = BGEN32 (zfile->section_list_buf.len);
     header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;  
@@ -866,7 +884,7 @@ void zfile_compress_genozip_header (VariantBlock *pseudo_vb, uint16_t data_type,
     header.num_items_concat             = BGEN64 (zfile->num_lines_concat);
     header.num_sections                 = BGEN32 (num_sections); 
     header.num_info_dictionary_sections = BGEN32 (zfile->num_sections[SEC_INFO_DICT]);
-    header.num_gt_dictionary_sections   = BGEN32 (zfile->num_sections[SEC_GENOTYPE_DICT]);
+    header.num_gt_dictionary_sections   = BGEN32 (zfile->num_sections[SEC_FRMT_SUBFIELD_DICT]);
     header.num_vcf_components           = BGEN32 (zfile->num_vcf_components_so_far);
 
     if (flag_md5) {
@@ -889,6 +907,8 @@ void zfile_compress_genozip_header (VariantBlock *pseudo_vb, uint16_t data_type,
 
     uint64_t genozip_header_offset = zfile->disk_so_far + z_data->len; // capture before zfile_compress that increases len
 
+    uint32_t len_before = z_data->len; // len and not pointer - it may be reallocted
+    
     // compress section into z_data - to be eventually written to disk by the I/O thread
     zfile_compress (pseudo_vb, z_data, (SectionHeader*)&header, zfile->section_list_buf.data);
 
@@ -902,6 +922,8 @@ void zfile_compress_genozip_header (VariantBlock *pseudo_vb, uint16_t data_type,
     memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
     z_data->len += sizeof(SectionFooterGenozipHeader);
     pseudo_vb->z_section_bytes[SEC_GENOZIP_HEADER] += sizeof(SectionFooterGenozipHeader);
+    
+    return (SectionHeaderGenozipHeader *)&z_data->data[len_before];
 }
 
 // reads the the genozip header section's header from a GENOZIP file - used by main_list, returns true if successful
@@ -910,7 +932,7 @@ bool zfile_get_genozip_header (File *z_file, SectionHeaderGenozipHeader *header)
     int bytes = fread ((char*)header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)z_file->file);
     if (bytes < sizeof(SectionHeaderGenozipHeader)) return false;
 
-    if (flag_show_headers) zfile_display_header ((SectionHeader *)header);
+    if (flag_show_headers) zfile_show_header ((SectionHeader *)header, NULL);
 
     return BGEN32 (header->h.magic) == GENOZIP_MAGIC;
 }

@@ -73,9 +73,11 @@ typedef struct file_ {
     Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file
 
     // section list - used for READING and WRITING genozip files
-    Buffer section_list_buf;
+    Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
+    Buffer section_list_dict_buf;      // a subset of section_list_buf - dictionaries are added here by VBs as they are being constructed
+
     uint32_t num_vcf_components_so_far;
-    
+
     // Information content stats - how many bytes and how many sections does this file have in each section type
     int64_t section_bytes[NUM_SEC_TYPES];   
     int64_t section_entries[NUM_SEC_TYPES]; // used only for Z files - number of entries of this type (dictionary entries or base250 entries)

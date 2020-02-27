@@ -98,6 +98,8 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->spiced_pw);
     buf_free(&vb->format_info_buf);
     buf_free(&vb->ra_buf);
+    buf_free(&vb->show_headers_buf);
+    buf_free(&vb->section_list_buf);
     
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)

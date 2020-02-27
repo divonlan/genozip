@@ -51,7 +51,7 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 static int flag_stdout=0, flag_replace=0, flag_show_content=0;
 int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
-    flag_show_b250=0, flag_show_sections=0, flag_show_headers=0;
+    flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0;
 
 DictIdType dict_id_show_one_b250= { 0 };  // argument of --show-b250-one
 
@@ -182,7 +182,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
         SEC_ID_B250, SEC_ID_DICT, SEC_REFALT_B250, SEC_REFALT_DICT, SEC_QUAL_B250, SEC_QUAL_DICT,
         SEC_FILTER_B250, SEC_FILTER_DICT, SEC_INFO_B250, SEC_INFO_DICT,
         SEC_INFO_SUBFIELD_B250, SEC_INFO_SUBFIELD_DICT, SEC_FORMAT_B250, SEC_FORMAT_DICT,
-        SEC_GENOTYPE_DATA, SEC_GENOTYPE_DICT,
+        SEC_GENOTYPE_DATA, SEC_FRMT_SUBFIELD_DICT,
         SEC_HAPLOTYPE_DATA, SEC_STATS_HT_SEPERATOR, SEC_PHASE_DATA
     };
 
@@ -249,7 +249,7 @@ static void main_show_content (const File *vcf_file, const File *z_file)
 
     int sections_per_category[3][30] = { 
         { SEC_HAPLOTYPE_DATA, NIL },
-        { SEC_PHASE_DATA, SEC_GENOTYPE_DATA, SEC_GENOTYPE_DICT, SEC_STATS_HT_SEPERATOR, NIL},
+        { SEC_PHASE_DATA, SEC_GENOTYPE_DATA, SEC_FRMT_SUBFIELD_DICT, SEC_STATS_HT_SEPERATOR, NIL},
         { SEC_GENOZIP_HEADER, SEC_VCF_HEADER, SEC_VB_HEADER, SEC_CHROM_B250, SEC_POS_B250, SEC_ID_B250, SEC_REFALT_B250, 
           SEC_QUAL_B250, SEC_FILTER_B250, SEC_INFO_B250, SEC_FORMAT_B250, SEC_INFO_SUBFIELD_B250, 
           SEC_CHROM_DICT, SEC_POS_DICT, SEC_ID_DICT, SEC_REFALT_DICT, SEC_QUAL_DICT,
@@ -389,6 +389,13 @@ static void main_genounzip (const char *z_filename,
         unsigned fn_len = strlen (z_filename);
 
         ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: %s - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
+
+        // skip this file if its size is 0
+        struct stat64 st;
+        int ret = stat64(z_filename, &st);
+        ASSERT (!ret, "Error: failed accessing %s: %s", z_filename, strerror(errno));
+        ASSERTW (st.st_size, "Skipping file %s because its size is 0", z_filename);
+        if (!st.st_size) return;
 
         if (!vcf_filename && !flag_stdout && !flag_split && pipe_to_test_thread < 0) {
             vcf_filename = (char *)malloc(fn_len + 10);
@@ -698,6 +705,18 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
     free (basenames);    
 }
 
+void genozip_set_global_max_lines_per_vb (const char *num_lines_str)
+{
+    unsigned len = strlen (num_lines_str);
+    ASSERT (len <= 9, "Error: invalid argument of --variant-block: %s. Expecting a number between 1 and 999999999", num_lines_str);
+
+    for (unsigned i=0; i < len; i++) {
+        ASSERT (num_lines_str[i] >= '0' && num_lines_str[i] <= '9', "Error: invalid argument of --variant-block: %s. Expecting a number between 1 and 999999999", num_lines_str);
+    }
+
+    global_max_lines_per_vb = atoi (num_lines_str);
+}
+
 int main (int argc, char **argv)
 {
     #define COMPRESS   'z'
@@ -753,6 +772,7 @@ int main (int argc, char **argv)
         #define _O  {"split",         no_argument,       &flag_split,        1 }
         #define _o  {"output",        required_argument, 0, 'o'                }
         #define _p  {"password",      required_argument, 0, 'p'                }
+        #define _vb {"vblock",        required_argument, 0, 'B'                }
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
         #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
@@ -764,17 +784,19 @@ int main (int argc, char **argv)
         #define _st {"show-time",     no_argument,       &flag_show_time   , 1 } 
         #define _sm {"show-memory",   no_argument,       &flag_show_memory , 1 } 
         #define _sh {"show-headers",  no_argument,       &flag_show_headers, 1 } 
+        #define _si {"show-index",    no_argument,       &flag_show_index  , 1 } 
+        #define _sr {"show-gheader",  no_argument,       &flag_show_gheader, 1 }  
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,      _s2, _s5, _s6,      _st, _sm, _sh, _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                                        _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                                        _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,      _s2, _s5, _s6,      _st, _sm, _sh,                _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                                                       _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                                                       _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLq^tVzm@:Oo:p:", // genozip
+            "cdfhlLq^tVzm@:Oo:p:B:", // genozip
             "cfhLq^V@:Oo:p:",      // genounzip
             "hLVmp:",              // genols
             "hLV@:p:"              // genocat
@@ -803,6 +825,7 @@ int main (int argc, char **argv)
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
+            case 'B' : genozip_set_global_max_lines_per_vb (optarg); break;
             case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'

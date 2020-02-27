@@ -139,6 +139,7 @@ void file_close (File **file_p,
         if (file->dict_data.memory) buf_destroy (pseudo_vb, &file->dict_data);
         if (file->ra_buf.memory) buf_destroy (pseudo_vb, &file->ra_buf);
         if (file->section_list_buf.memory) buf_destroy (pseudo_vb, &file->section_list_buf);
+        if (file->section_list_dict_buf.memory) buf_destroy (pseudo_vb, &file->section_list_dict_buf);
         if (file->v1_next_vcf_header.memory) buf_destroy (pseudo_vb, &file->v1_next_vcf_header);
     }
 

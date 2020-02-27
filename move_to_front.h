@@ -20,7 +20,7 @@
 #define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
 #define NIL -1
-typedef struct {
+typedef struct mtfnode_ {
     uint32_t char_index;       // character index into dictionary array
     uint32_t snip_len;         // not including \t terminator present in dictionary array
     Base250 word_index;        // word index into dictionary (8 or 16 bit - depending on ctx->encoding)
@@ -47,7 +47,7 @@ typedef struct {
     uint32_t prev_word_index;  // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
 
-typedef struct {
+typedef struct mtfcontext_ {
     unsigned did_i;            // the index of this ctx within the array vb->mtf_ctx
     DictIdType dict_id;        // ZIP & PIZ. which dict_id is this MTF dealing with
     SectionType b250_section_type; // section type where the the corresponding b250 data goes
@@ -78,7 +78,6 @@ extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterat
 extern void mtf_clone_ctx (VariantBlockP vb);
 extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional */, uint32_t *snip_len /* optional */);
 extern void mtf_merge_in_vb_ctx (VariantBlockP vb);
-//extern void mtf_compress_all_dictionaries (VariantBlockP pseudo_vb);
 extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, unsigned *num_subfields, DictIdType dict_id, SectionType dict_section_type);
 extern int mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id, bool error_if_absent);
 extern void mtf_integrate_dictionary_fragment (VariantBlockP vb, char *data);

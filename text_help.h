@@ -26,13 +26,16 @@ static const char *help_genozip[] = {
     "   -c --stdout       Send output to standard output instead of a file",    
     "   -f --force        Force overwrite of the output file, or force writing .vcf" GENOZIP_EXT " data to standard output",    
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    
-    "   -o --output       Output file name. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
-    "   -p --password     Password-protected - encrypted with 256-bit AES",
+    "   -o --output       <output-filename>. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
+    "   -p --password     <password>. Password-protected - encrypted with 256-bit AES",
     "   -m --md5          Records the MD5 hash of the VCF file in the genozip file header. When the resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF. Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file",
     "   -q --quiet        Don't show the progress indicator",    
-    "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+    "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
     "   --show-content    Show the information content of VCF files and the compression ratios of each component",
     "   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
+    "",
+    "Optimizing:",    
+    "   -B --vblock       <number>. Sets the number of variants (sites) in a variant block. Memory consumption of both compression and decompression are linear with the variant block size. Compression is sometimes better with larger block sizes, in particular if the number of samples is small. By default, the variant block size is set to a value between 4096 (for VCF files with 1024 samples or more) and 131,072 (for VCF files with 31 samples or less). The genozip file is indexed on the variant block level, so smaller blocks will result in faster lookup using -r or -R, but at the cost of a larger index",    
     "",
     "One or more file names may be given, or if omitted, standard input is used instead",
     "",
@@ -48,6 +51,8 @@ static const char *help_genozip_developer[] = {
     "   --show-gt-nodes   Show transposed GT matrix - each value is an index into its dictionary",
     "   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as the subfields of INFO - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers.",
     "   --show-headers    Show the sections headers (works for genounzip too)",
+    "   --show-index      Show the content of the random access index"
+    "   --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file)"
 };
 
 static const char *help_genounzip[] = {
@@ -63,10 +68,10 @@ static const char *help_genounzip[] = {
     "   -f --force        Force overwrite of the output file",
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    
     "   -O --split        Split a concatenated file back to its original components",
-    "   -o --output       Output file name. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
-    "   -p --password     Provide password to access file(s) that were compressed with --password",
+    "   -o --output       <output-filename>. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
+    "   -p --password     <password>. Provide password to access file(s) that were compressed with --password",
     "   -q --quiet        Don't show the progress indicator",    
-    "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+    "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
     "   --show-time       Show what functions are consuming the most time (useful mostly for developers of genozip)",
     "   --show-memory     Show what buffers are consuming the most memory (useful mostly for developers of genozip)",
     "   -h --help         Show this help page",
