@@ -489,7 +489,7 @@ void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
     header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
     header.encoding                = (uint8_t)ctx->encoding;
 
-    ASSERT (ctx->encoding == B250_ENC_8 || ctx->encoding == B250_ENC_16, 
+    ASSERT (ctx->encoding >= B250_ENC_8 && ctx->encoding <= B250_ENC_24, 
             "Error: invalid base250 encoding: %d", ctx->encoding);
             
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data);

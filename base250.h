@@ -20,12 +20,12 @@
 #define MAX_BASE250_NUMERALS 5
 typedef struct {
     uint32_t n;                                  // the number bering encoding
-    uint8_t  numerals[2][MAX_BASE250_NUMERALS];  // encoded number. up to 5 numerals (first array for 8bit, 2nd for 16 bit encoding)
-    uint8_t  num_numerals[2];                    // legal values - 1,2,3,4 (8 bit and 16 bit)
+    uint8_t  numerals[3][MAX_BASE250_NUMERALS];  // encoded number. up to 5 numerals (first array for 8bit, 2nd for 16 bit, 3rd for 24 bit encoding)
+    uint8_t  num_numerals[3];                    // legal values - 1,2,3,4 (8 bit and 16 bit)
 } Base250;
 
 // these values go into the SectionHeaderBase250
-typedef enum { B250_ENC_NONE=-1, B250_ENC_8=0, B250_ENC_16=1 } Base250Encoding; // B250_ENC_8/16 are used as indeces in arrays, so they need to be 0/1
+typedef enum { B250_ENC_NONE=-1, B250_ENC_8=0, B250_ENC_16=1, B250_ENC_24=2 } Base250Encoding; // B250_ENC_8/16 are used as indeces in arrays, so they need to be 0/1
 
 // B250_ENC_8:  if n <= 249: one numeral which is n
 //                         if n >= 250, first numeral is a code BASE250_2_NUMERALS, BASE250_3_NUMERALS or BASE250_4_NUMERALS
@@ -42,5 +42,7 @@ extern uint32_t base250_decode (const uint8_t **str_p, Base250Encoding encoding)
 //#define base250_len(data) (*(data) < BASE250_2_NUMERALS ? 1 : *(data) - BASE250_2_NUMERALS + 3) // number of bytes this base250 number consumes
 // new econding:
 unsigned base250_len (const uint8_t *data, Base250Encoding encoding);
+
+extern const char *enc_name (Base250Encoding encoding);
 
 #endif

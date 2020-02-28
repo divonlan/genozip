@@ -208,8 +208,8 @@ typedef struct {
     uint32_t variant_block_i;
     uint8_t section_type;
     uint8_t include         : 1;  // include this variant block in zcat
-    uint8_t encoding        : 1;  // used by b250 sections: 0 if encoding is 8bit, 1 if it is 16bit
-    uint8_t for_future_use  : 6;
+    uint8_t encoding        : 2;  // used by b250 sections: 0 if encoding is 8bit, 1 if it is 16bit, 2 for 24 bit
+    uint8_t for_future_use  : 5;
 } SectionListEntry;
 
 extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);

@@ -53,8 +53,7 @@ void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
     ent->offset          = offset;  // this is a partial offset (within d) - we will correct it later
     ent->include         = 0;
     ent->for_future_use  = 0;
-    ent->encoding        = (section_type_is_b250 (header->section_type)) && 
-                            (((SectionHeaderBase250 *)header)->encoding == B250_ENC_16);
+    ent->encoding        = (section_type_is_b250 (header->section_type)) ? ((SectionHeaderBase250 *)header)->encoding : 0; // 0, 1 or 2
 }
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file sectinon list - just before 
@@ -118,9 +117,9 @@ void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozip
         uint64_t this_offset = BGEN64 (ents[i].offset);
         uint64_t next_offset = (i < num_sections-1) ? BGEN64 (ents[i+1].offset) : pseudo_vb->z_file->disk_so_far;
 
-        fprintf (stderr, "    %3u. %-22.22s%s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
+        fprintf (stderr, "    %3u. %-24.24s%s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 
-                 section_type_is_b250 (ents[i].section_type) ? (ents[i].encoding ? " (16 bit)" : " (8 bit)") : "",
+                 section_type_is_b250 (ents[i].section_type) ? enc_name (ents[i].encoding) : "",
                  -DICT_ID_LEN, DICT_ID_LEN, ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 
                  BGEN32 (ents[i].variant_block_i), this_offset, next_offset - this_offset);
     }

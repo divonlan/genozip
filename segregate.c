@@ -734,11 +734,17 @@ static void seg_decide_encodings (VariantBlock *vb)
             else if (flag_encode_16)
                 ctx->encoding = B250_ENC_16; 
 
-            else if (ctx->mtf.len + ctx->ol_mtf.len <= 250) // this condition is checked only if not flag_encode_16
+            else if (flag_encode_24)
+                ctx->encoding = B250_ENC_24; 
+
+            else if (ctx->mtf.len + ctx->ol_mtf.len <= 250) // this condition is checked only if not flag_encode_16/24
                 ctx->encoding = B250_ENC_8; 
 
-            else
+            else if (ctx->mtf.len + ctx->ol_mtf.len <= 62500)
                 ctx->encoding = B250_ENC_16; 
+
+            else
+                ctx->encoding = B250_ENC_24; 
         }
     }
 }

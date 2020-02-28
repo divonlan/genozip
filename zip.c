@@ -68,7 +68,7 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
     buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 5-numeral.
                1.1, "ctx->b250_buf", 0);
 
-    ASSERT (ctx->encoding == B250_ENC_8 || ctx->encoding == B250_ENC_16,
+    ASSERT (ctx->encoding >= B250_ENC_8 && ctx->encoding <= B250_ENC_24,
             "Error: invalid encoding=%d in for dict_id=%.*s", ctx->encoding, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
 
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
