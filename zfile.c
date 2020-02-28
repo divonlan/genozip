@@ -206,13 +206,16 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
     if (flag_show_headers) zfile_show_header (header, vb->variant_block_i ? vb : NULL); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 
-void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
+static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 {
     SectionHeaderBase250 *header = (SectionHeaderBase250 *)section_header_p;
 
-    if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) ;
+    if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
 
-    fprintf (stderr, "%*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
+    if (flag_show_b250 && header->h.section_type == SEC_CHROM_B250)
+        fprintf (stderr, "Base-250 data for VB %u (result of '--show-b250'):\n", BGEN32 (header->h.variant_block_i));
+        
+    fprintf (stderr, "  %*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
 
     const uint8_t *data = (const uint8_t *)b250_data->data;
     for (unsigned i=0; i < BGEN32 (header->num_b250_items); i++) {
@@ -487,7 +490,7 @@ void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
     header.encoding                = (uint8_t)ctx->encoding;
 
     ASSERT (ctx->encoding == B250_ENC_8 || ctx->encoding == B250_ENC_16, 
-            "Error: invalid base250 encoding: %u", ctx->encoding);
+            "Error: invalid base250 encoding: %d", ctx->encoding);
             
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data);
 }

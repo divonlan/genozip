@@ -308,7 +308,7 @@ static void piz_initialize_sample_iterators (VariantBlock *vb)
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
-                    next += base250_len (next, line_format_info->ctx[sf] ? line_format_info->ctx[sf]->encoding : BASE250_ENCODING_UNKNOWN); // if this format has no non-GT subfields, it will not have a ctx 
+                    next += base250_len (next, line_format_info->ctx[sf] ? line_format_info->ctx[sf]->encoding : B250_ENC_NONE); // if this format has no non-GT subfields, it will not have a ctx 
             }
         }
 
@@ -316,8 +316,8 @@ static void piz_initialize_sample_iterators (VariantBlock *vb)
         ASSERT (sample_i == sample_after, "Error: expected to find %u genotypes in sb_i=%u of variant_block_i=%u, but found only %u",
                 vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i, vb->num_lines * (sample_i - sb_i * vb->num_samples_per_block));
 
-        ASSERT (next == after, "Error: expected to find %u genotypes in sb_i=%u of variant_block_i=%u, but found more. ",
-                vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i);
+        ASSERT (next == after, "Error: unused data remains in buffer after processing genotype data for sb_i=%u of variant_block_i=%u (%u lines x %u samples)",
+                sb_i, vb->variant_block_i, vb->num_lines, num_samples_in_sb);
     }
 
     COPY_TIMER (vb->profile.piz_initialize_sample_iterators)
@@ -825,7 +825,7 @@ static int16_t piz_read_global_area (VariantBlock *pseudo_vb, bool need_random_a
 {
     File *zfile = pseudo_vb->z_file;
 
-    uint16_t data_type = zfile_read_genozip_header (pseudo_vb, original_file_digest);
+    int16_t data_type = zfile_read_genozip_header (pseudo_vb, original_file_digest);
     if (data_type == MAYBE_V1 || data_type == EOF) return data_type;
 
     // read dictionaries

@@ -48,7 +48,7 @@ Base250 base250_encode (uint32_t n)
         result.numerals[B250_ENC_16][B250_ENC_16] = result.numerals[B250_ENC_16][2];
     }
     else { // == 1
-        if (n==0)  // #1 most frequent snip
+        if (result.n==0)  // #1 most frequent snip
             result.numerals[B250_ENC_16][B250_ENC_8] = 253;
         
         else {
@@ -70,8 +70,8 @@ uint32_t base250_decode (const uint8_t **str, Base250Encoding encoding)
 {
     ASSERT ((encoding == B250_ENC_16) || 
             (encoding == B250_ENC_8)  ||
-            (encoding == BASE250_ENCODING_UNKNOWN && (*str)[B250_ENC_8] == BASE250_MISSING_SF), // if line format has no non-GT subfields 
-            "Error: invalid encoding=%u", encoding);
+            (encoding == B250_ENC_NONE && (*str)[B250_ENC_8] == BASE250_MISSING_SF), // if line format has no non-GT subfields 
+            "Error: invalid encoding=%d", encoding);
 
     uint32_t ret, bytes_consumed=1;
 
@@ -111,12 +111,12 @@ unsigned base250_len (const uint8_t *data, Base250Encoding encoding)
             if (*data <= 252) return 1;
             else return *data - 250; // 3 or 4 or 5
 
-        case BASE250_ENCODING_UNKNOWN: // happens when called for a line that has no non-GT subfields
+        case B250_ENC_NONE: // happens when called for a line that has no non-GT subfields
             ASSERT0 (*data == BASE250_MISSING_SF, "Error: data has no encoding, but a byte other than BASE250_MISSING_SF was found");
             return 1;
     }
     
-    ABORT ("Invalid encoding type: %u", encoding);
+    ABORT ("Invalid encoding type: %d", encoding);
     return 0; // never reaches here - avoid compiler warning
 }
  

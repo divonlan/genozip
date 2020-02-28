@@ -726,9 +726,17 @@ static void seg_decide_encodings (VariantBlock *vb)
         if (ctx->mtf.len + ctx->ol_mtf.len) {
             // note: this is a heuristic - after the dictionary is merged into z_file, mtf.len might end up being
             // more than 250 even in 8 bit, and as a result some base250 might have more than 1 numeral
-            if (ctx->mtf.len + ctx->ol_mtf.len <= 250 || 
-                ctx->b250_section_type == SEC_GENOTYPE_DATA) 
-                ctx->encoding = B250_ENC_8; // all genotype dictionaries are 8bit - for now (bc we don't have a place in the section headers to indicate each subfield encoding)
+            if (ctx->b250_section_type == SEC_GENOTYPE_DATA || flag_encode_8)
+                // all genotype dictionaries are 8bit - for now (bc we don't have a place in the section headers to 
+                // indicate each subfield encoding). On the PIZ size, this is similarly set in piz_uncompress_all_sections()
+                ctx->encoding = B250_ENC_8; 
+
+            else if (flag_encode_16)
+                ctx->encoding = B250_ENC_16; 
+
+            else if (ctx->mtf.len + ctx->ol_mtf.len <= 250) // this condition is checked only if not flag_encode_16
+                ctx->encoding = B250_ENC_8; 
+
             else
                 ctx->encoding = B250_ENC_16; 
         }

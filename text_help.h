@@ -52,7 +52,9 @@ static const char *help_genozip_developer[] = {
     "   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as the subfields of INFO - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers.",
     "   --show-headers    Show the sections headers (works for genounzip too)",
     "   --show-index      Show the content of the random access index"
-    "   --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file)"
+    "   --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file)",
+    "   --encode-8        Force all INFO subfield and field (but not FORMAT subfield) b250 sections to be encoded with 8 (or 16) bit, rather than being decided optimally",
+    "   --encode-16 "
 };
 
 static const char *help_genounzip[] = {

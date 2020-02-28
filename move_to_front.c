@@ -55,7 +55,7 @@ static inline int32_t mtf_hash (const MtfContext *ctx, const char *snip, unsigne
 static inline uint32_t mtf_insert_to_dict (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len)
 {
     buf_alloc (vb, &ctx->dict, MAX ((ctx->dict.len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 2, "mtf_ctx->dict", ctx->did_i);
-    if (ctx->encoding) buf_set_overlayable (&ctx->dict); // during merge
+    if (ctx->encoding != B250_ENC_NONE) buf_set_overlayable (&ctx->dict); // during merge
 
     unsigned char_index = ctx->dict.len;
     char *dict_p = &ctx->dict.data[char_index];
@@ -149,7 +149,7 @@ uint32_t mtf_get_next_snip (VariantBlock *vb, MtfContext *ctx,
     if (!override_iterator && !iterator->next_b250) // INFO and Field1-9 data (GT data uses override_next_b250)
         iterator->next_b250 = (uint8_t *)ctx->b250.data; // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
 
-    uint32_t word_index = base250_decode (&iterator->next_b250, ctx ? ctx->encoding : BASE250_ENCODING_UNKNOWN); // if this line has no non-GT subfields, it will not have a ctx 
+    uint32_t word_index = base250_decode (&iterator->next_b250, ctx ? ctx->encoding : B250_ENC_NONE); // if this line has no non-GT subfields, it will not have a ctx 
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
@@ -236,7 +236,7 @@ int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, 
     vb->z_section_entries[ctx->dict_section_type]++; 
 
     buf_alloc (vb, &ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, 1+ctx->mtf.len), 2, "mtf_ctx->mtf", ctx->did_i);
-    if (ctx->encoding != BASE250_ENCODING_UNKNOWN) buf_set_overlayable (&ctx->mtf); // when called from merge
+    if (ctx->encoding != B250_ENC_NONE) buf_set_overlayable (&ctx->mtf); // when called from merge
 
     new_hashent->mtf_i = ctx->ol_mtf.len + ctx->mtf.len++; // new hash entry or extend linked list
     new_hashent->next  = NIL;
@@ -300,6 +300,7 @@ void mtf_clone_ctx (VariantBlock *vb)
         vb_ctx->dict_id           = zf_ctx->dict_id;
         vb_ctx->dict_section_type = zf_ctx->dict_section_type;
         vb_ctx->b250_section_type = zf_ctx->b250_section_type;
+        vb_ctx->encoding          = B250_ENC_NONE; // this vb will decide on its own encoding, we don't copy it
         mtf_init_iterator (vb_ctx);
     }
 
@@ -384,8 +385,8 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
         zf_ctx->b250_section_type = vb_ctx->b250_section_type;
         zf_ctx->dict_section_type = vb_ctx->dict_section_type;
-        zf_ctx->encoding          = vb_ctx->encoding;
         zf_ctx->dict_id           = vb_ctx->dict_id;
+        zf_ctx->encoding          = B250_ENC_NONE; // we don't encode from zfile, only from vb
 
         buf_move (vb, &zf_ctx->dict, &vb_ctx->dict);
         buf_set_overlayable (&zf_ctx->dict);
@@ -524,6 +525,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
         ctx->dict_id           = dict_id;
         ctx->dict_section_type = dict_section_type;
         ctx->b250_section_type = dict_section_type + 1; // the b250 is 1 after the dictionary for all dictionary sections
+        ctx->encoding          = ENC_TYPE_NONE;         // encoding will be decided at the end of segregate
         mtf_init_iterator (ctx);
 
         // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields

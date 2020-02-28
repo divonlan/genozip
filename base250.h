@@ -25,7 +25,7 @@ typedef struct {
 } Base250;
 
 // these values go into the SectionHeaderBase250
-typedef enum { BASE250_ENCODING_UNKNOWN=-1, B250_ENC_8=0, B250_ENC_16=1 } Base250Encoding;
+typedef enum { B250_ENC_NONE=-1, B250_ENC_8=0, B250_ENC_16=1 } Base250Encoding; // B250_ENC_8/16 are used as indeces in arrays, so they need to be 0/1
 
 // B250_ENC_8:  if n <= 249: one numeral which is n
 //                         if n >= 250, first numeral is a code BASE250_2_NUMERALS, BASE250_3_NUMERALS or BASE250_4_NUMERALS

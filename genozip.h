@@ -36,7 +36,7 @@
 
 #define MAX_SUBFIELDS      64   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file.
                                 // IMPORTANT! changing in this number will change the genozip file format because SectionHeaderGenotype uses it
-                                
+
 #define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined)
 
 #define MAX_CHROM_LEN      64   // maximum length of chromosome (contig) name
@@ -72,7 +72,7 @@ extern const char *global_cmd;            // set once in main()
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
-           flag_show_index, flag_show_gheader;
+           flag_show_index, flag_show_gheader, flag_encode_8, flag_encode_16;
 
 // macros
 #ifndef MIN

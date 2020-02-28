@@ -51,7 +51,8 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 static int flag_stdout=0, flag_replace=0, flag_show_content=0;
 int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
-    flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0;
+    flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0,
+    flag_encode_8=0, flag_encode_16=0;
 
 DictIdType dict_id_show_one_b250= { 0 };  // argument of --show-b250-one
 
@@ -786,13 +787,15 @@ int main (int argc, char **argv)
         #define _sh {"show-headers",  no_argument,       &flag_show_headers, 1 } 
         #define _si {"show-index",    no_argument,       &flag_show_index  , 1 } 
         #define _sr {"show-gheader",  no_argument,       &flag_show_gheader, 1 }  
+        #define _8  {"encode-8",      no_argument,       &flag_encode_8,     1 }  
+        #define _16 {"encode-16",     no_argument,       &flag_encode_16,    1 }  
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,      _s2, _s5, _s6,      _st, _sm, _sh,                _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                                                       _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                                                       _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _8, _16, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,      _s2, _s5, _s6,      _st, _sm, _sh,                         _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                                                                _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                                                                _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
@@ -877,6 +880,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_stdout || !flag_show_content, "%s: option %s is incompatable with --show-content", global_cmd, OT("stdout", "c"));
     ASSERT (!flag_stdout || !flag_show_sections,"%s: option %s is incompatable with --show-sections", global_cmd, OT("stdout", "c"));
     ASSERT (!flag_stdout || !flag_show_alleles, "%s: option %s is incompatable with --show-alleles", global_cmd, OT("stdout", "c"));
+    ASSERT (!flag_encode_8 || !flag_encode_16,  "%s: options --encode-8 and --encode-16 are mutually exclusive", global_cmd);
     ASSERTW (!flag_stdout       || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("stdout", "c"));
     ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS || command == HELP, "%s: ignoring %s option", global_cmd, OT("force", "f"));
     ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("replace", "^"));
