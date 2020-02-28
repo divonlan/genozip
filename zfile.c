@@ -486,11 +486,12 @@ void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
     header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
     header.encoding                = (uint8_t)ctx->encoding;
 
-    ASSERT (ctx->encoding == BASE250_ENCODING_8BIT || ctx->encoding == BASE250_ENCODING_16BIT, 
+    ASSERT (ctx->encoding == B250_ENC_8 || ctx->encoding == B250_ENC_16, 
             "Error: invalid base250 encoding: %u", ctx->encoding);
             
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data);
 }
+
 
 void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Buffer *section_data)
 {
@@ -722,27 +723,8 @@ bool zfile_read_one_vb (VariantBlock *vb)
     // handle the case of the terminating VB section in case of --split (we handle the case of non-split in zfile_read_one_section())
     if (flag_split && vb_header->h.flags == 1)
         return false; // end of vcf component
-/*
-    // dictionaries are processed right here by the dispatcher thread - the compute
-    // thread only access the dictionaries on the z_file->mtf_ctx
-    unsigned start_dictionary_sections = vb->z_data.len;
 
-    for (VcfFields f=CHROM; f <= FORMAT; f++) 
-        if ((1 << f) & vb_header->field_dictionary_sections_bitmap)
-            zfile_read_and_integrate_dictionary (vb, SEC_CHROM_DICT + f*2);
-    
-    uint32_t num_info_dictionary_sections  = BGEN32 (vb_header->num_info_dictionary_sections);
-    for (unsigned i=0; i < num_info_dictionary_sections; i++)
-        zfile_read_and_integrate_dictionary (vb, SEC_INFO_SUBFIELD_DICT);
-
-    uint32_t num_gt_dictionary_sections    = BGEN32 (vb_header->num_gt_dictionary_sections);
-    for (unsigned i=0; i < num_gt_dictionary_sections; i++)
-        zfile_read_and_integrate_dictionary (vb, SEC_FRMT_SUBFIELD_DICT);
-
-    // dictionaries are not included in z_data sent to the compute thread - shrink z_data back, effectively deleting them
-    vb->z_data.len = start_dictionary_sections; 
-*/
-    // overlay all available dictionaries (not just those that have fragments in this variant block) to the vb
+    // overlay all dictionaries (not just those that have fragments in this variant block) to the vb
     mtf_overlay_dictionaries_to_vb (vb);
 
     // read the the data sections (fields, info sub fields, genotype, phase, haplotype)
@@ -891,8 +873,6 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
     header.num_samples                  = BGEN32 (global_num_samples);
     header.num_items_concat             = BGEN64 (zfile->num_lines_concat);
     header.num_sections                 = BGEN32 (num_sections); 
-    header.num_info_dictionary_sections = BGEN32 (zfile->num_sections[SEC_INFO_DICT]);
-    header.num_gt_dictionary_sections   = BGEN32 (zfile->num_sections[SEC_FRMT_SUBFIELD_DICT]);
     header.num_vcf_components           = BGEN32 (zfile->num_vcf_components_so_far);
 
     if (flag_md5) {
@@ -940,7 +920,7 @@ bool zfile_get_genozip_header (File *z_file, SectionHeaderGenozipHeader *header)
     int bytes = fread ((char*)header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)z_file->file);
     if (bytes < sizeof(SectionHeaderGenozipHeader)) return false;
 
-    if (flag_show_headers) zfile_show_header ((SectionHeader *)header, NULL);
+    if (flag_show_headers) zfile_show_header (&header->h, NULL);
 
     return BGEN32 (header->h.magic) == GENOZIP_MAGIC;
 }

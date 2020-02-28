@@ -60,7 +60,7 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->phase_type = PHASE_UNKNOWN;
     vb->vcf_file = vb->z_file = NULL;
     vb->z_next_header_i = 0;
-    vb->num_dict_ids = vb->num_subfields = 0;
+    vb->num_dict_ids = vb->num_format_subfields = 0;
     vb->last_pos = 0;
 
     memset(vb->vcf_section_bytes, 0, sizeof(vb->vcf_section_bytes));

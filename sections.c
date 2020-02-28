@@ -10,6 +10,7 @@
 #include "vb.h"
 #include "endianness.h"
 
+// ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
 {
     DictIdType dict_id = { 0 };
@@ -50,7 +51,10 @@ void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
     ent->variant_block_i = BGEN32 (header->variant_block_i); // big endian in header - convert back to native
     ent->dict_id         = dict_id;
     ent->offset          = offset;  // this is a partial offset (within d) - we will correct it later
-    ent->include = ent->for_future_use = 0;
+    ent->include         = 0;
+    ent->for_future_use  = 0;
+    ent->encoding        = (section_type_is_b250 (header->section_type)) && 
+                            (((SectionHeaderBase250 *)header)->encoding == B250_ENC_16);
 }
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file sectinon list - just before 
@@ -102,8 +106,6 @@ void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozip
     fprintf (stderr, "  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
     fprintf (stderr, "  num_sections: %u\n",                  num_sections);
     fprintf (stderr, "  num_vcf_components: %u\n",            BGEN32 (header->num_vcf_components));
-    fprintf (stderr, "  num_info_dictionary_sections: %u\n",  BGEN32 (header->num_info_dictionary_sections));
-    fprintf (stderr, "  num_gt_dictionary_sections: %u\n",    BGEN32 (header->num_gt_dictionary_sections));
     fprintf (stderr, "  md5_hash_concat: %s\n",               md5_display (&header->md5_hash_concat, false));
     fprintf (stderr, "  created: %*s\n",                      -FILE_METADATA_LEN, header->created);
 
@@ -111,11 +113,17 @@ void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozip
 
     SectionListEntry *ents = (SectionListEntry *)pseudo_vb->z_file->section_list_buf.data;
 
-    for (unsigned i=0; i < num_sections; i++)
-        fprintf (stderr, "    %3u. %-22.22s %*.*s vb_i=%u offset_on_disk=%"PRIu64"\n", 
-                 i, st_name(ents[i].section_type), -DICT_ID_LEN, DICT_ID_LEN, 
-                 ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 
-                 BGEN32 (ents[i].variant_block_i), BGEN64 (ents[i].offset));
+    for (unsigned i=0; i < num_sections; i++) {
+     
+        uint64_t this_offset = BGEN64 (ents[i].offset);
+        uint64_t next_offset = (i < num_sections-1) ? BGEN64 (ents[i+1].offset) : pseudo_vb->z_file->disk_so_far;
+
+        fprintf (stderr, "    %3u. %-22.22s%s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
+                 i, st_name(ents[i].section_type), 
+                 section_type_is_b250 (ents[i].section_type) ? (ents[i].encoding ? " (16 bit)" : " (8 bit)") : "",
+                 -DICT_ID_LEN, DICT_ID_LEN, ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 
+                 BGEN32 (ents[i].variant_block_i), this_offset, next_offset - this_offset);
+    }
 }
 
 void BGEN_sections_list (Buffer *sections_list_buf)

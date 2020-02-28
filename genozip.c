@@ -897,7 +897,7 @@ int main (int argc, char **argv)
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
     if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
-    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || dict_id_show_one_b250.num) flag_quiet=true; // don't show progress when showing data
+    if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || dict_id_show_one_b250.num) flag_quiet=true; // don't show progress when showing data
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

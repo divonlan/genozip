@@ -106,20 +106,18 @@ typedef struct {
 
 typedef struct {
     SectionHeader h;
-    uint8_t genozip_version;
-    uint8_t encryption_type;          // one of ENC_TYPE_*
+    uint8_t  genozip_version;
+    uint8_t  encryption_type;         // one of ENC_TYPE_*
     uint16_t data_type;               // one of DATA_TYPE_*
     uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
     uint64_t uncompressed_data_size;  // data size of uncompressed file, if uncompressed as a single file
     uint64_t num_items_concat;        // number of items in a concatenated file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_vcf_components;      // number of vcf concatenated components in this file (1 if no concatenation)
-    uint32_t num_info_dictionary_sections;  // DO WE NEED THIS?
-    uint32_t num_gt_dictionary_sections;    // AND THIS?
 
-    Md5Hash md5_hash_concat;   // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
+    Md5Hash  md5_hash_concat;         // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
 
-    uint8_t password_test[16]; // short encrypted block - used to test the validy of a password
+    uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
 } 
@@ -144,8 +142,8 @@ typedef struct {
     uint64_t num_lines;        // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
     uint32_t num_samples;      // number of samples in the original VCF file
     uint32_t max_lines_per_vb; // log2 of the upper bound on how many variants (data lines) a VB can have in this file
-    uint8_t compression_type;  // compression type of original file, one of COMPRESSION_TYPE_*
-    Md5Hash md5_hash_single;   // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
+    uint8_t  compression_type; // compression type of original file, one of COMPRESSION_TYPE_*
+    Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
 
 #define VCF_FILENAME_LEN 256
     char vcf_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated.
@@ -210,7 +208,8 @@ typedef struct {
     uint32_t variant_block_i;
     uint8_t section_type;
     uint8_t include         : 1;  // include this variant block in zcat
-    uint8_t for_future_use  : 7;
+    uint8_t encoding        : 1;  // used by b250 sections: 0 if encoding is 8bit, 1 if it is 16bit
+    uint8_t for_future_use  : 6;
 } SectionListEntry;
 
 extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);

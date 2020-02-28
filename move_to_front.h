@@ -21,9 +21,9 @@
 
 #define NIL -1
 typedef struct mtfnode_ {
-    uint32_t char_index;       // character index into dictionary array
-    uint32_t snip_len;         // not including \t terminator present in dictionary array
-    Base250 word_index;        // word index into dictionary (8 or 16 bit - depending on ctx->encoding)
+    uint32_t char_index;      // character index into dictionary array
+    uint32_t snip_len;        // not including \t terminator present in dictionary array
+    Base250 word_index;       // word index into dictionary 
 } MtfNode;
 
 typedef struct {
@@ -38,13 +38,13 @@ typedef struct {
 
 // used by variant_block_i=1 to collect frequency statistics
 typedef struct {
-    int32_t mtf_i;            // index into MtfContext.mtf
-    int32_t count;            // number of times this snip has been encoutered so far
+    int32_t mtf_i;             // index into MtfContext.mtf
+    int32_t count;             // number of times this snip has been encoutered so far
 } SorterEnt;
 
 typedef struct {
     const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
-    uint32_t prev_word_index;  // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
+    int32_t prev_word_index;   // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
 
 typedef struct mtfcontext_ {
@@ -72,7 +72,6 @@ typedef struct mtfcontext_ {
 
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
-
 extern int32_t mtf_evaluate_snip (VariantBlockP vb, MtfContext *ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
 extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
 extern void mtf_clone_ctx (VariantBlockP vb);
@@ -88,8 +87,5 @@ extern void mtf_zero_all_sorters (VariantBlockP vb);
 extern void mtf_initialize_mutex (FileP z_file, unsigned next_variant_i_to_merge);
 
 extern void mtf_free_context (MtfContext *ctx);
-#ifdef DEBUG
-extern void mtf_tree_test (const MtfContext *ctx);
-#endif
 
 #endif

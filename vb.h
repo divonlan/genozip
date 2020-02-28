@@ -128,8 +128,6 @@ typedef struct variant_block_ {
     Buffer *genotype_sections_data;   // this is for piz - each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
     Buffer genotype_one_section_data; // for zip we need only one section data
     
-    uint32_t num_info_subfields;      // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
-                                      // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     // compresssed file data 
     Buffer z_data;                    // all headers and section data as read from disk
 
@@ -154,8 +152,11 @@ typedef struct variant_block_ {
     Buffer column_of_zeros;           // used by piz_get_ht_columns_data
 
     // dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field
-    unsigned num_dict_ids;            // total number of dictionaries of all types
-    unsigned num_subfields;           // number of subfields in this VB. num_subfields <= num_dict_ids-9.
+    uint32_t num_dict_ids;            // total number of dictionaries of all types
+    uint32_t num_format_subfields;    // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
+
+    uint32_t num_info_subfields;      // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
+                                      // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     MtfContext mtf_ctx[MAX_DICTS];    
 
     Buffer iname_mapper_buf;           // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[INFO].mtf

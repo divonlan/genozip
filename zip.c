@@ -68,7 +68,7 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
     buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 5-numeral.
                1.1, "ctx->b250_buf", 0);
 
-    ASSERT (ctx->encoding == BASE250_ENCODING_8BIT || ctx->encoding == BASE250_ENCODING_16BIT,
+    ASSERT (ctx->encoding == B250_ENC_8 || ctx->encoding == B250_ENC_16,
             "Error: invalid encoding %u in for dict_id=%.*s", ctx->encoding, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
 
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
@@ -77,7 +77,6 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
-
         MtfNode *node = mtf_node (ctx, ((const uint32_t *)ctx->mtf_i.data)[i], NULL, NULL);
         
         Base250 index = node->word_index;
@@ -87,12 +86,12 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
         if (one_up) // note: we can't do SEC_GENOTYPE_DATA bc we can't PIZ it as many GT data types are in the same section 
             ctx->b250.data[ctx->b250.len++] = BASE250_ONE_UP;
 
-        else if (index.num_numerals == 1)  // shortcut for most common case
-            ctx->b250.data[ctx->b250.len++] = index.numerals[0];
+        else if (index.num_numerals[ctx->encoding] == 1)  // shortcut for most common case
+            ctx->b250.data[ctx->b250.len++] = index.numerals[ctx->encoding][0];
 
         else {
-            memcpy (&ctx->b250.data[ctx->b250.len], &index.numerals, index.num_numerals);
-            ctx->b250.len += index.num_numerals;
+            memcpy (&ctx->b250.data[ctx->b250.len], &index.numerals[ctx->encoding], index.num_numerals[ctx->encoding]);
+            ctx->b250.len += index.num_numerals[ctx->encoding];
         }
 
         if (show) {
@@ -187,7 +186,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
             // if this VB has subfields in some line, but not in this line, then we have filled it in seg_complete_missing_lines(), 
             // therefore we have 1 fake subfield
-            if (vb->num_subfields > 0 && num_subfields==0) num_subfields = 1;
+            if (vb->num_format_subfields > 0 && num_subfields==0) num_subfields = 1;
 
             for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
             
@@ -201,12 +200,12 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
                     if (flag_show_gt_nodes) printf ("%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
 
-                    if (index.num_numerals == 1) { // shortcut for most common case
-                        *(dst_next++) = index.numerals[0];
+                    if (index.num_numerals[ctx->encoding] == 1) { // shortcut for most common case
+                        *(dst_next++) = index.numerals[ctx->encoding][0];
                     }
                     else {
-                        memcpy (dst_next, &index.numerals, index.num_numerals);
-                        dst_next += index.num_numerals;
+                        memcpy (dst_next, &index.numerals[ctx->encoding], index.num_numerals[ctx->encoding]);
+                        dst_next += index.num_numerals[ctx->encoding];
                     }
                 }
                 else if (node_index == WORD_INDEX_MISSING_SF) {

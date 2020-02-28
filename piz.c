@@ -762,7 +762,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
             // all genotype dictionaries are 8bit - for now (set during compression in seg_decide_encodings())
             for (unsigned did_i=0; did_i < MAX_DICTS; did_i++)
                 if (vb->mtf_ctx[did_i].b250_section_type == SEC_GENOTYPE_DATA)
-                    vb->mtf_ctx[did_i].encoding = BASE250_ENCODING_8BIT;
+                    vb->mtf_ctx[did_i].encoding = B250_ENC_8;
         }
         
         // next, comes phase data

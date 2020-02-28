@@ -176,8 +176,11 @@ uint32_t mtf_get_next_snip (VariantBlock *vb, MtfContext *ctx,
         if (word_index == WORD_INDEX_ONE_UP) 
             word_index = ctx->iterator.prev_word_index + 1;
 
-        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - \"%.*s\" dictionary has only %u entries",
-                vcf_line, word_index, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->word_list.len);
+        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s%s \"%.*s\" dictionary has only %u entries",
+                vcf_line, word_index, 
+                ctx->dict_section_type == SEC_INFO_SUBFIELD_DICT ? "INFO" : "",
+                ctx->dict_section_type == SEC_FRMT_SUBFIELD_DICT ? "FORMAT" : "",
+                DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->word_list.len);
 
         MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
 
@@ -397,7 +400,11 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
         // encode in base250 - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
         for (unsigned i=0; i < zf_ctx->mtf.len; i++) {
             MtfNode *zf_node = &((MtfNode *)zf_ctx->mtf.data)[i];
-            zf_node->word_index = base250_encode (zf_node->word_index.n, zf_ctx->encoding);
+            zf_node->word_index = base250_encode (zf_node->word_index.n); // note that vb overlays this
+
+            ASSERT (zf_node->word_index.n < zf_ctx->mtf.len, // sanity check
+                    "Error: word_index=%u out of bound - mtf.len=%u, in dictionary %.*s", 
+                    zf_node->word_index.n, zf_ctx->mtf.len, DICT_ID_LEN, dict_id_printable (zf_ctx->dict_id).id);
         }
     }
     else {
@@ -410,7 +417,9 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
             ASSERT (zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%u out of range - len=%i", zf_node_index, vb_ctx->mtf.len);
 
             // set word_index to be indexing the global dict - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
-            vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index, zf_ctx->encoding);
+            // note that encoding is private to the vb - different vbs might encoding their b250 of a certain dictionary with
+            // different encoding
+            vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index);
         }        
     }
 
@@ -630,8 +639,8 @@ void mtf_overlay_dictionaries_to_vb (VariantBlock *vb)
 
             // count dictionaries of genotype data subfields
             if (dict_id_is_gtdata_subfield (vb_ctx->dict_id)) {
-                vb->num_subfields++;
-                ASSERT (vb->num_subfields <= MAX_SUBFIELDS, 
+                vb->num_format_subfields++;
+                ASSERT (vb->num_format_subfields <= MAX_SUBFIELDS, 
                         "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 
                         file_printname (vb->z_file), MAX_SUBFIELDS, vb->variant_block_i);
             }

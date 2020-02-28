@@ -34,7 +34,9 @@
 #define MAX_PLOIDY         100  // this can be any number up to 65535, it is set to 100 to avoid memory allocation
                                 // explosion in case of an error in the VCF file
 
-#define MAX_SUBFIELDS      64   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file. This constant can be increased if needed.
+#define MAX_SUBFIELDS      64   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file.
+                                // IMPORTANT! changing in this number will change the genozip file format because SectionHeaderGenotype uses it
+                                
 #define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined)
 
 #define MAX_CHROM_LEN      64   // maximum length of chromosome (contig) name

@@ -139,8 +139,8 @@ static void seg_format_field (VariantBlock *vb, DataLine *dl,
             ASSERT (dict_id_is_gtdata_subfield (subfield), 
                     "Error: string %.*s in the FORMAT field of line=%u is not a legal subfield", DICT_ID_LEN, subfield.id, vcf_line_i);
 
-            format_mapper.ctx[format_mapper.num_subfields++] = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_subfields,
-                                                                         subfield, SEC_FRMT_SUBFIELD_DICT);
+            format_mapper.ctx[format_mapper.num_subfields++] = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields,
+                                                                                       subfield, SEC_FRMT_SUBFIELD_DICT);
         } 
         while (str[-1] != '\t' && str[-1] != '\n' && len > 0);
     }
@@ -717,7 +717,8 @@ void seg_complete_missing_lines (VariantBlock *vb)
     }
 }
 
-// decide for each ctx whether we will use 8 or 16 bit encoding    
+// ZIP only: decide for each ctx whether we will use 8 or 16 bit encoding. Note: different VBs might use different
+// encodings for b250 data based on the same dictionary - because of the logic
 static void seg_decide_encodings (VariantBlock *vb)
 {
     for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
@@ -727,9 +728,9 @@ static void seg_decide_encodings (VariantBlock *vb)
             // more than 250 even in 8 bit, and as a result some base250 might have more than 1 numeral
             if (ctx->mtf.len + ctx->ol_mtf.len <= 250 || 
                 ctx->b250_section_type == SEC_GENOTYPE_DATA) 
-                ctx->encoding = BASE250_ENCODING_8BIT; // all genotype dictionaries are 8bit - for now
+                ctx->encoding = B250_ENC_8; // all genotype dictionaries are 8bit - for now (bc we don't have a place in the section headers to indicate each subfield encoding)
             else
-                ctx->encoding = BASE250_ENCODING_16BIT; 
+                ctx->encoding = B250_ENC_16; 
         }
     }
 }

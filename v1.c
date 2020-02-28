@@ -485,7 +485,7 @@ static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, in
                 sample_iterator[sample_i].next_b250++; // skip
             }
             else {
-                for (unsigned sf_i=0; sf_i < vb->num_subfields; sf_i++) {
+                for (unsigned sf_i=0; sf_i < vb->num_format_subfields; sf_i++) {
 
                     if (line_subfields[sf_i] != NIL) {  // this line has this subfield (according to its FORMAT field)
 
@@ -553,7 +553,7 @@ static void v1_piz_initialize_next_gt_in_sample (VariantBlock *vb, int *num_subf
             // (gt data is stored transposed - i.e. column by column)
             for (unsigned line_i=0; line_i < vb->num_lines; line_i++)
                 for (unsigned sf=0; sf < num_subfields[line_i]; sf++) 
-                    next += base250_len (next, BASE250_ENCODING_8BIT); // v1 files are encoded in 8 bit
+                    next += base250_len (next, B250_ENC_8); // v1 files are encoded in 8 bit
         }
 
         // sanity checks to see we read the correct amount of genotypes
@@ -742,7 +742,7 @@ void v1_piz_uncompress_all_sections (VariantBlock *vb)
     // all dictionaries are 8bit in v1
     for (unsigned did_i=0; did_i < MAX_DICTS; did_i++)
         if (vb->mtf_ctx[did_i].b250_section_type == SEC_GENOTYPE_DATA)
-            vb->mtf_ctx[did_i].encoding = BASE250_ENCODING_8BIT;
+            vb->mtf_ctx[did_i].encoding = B250_ENC_8;
 
 }
 
