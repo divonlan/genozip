@@ -154,9 +154,9 @@ static unsigned main_get_num_cores()
 
 static void main_show_file_metadata (const File *vcf_file, const File *z_file)
 {
-    fprintf (stderr, "\n\n");
-    if (vcf_file->name) fprintf (stderr, "File name: %s\n", vcf_file->name);
-    fprintf (stderr, 
+    printf ("\n\n");
+    if (vcf_file->name) printf ("File name: %s\n", vcf_file->name);
+    printf (
 #ifdef _MSC_VER
              "Individuals: %u   Variants: %I64u   Non-GT subfields: %u\n", 
 #else
@@ -171,8 +171,8 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 
     char vsize[30], zsize[30];
 
-    fprintf (stderr, "Sections stats:\n");
-    fprintf (stderr, "                           #Sec  #Entries         VCF     %%       GENOZIP     %%   Ratio\n");
+    printf ("Sections stats:\n");
+    printf ("                           #Sec  #Entries         VCF     %%       GENOZIP     %%   Ratio\n");
     const char *format = "%22s    %5u  %10u  %8s %5.1f      %8s %5.1f  %6.1f%s\n";
 
     // the order in which we want them displayed
@@ -210,7 +210,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 
         char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_human_readable_size(vbytes, vsize) : "       ";
         
-        fprintf (stderr, format, categories[sec_i], zsections, zentries,
+        printf (format, categories[sec_i], zsections, zentries,
                  vcf_size_str, 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
                  buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
@@ -222,7 +222,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
         total_z        += zbytes;
     }
 
-    fprintf (stderr, format, "TOTAL", total_sections, total_entries,
+    printf (format, "TOTAL", total_sections, total_entries,
              buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
@@ -242,8 +242,8 @@ static void main_show_content (const File *vcf_file, const File *z_file)
     char vsize[30], zsize[30];
     int64_t total_vcf=0, total_z=0;
 
-    fprintf (stderr, "Compression stats:\n");
-    fprintf (stderr, "                              VCF     %%       GENOZIP     %%  Ratio\n");
+    printf ("Compression stats:\n");
+    printf ("                              VCF     %%       GENOZIP     %%  Ratio\n");
     const char *format = "%22s   %8s %5.1f      %8s %5.1f  %5.1f%s\n";
 
     const char *categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9"};
@@ -265,7 +265,7 @@ static void main_show_content (const File *vcf_file, const File *z_file)
             zbytes += z_file->section_bytes[*sec_i];
         }
 
-        fprintf (stderr, format, categories[i], 
+        printf (format, categories[i], 
                  buf_human_readable_size(vbytes, vsize), 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
                  buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
@@ -275,7 +275,7 @@ static void main_show_content (const File *vcf_file, const File *z_file)
         total_z        += zbytes;
     }
 
-    fprintf (stderr, format, "TOTAL", 
+    printf (format, "TOTAL", 
              buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
@@ -540,7 +540,7 @@ static void main_test (const char *vcf_filename)
 
 static void main_list_dir(); // forward declaration
 
-static void main_list (const char *z_filename, bool finalize, const char *subdir) 
+static void main_genols (const char *z_filename, bool finalize, const char *subdir) 
 {
     if (!finalize) {
         // no specific filename = show entire directory
@@ -648,7 +648,7 @@ static void main_list_dir(const char *dirname)
         ASSERT (!ret, "Error: failed to stat(%s): %s", ent->d_name, strerror (errno));
 
         if (!S_ISDIR (st.st_mode))  // don't go down subdirectories recursively
-            main_list (ent->d_name, false, dirname);
+            main_genols (ent->d_name, false, dirname);
     
     }
     closedir(dir);    
@@ -939,7 +939,7 @@ int main (int argc, char **argv)
             case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, !count, optind==argc); break;
             case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads, optind==argc); break;
             case TEST       : main_test  (next_input_file); break; // returns if successful, displays error and exits if not
-            case LIST       : main_list  (next_input_file, false, NULL); break;
+            case LIST       : main_genols  (next_input_file, false, NULL); break;
             
             default         : ASSERT(false, "%s: unrecognized command %c", global_cmd, command);
         }
@@ -948,7 +948,7 @@ int main (int argc, char **argv)
     } while (optind < argc);
             
     // if this is "list", finalize
-    if (command == LIST) main_list (NULL, true, NULL);
+    if (command == LIST) main_genols (NULL, true, NULL);
 
     return 0;
 }

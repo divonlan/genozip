@@ -116,7 +116,7 @@ static void zfile_show_header (const SectionHeader *header, VariantBlock *vb /* 
         vb->show_headers_buf.len += len;
     }
     else 
-        fprintf (stderr, str);
+        printf (str);
 }
 
 static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *header, 
@@ -213,21 +213,21 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
     if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
 
     if (flag_show_b250 && header->h.section_type == SEC_CHROM_B250)
-        fprintf (stderr, "Base-250 data for VB %u (result of '--show-b250'):\n", BGEN32 (header->h.variant_block_i));
+        printf ("Base-250 data for VB %u (result of '--show-b250'):\n", BGEN32 (header->h.variant_block_i));
         
-    fprintf (stderr, "  %*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
+    printf ("  %*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
 
     const uint8_t *data = (const uint8_t *)b250_data->data;
     for (unsigned i=0; i < BGEN32 (header->num_b250_items); i++) {
         uint32_t word_index = base250_decode (&data, (Base250Encoding)header->encoding);
         switch (word_index) {
-            case WORD_INDEX_ONE_UP     : fprintf (stderr, "ONE_UP "); break;
-            case WORD_INDEX_EMPTY_SF   : fprintf (stderr, "EMPTY "); break;
-            case WORD_INDEX_MISSING_SF : fprintf (stderr, "MISSING "); break;
-            default: fprintf (stderr, "%u ", word_index);
+            case WORD_INDEX_ONE_UP     : printf ("ONE_UP "); break;
+            case WORD_INDEX_EMPTY_SF   : printf ("EMPTY "); break;
+            case WORD_INDEX_MISSING_SF : printf ("MISSING "); break;
+            default: printf ("%u ", word_index);
         }
     }
-    fprintf (stderr, "\n");
+    printf ("\n");
 }
 
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
@@ -727,6 +727,12 @@ bool zfile_read_one_vb (VariantBlock *vb)
     if (flag_split && vb_header->h.flags == 1)
         return false; // end of vcf component
 
+    // if we're starting a new vcf component in a concatenated file - the I/O thread already skipped the VB terminator
+    // of the previous block - so we need to update variant_block_i
+//printf ("xxx header->h.variant_block_i=%u vb->variant_block_i=%u\n", BGEN32 (vb_header->h.variant_block_i), vb->variant_block_i);
+//    if (!flag_split && BGEN32 (vb_header->h.variant_block_i) == vb->variant_block_i + 1) 
+//        vb->variant_block_i++;
+
     // overlay all dictionaries (not just those that have fragments in this variant block) to the vb
     mtf_overlay_dictionaries_to_vb (vb);
 
@@ -833,7 +839,7 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
     global_num_samples        = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
     zfile->genozip_version    = header->genozip_version;
     zfile->num_vcf_components = BGEN32 (header->num_vcf_components);
-    *digest                   = header->md5_hash_concat; // has_md5 iff not 0. note: a chance of 1 in about 10^38 that we will get all-0 by chance in which case will won't perform the md5 comparison
+    *digest                   = header->md5_hash_concat; 
 
     zfile_uncompress_section (pseudo_vb, header, &zfile->section_list_buf, "zfile->section_list_buf", SEC_GENOZIP_HEADER);
     zfile->section_list_buf.len /= sizeof (SectionListEntry); // fix len
@@ -880,7 +886,7 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
 
     if (flag_concat_mode) {
         md5_finalize (&zfile->md5_ctx_concat, &header.md5_hash_concat);
-        if (flag_md5) fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
+        if (flag_md5 && zfile->num_vcf_components_so_far > 1) printf ("Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
     } 
     else 
         header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file
@@ -978,7 +984,7 @@ bool zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t pos_of_cu
     
     md5_finalize (&vb->z_file->md5_ctx_single, &curr_header->md5_hash_single);
     *md5 = curr_header->md5_hash_single;
-    if (flag_md5) fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
+    if (flag_md5) printf ("MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
 
     if (pos_of_current_vcf_header == 0) 
         vb->z_file->vcf_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 

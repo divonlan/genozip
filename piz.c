@@ -689,11 +689,6 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         ASSERT (global_num_samples == BGEN32 (header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, BGEN32 (header->num_samples));
     }
 
-    // if we're starting a new vcf component in a concatenated file - the I/O thread already skipped the VB terminator
-    // of the previous block - so we need to update variant_block_i
-    if (!flag_split && BGEN32 (header->h.variant_block_i) == vb->variant_block_i + 1) 
-        vb->variant_block_i++;
-    
     // in case of --split, the variant_block_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every vcf component
     if (flag_split) 
@@ -810,11 +805,9 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
         v1_piz_reconstruct_line_components (vb);
     }
 
-    COPY_TIMER (vb->profile.compute);
-
-#ifdef DEBUG
     buf_test_overflows(vb);
-#endif
+
+    COPY_TIMER (vb->profile.compute);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
@@ -921,22 +914,12 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
 
     // verify file integrity, if the genozip compress was run with --md5
     static Buffer md5_verif_str = EMPTY_BUFFER;
-    if (vcf_file->has_md5) {
-        Md5Hash decompressed_file_digest;
-        md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
+    Md5Hash decompressed_file_digest;
+    md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
-        ASSERT (md5_is_equal (decompressed_file_digest, original_file_digest),
-                "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
-                vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
-
-        // store verifications strings in a buffer to printed later - not to interfere with the progress indicator
-        if (!flag_quiet) {
-            buf_add_string (pseudo_vb, &md5_verif_str, md5_display (&decompressed_file_digest, false));
-            buf_add_string (pseudo_vb, &md5_verif_str, " - MD5 has been verified for ");
-            buf_add_string (pseudo_vb, &md5_verif_str, vcf_file->name);
-            buf_add_string (pseudo_vb, &md5_verif_str, "\n");
-        }
-    }
+    ASSERT (md5_is_equal (decompressed_file_digest, original_file_digest) || md5_is_zero (original_file_digest), // v1 files might be without md5
+            "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
+            vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
 
     if (flag_split) file_close (&pseudo_vb->vcf_file, pseudo_vb); // close this component file
 

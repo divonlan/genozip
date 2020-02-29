@@ -43,7 +43,6 @@ typedef struct file_ {
     uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
 
     // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)
-    bool has_md5;
     Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
     Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single vcf component
 

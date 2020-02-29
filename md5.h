@@ -30,10 +30,11 @@ typedef struct {
         uint8_t  bytes[64];
         uint32_t words[16];
     } buffer;
+    bool initialized;
 } Md5Context;
 
 extern void md5_do (const void *data, unsigned len, Md5Hash *digest);
-extern void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize);
+extern void md5_update (Md5Context *ctx, const void *data, unsigned len);
 extern void md5_finalize (Md5Context *ctx, Md5Hash *digest);
 extern const char *md5_display (const Md5Hash *digest, bool prefix_space);
 

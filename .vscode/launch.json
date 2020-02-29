@@ -11,8 +11,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/genozip-debug.exe",
 
-            //"args": ["-l"]
-            "args": ["-d", "-f", "test-file.vcf.genozip", "-o", "test-file.test.vcf"],
+            //"args": ["-l", "concat.vcf.genozip", "junk.vcf.genozip"]
+            "args": ["-d", "-f", "concat.vcf.genozip", "-@1"],
 
             //"args": ["-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "test.vcf", "-f", "-@1"],
 

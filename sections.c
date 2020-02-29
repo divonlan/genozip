@@ -96,19 +96,19 @@ void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozip
 {
     unsigned num_sections = BGEN32 (header->num_sections);
 
-    fprintf (stderr, "The genozip header follows, the result of --show-gheader:\n");
-    fprintf (stderr, "  genozip_version: %u\n",               header->genozip_version);
-    fprintf (stderr, "  encryption_type: %u\n",               header->encryption_type); 
-    fprintf (stderr, "  data_type: %u\n",                     BGEN16 (header->data_type));
-    fprintf (stderr, "  num_samples: %u\n",                   BGEN32 (header->num_samples));
-    fprintf (stderr, "  uncompressed_data_size: %"PRIu64"\n", BGEN64 (header->uncompressed_data_size));
-    fprintf (stderr, "  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
-    fprintf (stderr, "  num_sections: %u\n",                  num_sections);
-    fprintf (stderr, "  num_vcf_components: %u\n",            BGEN32 (header->num_vcf_components));
-    fprintf (stderr, "  md5_hash_concat: %s\n",               md5_display (&header->md5_hash_concat, false));
-    fprintf (stderr, "  created: %*s\n",                      -FILE_METADATA_LEN, header->created);
+    printf ("The genozip header follows, the result of --show-gheader:\n");
+    printf ("  genozip_version: %u\n",               header->genozip_version);
+    printf ("  encryption_type: %u\n",               header->encryption_type); 
+    printf ("  data_type: %u\n",                     BGEN16 (header->data_type));
+    printf ("  num_samples: %u\n",                   BGEN32 (header->num_samples));
+    printf ("  uncompressed_data_size: %"PRIu64"\n", BGEN64 (header->uncompressed_data_size));
+    printf ("  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
+    printf ("  num_sections: %u\n",                  num_sections);
+    printf ("  num_vcf_components: %u\n",            BGEN32 (header->num_vcf_components));
+    printf ("  md5_hash_concat: %s\n",               md5_display (&header->md5_hash_concat, false));
+    printf ("  created: %*s\n",                      -FILE_METADATA_LEN, header->created);
 
-    fprintf (stderr, "  sections:\n");
+    printf ("  sections:\n");
 
     SectionListEntry *ents = (SectionListEntry *)pseudo_vb->z_file->section_list_buf.data;
 
@@ -117,7 +117,7 @@ void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozip
         uint64_t this_offset = BGEN64 (ents[i].offset);
         uint64_t next_offset = (i < num_sections-1) ? BGEN64 (ents[i+1].offset) : pseudo_vb->z_file->disk_so_far;
 
-        fprintf (stderr, "    %3u. %-24.24s%s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
+        printf ("    %3u. %-24.24s%s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 
                  section_type_is_b250 (ents[i].section_type) ? enc_name (ents[i].encoding) : "",
                  -DICT_ID_LEN, DICT_ID_LEN, ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 

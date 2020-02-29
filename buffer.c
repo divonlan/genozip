@@ -63,7 +63,7 @@ char *buf_human_readable_uint (int64_t n, char *str /* out */)
         for (int i=0; i < len; i++) str[i] = rev[len-i-1];
     }
 
-    str[len+1] = '\0'; // string terminator
+    str[len] = '\0'; // string terminator
     return str;
 }
 
