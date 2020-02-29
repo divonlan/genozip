@@ -926,7 +926,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
         md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
         ASSERT (md5_is_equal (decompressed_file_digest, original_file_digest),
-                "File integrity error: MD5 of decompressed file %s is %s, original file's was %s", 
+                "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
                 vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
 
         // store verifications strings in a buffer to printed later - not to interfere with the progress indicator

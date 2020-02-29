@@ -878,14 +878,12 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
     header.num_sections                 = BGEN32 (num_sections); 
     header.num_vcf_components           = BGEN32 (zfile->num_vcf_components_so_far);
 
-    if (flag_md5) {
-        if (flag_concat_mode) {
-            md5_finalize (&zfile->md5_ctx_concat, &header.md5_hash_concat);
-            if (!flag_quiet) fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
-        } 
-        else 
-            header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file
-    }
+    if (flag_concat_mode) {
+        md5_finalize (&zfile->md5_ctx_concat, &header.md5_hash_concat);
+        if (flag_md5) fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
+    } 
+    else 
+        header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file
 
     zfile_get_metadata (header.created);
 
@@ -978,13 +976,9 @@ bool zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t pos_of_cu
     curr_header->vcf_data_size = BGEN64 (vb->z_file->vcf_data_size_single);
     curr_header->num_lines     = BGEN64 (vb->z_file->num_lines_single);
     
-    if (flag_md5) {
-        md5_finalize (&vb->z_file->md5_ctx_single, &curr_header->md5_hash_single);
-        *md5 = curr_header->md5_hash_single;
-        if (!flag_quiet) fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
-    }
-    else
-        md5_set_zero(md5);
+    md5_finalize (&vb->z_file->md5_ctx_single, &curr_header->md5_hash_single);
+    *md5 = curr_header->md5_hash_single;
+    if (flag_md5) fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
 
     if (pos_of_current_vcf_header == 0) 
         vb->z_file->vcf_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 

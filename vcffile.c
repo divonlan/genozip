@@ -126,15 +126,13 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
 
     file->vcf_data_so_far += str_len;
 
-    if (flag_md5 && flag_concat_mode && (!skip_md5_vcf_header || line->data[0] != '#')) { // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
+    if (flag_concat_mode && (!skip_md5_vcf_header || line->data[0] != '#')) { // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
         md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len, !vb->z_file->has_md5);
         vb->z_file->has_md5 = true;
     }
 
-    if (flag_md5) {
-        md5_update (&vb->z_file->md5_ctx_single, line->data, line->len, line_i_in_file==1);
-        vb->z_file->has_md5 = true;
-    }
+    md5_update (&vb->z_file->md5_ctx_single, line->data, line->len, line_i_in_file==1);
+    vb->z_file->has_md5 = true;
 
     return true;
 }
