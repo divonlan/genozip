@@ -843,7 +843,7 @@ static int16_t piz_read_global_area (VariantBlock *pseudo_vb, bool need_random_a
         buf_free (&pseudo_vb->z_data);
     }
 
-    file_seek (zfile, 0, SEEK_SET);
+    file_seek (zfile, 0, SEEK_SET, false);
 
     return DATA_TYPE_VCF;
 }

@@ -314,8 +314,6 @@ static void main_genozip (const char *vcf_filename,
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
  
-    ASSERTW (!flag_stdout || !flag_md5, "%s: ignoring --md5 / -m option - it cannot be used when output is redirected", global_cmd);
-  
     ASSERT0 (flag_concat_mode || !z_file, "Error: expecting z_file to be NULL in non-concat mode");
 
     // get output FILE
@@ -567,13 +565,13 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
     static bool first_file = true;
     static unsigned files_listed=0, files_ignored=0;
     static long long total_uncompressed_len=0, total_compressed_len=0;
-    char c_str[20], u_str[20];
+    char c_str[20], u_str[20], s_str[20];
 
     const unsigned FILENAME_WIDTH = 50;
 
-    const char *head_format = "%5s %8s %10s %10s %6s%s %*s %s\n";
-    const char *foot_format = "\nTotal:         %10s %10s %5uX\n";
-    const char *item_format = "%5u %s %10s %10s %5uX%s %s%s%*s %s\n";
+    const char *head_format = "%5s %10s %10s %10s %6s %s  %*s %s\n";
+    const char *foot_format = "\nTotal:           %10s %10s %5uX\n";
+    const char *item_format = "%5u %10s %10s %10s %5uX %s  %s%s%*s %s\n";
 
     if (finalize) {
         if (files_listed > 1) {
@@ -584,13 +582,14 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
             printf (foot_format, c_str, u_str, ratio);
         }
         
-        if (files_ignored) printf ("\nIgnored %u files that do not have a .vcf" GENOZIP_EXT " extension\n\n", files_ignored);
+        ASSERTW (!files_ignored, "\nIgnored %u file%s that %s not have a .vcf" GENOZIP_EXT " extension\n\n", 
+                 files_ignored, files_ignored==1 ? "" : "s", files_ignored==1 ? "does" : "do");
         
         return;
     }
 
     if (first_file) {
-        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", flag_md5 ? " MD5                             " : "", -FILENAME_WIDTH, "Name", "Creation");
+        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", " MD5 (of original VCF)           ", -FILENAME_WIDTH, "Name", "Creation");
         first_file = false;
     }
     
@@ -600,40 +599,28 @@ static void main_list (const char *z_filename, bool finalize, const char *subdir
         return;
     }
 
-    SectionHeaderGenozipHeader header;
-
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
-    bool success = zfile_get_genozip_header (z_file, &header);
-    if (!success) {
-        files_ignored++;
-        return;
-    }   
-
-    uint64_t vcf_data_size = BGEN64 (header.uncompressed_data_size);
-    uint32_t num_samples   = BGEN32 (header.num_samples);
-    uint64_t num_lines     = BGEN64 (header.num_items_concat);
-
-    char num_lines_str[50];
-    if (num_lines != NUM_LINES_UNKNOWN)
-#ifdef _MSC_VER        
-        sprintf (num_lines_str, "%8I64u", num_lines);
-#else
-        sprintf (num_lines_str, "%8"PRIu64, num_lines);
-#endif
-    else
-        sprintf (num_lines_str, "%-8s", "N/A");
+    uint64_t vcf_data_size, num_lines;
+    uint32_t num_samples;
+    Md5Hash md5_hash_concat;
+    char created[FILE_METADATA_LEN];
+    bool success = zfile_get_genozip_header (z_file, &vcf_data_size, &num_samples, &num_lines, 
+                                             &md5_hash_concat, created, FILE_METADATA_LEN);
+    if (!success) return;
 
     unsigned ratio = z_file->disk_size ? ((double)vcf_data_size / (double)z_file->disk_size) : 0;
     
-    buf_human_readable_size(z_file->disk_size, c_str);
-    buf_human_readable_size(vcf_data_size, u_str);
-    printf (item_format, num_samples, num_lines_str, 
+    buf_human_readable_size (z_file->disk_size, c_str);
+    buf_human_readable_size (vcf_data_size, u_str);
+    buf_human_readable_uint (num_lines, s_str);
+
+    printf (item_format, num_samples, s_str, 
             c_str, u_str, ratio, 
-            flag_md5 ? md5_display (&header.md5_hash_concat, true) : "",
+            md5_display (&md5_hash_concat, true),
             (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
             is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-            z_filename, header.created);
+            z_filename, created);
             
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += vcf_data_size;
@@ -795,15 +782,15 @@ int main (int argc, char **argv)
         typedef const struct option Option;
         static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _8, _16, _24, _00 };
         static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,      _s2, _s5, _s6,      _st, _sm, _sh     ,                         _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2,              _V,     _m,              _p,                                                                                     _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2,              _V,         _th,         _p,                                                                                     _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                     _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p,                                                                                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLq^tVzm@:Oo:p:B:", // genozip
-            "cfhLq^V@:Oo:p:",      // genounzip
-            "hLVmp:",              // genols
-            "hLV@:p:"              // genocat
+            "cdfhlLq^tVzm@:Oo:p:B:2", // genozip
+            "cfhLq^V@:Oo:p:",         // genounzip
+            "hLVp:q",                 // genols
+            "hLV@:p:1"                // genocat
         };
 
         int option_index = -1;
@@ -888,8 +875,7 @@ int main (int argc, char **argv)
     ASSERTW (!flag_force        || command == COMPRESS || command == UNCOMPRESS || command == HELP, "%s: ignoring %s option", global_cmd, OT("force", "f"));
     ASSERTW (!flag_replace      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("replace", "^"));
     ASSERTW (!flag_split        || command == LIST     || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("split", "O"));
-    ASSERTW (!flag_quiet        || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring %s option", global_cmd, OT("quiet", "q"));
-    ASSERTW (!flag_md5          || command == COMPRESS || command == LIST      , "%s: ignoring %s option %s", global_cmd, OT("md5","m"),
+    ASSERTW (!flag_md5          || command == COMPRESS                         , "%s: ignoring %s option %s", global_cmd, OT("md5","m"),
              command==UNCOMPRESS ? "- decompress always verifies MD5 if the file was compressed with --md5" : "");
     ASSERTW (!threads_str       || command == COMPRESS || command == UNCOMPRESS || command == TEST, "%s: ignoring %s option", global_cmd, OT("threads", "@"));
     ASSERTW (!out_filename      || command == COMPRESS || command == UNCOMPRESS, "%s: ignoring %s option", global_cmd, OT("output", "o"));
@@ -904,7 +890,8 @@ int main (int argc, char **argv)
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
     if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
-    if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || dict_id_show_one_b250.num) flag_quiet=true; // don't show progress when showing data
+    if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || dict_id_show_one_b250.num) 
+        flag_quiet=true; // don't show progress when debug data
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

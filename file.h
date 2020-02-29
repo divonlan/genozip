@@ -95,7 +95,7 @@ extern File *file_open (const char *filename, FileMode mode, FileType expected_t
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
 extern void file_close (FileP *vcf_file_p, VariantBlockP pseudo_vb /* optional */);
 extern size_t file_write (FileP file, const void *data, unsigned len);
-extern void file_seek (FileP file, int64_t offset, int whence);
+extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail);
 extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,

@@ -669,7 +669,7 @@ void zfile_read_all_dictionaries (VariantBlock *pseudo_vb, uint32_t last_vb_i /*
 
         // upon encountering the first dictionary, move the cursor to the dictionaries, and reset the read buffers
         if (first) {
-            file_seek (zfile, seclist[i].offset, SEEK_SET);
+            file_seek (zfile, seclist[i].offset, SEEK_SET, false);
             first = false;
         }
 
@@ -786,7 +786,7 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
     File *zfile = pseudo_vb->z_file;
 
     // read the footer from the end of the file
-    file_seek (zfile, -sizeof(SectionFooterGenozipHeader), SEEK_END);
+    file_seek (zfile, -sizeof(SectionFooterGenozipHeader), SEEK_END, false);
 
     SectionFooterGenozipHeader footer;
     int ret = fread (&footer, sizeof (footer), 1, (FILE *)zfile->file);
@@ -795,13 +795,13 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
     
     // case: this is not a valid genozip v2+ file... maybe its v1?
     if (BGEN32 (footer.magic) != GENOZIP_MAGIC) {
-        file_seek (zfile, 0, SEEK_SET);
+        file_seek (zfile, 0, SEEK_SET, false);
         return MAYBE_V1;
     }
 
     // read genozip header
     uint64_t genozip_header_offset = BGEN64 (footer.genozip_header_offset);
-    file_seek (zfile, genozip_header_offset, SEEK_SET);
+    file_seek (zfile, genozip_header_offset, SEEK_SET, false);
 
     // note: for v1, we will use this function only for the very first VCF header (which will tell us this is v1)
     ret = zfile_read_one_section (pseudo_vb, &pseudo_vb->z_data, "genozip_header", sizeof(SectionHeaderGenozipHeader), SEC_GENOZIP_HEADER);
@@ -918,14 +918,48 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
 }
 
 // reads the the genozip header section's header from a GENOZIP file - used by main_list, returns true if successful
-bool zfile_get_genozip_header (File *z_file, SectionHeaderGenozipHeader *header)
+bool zfile_get_genozip_header (File *z_file, 
+                               uint64_t *uncompressed_data_size,
+                               uint32_t *num_samples,
+                               uint64_t *num_items_concat,
+                               Md5Hash  *md5_hash_concat,
+                               char *created, unsigned created_len /* caller allocates space */)
 {
-    int bytes = fread ((char*)header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)z_file->file);
+    // read the footer from the end of the file
+    if (!file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, true))
+        return false;
+
+    SectionFooterGenozipHeader footer;
+    int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);
+    ASSERTW (ret == 1, "Skipping empty file %s", file_printname (z_file));    
+    if (!ret) return false; // empty file / cannot read
+    
+    // case: this is not a valid genozip v2+ file... maybe its v1?
+    if (BGEN32 (footer.magic) != GENOZIP_MAGIC) {
+        file_seek (z_file, 0, SEEK_SET, false);
+        return v1_vcf_header_get_vcf_header (z_file, uncompressed_data_size, num_samples, num_items_concat, 
+                                             md5_hash_concat, created, created_len);
+    }
+
+    // read genozip header
+    uint64_t genozip_header_offset = BGEN64 (footer.genozip_header_offset);
+    if (!file_seek (z_file, genozip_header_offset, SEEK_SET, true))
+        return false;
+
+    SectionHeaderGenozipHeader header;
+    int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)z_file->file);
     if (bytes < sizeof(SectionHeaderGenozipHeader)) return false;
 
-    if (flag_show_headers) zfile_show_header (&header->h, NULL);
+    ASSERTW (BGEN32 (header.h.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", file_printname (z_file));
+    if (BGEN32 (header.h.magic) != GENOZIP_MAGIC) return false;
 
-    return BGEN32 (header->h.magic) == GENOZIP_MAGIC;
+    *uncompressed_data_size = BGEN64 (header.uncompressed_data_size);
+    *num_samples            = BGEN32 (header.num_samples);
+    *num_items_concat       = BGEN64 (header.num_items_concat);
+    *md5_hash_concat        = header.md5_hash_concat;
+    memcpy (created, header.created, MIN (FILE_METADATA_LEN, created_len));
+
+    return true;
 }
 
 // updating the VCF bytes of a GENOZIP file. If we're compressing a simple VCF file, we will know
@@ -962,7 +996,7 @@ bool zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t pos_of_cu
     file_write (vb->z_file, curr_header, len);
     fflush ((FILE*)vb->z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
     
-    file_seek (vb->z_file, 0, SEEK_END); // return to the end of the file
+    file_seek (vb->z_file, 0, SEEK_END, false); // return to the end of the file
 
     return true; // success
 }

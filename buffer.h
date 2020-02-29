@@ -67,6 +67,7 @@ extern int64_t buf_vb_memory_consumption (ConstVariantBlockP vb);
 extern void buf_display_memory_usage (PoolId pool_id, bool memory_full);
 
 extern char *buf_human_readable_size (int64_t size, char *str /* out */);
+extern char *buf_human_readable_uint (int64_t n, char *str /* out */);
 
 #define buf_zero(buf_p) { memset ((buf_p)->data, 0, (buf_p)->size); }
 

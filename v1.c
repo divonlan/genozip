@@ -261,7 +261,7 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
     return true; 
 }
 
-#endif
+#endif // V1_ZFILE
 
 #ifdef V1_PIZ
 
@@ -821,4 +821,46 @@ bool v1_vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     return true;
 }
 
-#endif
+// returns the the VCF header section's header from a GENOZIP file - used by main_list
+bool v1_vcf_header_get_vcf_header (File *z_file, 
+                                   uint64_t *uncompressed_data_size,
+                                   uint32_t *num_samples,
+                                   uint64_t *num_items_concat,
+                                   Md5Hash  *md5_hash_concat,
+                                   char *created, unsigned created_len /* caller allocates space */)
+{
+    v1_SectionHeaderVCFHeader header;
+    int bytes = fread ((char*)&header, 1, crypt_padded_len (sizeof(v1_SectionHeaderVCFHeader)), (FILE *)z_file->file);
+    
+    if (bytes < sizeof(v1_SectionHeaderVCFHeader)) return false;
+
+    // case: encrypted, and we have a password
+    if (BGEN32 (header.h.magic) != GENOZIP_MAGIC && // possibly encrypted
+        crypt_have_password()) {
+        VariantBlock fake_vb;
+        memset (&fake_vb, 0, sizeof(fake_vb));
+        crypt_do (&fake_vb, (uint8_t *)&header, crypt_padded_len (sizeof (v1_SectionHeaderVCFHeader)), 0, -1);
+    }
+
+    // case: not encrypted, or encrypted and we successfully decrypted it
+    if (BGEN32 (header.h.magic) == GENOZIP_MAGIC) {
+        *uncompressed_data_size = BGEN64 (header.vcf_data_size);
+        *num_samples            = BGEN32 (header.num_samples);
+        *num_items_concat       = BGEN64 (header.num_lines);
+        *md5_hash_concat        = header.md5_hash_concat;
+        memcpy (created, header.created, MIN (created_len, v1_FILE_METADATA_LEN));
+    }
+
+    // case: we cannot read the header - we just return 0s
+    else {
+        *uncompressed_data_size = 0;
+        *num_samples            = 0;
+        *num_items_concat       = 0;
+        md5_set_zero (md5_hash_concat);
+        memset (created, 0, created_len);
+    }
+
+    return true; // all good
+}
+
+#endif // V1_VCF_HEADER

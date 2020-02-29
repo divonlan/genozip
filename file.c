@@ -203,11 +203,21 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
     return basename;
 }
 
-void file_seek (File *file, int64_t offset, int whence)
+bool file_seek (File *file, int64_t offset, int whence, bool soft_fail)
 {
-    ASSERT (!fseeko ((FILE *)file->file, offset, whence), 
-            "Error: fseeko failed on file %s: %s", file_printname (file), strerror (errno));
+    int ret = fseeko ((FILE *)file->file, offset, whence);
+
+    if (soft_fail) {
+        ASSERTW (!ret, errno == EINVAL ? "Error while reading file %s: it is too small%s" 
+                                       : "Warning: fseeko failed on file %s: %s", 
+                 file_printname (file),  errno == EINVAL ? "" : strerror (errno));
+    } 
+    else {
+        ASSERT (!ret, "Error: fseeko failed on file %s: %s", file_printname (file), strerror (errno));
+    }
 
     // reset the read buffers
-    file->next_read = file->last_read = READ_BUFFER_SIZE;
+    if (!ret) file->next_read = file->last_read = READ_BUFFER_SIZE;
+
+    return !ret;
 }

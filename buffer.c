@@ -44,6 +44,29 @@ char *buf_human_readable_size (int64_t size, char *str /* out */)
     return str; // for convenience so caller can use in printf directly
 }
 
+char *buf_human_readable_uint (int64_t n, char *str /* out */)
+{
+    unsigned len = 0, orig_len=0;
+
+    if (n==0) 
+        str[0] = '0';
+        
+    else {
+        char rev[50] = {}; // "initialize" to avoid compiler warning
+        while (n) {
+            if (orig_len && orig_len % 3 == 0) rev[len++] = ',';    
+            rev[len++] = '0' + n % 10;
+            orig_len++;
+            n /= 10;
+        }
+        // now reverse it
+        for (int i=0; i < len; i++) str[i] = rev[len-i-1];
+    }
+
+    str[len+1] = '\0'; // string terminator
+    return str;
+}
+
 // get string with buffer's metadata for debug message. this function is NOT thread-safe
 char *buf_display (const Buffer *buf)
 {
