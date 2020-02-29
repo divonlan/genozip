@@ -36,7 +36,7 @@ typedef enum { B250_ENC_NONE=-1, B250_ENC_8=0, B250_ENC_16=1, B250_ENC_24=2 } Ba
 //                         if n >= 250*250: first numeral is a code BASE250_3_NUMERALS or BASE250_4_NUMERALS
 //                         and the next 3 or 4 numerals are the number in base-250 (each numeral 0 to 249), least significant first
 
-extern Base250 base250_encode (uint32_t n);
+extern Base250 base250_encode (uint32_t n, Base250Encoding minimum_encoding);
 extern uint32_t base250_decode (const uint8_t **str_p, Base250Encoding encoding); // decodes and advances str_p
 
 //#define base250_len(data) (*(data) < BASE250_2_NUMERALS ? 1 : *(data) - BASE250_2_NUMERALS + 3) // number of bytes this base250 number consumes

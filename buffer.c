@@ -548,3 +548,11 @@ void buf_set_overlayable (Buffer *buf)
 { 
     buf->overlayable = true;
 }
+
+void buf_add_string (VariantBlock *vb, Buffer *buf, const char *str) 
+{ 
+    unsigned len = strlen (str); 
+    buf_alloc (vb, buf, MAX (1000, buf->len + len + 1), 2, "string_buf", 0);
+    buf_add (buf, str, len);
+    buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
+}

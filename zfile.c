@@ -466,9 +466,9 @@ void zfile_compress_dictionary_data (VariantBlock *vb, MtfContext *ctx,
     header.dict_id                 = ctx->dict_id;
 
     if (flag_show_dict) 
-        fprintf (stderr, "%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
-                 dict_id_printable (ctx->dict_id).id, vb->variant_block_i, st_name(ctx->dict_section_type), 
-                 ctx->did_i, num_words, num_chars, data);
+        printf ("%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
+                dict_id_printable (ctx->dict_id).id, vb->variant_block_i, st_name(ctx->dict_section_type), 
+                ctx->did_i, num_words, num_chars, data);
 
     zfile_compress (vb, &vb->z_file->dict_data, (SectionHeader*)&header, data);
 }
@@ -684,9 +684,9 @@ void zfile_read_all_dictionaries (VariantBlock *pseudo_vb, uint32_t last_vb_i /*
     if (flag_show_dict) 
         for (uint32_t did_i=0; did_i < pseudo_vb->z_file->num_dict_ids; did_i++) {
             MtfContext *ctx = &pseudo_vb->z_file->mtf_ctx[did_i];
-            fprintf (stderr, "%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
-                     dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
-                                        did_i, ctx->word_list.len, ctx->dict.len, ctx->dict.data);
+            printf ("%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
+                    dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
+                                       did_i, ctx->word_list.len, ctx->dict.len, ctx->dict.data);
         }
 }
 

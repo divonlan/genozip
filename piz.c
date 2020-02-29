@@ -931,11 +931,10 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
 
         // store verifications strings in a buffer to printed later - not to interfere with the progress indicator
         if (!flag_quiet) {
-            buf_alloc (pseudo_vb, &md5_verif_str, MAX (1000, md5_verif_str.len + 200), 2, "md5_verif_str", 0);
-            buf_add (&md5_verif_str, md5_display (&decompressed_file_digest, false), 32);
-            buf_add_string (&md5_verif_str, " - MD5 has been verified for ");
-            buf_add_string (&md5_verif_str, vcf_file->name);
-            buf_add_string (&md5_verif_str, "\n");
+            buf_add_string (pseudo_vb, &md5_verif_str, md5_display (&decompressed_file_digest, false));
+            buf_add_string (pseudo_vb, &md5_verif_str, " - MD5 has been verified for ");
+            buf_add_string (pseudo_vb, &md5_verif_str, vcf_file->name);
+            buf_add_string (pseudo_vb, &md5_verif_str, "\n");
         }
     }
 

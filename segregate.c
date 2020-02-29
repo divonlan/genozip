@@ -717,37 +717,6 @@ void seg_complete_missing_lines (VariantBlock *vb)
     }
 }
 
-// ZIP only: decide for each ctx whether we will use 8 or 16 bit encoding. Note: different VBs might use different
-// encodings for b250 data based on the same dictionary - because of the logic
-static void seg_decide_encodings (VariantBlock *vb)
-{
-    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
-        if (ctx->mtf.len + ctx->ol_mtf.len) {
-            // note: this is a heuristic - after the dictionary is merged into z_file, mtf.len might end up being
-            // more than 250 even in 8 bit, and as a result some base250 might have more than 1 numeral
-            if (ctx->b250_section_type == SEC_GENOTYPE_DATA || flag_encode_8)
-                // all genotype dictionaries are 8bit - for now (bc we don't have a place in the section headers to 
-                // indicate each subfield encoding). On the PIZ size, this is similarly set in piz_uncompress_all_sections()
-                ctx->encoding = B250_ENC_8; 
-
-            else if (flag_encode_16)
-                ctx->encoding = B250_ENC_16; 
-
-            else if (flag_encode_24)
-                ctx->encoding = B250_ENC_24; 
-
-            else if (ctx->mtf.len + ctx->ol_mtf.len <= 250) // this condition is checked only if not flag_encode_16/24
-                ctx->encoding = B250_ENC_8; 
-
-            else if (ctx->mtf.len + ctx->ol_mtf.len <= 62500)
-                ctx->encoding = B250_ENC_16; 
-
-            else
-                ctx->encoding = B250_ENC_24; 
-        }
-    }
-}
 
 // split each lines in this variant block to its components
 void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
@@ -778,9 +747,6 @@ void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
 
     if (/*vb->has_genotype_data || */vb->has_haplotype_data)
         seg_complete_missing_lines(vb);
-
-    // decide for each ctx whether we will use 8 or 16 bit encoding    
-    seg_decide_encodings(vb);
 
     COPY_TIMER(vb->profile.seg_all_data_lines);
 }

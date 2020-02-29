@@ -115,7 +115,7 @@ void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i
     uint8_t aes_key[AES_KEYLEN]; 
     crypt_generate_aes_key (vb, vb_i, sec_i, aes_key);
 
-    //printf ("vb_i=%u sec_i=%d key= %s\n", vb_i, sec_i, aes_display_key (aes_key)); // DEBUG
+    //printf ("vb_i=%u sec_i=%d key= %s\n", vb_i, sec_i, aes_display_key (aes_key)); 
 
     aes_initialize (vb, aes_key);
 

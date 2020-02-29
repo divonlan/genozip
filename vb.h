@@ -168,6 +168,7 @@ typedef struct variant_block_ {
     int32_t z_num_sections[NUM_SEC_TYPES];     // how many sections where written to .genozip of this type
     int32_t z_section_entries[NUM_SEC_TYPES];  // how many entries (dictionary or base250) where written to .genozip of this type
     Buffer show_headers_buf;                   // ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk
+    Buffer show_b250_buf;                      // ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing
     Buffer section_list_buf;                   // ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs.
 
 #   define NUM_COMPRESS_BUFS 4                 // bzlib2 compress requires 4 and decompress requires 2

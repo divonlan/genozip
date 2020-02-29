@@ -69,39 +69,51 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
                1.1, "ctx->b250_buf", 0);
 
     ASSERT (ctx->encoding >= B250_ENC_8 && ctx->encoding <= B250_ENC_24,
-            "Error: invalid encoding=%d in for dict_id=%.*s", ctx->encoding, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
+            "Error: invalid encoding=%s in for dict_id=%.*s", enc_name (ctx->encoding), DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
 
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
 
-    if (show) printf ("vb_i=%u %.*s: ", vb->variant_block_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id);
+    if (show) {
+        char s[200];
+        sprintf (s, "vb_i=%u %.*s (%s): ", vb->variant_block_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, enc_name (ctx->encoding));
+        buf_add_string (vb, &vb->show_b250_buf, s);
+    }
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
         MtfNode *node = mtf_node (ctx, ((const uint32_t *)ctx->mtf_i.data)[i], NULL, NULL);
-        
-        Base250 index = node->word_index;
 
-        bool one_up = (index.n == prev + 1) && (ctx->b250_section_type != SEC_GENOTYPE_DATA) && (i > 0);
+        uint32_t n            = node->word_index.n;
+        unsigned num_numerals = node->word_index.num_numerals[ctx->encoding];
+        uint8_t *numerals     = node->word_index.numerals[ctx->encoding];
+        
+        bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_GENOTYPE_DATA) && (i > 0);
 
         if (one_up) // note: we can't do SEC_GENOTYPE_DATA bc we can't PIZ it as many GT data types are in the same section 
             ctx->b250.data[ctx->b250.len++] = BASE250_ONE_UP;
 
-        else if (index.num_numerals[ctx->encoding] == 1)  // shortcut for most common case
-            ctx->b250.data[ctx->b250.len++] = index.numerals[ctx->encoding][0];
+        else if (num_numerals == 1)  // shortcut for most common case
+            ctx->b250.data[ctx->b250.len++] = numerals[0];
 
         else {
-            memcpy (&ctx->b250.data[ctx->b250.len], &index.numerals[ctx->encoding], index.num_numerals[ctx->encoding]);
-            ctx->b250.len += index.num_numerals[ctx->encoding];
+            memcpy (&ctx->b250.data[ctx->b250.len], numerals, num_numerals);
+            ctx->b250.len += num_numerals;
         }
 
         if (show) {
-            if (one_up) printf ("L%u:ONE_UP ", vb->first_line + i);
-            else        printf ("L%u:%u ", vb->first_line + i, index.n);
+            char s[200];
+            if (one_up) sprintf (s, "L%u:ONE_UP ", vb->first_line + i);
+            else        sprintf (s, "L%u:%u ", vb->first_line + i, n);
+            buf_add_string (vb, &vb->show_b250_buf, s);
         }
 
-        prev = index.n;
+        prev = n;
     }
-    if (show) printf ("\n");
+    if (show) {
+        buf_add_string (vb, &vb->show_b250_buf, "\n");
+        printf (vb->show_b250_buf.data);
+        buf_free (&vb->show_b250_buf);
+    }
 }
 
 #define SBL(line_i,sb_i) ((line_i) * vb->num_sample_blocks + (sb_i))

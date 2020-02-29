@@ -59,7 +59,7 @@ extern void buf_copy (VariantBlockP vb, Buffer *dst, const Buffer *src, unsigned
 extern void buf_move (VariantBlockP vb, Buffer *dst, Buffer *src);
 
 #define buf_add(buf, new_data, new_data_len) { memcpy (&(buf)->data[(buf)->len], (new_data), (new_data_len));  (buf)->len += (new_data_len); }
-#define buf_add_string(buf, str) buf_add (buf, str, strlen (str));
+extern void buf_add_string (VariantBlockP vb, Buffer *buf, const char *str);
 
 extern void buf_test_overflows(ConstVariantBlockP vb);
 

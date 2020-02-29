@@ -99,6 +99,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->format_info_buf);
     buf_free(&vb->ra_buf);
     buf_free(&vb->show_headers_buf);
+    buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     
     for (unsigned i=0; i < MAX_DICTS; i++) 
