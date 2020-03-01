@@ -17,7 +17,6 @@ static const char *help_genozip[] = {
     "   -z --compress     This is the default action. Compress a .vcf, .vcf.gz or .vcf.bz2 file (Yes! You can compress an already-compressed file). The source file is left unchanged. This is the default action of genozip",
     "   -d --decompress   Same as running genounzip. For more details, run: genounzip --help",
     "   -l --list         Same as running genols. For more details, run: genols --help",
-    "   -t --test         Test genozip. Compress the .vcf file(s), uncompress, and then compare the result to the original .vcf - all in memory without writing to any file",
     "   -h --help         Show this help page. Use with -f to see developer options.",
     "   -L --license      Show the license terms and conditions for this product",
     "   -V --version      Display version number",

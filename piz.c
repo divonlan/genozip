@@ -834,7 +834,7 @@ static int16_t piz_read_global_area (VariantBlock *pseudo_vb, bool need_random_a
 }
 
 // returns true is successfully outputted a vcf file
-bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool test_mode, unsigned max_threads, 
+bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsigned max_threads, 
                      bool is_first_vcf_component, bool is_last_file)
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
@@ -844,9 +844,8 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     if (flag_split && !sections_has_more_vcf_components (z_file)) return false; // no more components
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, is_last_file,
-                                      !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
-                                      z_basename);
+        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, is_last_file, z_basename);
+    
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
     // read genozip header

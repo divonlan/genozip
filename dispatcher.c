@@ -44,7 +44,6 @@ typedef struct {
     unsigned max_threads;
     File *vcf_file;
     File *z_file;
-    bool test_mode;
     bool is_last_file;
 
     // progress indicator stuff
@@ -59,7 +58,7 @@ typedef struct {
 static TimeSpecType profiler_timer; // wallclock
 
 Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
-                            bool test_mode, bool is_last_file, bool show_progress, const char *filename)
+                            bool is_last_file, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
@@ -73,9 +72,8 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
     dd->max_threads   = max_threads;
     dd->vcf_file      = vcf_file;
     dd->z_file        = z_file;
-    dd->test_mode     = test_mode;
     dd->is_last_file  = is_last_file;
-    dd->show_progress = show_progress && !flag_quiet && !!isatty(2);
+    dd->show_progress = !flag_quiet && !!isatty(2);
     dd->filename      = filename;
     dd->last_len      = 2;
 
@@ -87,7 +85,7 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (dd->show_progress && !flag_split) // note: for flag_split, we print this in dispatcher_resume() 
-        fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
+        fprintf (stderr, "%s %s: 0%%", global_cmd, dd->filename);
 
     return dd;
 }
@@ -112,7 +110,7 @@ void dispatcher_resume (Dispatcher dispatcher, File *vcf_file)
     dd->filename        = vcf_file->name;
     
     if (dd->show_progress)
-        fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
+        fprintf (stderr, "%s %s: 0%%", global_cmd, dd->filename);
 }
 
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
@@ -193,7 +191,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
         if (dd->max_threads > 1) {
             // adjust max_threads and/or num_lines, now that we know how memory a vb consumes
             unsigned vb_memory = buf_vb_memory_consumption (dd->next_vb);
-            long long num_threads_that_fit_in_memory = (dd->test_mode ? MAX_32BIT_WINDOWS_MEMORY/2 : MAX_32BIT_WINDOWS_MEMORY) / vb_memory; // in test mode, both zip and piz are running - each side gets half of the memory
+            long long num_threads_that_fit_in_memory = MAX_32BIT_WINDOWS_MEMORY / vb_memory; // in test mode, both zip and piz are running - each side gets half of the memory
             dd->max_threads = MIN (dd->max_threads, num_threads_that_fit_in_memory); // TO DO - play with num_lines to, not just compute threads
 #ifdef DEBUG
             char str[30]; 
@@ -341,26 +339,21 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     }
 
     if (done) {
-    
-        if (!dd->test_mode) {
-            char time_str[70];
-            dispatcher_human_time (seconds_so_far, time_str);
+        char time_str[70];
+        dispatcher_human_time (seconds_so_far, time_str);
 
-            if (bytes_compressed) {
-                if (file->type == VCF)  // source file was plain VCF
-                    fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
-                
-                else // source was .vcf.gz or .vcf.bz2
-                    fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
-                             dd->last_len, eraser, time_str, 
-                             (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
-                             file->type == VCF_GZ ? ".gz" : ".bz2",
-                             (double)file->disk_size / (double)bytes_compressed);            // compression vs .gz/.bz2 size
-            } else
-                fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);
-
+        if (bytes_compressed) {
+            if (file->type == VCF)  // source file was plain VCF
+                fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
+            
+            else // source was .vcf.gz or .vcf.bz2
+                fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
+                            dd->last_len, eraser, time_str, 
+                            (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
+                            file->type == VCF_GZ ? ".gz" : ".bz2",
+                            (double)file->disk_size / (double)bytes_compressed);            // compression vs .gz/.bz2 size
         } else
-            fprintf (stderr, "%.*s", dd->last_len, eraser); // test result comes after
+            fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);
     }
 
     dd->last_percent = percent;

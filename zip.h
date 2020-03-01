@@ -8,7 +8,6 @@
 
 #include "genozip.h"
 
-extern void zip_dispatcher (const char *vcf_basename, FileP vcf_file, 
-                            FileP z_file, bool test_mode, unsigned max_threads, bool is_last_file);
+extern void zip_dispatcher (const char *vcf_basename, FileP vcf_file, FileP z_file, unsigned max_threads, bool is_last_file);
 
 #endif

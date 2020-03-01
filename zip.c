@@ -540,15 +540,14 @@ static void zip_write_global_area (VariantBlock *pseudo_vb, const Md5Hash *singl
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_dispatcher (const char *vcf_basename, File *vcf_file, 
-                     File *z_file, bool test_mode, unsigned max_threads, bool is_last_file)
+void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, unsigned max_threads, bool is_last_file)
 {
     static unsigned last_variant_block_i = 0; // used if we're concatenating files - the variant_block_i will continue from one file to the next
     if (!flag_concat_mode) last_variant_block_i = 0; // reset if we're not concatenating
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, test_mode, is_last_file, !flag_show_alleles, vcf_basename);
+    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, is_last_file, vcf_basename);
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
