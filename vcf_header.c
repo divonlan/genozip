@@ -153,10 +153,10 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
         vb->vcf_file->section_bytes[SEC_VCF_HEADER] = vcf_header_text.len;
         vb->z_file  ->section_bytes[SEC_VCF_HEADER] = vb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
         vb->z_file  ->num_sections [SEC_VCF_HEADER]++;
-        vb->z_file  ->num_vcf_components_so_far++;
+        vb->z_file  ->num_vcf_components_so_far++; // when compressing
    }
 
-    // case : header not found, but data line found
+    // case : header not found - so we're not expecting first_data_line either
     else 
         ASSERT0 (! *first_data_line, "Error: file has no VCF header");
 
@@ -166,17 +166,17 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
     return true; // everything's good
 }
 
-// returns true if there's a file or false if its an empty file
-bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
+// returns offset of header within data, EOF if end of file
+bool vcf_header_genozip_to_vcf (VariantBlock *vb, 
+                                Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
 {
     vb->z_file->disk_at_beginning_of_this_vcf_file = vb->z_file->disk_so_far;
 
     static Buffer vcf_header_section = EMPTY_BUFFER;
 
-    // note: for v1, we will use this function only for the very first VCF header (which will tell us this is v1)
-    int ret = zfile_read_one_section (vb, &vcf_header_section, "vcf_header_section", 
-                                      sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER);
-    if (ret == EOF) {
+    int header_offset = zfile_read_one_section (vb, &vcf_header_section, "vcf_header_section", 
+                                                sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER);
+    if (header_offset == EOF) {
         buf_free (&vcf_header_section);
         return false; // empty file (or in case of split mode - no more components) - not an error
     }
@@ -184,7 +184,8 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     // handle the GENOZIP header of the VCF header section
     SectionHeaderVCFHeader *header = (SectionHeaderVCFHeader *)vcf_header_section.data;
 
-    ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
+    ASSERT (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), 
+            "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
@@ -223,11 +224,11 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     }
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if (first_vcf || !flag_concat_mode)
+    if (first_vcf || flag_split)
         vcffile_write_to_disk (vb->vcf_file, &vcf_header_buf);
     
     // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
-    else md5_update (&vb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
+    //else md5_update (&vb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
 
     buf_free (&vcf_header_section);
     buf_free (&vcf_header_buf);

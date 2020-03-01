@@ -102,12 +102,11 @@ static void zfile_show_header (const SectionHeader *header, VariantBlock *vb /* 
 
     char str[1000];
 
-    sprintf (str, "%-22s %*.*s vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x flags=%u\n",
+    sprintf (str, "%-22s %*.*s vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              BGEN32 (header->variant_block_i), BGEN16 (header->section_i), 
              BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
-             BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic),
-             header->flags);
+             BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic));
 
     if (vb) {
         unsigned len = strlen (str);
@@ -181,7 +180,7 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
 
         // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB when the index data is
         // known, and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (header->section_type != SEC_VB_HEADER || header->flags /* terminator vb header */)
+        if (header->section_type != SEC_VB_HEADER || header->variant_block_i == 0 /* terminator vb header */)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, -1-sec_i); // (use (-1-section_i) - different than header's +section_i)
 
         // encrypt the data body 
@@ -250,9 +249,9 @@ void zfile_uncompress_section (VariantBlock *vb,
 
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
-
-    bool is_dict = section_type_is_dictionary (expected_section_type);
-    ASSERT ((!is_dict && variant_block_i == vb->variant_block_i) || is_dict, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
+    
+    bool expecting_vb_i = !section_type_is_dictionary (expected_section_type) && expected_section_type != SEC_VCF_HEADER;
+    ASSERT (variant_block_i == vb->variant_block_i || !expecting_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
              "Error: bad variant_block_i: in file=%u in vb=%u", variant_block_i, vb->variant_block_i);
 
     // decrypt data (in-place) if needed
@@ -420,10 +419,9 @@ void zfile_compress_terminator_section (VariantBlock *vb)
     
     vb_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     vb_header.h.section_type          = SEC_VB_HEADER;
-    vb_header.h.flags                 = 1;   // terminator section
     vb_header.h.data_uncompressed_len = 0;
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
-    vb_header.h.variant_block_i       = BGEN32 (vb->variant_block_i);
+    vb_header.h.variant_block_i       = 0;   // terminator 
     
     buf_alloc (vb, &vb->z_data, sizeof(SectionHeaderVbHeader), 1, "z_data", 0);
 
@@ -633,23 +631,35 @@ int zfile_read_one_section (VariantBlock *vb,
                 "Error: failed to read section data, section_type=%s: %s", st_name(header->section_type), strerror (errno));
     }
 
-    // when showing the concatenated file, ignore the VCF component terminator and after that, ignore the 
+/*    if (expected_sec_type == SEC_VB_HEADER && header->variant_block_i == 0) { // vcf component terminator
+        data->len = header_offset; // rewind data
+        return; 
+    }    
+
+    bool is_vcf_component_terminator = (expected_sec_type == SEC_VB_HEADER && header->variant_block_i == 0); 
+
+    // case: when showing the concatenated file, ignore the VCF component terminator and after that, ignore the 
     // next component's VCF header
     if (!flag_split && zfile->num_vcf_components_so_far < zfile->num_vcf_components) {
-        if (expected_sec_type == SEC_VB_HEADER && header->flags == 1) { // this VB header is a VCF component terminator
+        // first, it will enter this if statement, and call ourselves recursively
+        if (is_vcf_component_terminator) { 
             data->len = header_offset; // rewind data
-            return zfile_read_one_section (vb, data, buf_name, sizeof (SectionHeaderVCFHeader), SEC_VCF_HEADER);
+            return vcf_header_genozip_to_vcf (vb, NULL, data, buf_name); // this calls us (zfile_read_one_section) for SEC_VCF_HEADER
+            //return zfile_read_one_section (vb, data, buf_name, sizeof (SectionHeaderVCFHeader), SEC_VCF_HEADER);
         }
 
+        // in the recursive call from vcf_header_genozip_to_vcf, it will enter this if statement, 
+        // and after returning vcf_header_genozip_to_vcf will call us once more to read the next VB header section
         if (zfile->vcf_data_size_concat > 0 && expected_sec_type == SEC_VCF_HEADER) { // not first VCF component in file 
             data->len = header_offset; // rewind data
-            return zfile_read_one_section (vb, data, buf_name, sizeof (SectionHeaderVbHeader), SEC_VB_HEADER);
         }
     }
 
     // case: we encountered a terminator VB header, and not expecting any concatenated vcf components
-    else if (expected_sec_type == SEC_VB_HEADER && header->flags == 1)
-        return EOF;
+    else if (is_vcf_component_terminator) return EOF;
+*/
+//    if (expected_sec_type == SEC_VCF_HEADER) 
+//        zfile->num_vcf_components_so_far++;
 
     return header_offset;
 }
@@ -690,7 +700,7 @@ void zfile_read_all_dictionaries (VariantBlock *pseudo_vb, uint32_t last_vb_i /*
         }
 }
 
-bool zfile_read_one_vb (VariantBlock *vb)
+void zfile_read_one_vb (VariantBlock *vb)
 { 
     START_TIMER;
 
@@ -699,7 +709,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
     // integrated into the global dictionaries.
     // Order of sections in a V2 VB:
     // 1. SEC_VB_HEADER - its data is the haplotype index
-    // 2. v1_SEC_DICTIONARY - All dictionaries - Genotype subfields, INFO subfields, and Fields <--- not included in vb->z_data
+    // 2. SEC_INFO_SUBFIELD_B250 - Fields 1-9 b250 data
     // 3. SEC_INFO_SUBFIELD_B250 - All INFO subfield data
     // 4. All sample data: up 3 sections per sample block:
     //    4a. SEC_GENOTYPE_DATA - genotype data
@@ -712,27 +722,23 @@ bool zfile_read_one_vb (VariantBlock *vb)
     // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
     #define vb_header ((SectionHeaderVbHeader *)&vb->z_data.data[vb_header_offset])
 
-    if (vb_header_offset == EOF) { // end of file, or end of vcf component, and we're splitting
+    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading variant_block_i=%u", vb->variant_block_i);
+
+/*    if (vb_header_offset == EOF) { // end of file, or end of vcf component, and we're splitting
         // update size - in case they were not known (pipe, gzip etc)
-        if (!vb->z_file->disk_size) 
-            vb->z_file->disk_size = vb->z_file->disk_so_far;
+//        if (!vb->z_file->disk_size) 
+//            vb->z_file->disk_size = vb->z_file->disk_so_far;
             
-        vb->z_file->eof = true;
+//        vb->z_file->eof = true;
 
         COPY_TIMER (vb->profile.zfile_read_one_vb);
         return false; // end of file
     }
 
     // handle the case of the terminating VB section in case of --split (we handle the case of non-split in zfile_read_one_section())
-    if (flag_split && vb_header->h.flags == 1)
+    if (flag_split && vb_header->h.variant_block_i == 0)
         return false; // end of vcf component
-
-    // if we're starting a new vcf component in a concatenated file - the I/O thread already skipped the VB terminator
-    // of the previous block - so we need to update variant_block_i
-//printf ("xxx header->h.variant_block_i=%u vb->variant_block_i=%u\n", BGEN32 (vb_header->h.variant_block_i), vb->variant_block_i);
-//    if (!flag_split && BGEN32 (vb_header->h.variant_block_i) == vb->variant_block_i + 1) 
-//        vb->variant_block_i++;
-
+*/
     // overlay all dictionaries (not just those that have fragments in this variant block) to the vb
     mtf_overlay_dictionaries_to_vb (vb);
 
@@ -751,7 +757,7 @@ bool zfile_read_one_vb (VariantBlock *vb)
     }
 
     // read the info subfield sections into memory (if any)
-    vb->num_info_subfields = sections_get_num_info_b250s (vb->z_file, vb->variant_block_i); // also used later in piz_uncompress_all_sections()
+    vb->num_info_subfields = sections_count_info_b250s (vb->z_file); // also used later in piz_uncompress_all_sections()
     for (unsigned sf_i=0; sf_i < vb->num_info_subfields; sf_i++) {
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
         zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_INFO_SUBFIELD_B250);    
@@ -780,8 +786,6 @@ bool zfile_read_one_vb (VariantBlock *vb)
     }
     
     COPY_TIMER (vb->profile.zfile_read_one_vb);
-
-    return true; 
 
     #undef vb_header
 }

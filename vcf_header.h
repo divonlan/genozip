@@ -18,7 +18,7 @@ extern const char *vcf_field_names[];
 
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
 extern bool vcf_header_vcf_to_genozip (VariantBlockP vb, unsigned *line_i, BufferP *first_data_line);
-extern bool vcf_header_genozip_to_vcf (VariantBlockP vb, Md5Hash *digest /* out */);
+extern bool vcf_header_genozip_to_vcf (VariantBlockP vb, Md5Hash *digest);
 
 // v1 compatability
 extern bool v1_vcf_header_genozip_to_vcf (VariantBlockP vb, Md5Hash *digest);

@@ -73,11 +73,8 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
 
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
 
-    if (show) {
-        char s[200];
-        sprintf (s, "vb_i=%u %.*s (%s): ", vb->variant_block_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, enc_name (ctx->encoding));
-        buf_add_string (vb, &vb->show_b250_buf, s);
-    }
+    if (show) 
+        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %.*s (%s): ", vb->variant_block_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, enc_name (ctx->encoding));
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
@@ -101,16 +98,14 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
         }
 
         if (show) {
-            char s[200];
-            if (one_up) sprintf (s, "L%u:ONE_UP ", vb->first_line + i);
-            else        sprintf (s, "L%u:%u ", vb->first_line + i, n);
-            buf_add_string (vb, &vb->show_b250_buf, s);
+            if (one_up) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", vb->first_line + i)
+            else        bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", vb->first_line + i, n)
         }
 
         prev = n;
     }
     if (show) {
-        buf_add_string (vb, &vb->show_b250_buf, "\n");
+        bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
         printf (vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
@@ -640,11 +635,6 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             }
         }
     } while (!dispatcher_is_done (dispatcher));
-
-    // write terminator section to disk - this will mark the end of this VCF component
-    next_vb = dispatcher_generate_next_vb (dispatcher);
-    zfile_compress_terminator_section (next_vb);
-    zip_output_processed_vb (next_vb, &next_vb->section_list_buf, vcf_file, true, true);
 
     // go back and update some fields in the vcf header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected

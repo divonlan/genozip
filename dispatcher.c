@@ -124,7 +124,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     buf_free (&dd->compute_threads_buf);
     vb_release_vb (&dd->pseudo_vb);
-    vb_release_vb (&dd->next_vb); // possibly used by terminator VB
+    //vb_release_vb (&dd->next_vb); // possibly used by terminator VB
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
@@ -327,7 +327,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
             sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
 
             // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
-            fprintf (stderr, "%.*s%s        %.8s", dd->last_len, eraser, progress, eraser);
+            fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
 
             dd->last_len = strlen (progress);
         }

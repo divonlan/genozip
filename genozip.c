@@ -36,9 +36,10 @@
 #include "zip.h"
 #include "piz.h"
 #include "crypt.h"
-#include "endianness.h"
 #include "file.h"
 #include "dict_id.h"
+#include "vb.h"
+#include "endianness.h"
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
@@ -540,7 +541,7 @@ static void main_test (const char *vcf_filename)
 
 static void main_list_dir(); // forward declaration
 
-static void main_genols (const char *z_filename, bool finalize, const char *subdir) 
+static void main_genols (const char *z_filename, bool finalize, const char *subdir, bool recursive) 
 {
     if (!finalize) {
         // no specific filename = show entire directory
@@ -569,9 +570,15 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     const unsigned FILENAME_WIDTH = 50;
 
-    const char *head_format = "%5s %10s %10s %10s %6s %s  %*s %s\n";
+    const char *head_format = "\n%5s %10s %10s %10s %6s %s  %*s %s\n";
     const char *foot_format = "\nTotal:           %10s %10s %5uX\n";
     const char *item_format = "%5u %10s %10s %10s %5uX %s  %s%s%*s %s\n";
+
+    // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
+    // warning messages regarding individual files
+    static VariantBlock fake_vb;      // vars are static so they survives recursive calls
+    static Buffer str_buf = EMPTY_BUFFER; 
+    memset (&fake_vb, 0, sizeof(fake_vb));
 
     if (finalize) {
         if (files_listed > 1) {
@@ -579,24 +586,24 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             buf_human_readable_size(total_uncompressed_len, u_str);
             unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            printf (foot_format, c_str, u_str, ratio);
+            bufprintf (&fake_vb, &str_buf, foot_format, c_str, u_str, ratio);
         }
         
         ASSERTW (!files_ignored, "\nIgnored %u file%s that %s not have a .vcf" GENOZIP_EXT " extension\n\n", 
                  files_ignored, files_ignored==1 ? "" : "s", files_ignored==1 ? "does" : "do");
         
-        return;
+        goto finish;
     }
 
     if (first_file) {
-        printf (head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", " MD5 (of original VCF)           ", -FILENAME_WIDTH, "Name", "Creation");
+        bufprintf (&fake_vb, &str_buf, head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", " MD5 (of original VCF)           ", -(int)FILENAME_WIDTH, "Name", "Creation");
         first_file = false;
     }
     
     File *z_file = file_open(z_filename, READ, GENOZIP_TEST);    
     if (!z_file) {
         files_ignored++;
-        return;
+        goto finish;
     }
 
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
@@ -607,7 +614,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     char created[FILE_METADATA_LEN];
     bool success = zfile_get_genozip_header (z_file, &vcf_data_size, &num_samples, &num_lines, 
                                              &md5_hash_concat, created, FILE_METADATA_LEN);
-    if (!success) return;
+    if (!success) goto finish
+    ;
 
     unsigned ratio = z_file->disk_size ? ((double)vcf_data_size / (double)z_file->disk_size) : 0;
     
@@ -615,12 +623,12 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     buf_human_readable_size (vcf_data_size, u_str);
     buf_human_readable_uint (num_lines, s_str);
 
-    printf (item_format, num_samples, s_str, 
-            c_str, u_str, ratio, 
-            md5_display (&md5_hash_concat, true),
-            (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
-            is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
-            z_filename, created);
+    bufprintf (&fake_vb, &str_buf, item_format, num_samples, s_str, 
+               c_str, u_str, ratio, 
+               md5_display (&md5_hash_concat, true),
+               (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
+               is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
+               z_filename, created);
             
     total_compressed_len   += z_file->disk_size;
     total_uncompressed_len += vcf_data_size;
@@ -628,6 +636,12 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     files_listed++;
 
     file_close (&z_file, NULL);
+
+finish:
+    if (!recursive) {
+            printf (str_buf.data);
+            buf_free (&str_buf);
+    }
 }
 
 static void main_list_dir(const char *dirname)
@@ -648,7 +662,7 @@ static void main_list_dir(const char *dirname)
         ASSERT (!ret, "Error: failed to stat(%s): %s", ent->d_name, strerror (errno));
 
         if (!S_ISDIR (st.st_mode))  // don't go down subdirectories recursively
-            main_genols (ent->d_name, false, dirname);
+            main_genols (ent->d_name, false, dirname, true);
     
     }
     closedir(dir);    
@@ -665,10 +679,12 @@ void verify_architecture()
     
     // verify endianity is as expected
     uint16_t test_endianity = 0x0102;
-#ifdef __LITTLE_ENDIAN__
+#if defined __LITTLE_ENDIAN__
     ASSERT0 (*(uint8_t*)&test_endianity==0x02, "Error: expected CPU to be Little Endian but it is not");
-#else
+#elif defined __BIG_ENDIAN__
     ASSERT0 (*(uint8_t*)&test_endianity==0x01, "Error: expected CPU to be Big Endian but it is not");
+#else
+#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
 #endif
 }
 
@@ -939,7 +955,7 @@ int main (int argc, char **argv)
             case COMPRESS   : main_genozip (next_input_file, out_filename, -1, global_max_threads, !count, optind==argc); break;
             case UNCOMPRESS : main_genounzip (next_input_file, out_filename, -1, -1, global_max_threads, optind==argc); break;
             case TEST       : main_test  (next_input_file); break; // returns if successful, displays error and exits if not
-            case LIST       : main_genols  (next_input_file, false, NULL); break;
+            case LIST       : main_genols  (next_input_file, false, NULL, false); break;
             
             default         : ASSERT(false, "%s: unrecognized command %c", global_cmd, command);
         }
@@ -948,7 +964,7 @@ int main (int argc, char **argv)
     } while (optind < argc);
             
     // if this is "list", finalize
-    if (command == LIST) main_genols (NULL, true, NULL);
+    if (command == LIST) main_genols (NULL, true, NULL, false);
 
     return 0;
 }

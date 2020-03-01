@@ -104,8 +104,6 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
         if (c == EOF) {
             ASSERT0 (!str_len, "Invalid VCF file: Expecting file to end with a newline");
 
-            file->eof = true;
-
             buf_free(line);
             return false;
         }

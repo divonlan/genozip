@@ -28,7 +28,7 @@ extern void zfile_compress_dictionary_data (VariantBlockP vb, MtfContextP ctx,
                                             uint32_t num_words, const char *data, uint32_t num_chars);
 extern void zfile_compress_b250_data (VariantBlockP vb, MtfContextP ctx);
 
-extern bool zfile_read_one_vb (VariantBlockP vb);
+extern void zfile_read_one_vb (VariantBlockP vb);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
 #define MAYBE_V1 (-2) // zfile_read_one_section returns this if the first section cannot be read

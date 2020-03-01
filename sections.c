@@ -81,15 +81,40 @@ void sections_list_concat (VariantBlock *vb, BufferP section_list_buf)
 }
 
 // called by PIZ I/O thread: zfile_read_on_vb
-uint32_t sections_get_num_info_b250s (const File *z_file, uint32_t variant_block_i)
+uint32_t sections_count_info_b250s (File *z_file)
 {
-    SectionListEntry *ent = ((SectionListEntry *)z_file->section_list_buf.data);
-    uint32_t counter=0;
+    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
 
-    for (unsigned i=0; i < z_file->section_list_buf.len; i++, ent++)
-        counter += (variant_block_i == ent->variant_block_i) && (ent->section_type == SEC_INFO_SUBFIELD_B250);
+    // skip to the first SEC_INFO_SUBFIELD_B250
+    while (sl[z_file->sl_cursor].section_type != SEC_INFO_SUBFIELD_B250) z_file->sl_cursor++;
 
-    return counter;
+    // count the SEC_INFO_SUBFIELD_B250 sections
+    uint32_t start = z_file->sl_cursor;
+    while (sl[z_file->sl_cursor].section_type == SEC_INFO_SUBFIELD_B250) z_file->sl_cursor++;
+
+    return z_file->sl_cursor - start;
+}
+
+// called by PIZ I/O to know if next up is a VB Header or VCF Header or EOF
+SectionType sections_get_next_header_type (File *z_file)
+{
+    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
+
+    // find the next VB or VCF header section
+    while (z_file->sl_cursor < z_file->section_list_buf.len) {
+        SectionType sec_type = sl[z_file->sl_cursor++].section_type;
+        if (sec_type == SEC_VB_HEADER || sec_type == SEC_VCF_HEADER) return sec_type;
+    }
+
+    return SEC_EOF; // no more headers
+}
+
+// called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
+bool sections_has_more_vcf_components (File *z_file)
+{
+    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
+
+    return z_file->sl_cursor==0 || sl[z_file->sl_cursor-1].section_type == SEC_VCF_HEADER;
 }
 
 void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozipHeader *header)

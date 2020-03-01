@@ -19,6 +19,8 @@
 
 // note: the numbering of the sections cannot be modified, for backward compatability
 typedef enum {
+    SEC_EOF                = -1, // doesn't appear in the file - just a value to indicate there are no more sections
+
     // data sections - statring in v1
     SEC_VCF_HEADER         = 0,  SEC_VB_HEADER           = 1, 
     SEC_FRMT_SUBFIELD_DICT = 2,  SEC_GENOTYPE_DATA       = 3, 
@@ -93,7 +95,7 @@ typedef struct {
     uint32_t variant_block_i;       // VB with in file starting from 1 ; 0 for VCF Header
     uint16_t section_i;             // section within VB - 0 for Variant Data
     uint8_t  section_type;          
-    uint8_t  flags;                 // section-type specific flags
+    uint8_t  unused;
 } SectionHeader; 
 
 // data types genozip can compress
@@ -212,13 +214,6 @@ typedef struct {
     uint8_t for_future_use  : 5;
 } SectionListEntry;
 
-extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);
-extern void sections_list_concat (VariantBlockP vb, BufferP section_list_buf);
-extern uint32_t sections_get_num_info_b250s (ConstFileP z_file, uint32_t variant_block_i);
-extern void BGEN_sections_list (BufferP sections_list_buf);
-extern const char *st_name (unsigned sec_type);
-extern void sections_show_genozip_header (VariantBlockP pseudo_vb, SectionHeaderGenozipHeader *header);
-
 // ------------------------------------------------------------------------------------------------------
 // GENOZIP_FILE_FORMAT_VERSION==1 historical version - we support uncomrpessing old version files
 
@@ -272,5 +267,14 @@ typedef struct {
 
 
 #pragma pack(pop)
+
+extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);
+extern void sections_list_concat (VariantBlockP vb, BufferP section_list_buf);
+extern uint32_t sections_count_info_b250s (FileP z_file);
+extern SectionType sections_get_next_header_type (FileP z_file);
+extern bool sections_has_more_vcf_components (FileP z_file);
+extern void BGEN_sections_list (BufferP sections_list_buf);
+extern const char *st_name (unsigned sec_type);
+extern void sections_show_genozip_header (VariantBlockP pseudo_vb, SectionHeaderGenozipHeader *header);
 
 #endif

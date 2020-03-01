@@ -849,6 +849,8 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     static Dispatcher dispatcher = NULL;
     bool piz_successful = false;
     
+    if (flag_split && !sections_has_more_vcf_components (z_file)) return false; // no more components
+
     if (!dispatcher) 
         dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, test_mode, is_last_file,
                                       !test_mode, // in test mode, we leave it to zip_dispatcher to display the progress indicator
@@ -859,15 +861,23 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
     Md5Hash original_file_digest;
     
     // read genozip header and set the data type when reading the first vcf component of in case of --split, 
-    static int16_t data_type=-1; 
-    if (is_first_vcf_component) 
+    static int16_t data_type = EOF; 
+    if (is_first_vcf_component) {
         data_type = piz_read_global_area (pseudo_vb, true, &original_file_digest);
+
+        if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
+            ASSERT (sections_get_next_header_type(z_file) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
+    }
 
     if (data_type == EOF) goto finish;
 
+    ASSERT (z_file->genozip_version > 1 || !flag_split || is_first_vcf_component,
+            "Error: %s was compressed with genozip v1, splitting out components is not supported. Only the first file was extracted.",
+            file_printname (z_file));
+
     // read and write VCF header. in split mode this also opens vcf_file
-    piz_successful = data_type != MAYBE_V1 ? vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest)
-                                                : v1_vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest);
+    piz_successful = (data_type != MAYBE_V1) ? vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest)
+                                             : v1_vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest);
 
     if (!piz_successful) goto finish; // empty file - not an error
     
@@ -885,13 +895,35 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, bool 
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a variant block and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
-            bool success = z_file->genozip_version == 1 ? v1_zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher))
-                                                        : zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher));
-            if (success) {
-                header_only_file = false;
-                dispatcher_compute (dispatcher, piz_uncompress_variant_block);
+            bool compute = false;
+            if (z_file->genozip_version > 1) {
+                
+                switch (sections_get_next_header_type(z_file)) {
+                    case SEC_VB_HEADER:  
+                        zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher)); 
+                        compute = true;
+                        break;
+
+                    case SEC_EOF: 
+                        break; 
+
+                    case SEC_VCF_HEADER: // 2nd+ vcf header of a concatenated file
+                        if (!flag_split) {
+                            vcf_header_genozip_to_vcf (pseudo_vb, NULL); // skip 2nd+ vcf header if concatenating
+                            continue;
+                        }
+                        break; // eof if splitting
+
+                    default: ABORT0 ("Error: unexpected section_type");
+                }
             }
-            else {
+            else compute = v1_zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher));  // genozip v1
+
+            if (compute) {
+                dispatcher_compute (dispatcher, piz_uncompress_variant_block);
+                header_only_file = false;                
+            }
+            else { // eof
                 dispatcher_input_exhausted (dispatcher);
 
                 if (header_only_file)
