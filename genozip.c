@@ -48,12 +48,11 @@ const char *global_cmd = NULL;
 
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 
-// the flags - some are static, some are globals 
-static int flag_stdout=0, flag_replace=0, flag_show_content=0;
+// the flags - representing command line options - available globally
 int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0,
-    flag_encode_8=0, flag_encode_16=0, flag_encode_24=0;
+    flag_encode_8=0, flag_encode_16=0, flag_encode_24=0, flag_stdout=0, flag_replace=0, flag_show_content=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
@@ -950,6 +949,9 @@ int main (int argc, char **argv)
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
+
+        ASSERT (next_input_file || (command != COMPRESS && command != UNCOMPRESS), 
+                "%s: filename(s) required (redirecting from stdin is not possible)", global_cmd);
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
         
