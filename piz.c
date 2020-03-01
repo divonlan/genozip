@@ -570,12 +570,16 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
             next += gt_len;
         }
 
-        // add tab or newline separator after sample data
-        if (dl->has_haplotype_data || dl->has_genotype_data)
-            *(next++) = (sample_i == global_num_samples - 1) ? '\n' : '\t';
+        // add tab separator after sample data
+        if (dl->has_haplotype_data || dl->has_genotype_data) *(next++) = '\t';
     }
-    *next = '\0'; // end of string;
 
+    // trim trailing tabs due to missing data
+    for (; next >= dl->line.data+2 && next[-2] == '\t'; next--); // after this loop, next points to the first tab after the last non-tab character
+
+    next[-1] = '\n'; // replace the last tab with a newline
+    next[0]  = '\0'; // end of string
+    
     // sanity check (the actual can be smaller in a line with missing samples)
     ASSERT (next - dl->line.data <= dl->line.len, "Error: unexpected line size in line_i=%u: calculated=%u, actual=%u", 
             vb->first_line + vb_line_i, dl->line.len, (unsigned)(next - dl->line.data));
