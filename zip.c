@@ -201,7 +201,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
                 if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
 
-                    MtfContext *ctx = format_mapper->ctx[sf];
+                    MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
                     MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
                     Base250 index = node->word_index;
 

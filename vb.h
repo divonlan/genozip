@@ -20,17 +20,11 @@ typedef enum { PHASE_UNKNOWN      = '-',
                PHASE_MIXED_PHASED = '+'    } PhaseType;
 
 typedef struct {
-    int num_subfields; // NIL if this mapper is not defined
-    MtfContext *ctx[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]
+    uint8_t num_subfields; // (uint8_t)NIL if this mapper is not defined
+    uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]
 } SubfieldMapperZip;
 
-// mapping data for info names - appears once per unique INFO field names in vb
-typedef struct {
-    int num_subfields;                            // number of subfields in this INFO names - NIL if this mapper is not defined
-    MtfContext *ctx[MAX_SUBFIELDS];               // context of the all the subfields for this INFO name - pointers to vb->mtf_ctx
-    const char *names[MAX_SUBFIELDS];             // names of all subfields of this INFO fields - pointer into the INFO dictionary
-    uint8_t name_lens[MAX_SUBFIELDS];             // lengths of names including the '='. 
-} SubfieldInfoMapperPiz;
+#define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->mtf_ctx[(mapper)->did_i[(sf)]] : NULL)
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
@@ -51,7 +45,7 @@ typedef struct {
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
     uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
-    uint32_t info_mtf_i;     // the mtf_i into mtx_ctx[INFO].mtf   and also iname_mapper_buf   that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
+    uint32_t info_mtf_i;     // the mtf_i into mtx_ctx[INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
 
     // backward compatability with genozip v1
     Buffer v1_variant_data;

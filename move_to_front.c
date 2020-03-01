@@ -272,7 +272,7 @@ static void mtf_init_mapper (VariantBlock *vb, VcfFields field_i, Buffer *mapper
     buf_alloc (vb, mapper_buf,  mapper_buf->len * sizeof (SubfieldMapperZip), 2, name, 0);
     
     for (unsigned i=0; i < mapper_buf->len; i++) 
-        ((SubfieldMapperZip *)mapper_buf->data)[i].num_subfields = NIL;
+        ((SubfieldMapperZip *)mapper_buf->data)[i].num_subfields = (uint8_t)NIL;
 }
 
 // ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.

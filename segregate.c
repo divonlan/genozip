@@ -139,8 +139,9 @@ static void seg_format_field (VariantBlock *vb, DataLine *dl,
             ASSERT (dict_id_is_gtdata_subfield (subfield), 
                     "Error: string %.*s in the FORMAT field of line=%u is not a legal subfield", DICT_ID_LEN, subfield.id, vcf_line_i);
 
-            format_mapper.ctx[format_mapper.num_subfields++] = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields,
-                                                                                       subfield, SEC_FRMT_SUBFIELD_DICT);
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields, subfield, SEC_FRMT_SUBFIELD_DICT);
+            
+            format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
         } 
         while (str[-1] != '\t' && str[-1] != '\n' && len > 0);
     }
@@ -224,18 +225,19 @@ static void seg_info_field (VariantBlock *vb, DataLine *dl, const char *info_str
                 DictIdType dict_id = dict_id_info_subfield (dict_id_make (this_name, this_name_len));
 
                 // find which DictId (did_i) this subfield belongs to
-                iname_mapper.ctx[sf_i] = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, dict_id, SEC_INFO_SUBFIELD_DICT);
+                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, dict_id, SEC_INFO_SUBFIELD_DICT);
+                iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
 
                 // allocate memory if needed (check before calling buf_alloc - we're in a tight loop)
-                Buffer *mtf_i_buf = &iname_mapper.ctx[sf_i]->mtf_i;
+                Buffer *mtf_i_buf = &ctx->mtf_i;
                 if (!buf_is_allocated(mtf_i_buf) || (mtf_i_buf->len + 1) * sizeof(uint32_t) > mtf_i_buf->size)
                     buf_alloc (vb, mtf_i_buf, MIN (global_max_lines_per_vb, mtf_i_buf->len + 1) * sizeof (uint32_t),
-                               1.15, "mtf_ctx->mtf_i", iname_mapper.ctx[sf_i]->dict_section_type);
+                               1.15, "mtf_ctx->mtf_i", ctx->dict_section_type);
 
                 MtfNode *sf_node;
 
                 ((uint32_t *)mtf_i_buf->data)[mtf_i_buf->len++] = 
-                    mtf_evaluate_snip (vb, iname_mapper.ctx[sf_i], this_value, this_value_len, &sf_node, NULL);
+                    mtf_evaluate_snip (vb, ctx, this_value, this_value_len, &sf_node, NULL);
 
                 vb->vcf_section_bytes[SEC_INFO_SUBFIELD_B250] += (this_value_len+1); // including the separator (; or \n)
 
@@ -447,7 +449,7 @@ static void seg_genotype_area (VariantBlock *vb, DataLine *dl,
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data);
 
         MtfNode *node;
-        int32_t node_index = mtf_evaluate_snip (vb, format_mapper->ctx[sf], cell_gt_data, len, &node, NULL);
+        int32_t node_index = mtf_evaluate_snip (vb, MAPPER_CTX (format_mapper, sf), cell_gt_data, len, &node, NULL);
         *(next++) = node_index;
 
         if (node_index != WORD_INDEX_MISSING_SF) // don't skip the \t if we might have more missing subfields

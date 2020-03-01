@@ -142,11 +142,11 @@ static void piz_map_iname_subfields (VariantBlock *vb)
 
     const MtfContext *info_ctx = &vb->mtf_ctx[INFO];
     vb->iname_mapper_buf.len = info_ctx->word_list.len;
-    buf_alloc (vb, &vb->iname_mapper_buf, sizeof (SubfieldInfoMapperPiz) * vb->iname_mapper_buf.len,
+    buf_alloc (vb, &vb->iname_mapper_buf, sizeof (SubfieldMapperZip) * vb->iname_mapper_buf.len,
                1, "iname_mapper_buf", 0);
     buf_zero (&vb->iname_mapper_buf);
 
-    SubfieldInfoMapperPiz *all_iname_mappers = (SubfieldInfoMapperPiz*)vb->iname_mapper_buf.data;
+    SubfieldMapperZip *all_iname_mappers = (SubfieldMapperZip*)vb->iname_mapper_buf.data;
 
     const MtfWord *all_inames = (const MtfWord *)info_ctx->word_list.data;
 
@@ -154,7 +154,7 @@ static void piz_map_iname_subfields (VariantBlock *vb)
 
         const char *iname = (const char *)&info_ctx->dict.data[all_inames[iname_i].char_index]; // e.g. "I1=I2=I3=" - pointer into the INFO dictionary
         unsigned iname_len = all_inames[iname_i].snip_len; 
-        SubfieldInfoMapperPiz *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
+        SubfieldMapperZip *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
 
         // get INFO subfield snips - which are the values of the INFO subfield, where the names are
         // in the INFO snip in the format "info1=info2=info3="). 
@@ -164,27 +164,17 @@ static void piz_map_iname_subfields (VariantBlock *vb)
         // traverse the subfields of one iname. E.g. if the iname is "I1=I2=I3=" then we traverse I1, I2, I3
         for (unsigned i=0; i < iname_len; i++) {
             
-            iname_mapper->names[iname_mapper->num_subfields] = &iname[i];
-
             // traverse the iname, and get the dict_id for each subfield name (using only the first 8 characers)
             dict_id.num = 0;
             unsigned j=0; 
             while (iname[i] != '=' && iname[i] != '\t') { // value-less INFO names can be terminated by the end-of-word \t in the dictionary
-                if (j < DICT_ID_LEN) dict_id.id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
+                if (j < DICT_ID_LEN) 
+                    dict_id.id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
                 i++, j++;
             }
             dict_id = dict_id_info_subfield (dict_id);
 
-            iname_mapper->name_lens[iname_mapper->num_subfields] = j + (iname[i] == '='); // including the '='
-
-            int did_i = mtf_get_existing_did_i_by_dict_id (vb, dict_id); // it will be NIL if this is an INFO name without values            
-            if (did_i != NIL) {
-                iname_mapper->ctx[iname_mapper->num_subfields] = &vb->mtf_ctx[did_i];
-
-                ASSERT (iname_mapper->ctx[iname_mapper->num_subfields]->dict_id.num == dict_id.num, "Error: unexpected dict_id. iname_mapper->ctx->dict_id=%.*s dict_id=%.*s", DICT_ID_LEN, 
-                        iname_mapper->ctx[iname_mapper->num_subfields]->dict_id.id, DICT_ID_LEN, dict_id.id);
-            }
-
+            iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (vb, dict_id); // it will be NIL if this is an INFO name without values            
             iname_mapper->num_subfields++;
         }
     }
@@ -205,7 +195,7 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
     // get mtf_i and variant data length
     unsigned line_len = 0;
     char pos_str[50];
-    SubfieldInfoMapperPiz *iname_mapper = NULL;
+    SubfieldMapperZip *iname_mapper = NULL;
 
     // extract snips and calculate length of variant data
     for (VcfFields f=CHROM; f <= FORMAT; f++) {
@@ -226,12 +216,12 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
             ASSERT (index >= 0 && index < vb->iname_mapper_buf.len, 
                     "Error: iname_mapper index out of range: index=%d, vb->iname_mapper_buf.len=%u", index, vb->iname_mapper_buf.len);
 
-            iname_mapper = &((SubfieldInfoMapperPiz *)vb->iname_mapper_buf.data)[index];
+            iname_mapper = &((SubfieldMapperZip *)vb->iname_mapper_buf.data)[index];
             for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
                                 
-                if (!iname_mapper->ctx[sf_i]) continue; // a name without values
+                if (iname_mapper->did_i[sf_i] == (uint8_t)NIL) continue; // a name without values
 
-                mtf_get_next_snip (vb, iname_mapper->ctx[sf_i], NULL, &info_sf_value_snip[sf_i], &info_sf_value_snip_len[sf_i], vb->first_line + vb_line_i);
+                mtf_get_next_snip (vb, MAPPER_CTX (iname_mapper, sf_i), NULL, &info_sf_value_snip[sf_i], &info_sf_value_snip_len[sf_i], vb->first_line + vb_line_i);
 
                 line_len += info_sf_value_snip_len[sf_i];
             }
@@ -252,11 +242,17 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
         // info subfield eg "info1=value1;info2=value2" - "info1=", "info2=" are the name snips
         // while "value1" and "value2" are the value snips - we merge them here
         if (f == INFO) {
+            const char *c = snip[INFO];
             for (unsigned sf_i=0; sf_i < iname_mapper->num_subfields ; sf_i++) {
-
-                buf_add (&vb->line_variant_data, iname_mapper->names[sf_i], iname_mapper->name_lens[sf_i]); // name inc. '=' e.g. "Info1="
                 
-                if (iname_mapper->ctx[sf_i])  // some info names can be without values, in which case there will be no ctx
+                // get the name eg "AF="
+                const char *start = c;
+                for (; *c != '=' && *c != '\t'; c++);
+                if (*c == '=') c++; // move past the '=' 
+
+                buf_add (&vb->line_variant_data, start, (unsigned)(c-start)); // name inc. '=' e.g. "Info1="
+
+                if (iname_mapper->did_i[sf_i] != (uint8_t)NIL)  // some info names can be without values, in which case there will be no ctx
                     buf_add (&vb->line_variant_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
     
                 if (sf_i != iname_mapper->num_subfields-1)
