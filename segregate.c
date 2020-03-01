@@ -262,11 +262,11 @@ static void seg_info_field (VariantBlock *vb, DataLine *dl, const char *info_str
     info_field_mtf_i[vb->mtf_ctx[INFO].mtf_i.len++] = node_index;
 
     // if this is a totally new subfield (first time in this file) - make a new SubfieldMapperZip for it.
-    if (is_new) {
+    if (is_new) {   
         ASSERT (node_index == vb->iname_mapper_buf.len, "Error: node_index=%u different than vb->iname_mapper_buf.len=%u", node_index, vb->iname_mapper_buf.len);
     
         vb->iname_mapper_buf.len++;
-        buf_alloc (vb, &vb->iname_mapper_buf, vb->iname_mapper_buf.len * sizeof (SubfieldMapperZip), 2, "iname_mapper_buf", 0);
+        buf_alloc (vb, &vb->iname_mapper_buf, MAX (100, vb->iname_mapper_buf.len) * sizeof (SubfieldMapperZip), 1.5, "iname_mapper_buf", 0);
     }
 
     // it is possible that the iname_mapper is not set yet even though not new - if the node is from a previous VB and
