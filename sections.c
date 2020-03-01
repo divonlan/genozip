@@ -120,13 +120,14 @@ bool sections_has_more_vcf_components (File *z_file)
 void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozipHeader *header)
 {
     unsigned num_sections = BGEN32 (header->num_sections);
+    char size_str[50];
 
-    printf ("The genozip header follows, the result of --show-gheader:\n");
+    printf ("Below are the contents of the genozip header. This is the output of --show-gheader:\n");
     printf ("  genozip_version: %u\n",               header->genozip_version);
-    printf ("  encryption_type: %u\n",               header->encryption_type); 
-    printf ("  data_type: %u\n",                     BGEN16 (header->data_type));
+    printf ("  data_type: %s\n",                     dt_name (BGEN16 (header->data_type)));
+    printf ("  encryption_type: %s\n",               encryption_name (header->encryption_type)); 
     printf ("  num_samples: %u\n",                   BGEN32 (header->num_samples));
-    printf ("  uncompressed_data_size: %"PRIu64"\n", BGEN64 (header->uncompressed_data_size));
+    printf ("  uncompressed_data_size: %s\n",        buf_human_readable_uint (BGEN64 (header->uncompressed_data_size), size_str));
     printf ("  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
     printf ("  num_sections: %u\n",                  num_sections);
     printf ("  num_vcf_components: %u\n",            BGEN32 (header->num_vcf_components));
@@ -161,16 +162,31 @@ void BGEN_sections_list (Buffer *sections_list_buf)
     }
 }
 
-const char *st_name(unsigned sec_type)
+static const char *sections_type_name (unsigned item, const char **names, unsigned num_names)
 {
-    static const char *st_names[] = SECTIONTYPE_NAMES;
-
-    if (sec_type > sizeof(st_names)/sizeof(st_names[0])) {
+    if (item > num_names) {
         static char str[50];
-        sprintf (str, "%u (out of range)", sec_type);
+        sprintf (str, "%u (out of range)", item);
         return str;
     }
     
-    return st_names[sec_type];
+    return names[item];    
 }
 
+const char *st_name(unsigned sec_type)
+{
+    static const char *names[] = SECTIONTYPE_NAMES;
+    return sections_type_name (sec_type, names, sizeof(names)/sizeof(names[0]));
+}
+
+const char *dt_name (unsigned data_type)
+{
+    static const char *names[] = DATATYPE_NAMES;
+    return sections_type_name (data_type, names, sizeof(names)/sizeof(names[0]));
+}
+
+const char *encryption_name (unsigned encryption_type)
+{
+    static const char *names[] = ENCRYPTION_TYPE_NAMES;
+    return sections_type_name (encryption_type, names, sizeof(names)/sizeof(names[0]));
+}

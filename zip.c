@@ -617,10 +617,12 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
                 // this vb has no data
                 dispatcher_input_exhausted (dispatcher);
                 
-                ASSERT (!z_file->vcf_data_size_single || 
-                        z_file->vcf_data_size_single /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
+                // note: the field vcf_data_size_* in vcf_file are updated when the data is read from the vcf file, and these 
+                // fields in z_file are are updated below
+                ASSERT (!vcf_file->vcf_data_size_single || 
+                        vcf_file->vcf_data_size_single /* read from VCF file metadata */ == vcf_file->vcf_data_so_far, /* actually read */
                         "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
-                        z_file->vcf_data_size_single, z_file->vcf_data_so_far);
+                        vcf_file->vcf_data_size_single, vcf_file->vcf_data_so_far);
 
                 vcf_file->vcf_data_size_single = z_file->vcf_data_size_single = vcf_file->vcf_data_so_far;
 

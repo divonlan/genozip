@@ -12,8 +12,8 @@
             "program": "${workspaceFolder}/genozip-debug.exe",
 
             //"args": ["-l", "concat.vcf.genozip"]
-            "args": ["-z", "-f", "minimal.vcf", "minimal.vcf", "-o", "junk.vcf.genozip"],
-            //"args": ["-d", "-f", "concat.vcf.genozip", "-O"],
+            //"args": ["-z", "-f", "minimal.vcf", "--show-sections", "-o", "junk.vcf.genozip"],
+            "args": ["-d", "-f", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip", "-o", "junk.vcf"],
 
             //"args": ["-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "test.vcf", "-f", "-@1"],
 

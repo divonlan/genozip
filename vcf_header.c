@@ -89,6 +89,8 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
 bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **first_data_line)
 {    
+    vb->z_file->disk_at_beginning_of_this_vcf_file = vb->z_file->disk_so_far;
+
     static Buffer vcf_header_line = EMPTY_BUFFER; // serves to read the header, then its the first line in the data, and again the header when starting the next vcf file
     static Buffer vcf_header_text = EMPTY_BUFFER;
 
@@ -143,10 +145,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
             return false;
         }
 
-        if (vb->z_file) {
-            zfile_write_vcf_header (vb, &vcf_header_text, is_first_vcf); // we write all headers in concat mode too, to support --split
-            vb->z_file->vcf_data_so_far += vcf_header_text.len; // length of the original VCF header
-        }
+        if (vb->z_file) zfile_write_vcf_header (vb, &vcf_header_text, is_first_vcf); // we write all headers in concat mode too, to support --split
 
         vb->vcf_file->section_bytes[SEC_VCF_HEADER] = vcf_header_text.len;
         vb->z_file  ->section_bytes[SEC_VCF_HEADER] = vb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
@@ -189,6 +188,7 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb,
     if (flag_split) {
         ASSERT0 (!vb->vcf_file, "Error: not expecting vb->vcf_file to be open already in split mode");
         vb->vcf_file = file_open (header->vcf_filename, WRITE, VCF);
+        vb->z_file->vcf_data_size_single = BGEN64 (header->vcf_data_size);
     }
 
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);

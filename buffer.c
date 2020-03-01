@@ -226,11 +226,11 @@ void buf_display_memory_usage (PoolId pool_id, bool memory_full)
 
     char str[30];
     buf_human_readable_size (total_bytes, str);
-    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
+    printf ("Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
 
     for (unsigned i=0; i < num_stats; i++) {
         buf_human_readable_size (stats[i].bytes, str);
-        fprintf (stderr, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
+        printf ("%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
     }
 }
 

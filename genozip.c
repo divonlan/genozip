@@ -55,7 +55,8 @@ int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0,
     flag_encode_8=0, flag_encode_16=0, flag_encode_24=0;
 
-DictIdType dict_id_show_one_b250= { 0 };  // argument of --show-b250-one
+DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
+           dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
 
 static int main_print (const char **text, unsigned num_lines,
                        const char *wrapped_line_prefix, 
@@ -96,7 +97,7 @@ static int main_print_help (ExeType exe_type, bool explicit)
     static const char **texts[] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
     static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
     
-    if (exe_type == EXE_GENOZIP && flag_force) exe_type = (ExeType)4;
+    if (flag_force) exe_type = (ExeType)4; // -h -f shows developer help
 
     main_print (texts[exe_type], sizes[exe_type] / sizeof(char*), "                     ",  "\n", 0);
     main_print (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
@@ -170,11 +171,11 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 {
     main_show_file_metadata (vcf_file, z_file);
 
-    char vsize[30], zsize[30];
+    char vsize[30], zsize[30], zentries_str[30];
 
     printf ("Sections stats:\n");
-    printf ("                           #Sec  #Entries         VCF     %%       GENOZIP     %%   Ratio\n");
-    const char *format = "%22s    %5u  %10u  %8s %5.1f      %8s %5.1f  %6.1f%s\n";
+    printf ("                           #Sec  #Entries            VCF     %%       GENOZIP     %%   Ratio\n");
+    const char *format = "%22s    %5u  %13s  %8s %5.1f      %8s %5.1f  %6.1f%s\n";
 
     // the order in which we want them displayed
     const SectionType secs[] = {
@@ -211,7 +212,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 
         char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_human_readable_size(vbytes, vsize) : "       ";
         
-        printf (format, categories[sec_i], zsections, zentries,
+        printf (format, categories[sec_i], zsections, buf_human_readable_uint (zentries, zentries_str),
                  vcf_size_str, 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
                  buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
@@ -223,7 +224,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
         total_z        += zbytes;
     }
 
-    printf (format, "TOTAL", total_sections, total_entries,
+    printf (format, "TOTAL", total_sections, buf_human_readable_uint (total_entries, zentries_str),
              buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
@@ -388,7 +389,7 @@ static void main_genounzip (const char *z_filename,
     if (z_filename) {
         unsigned fn_len = strlen (z_filename);
 
-        ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: %s - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
+        ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: \"%s\" - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
 
         // skip this file if its size is 0
         struct stat64 st;
@@ -780,6 +781,8 @@ int main (int argc, char **argv)
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
         #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
+        #define _d1 {"show-one-dict", required_argument, 0, '3'                }
+        #define _d2 {"show-dict-one", required_argument, 0, '3'                }
         #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes,1 } 
         #define _s2 {"show-b250",     no_argument,       &flag_show_b250,    1 } 
         #define _s5 {"show-one-b250", required_argument, 0, '2'                }
@@ -796,17 +799,17 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _8, _16, _24, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd,      _s2, _s5, _s6,      _st, _sm, _sh     ,                         _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                     _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p,                                                                                     _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _t, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _8, _16, _24, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL,     _V,         _th, _O, _o, _p,           _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,                         _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                               _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p,                                                                                               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLq^tVzm@:Oo:p:B:2", // genozip
-            "cfhLq^V@:Oo:p:",         // genounzip
-            "hLVp:q",                 // genols
-            "hLV@:p:1"                // genocat
+            "cdfhlLq^tVzm@:Oo:p:B:", // genozip
+            "cfhLq^V@:Oo:p:",        // genounzip
+            "hLVp:q",                // genols
+            "hLV@:p:1"               // genocat
         };
 
         int option_index = -1;
@@ -832,6 +835,7 @@ int main (int argc, char **argv)
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
+            case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : genozip_set_global_max_lines_per_vb (optarg); break;
             case 'p' : crypt_set_password (optarg) ; break;
 
@@ -906,7 +910,8 @@ int main (int argc, char **argv)
     if (command != COMPRESS && command != LIST) flag_md5=false;
     
     if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
-    if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || dict_id_show_one_b250.num) 
+    if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || 
+        dict_id_show_one_b250.num || dict_id_show_one_dict.num) 
         flag_quiet=true; // don't show progress when debug data
 
     // determine how many threads we have - either as specified by the user, or by the number of cores

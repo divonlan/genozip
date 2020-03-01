@@ -86,7 +86,7 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
     buf_alloc (dd->pseudo_vb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (dd->show_progress) 
+    if (dd->show_progress && !flag_split) // note: for flag_split, we print this in dispatcher_resume() 
         fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
 
     return dd;
@@ -104,8 +104,15 @@ void dispatcher_resume (Dispatcher dispatcher, File *vcf_file)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
+    clock_gettime(CLOCK_REALTIME, &dd->start_time); 
+
     dd->input_exhausted = false;
-    dd->vcf_file = vcf_file;
+    dd->vcf_file        = vcf_file;
+    dd->last_len        = 2;
+    dd->filename        = vcf_file->name;
+    
+    if (dd->show_progress)
+        fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
 }
 
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
@@ -284,8 +291,8 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     static double ratio_so_far = 1;
 
     uint64_t total, sofar;
-    if (file->vcf_data_size_concat) { // if we have the VCF data size, go by it 
-        total = file->vcf_data_size_concat;
+    if (file->vcf_data_size_single) { // if we have the VCF data size, go by it 
+        total = file->vcf_data_size_single;
         sofar = vcf_data_written_so_far;
     
     } else if (file->disk_size) {

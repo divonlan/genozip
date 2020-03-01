@@ -80,6 +80,15 @@ typedef enum {
 
 #define GENOZIP_MAGIC 0x27052012
 
+// data types genozip can compress
+#define DATA_TYPE_VCF          0
+#define DATATYPE_NAMES { "VCF " }
+
+// encryption types
+#define ENCRYPTION_TYPE_NONE   0
+#define ENCRYPTION_TYPE_AES256 1
+#define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit"}
+
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
 // section headers are encoded in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
@@ -97,14 +106,6 @@ typedef struct {
     uint8_t  section_type;          
     uint8_t  unused;
 } SectionHeader; 
-
-// data types genozip can compress
-#define DATA_TYPE_VCF 0
-
-#define ENC_TYPE_NONE   0
-#define ENC_TYPE_AES256 1
-
-// Note: see v1 sections in v1.c
 
 typedef struct {
     SectionHeader h;
@@ -139,7 +140,7 @@ typedef struct {
 // The VCF header section appears once in the file (or multiple times in case of concatenation), and includes the VCF file header 
 typedef struct {
     SectionHeader h;
-    uint64_t vcf_data_size;    // number of bytes in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
+    uint64_t vcf_data_size;    // number of bytes in the original VCF file. 
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;        // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
     uint32_t num_samples;      // number of samples in the original VCF file
@@ -148,7 +149,7 @@ typedef struct {
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
 
 #define VCF_FILENAME_LEN 256
-    char vcf_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated.
+    char vcf_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated. always a .vcf, even if the original was .vcf.gz or .vcf.bz2
 
 } SectionHeaderVCFHeader; 
 
@@ -275,6 +276,8 @@ extern SectionType sections_get_next_header_type (FileP z_file);
 extern bool sections_has_more_vcf_components (FileP z_file);
 extern void BGEN_sections_list (BufferP sections_list_buf);
 extern const char *st_name (unsigned sec_type);
+extern const char *dt_name (unsigned data_type);
+extern const char *encryption_name (unsigned encryption_type);
 extern void sections_show_genozip_header (VariantBlockP pseudo_vb, SectionHeaderGenozipHeader *header);
 
 #endif

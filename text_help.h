@@ -48,8 +48,10 @@ static const char *help_genozip_developer[] = {
     "   --show-memory     Show what buffers are consuming the most memory",
     "   --show-sections   Shows the section types of the output genozip file and the compression ratios of each component",
     "   --show-dict       Show dictionary fragments written for each variant block (works for genounzip too)",
+    "   --show-one-dict   <field-name> Show the dictionary for this field in a tab-seperated list - <field-name> may be one of the fields 1-9 (CHROM to FORMAT) or a subfield of INFO or a subfield of FORMAT (works for genounzip too)",
     "   --show-gt-nodes   Show transposed GT matrix - each value is an index into its dictionary",
     "   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as the subfields of INFO - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers.",
+    "   --show-one-b250   <field-name> Show the values for this field - maybe one of the fields 1-9 (CHROM to FORMAT) or a subfield of INFO",
     "   --show-headers    Show the sections headers (works for genounzip too)",
     "   --show-index      Show the content of the random access index"
     "   --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file)",

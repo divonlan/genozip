@@ -575,7 +575,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
         ctx->dict_id           = dict_id;
         ctx->dict_section_type = dict_section_type;
         ctx->b250_section_type = dict_section_type + 1; // the b250 is 1 after the dictionary for all dictionary sections
-        ctx->encoding          = ENC_TYPE_NONE;         // encoding will be decided at the end of segregate
+        ctx->encoding          = ENCRYPTION_TYPE_NONE;         // encoding will be decided at the end of segregate
         mtf_init_iterator (ctx);
 
         // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields

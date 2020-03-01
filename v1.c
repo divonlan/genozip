@@ -28,7 +28,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     buf_alloc (vb, data, header_offset + header_size, 2, buf_name, 1);
 
     SectionHeader *header = zfile_read_from_disk (vb, data, requested_bytes, false); // note: header in file can be shorter than header_size if its an earlier version
-    ASSERT (header || allow_eof, "Error: Failed to read header, section_type=%s", st_name(expected_sec_type));
+    ASSERT (header || allow_eof, "Error: genozip v1 file - Failed to read header, section_type=%s", st_name(expected_sec_type));
     
     // if this is the first VCF header, part of it was already read by zfile_read_genozip_header() and placed in data (which is vb->z_file->v1_next_vcf_header)
     if (expected_sec_type == SEC_VCF_HEADER) header = (SectionHeader *)data->data;
@@ -38,7 +38,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     // decrypt header
     if (is_encrypted) {
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
-                "Error: password provided, but file %s is not encrypted", file_printname (vb->z_file));
+                "Error: genozip v1 file - password provided, but file %s is not encrypted", file_printname (vb->z_file));
 
         crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
     }
@@ -53,7 +53,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
             
         if (padding) {
             char *header_extra_bytes = zfile_read_from_disk (vb, data, padding, false);
-            ASSERT0 (header_extra_bytes, "Error: Failed to read header padding");
+            ASSERT0 (header_extra_bytes, "Error: genozip v1 file - Failed to read header padding");
         }
 
         crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i);
@@ -61,7 +61,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     }
 
     if (!is_magical && is_encrypted && expected_sec_type == SEC_VCF_HEADER) {
-        ABORT ("Error: password is wrong for file %s", file_printname (vb->z_file)); // mostly likely its because of a wrong password
+        ABORT ("Error: genozip v1 file - password is wrong for file %s", file_printname (vb->z_file)); // mostly likely its because of a wrong password
     }
 
     // case: encryption failed because this is actually a SEC_VCF_HEADER of a new vcf component of a concatenated file
@@ -99,13 +99,13 @@ int v1_zfile_read_one_section (VariantBlock *vb,
         }
     } 
 
-    ASSERT (is_magical, "Error: corrupt data (magic is wrong) when reading file %s", file_printname (vb->z_file));
+    ASSERT (is_magical, "Error: genozip v1 file - corrupt data (magic is wrong) when reading file %s", file_printname (vb->z_file));
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
-    ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
+    ASSERT (compressed_offset, "Error: genozip v1 file - header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
 
     unsigned data_compressed_len = BGEN32 (header->data_compressed_len);
-    ASSERT (data_compressed_len, "Error: header.data_compressed_len is 0 when reading section_type=%s", st_name(expected_sec_type));
+    ASSERT (data_compressed_len, "Error: genozip v1 file - header.data_compressed_len is 0 when reading section_type=%s", st_name(expected_sec_type));
 
     unsigned data_encrypted_len  = BGEN32 (header->data_encrypted_len);
 
@@ -118,12 +118,17 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     
     // check that we received the section type we expect, 
     ASSERT (header->section_type == expected_sec_type || (found_a_vcf_header && expected_sec_type == SEC_VB_HEADER),
-            "Error: Unexpected section type: expecting %s, found %s", st_name(expected_sec_type), st_name(header->section_type));
+            "Error: genozip v1 file - unexpected section type: expecting %s, found %s", st_name(expected_sec_type), st_name(header->section_type));
 
     unsigned expected_header_size = new_vcf_component ? new_header_size : header_size;
 
+    // case: this is actually not a v1 file, but it got truncated so the v2 reader didn't find the genozip header section
+    // and referred it to v1
+    ASSERT (!(header->section_type == SEC_VCF_HEADER && compressed_offset == sizeof(SectionHeaderVCFHeader)), 
+            "Error: failed to read file %s - it appears to be truncated", file_printname (vb->z_file));
+
     ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VB_HEADER, // for variant data, we also have the permutation index
-            "Error: invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
+            "Error: genozip v1 file - invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
     buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "v1_zfile_read_one_section", 2);
@@ -135,15 +140,15 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     if (expected_sec_type == SEC_VB_HEADER && !new_vcf_component) {
 
         int bytes_left_over = compressed_offset - header_size;
-        ASSERT (bytes_left_over >= 0, "Error: expected bytes_left_over=%d to be >=0", bytes_left_over)
+        ASSERT (bytes_left_over >= 0, "Error: genozip v1 file - expected bytes_left_over=%d to be >=0", bytes_left_over)
 
         if (bytes_left_over) { // there will be an Index only if this VCF has samples
             
             uint8_t *left_over_data = zfile_read_from_disk (vb, data, bytes_left_over, false);
-            ASSERT (left_over_data, "Failed to read left over bytes. bytes_left_over=%u", bytes_left_over);
+            ASSERT (left_over_data, "Error: genozip v1 file - Failed to read left over bytes. bytes_left_over=%u", bytes_left_over);
 
             if (is_encrypted) { // this is just for the ht index - we've already handle encrypted vcf header and set new_vcf_component=true 
-                ASSERT (bytes_left_over == crypt_padded_len (bytes_left_over), "Error: bad length of bytes_left_over=%u", bytes_left_over); // we expected it to be aligned, bc the total encryption block is aligned and header_size is aligned 
+                ASSERT (bytes_left_over == crypt_padded_len (bytes_left_over), "Error: genozip v1 file - bad length of bytes_left_over=%u", bytes_left_over); // we expected it to be aligned, bc the total encryption block is aligned and header_size is aligned 
                 
                 // for the haplotype index - it is part of the header so we just continue the encryption stream
                 crypt_continue (vb, left_over_data, bytes_left_over);
@@ -156,7 +161,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     // read section data
     if (data_len) {
         ASSERT (zfile_read_from_disk (vb, data, data_len, false), 
-                "Error: failed to read section data, section_type=%s", st_name(header->section_type));
+                "Error: genozip v1 file - failed to read section data, section_type=%s", st_name(header->section_type));
     }
 
     // deal with a VCF header that was encountered while expecting a SEC_VB_HEADER (i.e. 2nd+ component of a concatenated file)

@@ -336,7 +336,9 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_
     }
 
     file_basename (vb->vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
-
+    if (vb->vcf_file->type == VCF_GZ)  vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-3] = '\0'; // remove the .gz
+    if (vb->vcf_file->type == VCF_BZ2) vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-4] = '\0'; // remove the .gz
+    
     static Buffer vcf_header_buf = EMPTY_BUFFER;
 
     buf_alloc ((VariantBlock*)vb, &vcf_header_buf, vcf_header_text->len / 3, // generous guess of compressed size
@@ -408,27 +410,6 @@ void zfile_compress_vb_header (VariantBlock *vb)
     vb->z_section_bytes[SEC_VB_HEADER]   -= my_squeeze_len;
 }
 
-// a data-less SectionHeaderVbHeader with first_line set to 0, is an indicator that this VCF component is over
-// after this, either the file ends, or there is another VCF component starting with a VCF header
-void zfile_compress_terminator_section (VariantBlock *vb)
-{
-    uint32_t sizeof_header = sizeof (SectionHeaderVbHeader);
-
-    SectionHeaderVbHeader vb_header;
-    memset (&vb_header, 0, sizeof(SectionHeaderVbHeader)); // safety
-    
-    vb_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    vb_header.h.section_type          = SEC_VB_HEADER;
-    vb_header.h.data_uncompressed_len = 0;
-    vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
-    vb_header.h.variant_block_i       = 0;   // terminator 
-    
-    buf_alloc (vb, &vb->z_data, sizeof(SectionHeaderVbHeader), 1, "z_data", 0);
-
-    // compress section into z_data - to be eventually written to disk by the I/O thread
-    zfile_compress (vb, &vb->z_data, (SectionHeader*)&vb_header, vb->haplotype_permutation_index_squeezed.data);
-}
-
 // ZIP only: updating of the already compressed variant data section, after completion of all other sections
 // note: this updates the z_data in memory (not on disk)
 void zfile_update_compressed_vb_header (VariantBlock *vb,
@@ -463,10 +444,13 @@ void zfile_compress_dictionary_data (VariantBlock *vb, MtfContext *ctx,
     header.num_snips               = BGEN32 (num_words);
     header.dict_id                 = ctx->dict_id;
 
-    if (flag_show_dict) 
+    if (flag_show_dict)
         printf ("%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
                 dict_id_printable (ctx->dict_id).id, vb->variant_block_i, st_name(ctx->dict_section_type), 
                 ctx->did_i, num_words, num_chars, data);
+
+    if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
+        printf ("%.*s\t", num_chars, data);
 
     zfile_compress (vb, &vb->z_file->dict_data, (SectionHeader*)&header, data);
 }
@@ -691,12 +675,17 @@ void zfile_read_all_dictionaries (VariantBlock *pseudo_vb, uint32_t last_vb_i /*
         buf_free (&pseudo_vb->z_data);
     }
 
-    if (flag_show_dict) 
+    if (flag_show_dict || dict_id_show_one_dict.num) 
         for (uint32_t did_i=0; did_i < pseudo_vb->z_file->num_dict_ids; did_i++) {
             MtfContext *ctx = &pseudo_vb->z_file->mtf_ctx[did_i];
-            printf ("%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
-                    dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
-                                       did_i, ctx->word_list.len, ctx->dict.len, ctx->dict.data);
+
+            if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num) 
+                printf ("%.*s\t", ctx->dict.len, ctx->dict.data);
+            
+            if (flag_show_dict)
+                printf ("%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
+                        dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
+                                        did_i, ctx->word_list.len, ctx->dict.len, ctx->dict.data);
         }
 }
 
@@ -826,11 +815,11 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
             "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s). You might want to consider upgrading genozip to the newest version.",
             file_printname (zfile), header->genozip_version, GENOZIP_CODE_VERSION);
 
-    ASSERT (header->encryption_type != ENC_TYPE_NONE || !crypt_have_password(), 
+    ASSERT (header->encryption_type != ENCRYPTION_TYPE_NONE || !crypt_have_password(), 
             "Error: password provided, but file %s is not encrypted", file_printname (zfile));
 
     // get & test password, if file is encrypted
-    if (header->encryption_type != ENC_TYPE_NONE) {
+    if (header->encryption_type != ENCRYPTION_TYPE_NONE) {
 
         if (!crypt_have_password()) crypt_prompt_for_password();
 
@@ -881,7 +870,7 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
     header.h.data_uncompressed_len      = BGEN32 (zfile->section_list_buf.len);
     header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;  
     header.data_type                    = BGEN16 (data_type);
-    header.encryption_type              = is_encrypted ? ENC_TYPE_AES256 : ENC_TYPE_NONE;
+    header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
     header.uncompressed_data_size       = BGEN64 (zfile->vcf_data_size_concat);
     header.num_samples                  = BGEN32 (global_num_samples);
     header.num_items_concat             = BGEN64 (zfile->num_lines_concat);

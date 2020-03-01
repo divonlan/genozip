@@ -40,8 +40,6 @@ extern void zfile_uncompress_section (VariantBlockP vb, void *section_header,
                                       BufferP uncompressed_data, const char *uncompressed_data_buf_name,
                                       SectionType expected_section_type);
 
-extern void zfile_compress_terminator_section (VariantBlockP vb);
-
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
