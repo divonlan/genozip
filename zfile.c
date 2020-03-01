@@ -587,7 +587,8 @@ int zfile_read_one_section (VariantBlock *vb,
         is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC; // update after decryption
     }
 
-    ASSERT (is_magical, "Error: corrupt data (magic is wrong) when reading file %s", file_printname (zfile));
+    ASSERT (is_magical, "Error: corrupt data (magic is wrong) when attempting to read section %s of variant_block_i=%u in file %s", 
+            st_name (expected_sec_type), vb->variant_block_i, file_printname (zfile));
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
@@ -961,12 +962,12 @@ bool zfile_get_genozip_header (File *z_file,
 
 // updating the VCF bytes of a GENOZIP file. If we're compressing a simple VCF file, we will know
 // the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
-// when we're done. num_lines can only be known after we're done.
+// when we're done. num_lines can only be known after we're done with this VCF component.
 // if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
 bool zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t pos_of_current_vcf_header, Md5Hash *md5 /* out */)
 {
-    // rewind to beginning of current (latest) vcf header - nothing to do if we can't (eg. because we're writing to stdout)
-    if (fseeko ((FILE *)vb->z_file->file, pos_of_current_vcf_header, SEEK_SET)) return false;
+    // rewind to beginning of current (latest) vcf header - nothing to do if we can't
+    if (!file_seek (vb->z_file, pos_of_current_vcf_header, SEEK_SET, true)) return false;
 
     unsigned len = crypt_padded_len (sizeof (SectionHeaderVCFHeader));
 
