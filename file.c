@@ -203,14 +203,18 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
     return basename;
 }
 
+// returns true if successful. depending on soft_fail, a failure will either emit an error 
+// (and exit) or a warning (and return).
 bool file_seek (File *file, int64_t offset, int whence, bool soft_fail)
 {
-    int ret = fseeko ((FILE *)file->file, offset, whence);
+    int ret = fseeko64 ((FILE *)file->file, offset, whence);
 
     if (soft_fail) {
-        ASSERTW (!ret, errno == EINVAL ? "Error while reading file %s: it is too small%s" 
-                                       : "Warning: fseeko failed on file %s: %s", 
-                 file_printname (file),  errno == EINVAL ? "" : strerror (errno));
+        if (!flag_stdout) {
+            ASSERTW (!ret, errno == EINVAL ? "Error while reading file %s: it is too small%s" 
+                                        : "Warning: fseeko failed on file %s: %s", 
+                    file_printname (file),  errno == EINVAL ? "" : strerror (errno));
+        }
     } 
     else {
         ASSERT (!ret, "Error: fseeko failed on file %s: %s", file_printname (file), strerror (errno));
