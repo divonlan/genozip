@@ -31,13 +31,18 @@
 // in similar haplotypes grouped together - improving the compression.
 
 #define SAMPLES_PER_BLOCK  4096 // tradeoff: larger is better compression, but in some cases might be slower retrieval speed
-#define MAX_PLOIDY         100  // this can be any number up to 65535, it is set to 100 to avoid memory allocation
-                                // explosion in case of an error in the VCF file
 
-#define MAX_SUBFIELDS      64   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file.
-                                // IMPORTANT! changing in this number will change the genozip file format because SectionHeaderGenotype uses it
+#define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
+#if MAX_PLOIDY > 65535
+#error "MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeader.ploidy and VariantBlock.ploidy are uint16_t"
+#endif
 
-#define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined)
+#define MAX_SUBFIELDS      63   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file.
+
+#define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined). 
+#if MAX_DICTS > 255
+#error "MAX_DICTS cannot go beyond 255 as SubfieldMapperZip and SubfieldInfoMapperPiz represent did_i as uint_8, and NIL=255"
+#endif
 
 #define MAX_CHROM_LEN      64   // maximum length of chromosome (contig) name
 
@@ -72,7 +77,8 @@ extern const char *global_cmd;            // set once in main()
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat_mode, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
-           flag_show_index, flag_show_gheader, flag_encode_8, flag_encode_16, flag_encode_24;
+           flag_show_index, flag_show_gheader, flag_encode_8, flag_encode_16, flag_encode_24, flag_stdout, flag_replace, 
+           flag_show_content;
 
 // macros
 #ifndef MIN
