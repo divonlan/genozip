@@ -543,10 +543,10 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
 // gets did_id if the dictionary exists, or returns NIL, if not
 int mtf_get_existing_did_i_by_dict_id (VariantBlock *vb, DictIdType dict_id)
 {
-    MtfContext *mtf_ctx = vb->z_file->mtf_ctx;
+    //MtfContext *mtf_ctx = vb->z_file->mtf_ctx;
 
     for (unsigned did_i=0; did_i < vb->z_file->num_dict_ids; did_i++) 
-        if (dict_id.num == mtf_ctx[did_i].dict_id.num) return did_i;
+        if (dict_id.num == vb->mtf_ctx[did_i].dict_id.num) return did_i;
 
     return NIL; // not found
 }
