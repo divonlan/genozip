@@ -55,8 +55,10 @@ static inline int32_t mtf_hash (const MtfContext *ctx, const char *snip, unsigne
 static inline uint32_t mtf_insert_to_dict (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len)
 {
     buf_alloc (vb, &ctx->dict, MAX ((ctx->dict.len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 2, "mtf_ctx->dict", ctx->did_i);
-    if (ctx->encoding != B250_ENC_NONE) buf_set_overlayable (&ctx->dict); // during merge
-
+    
+    //if (ctx->encoding != B250_ENC_NONE) buf_set_overlayable (&ctx->dict); // during merge
+    buf_set_overlayable (&ctx->dict); 
+    
     unsigned char_index = ctx->dict.len;
     char *dict_p = &ctx->dict.data[char_index];
 
@@ -149,7 +151,8 @@ uint32_t mtf_get_next_snip (VariantBlock *vb, MtfContext *ctx,
     if (!override_iterator && !iterator->next_b250) // INFO and Field1-9 data (GT data uses override_next_b250)
         iterator->next_b250 = (uint8_t *)ctx->b250.data; // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
 
-    uint32_t word_index = base250_decode (&iterator->next_b250, ctx ? ctx->encoding : B250_ENC_NONE); // if this line has no non-GT subfields, it will not have a ctx 
+    uint32_t word_index = vb->z_file->genozip_version >= 2 ? base250_decode (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
+                                                           : v1_base250_decode (&iterator->next_b250);
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
@@ -236,7 +239,8 @@ int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, 
     vb->z_section_entries[ctx->dict_section_type]++; 
 
     buf_alloc (vb, &ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, 1+ctx->mtf.len), 2, "mtf_ctx->mtf", ctx->did_i);
-    if (ctx->encoding != B250_ENC_NONE) buf_set_overlayable (&ctx->mtf); // when called from merge
+    //if (ctx->encoding != B250_ENC_NONE) buf_set_overlayable (&ctx->mtf); // when called from merge
+    buf_set_overlayable (&ctx->mtf);
 
     new_hashent->mtf_i = ctx->ol_mtf.len + ctx->mtf.len++; // new hash entry or extend linked list
     new_hashent->next  = NIL;
@@ -301,7 +305,6 @@ void mtf_clone_ctx (VariantBlock *vb)
         vb_ctx->dict_id           = zf_ctx->dict_id;
         vb_ctx->dict_section_type = zf_ctx->dict_section_type;
         vb_ctx->b250_section_type = zf_ctx->b250_section_type;
-        vb_ctx->encoding          = zf_ctx->encoding; // minimum encoding for this dict, VB might increase it further in mtf_decide_encoding
         mtf_init_iterator (vb_ctx);
     }
 
@@ -336,43 +339,6 @@ static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id)
     vb->z_file->num_dict_ids++;
 
     return vb->z_file->num_dict_ids-1;
-}
-
-// ZIP only: decide for each ctx whether we will use 8 or 16 bit encoding. Note: different VBs might use different
-// encodings for b250 data based on the same dictionary - because of the logic
-static void mtf_decide_encodings (MtfContext *vb_ctx, MtfContext *zf_ctx)
-{
-    if (vb_ctx->mtf.len + vb_ctx->ol_mtf.len == 0) return; // nothing to do
-
-    // calculate enc - the minimum encoding level required for this VB
-    Base250Encoding enc = B250_ENC_NONE;
-
-    // note: this is a heuristic - after the dictionary is merged into z_file, mtf.len might end up being
-    // more than 250 even in 8 bit, and as a result some base250 might have more than 1 numeral
-    if (vb_ctx->b250_section_type == SEC_GENOTYPE_DATA || flag_encode_8)
-        // all genotype dictionaries are 8bit - for now (bc we don't have a place in the section headers to 
-        // indicate each subfield encoding). On the PIZ size, this is similarly set in piz_uncompress_all_sections()
-        enc = B250_ENC_8; 
-
-    else if (flag_encode_16)
-        enc = B250_ENC_16; 
-
-    else if (flag_encode_24)
-        enc = B250_ENC_24; 
-
-    else if (vb_ctx->mtf.len + vb_ctx->ol_mtf.len <= 250) // this condition is checked only if not flag_encode_16/24
-        enc = B250_ENC_8; 
-
-    else if (vb_ctx->mtf.len + vb_ctx->ol_mtf.len <= 62500)
-        enc = B250_ENC_16; 
-
-    else
-        enc = B250_ENC_24; 
-
-    // calculate the actual encoding to be used - possibly higher than enc, if previous VBs have already used higher
-    // (and hence Base250 of previously entered nodes doesn't contain lower bit values). 
-    // if enc is higher than the previously highest, then now the minimum encryption is increased
-    vb_ctx->encoding /* to be used for this VB */ = zf_ctx->encoding /* minimum for all future VBs */ = MAX (enc, zf_ctx->encoding);
 }
 
 void mtf_initialize_mutex (File *z_file, unsigned next_variant_i_to_merge)
@@ -424,9 +390,6 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
         zf_ctx->b250_section_type = vb_ctx->b250_section_type;
         zf_ctx->dict_section_type = vb_ctx->dict_section_type;
         zf_ctx->dict_id           = vb_ctx->dict_id;
-        zf_ctx->encoding          = B250_ENC_NONE; // initialize - mtf_decide_encodings might update this
-
-        mtf_decide_encodings (vb_ctx, zf_ctx); // set vb encoding level, and minimum zf encoding level for all future VBs
 
         buf_move (vb, &zf_ctx->dict, &vb_ctx->dict);
         buf_set_overlayable (&zf_ctx->dict);
@@ -441,7 +404,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
         // encode in base250 - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
         for (unsigned i=0; i < zf_ctx->mtf.len; i++) {
             MtfNode *zf_node = &((MtfNode *)zf_ctx->mtf.data)[i];
-            zf_node->word_index = base250_encode (zf_node->word_index.n, zf_ctx->encoding); // note that vb overlays this. also, vb_1 has been sorted so word_index != node_index
+            zf_node->word_index = base250_encode (zf_node->word_index.n); // note that vb overlays this. also, vb_1 has been sorted so word_index != node_index
 
             ASSERT (zf_node->word_index.n < zf_ctx->mtf.len, // sanity check
                     "Error: word_index=%u out of bound - mtf.len=%u, in dictionary %.*s", 
@@ -449,10 +412,6 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
         }
     }
     else {
-
-        // set vb encoding level, and possibly increase the minimum zf encoding level for all future VBs
-        mtf_decide_encodings (vb_ctx, zf_ctx); 
-
         // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
         for (unsigned i=0; i < vb_ctx->mtf.len; i++) {
             MtfNode *vb_node = &((MtfNode *)vb_ctx->mtf.data)[i];
@@ -463,10 +422,8 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
             ASSERT (zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%u out of range - len=%i", zf_node_index, vb_ctx->mtf.len);
 
             // set word_index to be indexing the global dict - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
-            // note that encoding is private to the vb - different vbs might encoding their b250 of a certain dictionary with
-            // different encoding
             if (is_new)
-                vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index, zf_ctx->encoding);
+                vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index);
             else 
                 // a previous VB already already calculated the word index for this node. if it was done by vb_i=1,
                 // then it is also resorted and the word_index is no longer the same as the node_index
@@ -575,7 +532,6 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
         ctx->dict_id           = dict_id;
         ctx->dict_section_type = dict_section_type;
         ctx->b250_section_type = dict_section_type + 1; // the b250 is 1 after the dictionary for all dictionary sections
-        ctx->encoding          = ENCRYPTION_TYPE_NONE;         // encoding will be decided at the end of segregate
         mtf_init_iterator (ctx);
 
         // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields

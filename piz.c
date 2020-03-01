@@ -304,7 +304,7 @@ static void piz_initialize_sample_iterators (VariantBlock *vb)
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
-                    next += base250_len (next, line_format_info->ctx[sf] ? line_format_info->ctx[sf]->encoding : B250_ENC_NONE); // if this format has no non-GT subfields, it will not have a ctx 
+                    next += base250_len (next); // if this format has no non-GT subfields, it will not have a ctx 
             }
         }
 
@@ -718,7 +718,6 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
 
         zfile_uncompress_section (vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", SEC_CHROM_B250 + f*2);
-        vb->mtf_ctx[f].encoding = header->encoding;
     }
 
     for (unsigned sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
@@ -729,7 +728,6 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
                                                   SEC_INFO_SUBFIELD_DICT);
 
         zfile_uncompress_section (vb, header, &ctx->b250, "mtf_ctx.b250", SEC_INFO_SUBFIELD_B250);    
-        ctx->encoding = header->encoding;    
     }
 
     // we allocate memory for the Buffer arrays only once the first time this VariantBlock
@@ -751,14 +749,8 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         unsigned num_samples_in_sb = (sb_i == vb->num_sample_blocks-1 ? global_num_samples % vb->num_samples_per_block : vb->num_samples_per_block);
 
         // if genotype data exists, it appears first
-        if (vb->has_genotype_data) {
+        if (vb->has_genotype_data) 
             zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_GENOTYPE_DATA);
-
-            // all genotype dictionaries are 8bit - for now (set during compression in seg_decide_encodings())
-            for (unsigned did_i=0; did_i < MAX_DICTS; did_i++)
-                if (vb->mtf_ctx[did_i].b250_section_type == SEC_GENOTYPE_DATA)
-                    vb->mtf_ctx[did_i].encoding = B250_ENC_8;
-        }
         
         // next, comes phase data
         if (vb->phase_type == PHASE_MIXED_PHASED) {

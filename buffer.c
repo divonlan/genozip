@@ -567,11 +567,6 @@ void buf_move (VariantBlock *vb, Buffer *dst, Buffer *src)
     buf_add_to_buffer_list (vb, dst);
 }
 
-void buf_set_overlayable (Buffer *buf) 
-{ 
-    buf->overlayable = true;
-}
-
 void buf_add_string (VariantBlock *vb, Buffer *buf, const char *str) 
 { 
     unsigned len = strlen (str); 

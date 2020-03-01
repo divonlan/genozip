@@ -68,29 +68,23 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
     buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 5-numeral.
                1.1, "ctx->b250_buf", 0);
 
-    ASSERT (ctx->encoding >= B250_ENC_8 && ctx->encoding <= B250_ENC_24,
-            "Error: invalid encoding=%s in for dict_id=%.*s", enc_name (ctx->encoding), DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
-
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
 
     if (show) 
-        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %.*s (%s): ", vb->variant_block_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, enc_name (ctx->encoding));
+        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %.*s: ", vb->variant_block_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id);
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
         MtfNode *node = mtf_node (ctx, ((const uint32_t *)ctx->mtf_i.data)[i], NULL, NULL);
 
         uint32_t n            = node->word_index.n;
-        unsigned num_numerals = node->word_index.num_numerals[ctx->encoding];
-        uint8_t *numerals     = node->word_index.numerals[ctx->encoding];
+        unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
+        uint8_t *numerals     = node->word_index.encoded.numerals;
         
         bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_GENOTYPE_DATA) && (i > 0);
 
         if (one_up) // note: we can't do SEC_GENOTYPE_DATA bc we can't PIZ it as many GT data types are in the same section 
             ctx->b250.data[ctx->b250.len++] = BASE250_ONE_UP;
-
-        else if (num_numerals == 1)  // shortcut for most common case
-            ctx->b250.data[ctx->b250.len++] = numerals[0];
 
         else {
             memcpy (&ctx->b250.data[ctx->b250.len], numerals, num_numerals);
@@ -160,8 +154,6 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 {
     START_TIMER;
 
-    // calculate encoding of each gt data context
-
     // build sample block genetype data
     uint8_t *dst_next = (uint8_t *)vb->genotype_one_section_data.data;
     
@@ -207,13 +199,8 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
                     if (flag_show_gt_nodes) printf ("%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
 
-                    if (index.num_numerals[ctx->encoding] == 1) { // shortcut for most common case
-                        *(dst_next++) = index.numerals[ctx->encoding][0];
-                    }
-                    else {
-                        memcpy (dst_next, &index.numerals[ctx->encoding], index.num_numerals[ctx->encoding]);
-                        dst_next += index.num_numerals[ctx->encoding];
-                    }
+                    base250_copy (dst_next, index);
+                    dst_next += base250_len (index.encoded.numerals);
                 }
                 else if (node_index == WORD_INDEX_MISSING_SF) {
                     *(dst_next++) = BASE250_MISSING_SF;

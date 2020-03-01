@@ -55,9 +55,6 @@ static const char *help_genozip_developer[] = {
     "   --show-headers    Show the sections headers (works for genounzip too)",
     "   --show-index      Show the content of the random access index"
     "   --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file)",
-    "   --encode-8        Force all INFO subfields and fields 1-9 (but not FORMAT subfields) b250 sections to be encoded with 8, 16 or 24 bit, rather than being decided optimally",
-    "   --encode-16 ",
-    "   --encode-24 "
 };
 
 static const char *help_genounzip[] = {

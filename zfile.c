@@ -218,7 +218,7 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 
     const uint8_t *data = (const uint8_t *)b250_data->data;
     for (unsigned i=0; i < BGEN32 (header->num_b250_items); i++) {
-        uint32_t word_index = base250_decode (&data, (Base250Encoding)header->encoding);
+        uint32_t word_index = base250_decode (&data);
         switch (word_index) {
             case WORD_INDEX_ONE_UP     : printf ("ONE_UP "); break;
             case WORD_INDEX_EMPTY_SF   : printf ("EMPTY "); break;
@@ -469,10 +469,6 @@ void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;
     header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
-    header.encoding                = (uint8_t)ctx->encoding;
-
-    ASSERT (ctx->encoding >= B250_ENC_8 && ctx->encoding <= B250_ENC_24, 
-            "Error: invalid base250 encoding: %d", ctx->encoding);
             
     zfile_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data);
 }

@@ -63,7 +63,6 @@ typedef struct mtfcontext_ {
     
     Buffer mtf_i;              // ZIP only: contains 32bit indeces into the ctx->mtf - this is an intermediate step before generating fields_sections_data 
     
-    Base250Encoding encoding;  // encoding type of b250
     Buffer b250;               // ZIP & PIZ: The buffer of b250 data containing indeces (in b250) to word_list
     
     // PIZ only: these two fields are used to iterate on the context, reading one b250 word_index at a time

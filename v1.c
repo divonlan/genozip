@@ -556,7 +556,7 @@ static void v1_piz_initialize_next_gt_in_sample (VariantBlock *vb, int *num_subf
             // (gt data is stored transposed - i.e. column by column)
             for (unsigned line_i=0; line_i < vb->num_lines; line_i++)
                 for (unsigned sf=0; sf < num_subfields[line_i]; sf++) 
-                    next += base250_len (next, B250_ENC_8); // v1 files are encoded in 8 bit
+                    next += v1_base250_len (next); 
         }
 
         // sanity checks to see we read the correct amount of genotypes
@@ -741,12 +741,6 @@ void v1_piz_uncompress_all_sections (VariantBlock *vb)
                     "Error: unexpected size of haplotype_sections_data[%u]: expecting %u but got %u", sb_i, expected_size, vb->haplotype_sections_data[sb_i].len)
         }
     }
-
-    // all dictionaries are 8bit in v1
-    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++)
-        if (vb->mtf_ctx[did_i].b250_section_type == SEC_GENOTYPE_DATA)
-            vb->mtf_ctx[did_i].encoding = B250_ENC_8;
-
 }
 
 #endif
@@ -865,3 +859,34 @@ bool v1_vcf_header_get_vcf_header (File *z_file,
 }
 
 #endif // V1_VCF_HEADER
+
+#ifdef V1_BASE250
+
+#define BASE250_2_NUMERALS 253 // this number has 2 numerals, starting from numerals[1]
+#define BASE250_3_NUMERALS 254 // this number has 3 numerals
+#define BASE250_4_NUMERALS 255 // this number has 4 numerals
+
+uint32_t v1_base250_decode (const uint8_t **str)
+{
+    if ((*str)[0] < 250) {
+        (*str)++;
+        return (*str)[-1]; // single numeral or control character
+    }
+    else if ((*str)[0] == BASE250_ONE_UP)     { (*str)++; return WORD_INDEX_ONE_UP; }
+    else if ((*str)[0] == BASE250_EMPTY_SF)   { (*str)++; return WORD_INDEX_EMPTY_SF; }
+    else if ((*str)[0] == BASE250_MISSING_SF) { (*str)++; return WORD_INDEX_MISSING_SF; }
+
+    uint32_t result = 0;
+    uint32_t factor = 1;
+    unsigned num_numerals = (*str)[0] - BASE250_2_NUMERALS + 2; // 2, 3 or 4
+    for (unsigned i=1; i <= num_numerals; i++) {
+        result += (*str)[i] * factor;
+        factor *= 250;
+    }
+
+    (*str) += num_numerals + 1;
+
+    return result;
+}
+
+#endif // V1_BASE250

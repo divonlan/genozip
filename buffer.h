@@ -45,7 +45,8 @@ extern unsigned buf_alloc_do (VariantBlockP vb,
   ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((vb), (buf), (requested_size), (grow_at_least_factor), (name), (param)) \
                                                     : (buf)->size) 
 
-extern void buf_set_overlayable (Buffer *buf);
+#define buf_set_overlayable(buf) (buf)->overlayable = true
+
 extern void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_from, unsigned *regular_buf_offset, const char *name, unsigned param);
 extern void buf_free (Buffer *buf); // free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
 extern void buf_destroy (VariantBlockP vb, Buffer *buf);
