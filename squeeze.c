@@ -172,6 +172,7 @@ void squeeze_unit_test()
     uint16_t checksum;
 
     VariantBlock vb;
+    vb.num_haplotypes_per_line = sizeof (unsqueezed) / sizeof (unsqueezed[0]);
     squeeze(&vb, squeezed, &checksum, normal, 32);
 
 
