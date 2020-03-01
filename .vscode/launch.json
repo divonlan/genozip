@@ -12,8 +12,8 @@
             "program": "${workspaceFolder}/genozip-debug.exe",
 
             //"args": ["-l", "concat.vcf.genozip"]
-            //"args": ["-z", "-f", "data/minimal.vcf", "data/minimal.vcf", "-o", "concat.vcf.genozip"],
-            "args": ["-d", "-f", "concat.vcf.genozip", "-O"],
+            "args": ["-z", "-f", "minimal.vcf", "minimal.vcf", "-o", "junk.vcf.genozip"],
+            //"args": ["-d", "-f", "concat.vcf.genozip", "-O"],
 
             //"args": ["-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "test.vcf", "-f", "-@1"],
 

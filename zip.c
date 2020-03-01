@@ -494,8 +494,7 @@ static void zip_compress_one_vb (VariantBlock *vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
-static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section_list_buf, File *vcf_file, 
-                                     bool is_final, bool is_z_data)
+static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section_list_buf, File *vcf_file, bool is_z_data)
 {
     START_TIMER;
 
@@ -523,18 +522,6 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section
         z_file->section_entries[sec_i]  += processed_vb->z_section_entries[sec_i];
     }
 
-    if (is_final) {
-
-        ASSERT (!z_file->vcf_data_size_single || 
-                z_file->vcf_data_size_single /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
-                "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
-                z_file->vcf_data_size_single, z_file->vcf_data_so_far);
-
-        vcf_file->vcf_data_size_single = z_file->vcf_data_size_single = vcf_file->vcf_data_so_far;
-
-        z_file->vcf_data_size_concat += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
-    }
-
     if (flag_show_headers && buf_is_allocated (&processed_vb->show_headers_buf))
         fprintf (stderr, processed_vb->show_headers_buf.data);
 }
@@ -545,7 +532,7 @@ static void zip_write_global_area (VariantBlock *pseudo_vb, const Md5Hash *singl
     File *file = pseudo_vb->z_file;
 
     // output dictionaries to disk
-    zip_output_processed_vb (pseudo_vb, &file->section_list_dict_buf, NULL, false, false);  
+    zip_output_processed_vb (pseudo_vb, &file->section_list_dict_buf, NULL, false);  
     
     // compress all random access records into pseudo_vb->z_data
     if (flag_show_index) random_access_show (&file->ra_buf, true);
@@ -557,7 +544,7 @@ static void zip_write_global_area (VariantBlock *pseudo_vb, const Md5Hash *singl
         zfile_compress_genozip_header (pseudo_vb, DATA_TYPE_VCF, single_component_md5);    
 
     // output to disk random access and genozip header sections to disk
-    zip_output_processed_vb (pseudo_vb, NULL, NULL, false, true);  
+    zip_output_processed_vb (pseudo_vb, NULL, NULL, true);  
 
     if (flag_show_gheader) sections_show_genozip_header (pseudo_vb, genozip_header_header);
 }
@@ -607,7 +594,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL);
             if (!processed_vb) continue; // no running compute threads or vb processing not completed
             
-            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, vcf_file, false, true);
+            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, vcf_file, true);
 
             dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
                                         z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
@@ -630,6 +617,15 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file,
                 // this vb has no data
                 dispatcher_input_exhausted (dispatcher);
                 
+                ASSERT (!z_file->vcf_data_size_single || 
+                        z_file->vcf_data_size_single /* read from VCF file metadata */ == z_file->vcf_data_so_far, /* actually read */
+                        "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
+                        z_file->vcf_data_size_single, z_file->vcf_data_so_far);
+
+                vcf_file->vcf_data_size_single = z_file->vcf_data_size_single = vcf_file->vcf_data_so_far;
+
+                z_file->vcf_data_size_concat += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
+
                 dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
                                             z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
             }

@@ -144,10 +144,8 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
         }
 
         if (vb->z_file) {
-            //if (use_vcf_header)
             zfile_write_vcf_header (vb, &vcf_header_text, is_first_vcf); // we write all headers in concat mode too, to support --split
-            //else
-            //    vb->z_file->vcf_data_so_far  += vcf_header_text.len; // length of the original VCF header
+            vb->z_file->vcf_data_so_far += vcf_header_text.len; // length of the original VCF header
         }
 
         vb->vcf_file->section_bytes[SEC_VCF_HEADER] = vcf_header_text.len;

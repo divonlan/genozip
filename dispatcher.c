@@ -340,13 +340,15 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
             dispatcher_human_time (seconds_so_far, time_str);
 
             if (bytes_compressed) {
-                if (file->vcf_data_size_concat == file->disk_size) // source file was plain VCF
+                if (file->type == VCF)  // source file was plain VCF
                     fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
-                else // source was .vcf.gz
-                    fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs gzip: %1.1f)\n", 
+                
+                else // source was .vcf.gz or .vcf.bz2
+                    fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
                              dd->last_len, eraser, time_str, 
                              (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
-                             (double)file->disk_size / (double)bytes_compressed);            // compression vs gzipped size
+                             file->type == VCF_GZ ? ".gz" : ".bz2",
+                             (double)file->disk_size / (double)bytes_compressed);            // compression vs .gz/.bz2 size
             } else
                 fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);
 
