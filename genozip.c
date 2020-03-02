@@ -290,75 +290,6 @@ static void main_show_content (const File *vcf_file, const File *z_file)
 
 }
 
-static void main_genounzip (const char *z_filename,
-                            const char *vcf_filename, 
-                            unsigned max_threads,
-                            bool is_last_file)
-{
-    static File *vcf_file = NULL; 
-    File *z_file;
-
-    vcf_header_initialize();
-
-    // get input FILE
-    ASSERT0 (z_filename, "Error: z_filename is NULL");
-
-    unsigned fn_len = strlen (z_filename);
-
-    ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: \"%s\" - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
-
-    // skip this file if its size is 0
-    RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
-
-    if (!vcf_filename && !flag_stdout && !flag_split) {
-        vcf_filename = (char *)malloc(fn_len + 10);
-        ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
-
-        sprintf ((char *)vcf_filename, "%.*s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename);    // .vcf.genozip -> .vcf
-    }
-
-    z_file = file_open (z_filename, READ, GENOZIP);    
-
-    // get output FILE 
-    if (vcf_filename) {
-        ASSERT0 (!vcf_file || flag_concat, "Error: vcf_file is open but not in concat mode");
-
-        if (!vcf_file)  // in concat mode, for second file onwards, vcf_file is already open
-            vcf_file = file_open (vcf_filename, WRITE, VCF);
-    }
-    else if (flag_stdout) { // stdout
-        vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
-    }
-    else if (flag_split) {
-        // do nothing - the vcf component files will be opened by vcf_header_genozip_to_vcf()
-    }
-    else {
-        ABORT0 ("Error: unrecognized configuration for the vcf_file");
-    }
-    
-    const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
-    
-    // a loop for decompressing all vcf components in split mode. in non-split mode, it collapses to one a single iteration.
-    bool piz_successful;
-    unsigned num_vcf_components=0;
-    do {
-        piz_successful = piz_dispatcher (basename, z_file, vcf_file, max_threads, num_vcf_components==0, is_last_file);
-        if (piz_successful) num_vcf_components++;
-    } while (flag_split && piz_successful); 
-
-    if (!flag_concat && !flag_stdout && !flag_split) 
-        // don't close the concatenated file - it will close with the process exits
-        // don't close in split mode - piz_dispatcher() opens and closes each component
-        // don't close stdout - in concat mode, we might still need it for the next file
-        file_close (&vcf_file, NULL); 
-
-    file_close (&z_file, NULL);
-
-    free ((void *)basename);
-
-    if (flag_replace && vcf_filename && z_filename) file_remove (z_filename); 
-}
-
 static void main_list_dir(); // forward declaration
 
 static void main_genols (const char *z_filename, bool finalize, const char *subdir, bool recursive) 
@@ -455,6 +386,74 @@ finish:
             printf ("%.*s", str_buf.len, str_buf.data);
             buf_free (&str_buf);
     }
+}
+static void main_genounzip (const char *z_filename,
+                            const char *vcf_filename, 
+                            unsigned max_threads,
+                            bool is_last_file)
+{
+    static File *vcf_file = NULL; 
+    File *z_file;
+
+    vcf_header_initialize();
+
+    // get input FILE
+    ASSERT0 (z_filename, "Error: z_filename is NULL");
+
+    unsigned fn_len = strlen (z_filename);
+
+    ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: \"%s\" - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
+
+    // skip this file if its size is 0
+    RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
+
+    if (!vcf_filename && !flag_stdout && !flag_split) {
+        vcf_filename = (char *)malloc(fn_len + 10);
+        ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
+
+        sprintf ((char *)vcf_filename, "%.*s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename);    // .vcf.genozip -> .vcf
+    }
+
+    z_file = file_open (z_filename, READ, GENOZIP);    
+
+    // get output FILE 
+    if (vcf_filename) {
+        ASSERT0 (!vcf_file || flag_concat, "Error: vcf_file is open but not in concat mode");
+
+        if (!vcf_file)  // in concat mode, for second file onwards, vcf_file is already open
+            vcf_file = file_open (vcf_filename, WRITE, VCF);
+    }
+    else if (flag_stdout) { // stdout
+        vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
+    }
+    else if (flag_split) {
+        // do nothing - the vcf component files will be opened by vcf_header_genozip_to_vcf()
+    }
+    else {
+        ABORT0 ("Error: unrecognized configuration for the vcf_file");
+    }
+    
+    const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
+    
+    // a loop for decompressing all vcf components in split mode. in non-split mode, it collapses to one a single iteration.
+    bool piz_successful;
+    unsigned num_vcf_components=0;
+    do {
+        piz_successful = piz_dispatcher (basename, z_file, vcf_file, max_threads, num_vcf_components==0, is_last_file);
+        if (piz_successful) num_vcf_components++;
+    } while (flag_split && piz_successful); 
+
+    if (!flag_concat && !flag_stdout && !flag_split) 
+        // don't close the concatenated file - it will close with the process exits
+        // don't close in split mode - piz_dispatcher() opens and closes each component
+        // don't close stdout - in concat mode, we might still need it for the next file
+        file_close (&vcf_file, NULL); 
+
+    file_close (&z_file, NULL);
+
+    free ((void *)basename);
+
+    if (flag_replace && vcf_filename && z_filename) file_remove (z_filename); 
 }
 
 static void main_genozip (const char *vcf_filename, 
