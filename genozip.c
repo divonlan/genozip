@@ -49,10 +49,10 @@ const char *global_cmd = NULL;
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 
 // the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_concat_mode=0, flag_md5=0, flag_split=0, 
+int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0,
-    flag_stdout=0, flag_replace=0, flag_show_content=0;
+    flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
@@ -292,89 +292,8 @@ static void main_show_content (const File *vcf_file, const File *z_file)
 
 }
 
-static void main_genozip (const char *vcf_filename, 
-                          char *z_filename,
-                          unsigned max_threads,
-                          bool is_first_file, bool is_last_file)
-{
-    File *vcf_file;
-    static File *z_file = NULL; // static to support concat mode
-
-    // get input file
-    if (vcf_filename) {
-        // skip this file if its size is 0
-        struct stat64 st;
-        int ret = stat64(vcf_filename, &st);
-        ASSERT (!ret, "Error: failed accessing %s: %s", vcf_filename, strerror(errno));
-        ASSERTW (st.st_size, "Skipping file %s because its size is 0", vcf_filename);
-        if (!st.st_size) return;
-    
-        // open the file
-        vcf_file = file_open (vcf_filename, READ, VCF);
-    }
-    else {  // stdin
-        vcf_file = file_fdopen (0, READ, STDIN, false);
-        flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
-    }
- 
-    ASSERT0 (flag_concat_mode || !z_file, "Error: expecting z_file to be NULL in non-concat mode");
-
-    // get output FILE
-    if (!flag_stdout) {
-
-        if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
-            if (!z_filename) {
-                unsigned fn_len = strlen (vcf_filename);
-                z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
-                ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
-
-                if (vcf_file->type == VCF)
-                    sprintf (z_filename, "%s" GENOZIP_EXT, vcf_filename); // .vcf -> .vcf.genozip
-                else if (vcf_file->type == VCF_GZ)
-                    sprintf (z_filename, "%.*s" GENOZIP_EXT, fn_len-3, vcf_filename); // .vcf.gz -> .vcf.genozip
-                else if (vcf_file->type == VCF_BZ2)
-                    sprintf (z_filename, "%.*s" GENOZIP_EXT, fn_len-4, vcf_filename); // .vcf.bz2 -> .vcf.genozip
-                else
-                    ABORT ("Invalid file type: %u", vcf_file->type);
-            }
-
-            z_file = file_open (z_filename, WRITE, GENOZIP);
-        }
-
-        z_file->vcf_data_so_far                    = 0; // reset these as they relate to the VCF data of the VCF file currently being processed
-        z_file->vcf_data_size_single               = vcf_file->vcf_data_size_single; // 0 if vcf is .gz or a pipe or stdin
-    }
-    else if (flag_stdout) { // stdout
-#ifdef _WIN32
-        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
-#endif
-        ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
-
-        z_file = file_fdopen (1, WRITE, STDOUT, false);
-    } 
-    else ABORT0 ("Error: No output channel");
-    
-    const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
-    zip_dispatcher (basename, vcf_file, z_file, max_threads, is_last_file);
-
-    if (flag_show_sections) main_show_sections (vcf_file, z_file);
-    if (flag_show_content)  main_show_content  (vcf_file, z_file);
-
-    bool remove_vcf_file = z_file && flag_replace && vcf_filename;
-
-    file_close (&vcf_file, NULL);
-
-    if ((is_last_file || !flag_concat_mode) && !flag_stdout && z_file) 
-        file_close (&z_file, NULL); 
-
-    if (remove_vcf_file) file_remove (vcf_filename); 
-
-    free ((void *)basename);
-}
-
 static void main_genounzip (const char *z_filename,
-                            char *vcf_filename, 
+                            const char *vcf_filename, 
                             unsigned max_threads,
                             bool is_last_file)
 {
@@ -382,36 +301,31 @@ static void main_genounzip (const char *z_filename,
     File *z_file;
     
     // get input FILE
-    if (z_filename) {
-        unsigned fn_len = strlen (z_filename);
+    ASSERT0 (z_filename, "Error: z_filename is NULL");
 
-        ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: \"%s\" - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
+    unsigned fn_len = strlen (z_filename);
 
-        // skip this file if its size is 0
-        struct stat64 st;
-        int ret = stat64(z_filename, &st);
-        ASSERT (!ret, "Error: failed accessing %s: %s", z_filename, strerror(errno));
-        ASSERTW (st.st_size, "Skipping file %s because its size is 0", z_filename);
-        if (!st.st_size) return;
+    ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: \"%s\" - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
 
-        if (!vcf_filename && !flag_stdout && !flag_split) {
-            vcf_filename = (char *)malloc(fn_len + 10);
-            ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
+    // skip this file if its size is 0
+    struct stat64 st;
+    int ret = stat64(z_filename, &st);
+    ASSERT (!ret, "Error: failed accessing %s: %s", z_filename, strerror(errno));
+    ASSERTW (st.st_size, "Skipping file %s because its size is 0", z_filename);
+    if (!st.st_size) return;
 
-            sprintf (vcf_filename, "%.*s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename);    // .vcf.genozip -> .vcf
-        }
+    if (!vcf_filename && !flag_stdout && !flag_split) {
+        vcf_filename = (char *)malloc(fn_len + 10);
+        ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
 
-        z_file = file_open (z_filename, READ, GENOZIP);    
-    }
-    else { // stdin
-        // we don't allow reading the genozip file from stdin, because we need to random-access it - e.g. start by
-        // reading the genozip header in its end
-        ABORT ("%s: missing a genozip file name, please see '%s --help' for more details", global_cmd, global_cmd);
+        sprintf ((char *)vcf_filename, "%.*s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename);    // .vcf.genozip -> .vcf
     }
 
-    // get output FILE
+    z_file = file_open (z_filename, READ, GENOZIP);    
+
+    // get output FILE 
     if (vcf_filename) {
-        ASSERT0 (!vcf_file || flag_concat_mode, "Error: vcf_file is open but not in concat mode");
+        ASSERT0 (!vcf_file || flag_concat, "Error: vcf_file is open but not in concat mode");
 
         if (!vcf_file)  // in concat mode, for second file onwards, vcf_file is already open
             vcf_file = file_open (vcf_filename, WRITE, VCF);
@@ -436,7 +350,7 @@ static void main_genounzip (const char *z_filename,
         if (piz_successful) num_vcf_components++;
     } while (flag_split && piz_successful); 
 
-    if (!flag_concat_mode && !flag_stdout && !flag_split) 
+    if (!flag_concat && !flag_stdout && !flag_split) 
         // don't close the concatenated file - it will close with the process exits
         // don't close in split mode - piz_dispatcher() opens and closes each component
         // don't close stdout - in concat mode, we might still need it for the next file
@@ -524,8 +438,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     char created[FILE_METADATA_LEN];
     bool success = zfile_get_genozip_header (z_file, &vcf_data_size, &num_samples, &num_lines, 
                                              &md5_hash_concat, created, FILE_METADATA_LEN);
-    if (!success) goto finish
-    ;
+    if (!success) goto finish;
 
     unsigned ratio = z_file->disk_size ? ((double)vcf_data_size / (double)z_file->disk_size) : 0;
     
@@ -551,6 +464,92 @@ finish:
     if (!recursive) {
             printf (str_buf.data);
             buf_free (&str_buf);
+    }
+}
+
+static void main_genozip (const char *vcf_filename, 
+                          char *z_filename,
+                          unsigned max_threads,
+                          bool is_first_file, bool is_last_file)
+{
+    File *vcf_file;
+    static File *z_file = NULL; // static to support concat mode
+
+    // get input file
+    if (vcf_filename) {
+        // skip this file if its size is 0
+        struct stat64 st;
+        int ret = stat64(vcf_filename, &st);
+        ASSERT (!ret, "Error: failed accessing %s: %s", vcf_filename, strerror(errno));
+        ASSERTW (st.st_size, "Skipping file %s because its size is 0", vcf_filename);
+        if (!st.st_size) return;
+    
+        // open the file
+        vcf_file = file_open (vcf_filename, READ, VCF);
+    }
+    else {  // stdin
+        vcf_file = file_fdopen (0, READ, STDIN, false);
+        flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
+    }
+ 
+    ASSERT0 (flag_concat || !z_file, "Error: expecting z_file to be NULL in non-concat mode");
+
+    // get output FILE
+    if (!flag_stdout) {
+
+        if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
+            if (!z_filename) {
+                unsigned fn_len = strlen (vcf_filename);
+                z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
+                ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
+
+                if (vcf_file->type == VCF)
+                    sprintf (z_filename, "%s" GENOZIP_EXT, vcf_filename); // .vcf -> .vcf.genozip
+                else if (vcf_file->type == VCF_GZ)
+                    sprintf (z_filename, "%.*s" GENOZIP_EXT, fn_len-3, vcf_filename); // .vcf.gz -> .vcf.genozip
+                else if (vcf_file->type == VCF_BZ2)
+                    sprintf (z_filename, "%.*s" GENOZIP_EXT, fn_len-4, vcf_filename); // .vcf.bz2 -> .vcf.genozip
+                else
+                    ABORT ("Invalid file type: %u", vcf_file->type);
+            }
+
+            z_file = file_open (z_filename, WRITE, GENOZIP);
+        }
+
+        z_file->vcf_data_so_far                    = 0; // reset these as they relate to the VCF data of the VCF file currently being processed
+        z_file->vcf_data_size_single               = vcf_file->vcf_data_size_single; // 0 if vcf is .gz or a pipe or stdin
+    }
+    else if (flag_stdout) { // stdout
+#ifdef _WIN32
+        // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
+        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
+#endif
+        ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
+
+        z_file = file_fdopen (1, WRITE, STDOUT, false);
+    } 
+    else ABORT0 ("Error: No output channel");
+    
+    const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
+    zip_dispatcher (basename, vcf_file, z_file, max_threads, is_last_file);
+
+    if (flag_show_sections) main_show_sections (vcf_file, z_file);
+    if (flag_show_content)  main_show_content  (vcf_file, z_file);
+
+    bool remove_vcf_file = z_file && flag_replace && vcf_filename;
+
+    file_close (&vcf_file, NULL);
+
+    if ((is_last_file || !flag_concat) && !flag_stdout && z_file) 
+        file_close (&z_file, NULL); 
+
+    if (remove_vcf_file) file_remove (vcf_filename); 
+
+    free ((void *)basename);
+
+    if (flag_test) {
+        vcf_header_reset_globals();
+        main_genounzip (z_filename, vcf_filename, max_threads, is_last_file);
     }
 }
 
@@ -633,8 +632,8 @@ void genozip_set_global_max_lines_per_vb (const char *num_lines_str)
 
 int main (int argc, char **argv)
 {
-    #define COMPRESS   'z'
-    #define UNCOMPRESS 'd'
+    #define ZIP        'z'
+    #define UNZIP      'd'
     #define LIST       'l'
     #define LICENSE    'L'
     #define VERSION    'V'
@@ -669,7 +668,7 @@ int main (int argc, char **argv)
     while (1) {
 
         #define _c  {"stdout",        no_argument,       &flag_stdout,       1 }
-        #define _d  {"decompress",    no_argument,       &command, UNCOMPRESS  }
+        #define _d  {"decompress",    no_argument,       &command, UNZIP       }
         #define _f  {"force",         no_argument,       &flag_force,        1 }
         #define _h  {"help",          no_argument,       &command, HELP        }
         #define _l  {"list",          required_argument, &command, LIST        }
@@ -678,8 +677,9 @@ int main (int argc, char **argv)
         #define _q  {"quiet",         no_argument,       &flag_quiet,        1 }
         #define _DL {"replace",       no_argument,       &flag_replace,      1 }
         #define _V  {"version",       no_argument,       &command, VERSION     }
-        #define _z  {"compress",      no_argument,       &command, COMPRESS    }
+        #define _z  {"compress",      no_argument,       &command, ZIP         }
         #define _m  {"md5",           no_argument,       &flag_md5,          1 }
+        #define _t  {"test",          no_argument,       &flag_test,         1 }
         #define _th {"threads",       required_argument, 0, '@'                }
         #define _O  {"split",         no_argument,       &flag_split,        1 }
         #define _o  {"output",        required_argument, 0, 'o'                }
@@ -703,17 +703,17 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _DL, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _DL, _V,         _th, _O, _o, _p,           _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,           _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,      _V,                      _p,                                                                                 _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,      _V,         _th,         _p,                                                                                 _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _t, _DL, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,         _th, _O, _o, _p,           _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,           _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                 _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p,                                                                                 _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLq^Vzm@:Oo:p:B:", // genozip
-            "cfhLq^V@:Oo:p:",       // genounzip
-            "hLVp:q",               // genols
-            "hLV@:p:1"              // genocat
+            "cdfhlLqt^Vzm@:Oo:p:B:", // genozip
+            "cfhLqt^V@:Oo:p:",       // genounzip
+            "hLVp:q",                // genols
+            "hLV@:p:1"               // genocat
         };
 
         int option_index = -1;
@@ -724,7 +724,7 @@ int main (int argc, char **argv)
         is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
 
         switch (c) {
-            case COMPRESS : case UNCOMPRESS : case LIST : case LICENSE : 
+            case ZIP : case UNZIP : case LIST : case LICENSE : 
             case VERSION  : case HELP :
                 ASSERT(command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
                 command=c; 
@@ -734,6 +734,7 @@ int main (int argc, char **argv)
             case 'f' : flag_force         = 1      ; break;
             case '^' : flag_replace       = 1      ; break;
             case 'q' : flag_quiet         = 1      ; break;
+            case 't' : flag_test          = 1      ; break;
             case 'm' : flag_md5           = 1      ; break;
             case 'O' : flag_split         = 1      ; break;
             case '@' : threads_str  = optarg       ; break;
@@ -777,9 +778,9 @@ int main (int argc, char **argv)
         else if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) 
             return main_print_help (exe_type, false);
 
-        else if (exe_type == EXE_GENOUNZIP) command = UNCOMPRESS;
-        else if (exe_type == EXE_GENOCAT) { command = UNCOMPRESS; flag_stdout=1 ; }
-        else command = COMPRESS; // default 
+        else if (exe_type == EXE_GENOUNZIP) command = UNZIP;
+        else if (exe_type == EXE_GENOCAT) { command = UNZIP; flag_stdout=1 ; }
+        else command = ZIP; // default 
     }
 
     // sanity checks
@@ -789,20 +790,25 @@ int main (int argc, char **argv)
     ASSERT (!flag_stdout || !flag_split,        "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
     ASSERT (!flag_split  || !out_filename,      "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
     ASSERT (!flag_stdout || !flag_replace,      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
-    ASSERT (!flag_stdout || !flag_show_content, "%s: option %s is incompatable with --show-content", global_cmd, OT("stdout", "c"));
-    ASSERT (!flag_stdout || !flag_show_sections,"%s: option %s is incompatable with --show-sections", global_cmd, OT("stdout", "c"));
-    ASSERT (!flag_stdout || !flag_show_alleles, "%s: option %s is incompatable with --show-alleles", global_cmd, OT("stdout", "c"));
-    
-    // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
-    // will overwrite each other if extract with -o
-    if (out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
+    ASSERT (!flag_test   || !out_filename || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
+    ASSERT (!flag_test   || !flag_replace || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
+    ASSERT (!flag_test   || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
 
-    if (command != COMPRESS && command != LIST) flag_md5=false;
+    // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
+    // will overwrite each other if extracted with --split
+    if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
+
+    if (command != ZIP && command != LIST) flag_md5=false;
     
-    if (command == UNCOMPRESS && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
+    if (command == UNZIP && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
     if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || 
         dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_alleles) 
         flag_quiet=true; // don't show progress when debug data
+
+    unsigned num_files = argc - optind;
+
+    ASSERT0 (num_files <= 1 || !flag_show_sections, "Error: --show-content can only work on one file at time");
+    ASSERT0 (num_files <= 1 || !flag_show_content,  "Error: --show-sections can only work on one file at time");
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
@@ -822,32 +828,27 @@ int main (int argc, char **argv)
     if (command == HELP) 
         return main_print_help (exe_type, true);
 
-    flag_concat_mode = (out_filename != NULL);
+    flag_concat = (command == ZIP) && (out_filename != NULL);
 
-    unsigned count=0;
-    do {
+    for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
+
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
-        ASSERT (next_input_file || (command != COMPRESS && command != UNCOMPRESS), 
+        ASSERT (next_input_file || command != UNZIP, 
                 "%s: filename(s) required (redirecting from stdin is not possible)", global_cmd);
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
         
-        ASSERT0 (!count || !flag_show_sections, "Error: --show-content can only work on one file at time");
-        ASSERT0 (!count || !flag_show_content,  "Error: --show-sections can only work on one file at time");
-
         switch (command) {
-            case COMPRESS   : main_genozip (next_input_file, out_filename, global_max_threads, !count, optind==argc); break;
-            case UNCOMPRESS : main_genounzip (next_input_file, out_filename, global_max_threads, optind==argc); break;
-            case LIST       : main_genols  (next_input_file, false, NULL, false); break;
+            case ZIP   : main_genozip (next_input_file, out_filename, global_max_threads, file_i==0, file_i==num_files-1); break;
+            case UNZIP : main_genounzip (next_input_file, out_filename, global_max_threads, file_i==num_files-1); break;
+            case LIST  : main_genols  (next_input_file, false, NULL, false); break;
             
-            default         : ASSERT(false, "%s: unrecognized command %c", global_cmd, command);
+            default         : ABORT ("%s: unrecognized command %c", global_cmd, command);
         }
-
-        count++;
-    } while (optind < argc);
+    }
             
     // if this is "list", finalize
     if (command == LIST) main_genols (NULL, true, NULL, false);

@@ -874,7 +874,7 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
     header.num_sections                 = BGEN32 (num_sections); 
     header.num_vcf_components           = BGEN32 (zfile->num_vcf_components_so_far);
 
-    if (flag_concat_mode) {
+    if (flag_concat) {
         md5_finalize (&zfile->md5_ctx_concat, &header.md5_hash_concat);
         if (flag_md5 && zfile->num_vcf_components_so_far > 1) printf ("Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
     } 

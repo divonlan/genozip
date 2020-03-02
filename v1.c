@@ -125,7 +125,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     // case: this is actually not a v1 file, but it got truncated so the v2 reader didn't find the genozip header section
     // and referred it to v1
     ASSERT (!(header->section_type == SEC_VCF_HEADER && compressed_offset == sizeof(SectionHeaderVCFHeader)), 
-            "Error: failed to read file %s - it appears to be truncated", file_printname (vb->z_file));
+            "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (vb->z_file));
 
     ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VB_HEADER, // for variant data, we also have the permutation index
             "Error: genozip v1 file - invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
@@ -774,6 +774,8 @@ bool v1_vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
 
     ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(v1_SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(v1_SectionHeaderVCFHeader));
 
+    ASSERT (!flag_test, "Error when testing %s: --test option is not supported for files compressed with genozip version 1", file_printname (vb->z_file));
+
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
         ASSERT0 (!vb->vcf_file, "Error: not expecting vb->vcf_file to be open already in split mode");
@@ -785,7 +787,7 @@ bool v1_vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
 
     global_max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
 
-    if (first_vcf || !flag_concat_mode) {
+    if (first_vcf || !flag_concat) {
         vb->z_file->num_lines_concat     = vb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
         vb->z_file->vcf_data_size_concat = vb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
     }
@@ -804,7 +806,7 @@ bool v1_vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     }
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if (first_vcf || !flag_concat_mode)
+    if (first_vcf || !flag_concat)
         vcffile_write_to_disk (vb->vcf_file, &vcf_header_buf);
     
     // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
@@ -839,6 +841,12 @@ bool v1_vcf_header_get_vcf_header (File *z_file,
 
     // case: not encrypted, or encrypted and we successfully decrypted it
     if (BGEN32 (header.h.magic) == GENOZIP_MAGIC) {
+
+        // this is actually just a bad v2+ file
+        RETURNW (!(header.h.section_type == SEC_VCF_HEADER && BGEN32 (header.h.compressed_offset) == sizeof(SectionHeaderVCFHeader)), 
+                 false,
+                 "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (z_file));
+        
         *uncompressed_data_size = BGEN64 (header.vcf_data_size);
         *num_samples            = BGEN32 (header.num_samples);
         *num_items_concat       = BGEN64 (header.num_lines);
@@ -846,7 +854,7 @@ bool v1_vcf_header_get_vcf_header (File *z_file,
         memcpy (created, header.created, MIN (created_len, v1_FILE_METADATA_LEN));
     }
 
-    // case: we cannot read the header - we just return 0s
+    // case: we cannot read the header (we assume its encrypted) - we just return 0s
     else {
         *uncompressed_data_size = 0;
         *num_samples            = 0;

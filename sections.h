@@ -199,7 +199,6 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint32_t num_b250_items;           // number of items in b250 items
-    uint8_t unused[3];
     DictIdType dict_id;           
 } SectionHeaderBase250;     
 

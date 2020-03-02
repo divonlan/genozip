@@ -29,6 +29,7 @@ static const char *help_genozip[] = {
     "   -p --password     <password>. Password-protected - encrypted with 256-bit AES",
     "   -m --md5          Shows the MD5 hash of the VCF file in the genozip file header. Note: genozip always calculates and stores the md5, and when the resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF. Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file",
     "   -q --quiet        Don't show the progress indicator or warnings",    
+    "   -t --test         After compressing normally, decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting decompressed file to that of the original VCF",
     "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
     "   --show-content    Show the information content of VCF files and the compression ratios of each component",
     "   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
@@ -38,7 +39,7 @@ static const char *help_genozip[] = {
     "",
     "One or more file names may be given, or if omitted, standard input is used instead",
     "",
-    "Genozip is available for free for non-commercial use. Commercial use requires a commercial license.",
+    "genozip is available for free for non-commercial use. Commercial use requires a commercial license",
 };
 
 static const char *help_genozip_developer[] = {
@@ -72,14 +73,13 @@ static const char *help_genounzip[] = {
     "   -o --output       <output-filename>. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
     "   -p --password     <password>. Provide password to access file(s) that were compressed with --password",
     "   -q --quiet        Don't show the progress indicator or warnings",    
+    "   -t --test         Decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting decompressed file to that of the original VCF",
     "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
-    "   --show-time       Show what functions are consuming the most time (useful mostly for developers of genozip)",
-    "   --show-memory     Show what buffers are consuming the most memory (useful mostly for developers of genozip)",
-    "   -h --help         Show this help page",
+    "   -h --help         Show this help page. Use with -f to see developer options.",
     "   -L --license      Show the license terms and conditions for this product",
     "   -V --version      Display version number",
     "",
-    "One or more file names may be given, or if omitted, standard input is used instead",
+    "One or more file names must be given"
 };
 
 static const char *help_genols[] = {
@@ -111,11 +111,11 @@ static const char *help_genocat[] = {
     "   -p --password     Provide password to access file(s) that were compressed with --password",
     "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
     "   -q --quiet        Don't show warnings",    
-    "   -h --help         Show this help page",
+    "   -h --help         Show this help page. Use with -f to see developer options.",
     "   -L --license      Show the license terms and conditions for this product",
     "   -V --version      Display version number",
     "",
-    "One or more file names may be given, or if omitted, standard input is used instead",
+    "One or more file names must be given",
 };
 
 static const char *help_footer[] = {

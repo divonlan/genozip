@@ -24,6 +24,13 @@ Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file r
 // global - this names go into the dictionary names on disk. to preserve backward compatability, they should not be changed.
 const char *vcf_field_names[] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
 
+void vcf_header_reset_globals()
+{
+    global_num_samples      = 0;
+    global_max_lines_per_vb = 0;
+    buf_free (&global_vcf_header_line);
+}
+
 static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffer *vcf_header)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken
@@ -45,7 +52,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
             }
 
             // subsequent files - if we're in concat mode just compare to make sure the header is the same
-            else if (flag_concat_mode && 
+            else if (flag_concat && 
                      (vcf_header->len-i != global_vcf_header_line.len || memcmp (global_vcf_header_line.data, &vcf_header->data[i], global_vcf_header_line.len))) {
 
                 fprintf (stderr, "%s: skipping %s: it has a different VCF header line than %s, see below:\n"
@@ -95,7 +102,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
     static Buffer vcf_header_text = EMPTY_BUFFER;
 
     // in concat mode, we write the header to the genozip file, only for the first vcf file
-    //bool use_vcf_header = !flag_concat_mode || !buf_is_allocated (&global_vcf_header_line) /* first vcf */;
+    //bool use_vcf_header = !flag_concat || !buf_is_allocated (&global_vcf_header_line) /* first vcf */;
     
     // line might be used as the first line, so it cannot be free at the end of this function
     // however, by the time we come here again, at the next VCF file, it is no longer needed
@@ -109,7 +116,7 @@ bool vcf_header_vcf_to_genozip (VariantBlock *vb, unsigned *line_i, Buffer **fir
 
     bool is_first_vcf = !buf_is_allocated (&global_vcf_header_line); 
 
-    bool skip_md5_vcf_header = flag_concat_mode && !is_first_vcf /* not first vcf */;
+    bool skip_md5_vcf_header = flag_concat && !is_first_vcf /* not first vcf */;
     
     while (1) {
         bool success = vcffile_get_line (vb, *line_i + 1, skip_md5_vcf_header, &vcf_header_line, "vcf_header_line");
@@ -195,7 +202,7 @@ bool vcf_header_genozip_to_vcf (VariantBlock *vb,
 
     uint32_t max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
 
-    if (first_vcf || !flag_concat_mode) {
+    if (first_vcf || flag_split) {
         vb->z_file->num_lines_concat     = vb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
         vb->z_file->vcf_data_size_concat = vb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
 

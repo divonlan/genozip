@@ -124,7 +124,7 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
 
     file->vcf_data_so_far += str_len;
 
-    if (flag_concat_mode && (!skip_md5_vcf_header || line->data[0] != '#'))  // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
+    if (flag_concat && (!skip_md5_vcf_header || line->data[0] != '#'))  // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
         md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len);
 
     md5_update (&vb->z_file->md5_ctx_single, line->data, line->len);
@@ -137,10 +137,12 @@ unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
     unsigned len = buf->len;
     char *next = buf->data;
 
-    while (len) {
-        unsigned bytes_written = file_write (vcf_file, next, len);
-        len  -= bytes_written;
-        next += bytes_written;
+    if (!flag_test) {
+        while (len) {
+            unsigned bytes_written = file_write (vcf_file, next, len);
+            len  -= bytes_written;
+            next += bytes_written;
+        }
     }
 
     md5_update (&vcf_file->md5_ctx_concat, buf->data, buf->len);
@@ -167,67 +169,4 @@ void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb)
             vb->variant_block_i, vb->first_line, vb->first_line+vb->num_lines-1, vb->num_lines, vb->vb_data_size, size_written_this_vb);
 
     COPY_TIMER (vb->profile.write);
-}
-
-void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
-{
-    const unsigned buf_size = 500000;
-
-    char *data_pipe = (char *)calloc (buf_size, 1);
-    ASSERT0 (data_pipe, "Error: Failed to allocate data_pipe");
-
-    char *data_file = (char *)calloc (buf_size, 1);
-    ASSERT0 (data_file, "Error: Failed to allocate data_file");
-
-    unsigned len_file=0, len_pipe=0;
-    uint64_t total_len=0;
-    do {
-        len_pipe = fread (data_pipe, 1, buf_size, from_pipe);
-        
-        if (vcf_file->type == VCF)
-            len_file =   fread (data_file, 1, buf_size, (FILE *)vcf_file->file);
-        else if (vcf_file->type == VCF_GZ)
-            len_file = gzfread (data_file, 1, buf_size, (gzFile)vcf_file->file);
-        else if (vcf_file->type == VCF_BZ2) 
-            len_file = BZ2_bzread ((BZFILE *)vcf_file->file, data_file, buf_size);
-        else
-            ABORT0 ("Unknown file type");
-
-        const char *failed_text = "FAILED!!! Please contact bugs@genozip.com to help fix this bug in genozip";
-
-        unsigned min_len = MIN (len_file, len_pipe);
-        bool failed = false;
-        if (memcmp (data_pipe, data_file, min_len)) {
-
-            for (int i=0; i < (int)min_len ; i++) {
-                if (data_pipe[i] != data_file[i]) {
-                    int display_start = MAX (i-50, 0);
-                    printf (
-#ifdef _MSC_VER
-                            "Data differs from pipe in character %I64u of the file. Showing the buffers around this character:\n***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", 
-#else
-                            "Data differs from pipe in character %"PRIu64" of the file. Showing the buffers around this character:\n"
-                            "***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", 
-#endif
-                            total_len + i, MIN (len_pipe, 100), &data_pipe[display_start], MIN (len_file, 100), &data_file[display_start]);                     
-                    break;
-                }
-            }
-            failed = true;
-        } 
-
-        if (len_pipe != len_file) {
-            printf ("Length differs - and zip & piz length=%u ; original file length=%u\n", len_pipe, len_file);
-            failed = true;
-        }
-
-        ASSERT (!failed, "%s", failed_text);
-
-        total_len += len_pipe;
-    } while (len_pipe);
-
-    fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
-
-    free (data_pipe);
-    free (data_file);
 }

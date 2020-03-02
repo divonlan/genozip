@@ -44,6 +44,7 @@ typedef struct {
     unsigned max_threads;
     File *vcf_file;
     File *z_file;
+    bool test_mode;
     bool is_last_file;
 
     // progress indicator stuff
@@ -58,7 +59,7 @@ typedef struct {
 static TimeSpecType profiler_timer; // wallclock
 
 Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
-                            bool is_last_file, const char *filename)
+                            bool test_mode, bool is_last_file, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
@@ -72,6 +73,7 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
     dd->max_threads   = max_threads;
     dd->vcf_file      = vcf_file;
     dd->z_file        = z_file;
+    dd->test_mode     = test_mode;
     dd->is_last_file  = is_last_file;
     dd->show_progress = !flag_quiet && !!isatty(2);
     dd->filename      = filename;
@@ -85,7 +87,7 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (dd->show_progress && !flag_split) // note: for flag_split, we print this in dispatcher_resume() 
-        fprintf (stderr, "%s %s: 0%%", global_cmd, dd->filename);
+        fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
 
     return dd;
 }
@@ -110,7 +112,7 @@ void dispatcher_resume (Dispatcher dispatcher, File *vcf_file)
     dd->filename        = vcf_file->name;
     
     if (dd->show_progress)
-        fprintf (stderr, "%s %s: 0%%", global_cmd, dd->filename);
+        fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
 }
 
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
@@ -129,11 +131,10 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     buf_free (&dd->compute_threads_buf);
     vb_release_vb (&dd->pseudo_vb);
-    //vb_release_vb (&dd->next_vb); // possibly used by terminator VB
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
-    if (!flag_concat_mode && !dd->is_last_file) vb_cleanup_memory (dd->pool_id); 
+    if (!flag_concat && !dd->is_last_file) vb_cleanup_memory (dd->pool_id); 
 
     if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing variant_block_i count between subsequent concatented files
 
@@ -191,8 +192,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
         if (dd->max_threads > 1) {
             // adjust max_threads and/or num_lines, now that we know how memory a vb consumes
             unsigned vb_memory = buf_vb_memory_consumption (dd->next_vb);
-            long long num_threads_that_fit_in_memory = MAX_32BIT_WINDOWS_MEMORY / vb_memory; // in test mode, both zip and piz are running - each side gets half of the memory
-            dd->max_threads = MIN (dd->max_threads, num_threads_that_fit_in_memory); // TO DO - play with num_lines to, not just compute threads
+            dd->max_threads = MIN (dd->max_threads, MAX_32BIT_WINDOWS_MEMORY / vb_memory); // TO DO - play with num_lines to, not just compute threads
 #ifdef DEBUG
             char str[30]; 
             printf ("\nvb_memory=%s max_threads=%u\n", buf_human_readable_size (vb_memory, str), dd->max_threads);
@@ -339,21 +339,26 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     }
 
     if (done) {
-        char time_str[70];
-        dispatcher_human_time (seconds_so_far, time_str);
+    
+        if (!dd->test_mode) {
+            char time_str[70];
+            dispatcher_human_time (seconds_so_far, time_str);
 
-        if (bytes_compressed) {
-            if (file->type == VCF)  // source file was plain VCF
-                fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
-            
-            else // source was .vcf.gz or .vcf.bz2
-                fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
-                            dd->last_len, eraser, time_str, 
-                            (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
-                            file->type == VCF_GZ ? ".gz" : ".bz2",
-                            (double)file->disk_size / (double)bytes_compressed);            // compression vs .gz/.bz2 size
+            if (bytes_compressed) {
+                if (file->type == VCF)  // source file was plain VCF
+                    fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
+                
+                else // source was .vcf.gz or .vcf.bz2
+                    fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
+                             dd->last_len, eraser, time_str, 
+                             (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
+                             file->type == VCF_GZ ? ".gz" : ".bz2",
+                             (double)file->disk_size / (double)bytes_compressed);            // compression vs .gz/.bz2 size
+            } else
+                fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);
+
         } else
-            fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);
+            fprintf (stderr, "%.*s", dd->last_len, eraser); // test result comes after
     }
 
     dd->last_percent = percent;

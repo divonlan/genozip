@@ -543,11 +543,11 @@ static void zip_write_global_area (VariantBlock *pseudo_vb, const Md5Hash *singl
 void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, unsigned max_threads, bool is_last_file)
 {
     static unsigned last_variant_block_i = 0; // used if we're concatenating files - the variant_block_i will continue from one file to the next
-    if (!flag_concat_mode) last_variant_block_i = 0; // reset if we're not concatenating
+    if (!flag_concat) last_variant_block_i = 0; // reset if we're not concatenating
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, is_last_file, vcf_basename);
+    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, false, is_last_file, vcf_basename);
 
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
@@ -626,8 +626,8 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
     if (z_file && z_file->type == GENOZIP && vcf_header_header_pos >= 0) 
         success = zfile_update_vcf_header_section_header (pseudo_vb, vcf_header_header_pos, &single_component_md5);
 
-    // if this last file - write the genozip header, random access and dictionaries
-    if (is_last_file) zip_write_global_area (pseudo_vb, &single_component_md5);
+    // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
+    if (is_last_file || !flag_concat) zip_write_global_area (pseudo_vb, &single_component_md5);
 
 finish:
     z_file->disk_size = z_file->disk_so_far;

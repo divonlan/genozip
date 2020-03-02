@@ -844,7 +844,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     if (flag_split && !sections_has_more_vcf_components (z_file)) return false; // no more components
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, is_last_file, z_basename);
+        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, flag_test, is_last_file, z_basename);
     
     VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
 
@@ -940,9 +940,17 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     Md5Hash decompressed_file_digest;
     md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
-    ASSERT (md5_is_equal (decompressed_file_digest, original_file_digest) || md5_is_zero (original_file_digest), // v1 files might be without md5
-            "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
-            vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
+    if (flag_test) {
+        if (md5_is_equal (decompressed_file_digest, original_file_digest))
+            fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
+        else
+            fprintf (stderr, "FAILED!!!\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
+                     md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
+    }
+    else
+        ASSERT (md5_is_equal (decompressed_file_digest, original_file_digest) || md5_is_zero (original_file_digest), // v1 files might be without md5
+                "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
+                vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
 
     if (flag_split) file_close (&pseudo_vb->vcf_file, pseudo_vb); // close this component file
 
