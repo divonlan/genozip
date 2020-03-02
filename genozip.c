@@ -297,7 +297,9 @@ static void main_genounzip (const char *z_filename,
 {
     static File *vcf_file = NULL; 
     File *z_file;
-    
+
+    vcf_header_reset_globals();
+
     // get input FILE
     ASSERT0 (z_filename, "Error: z_filename is NULL");
 
@@ -506,7 +508,7 @@ static void main_genozip (const char *vcf_filename,
     else if (flag_stdout) { // stdout
 #ifdef _WIN32
         // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        //ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
+        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
 #endif
         ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
@@ -531,10 +533,8 @@ static void main_genozip (const char *vcf_filename,
 
     free ((void *)basename);
 
-    if (flag_test && (!flag_concat || is_last_file)) {
-        vcf_header_reset_globals();
+    if (flag_test && (!flag_concat || is_last_file)) 
         main_genounzip (z_filename, vcf_filename, max_threads, is_last_file);
-    }
 }
 
 static void main_list_dir(const char *dirname)
