@@ -39,17 +39,25 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
         if (file_has_ext (file->name, ".vcf")) {
             file->type = VCF;
 
-            // actually open the file - unless we're just testing in genounzip
+            // don't actually open the file if we're just testing in genounzip
             if (flag_test && mode == WRITE) return file;
 
             file->file = fopen(file->name, mode == READ ? "r" : "wb"); // "wb" so Windows doesn't add ASCII 13
         }
         else if (file_has_ext (file->name, ".vcf.gz")) {
             file->type = VCF_GZ;
+
+            // don't actually open the file if we're just testing in genounzip
+            if (flag_test && mode == WRITE) return file;
+
             file->file = gzopen64 (file->name, mode == READ ? "rb" : "wb");    
         }
         else if (file_has_ext (file->name, ".vcf.bz2")) {
             file->type = VCF_BZ2;
+
+            // don't actually open the file if we're just testing in genounzip
+            if (flag_test && mode == WRITE) return file;
+
             file->file = BZ2_bzopen (file->name, mode == READ ? "rb" : "wb");    
         }
         else if (file_has_ext (file->name, ".bcf")) {
