@@ -941,11 +941,12 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
     if (flag_test) {
-        if (md5_is_equal (decompressed_file_digest, original_file_digest))
-            fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
-        else
+        if (!md5_is_equal (decompressed_file_digest, original_file_digest)) 
             fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
                      md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
+        
+        else if (!flag_quiet)
+            fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
     }
     else
         ASSERT (md5_is_equal (decompressed_file_digest, original_file_digest) || md5_is_zero (original_file_digest), // v1 files might be without md5
