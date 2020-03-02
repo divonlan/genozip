@@ -126,7 +126,7 @@ void vb_release_vb (VariantBlock **vb_p)
     // vb->column_of_zeros : we don't free this as its a constant array of zeros, of size global_max_lines_per_vb
 }
 
-static VariantBlockPool *pools[NUM_POOLS] = {NULL, NULL}; // the pools remains even between vcf files
+static VariantBlockPool *pools[NUM_POOLS] = {NULL}; // the pools remains even between vcf files
 
 void vb_create_pool (PoolId pool_id, unsigned num_vbs)
 {

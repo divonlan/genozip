@@ -13,8 +13,10 @@
 
 struct variant_block_; 
 
-#define NUM_POOLS 2 
-typedef enum { POOL_ID_UNIT_TEST=-1, POOL_ID_ZIP=0, POOL_ID_UNZIP=1 } PoolId;
+// following the cancelation of concurrent unzip and zip during --test, pools are now redundant and 
+// be removed in the future. For now, we just define one pool that is shared between zip and unzip
+#define NUM_POOLS 1
+typedef enum { POOL_ID_UNIT_TEST=-1, POOL_ID_ZIP=0, POOL_ID_UNZIP=0 } PoolId;
 
 typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_FULL_OVERLAY, BUF_PARTIAL_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
 
