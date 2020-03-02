@@ -627,6 +627,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
         success = zfile_update_vcf_header_section_header (pseudo_vb, vcf_header_header_pos, &single_component_md5);
 
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
+fprintf (stderr, "is_last_file=%u flag_concat=%u\n", is_last_file, flag_concat);
     if (is_last_file || !flag_concat) zip_write_global_area (pseudo_vb, &single_component_md5);
 
 finish:

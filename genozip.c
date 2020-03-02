@@ -506,7 +506,7 @@ static void main_genozip (const char *vcf_filename,
     else if (flag_stdout) { // stdout
 #ifdef _WIN32
         // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
+        //ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
 #endif
         ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
@@ -820,8 +820,11 @@ int main (int argc, char **argv)
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
         
         switch (command) {
-            case ZIP   : main_genozip (next_input_file, out_filename, global_max_threads, file_i==0, file_i==num_files-1); break;
+            case ZIP   : main_genozip (next_input_file, out_filename, global_max_threads, file_i==0, !next_input_file || file_i==num_files-1); 
+                         break;
+            
             case UNZIP : main_genounzip (next_input_file, out_filename, global_max_threads, file_i==num_files-1); break;
+            
             case LIST  : main_genols  (next_input_file, false, NULL, false); break;
             
             default         : ABORT ("%s: unrecognized command %c", global_cmd, command);

@@ -212,8 +212,7 @@ static void seg_info_field (VariantBlock *vb, DataLine *dl, const char *info_str
                 continue;
             }
             
-            else
-                this_name_len++; // don't count the = or ; in the len
+            else this_name_len++; // don't count the = or ; in the len
         }
         else {
             if (c == ';') { // end of value

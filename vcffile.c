@@ -113,6 +113,12 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
 
     } while (line->data[str_len-1] != '\n');
             
+    // if this file somehow passed through Windows and had \n replace by \r\n - remove the \r
+    if (str_len >= 2 && line->data[str_len-2] == '\r') {
+        line->data[str_len-2] = '\n';
+        str_len--;
+    }
+
     line->data[str_len] = '\0'; // terminate string
 
     *avg_line_len_so_far = (double)((*avg_line_len_so_far * *lines_so_far) + (str_len+1)) / (double)(*lines_so_far+1);
