@@ -539,6 +539,8 @@ void buf_destroy (VariantBlock *vb, Buffer *buf)
 
     // sanity (note: it is possible that a buffer is not in the list if it was never allocated)
     ASSERT0 (!buf->memory || i < vb->buffer_list.len, "Error: cannot find buffer in buffer_list");
+
+    memset (buf, 0, sizeof (Buffer)); // reset to factory defaults
 }
 
 void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src, 
