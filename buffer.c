@@ -234,7 +234,7 @@ void buf_display_memory_usage (PoolId pool_id, bool memory_full)
     }
 }
 
-long long buf_vb_memory_consumption (const VariantBlock *vb)
+int64_t buf_vb_memory_consumption (const VariantBlock *vb)
 {
     const Buffer *buf_list   = &vb->buffer_list;
 
