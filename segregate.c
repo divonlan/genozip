@@ -175,7 +175,7 @@ static void seg_info_field (VariantBlock *vb, DataLine *dl, const char *info_str
     unsigned iname_len = 0;
     const char *this_name = info_str;
     unsigned this_name_len = 0;
-    const char *this_value;
+    const char *this_value = NULL;
     unsigned this_value_len=0;
     unsigned sf_i=0;
 
