@@ -91,8 +91,8 @@ static inline void my_exit() { exit(1); }// an exit function so we can put a deb
 #define ASSERT0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); my_exit(); }}
 #define ASSERTW(condition, format, ...)      { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
 #define ASSERTW0(condition, string)          { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n%s\n", string); } }
-#define RETURNW(condition, ret, format, ...) { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); return (ret); }}
-#define RETURNW0(condition, ret, string)     { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n%s\n", string); return (ret); } }
+#define RETURNW(condition, ret, format, ...) { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); return ret; }}
+#define RETURNW0(condition, ret, string)     { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n%s\n", string); return ret; } }
 #define ABORT(format, ...)                   { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit();}
 #define ABORT0(string)                       { fprintf (stderr, "\n%s\n", string); my_exit();}
 

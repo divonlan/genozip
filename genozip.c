@@ -13,7 +13,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #ifdef _WIN32
 #include <process.h>
 #elif defined __APPLE__
@@ -308,11 +307,7 @@ static void main_genounzip (const char *z_filename,
     ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: \"%s\" - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
 
     // skip this file if its size is 0
-    struct stat64 st;
-    int ret = stat64(z_filename, &st);
-    ASSERT (!ret, "Error: failed accessing %s: %s", z_filename, strerror(errno));
-    ASSERTW (st.st_size, "Skipping file %s because its size is 0", z_filename);
-    if (!st.st_size) return;
+    RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
     if (!vcf_filename && !flag_stdout && !flag_split) {
         vcf_filename = (char *)malloc(fn_len + 10);
@@ -375,15 +370,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         }
 
         // filename is a directory - show directory contents (but not recursively)
-        if (!subdir) {
-            struct stat st;
-            int ret = stat (z_filename, &st);
-            ASSERT (!ret, "Error: failed to stat(%s): %s", z_filename, strerror (errno));
-
-            if (S_ISDIR (st.st_mode)) {
-                main_list_dir (z_filename);
-                return;
-            }
+        if (!subdir && file_is_dir (z_filename)) {
+            main_list_dir (z_filename);
+            return;
         }
     }
 
@@ -478,11 +467,7 @@ static void main_genozip (const char *vcf_filename,
     // get input file
     if (vcf_filename) {
         // skip this file if its size is 0
-        struct stat64 st;
-        int ret = stat64(vcf_filename, &st);
-        ASSERT (!ret, "Error: failed accessing %s: %s", vcf_filename, strerror(errno));
-        ASSERTW (st.st_size, "Skipping file %s because its size is 0", vcf_filename);
-        if (!st.st_size) return;
+        RETURNW (file_get_size (vcf_filename),, "Cannot compresss file %s because its size is 0 - skipping it", vcf_filename);
     
         // open the file
         vcf_file = file_open (vcf_filename, READ, VCF);
@@ -547,7 +532,7 @@ static void main_genozip (const char *vcf_filename,
 
     free ((void *)basename);
 
-    if (flag_test) {
+    if (flag_test && (!flag_concat || is_last_file)) {
         vcf_header_reset_globals();
         main_genounzip (z_filename, vcf_filename, max_threads, is_last_file);
     }
@@ -564,16 +549,10 @@ static void main_list_dir(const char *dirname)
     int ret = chdir (dirname);
     ASSERT (!ret, "Error: failed to chdir(%s)", dirname);
 
-    while ((ent = readdir(dir))) {
-        
-        struct stat st;
-        ret = stat (ent->d_name, &st);
-        ASSERT (!ret, "Error: failed to stat(%s): %s", ent->d_name, strerror (errno));
-
-        if (!S_ISDIR (st.st_mode))  // don't go down subdirectories recursively
+    while ((ent = readdir(dir))) 
+        if (!file_is_dir (ent->d_name))  // don't go down subdirectories recursively
             main_genols (ent->d_name, false, dirname, true);
     
-    }
     closedir(dir);    
 
     ret = chdir ("..");

@@ -944,7 +944,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
         if (md5_is_equal (decompressed_file_digest, original_file_digest))
             fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
         else
-            fprintf (stderr, "FAILED!!!\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
+            fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
                      md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
     }
     else

@@ -86,12 +86,8 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     }
 
     if (mode == READ) {
-        // get file size
-        struct stat64 st;
-        int ret = stat64(file->name, &st);
-        ASSERTW (!ret, "Warning: stat64(%s) failed: %s", file->name, strerror(errno));
 
-        file->disk_size = ret ? 0 : st.st_size;
+        file->disk_size = file_get_size (file->name);
 
         if (file->type == VCF)
             file->vcf_data_size_single = file->vcf_data_size_concat = file->disk_size; 
@@ -231,4 +227,24 @@ bool file_seek (File *file, int64_t offset, int whence, bool soft_fail)
     if (!ret) file->next_read = file->last_read = READ_BUFFER_SIZE;
 
     return !ret;
+}
+
+uint64_t file_get_size (const char *filename)
+{
+    struct stat64 st;
+    
+    int ret = stat64(filename, &st);
+    ASSERT (!ret, "Error: failed accessing %s: %s", filename, strerror(errno));
+    
+    return st.st_size;
+}
+
+bool file_is_dir (const char *filename)
+{
+    struct stat64 st;
+    
+    int ret = stat64(filename, &st);
+    ASSERT (!ret, "Error: failed accessing %s: %s", filename, strerror(errno));
+    
+    return S_ISDIR (st.st_mode);
 }
