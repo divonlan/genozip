@@ -210,7 +210,11 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
 // (and exit) or a warning (and return).
 bool file_seek (File *file, int64_t offset, int whence, bool soft_fail)
 {
+#ifdef __APPLE__
+    int ret = fseeko ((FILE *)file->file, offset, whence);
+#else
     int ret = fseeko64 ((FILE *)file->file, offset, whence);
+#endif
 
     if (soft_fail) {
         if (!flag_stdout) {
