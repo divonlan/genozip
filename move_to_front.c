@@ -201,8 +201,8 @@ uint32_t mtf_get_next_snip (VariantBlock *vb, MtfContext *ctx,
 // Process and snip - return its node index, and enter it into the directory if its not already there. Called
 // 1. During segregate - as snips are encountered in the data. No base250 encoding yet
 // 2. During mtf_merge_in_vb_ctx_one_dict_id() - to enter snips into z_file->mtf_ctx - also encoding in base250
-int32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len,
-                           MtfNode **node /* out */, bool *is_new /* optional out */) 
+uint32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip, uint32_t snip_len,
+                            MtfNode **node /* out */, bool *is_new /* optional out */) 
 {
     vb->z_section_entries[ctx->b250_section_type]++; 
 

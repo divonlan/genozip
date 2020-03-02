@@ -84,7 +84,7 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
         bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_GENOTYPE_DATA) && (i > 0);
 
         if (one_up) // note: we can't do SEC_GENOTYPE_DATA bc we can't PIZ it as many GT data types are in the same section 
-            ctx->b250.data[ctx->b250.len++] = BASE250_ONE_UP;
+            ((uint8_t *)ctx->b250.data)[ctx->b250.len++] = (uint8_t)BASE250_ONE_UP;
 
         else {
             memcpy (&ctx->b250.data[ctx->b250.len], numerals, num_numerals);
@@ -100,7 +100,7 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
     }
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
-        printf (vb->show_b250_buf.data);
+        printf ("%.*s", vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
 }
@@ -510,7 +510,7 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section
     }
 
     if (flag_show_headers && buf_is_allocated (&processed_vb->show_headers_buf))
-        fprintf (stderr, processed_vb->show_headers_buf.data);
+        printf ("%*.s", processed_vb->show_headers_buf.len, processed_vb->show_headers_buf.data);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written

@@ -452,7 +452,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
 finish:
     if (!recursive) {
-            printf (str_buf.data);
+            printf ("%.*s", str_buf.len, str_buf.data);
             buf_free (&str_buf);
     }
 }

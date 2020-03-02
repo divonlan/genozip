@@ -13,14 +13,14 @@
 #include "random_access.h"
 
 // returns the node index
-static int32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, unsigned vcf_line_i, VcfFields f, 
-                              bool *is_new) // optional out
+static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, unsigned vcf_line_i, VcfFields f, 
+                               bool *is_new) // optional out
 {
     uint32_t *this_field_section = (uint32_t *)vb->mtf_ctx[f].mtf_i.data;
 
     MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
-    int32_t node_index = mtf_evaluate_snip (vb, ctx, str, len, &node, is_new);
+    uint32_t node_index = mtf_evaluate_snip (vb, ctx, str, len, &node, is_new);
     this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
 
     vb->vcf_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
@@ -31,7 +31,7 @@ static int32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, u
 // returns true if this line has the same chrom as this VB, or if it is the first line
 static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned chrom_str_len, unsigned vcf_line_i)
 {
-    int32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vcf_line_i, CHROM, NULL);
+    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vcf_line_i, CHROM, NULL);
     uint32_t vb_line_i = vcf_line_i - vb->first_line;
     
     // case: first vb line or change in chrom - start new entry
@@ -150,7 +150,7 @@ static void seg_format_field (VariantBlock *vb, DataLine *dl,
         buf_alloc (vb, &vb->line_gt_data, format_mapper.num_subfields * global_num_samples * sizeof(uint32_t), 1, "line_gt_data", vcf_line_i); 
 
     bool is_new;
-    int32_t node_index = seg_one_field (vb, field_start, field_len, vcf_line_i, FORMAT, &is_new);
+    uint32_t node_index = seg_one_field (vb, field_start, field_len, vcf_line_i, FORMAT, &is_new);
 
     dl->format_mtf_i = node_index;
 
@@ -448,7 +448,7 @@ static void seg_genotype_area (VariantBlock *vb, DataLine *dl,
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data);
 
         MtfNode *node;
-        int32_t node_index = mtf_evaluate_snip (vb, MAPPER_CTX (format_mapper, sf), cell_gt_data, len, &node, NULL);
+        uint32_t node_index = mtf_evaluate_snip (vb, MAPPER_CTX (format_mapper, sf), cell_gt_data, len, &node, NULL);
         *(next++) = node_index;
 
         if (node_index != WORD_INDEX_MISSING_SF) // don't skip the \t if we might have more missing subfields

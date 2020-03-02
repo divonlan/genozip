@@ -116,7 +116,7 @@ static void zfile_show_header (const SectionHeader *header, VariantBlock *vb /* 
         vb->show_headers_buf.len += len;
     }
     else 
-        printf (str);
+        printf ("%s", str);
 }
 
 static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *header, 
