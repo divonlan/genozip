@@ -20,7 +20,7 @@ extern const char *vcf_field_names[];
 extern bool vcf_header_vcf_to_genozip (VariantBlockP vb, unsigned *line_i, BufferP *first_data_line);
 extern bool vcf_header_genozip_to_vcf (VariantBlockP vb, Md5Hash *digest);
 
-extern void vcf_header_reset_globals();
+extern void vcf_header_initialize();
 
 // v1 compatability
 extern bool v1_vcf_header_genozip_to_vcf (VariantBlockP vb, Md5Hash *digest);

@@ -298,7 +298,7 @@ static void main_genounzip (const char *z_filename,
     static File *vcf_file = NULL; 
     File *z_file;
 
-    vcf_header_reset_globals();
+    vcf_header_initialize();
 
     // get input FILE
     ASSERT0 (z_filename, "Error: z_filename is NULL");
