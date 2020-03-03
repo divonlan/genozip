@@ -549,16 +549,25 @@ static void main_genozip (const char *vcf_filename,
         bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
                                       NULL, NULL, &startup_info, &proc_info);
         ASSERT (success, "Error: failed CreateProcess() to run test: GetLastError=%lu", GetLastError());
+
+        // wait for child, so that the terminal doesn't print the prompt until the child is done
+        WaitForSingleObject (proc_info.hProcess, INFINITE);
+        CloseHandle (proc_info.hProcess);        
 #else
         if (!fork()) { // I am the child
             char *test_argv[6];
-            test_argv[0] = exec_name;
+            test_argv[0] = (char *)exec_name;
             test_argv[1] = "-d";
             test_argv[2] = "-t";
             test_argv[3] = z_filename;
             test_argv[4] = flag_quiet ? "-q" : NULL;
             test_argv[5] = NULL;
             execvp (exec_name, test_argv);        
+        }
+        else {  // I am the parent
+            // wait for child, so that the terminal doesn't print the prompt until the child is done
+            int status;
+            wait (&status);
         }
 #endif
         //main_genounzip (z_filename, vcf_filename, max_threads, is_last_file);
