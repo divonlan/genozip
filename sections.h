@@ -272,9 +272,9 @@ extern uint32_t sections_count_info_b250s (FileP z_file);
 extern SectionType sections_get_next_header_type (FileP z_file);
 extern bool sections_has_more_vcf_components (FileP z_file);
 extern void BGEN_sections_list (BufferP sections_list_buf);
-extern const char *st_name (unsigned sec_type);
+extern const char *st_name (SectionType sec_type);
 extern const char *dt_name (unsigned data_type);
 extern const char *encryption_name (unsigned encryption_type);
-extern void sections_show_genozip_header (SectionHeaderGenozipHeader *header);
+extern void sections_show_gheader (SectionHeaderGenozipHeader *header);
 
 #endif

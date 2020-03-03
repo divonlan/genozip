@@ -510,7 +510,7 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section
     }
 
     if (flag_show_headers && buf_is_allocated (&processed_vb->show_headers_buf))
-        printf ("%*.s", processed_vb->show_headers_buf.len, processed_vb->show_headers_buf.data);
+        buf_print (&processed_vb->show_headers_buf, false);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -527,12 +527,13 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     zfile_compress_section_data (external_vb, SEC_RANDOM_ACCESS, &file->ra_buf);
 
     // compress genozip header (including section records and footer) into external_vb->z_data
-    SectionHeaderGenozipHeader *genozip_header_header = zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5);    
+    SectionHeaderGenozipHeader genozip_header_header;
+    zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5, &genozip_header_header);    
 
     // output to disk random access and genozip header sections to disk
     zip_output_processed_vb (external_vb, NULL, NULL, true);  
 
-    if (flag_show_gheader) sections_show_genozip_header (genozip_header_header);
+    if (flag_show_gheader) sections_show_gheader (&genozip_header_header);
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 

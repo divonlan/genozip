@@ -241,6 +241,15 @@ bool file_seek (File *file, int64_t offset, int whence, bool soft_fail)
     return !ret;
 }
 
+uint64_t file_tell (File *file)
+{
+#ifdef __APPLE__
+    return ftello ((FILE *)file->file);
+#else
+    return ftello64 ((FILE *)file->file);
+#endif
+}
+
 uint64_t file_get_size (const char *filename)
 {
     struct stat64 st;

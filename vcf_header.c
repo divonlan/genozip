@@ -174,7 +174,7 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 
     static Buffer vcf_header_section = EMPTY_BUFFER;
 
-    int header_offset = zfile_read_one_section (external_vb, &vcf_header_section, "vcf_header_section", 
+    int header_offset = zfile_read_one_section (external_vb, 0, &vcf_header_section, "vcf_header_section", 
                                                 sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER);
     if (header_offset == EOF) {
         buf_free (&vcf_header_section);

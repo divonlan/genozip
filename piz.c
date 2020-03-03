@@ -817,7 +817,7 @@ static int16_t piz_read_global_area (bool need_random_access, Md5Hash *original_
    
     // read random access, but only if we are going to need it
     if (need_random_access) {
-        zfile_read_one_section (external_vb, &external_vb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
+        zfile_read_one_section (external_vb, 0, &external_vb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
 
         zfile_uncompress_section (external_vb, external_vb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
 

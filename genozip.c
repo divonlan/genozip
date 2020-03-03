@@ -46,6 +46,7 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
+int command = -1;  // must be static or global to initialize list_options 
 
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 
@@ -384,7 +385,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
 finish:
     if (!recursive) {
-            printf ("%.*s", str_buf.len, str_buf.data);
+            buf_print (&str_buf, false);
             buf_free (&str_buf);
     }
 }
@@ -461,9 +462,12 @@ static void main_genounzip (const char *z_filename,
 // genounzipping, we create a new genounzip process
 static void main_test_after_genozip (char *exec_name, char *z_filename)
 {
+    const char *password = crypt_get_password();
+
 #ifdef _WIN32
-    char *cmd_line = malloc (strlen (exec_name) + 50);
-    sprintf (cmd_line, "%s -d -t %s %s", exec_name, (flag_quiet ? "-q" : ""), z_filename);
+    char *cmd_line = malloc (strlen (exec_name) + strlen (password) + 50);
+    sprintf (cmd_line, "%s -d -t %s %s %s %s", exec_name, (flag_quiet ? "-q" : ""), 
+             (password ? "-p" : ""), (password ? password : ""), z_filename);
 
     STARTUPINFO startup_info;
     memset (&startup_info, 0, sizeof startup_info);
@@ -473,7 +477,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     memset (&proc_info, 0, sizeof proc_info);
 
     bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
-                                    NULL, NULL, &startup_info, &proc_info);
+                                  NULL, NULL, &startup_info, &proc_info);
     ASSERT (success, "Error: failed CreateProcess() to run test: GetLastError=%lu", GetLastError());
 
     // wait for child, so that the terminal doesn't print the prompt until the child is done
@@ -481,13 +485,17 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     CloseHandle (proc_info.hProcess);        
 #else
     if (!fork()) { // I am the child
-        char *test_argv[6];
-        test_argv[0] = exec_name;
-        test_argv[1] = "-d";
-        test_argv[2] = "-t";
-        test_argv[3] = z_filename;
-        test_argv[4] = flag_quiet ? "-q" : NULL;
-        test_argv[5] = NULL;
+        char *test_argv[30];
+        int test_argc = 0;
+        test_argv[test_argc++] = exec_name;
+        test_argv[test_argc++] = "-d";
+        test_argv[test_argc++] = "-t";
+        test_argv[test_argc++] = z_filename;
+        if (flag_quiet) test_argv[test_argc++] = "-q";
+        if (password)   test_argv[test_argc++] = "-p";
+        if (password)   test_argv[test_argc++] = password;
+        test_argv[test_argc] = NULL;
+        
         execvp (exec_name, test_argv);        
     }
     else {  // I am the parent
@@ -676,7 +684,6 @@ int main (int argc, char **argv)
 
     buf_initialize();
 
-    static int command = -1;  // must be static to initialize list_options 
     char *out_filename = NULL;
     char *threads_str  = NULL;
 

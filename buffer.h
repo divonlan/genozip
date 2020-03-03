@@ -60,6 +60,8 @@ extern void buf_move (VariantBlockP vb, Buffer *dst, Buffer *src);
 extern void buf_add_string (VariantBlockP vb, Buffer *buf, const char *str);
 #define bufprintf(vb, buf, format, ...)  { char s[5000]; sprintf (s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), s); }
 
+extern void buf_print (Buffer *buf, bool add_newline);
+
 extern void buf_test_overflows(ConstVariantBlockP vb);
 
 extern int64_t buf_vb_memory_consumption (ConstVariantBlockP vb);

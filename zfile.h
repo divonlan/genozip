@@ -12,7 +12,7 @@
 #include "md5.h"
 
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
-extern SectionHeaderGenozipHeader *zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_component_md5);
+extern void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_component_md5, SectionHeaderGenozipHeader *header);
 extern bool zfile_get_genozip_header (FileP z_file, uint64_t *uncompressed_data_size, uint32_t *num_samples,
                                       uint64_t *num_items_concat, Md5Hash *md5_hash_concat, char *created, unsigned created_len);
 
@@ -32,7 +32,7 @@ extern void zfile_read_one_vb (VariantBlockP vb);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
 #define MAYBE_V1 (-2) // zfile_read_one_section returns this if the first section cannot be read
-extern int zfile_read_one_section (VariantBlockP vb, 
+extern int zfile_read_one_section (VariantBlockP vb, uint32_t original_vb_i,
                                    BufferP data /* buffer to append */, const char *buf_name,
                                    unsigned header_size, SectionType expected_sec_type);
 

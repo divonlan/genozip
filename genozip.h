@@ -73,6 +73,7 @@ typedef struct mtfnode_ *MtfNodeP;
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples, global_max_lines_per_vb;
 extern const char *global_cmd;            // set once in main()
+extern int command;
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, 

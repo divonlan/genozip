@@ -30,15 +30,15 @@ void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
 
     Buffer *section_list_buf;
     uint64_t offset;
-    if (!vb->variant_block_i) {  // case 1
+    if (!vb->variant_block_i) {  // case 1 - vcf header, random access, genotype header
         section_list_buf = &vb->z_file->section_list_buf;
         offset = vb->z_file->disk_so_far + vb->z_data.len;
     }
-    else if (is_dict) {          // case 2
+    else if (is_dict) {          // case 2 - dictionaries
         section_list_buf = &vb->z_file->section_list_dict_buf;
         offset = vb->z_file->dict_data.len;
     }
-    else {                       // case 3
+    else {                       // case 3 - VB content
         section_list_buf = &vb->section_list_buf;
         offset = vb->z_data.len;
     }
@@ -116,7 +116,7 @@ bool sections_has_more_vcf_components (File *z_file)
     return z_file->sl_cursor==0 || sl[z_file->sl_cursor-1].section_type == SEC_VCF_HEADER;
 }
 
-void sections_show_genozip_header (SectionHeaderGenozipHeader *header)
+void sections_show_gheader (SectionHeaderGenozipHeader *header)
 {
     unsigned num_sections = BGEN32 (header->num_sections);
     char size_str[50];
@@ -171,9 +171,12 @@ static const char *sections_type_name (unsigned item, const char **names, unsign
     return names[item];    
 }
 
-const char *st_name(unsigned sec_type)
+const char *st_name(SectionType sec_type)
 {
     static const char *names[] = SECTIONTYPE_NAMES;
+    
+    if (sec_type == SEC_EOF) return "SEC_EOF";
+    
     return sections_type_name (sec_type, names, sizeof(names)/sizeof(names[0]));
 }
 

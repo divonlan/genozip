@@ -579,3 +579,11 @@ void buf_add_string (VariantBlock *vb, Buffer *buf, const char *str)
     buf_add (buf, str, len);
     buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
 }
+
+void buf_print (Buffer *buf, bool add_newline)
+{
+    for (unsigned i=0; i < buf->len; i++) 
+        putchar (buf->data[i]);  // safer than printf %.*s ?
+
+    if (add_newline) putchar ('\n');
+}

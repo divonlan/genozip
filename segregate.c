@@ -656,7 +656,7 @@ static void seg_data_line (VariantBlock *vb, /* may be NULL if testing */
         buf_overlay (&dl->haplotype_data, &dl->line, &vb->line_ht_data, &offset_in_line, "dl->haplotype_data", vcf_line_i);
         
         if (flag_show_alleles)
-            printf ("%.*s\n", dl->haplotype_data.len, dl->haplotype_data.data);
+            buf_print (&dl->haplotype_data, true);
     }
 
     buf_free (&vb->line_ht_data);
