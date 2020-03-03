@@ -18,11 +18,13 @@
 #elif defined __APPLE__
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
+#include <sys/wait.h>
 #include <termios.h>
 #else // LINUX
 #include <sched.h>
 #include <sys/ioctl.h>
 #include <sys/sysinfo.h>
+#include <sys/wait.h>
 #include <termios.h>
 #endif
 
@@ -457,11 +459,52 @@ static void main_genounzip (const char *z_filename,
     if (flag_replace && vcf_filename && z_filename) file_remove (z_filename); 
 }
 
+// run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
+// genounzipping, we create a new genounzip process
+static void main_test_after_genozip (char *exec_name, char *z_filename)
+{
+#ifdef _WIN32
+    char *cmd_line = malloc (strlen (exec_name) + 50);
+    sprintf (cmd_line, "%s -d -t %s %s", exec_name, (flag_quiet ? "-q" : ""), z_filename);
+
+    STARTUPINFO startup_info;
+    memset (&startup_info, 0, sizeof startup_info);
+    startup_info.cb = sizeof startup_info;
+
+    PROCESS_INFORMATION proc_info;
+    memset (&proc_info, 0, sizeof proc_info);
+
+    bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
+                                    NULL, NULL, &startup_info, &proc_info);
+    ASSERT (success, "Error: failed CreateProcess() to run test: GetLastError=%lu", GetLastError());
+
+    // wait for child, so that the terminal doesn't print the prompt until the child is done
+    WaitForSingleObject (proc_info.hProcess, INFINITE);
+    CloseHandle (proc_info.hProcess);        
+#else
+    if (!fork()) { // I am the child
+        char *test_argv[6];
+        test_argv[0] = exec_name;
+        test_argv[1] = "-d";
+        test_argv[2] = "-t";
+        test_argv[3] = z_filename;
+        test_argv[4] = flag_quiet ? "-q" : NULL;
+        test_argv[5] = NULL;
+        execvp (exec_name, test_argv);        
+    }
+    else {  // I am the parent
+        // wait for child, so that the terminal doesn't print the prompt until the child is done
+        int status;
+        wait (&status);
+    }
+#endif
+}
+
 static void main_genozip (const char *vcf_filename, 
                           char *z_filename,
                           unsigned max_threads,
                           bool is_first_file, bool is_last_file,
-                          const char *exec_name)
+                          char *exec_name)
 {
     File *vcf_file;
     static File *z_file = NULL; // static to support concat mode
@@ -534,44 +577,8 @@ static void main_genozip (const char *vcf_filename,
 
     free ((void *)basename);
 
-    if (flag_test && (!flag_concat || is_last_file)) {
-#ifdef _WIN32
-        char *cmd_line = malloc (strlen (exec_name) + 50);
-        sprintf (cmd_line, "%s -d -t %s %s", exec_name, (flag_quiet ? "-q" : ""), z_filename);
-
-        STARTUPINFO startup_info;
-        memset (&startup_info, 0, sizeof startup_info);
-        startup_info.cb = sizeof startup_info;
-
-        PROCESS_INFORMATION proc_info;
-        memset (&proc_info, 0, sizeof proc_info);
-
-        bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
-                                      NULL, NULL, &startup_info, &proc_info);
-        ASSERT (success, "Error: failed CreateProcess() to run test: GetLastError=%lu", GetLastError());
-
-        // wait for child, so that the terminal doesn't print the prompt until the child is done
-        WaitForSingleObject (proc_info.hProcess, INFINITE);
-        CloseHandle (proc_info.hProcess);        
-#else
-        if (!fork()) { // I am the child
-            char *test_argv[6];
-            test_argv[0] = (char *)exec_name;
-            test_argv[1] = "-d";
-            test_argv[2] = "-t";
-            test_argv[3] = z_filename;
-            test_argv[4] = flag_quiet ? "-q" : NULL;
-            test_argv[5] = NULL;
-            execvp (exec_name, test_argv);        
-        }
-        else {  // I am the parent
-            // wait for child, so that the terminal doesn't print the prompt until the child is done
-            int status;
-            wait (&status);
-        }
-#endif
-        //main_genounzip (z_filename, vcf_filename, max_threads, is_last_file);
-    }
+    // test the compression, if the user requested --test
+    if (flag_test && (!flag_concat || is_last_file)) main_test_after_genozip (exec_name, z_filename);
 }
 
 static void main_list_dir(const char *dirname)
