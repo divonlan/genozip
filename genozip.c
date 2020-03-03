@@ -551,7 +551,7 @@ static void main_genozip (const char *vcf_filename,
         ASSERT (success, "Error: failed CreateProcess() to run test: GetLastError=%lu", GetLastError());
 #else
         if (!fork()) { // I am the child
-            const char *test_argv[6];
+            char * const *test_argv[6];
             test_argv[0] = exec_name;
             test_argv[1] = "-d";
             test_argv[2] = "-t";
