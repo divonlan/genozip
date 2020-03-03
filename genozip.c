@@ -324,17 +324,15 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
-    static VariantBlock fake_vb;      // vars are static so they survives recursive calls
     static Buffer str_buf = EMPTY_BUFFER; 
-    memset (&fake_vb, 0, sizeof(fake_vb));
-
+    
     if (finalize) {
         if (files_listed > 1) {
             buf_human_readable_size(total_compressed_len, c_str);
             buf_human_readable_size(total_uncompressed_len, u_str);
             unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            bufprintf (&fake_vb, &str_buf, foot_format, c_str, u_str, ratio);
+            bufprintf (external_vb, &str_buf, foot_format, c_str, u_str, ratio);
         }
         
         ASSERTW (!files_ignored, "\nIgnored %u file%s that %s not have a .vcf" GENOZIP_EXT " extension\n\n", 
@@ -344,7 +342,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     }
 
     if (first_file) {
-        bufprintf (&fake_vb, &str_buf, head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", " MD5 (of original VCF)           ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        bufprintf (external_vb, &str_buf, head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", " MD5 (of original VCF)           ", -(int)FILENAME_WIDTH, "Name", "Creation");
         first_file = false;
     }
     
@@ -370,7 +368,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     buf_human_readable_size (vcf_data_size, u_str);
     buf_human_readable_uint (num_lines, s_str);
 
-    bufprintf (&fake_vb, &str_buf, item_format, num_samples, s_str, 
+    bufprintf (external_vb, &str_buf, item_format, num_samples, s_str, 
                c_str, u_str, ratio, 
                md5_display (&md5_hash_concat, true),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
@@ -382,7 +380,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     files_listed++;
 
-    file_close (&z_file, NULL);
+    file_close (&z_file, false);
 
 finish:
     if (!recursive) {
@@ -450,9 +448,9 @@ static void main_genounzip (const char *z_filename,
         // don't close the concatenated file - it will close with the process exits
         // don't close in split mode - piz_dispatcher() opens and closes each component
         // don't close stdout - in concat mode, we might still need it for the next file
-        file_close (&vcf_file, NULL); 
+        file_close (&vcf_file, false); 
 
-    file_close (&z_file, NULL);
+    file_close (&z_file, false);
 
     free ((void *)basename);
 
@@ -568,10 +566,10 @@ static void main_genozip (const char *vcf_filename,
 
     bool remove_vcf_file = z_file && flag_replace && vcf_filename;
 
-    file_close (&vcf_file, NULL);
+    file_close (&vcf_file, false);
 
     if ((is_last_file || !flag_concat) && !flag_stdout && z_file) 
-        file_close (&z_file, NULL); 
+        file_close (&z_file, false); 
 
     if (remove_vcf_file) file_remove (vcf_filename); 
 

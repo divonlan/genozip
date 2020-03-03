@@ -31,6 +31,8 @@ static uint64_t abandoned_mem_high_watermark = 0;
 void buf_initialize()
 {
     pthread_mutex_init (&overlay_mutex, NULL);
+
+    vb_external_vb_initialize();
 }
 
 char *buf_human_readable_size (int64_t size, char *str /* out */)
@@ -163,7 +165,7 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
 }
 
-void buf_display_memory_usage (PoolId pool_id, bool memory_full)
+void buf_display_memory_usage (bool memory_full)
 {
     #define MAX_MEMORY_STATS 100
     static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
@@ -174,11 +176,12 @@ void buf_display_memory_usage (PoolId pool_id, bool memory_full)
     else
         fprintf (stderr, "\n-------------------------------------------------------------------------------------\n");
 
-    VariantBlockPool *vb_pool = vb_get_pool (pool_id);
+    VariantBlockPool *vb_pool = vb_get_pool ();
 
-    for (unsigned vb_i=0; vb_i < vb_pool->num_vbs; vb_i++) {
+    for (int vb_i=-1; vb_i < vb_pool->num_vbs; vb_i++) {
 
-        Buffer *buf_list = &vb_pool->vb[vb_i].buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
+        Buffer *buf_list = (vb_i == -1) ? &external_vb->buffer_list
+                                        : &vb_pool->vb[vb_i].buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
 
         if (!buf_list->len) continue; // no buffers allocated yet for this VB
 
@@ -275,7 +278,7 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
     if (!buf->memory) {
         buf_test_overflows(vb);
 #ifdef DEBUG
-        buf_display_memory_usage (vb->pool_id, true);
+        buf_display_memory_usage (true);
 #endif
         ABORT ("Error: Failed to allocate %u bytes name=%s param=%u", size + overhead_size, name, param);
     }

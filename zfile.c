@@ -613,47 +613,17 @@ int zfile_read_one_section (VariantBlock *vb,
                 "Error: failed to read section data, section_type=%s: %s", st_name(header->section_type), strerror (errno));
     }
 
-/*    if (expected_sec_type == SEC_VB_HEADER && header->variant_block_i == 0) { // vcf component terminator
-        data->len = header_offset; // rewind data
-        return; 
-    }    
-
-    bool is_vcf_component_terminator = (expected_sec_type == SEC_VB_HEADER && header->variant_block_i == 0); 
-
-    // case: when showing the concatenated file, ignore the VCF component terminator and after that, ignore the 
-    // next component's VCF header
-    if (!flag_split && zfile->num_vcf_components_so_far < zfile->num_vcf_components) {
-        // first, it will enter this if statement, and call ourselves recursively
-        if (is_vcf_component_terminator) { 
-            data->len = header_offset; // rewind data
-            return vcf_header_genozip_to_vcf (vb, NULL, data, buf_name); // this calls us (zfile_read_one_section) for SEC_VCF_HEADER
-            //return zfile_read_one_section (vb, data, buf_name, sizeof (SectionHeaderVCFHeader), SEC_VCF_HEADER);
-        }
-
-        // in the recursive call from vcf_header_genozip_to_vcf, it will enter this if statement, 
-        // and after returning vcf_header_genozip_to_vcf will call us once more to read the next VB header section
-        if (zfile->vcf_data_size_concat > 0 && expected_sec_type == SEC_VCF_HEADER) { // not first VCF component in file 
-            data->len = header_offset; // rewind data
-        }
-    }
-
-    // case: we encountered a terminator VB header, and not expecting any concatenated vcf components
-    else if (is_vcf_component_terminator) return EOF;
-*/
-//    if (expected_sec_type == SEC_VCF_HEADER) 
-//        zfile->num_vcf_components_so_far++;
-
     return header_offset;
 }
 
-void zfile_read_all_dictionaries (VariantBlock *pseudo_vb, uint32_t last_vb_i /* 0 means all VBs */)
+void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */)
 {
-    File *zfile = pseudo_vb->z_file;
+    File *zfile = external_vb->z_file;
 
-    SectionListEntry *seclist = (SectionListEntry *)pseudo_vb->z_file->section_list_buf.data;
+    SectionListEntry *seclist = (SectionListEntry *)external_vb->z_file->section_list_buf.data;
 
     bool first=true;
-    for (unsigned i=0; i < pseudo_vb->z_file->section_list_buf.len; i++) {
+    for (unsigned i=0; i < external_vb->z_file->section_list_buf.len; i++) {
     
         if (!section_type_is_dictionary(seclist[i].section_type)) continue;
 
@@ -665,17 +635,17 @@ void zfile_read_all_dictionaries (VariantBlock *pseudo_vb, uint32_t last_vb_i /*
             first = false;
         }
 
-        zfile_read_one_section (pseudo_vb, &pseudo_vb->z_data, "z_data", sizeof(SectionHeaderDictionary), seclist[i].section_type);    
+        zfile_read_one_section (external_vb, &external_vb->z_data, "z_data", sizeof(SectionHeaderDictionary), seclist[i].section_type);    
 
         // update dictionaries in z_file->mtf_ctx with dictionary data 
-        mtf_integrate_dictionary_fragment (pseudo_vb, pseudo_vb->z_data.data);
+        mtf_integrate_dictionary_fragment (external_vb, external_vb->z_data.data);
 
-        buf_free (&pseudo_vb->z_data);
+        buf_free (&external_vb->z_data);
     }
 
     if (flag_show_dict || dict_id_show_one_dict.num) 
-        for (uint32_t did_i=0; did_i < pseudo_vb->z_file->num_dict_ids; did_i++) {
-            MtfContext *ctx = &pseudo_vb->z_file->mtf_ctx[did_i];
+        for (uint32_t did_i=0; did_i < external_vb->z_file->num_dict_ids; did_i++) {
+            MtfContext *ctx = &external_vb->z_file->mtf_ctx[did_i];
 
             if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num) 
                 printf ("%.*s\t", ctx->dict.len, ctx->dict.data);
@@ -778,9 +748,9 @@ void zfile_read_one_vb (VariantBlock *vb)
 }
 
 // returns the read data IF this is an invalid v2+ file, and hence might be v1
-int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // out
+int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 {
-    File *zfile = pseudo_vb->z_file;
+    File *zfile = external_vb->z_file;
 
     // read the footer from the end of the file
     file_seek (zfile, -sizeof(SectionFooterGenozipHeader), SEEK_END, false);
@@ -801,10 +771,10 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
     file_seek (zfile, genozip_header_offset, SEEK_SET, false);
 
     // note: for v1, we will use this function only for the very first VCF header (which will tell us this is v1)
-    ret = zfile_read_one_section (pseudo_vb, &pseudo_vb->z_data, "genozip_header", sizeof(SectionHeaderGenozipHeader), SEC_GENOZIP_HEADER);
+    ret = zfile_read_one_section (external_vb, &external_vb->z_data, "genozip_header", sizeof(SectionHeaderGenozipHeader), SEC_GENOZIP_HEADER);
     ASSERT0 (ret != EOF, "Error: unexpected EOF when reading genozip header");
     
-    SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)pseudo_vb->z_data.data;
+    SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)external_vb->z_data.data;
 
     int data_type = BGEN16 (header->data_type); 
     ASSERT (data_type == DATA_TYPE_VCF, "Error: unrecognized data_type=%d", data_type);
@@ -821,7 +791,7 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
 
         if (!crypt_have_password()) crypt_prompt_for_password();
 
-        crypt_do (pseudo_vb, header->password_test, sizeof(header->password_test), 0, -SEC_GENOZIP_HEADER); // decrypt password test
+        crypt_do (external_vb, header->password_test, sizeof(header->password_test), 0, -SEC_GENOZIP_HEADER); // decrypt password test
 
         ASSERT (!memcmp (header->password_test, password_test_string, sizeof(header->password_test)),
                 "Error: password is wrong for file %s", file_printname (zfile));
@@ -832,19 +802,18 @@ int16_t zfile_read_genozip_header (VariantBlock *pseudo_vb, Md5Hash *digest) // 
     zfile->num_vcf_components = BGEN32 (header->num_vcf_components);
     *digest                   = header->md5_hash_concat; 
 
-    zfile_uncompress_section (pseudo_vb, header, &zfile->section_list_buf, "zfile->section_list_buf", SEC_GENOZIP_HEADER);
+    zfile_uncompress_section (external_vb, header, &zfile->section_list_buf, "zfile->section_list_buf", SEC_GENOZIP_HEADER);
     zfile->section_list_buf.len /= sizeof (SectionListEntry); // fix len
     BGEN_sections_list (&zfile->section_list_buf);
 
-    buf_free (&pseudo_vb->z_data);
+    buf_free (&external_vb->z_data);
 
     return data_type;
 }
 
-SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_vb, uint16_t data_type, 
-                                                           const Md5Hash *single_component_md5)
+SectionHeaderGenozipHeader *zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_component_md5)
 {
-    File *zfile = pseudo_vb->z_file;
+    File *zfile = external_vb->z_file;
 
     // start with just the fields needed by sections_add_to_list
     SectionHeaderGenozipHeader header;
@@ -853,7 +822,7 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
 
     // "manually" add the genozip section to the section list - normally it is added in zfile_compress()
     // but in this case the genozip section containing the list will already be ready...
-    sections_add_to_list (pseudo_vb, &header.h);
+    sections_add_to_list (external_vb, &header.h);
 
     bool is_encrypted = crypt_have_password();
 
@@ -886,17 +855,17 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
 
     if (is_encrypted) {
         memcpy (header.password_test, password_test_string, sizeof(header.password_test));
-        crypt_do (pseudo_vb, header.password_test, sizeof(header.password_test), 0, -SEC_GENOZIP_HEADER);
+        crypt_do (external_vb, header.password_test, sizeof(header.password_test), 0, -SEC_GENOZIP_HEADER);
     }
 
-    Buffer *z_data = &pseudo_vb->z_data;
+    Buffer *z_data = &external_vb->z_data;
 
     uint64_t genozip_header_offset = zfile->disk_so_far + z_data->len; // capture before zfile_compress that increases len
 
     uint32_t len_before = z_data->len; // len and not pointer - it may be reallocted
     
     // compress section into z_data - to be eventually written to disk by the I/O thread
-    zfile_compress (pseudo_vb, z_data, (SectionHeader*)&header, zfile->section_list_buf.data);
+    zfile_compress (external_vb, z_data, (SectionHeader*)&header, zfile->section_list_buf.data);
 
     // add a footer to this section - this footer appears AFTER the genozip header data, 
     // facilitating reading the genozip header in reverse from the end of the file
@@ -904,10 +873,10 @@ SectionHeaderGenozipHeader *zfile_compress_genozip_header (VariantBlock *pseudo_
     footer.magic                 = BGEN32 (GENOZIP_MAGIC);
     footer.genozip_header_offset = BGEN64 (genozip_header_offset);
 
-    buf_alloc (pseudo_vb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data", 0);
+    buf_alloc (external_vb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data", 0);
     memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
     z_data->len += sizeof(SectionFooterGenozipHeader);
-    pseudo_vb->z_section_bytes[SEC_GENOZIP_HEADER] += sizeof(SectionFooterGenozipHeader);
+    external_vb->z_section_bytes[SEC_GENOZIP_HEADER] += sizeof(SectionFooterGenozipHeader);
     
     return (SectionHeaderGenozipHeader *)&z_data->data[len_before];
 }
@@ -961,33 +930,33 @@ bool zfile_get_genozip_header (File *z_file,
 // the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
 // when we're done. num_lines can only be known after we're done with this VCF component.
 // if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
-bool zfile_update_vcf_header_section_header (VariantBlock *vb, off64_t pos_of_current_vcf_header, Md5Hash *md5 /* out */)
+bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, Md5Hash *md5 /* out */)
 {
     // rewind to beginning of current (latest) vcf header - nothing to do if we can't
-    if (!file_seek (vb->z_file, pos_of_current_vcf_header, SEEK_SET, true)) return false;
+    if (!file_seek (external_vb->z_file, pos_of_current_vcf_header, SEEK_SET, true)) return false;
 
     unsigned len = crypt_padded_len (sizeof (SectionHeaderVCFHeader));
 
     // update the header of the single (current) vcf. 
-    SectionHeaderVCFHeader *curr_header = &vb->z_file->vcf_header_single;
-    curr_header->vcf_data_size = BGEN64 (vb->z_file->vcf_data_size_single);
-    curr_header->num_lines     = BGEN64 (vb->z_file->num_lines_single);
+    SectionHeaderVCFHeader *curr_header = &external_vb->z_file->vcf_header_single;
+    curr_header->vcf_data_size = BGEN64 (external_vb->z_file->vcf_data_size_single);
+    curr_header->num_lines     = BGEN64 (external_vb->z_file->num_lines_single);
     
-    md5_finalize (&vb->z_file->md5_ctx_single, &curr_header->md5_hash_single);
+    md5_finalize (&external_vb->z_file->md5_ctx_single, &curr_header->md5_hash_single);
     *md5 = curr_header->md5_hash_single;
     if (flag_md5) printf ("MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
 
     if (pos_of_current_vcf_header == 0) 
-        vb->z_file->vcf_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 
+        external_vb->z_file->vcf_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 
 
     // encrypt if needed
     if (crypt_have_password()) 
-        crypt_do (vb, (uint8_t *)curr_header, len, 0, -1); // 0,-1 are the VCF header's header
+        crypt_do (external_vb, (uint8_t *)curr_header, len, 0, -1); // 0,-1 are the VCF header's header
 
-    file_write (vb->z_file, curr_header, len);
-    fflush ((FILE*)vb->z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
+    file_write (external_vb->z_file, curr_header, len);
+    fflush ((FILE*)external_vb->z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
     
-    file_seek (vb->z_file, 0, SEEK_END, false); // return to the end of the file
+    file_seek (external_vb->z_file, 0, SEEK_END, false); // return to the end of the file
 
     return true; // success
 }

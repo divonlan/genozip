@@ -26,8 +26,6 @@ typedef struct {
 } Thread;
 
 typedef struct {
-    PoolId pool_id;
-    VariantBlock *pseudo_vb;
     unsigned max_vb_id_so_far; 
     Buffer compute_threads_buf;
     Thread *compute_threads;
@@ -58,7 +56,7 @@ typedef struct {
 
 static TimeSpecType profiler_timer; // wallclock
 
-Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previous_vb_i, File *vcf_file, File *z_file,
+Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *vcf_file, File *z_file,
                             bool test_mode, bool is_last_file, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
@@ -68,7 +66,6 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
 
     clock_gettime(CLOCK_REALTIME, &dd->start_time); 
 
-    dd->pool_id       = pool_id;
     dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the variant_block_i will continue from one file to the next
     dd->max_threads   = max_threads;
     dd->vcf_file      = vcf_file;
@@ -79,11 +76,12 @@ Dispatcher dispatcher_init (unsigned max_threads, PoolId pool_id, unsigned previ
     dd->filename      = filename;
     dd->last_len      = 2;
 
-    vb_create_pool (pool_id, MAX (2,max_threads)+1 /* +1 for pseudo-vb */);
+    vb_create_pool (MAX (2,max_threads));
 
-    dd->pseudo_vb = vb_get_vb (dd->pool_id, vcf_file, z_file, 0);
+    external_vb->vcf_file = vcf_file;
+    external_vb->z_file   = z_file;
 
-    buf_alloc (dd->pseudo_vb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
+    buf_alloc (external_vb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (dd->show_progress && !flag_split) // note: for flag_split, we print this in dispatcher_resume() 
@@ -119,22 +117,22 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 {
     DispatcherData *dd = (DispatcherData *)*dispatcher;
 
-    COPY_TIMER (dd->pseudo_vb->profile.wallclock);
+    COPY_TIMER (external_vb->profile.wallclock);
 
     if (flag_show_time) 
-        profiler_print_report (&dd->pseudo_vb->profile, 
+        profiler_print_report (&external_vb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far,
                                dd->filename, dd->next_vb_i);
 
     // must be before vb_cleanup_memory() 
-    if (flag_show_memory) buf_display_memory_usage (dd->pool_id, false);    
+    if (flag_show_memory) buf_display_memory_usage (false);    
 
     buf_free (&dd->compute_threads_buf);
-    vb_release_vb (&dd->pseudo_vb);
+    vb_release_vb (&external_vb);
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
-    if (!flag_concat && !dd->is_last_file) vb_cleanup_memory (dd->pool_id); 
+    if (!flag_concat && !dd->is_last_file) vb_cleanup_memory(); 
 
     if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing variant_block_i count between subsequent concatented files
 
@@ -158,7 +156,7 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher)
 
     dd->next_vb_i++;
 
-    dd->next_vb = vb_get_vb (dd->pool_id, dd->vcf_file, dd->z_file, dd->next_vb_i);
+    dd->next_vb = vb_get_vb (dd->vcf_file, dd->z_file, dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
 
     return dd->next_vb;
@@ -252,12 +250,6 @@ VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->next_vb;
-}
-
-VariantBlock *dispatcher_get_pseudo_vb (Dispatcher dispatcher)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-    return dd->pseudo_vb;
 }
 
 static void dispatcher_human_time (unsigned secs, char *str /* out */)
@@ -375,7 +367,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
         buf_test_overflows(dd->processed_vb); // just to be safe, this isn't very expensive
 
         if (flag_show_time) 
-            profiler_add (&dd->pseudo_vb->profile, &dd->processed_vb->profile);
+            profiler_add (&external_vb->profile, &dd->processed_vb->profile);
 
         vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
     }

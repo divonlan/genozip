@@ -805,27 +805,26 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 }
 
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
-static int16_t piz_read_global_area (VariantBlock *pseudo_vb, bool need_random_access,
-                                     Md5Hash *original_file_digest) // out
+static int16_t piz_read_global_area (bool need_random_access, Md5Hash *original_file_digest) // out
 {
-    File *zfile = pseudo_vb->z_file;
+    File *zfile = external_vb->z_file;
 
-    int16_t data_type = zfile_read_genozip_header (pseudo_vb, original_file_digest);
+    int16_t data_type = zfile_read_genozip_header (original_file_digest);
     if (data_type == MAYBE_V1 || data_type == EOF) return data_type;
 
     // read dictionaries
-    zfile_read_all_dictionaries (pseudo_vb, 0);
+    zfile_read_all_dictionaries (0);
    
     // read random access, but only if we are going to need it
     if (need_random_access) {
-        zfile_read_one_section (pseudo_vb, &pseudo_vb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
+        zfile_read_one_section (external_vb, &external_vb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
 
-        zfile_uncompress_section (pseudo_vb, pseudo_vb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
+        zfile_uncompress_section (external_vb, external_vb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
 
         zfile->ra_buf.len /= random_access_sizeof_entry();
         BGEN_random_access (&zfile->ra_buf);
 
-        buf_free (&pseudo_vb->z_data);
+        buf_free (&external_vb->z_data);
     }
 
     file_seek (zfile, 0, SEEK_SET, false);
@@ -844,17 +843,15 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     if (flag_split && !sections_has_more_vcf_components (z_file)) return false; // no more components
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (max_threads, POOL_ID_UNZIP, 0, vcf_file, z_file, flag_test, is_last_file, z_basename);
+        dispatcher = dispatcher_init (max_threads, 0, vcf_file, z_file, flag_test, is_last_file, z_basename);
     
-    VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
-
     // read genozip header
     Md5Hash original_file_digest;
     
     // read genozip header and set the data type when reading the first vcf component of in case of --split, 
     static int16_t data_type = EOF; 
     if (is_first_vcf_component) {
-        data_type = piz_read_global_area (pseudo_vb, true, &original_file_digest);
+        data_type = piz_read_global_area (true, &original_file_digest);
 
         if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
             ASSERT (sections_get_next_header_type(z_file) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
@@ -867,12 +864,12 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
             file_printname (z_file));
 
     // read and write VCF header. in split mode this also opens vcf_file
-    piz_successful = (data_type != MAYBE_V1) ? vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest)
-                                             : v1_vcf_header_genozip_to_vcf (pseudo_vb, &original_file_digest);
+    piz_successful = (data_type != MAYBE_V1) ? vcf_header_genozip_to_vcf (&original_file_digest)
+                                             : v1_vcf_header_genozip_to_vcf (&original_file_digest);
 
     if (!piz_successful) goto finish; // empty file - not an error
     
-    vcf_file = pseudo_vb->vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
+    vcf_file = external_vb->vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
 
     if (flag_split) 
         dispatcher_resume (dispatcher, vcf_file); // accept more input 
@@ -900,7 +897,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
 
                     case SEC_VCF_HEADER: // 2nd+ vcf header of a concatenated file
                         if (!flag_split) {
-                            vcf_header_genozip_to_vcf (pseudo_vb, NULL); // skip 2nd+ vcf header if concatenating
+                            vcf_header_genozip_to_vcf (NULL); // skip 2nd+ vcf header if concatenating
                             continue;
                         }
                         break; // eof if splitting
@@ -953,7 +950,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
                 "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
                 vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
 
-    if (flag_split) file_close (&pseudo_vb->vcf_file, pseudo_vb); // close this component file
+    if (flag_split) file_close (&external_vb->vcf_file, true); // close this component file
 
 finish:
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

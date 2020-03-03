@@ -275,6 +275,6 @@ extern void BGEN_sections_list (BufferP sections_list_buf);
 extern const char *st_name (unsigned sec_type);
 extern const char *dt_name (unsigned data_type);
 extern const char *encryption_name (unsigned encryption_type);
-extern void sections_show_genozip_header (VariantBlockP pseudo_vb, SectionHeaderGenozipHeader *header);
+extern void sections_show_genozip_header (SectionHeaderGenozipHeader *header);
 
 #endif

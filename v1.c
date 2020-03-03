@@ -748,38 +748,38 @@ void v1_piz_uncompress_all_sections (VariantBlock *vb)
 #ifdef V1_VCF_HEADER
 
 // returns true if there's a file or false if its an empty file
-bool v1_vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
+bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
 {
     // read vcf header if its not already read. it maybe already read, if we're in flag_split mode, for second component onwards
     // (it would have been read by previous component and stored for us)
-    if (!buf_is_allocated (&vb->z_file->v1_next_vcf_header) ||
-        vb->z_file->v1_next_vcf_header.len < sizeof(v1_SectionHeaderVCFHeader)) { // first VCF header, data moved here by zfile_read_genozip_header()
+    if (!buf_is_allocated (&external_vb->z_file->v1_next_vcf_header) ||
+        external_vb->z_file->v1_next_vcf_header.len < sizeof(v1_SectionHeaderVCFHeader)) { // first VCF header, data moved here by zfile_read_genozip_header()
         
         int ret;
-        ret = v1_zfile_read_one_section (vb, &vb->z_file->v1_next_vcf_header, "z_file->v1_next_vcf_header", 
+        ret = v1_zfile_read_one_section (external_vb, &external_vb->z_file->v1_next_vcf_header, "z_file->v1_next_vcf_header", 
                                          sizeof(v1_SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
 
         if (ret == EOF) {
-            buf_free (&vb->z_file->v1_next_vcf_header);
+            buf_free (&external_vb->z_file->v1_next_vcf_header);
             return false; // empty file (or in case of split mode - no more components) - not an error
         }
     }
 
     // handle the GENOZIP header of the VCF header section
-    v1_SectionHeaderVCFHeader *header = (v1_SectionHeaderVCFHeader *)vb->z_file->v1_next_vcf_header.data;
+    v1_SectionHeaderVCFHeader *header = (v1_SectionHeaderVCFHeader *)external_vb->z_file->v1_next_vcf_header.data;
 
-    vb->z_file->genozip_version = header->genozip_version;
+    external_vb->z_file->genozip_version = header->genozip_version;
     
     ASSERT0 (header->genozip_version == 1, "Error: v1_vcf_header_genozip_to_vcf() can only handle v1 VCF Header sections");
 
     ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(v1_SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(v1_SectionHeaderVCFHeader));
 
-    ASSERT (!flag_test, "Error when testing %s: --test option is not supported for files compressed with genozip version 1", file_printname (vb->z_file));
+    ASSERT (!flag_test, "Error when testing %s: --test option is not supported for files compressed with genozip version 1", file_printname (external_vb->z_file));
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
-        ASSERT0 (!vb->vcf_file, "Error: not expecting vb->vcf_file to be open already in split mode");
-        vb->vcf_file = file_open (header->vcf_filename, WRITE, VCF);
+        ASSERT0 (!external_vb->vcf_file, "Error: not expecting external_vb->vcf_file to be open already in split mode");
+        external_vb->vcf_file = file_open (header->vcf_filename, WRITE, VCF);
     }
 
     extern Buffer global_vcf_header_line; // defined in vcf_header.c
@@ -788,31 +788,31 @@ bool v1_vcf_header_genozip_to_vcf (VariantBlock *vb, Md5Hash *digest)
     global_max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
 
     if (first_vcf || !flag_concat) {
-        vb->z_file->num_lines_concat     = vb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
-        vb->z_file->vcf_data_size_concat = vb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
+        external_vb->z_file->num_lines_concat     = external_vb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
+        external_vb->z_file->vcf_data_size_concat = external_vb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
     }
 
     *digest = flag_split ? header->md5_hash_single : header->md5_hash_concat;
         
     // now get the text of the VCF header itself
     static Buffer vcf_header_buf = EMPTY_BUFFER;
-    zfile_uncompress_section (vb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
+    zfile_uncompress_section (external_vb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
 
-    bool can_concatenate = vcf_header_set_globals (vb, vb->z_file->name, &vcf_header_buf);
+    bool can_concatenate = vcf_header_set_globals (external_vb, external_vb->z_file->name, &vcf_header_buf);
     if (!can_concatenate) {
-        buf_free (&vb->z_file->v1_next_vcf_header);
+        buf_free (&external_vb->z_file->v1_next_vcf_header);
         buf_free (&vcf_header_buf);
         return false;
     }
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
     if (first_vcf || !flag_concat)
-        vcffile_write_to_disk (vb->vcf_file, &vcf_header_buf);
+        vcffile_write_to_disk (external_vb->vcf_file, &vcf_header_buf);
     
     // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
-    else md5_update (&vb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
+    else md5_update (&external_vb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
 
-    buf_free (&vb->z_file->v1_next_vcf_header);
+    buf_free (&external_vb->z_file->v1_next_vcf_header);
     buf_free (&vcf_header_buf);
 
     return true;
@@ -834,9 +834,7 @@ bool v1_vcf_header_get_vcf_header (File *z_file,
     // case: encrypted, and we have a password
     if (BGEN32 (header.h.magic) != GENOZIP_MAGIC && // possibly encrypted
         crypt_have_password()) {
-        VariantBlock fake_vb;
-        memset (&fake_vb, 0, sizeof(fake_vb));
-        crypt_do (&fake_vb, (uint8_t *)&header, crypt_padded_len (sizeof (v1_SectionHeaderVCFHeader)), 0, -1);
+        crypt_do (external_vb, (uint8_t *)&header, crypt_padded_len (sizeof (v1_SectionHeaderVCFHeader)), 0, -1);
     }
 
     // case: not encrypted, or encrypted and we successfully decrypted it

@@ -116,7 +116,7 @@ bool sections_has_more_vcf_components (File *z_file)
     return z_file->sl_cursor==0 || sl[z_file->sl_cursor-1].section_type == SEC_VCF_HEADER;
 }
 
-void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozipHeader *header)
+void sections_show_genozip_header (SectionHeaderGenozipHeader *header)
 {
     unsigned num_sections = BGEN32 (header->num_sections);
     char size_str[50];
@@ -135,12 +135,12 @@ void sections_show_genozip_header (VariantBlock *pseudo_vb, SectionHeaderGenozip
 
     printf ("  sections:\n");
 
-    SectionListEntry *ents = (SectionListEntry *)pseudo_vb->z_file->section_list_buf.data;
+    SectionListEntry *ents = (SectionListEntry *)external_vb->z_file->section_list_buf.data;
 
     for (unsigned i=0; i < num_sections; i++) {
      
         uint64_t this_offset = BGEN64 (ents[i].offset);
-        uint64_t next_offset = (i < num_sections-1) ? BGEN64 (ents[i+1].offset) : pseudo_vb->z_file->disk_so_far;
+        uint64_t next_offset = (i < num_sections-1) ? BGEN64 (ents[i+1].offset) : external_vb->z_file->disk_so_far;
 
         printf ("    %3u. %-24.24s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 

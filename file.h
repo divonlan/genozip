@@ -92,7 +92,7 @@ typedef struct file_ {
 typedef enum {READ, WRITE} FileMode;
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
-extern void file_close (FileP *vcf_file_p, VariantBlockP pseudo_vb /* optional */);
+extern void file_close (FileP *vcf_file_p, bool cleanup_memory /* optional */);
 extern size_t file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail);
 extern uint64_t file_get_size (const char *filename);

@@ -13,10 +13,6 @@
 
 struct variant_block_; 
 
-// in --test, we seperate the memory pools of zip and unzip to make sure they don't step on each other
-#define NUM_POOLS 2
-typedef enum { POOL_ID_UNIT_TEST=-1, POOL_ID_ZIP=0, POOL_ID_UNZIP=1 } PoolId;
-
 typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_FULL_OVERLAY, BUF_PARTIAL_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
 
 typedef struct buffer_ {
@@ -67,7 +63,7 @@ extern void buf_add_string (VariantBlockP vb, Buffer *buf, const char *str);
 extern void buf_test_overflows(ConstVariantBlockP vb);
 
 extern int64_t buf_vb_memory_consumption (ConstVariantBlockP vb);
-extern void buf_display_memory_usage (PoolId pool_id, bool memory_full);
+extern void buf_display_memory_usage (bool memory_full);
 
 extern char *buf_human_readable_size (int64_t size, char *str /* out */);
 extern char *buf_human_readable_uint (int64_t n, char *str /* out */);

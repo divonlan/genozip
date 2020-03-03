@@ -9,6 +9,12 @@
 #include "vb.h"
 #include "move_to_front.h"
 
+// pool of VBs allocated based on number of threads
+static VariantBlockPool *pool = NULL;
+
+// one VB outside of pool
+VariantBlock *external_vb = NULL;
+
 unsigned vb_num_samples_in_sb(const VariantBlock *vb, unsigned sb_i)
 {
     return sb_i < vb->num_sample_blocks-1 ? vb->num_samples_per_block 
@@ -126,53 +132,50 @@ void vb_release_vb (VariantBlock **vb_p)
     // vb->column_of_zeros : we don't free this as its a constant array of zeros, of size global_max_lines_per_vb
 }
 
-static VariantBlockPool *pools[NUM_POOLS] = {NULL}; // the pools remains even between vcf files
-
-void vb_create_pool (PoolId pool_id, unsigned num_vbs)
+void vb_create_pool (unsigned num_vbs)
 {
-    ASSERT (!pools[pool_id] || num_vbs==pools[pool_id]->num_vbs, 
-            "Error: pool %u already exists, but with the wrong number of vbs - expected %u but it has %u", pool_id, num_vbs, pools[pool_id]->num_vbs);
+    ASSERT (!pool || num_vbs==pool->num_vbs, 
+            "Error: vb pool already exists, but with the wrong number of vbs - expected %u but it has %u", num_vbs, pool->num_vbs);
 
-    if (!pools[pool_id])  {
-        pools[pool_id] = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
-        ASSERT0 (pools[pool_id], "Error: failed to calloc pool");
+    if (!pool)  {
+        pool = (VariantBlockPool *)calloc (1, sizeof (VariantBlockPool) + num_vbs * sizeof (VariantBlock)); // note we can't use Buffer yet, because we don't have VBs yet...
+        ASSERT0 (pool, "Error: failed to calloc pool");
 
-        pools[pool_id]->num_vbs = num_vbs; 
+        pool->num_vbs = num_vbs; 
     }
 }
 
-VariantBlockPool *vb_get_pool (PoolId pool_id)
+VariantBlockPool *vb_get_pool ()
 {
-    ASSERT ((int)pool_id < NUM_POOLS && pools[pool_id], "Error: pool %u doesn't exists", pool_id);
-    return pools[pool_id];
+    return pool;
+}
+
+void vb_external_vb_initialize()
+{
+    ASSERT0 (!external_vb, "Error: external_vb already initialized");
+
+    external_vb = calloc (1, sizeof (VariantBlock));
+    ASSERT0 (external_vb, "Error: failed to calloc external_vb");
+    external_vb->id = -1;
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
-VariantBlock *vb_get_vb (PoolId pool_id, 
-                         FileP vcf_file, FileP z_file,
-                         unsigned variant_block_i)
+VariantBlock *vb_get_vb (FileP vcf_file, FileP z_file, unsigned variant_block_i)
 {
     VariantBlock *vb=NULL;
-
-    if (pool_id == POOL_ID_UNIT_TEST) { // should only be used for unit testing - memory-leaks a VB
-        vb = (VariantBlock *)calloc (1, sizeof(VariantBlock));
-        ASSERT0 (vb, "Error: failed to calloc vb");
-    }
-    else {
-        // see if there's a VB avaiable for recycling
-        unsigned vb_i; for (vb_i=0; vb_i < pools[pool_id]->num_vbs; vb_i++) {
-        
-            vb = &pools[pool_id]->vb[vb_i];
-        
-            if (!vb->in_use) {
-                vb->id = vb_i;
-                vb->pool_id = pool_id;
-                break;
-            }
+    
+    // see if there's a VB avaiable for recycling
+    unsigned vb_i; for (vb_i=0; vb_i < pool->num_vbs; vb_i++) {
+    
+        vb = &pool->vb[vb_i];
+    
+        if (!vb->in_use) {
+            vb->id = vb_i;
+            break;
         }
-
-        ASSERT (vb_i < pools[pool_id]->num_vbs, "Error: VB pool pool_id=%u is full - it already has %u VBs", pool_id, pools[pool_id]->num_vbs)
     }
+
+    ASSERT (vb_i < pool->num_vbs, "Error: VB pool is full - it already has %u VBs", pool->num_vbs)
 
     vb->in_use           = true;
     vb->variant_block_i  = variant_block_i;
@@ -196,11 +199,11 @@ static void vb_free_buffer_array (VariantBlock *vb, Buffer **buf_array, unsigned
 }
 
 // free memory allocations that assume subsequent files will have the same number of samples.
-void vb_cleanup_memory (PoolId pool_id)
+void vb_cleanup_memory ()
 {
     // see if there's a VB avaiable for recycling
-    for (unsigned vb_i=0; vb_i < pools[pool_id]->num_vbs; vb_i++) {
-        VariantBlock *vb = &pools[pool_id]->vb[vb_i];
+    for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
+        VariantBlock *vb = &pool->vb[vb_i];
      
         vb_free_buffer_array (vb, &vb->genotype_sections_data, vb->num_sample_blocks);
         vb_free_buffer_array (vb, &vb->haplotype_sections_data, vb->num_sample_blocks);

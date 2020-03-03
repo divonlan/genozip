@@ -121,7 +121,7 @@ File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex)
 }
 
 void file_close (File **file_p, 
-                 VariantBlockP pseudo_vb) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with splitting concatenated files
+                 bool cleanup_memory) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with splitting concatenated files
 {
     File *file = *file_p;
     *file_p = NULL;
@@ -147,12 +147,12 @@ void file_close (File **file_p,
     if (file->mutex_initialized) 
         pthread_mutex_destroy (&file->mutex);
 
-    if (pseudo_vb) {
-        if (file->dict_data.memory) buf_destroy (pseudo_vb, &file->dict_data);
-        if (file->ra_buf.memory) buf_destroy (pseudo_vb, &file->ra_buf);
-        if (file->section_list_buf.memory) buf_destroy (pseudo_vb, &file->section_list_buf);
-        if (file->section_list_dict_buf.memory) buf_destroy (pseudo_vb, &file->section_list_dict_buf);
-        if (file->v1_next_vcf_header.memory) buf_destroy (pseudo_vb, &file->v1_next_vcf_header);
+    if (cleanup_memory) {
+        if (file->dict_data.memory) buf_destroy (external_vb, &file->dict_data);
+        if (file->ra_buf.memory) buf_destroy (external_vb, &file->ra_buf);
+        if (file->section_list_buf.memory) buf_destroy (external_vb, &file->section_list_buf);
+        if (file->section_list_dict_buf.memory) buf_destroy (external_vb, &file->section_list_dict_buf);
+        if (file->v1_next_vcf_header.memory) buf_destroy (external_vb, &file->v1_next_vcf_header);
     }
 
     if (file->name) free (file->name);

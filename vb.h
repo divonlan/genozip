@@ -55,10 +55,9 @@ typedef struct {
 // IMPORTANT: if changing fields in VariantBlock, also update vb_release_vb
 typedef struct variant_block_ {
 
-    unsigned id;               // id of vb within the vb pool
-    PoolId pool_id; 
+    int id;                    // id of vb within the vb pool (-1 is the external vb)
 
-    FileP vcf_file, z_file;  // pointers to objects that span multiple VBs
+    FileP vcf_file, z_file;    // pointers to objects that span multiple VBs
 
     // memory management
     Buffer buffer_list;        // a buffer containing an array of pointers to all buffers allocated for this VB (either by the I/O thread or its compute thread)
@@ -175,8 +174,9 @@ typedef struct variant_block_ {
     Buffer v1_num_subfields_buf;
 } VariantBlock;
 
-extern void vb_cleanup_memory (PoolId pool_id);
-extern VariantBlock *vb_get_vb (PoolId pool_id, FileP vcf_file, FileP z_file, unsigned variant_block_i);
+extern void vb_cleanup_memory();
+extern VariantBlock *vb_get_vb (FileP vcf_file, FileP z_file, unsigned variant_block_i);
+extern void vb_external_vb_initialize();
 extern unsigned vb_num_samples_in_sb (const VariantBlock *vb, unsigned sb_i);
 extern unsigned vb_num_sections(VariantBlock *vb);
 extern void vb_release_vb (VariantBlock **vb_p);
@@ -185,7 +185,7 @@ typedef struct {
     unsigned num_vbs;
     VariantBlock vb[]; // variable length
 } VariantBlockPool;
-extern void vb_create_pool (PoolId pool_id, unsigned num_vbs);
-extern VariantBlockPool *vb_get_pool (PoolId pool_id);
+extern void vb_create_pool (unsigned num_vbs);
+extern VariantBlockPool *vb_get_pool();
 
 #endif

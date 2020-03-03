@@ -514,26 +514,25 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
-static void zip_write_global_area (VariantBlock *pseudo_vb, const Md5Hash *single_component_md5)
+static void zip_write_global_area (const Md5Hash *single_component_md5)
 {
-    File *file = pseudo_vb->z_file;
+    File *file = external_vb->z_file;
 
     // output dictionaries to disk
-    zip_output_processed_vb (pseudo_vb, &file->section_list_dict_buf, NULL, false);  
+    zip_output_processed_vb (external_vb, &file->section_list_dict_buf, NULL, false);  
     
-    // compress all random access records into pseudo_vb->z_data
+    // compress all random access records into external_vb->z_data
     if (flag_show_index) random_access_show (&file->ra_buf, true);
     file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
-    zfile_compress_section_data (pseudo_vb, SEC_RANDOM_ACCESS, &file->ra_buf);
+    zfile_compress_section_data (external_vb, SEC_RANDOM_ACCESS, &file->ra_buf);
 
-    // compress genozip header (including section records and footer) into pseudo_vb->z_data
-    SectionHeaderGenozipHeader *genozip_header_header = 
-        zfile_compress_genozip_header (pseudo_vb, DATA_TYPE_VCF, single_component_md5);    
+    // compress genozip header (including section records and footer) into external_vb->z_data
+    SectionHeaderGenozipHeader *genozip_header_header = zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5);    
 
     // output to disk random access and genozip header sections to disk
-    zip_output_processed_vb (pseudo_vb, NULL, NULL, true);  
+    zip_output_processed_vb (external_vb, NULL, NULL, true);  
 
-    if (flag_show_gheader) sections_show_genozip_header (pseudo_vb, genozip_header_header);
+    if (flag_show_gheader) sections_show_genozip_header (genozip_header_header);
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
@@ -547,9 +546,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, POOL_ID_ZIP, last_variant_block_i, vcf_file, z_file, false, is_last_file, vcf_basename);
-
-    VariantBlock *pseudo_vb = dispatcher_get_pseudo_vb (dispatcher);
+    Dispatcher dispatcher = dispatcher_init (max_threads, last_variant_block_i, vcf_file, z_file, false, is_last_file, vcf_basename);
 
     unsigned line_i = 0; // last line read (first line in file = 1, consistent with script line numbers)
 
@@ -558,7 +555,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t vcf_header_header_pos = z_file->disk_so_far;
-    bool success = vcf_header_vcf_to_genozip (pseudo_vb, &line_i, &first_data_line);
+    bool success = vcf_header_vcf_to_genozip (&line_i, &first_data_line);
     if (!success) goto finish;
 
     mtf_initialize_mutex (z_file, last_variant_block_i+1);
@@ -624,10 +621,10 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5;
     if (z_file && z_file->type == GENOZIP && vcf_header_header_pos >= 0) 
-        success = zfile_update_vcf_header_section_header (pseudo_vb, vcf_header_header_pos, &single_component_md5);
+        success = zfile_update_vcf_header_section_header (vcf_header_header_pos, &single_component_md5);
 
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
-    if (is_last_file || !flag_concat) zip_write_global_area (pseudo_vb, &single_component_md5);
+    if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);
 
 finish:
     z_file->disk_size = z_file->disk_so_far;
