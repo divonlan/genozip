@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #ifdef _WIN32
+#include <windows.h>
 #include <process.h>
 #elif defined __APPLE__
 #include <sys/ioctl.h>
@@ -459,7 +460,8 @@ static void main_genounzip (const char *z_filename,
 static void main_genozip (const char *vcf_filename, 
                           char *z_filename,
                           unsigned max_threads,
-                          bool is_first_file, bool is_last_file)
+                          bool is_first_file, bool is_last_file,
+                          const char *exec_name)
 {
     File *vcf_file;
     static File *z_file = NULL; // static to support concat mode
@@ -532,8 +534,35 @@ static void main_genozip (const char *vcf_filename,
 
     free ((void *)basename);
 
-    if (flag_test && (!flag_concat || is_last_file)) 
-        main_genounzip (z_filename, vcf_filename, max_threads, is_last_file);
+    if (flag_test && (!flag_concat || is_last_file)) {
+#ifdef _WIN32
+        char *cmd_line = malloc (strlen (exec_name) + 50);
+        sprintf (cmd_line, "%s -d -t %s %s", exec_name, (flag_quiet ? "-q" : ""), z_filename);
+
+        STARTUPINFO startup_info;
+        memset (&startup_info, 0, sizeof startup_info);
+        startup_info.cb = sizeof startup_info;
+
+        PROCESS_INFORMATION proc_info;
+        memset (&proc_info, 0, sizeof proc_info);
+
+        bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
+                                      NULL, NULL, &startup_info, &proc_info);
+        ASSERT (success, "Error: failed CreateProcess() to run test: GetLastError=%lu", GetLastError());
+#else
+        if (!fork()) { // I am the child
+            const char *test_argv[6];
+            test_argv[0] = exec_name;
+            test_argv[1] = "-d";
+            test_argv[2] = "-t";
+            test_argv[3] = z_filename;
+            test_argv[4] = flag_quiet ? "-q" : NULL;
+            test_argv[5] = NULL;
+            execvp (exec_name, test_argv);        
+        }
+#endif
+        //main_genounzip (z_filename, vcf_filename, max_threads, is_last_file);
+    }
 }
 
 static void main_list_dir(const char *dirname)
@@ -662,6 +691,7 @@ int main (int argc, char **argv)
         #define _o  {"output",        required_argument, 0, 'o'                }
         #define _p  {"password",      required_argument, 0, 'p'                }
         #define _vb {"vblock",        required_argument, 0, 'B'                }
+        #define _r  {"regions",       required_argument, 0, 'r'                }
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
         #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
@@ -680,17 +710,17 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _t, _DL, _V, _z, _m, _th, _O, _o, _p, _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,         _th, _O, _o, _p,           _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,           _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                 _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p,                                                                                 _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,     _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,         _th, _O, _o, _p,               _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,           _00 };
+        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                     _00 };
+        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p, _r,                                                                                 _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
             "cdfhlLqt^Vzm@:Oo:p:B:", // genozip
             "cfhLqt^V@:Oo:p:",       // genounzip
             "hLVp:q",                // genols
-            "hLV@:p:1"               // genocat
+            "hLV@:p:1r:"             // genocat
         };
 
         int option_index = -1;
@@ -720,6 +750,7 @@ int main (int argc, char **argv)
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : genozip_set_global_max_lines_per_vb (optarg); break;
             case 'p' : crypt_set_password (optarg) ; break;
+            case 'r' :// regions_add (optarg);       ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
 
@@ -819,7 +850,7 @@ int main (int argc, char **argv)
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
         
         switch (command) {
-            case ZIP   : main_genozip (next_input_file, out_filename, global_max_threads, file_i==0, !next_input_file || file_i==num_files-1); 
+            case ZIP   : main_genozip (next_input_file, out_filename, global_max_threads, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); 
                          break;
             
             case UNZIP : main_genounzip (next_input_file, out_filename, global_max_threads, file_i==num_files-1); break;
