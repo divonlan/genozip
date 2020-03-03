@@ -128,7 +128,6 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     if (flag_show_memory) buf_display_memory_usage (false);    
 
     buf_free (&dd->compute_threads_buf);
-    vb_release_vb (&external_vb);
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file

@@ -8,4 +8,6 @@
 
 #include "genozip.h"
 
+extern void regions_add (char *reg_str);
+
 #endif

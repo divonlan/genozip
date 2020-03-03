@@ -34,7 +34,8 @@ else
 endif
 
 MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c random_access.c sections.c\
-	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c
+	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
+		  regions.c
 
 CONDA_COMPATIBILITY_SRCS = compatability/visual_c_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
 
@@ -48,7 +49,7 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 CONDA_INCS = aes.h dispatcher.h gloptimize.h profiler.h dict_id.h vcffile.h zip.h v1.c \
              base250.h endianness.h md5.h sections.h text_help.h vcf_header.h \
              buffer.h file.h move_to_front.h segregate.h text_license.h version.h \
-             crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h\
+             crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h regions.h \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
              compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
              compatability/visual_c_pthread.h \
@@ -91,7 +92,7 @@ EXECUTABLES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
 all: $(EXECUTABLES)
 
 debug : CFLAGS  += -DDEBUG -g -O0
-debug : genozip-debug$(EXE)
+debug : genozip-debug$(EXE) genounzip-debug$(EXE) genols-debug$(EXE) genocat-debug$(EXE)
 
 -include $(DEPS)
 
@@ -116,6 +117,11 @@ genozip-debug$(EXE): $(DEBUG_OBJS)
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
+	@echo Hard linking $@
+	@rm -f $@ 
+	@ln $^ $@
+
+genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
 	@ln $^ $@

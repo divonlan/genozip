@@ -9,11 +9,11 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/genozip-debug.exe",
+            "program": "${workspaceFolder}/genocat-debug.exe",
 
-            //"args": ["-l", "1.vcf.genozip"]
-            "args": ["-z", "-f","-t",  "2.vcf"],
-            //"args": ["-d", "-t", "1.vcf.genozip"],
+            "args": ["minimal.vcf.genozip", "-r", "22:1-,23:5-123,24:-100,25:1000,1000-2000,1000-,-2000", "-r", "1000"],
+            //"args": ["-z", "-f",  "minimal.vcf", "minimal.plaintext.vcf", "-o", "concat.vcf.genozip"],
+            //"args": ["-d", "-t", "minimal.vcf.genozip", "-m"],
 
             //"args": ["-d", "test-file.vcf.genozip", "-o", "test-file.test.vcf", "-f", "-@1"],
 

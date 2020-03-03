@@ -78,7 +78,7 @@ extern int command;
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
-           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test;
+           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VariantBlockP external_vb;

@@ -41,6 +41,7 @@
 #include "dict_id.h"
 #include "vb.h"
 #include "endianness.h"
+#include "regions.h"
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
@@ -54,7 +55,7 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0,
-    flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0;
+    flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
@@ -732,14 +733,14 @@ int main (int argc, char **argv)
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,     _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,         _th, _O, _o, _p,               _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,           _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,     _m, _th, _O, _o, _p,               _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,           _00 };
         static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                     _00 };
         static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p, _r,                                                                                 _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
             "cdfhlLqt^Vzm@:Oo:p:B:", // genozip
-            "cfhLqt^V@:Oo:p:",       // genounzip
+            "cfhLqt^V@:Oo:p:m",      // genounzip
             "hLVp:q",                // genols
             "hLV@:p:1r:"             // genocat
         };
@@ -771,7 +772,7 @@ int main (int argc, char **argv)
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : genozip_set_global_max_lines_per_vb (optarg); break;
             case 'p' : crypt_set_password (optarg) ; break;
-            case 'r' :// regions_add (optarg);       ; break;
+            case 'r' : flag_regions = true; regions_add (optarg); break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
 
@@ -819,6 +820,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_stdout || !flag_split,        "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
     ASSERT (!flag_split  || !out_filename,      "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
     ASSERT (!flag_stdout || !flag_replace,      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
+    ASSERT (!flag_stdout || !flag_md5,          "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("--md5", "m"));
     ASSERT (!flag_test   || !out_filename || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
     ASSERT (!flag_test   || !flag_replace || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSERT (!flag_test   || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
@@ -827,8 +829,6 @@ int main (int argc, char **argv)
     // will overwrite each other if extracted with --split
     if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
 
-    if (command != ZIP && command != LIST) flag_md5=false;
-    
     if (command == UNZIP && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
     if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || 
         dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_alleles) 
