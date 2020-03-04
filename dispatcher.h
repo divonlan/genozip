@@ -18,7 +18,7 @@ extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i);
 
 typedef void (*DispatcherFuncType)(VariantBlockP);
 extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func);
-extern VariantBlockP dispatcher_generate_next_vb (Dispatcher dispatcher);       
+extern VariantBlockP dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i);       
 extern bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final);                                  
 extern VariantBlockP dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final);
 extern bool dispatcher_has_free_thread (Dispatcher dispatcher);

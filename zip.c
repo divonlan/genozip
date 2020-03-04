@@ -516,24 +516,24 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section
 // write all the sections at the end of the file, after all VB stuff has been written
 static void zip_write_global_area (const Md5Hash *single_component_md5)
 {
-    File *file = external_vb->z_file;
+    File *file = evb->z_file;
 
     // output dictionaries to disk
-    zip_output_processed_vb (external_vb, &file->section_list_dict_buf, NULL, false);  
+    zip_output_processed_vb (evb, &file->section_list_dict_buf, NULL, false);  
     
-    // compress all random access records into external_vb->z_data
-    if (flag_show_index) random_access_show (&file->ra_buf, true);
-    file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
-    zfile_compress_section_data (external_vb, SEC_RANDOM_ACCESS, &file->ra_buf);
+    // compress all random access records into evb->z_data
+    if (flag_show_index) random_access_show_index();
+    
+    BGEN_random_access(); // make ra_buf into big endian
 
-    // compress genozip header (including section records and footer) into external_vb->z_data
-    SectionHeaderGenozipHeader genozip_header_header;
-    zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5, &genozip_header_header);    
+    file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
+    zfile_compress_section_data (evb, SEC_RANDOM_ACCESS, &file->ra_buf);
+
+    // compress genozip header (including its payload sectionlist and footer) into evb->z_data
+    zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5);    
 
     // output to disk random access and genozip header sections to disk
-    zip_output_processed_vb (external_vb, NULL, NULL, true);  
-
-    if (flag_show_gheader) sections_show_gheader (&genozip_header_header);
+    zip_output_processed_vb (evb, NULL, NULL, true);  
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
@@ -588,7 +588,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
         // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - read one
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
-            next_vb = dispatcher_generate_next_vb (dispatcher);
+            next_vb = dispatcher_generate_next_vb (dispatcher, 0);
 
             next_vb->first_line = line_i;
 

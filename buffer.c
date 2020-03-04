@@ -17,7 +17,7 @@
 #include "compatability/visual_c_pthread.h"
 #endif
 
-//#define DISPLAY_ALLOCS_AFTER 4090 // display allocations, except the first X allocations. reallocs are always displayed
+//#define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
 #define OVERFLOW_TRAP  0x776F6C667265766FULL // "OVERFLOW" - inserted at the end of each memory block to detected overflows
@@ -69,18 +69,25 @@ char *buf_human_readable_uint (int64_t n, char *str /* out */)
     return str;
 }
 
+#define POINTER_STR_LEN 19
+char *buf_display_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/)
+{
+#ifdef _MSC_VER
+    sprintf (str, "0x%I64x", (uint64_t)p);
+#else
+    sprintf (str, "0x%"PRIx64, (uint64_t)p);
+#endif
+    return str;
+}
+
 // get string with buffer's metadata for debug message. this function is NOT thread-safe
 char *buf_display (const Buffer *buf)
 {
     static char str[200]; // NOT thread-safe
 
-    sprintf (str, 
-#ifdef _MSC_VER
-             "Buffer %s (%u): size=%u len=%u data=0x%I64x memory=0x%I64x",
-#else
-             "Buffer %s (%u): size=%u len=%u data=0x%"PRIx64" memory=0x%"PRIx64,
-#endif
-             buf->name, buf->param, buf->size, buf->len, (uint64_t)buf->data, (uint64_t)buf->memory);
+    char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN];
+    sprintf (str, "Buffer %s (%u): size=%u len=%u data=%s memory=%s",
+             buf->name, buf->param, buf->size, buf->len, buf_display_pointer(buf->data, s1), buf_display_pointer(buf->memory,s2));
     return str;    
 }
 
@@ -104,47 +111,34 @@ void buf_test_overflows(const VariantBlock *vb)
 
         if (!buf) continue; // buf was 'buf_destroy'd
 
+        char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN], s3[POINTER_STR_LEN];
         if (buf->memory) {
-            if (!buf->name) {
-                fprintf (stderr, 
-#ifdef _MSC_VER
-                         "buffer=0x%I64x : Corrupt Buffer structure - null name\n", 
-#else
-                         "buffer=0x%"PRIx64" : Corrupt Buffer structure - null name\n", 
-#endif
-                         (uint64_t)(uintptr_t)buf);
+            if (buf->type < BUF_UNALLOCATED || buf->type > BUF_PARTIAL_OVERLAY) {
+                fprintf (stderr, "buffer=%s : Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", buf_display_pointer (buf, s1));
+                corruption = true;
+            }
+            else if (!buf->name) {
+                fprintf (stderr, "buffer=%s : Corrupt Buffer structure - null name\n", buf_display_pointer (buf, s1));
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
                 fprintf (stderr, 
-#ifdef _MSC_VER
-                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%I64x\n", 
-#else
-                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=0x%"PRIx64"\n", 
-#endif
-                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, (uint64_t)(uintptr_t)buf->data);
+                         "vb_id=%d buf_i=%u buffer=%s memory=%s : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=%s\n", 
+                         vb ? vb->id : 0, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->name, buf->param, buf_display_pointer(buf->data,s3));
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, 
-#ifdef _MSC_VER
-                        "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x : Underflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
-#else
-                        "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" : Underflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
-#endif
-                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->name, buf->param, 
+                        "vb_id=%d buf_i=%u buffer=%s memory=%s : Underflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
+                         vb ? vb->id : 0, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->name, buf->param, 
                          buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
                 corruption = true;
             }
             else if (buf_has_overflowed(buf)) {
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
-#ifdef _MSC_VER
-                         "vb_id=%u buf_i=%u buffer=0x%I64x memory=0x%I64x size=%u : Overflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
-#else
-                         "vb_id=%u buf_i=%u buffer=0x%"PRIx64" memory=0x%"PRIx64" size=%u : Overflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
-#endif
-                         vb ? vb->id : 0, buf_i, (uint64_t)(uintptr_t)buf, (uint64_t)(uintptr_t)buf->memory, buf->size, buf->name, buf->param, 
+                         "vb_id=%d buf_i=%u buffer=%s memory=%s size=%u : Overflow in buffer %.30s param=%u fence=\"%c%c%c%c%c%c%c%c\"\n", 
+                         vb ? vb->id : 0, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->size, buf->name, buf->param, 
                          of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                 
                 corruption = true;
@@ -180,7 +174,7 @@ void buf_display_memory_usage (bool memory_full)
 
     for (int vb_i=-1; vb_i < vb_pool->num_vbs; vb_i++) {
 
-        Buffer *buf_list = (vb_i == -1) ? &external_vb->buffer_list
+        Buffer *buf_list = (vb_i == -1) ? &evb->buffer_list
                                         : &vb_pool->vb[vb_i].buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
 
         if (!buf_list->len) continue; // no buffers allocated yet for this VB
@@ -298,8 +292,10 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
     *(uint16_t *)(buf->data + size + sizeof (uint64_t)) = 1; // counter of buffers that use of this memory (0 or 1 main buffer + any number of overlays)
 
 #ifdef DISPLAY_ALLOCS_AFTER
-    if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-        fprintf (stderr, "%s (%u): old_size=%u new_size=%u\n", buf->name, buf->param, old_size, size);
+    if (vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
+        char s[POINTER_STR_LEN];
+        fprintf (stderr, "%s (%u): old_size=%u new_size=%u &buffer=%s\n", buf->name, buf->param, old_size, size, buf_display_pointer(buf,s));
+    }
 #endif
 }
 

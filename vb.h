@@ -90,6 +90,8 @@ typedef struct variant_block_ {
     // random access, chrom and pos
     Buffer ra_buf;             // ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file        
     int32_t last_pos;          // value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes
+    RAEntry *curr_ra_ent;      // these two are used by random_access_update_chrom/random_access_update_pos to sync between them
+    bool curr_ra_ent_is_initialized; 
 
     // working memory for segregate - we segregate a line components into these buffers, and when done
     // we copy it back to DataLine - the buffers overlaying the line field
@@ -174,9 +176,9 @@ typedef struct variant_block_ {
     Buffer v1_num_subfields_buf;
 } VariantBlock;
 
-extern void vb_cleanup_memory();
+extern void vb_cleanup_memory(void);
 extern VariantBlock *vb_get_vb (FileP vcf_file, FileP z_file, unsigned variant_block_i);
-extern void vb_external_vb_initialize();
+extern void vb_external_vb_initialize(void);
 extern unsigned vb_num_samples_in_sb (const VariantBlock *vb, unsigned sb_i);
 extern unsigned vb_num_sections(VariantBlock *vb);
 extern void vb_release_vb (VariantBlock **vb_p);
@@ -186,6 +188,6 @@ typedef struct {
     VariantBlock vb[]; // variable length
 } VariantBlockPool;
 extern void vb_create_pool (unsigned num_vbs);
-extern VariantBlockPool *vb_get_pool();
+extern VariantBlockPool *vb_get_pool(void);
 
 #endif

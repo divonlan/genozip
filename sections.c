@@ -9,6 +9,7 @@
 #include "file.h"
 #include "vb.h"
 #include "endianness.h"
+#include "random_access.h"
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
@@ -51,8 +52,6 @@ void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
     ent->variant_block_i = BGEN32 (header->variant_block_i); // big endian in header - convert back to native
     ent->dict_id         = dict_id;
     ent->offset          = offset;  // this is a partial offset (within d) - we will correct it later
-    ent->include         = 0;
-    ent->for_future_use  = 0;
 }
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file sectinon list - just before 
@@ -80,40 +79,78 @@ void sections_list_concat (VariantBlock *vb, BufferP section_list_buf)
 }
 
 // called by PIZ I/O thread: zfile_read_on_vb
-uint32_t sections_count_info_b250s (File *z_file)
+uint32_t sections_count_info_b250s (unsigned vb_i)
 {
-    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
+    SectionListEntry *sl = ((SectionListEntry *)evb->z_file->section_list_buf.data);
 
-    // skip to the first SEC_INFO_SUBFIELD_B250
-    while (sl[z_file->sl_cursor].section_type != SEC_INFO_SUBFIELD_B250) z_file->sl_cursor++;
+    // skip to the first SEC_INFO_SUBFIELD_B250 (if there is one...)
+    while (evb->z_file->sl_cursor < evb->z_file->section_list_buf.len &&
+           sl[evb->z_file->sl_cursor].variant_block_i == vb_i &&
+           sl[evb->z_file->sl_cursor].section_type != SEC_INFO_SUBFIELD_B250) 
+        evb->z_file->sl_cursor++;
 
     // count the SEC_INFO_SUBFIELD_B250 sections
-    uint32_t start = z_file->sl_cursor;
-    while (sl[z_file->sl_cursor].section_type == SEC_INFO_SUBFIELD_B250) z_file->sl_cursor++;
+    uint32_t start = evb->z_file->sl_cursor;
+    while (sl[evb->z_file->sl_cursor].section_type == SEC_INFO_SUBFIELD_B250) evb->z_file->sl_cursor++;
 
-    return z_file->sl_cursor - start;
+    return evb->z_file->sl_cursor - start;
 }
 
 // called by PIZ I/O to know if next up is a VB Header or VCF Header or EOF
-SectionType sections_get_next_header_type (File *z_file)
+SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skipped_vb)
 {
-    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
-
     // find the next VB or VCF header section
-    while (z_file->sl_cursor < z_file->section_list_buf.len) {
-        SectionType sec_type = sl[z_file->sl_cursor++].section_type;
-        if (sec_type == SEC_VB_HEADER || sec_type == SEC_VCF_HEADER) return sec_type;
+    *skipped_vb = false;
+
+    while (evb->z_file->sl_cursor < evb->z_file->section_list_buf.len) {
+       *sl_ent = &((SectionListEntry *)evb->z_file->section_list_buf.data)[evb->z_file->sl_cursor++];
+ 
+        SectionType sec_type = (*sl_ent)->section_type;
+        if (sec_type == SEC_VCF_HEADER) 
+            return SEC_VCF_HEADER;
+
+        if (sec_type == SEC_VB_HEADER) {
+            if (random_access_is_vb_included ((*sl_ent)->variant_block_i))
+                return SEC_VB_HEADER;
+            
+            else *skipped_vb = true;
+        }
     }
 
     return SEC_EOF; // no more headers
 }
 
-// called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
-bool sections_has_more_vcf_components (File *z_file)
+// dictionary section iterator. returns true if another dictionary was found.
+bool sections_get_next_dictionary (SectionListEntry **sl_ent)
 {
-    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
+    SectionListEntry *sl = ((SectionListEntry *)evb->z_file->section_list_buf.data);
 
-    return z_file->sl_cursor==0 || sl[z_file->sl_cursor-1].section_type == SEC_VCF_HEADER;
+    // find the next VB or VCF header section
+    while (evb->z_file->sl_dir_cursor < evb->z_file->section_list_buf.len) {
+        *sl_ent = &sl[evb->z_file->sl_dir_cursor++];
+        if (section_type_is_dictionary((*sl_ent)->section_type)) 
+            return true;
+    }
+
+    return false; // no more dictionaries
+}
+
+// called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
+bool sections_has_more_vcf_components()
+{
+    SectionListEntry *sl = ((SectionListEntry *)evb->z_file->section_list_buf.data);
+
+    return evb->z_file->sl_cursor==0 || sl[evb->z_file->sl_cursor-1].section_type == SEC_VCF_HEADER;
+}
+
+void BGEN_sections_list()
+{
+    SectionListEntry *ent = (SectionListEntry *)evb->z_file->section_list_buf.data;
+
+    for (unsigned i=0; i < evb->z_file->section_list_buf.len; i++) {
+        ent[i].variant_block_i = BGEN32 (ent[i].variant_block_i);
+        ent[i].offset          = BGEN64 (ent[i].offset);
+    }
 }
 
 void sections_show_gheader (SectionHeaderGenozipHeader *header)
@@ -135,28 +172,17 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
 
     printf ("  sections:\n");
 
-    SectionListEntry *ents = (SectionListEntry *)external_vb->z_file->section_list_buf.data;
+    SectionListEntry *ents = (SectionListEntry *)evb->z_file->section_list_buf.data;
 
     for (unsigned i=0; i < num_sections; i++) {
      
-        uint64_t this_offset = BGEN64 (ents[i].offset);
-        uint64_t next_offset = (i < num_sections-1) ? BGEN64 (ents[i+1].offset) : external_vb->z_file->disk_so_far;
+        uint64_t this_offset = ents[i].offset;
+        uint64_t next_offset = (i < num_sections-1) ? ents[i+1].offset : evb->z_file->disk_so_far;
 
         printf ("    %3u. %-24.24s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 
                  -DICT_ID_LEN, DICT_ID_LEN, ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 
-                 BGEN32 (ents[i].variant_block_i), this_offset, next_offset - this_offset);
-    }
-}
-
-void BGEN_sections_list (Buffer *sections_list_buf)
-{
-    SectionListEntry *ent = (SectionListEntry *)sections_list_buf->data;
-
-    // update only entries that belong to the same vb AND have the same class - dictionary or not dictionary
-    for (unsigned i=0; i < sections_list_buf->len; i++) {
-        ent[i].variant_block_i = BGEN32 (ent[i].variant_block_i);
-        ent[i].offset          = BGEN64 (ent[i].offset);
+                 ents[i].variant_block_i, this_offset, next_offset - this_offset);
     }
 }
 

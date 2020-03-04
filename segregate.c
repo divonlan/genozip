@@ -32,11 +32,8 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
 static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned chrom_str_len, unsigned vcf_line_i)
 {
     uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vcf_line_i, CHROM, NULL);
-    uint32_t vb_line_i = vcf_line_i - vb->first_line;
-    
-    // case: first vb line or change in chrom - start new entry
-    if (!vb_line_i || chrom_node_index != random_access_get_last_chrom_node_index(vb)) 
-        random_access_new_entry (vb, vb_line_i, chrom_node_index);
+
+    random_access_update_chrom (vb, vcf_line_i - vb->first_line, chrom_node_index);
 }
 
 static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_len, unsigned vcf_line_i)
@@ -48,7 +45,7 @@ static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_l
 
     int32_t this_pos = (int32_t)this_pos_64;
 
-    ASSERT (this_pos_64 >= 1 && this_pos_64 <= 0x7fffffff, 
+    ASSERT (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, 
             "Error: Invalid POS in line %u - value should be between 1 and %u, but found %u", vcf_line_i, 0x7fffffff, this_pos);
     
     int32_t pos_delta = this_pos - vb->last_pos;
@@ -82,7 +79,7 @@ static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_l
 
     vb->last_pos = this_pos;
 
-    random_access_update_last_entry (vb, this_pos);
+    random_access_update_pos (vb, this_pos);
 }
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield

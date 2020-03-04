@@ -19,6 +19,7 @@
 #include "piz.h"
 #include "sections.h"
 #include "random_access.h"
+#include "regions.h"
 
 typedef struct {
     unsigned num_subfields;         // number of subfields this FORMAT has
@@ -805,31 +806,45 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 }
 
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
-static int16_t piz_read_global_area (bool need_random_access, Md5Hash *original_file_digest) // out
+static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 {
-    File *zfile = external_vb->z_file;
+    File *zfile = evb->z_file;
 
     int16_t data_type = zfile_read_genozip_header (original_file_digest);
     if (data_type == MAYBE_V1 || data_type == EOF) return data_type;
 
-    // read dictionaries
+    // read dictionaries (this also seeks to the start of the dictionaries)
     zfile_read_all_dictionaries (0);
-   
-    // read random access, but only if we are going to need it
-    if (need_random_access) {
-        zfile_read_one_section (external_vb, 0, &external_vb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
+    
+    // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
+    regions_get_chrom_index();
 
-        zfile_uncompress_section (external_vb, external_vb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
+    // read random access, but only if we are going to need it
+    if (flag_regions || flag_show_index) {
+        zfile_read_one_section (evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
+
+        zfile_uncompress_section (evb, evb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
 
         zfile->ra_buf.len /= random_access_sizeof_entry();
-        BGEN_random_access (&zfile->ra_buf);
+        BGEN_random_access();
 
-        buf_free (&external_vb->z_data);
+        if (flag_show_index) random_access_show_index();
+
+        buf_free (&evb->z_data);
     }
 
     file_seek (zfile, 0, SEEK_SET, false);
 
     return DATA_TYPE_VCF;
+}
+
+static void enforce_v1_limitations (bool is_first_vcf_component)
+{
+    ASSERT (!flag_split || is_first_vcf_component,
+            "Error: %s was compressed with genozip v1, --split / -O is not supported. Only the first file was extracted.",
+            file_printname (evb->z_file));
+
+    ASSERT (!flag_regions, "Error: %s was compressed with genozip v1, --regions / -r is not supported.", file_printname (evb->z_file));
 }
 
 // returns true is successfully outputted a vcf file
@@ -839,37 +854,38 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
     bool piz_successful = false;
+    SectionListEntry *sl_ent = NULL;
     
-    if (flag_split && !sections_has_more_vcf_components (z_file)) return false; // no more components
+    if (flag_split && !sections_has_more_vcf_components()) return false; // no more components
 
     if (!dispatcher) 
         dispatcher = dispatcher_init (max_threads, 0, vcf_file, z_file, flag_test, is_last_file, z_basename);
     
     // read genozip header
     Md5Hash original_file_digest;
-    
+
     // read genozip header and set the data type when reading the first vcf component of in case of --split, 
     static int16_t data_type = EOF; 
     if (is_first_vcf_component) {
-        data_type = piz_read_global_area (true, &original_file_digest);
+        data_type = piz_read_global_area (&original_file_digest);
 
+        bool dummy;
         if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
-            ASSERT (sections_get_next_header_type(z_file) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
+            ASSERT (sections_get_next_header_type(&sl_ent, &dummy) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
     }
 
     if (data_type == EOF) goto finish;
 
-    ASSERT (z_file->genozip_version > 1 || !flag_split || is_first_vcf_component,
-            "Error: %s was compressed with genozip v1, splitting out components is not supported. Only the first file was extracted.",
-            file_printname (z_file));
+    if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_vcf_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 
     // read and write VCF header. in split mode this also opens vcf_file
     piz_successful = (data_type != MAYBE_V1) ? vcf_header_genozip_to_vcf (&original_file_digest)
                                              : v1_vcf_header_genozip_to_vcf (&original_file_digest);
-
-    if (!piz_successful) goto finish; // empty file - not an error
     
-    vcf_file = external_vb->vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
+    ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", file_printname (z_file));
+    if (!piz_successful) goto finish;
+
+    vcf_file = evb->vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
 
     if (flag_split) 
         dispatcher_resume (dispatcher, vcf_file); // accept more input 
@@ -886,9 +902,13 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
             bool compute = false;
             if (z_file->genozip_version > 1) {
                 
-                switch (sections_get_next_header_type(z_file)) {
+                bool skipped_vb;
+                switch (sections_get_next_header_type(&sl_ent, &skipped_vb)) {
                     case SEC_VB_HEADER:  
-                        zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher)); 
+
+                        if (skipped_vb) file_seek (evb->z_file, sl_ent->offset, SEEK_SET, false);
+
+                        zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher, sl_ent->variant_block_i)); 
                         compute = true;
                         break;
 
@@ -905,7 +925,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
                     default: ABORT0 ("Error: unexpected section_type");
                 }
             }
-            else compute = v1_zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher));  // genozip v1
+            else compute = v1_zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
 
             if (compute) {
                 dispatcher_compute (dispatcher, piz_uncompress_variant_block);
@@ -948,12 +968,12 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
             fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
                      md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
         
-        else ASSERT (md5_is_zero (original_file_digest), // v1 files might be without md5
+        else ASSERT (flag_regions || md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
                      "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
                      vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
     }
 
-    if (flag_split) file_close (&external_vb->vcf_file, true); // close this component file
+    if (flag_split) file_close (&evb->vcf_file, true); // close this component file
 
 finish:
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

@@ -78,10 +78,10 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *
 
     vb_create_pool (MAX (2,max_threads));
 
-    external_vb->vcf_file = vcf_file;
-    external_vb->z_file   = z_file;
+    evb->vcf_file = vcf_file;
+    evb->z_file   = z_file;
 
-    buf_alloc (external_vb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
+    buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (dd->show_progress && !flag_split) // note: for flag_split, we print this in dispatcher_resume() 
@@ -117,17 +117,17 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 {
     DispatcherData *dd = (DispatcherData *)*dispatcher;
 
-    COPY_TIMER (external_vb->profile.wallclock);
+    COPY_TIMER (evb->profile.wallclock);
 
     if (flag_show_time) 
-        profiler_print_report (&external_vb->profile, 
+        profiler_print_report (&evb->profile, 
                                dd->max_threads, dd->max_vb_id_so_far,
                                dd->filename, dd->next_vb_i);
 
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (false);    
 
-    buf_free (&dd->compute_threads_buf);
+    buf_destroy (evb, &dd->compute_threads_buf); // we need to destroy (not marely free) because we are about to free dd
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
@@ -149,11 +149,11 @@ static void *dispatcher_thread_entry (void *thread_)
     return NULL;
 }
 
-VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher)
+VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
-    dd->next_vb_i++;
+    dd->next_vb_i = vb_i ? vb_i : dd->next_vb_i+1;
 
     dd->next_vb = vb_get_vb (dd->vcf_file, dd->z_file, dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
@@ -366,7 +366,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
         buf_test_overflows(dd->processed_vb); // just to be safe, this isn't very expensive
 
         if (flag_show_time) 
-            profiler_add (&external_vb->profile, &dd->processed_vb->profile);
+            profiler_add (&evb->profile, &dd->processed_vb->profile);
 
         vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
     }

@@ -42,7 +42,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             // don't actually open the file if we're just testing in genounzip
             if (flag_test && mode == WRITE) return file;
 
-            file->file = fopen(file->name, mode == READ ? "r" : "wb"); // "wb" so Windows doesn't add ASCII 13
+            file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "rb"/"wb" so libc on Windows doesn't drop/add '\r' between our code and the disk. we will handle the '\r' explicitly.
         }
         else if (file_has_ext (file->name, ".vcf.gz")) {
             file->type = VCF_GZ;
@@ -137,7 +137,14 @@ void file_close (File **file_p,
         }
         else {
             int ret = fclose((FILE *)file->file);
-            ASSERTW (!ret, "Warning: failed to close vcf file %s: %s", file->name ? file->name : "", strerror(errno));
+
+            if (ret && !errno) { // this is a telltale sign of a memory overflow
+                buf_test_overflows(evb); // failing to close for no reason is a sign of memory issues
+                // if its not a buffer - maybe its file->file itself
+                fprintf (stderr, "Error: fclose() failed without an error, possible file->file pointer is corrupted\n");
+            }
+
+            ASSERTW (!ret, "Warning: failed to close file %s: %s", file->name ? file->name : "", strerror(errno)); // vcf or genozip
         } 
     }
 
@@ -148,11 +155,11 @@ void file_close (File **file_p,
         pthread_mutex_destroy (&file->mutex);
 
     if (cleanup_memory) {
-        if (file->dict_data.memory) buf_destroy (external_vb, &file->dict_data);
-        if (file->ra_buf.memory) buf_destroy (external_vb, &file->ra_buf);
-        if (file->section_list_buf.memory) buf_destroy (external_vb, &file->section_list_buf);
-        if (file->section_list_dict_buf.memory) buf_destroy (external_vb, &file->section_list_dict_buf);
-        if (file->v1_next_vcf_header.memory) buf_destroy (external_vb, &file->v1_next_vcf_header);
+        if (file->dict_data.memory) buf_destroy (evb, &file->dict_data);
+        if (file->ra_buf.memory) buf_destroy (evb, &file->ra_buf);
+        if (file->section_list_buf.memory) buf_destroy (evb, &file->section_list_buf);
+        if (file->section_list_dict_buf.memory) buf_destroy (evb, &file->section_list_dict_buf);
+        if (file->v1_next_vcf_header.memory) buf_destroy (evb, &file->v1_next_vcf_header);
     }
 
     if (file->name) free (file->name);
@@ -216,7 +223,9 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
 
 // returns true if successful. depending on soft_fail, a failure will either emit an error 
 // (and exit) or a warning (and return).
-bool file_seek (File *file, int64_t offset, int whence, bool soft_fail)
+bool file_seek (File *file, int64_t offset, 
+                int whence, // SEEK_SET, SEEK_CUR or SEEK_END
+                bool soft_fail)
 {
 #ifdef __APPLE__
     int ret = fseeko ((FILE *)file->file, offset, whence);

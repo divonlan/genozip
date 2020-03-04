@@ -73,6 +73,7 @@ static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250
 
 extern uint32_t mtf_evaluate_snip (VariantBlockP vb, MtfContext *ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
 extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
+extern int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VariantBlockP vb);
 extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional */, uint32_t *snip_len /* optional */);
 extern void mtf_merge_in_vb_ctx (VariantBlockP vb);

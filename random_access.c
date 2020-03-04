@@ -8,56 +8,55 @@
 #include "vb.h"
 #include "file.h"
 #include "endianness.h"
+#include "regions.h"
 
 // we pack this, because it gets written to disk in SEC_RANDOM_ACCESS. On disk, it is stored in Big Endian.
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
-typedef struct {
-    uint32_t chrom;                       // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
-    uint32_t min_pos;                     // POS field value of first position
-    int32_t  max_pos;                     // in VB, this is in an absolute value. On disk, it is the detla vs first_pos
-    uint32_t variant_block_i;             // the vb_i in which this range appears
-    uint32_t start_vb_line, num_vb_lines; // corresponds to the line with this VB
-    uint32_t is_sorted      : 1;          // is this range sorted in a non-decreasing order?
-    uint32_t for_future_use : 31;         // put this 1 bit in 32 bits to avoid aliasing issues
-} RAEntry; 
 
 #pragma pack(pop)
 
-int32_t random_access_get_last_chrom_node_index (VariantBlock *vb)
+// ZIP only: called from seg_chrom_field when the CHROM changed - this might be a new chrom, or
+// might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
+void random_access_update_chrom (VariantBlock *vb, uint32_t vb_line_i, int32_t chrom_node_index)
 {
-    ASSERT (vb->ra_buf.len > 0, "Error: vb->ra_buf.len is 0, can't get last, vb_i=%u", vb->variant_block_i);
+    if (vb->curr_ra_ent && vb->curr_ra_ent->chrom == chrom_node_index) return; // all good - current chrom continues
 
-    return ((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len-1].chrom;
-}
+    RAEntry *ra = ((RAEntry *)vb->ra_buf.data);
 
-// ZIP only: called from seg_chrom_field
-void random_access_new_entry (VariantBlock *vb, uint32_t vb_line_i, int32_t chrom_node_index)
-{
+    // search for existing chrom
+    unsigned i=0; for (; i < vb->ra_buf.len; i++)
+        if (ra[i].chrom == chrom_node_index) { // found existing chrom
+            vb->curr_ra_ent = &ra[i];
+            return;
+        }
+
+    // this is a new chrom - we need a new entry
     buf_alloc (vb, &vb->ra_buf, sizeof (RAEntry) * (vb->ra_buf.len + 1), 2, "ra_buf", vb->variant_block_i);
 
-    RAEntry *ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len++];
-    memset (ra_ent, 0, sizeof(RAEntry));
+    vb->curr_ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len++];
+    memset (vb->curr_ra_ent, 0, sizeof(RAEntry));
 
-    ra_ent->chrom           = (chrom_node_index >= 0) ? chrom_node_index : (ra_ent-1)->chrom; // copy previous chrom if -1 (=unchanged)
-    ra_ent->start_vb_line   = vb_line_i;
-    ra_ent->is_sorted       = true; // sorted until proven otherwise
-    ra_ent->variant_block_i = vb->variant_block_i;
+    vb->curr_ra_ent->chrom           = chrom_node_index;
+    vb->curr_ra_ent->start_vb_line   = vb_line_i;
+    vb->curr_ra_ent->variant_block_i = vb->variant_block_i;
+    vb->curr_ra_ent_is_initialized   = false; // we will finish the initialization or POS on the first call to random_access_update_pos
 }
 
-// ZIP only: called from seg_pos_field
-void random_access_update_last_entry (VariantBlock *vb, int32_t this_pos)
+// ZIP only: called from seg_pos_field - update the pos in the existing chrom entry
+void random_access_update_pos (VariantBlock *vb, int32_t this_pos)
 {
     RAEntry *ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len-1];
 
-    if (this_pos < ra_ent->max_pos) ra_ent->is_sorted = false;
+    if (!vb->curr_ra_ent_is_initialized) {
+        ra_ent->min_pos = ra_ent->max_pos = this_pos;
+        vb->curr_ra_ent_is_initialized = true;
+    }    
+
+    else if (this_pos < ra_ent->min_pos) ra_ent->min_pos = this_pos; 
     
-    if (ra_ent->min_pos == 0 || this_pos < ra_ent->min_pos) 
-        ra_ent->min_pos = this_pos; // new vb or new new chrom 
-    
-    if (this_pos > ra_ent->max_pos)
-        ra_ent->max_pos = this_pos;
+    else if (this_pos > ra_ent->max_pos) ra_ent->max_pos = this_pos;
 
     ra_ent->num_vb_lines++;
 }
@@ -76,36 +75,56 @@ void random_access_merge_in_vb (VariantBlock *vb)
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
         MtfNode *chrom_node = mtf_node (chrom_ctx, src_ra[i].chrom, NULL, NULL);
 
-        dst_ra[i].is_sorted       = src_ra[i].is_sorted;
-        dst_ra[i].variant_block_i = BGEN32 (vb->variant_block_i);
-        dst_ra[i].chrom           = BGEN32 (chrom_node->word_index.n); // note: in the VB we store the node index, while in zfile we store tha word index
-        dst_ra[i].min_pos         = BGEN32 (src_ra[i].min_pos);
-        dst_ra[i].max_pos         = BGEN32 (src_ra[i].max_pos - src_ra[i].min_pos); // delta compresses better ?? check
-        dst_ra[i].start_vb_line   = BGEN32 (src_ra[i].start_vb_line);
-        dst_ra[i].num_vb_lines    = BGEN32 (src_ra[i].num_vb_lines);
+        dst_ra[i].variant_block_i = vb->variant_block_i;
+        dst_ra[i].chrom           = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
+        dst_ra[i].min_pos         = src_ra[i].min_pos;
+        dst_ra[i].max_pos         = src_ra[i].max_pos;
+        dst_ra[i].start_vb_line   = src_ra[i].start_vb_line;
+        dst_ra[i].num_vb_lines    = src_ra[i].num_vb_lines;
     }
 
     vb->z_file->ra_buf.len += vb->ra_buf.len;
 }
 
-// converts back to native from big endian, and also recovers max_pos
-static inline void BGEN_random_access_entry (RAEntry *ra_ent)
+// PIZ I/O thread: check if for the given VB,
+// the ranges in random access (from the file) overlap with the ranges in regions (from the command line -r or -R)
+bool random_access_is_vb_included (uint32_t vb_i)
 {
-    ra_ent->variant_block_i = BGEN32 (ra_ent->variant_block_i);
-    ra_ent->chrom           = BGEN32 (ra_ent->chrom);
-    ra_ent->min_pos         = BGEN32 (ra_ent->min_pos);
-    ra_ent->max_pos         = BGEN32 (ra_ent->max_pos) + ra_ent->min_pos; // restore from delta
-    ra_ent->start_vb_line   = BGEN32 (ra_ent->start_vb_line);
-    ra_ent->num_vb_lines    = BGEN32 (ra_ent->num_vb_lines);
+    if (!flag_regions) return true; // if no -r/-R was specified, all VBs are included
+
+    static const RAEntry *next_ra = NULL;
+
+    ASSERT0 ((vb_i==1) == !next_ra, "Error: expecting next_ra==NULL iff vb_i==1");
+
+    const RAEntry *first_ra = (const RAEntry *)evb->z_file->ra_buf.data;
+    if (!next_ra) next_ra = first_ra;
+
+    bool included=false;
+    while ((next_ra - first_ra < evb->z_file->ra_buf.len) && (next_ra->variant_block_i == vb_i)) {
+
+        // we call regions_is_region_included_in_requested_regions() until a first included is found. then we just loop until the end of this vb
+        if (!included && regions_is_region_included_in_requested_regions (next_ra->chrom, next_ra->min_pos, next_ra->max_pos))
+            included = true; 
+
+        next_ra++;
+    }   
+
+    return included; 
 }
 
-// Called by PIZ I/O thread
-void BGEN_random_access (Buffer *ra_buf)
+// Called by PIZ I/O thread (piz_read_global_area) and ZIP I/O thread (zip_write_global_area)
+void BGEN_random_access()
 {
-    RAEntry *ra = (RAEntry *)ra_buf->data;
+    RAEntry *ra = (RAEntry *)evb->z_file->ra_buf.data;
 
-    for (unsigned i=0; i < ra_buf->len; i++) 
-        BGEN_random_access_entry (&ra[i]);
+    for (unsigned i=0; i < evb->z_file->ra_buf.len; i++) {
+        ra[i].variant_block_i = BGEN32 (ra[i].variant_block_i);
+        ra[i].chrom           = BGEN32 (ra[i].chrom);
+        ra[i].min_pos         = BGEN32 (ra[i].min_pos);
+        ra[i].max_pos         = BGEN32 (ra[i].max_pos);
+        ra[i].start_vb_line   = BGEN32 (ra[i].start_vb_line);
+        ra[i].num_vb_lines    = BGEN32 (ra[i].num_vb_lines);
+    }
 }
 
 unsigned random_access_sizeof_entry()
@@ -113,20 +132,19 @@ unsigned random_access_sizeof_entry()
     return sizeof (RAEntry);
 }
 
-void random_access_show (const Buffer *ra_buf, bool is_big_endian)
+void random_access_show_index ()
 {
-    fprintf (stderr, "Random-access index contents (result of --show-index):\n");
+    printf ("Random-access index contents (result of --show-index):\n");
+    
+    const Buffer *ra_buf = &evb->z_file->ra_buf;
 
     for (unsigned i=0; i < ra_buf->len; i++) {
         
         RAEntry ra_ent = ((RAEntry *)ra_buf->data)[i]; // make a copy in case we need to BGEN
         
-        if (is_big_endian) BGEN_random_access_entry (&ra_ent);
-
-        const char *chrom_str = is_big_endian ? "chrom_WORD_index" : "chrom_NODE_index";
-
-        fprintf (stderr, "vb_i=%u %s=%u min_pos=%u max_pos=%u start_vb_line=%u num_vb_lines=%u is_sorted=%u\n",
-                 ra_ent.variant_block_i, chrom_str, ra_ent.chrom, ra_ent.min_pos, ra_ent.max_pos, ra_ent.start_vb_line, 
-                 ra_ent.num_vb_lines, ra_ent.is_sorted);
+        printf ("vb_i=%u chrom_node_index=%u min_pos=%u max_pos=%u start_vb_line=%u num_vb_lines=%u\n",
+                ra_ent.variant_block_i, ra_ent.chrom, ra_ent.min_pos, ra_ent.max_pos, ra_ent.start_vb_line, 
+                ra_ent.num_vb_lines);
     }
 }
+

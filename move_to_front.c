@@ -94,9 +94,9 @@ MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i,
     return node;
 }
 
-static inline int32_t mtf_get_mtf_i (VariantBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len, 
-                                     MtfNode **node,        // out - node if node is found, NULL if not
-                                     HashEnt **new_hashent) // optional out - the hash entry for a new node
+static inline int32_t mtf_get_node_index (VariantBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len, 
+                                          MtfNode **node,        // out - node if node is found, NULL if not
+                                          HashEnt **new_hashent) // out - the hash entry for a new node
 {
     HashEnt head, *hashent = &head;
     hashent->next = mtf_hash (ctx, snip, snip_len); // entry in hash table determined by hash function on snip
@@ -110,7 +110,7 @@ static inline int32_t mtf_get_mtf_i (VariantBlock *vb, MtfContext *ctx, const ch
 
         // case: snip is not in hash table and also no other snip occupies the slot
         if (hashent->mtf_i == NIL) { // unoccupied space in core hash table
-            if (new_hashent) *new_hashent = hashent;
+            *new_hashent = hashent;
             return NIL;
         }
 
@@ -120,23 +120,34 @@ static inline int32_t mtf_get_mtf_i (VariantBlock *vb, MtfContext *ctx, const ch
 
         // case: snip is in the hash table 
         if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) {
-            if (new_hashent) *new_hashent = NULL; // not a new node
+            *new_hashent = NULL; // not a new node
             return hashent->mtf_i;
         }
     }
 
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
-    if (new_hashent) {
-        if (ctx->hash.size < sizeof (HashEnt) * (1 + ctx->hash.len))
-            buf_alloc (vb, &ctx->hash, sizeof (HashEnt) * (1 + ctx->hash.len), 2, "mtf_ctx->hash" , 0);
+    if (ctx->hash.size < sizeof (HashEnt) * (1 + ctx->hash.len))
+        buf_alloc (vb, &ctx->hash, sizeof (HashEnt) * (1 + ctx->hash.len), 2, "mtf_ctx->hash" , 0);
 
-        hashent = &((HashEnt*)ctx->hash.data)[hashent_i]; // might have changed after realloc
-        hashent->next = ctx->hash.len++;
+    hashent = &((HashEnt*)ctx->hash.data)[hashent_i]; // might have changed after realloc
+    hashent->next = ctx->hash.len++;
 
-        *new_hashent = &((HashEnt*)ctx->hash.data)[hashent->next];
-    }
+    *new_hashent = &((HashEnt*)ctx->hash.data)[hashent->next];
 
     *node = NULL;
+    return NIL;
+}
+
+// PIZ: search for a node matching this snip in a directory and return the node index. note that we do a linear
+// search as PIZ doesn't have hash tables.
+int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned snip_len)
+{
+    MtfWord *words = (MtfWord *)ctx->word_list.data;
+
+    for (unsigned i=0; i < ctx->word_list.len; i++)
+        if (words[i].snip_len == snip_len && !memcmp (&ctx->dict.data[words[i].char_index], snip, snip_len))
+            return i;
+
     return NIL;
 }
 
@@ -220,7 +231,7 @@ uint32_t mtf_evaluate_snip (VariantBlock *vb, MtfContext *ctx, const char *snip,
 
     // attempt to get the node from the hash table
     HashEnt *new_hashent = NULL;
-    int32_t mtf_i = mtf_get_mtf_i (vb, ctx, snip, snip_len, node, &new_hashent);
+    int32_t mtf_i = mtf_get_node_index (vb, ctx, snip, snip_len, node, &new_hashent);
     if (mtf_i != NIL) {
         if (is_new) *is_new = false;
 

@@ -74,7 +74,7 @@ typedef struct file_ {
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
     Buffer section_list_dict_buf;      // ZIP: a subset of section_list_buf - dictionaries are added here by VBs as they are being constructed
-    uint32_t sl_cursor;                // PIZ: next index into section_list for searching for sections
+    uint32_t sl_cursor, sl_dir_cursor; // PIZ: next index into section_list for searching for sections
     uint32_t num_vcf_components_so_far;
 
     // Information content stats - how many bytes and how many sections does this file have in each section type

@@ -13,7 +13,7 @@
 static VariantBlockPool *pool = NULL;
 
 // one VB outside of pool
-VariantBlock *external_vb = NULL;
+VariantBlock *evb = NULL;
 
 unsigned vb_num_samples_in_sb(const VariantBlock *vb, unsigned sb_i)
 {
@@ -68,6 +68,8 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->z_next_header_i = 0;
     vb->num_dict_ids = vb->num_format_subfields = 0;
     vb->last_pos = 0;
+    vb->curr_ra_ent = NULL; 
+    vb->curr_ra_ent_is_initialized = false;
 
     memset(vb->vcf_section_bytes, 0, sizeof(vb->vcf_section_bytes));
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
@@ -152,11 +154,11 @@ VariantBlockPool *vb_get_pool ()
 
 void vb_external_vb_initialize()
 {
-    ASSERT0 (!external_vb, "Error: external_vb already initialized");
+    ASSERT0 (!evb, "Error: evb already initialized");
 
-    external_vb = calloc (1, sizeof (VariantBlock));
-    ASSERT0 (external_vb, "Error: failed to calloc external_vb");
-    external_vb->id = -1;
+    evb = calloc (1, sizeof (VariantBlock));
+    ASSERT0 (evb, "Error: failed to calloc evb");
+    evb->id = -1;
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip

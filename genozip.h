@@ -44,8 +44,6 @@
 #error "MAX_DICTS cannot go beyond 255 as SubfieldMapperZip and SubfieldInfoMapperPiz represent did_i as uint_8, and NIL=255"
 #endif
 
-#define MAX_CHROM_LEN      64   // maximum length of chromosome (contig) name
-
 // Note: the algorithm will use as many cores as it can - but there's no speed penalty for a higher MAX_COMPUTE_THREADS
 // that number of cores - it will not be faster, but also not slower.
 // However, each thread adds memory consumption approximately linearly
@@ -81,7 +79,7 @@ extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_
            flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
-extern VariantBlockP external_vb;
+extern VariantBlockP evb;
 
 // macros
 #ifndef MIN
@@ -90,7 +88,7 @@ extern VariantBlockP external_vb;
 #endif
 
 // sanity checks
-static inline void my_exit() { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
+static inline void my_exit(void) { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
 #define ASSERT(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit(); }}
 #define ASSERT0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); my_exit(); }}
 #define ASSERTW(condition, format, ...)      { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}

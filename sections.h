@@ -204,13 +204,22 @@ typedef struct {
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct {
-    uint64_t offset;              // offset of this section in the file
-    DictIdType dict_id;           // used if this section is a DICT or a B250 section
+    uint64_t offset;                   // offset of this section in the file
+    DictIdType dict_id;                // used if this section is a DICT or a B250 section
     uint32_t variant_block_i;
     uint8_t section_type;
-    uint8_t include         : 1;  // include this variant block in zcat
-    uint8_t for_future_use  : 7;
+    uint8_t unused[3];                 // padding
 } SectionListEntry;
+
+// the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
+// we maintain one RA entry per vb per every chrom in the the VB
+typedef struct {
+    uint32_t variant_block_i;             // the vb_i in which this range appears
+    uint32_t chrom;                       // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
+    uint32_t min_pos, max_pos;            // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
+    uint32_t start_vb_line;               // the first VB line (0-based) where this chrom is found
+    uint32_t num_vb_lines;                // the number of lines (not necessarily contiguous) of this chrom in the VB
+} RAEntry; 
 
 // ------------------------------------------------------------------------------------------------------
 // GENOZIP_FILE_FORMAT_VERSION==1 historical version - we support uncomrpessing old version files
@@ -252,7 +261,8 @@ typedef struct {
     uint16_t num_dictionary_sections;  // we have a dictionary for each dict_id, in which new words were introduced in this VB that weren't already in the dictionary. so num_dictionary_sections <= num_dict_ids
     uint32_t max_gt_line_len;
 
-    char chrom[MAX_CHROM_LEN];         // a null-terminated ID of the chromosome
+#define v1_MAX_CHROM_LEN      64       // maximum length of chromosome (contig) name
+    char chrom[v1_MAX_CHROM_LEN];      // a null-terminated ID of the chromosome
     int64_t min_pos, max_pos;          // minimum and maximum POS values in this VB. -1 if unknown. Note: our format support 64bit POS, but VCF specification as well as the POS dictionary supports 32bit (values 0 to 2M-1)
 
     uint32_t vb_data_size;             // size of variant block as it appears in the source file
@@ -266,12 +276,17 @@ typedef struct {
 
 #pragma pack(pop)
 
+// zip stuff
 extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VariantBlockP vb, BufferP section_list_buf);
-extern uint32_t sections_count_info_b250s (FileP z_file);
-extern SectionType sections_get_next_header_type (FileP z_file);
-extern bool sections_has_more_vcf_components (FileP z_file);
-extern void BGEN_sections_list (BufferP sections_list_buf);
+
+// piz stuff
+extern uint32_t sections_count_info_b250s (unsigned vb_i);
+extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb);
+extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
+extern bool sections_has_more_vcf_components(void);
+
+extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
 extern const char *dt_name (unsigned data_type);
 extern const char *encryption_name (unsigned encryption_type);

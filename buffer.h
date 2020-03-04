@@ -27,7 +27,7 @@ typedef struct buffer_ {
 } Buffer;
 #define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL}
 
-extern void buf_initialize();
+extern void buf_initialize(void);
 
 #define buf_is_allocated(buf_p) ((buf_p)->data != NULL && ((buf_p)->type == BUF_REGULAR || (buf_p)->type == BUF_FULL_OVERLAY || (buf_p)->type == BUF_PARTIAL_OVERLAY))
 
@@ -69,6 +69,8 @@ extern void buf_display_memory_usage (bool memory_full);
 
 extern char *buf_human_readable_size (int64_t size, char *str /* out */);
 extern char *buf_human_readable_uint (int64_t n, char *str /* out */);
+#define POINTER_STR_LEN 19
+extern char *buf_display_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/);
 
 #define buf_zero(buf_p) { memset ((buf_p)->data, 0, (buf_p)->size); }
 

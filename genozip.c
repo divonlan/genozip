@@ -334,7 +334,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             buf_human_readable_size(total_uncompressed_len, u_str);
             unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            bufprintf (external_vb, &str_buf, foot_format, c_str, u_str, ratio);
+            bufprintf (evb, &str_buf, foot_format, c_str, u_str, ratio);
         }
         
         ASSERTW (!files_ignored, "\nIgnored %u file%s that %s not have a .vcf" GENOZIP_EXT " extension\n\n", 
@@ -344,7 +344,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     }
 
     if (first_file) {
-        bufprintf (external_vb, &str_buf, head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", " MD5 (of original VCF)           ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        bufprintf (evb, &str_buf, head_format, "Indiv", "Sites", "Compressed", "Original", "Factor", " MD5 (of original VCF)           ", -(int)FILENAME_WIDTH, "Name", "Creation");
         first_file = false;
     }
     
@@ -370,7 +370,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     buf_human_readable_size (vcf_data_size, u_str);
     buf_human_readable_uint (num_lines, s_str);
 
-    bufprintf (external_vb, &str_buf, item_format, num_samples, s_str, 
+    bufprintf (evb, &str_buf, item_format, num_samples, s_str, 
                c_str, u_str, ratio, 
                md5_display (&md5_hash_concat, true),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
@@ -466,7 +466,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     const char *password = crypt_get_password();
 
 #ifdef _WIN32
-    char *cmd_line = malloc (strlen (exec_name) + strlen (password) + 50);
+    char *cmd_line = malloc (strlen (exec_name) + (password ? strlen (password) : 0) + 50);
     sprintf (cmd_line, "%s -d -t %s %s %s %s", exec_name, (flag_quiet ? "-q" : ""), 
              (password ? "-p" : ""), (password ? password : ""), z_filename);
 
@@ -499,11 +499,8 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
         
         execvp (exec_name, test_argv);        
     }
-    else {  // I am the parent
-        // wait for child, so that the terminal doesn't print the prompt until the child is done
-        int status;
-        wait (&status);
-    }
+    
+    wait (NULL); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
 #endif
 }
 
@@ -733,7 +730,7 @@ int main (int argc, char **argv)
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,     _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,     _m, _th, _O, _o, _p,               _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh     ,           _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,     _m, _th, _O, _o, _p,               _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,           _00 };
         static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                     _00 };
         static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p, _r,                                                                                 _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
@@ -830,9 +827,11 @@ int main (int argc, char **argv)
     if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
 
     if (command == UNZIP && flag_stdout) flag_quiet=true; // don't show progress when outputing to stdout
-    if (flag_show_dict || flag_show_gheader || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || 
-        dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_alleles) 
-        flag_quiet=true; // don't show progress when debug data
+    
+    // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
+    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || 
+        dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_alleles || (flag_show_index && command==UNZIP))
+        flag_quiet=true; // don't show progress
 
     unsigned num_files = argc - optind;
 

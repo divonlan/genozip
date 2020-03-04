@@ -114,7 +114,9 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
     } while (line->data[str_len-1] != '\n');
             
     // if this file somehow passed through Windows and had \n replace by \r\n - remove the \r
-    if (str_len >= 2 && line->data[str_len-2] == '\r') {
+    bool windows_style_newline = str_len >= 2 && line->data[str_len-2] == '\r';
+    
+    if (windows_style_newline) {
         line->data[str_len-2] = '\n';
         str_len--;
     }
@@ -126,7 +128,7 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
     
     line->len = str_len;
 
-    file->vcf_data_so_far += str_len;
+    file->vcf_data_so_far += str_len + windows_style_newline;
 
     if (flag_concat && (!skip_md5_vcf_header || line->data[0] != '#'))  // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
         md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len);
