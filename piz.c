@@ -66,8 +66,9 @@ static inline void piz_decode_pos (VariantBlock *vb, const char *delta_snip, uns
 
         *pos_len = len;
     }
-    else {  // n=0. note: POS=0 is not compliant with the VCF spcification
-        pos_str[0] = 0;
+    else {  // n=0. 
+        pos_str[0] = '0';
+        pos_str[1] = '\0';
         *pos_len = 1;
     }
     COPY_TIMER(vb->profile.piz_decode_pos);
@@ -743,6 +744,8 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     for (VcfFields f=CHROM; f <= FORMAT; f++) {
 
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
+
+        if (f==FORMAT && flag_drop_genotypes) continue; // we don't need FORMAT if --drop-genotypes
 
         zfile_uncompress_section (vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", SEC_CHROM_B250 + f*2);
     }

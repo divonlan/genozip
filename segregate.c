@@ -12,6 +12,8 @@
 #include "endianness.h"
 #include "random_access.h"
 
+#define MAX_POS 0x7fffffff // maximum allowed value for POS
+
 // returns the node index
 static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, unsigned vcf_line_i, VcfFields f, 
                                bool *is_new) // optional out
@@ -41,14 +43,14 @@ static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_l
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
     const char *s; for (s=pos_str; *s != '\t'; s++) {
-        ASSERT (*s >= '0' && *s <= '9', "Error: POS field in line %u must be an integer number", vcf_line_i);
+        ASSERT (*s >= '0' && *s <= '9', "Error: POS field in line %u must be an integer number between 0 and %u", vcf_line_i, MAX_POS);
         this_pos_64 = this_pos_64 * 10 + (*s - '0');
     }
 
     int32_t this_pos = (int32_t)this_pos_64;
 
     ASSERT (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, 
-            "Error: Invalid POS in line %u - value should be between 0 and %u, but found %u", vcf_line_i, 0x7fffffff, this_pos);
+            "Error: Invalid POS in line %u - value should be between 0 and %u, but found %u", vcf_line_i, MAX_POS, this_pos);
     
     int32_t pos_delta = this_pos - vb->last_pos;
     

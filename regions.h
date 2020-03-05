@@ -13,7 +13,7 @@ extern void regions_make_chregs(void);
 extern void regions_transform_negative_to_positive_complement(void);
 extern bool regions_get_ra_intersection (uint32_t chrom_node_index, uint32_t min_pos, uint32_t max_pos, char *intersection_one_ra);
 extern unsigned regions_max_num_chregs(void);
-extern void regions_display(void);
+extern void regions_display(const char *title);
 extern bool regions_is_site_included (uint32_t chrom_word_index, uint32_t pos);
 
 #endif

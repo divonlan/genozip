@@ -181,7 +181,7 @@ void regions_add (const char *region_str)
             }
         }
 
-        //regions_display(); 
+        regions_display ("After regions_add"); 
     }
 }
 
@@ -226,7 +226,7 @@ void regions_make_chregs(void)
 
     buf_destroy (evb, &regions_buf); // free the memory, we don't need it again
 
-    //regions_display();
+    regions_display("After regions_make_chregs");
 }
 
 void regions_transform_negative_to_positive_complement()
@@ -292,7 +292,7 @@ void regions_transform_negative_to_positive_complement()
 
     free (neg_chregs);
 
-    //regions_display(); 
+    regions_display("After regions_transform_negative_to_positive_complement"); 
 }
 
 // PIZ: we calculate which regions (specified in the command line -r/-R) intersect with 
@@ -343,8 +343,10 @@ unsigned regions_max_num_chregs(void)
     return result; 
 }
 
-void regions_display()
+void regions_display(const char *title)
 {
+    fprintf (stderr, "regions_display: %s\n", title);
+
     if (buf_is_allocated (&regions_buf)) {
 
         fprintf (stderr, "Showing %u %s regions:\n", regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
