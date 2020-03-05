@@ -20,6 +20,7 @@
 #include "sections.h"
 #include "random_access.h"
 #include "regions.h"
+#include "samples.h"
 
 typedef struct {
     unsigned num_subfields;         // number of subfields this FORMAT has
@@ -351,6 +352,8 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i)
              sample_i < first_sample + num_samples_in_sb; 
              sample_i++) {
 
+            if (flag_samples && !samples_am_i_included (sample_i)) continue;
+
             const char *snip = NULL; // will be set to a pointer into a dictionary
             
             for (unsigned sf_i=0; sf_i < line_format_info->num_subfields; sf_i++) {
@@ -391,7 +394,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i)
 
     vb->line_gt_data.len = next - vb->line_gt_data.data;
 
-    dl->has_genotype_data = (vb->line_gt_data.len > global_num_samples); // not all just \t
+    dl->has_genotype_data = (vb->line_gt_data.len > global_number_displayed_samples); // not all just \t
 
     COPY_TIMER(vb->profile.piz_get_genotype_data_line);
 }
@@ -521,6 +524,8 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
     // add samples
     for (unsigned sample_i=0; sample_i < global_num_samples; sample_i++) {
 
+        if (flag_samples && !samples_am_i_included (sample_i)) continue;
+
         // add haplotype data - ploidy haplotypes per sample 
         if (dl->has_haplotype_data) {
 
@@ -531,7 +536,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
             for (unsigned p=0; p < vb->ploidy ; p++) {
                 
                 unsigned char ht = vb->line_ht_data.data[sample_i * vb->ploidy + p];
-                if (ht == '.') // unknown 
+                if (ht == '.') // unknown
                     *(next++) = ht;
 
                 else if (ht == '*')  // missing haplotype - delete previous phase
@@ -604,14 +609,14 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 
-        buf_alloc (vb, &vb->line_phase_data, global_num_samples, 1, "line_phase_data", 0);
+        buf_alloc (vb, &vb->line_phase_data, global_num_samples, 1, "line_phase_data", vb->variant_block_i);
 
     // initialize haplotype stuff
     const char **ht_columns_data=NULL;
     if (vb->has_haplotype_data && !flag_drop_genotypes) {
 
         //  memory - realloc for exact size, add 7 because depermuting_loop works on a word (32/64 bit) boundary
-        buf_alloc (vb, &vb->line_ht_data, vb->num_haplotypes_per_line + 7, 1, "line_ht_data", 0);
+        buf_alloc (vb, &vb->line_ht_data, vb->num_haplotypes_per_line + 7, 1, "line_ht_data", vb->variant_block_i);
 
         ht_columns_data = piz_get_ht_columns_data (vb);
     }
@@ -626,7 +631,7 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
         // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
         piz_initialize_sample_iterators(vb);
 
-        buf_alloc (vb, &vb->line_gt_data, vb->max_gt_line_len, 1, "line_gt_data", 0);
+        buf_alloc (vb, &vb->line_gt_data, vb->max_gt_line_len, 1, "line_gt_data", vb->variant_block_i);
     }
 
     // this arrays (for fields) and iname_mapper->next (for info subfields)  contain pointers to the next b250 item.
@@ -703,6 +708,12 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         global_num_samples = BGEN32 (header->num_samples);
     else {
         ASSERT (global_num_samples == BGEN32 (header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, BGEN32 (header->num_samples));
+    }
+
+    // if the user filtered out all samples, we don't need to even uncompress them
+    if (flag_samples && !global_number_displayed_samples) {
+        vb->has_genotype_data = false;
+        vb->has_haplotype_data = false;
     }
 
     // in case of --split, the variant_block_i in the 2nd+ component will be different than that assigned by the dispatcher

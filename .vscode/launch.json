@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/genocat-debug.exe",
             //"program": "${workspaceFolder}/genozip-debug.exe",
 
-            "args": ["test-file.vcf.genozip", "-ojunk.vcf", "-f", "-r13"],
+            "args": ["test-file.vcf.genozip", "-sPerson1,Person2,XXXrson90"],
             //"args": ["-t", "-f",  "out.vcf"],
             //"args": ["GFX0241869.filtered.snp.vcf.genozip", "-o", "junk.vcf", "-f", "-G", "--show-memory"],
             //"args": ["test-file.vcf.genozip", "-G"],

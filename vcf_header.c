@@ -12,8 +12,10 @@
 #include "version.h"
 #include "endianness.h"
 #include "file.h"
+#include "samples.h"
 
-unsigned global_num_samples      = 0; // a global param - assigned once before any thread is created, and never changes - so no thread safety issue
+unsigned global_num_samples      = 0; // number of samples in the file
+unsigned global_number_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that global_num_samples if --samples is used
 unsigned global_max_lines_per_vb = 0; // for ZIP this is determined by as a function of the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
 
 Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
@@ -23,8 +25,9 @@ const char *vcf_field_names[] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILT
 
 void vcf_header_initialize()
 {
-    global_num_samples      = 0;
-    global_max_lines_per_vb = 0;
+    global_num_samples              = 0;
+    global_number_displayed_samples = 0;
+    global_max_lines_per_vb         = 0;
     buf_free (&global_vcf_header_line);
 }
 
@@ -66,6 +69,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
 
             //count samples
             global_num_samples = (tab_count >= 9) ? tab_count-8 : 0; // note: a VCF file without samples would have tab_count==7 (8 fields) and is perfectly legal
+            global_number_displayed_samples = global_num_samples;
 
             // set global_max_lines_per_vb when compressing. we decompressing, it will be determined by the input file.
             if (!global_max_lines_per_vb) {
@@ -81,6 +85,9 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
             ASSERT0 (tab_count != 8, "Error: invalid VCF file - field header line contains a FORMAT field but no samples");
 
             ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
+
+            // if --samples is used, update vcf_header and global_number_displayed_samples
+            if (flag_samples) samples_digest_vcf_header (vcf_header);
 
             return true; 
         }
