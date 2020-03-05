@@ -21,6 +21,8 @@
 #include "random_access.h"
 #include "endianness.h"
 
+static uint32_t global_samples_per_block = 4096; // tradeoff: larger is better compression, but in some cases might be slower retrieval speed
+
 // read entire variant block to memory. this is called from the dispatcher thread
 static void zip_read_variant_block (File *vcf_file,
                                     unsigned *line_i,   // in/out next line to be read
@@ -137,7 +139,7 @@ static unsigned zip_get_genotype_vb_start_len (VariantBlock *vb)
             unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
 
             gt_sb_line_starts[SBL(line_i, sb_i)] = 
-                &gt_data[SAMPLES_PER_BLOCK * sb_i * format_mapper->num_subfields];
+                &gt_data[global_samples_per_block * sb_i * format_mapper->num_subfields];
 
             unsigned num_subfields_in_sample_line = format_mapper->num_subfields * num_samples_in_sb; // number of uint32_t
             gt_sb_line_lengths[SBL(line_i, sb_i)] = num_subfields_in_sample_line;
@@ -163,7 +165,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
     unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
     for (unsigned sample_i=0; sample_i < num_samples_in_sb; sample_i++) {
 
-        if (flag_show_gt_nodes) fprintf (stderr, "sample=%u (vb_i=%u sb_i=%u):\n", sb_i * SAMPLES_PER_BLOCK + sample_i + 1, vb->variant_block_i, sb_i);
+        if (flag_show_gt_nodes) fprintf (stderr, "sample=%u (vb_i=%u sb_i=%u):\n", sb_i * global_samples_per_block + sample_i + 1, vb->variant_block_i, sb_i);
 
         for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
 
@@ -385,7 +387,7 @@ static void zip_compress_one_vb (VariantBlock *vb)
 
     // initalize variant block data (everything else is initialzed to 0 via calloc)
     vb->phase_type = PHASE_UNKNOWN;  // phase type of this block
-    vb->num_samples_per_block = SAMPLES_PER_BLOCK;
+    vb->num_samples_per_block = global_samples_per_block;
     vb->num_sample_blocks = ceil((float)global_num_samples / (float)vb->num_samples_per_block);
 
     // if testing, make a copy of the original lines read from the file, to compare to the result of vunblocking later

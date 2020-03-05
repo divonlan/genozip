@@ -30,8 +30,6 @@
 // variants in the block (assuming the VCF is sorted by POS), resulting in our sorting by number of 1s more likely to result
 // in similar haplotypes grouped together - improving the compression.
 
-#define SAMPLES_PER_BLOCK  4096 // tradeoff: larger is better compression, but in some cases might be slower retrieval speed
-
 #define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if MAX_PLOIDY > 65535
 #error "MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeader.ploidy and VariantBlock.ploidy are uint16_t"

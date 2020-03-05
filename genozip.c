@@ -44,6 +44,7 @@
 #include "regions.h"
 #include "samples.h"
 
+
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
 ExeType exe_type;
@@ -501,7 +502,9 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
         execvp (exec_name, (char * const *)test_argv);        
     }
     
-    wait (NULL); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
+    int *wstatus;
+    wait (wstatus); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
+    if (wstatus) fprintf (stderr, "genozip test exited with status %u\n", wstatus;)
 #endif
 }
 
