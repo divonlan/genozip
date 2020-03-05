@@ -897,6 +897,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     static Dispatcher dispatcher = NULL;
     bool piz_successful = false;
     SectionListEntry *sl_ent = NULL;
+fprintf(stderr, "xxx1\n");
     
     if (flag_split && !sections_has_more_vcf_components()) return false; // no more components
 
@@ -930,6 +931,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
 
     if (flag_split) 
         dispatcher_resume (dispatcher, vcf_file); // accept more input 
+fprintf(stderr, "xxx1\n");
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
@@ -939,6 +941,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     do {
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a variant block and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
+fprintf(stderr, "pxxx1\n");
 
             bool compute = false;
             if (z_file->genozip_version > 1) {
@@ -991,6 +994,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
 
         // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
         else if (dispatcher_has_processed_vb (dispatcher, NULL)) {
+fprintf(stderr, "pxxx2\n");
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
     
             vcffile_write_one_variant_block (vcf_file, processed_vb);
