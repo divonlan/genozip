@@ -97,10 +97,12 @@ uint32_t sections_count_info_b250s (unsigned vb_i)
 }
 
 // called by PIZ I/O to know if next up is a VB Header or VCF Header or EOF
-SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skipped_vb)
+SectionType sections_get_next_header_type (SectionListEntry **sl_ent, 
+                                           bool *skipped_vb,   // out (VB only) - true if this vb should be skipped
+                                           Buffer *region_ra_intersection_matrix) // out (VB only) - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
 {
     // find the next VB or VCF header section
-    *skipped_vb = false;
+    if (skipped_vb) *skipped_vb = false;
 
     while (evb->z_file->sl_cursor < evb->z_file->section_list_buf.len) {
        *sl_ent = &((SectionListEntry *)evb->z_file->section_list_buf.data)[evb->z_file->sl_cursor++];
@@ -110,10 +112,10 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skip
             return SEC_VCF_HEADER;
 
         if (sec_type == SEC_VB_HEADER) {
-            if (random_access_is_vb_included ((*sl_ent)->variant_block_i))
+            if (random_access_is_vb_included ((*sl_ent)->variant_block_i, region_ra_intersection_matrix))
                 return SEC_VB_HEADER;
             
-            else *skipped_vb = true;
+            else if (skipped_vb) *skipped_vb = true;
         }
     }
 
@@ -158,19 +160,19 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     unsigned num_sections = BGEN32 (header->num_sections);
     char size_str[50];
 
-    printf ("Below are the contents of the genozip header. This is the output of --show-gheader:\n");
-    printf ("  genozip_version: %u\n",               header->genozip_version);
-    printf ("  data_type: %s\n",                     dt_name (BGEN16 (header->data_type)));
-    printf ("  encryption_type: %s\n",               encryption_name (header->encryption_type)); 
-    printf ("  num_samples: %u\n",                   BGEN32 (header->num_samples));
-    printf ("  uncompressed_data_size: %s\n",        buf_human_readable_uint (BGEN64 (header->uncompressed_data_size), size_str));
-    printf ("  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
-    printf ("  num_sections: %u\n",                  num_sections);
-    printf ("  num_vcf_components: %u\n",            BGEN32 (header->num_vcf_components));
-    printf ("  md5_hash_concat: %s\n",               md5_display (&header->md5_hash_concat, false));
-    printf ("  created: %*s\n",                      -FILE_METADATA_LEN, header->created);
+    fprintf (stderr, "Below are the contents of the genozip header. This is the output of --show-gheader:\n");
+    fprintf (stderr, "  genozip_version: %u\n",               header->genozip_version);
+    fprintf (stderr, "  data_type: %s\n",                     dt_name (BGEN16 (header->data_type)));
+    fprintf (stderr, "  encryption_type: %s\n",               encryption_name (header->encryption_type)); 
+    fprintf (stderr, "  num_samples: %u\n",                   BGEN32 (header->num_samples));
+    fprintf (stderr, "  uncompressed_data_size: %s\n",        buf_human_readable_uint (BGEN64 (header->uncompressed_data_size), size_str));
+    fprintf (stderr, "  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
+    fprintf (stderr, "  num_sections: %u\n",                  num_sections);
+    fprintf (stderr, "  num_vcf_components: %u\n",            BGEN32 (header->num_vcf_components));
+    fprintf (stderr, "  md5_hash_concat: %s\n",               md5_display (&header->md5_hash_concat, false));
+    fprintf (stderr, "  created: %*s\n",                      -FILE_METADATA_LEN, header->created);
 
-    printf ("  sections:\n");
+    fprintf (stderr, "  sections:\n");
 
     SectionListEntry *ents = (SectionListEntry *)evb->z_file->section_list_buf.data;
 
@@ -179,7 +181,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
         uint64_t this_offset = ents[i].offset;
         uint64_t next_offset = (i < num_sections-1) ? ents[i+1].offset : evb->z_file->disk_so_far;
 
-        printf ("    %3u. %-24.24s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
+        fprintf (stderr, "    %3u. %-24.24s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 
                  -DICT_ID_LEN, DICT_ID_LEN, ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 
                  ents[i].variant_block_i, this_offset, next_offset - this_offset);

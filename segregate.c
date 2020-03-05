@@ -39,14 +39,16 @@ static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned c
 static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_len, unsigned vcf_line_i)
 {
     // scan by ourselves - hugely faster the sscanf
-    int64_t this_pos_64=0; // long long so we can test for overflow
-    const char *s; for (s=pos_str; *s != '\t'; s++)
+    int64_t this_pos_64=0; // int64_t so we can test for overflow
+    const char *s; for (s=pos_str; *s != '\t'; s++) {
+        ASSERT (*s >= '0' && *s <= '9', "Error: POS field in line %u must be an integer number", vcf_line_i);
         this_pos_64 = this_pos_64 * 10 + (*s - '0');
+    }
 
     int32_t this_pos = (int32_t)this_pos_64;
 
     ASSERT (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, 
-            "Error: Invalid POS in line %u - value should be between 1 and %u, but found %u", vcf_line_i, 0x7fffffff, this_pos);
+            "Error: Invalid POS in line %u - value should be between 0 and %u, but found %u", vcf_line_i, 0x7fffffff, this_pos);
     
     int32_t pos_delta = this_pos - vb->last_pos;
     
@@ -735,7 +737,7 @@ void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
 
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
-        //printf ("vb_line_i=%u\n", vb_line_i);
+        //fprintf (stderr, "vb_line_i=%u\n", vb_line_i);
         DataLine *dl = &vb->data_lines[vb_line_i];
 
         if (lines_orig) buf_copy (vb, &lines_orig[vb_line_i], &dl->line, 1, 0, dl->line.len+1, "lines_orig", vb->variant_block_i); // if testing

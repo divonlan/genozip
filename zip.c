@@ -100,7 +100,7 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
     }
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
-        printf ("%.*s", vb->show_b250_buf.len, vb->show_b250_buf.data);
+        fprintf (stderr, "%.*s", vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
 }
@@ -163,11 +163,11 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
     unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
     for (unsigned sample_i=0; sample_i < num_samples_in_sb; sample_i++) {
 
-        if (flag_show_gt_nodes) printf ("sample=%u (vb_i=%u sb_i=%u):\n", sb_i * SAMPLES_PER_BLOCK + sample_i + 1, vb->variant_block_i, sb_i);
+        if (flag_show_gt_nodes) fprintf (stderr, "sample=%u (vb_i=%u sb_i=%u):\n", sb_i * SAMPLES_PER_BLOCK + sample_i + 1, vb->variant_block_i, sb_i);
 
         for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
 
-            if (flag_show_gt_nodes) printf ("  L%u: ", line_i + vb->first_line);
+            if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i + vb->first_line);
 
             DataLine *dl = &vb->data_lines[line_i];
 
@@ -197,7 +197,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
                     MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
                     Base250 index = node->word_index;
 
-                    if (flag_show_gt_nodes) printf ("%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
+                    if (flag_show_gt_nodes) fprintf (stderr, "%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
 
                     base250_copy (dst_next, index);
                     dst_next += base250_len (index.encoded.numerals);
@@ -212,7 +212,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
             vb->genotype_one_section_data.len += dst_next - dst_start;
             
-            if (flag_show_gt_nodes) printf ("\n");
+            if (flag_show_gt_nodes) fprintf (stderr, "\n");
         }
     }
 

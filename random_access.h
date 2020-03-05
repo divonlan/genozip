@@ -16,6 +16,6 @@ extern void random_access_merge_in_vb (VariantBlockP vb);
 extern void BGEN_random_access (void);
 extern unsigned random_access_sizeof_entry(void);
 extern void random_access_show_index(void);
-extern bool random_access_is_vb_included (uint32_t vb_i);
+extern bool random_access_is_vb_included (uint32_t vb_i, BufferP region_ra_intersection_matrix);
 
 #endif

@@ -43,10 +43,9 @@
 #include "endianness.h"
 #include "regions.h"
 
-typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
-
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
+ExeType exe_type;
 int command = -1;  // must be static or global to initialize list_options 
 
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
@@ -55,7 +54,8 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0,
-    flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0;
+    flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0,
+    flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
@@ -84,17 +84,17 @@ static int main_print (const char **text, unsigned num_lines,
         bool wrapped = false;
         while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
             int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); c>=0 && line[c] != ' '; c--); // find 
-            printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
+            fprintf (stderr, "%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + 1; // skip space too
             line_len -= c + 1;
             wrapped = true;
         }
-        printf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
+        fprintf (stderr, "%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
     }
     return 0;
 }
 
-static int main_print_help (ExeType exe_type, bool explicit)
+static int main_print_help (bool explicit)
 {
     static const char **texts[] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
     static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
@@ -158,9 +158,9 @@ static unsigned main_get_num_cores()
 
 static void main_show_file_metadata (const File *vcf_file, const File *z_file)
 {
-    printf ("\n\n");
-    if (vcf_file->name) printf ("File name: %s\n", vcf_file->name);
-    printf (
+    fprintf (stderr, "\n\n");
+    if (vcf_file->name) fprintf (stderr, "File name: %s\n", vcf_file->name);
+    fprintf (stderr, 
 #ifdef _MSC_VER
              "Individuals: %u   Variants: %I64u   Non-GT subfields: %u\n", 
 #else
@@ -175,8 +175,8 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 
     char vsize[30], zsize[30], zentries_str[30];
 
-    printf ("Sections stats:\n");
-    printf ("                           #Sec  #Entries            VCF     %%       GENOZIP     %%   Ratio\n");
+    fprintf (stderr, "Sections stats:\n");
+    fprintf (stderr, "                           #Sec  #Entries            VCF     %%       GENOZIP     %%   Ratio\n");
     const char *format = "%22s    %5u  %13s  %8s %5.1f      %8s %5.1f  %6.1f%s\n";
 
     // the order in which we want them displayed
@@ -214,7 +214,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 
         char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_human_readable_size(vbytes, vsize) : "       ";
         
-        printf (format, categories[sec_i], zsections, buf_human_readable_uint (zentries, zentries_str),
+        fprintf (stderr, format, categories[sec_i], zsections, buf_human_readable_uint (zentries, zentries_str),
                  vcf_size_str, 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
                  buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
@@ -226,7 +226,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
         total_z        += zbytes;
     }
 
-    printf (format, "TOTAL", total_sections, buf_human_readable_uint (total_entries, zentries_str),
+    fprintf (stderr, format, "TOTAL", total_sections, buf_human_readable_uint (total_entries, zentries_str),
              buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
@@ -246,8 +246,8 @@ static void main_show_content (const File *vcf_file, const File *z_file)
     char vsize[30], zsize[30];
     int64_t total_vcf=0, total_z=0;
 
-    printf ("Compression stats:\n");
-    printf ("                              VCF     %%       GENOZIP     %%  Ratio\n");
+    fprintf (stderr, "Compression stats:\n");
+    fprintf (stderr, "                              VCF     %%       GENOZIP     %%  Ratio\n");
     const char *format = "%22s   %8s %5.1f      %8s %5.1f  %5.1f%s\n";
 
     const char *categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9", "Index"};
@@ -272,7 +272,7 @@ static void main_show_content (const File *vcf_file, const File *z_file)
             zbytes += z_file->section_bytes[*sec_i];
         }
 
-        printf (format, categories[i], 
+        fprintf (stderr, format, categories[i], 
                  buf_human_readable_size(vbytes, vsize), 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
                  buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
@@ -282,7 +282,7 @@ static void main_show_content (const File *vcf_file, const File *z_file)
         total_z        += zbytes;
     }
 
-    printf (format, "TOTAL", 
+    fprintf (stderr, format, "TOTAL", 
              buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
@@ -672,7 +672,6 @@ int main (int argc, char **argv)
             *c += 'a' - 'A';
 #endif
 
-    ExeType exe_type;
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
     else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
     else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
@@ -711,6 +710,10 @@ int main (int argc, char **argv)
         #define _p  {"password",      required_argument, 0, 'p'                }
         #define _vb {"vblock",        required_argument, 0, 'B'                }
         #define _r  {"regions",       required_argument, 0, 'r'                }
+        #define _tg {"targets",       required_argument, 0, 't'                }
+        #define _G  {"drop-genotypes",no_argument,       &flag_drop_genotypes,1}
+        #define _H1 {"no-header",     no_argument,       &flag_no_header,    1 }
+        #define _H0 {"header-only",   no_argument,       &flag_header_only,  1 }
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
         #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
@@ -729,17 +732,17 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,     _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,     _m, _th, _O, _o, _p,               _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,           _00 };
-        static Option genols_lo[]     = {             _h,     _L1, _L2, _q,          _V,                      _p,                                                                                     _00 };
-        static Option genocat_lo[]    = {             _h,     _L1, _L2, _q,          _V,         _th,         _p, _r,                                                                                 _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                        _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                  _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,           _00 };
+        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,          _V,                      _p,                                                                          _st, _sm,                     _00 };
+        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q,          _V,         _th,     _o, _p, _r, _tg, _G, _H0, _H1,                                                   _st, _sm,                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         static const char *short_options[] = { // same order as ExeType
             "cdfhlLqt^Vzm@:Oo:p:B:", // genozip
             "cfhLqt^V@:Oo:p:m",      // genounzip
-            "hLVp:q",                // genols
-            "hLV@:p:1r:"             // genocat
+            "hLVp:qf",               // genols
+            "hLV@:p:1r:t:HGo:f"      // genocat
         };
 
         int option_index = -1;
@@ -760,16 +763,19 @@ int main (int argc, char **argv)
             case 'f' : flag_force         = 1      ; break;
             case '^' : flag_replace       = 1      ; break;
             case 'q' : flag_quiet         = 1      ; break;
-            case 't' : flag_test          = 1      ; break;
+            case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
+                       // fall through for genocat -r
+            case 'r' : flag_regions = true; regions_add (optarg); break;
             case 'm' : flag_md5           = 1      ; break;
             case 'O' : flag_split         = 1      ; break;
+            case 'G' : flag_drop_genotypes= 1      ; break;
+            case 'H' : flag_no_header     = 1      ; break;
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : genozip_set_global_max_lines_per_vb (optarg); break;
             case 'p' : crypt_set_password (optarg) ; break;
-            case 'r' : flag_regions = true; regions_add (optarg); break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
 
@@ -803,24 +809,25 @@ int main (int argc, char **argv)
         if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
         
         else if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) 
-            return main_print_help (exe_type, false);
+            return main_print_help (false);
 
         else if (exe_type == EXE_GENOUNZIP) command = UNZIP;
-        else if (exe_type == EXE_GENOCAT) { command = UNZIP; flag_stdout=1 ; }
+        else if (exe_type == EXE_GENOCAT) { command = UNZIP; flag_stdout = !out_filename ; }
         else command = ZIP; // default 
     }
 
-    // sanity checks
+    // check for incompatabilities between flags
     #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
     
-    ASSERT (!flag_stdout || !out_filename,      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
-    ASSERT (!flag_stdout || !flag_split,        "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
-    ASSERT (!flag_split  || !out_filename,      "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
-    ASSERT (!flag_stdout || !flag_replace,      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
-    ASSERT (!flag_stdout || !flag_md5,          "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("--md5", "m"));
+    ASSERT (!flag_stdout || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
+    ASSERT (!flag_stdout || !flag_split,                       "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
+    ASSERT (!flag_split  || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
+    ASSERT (!flag_stdout || !flag_replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
+    ASSERT (!flag_stdout || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
     ASSERT (!flag_test   || !out_filename || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
     ASSERT (!flag_test   || !flag_replace || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSERT (!flag_test   || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
+    ASSERT (!flag_header_only || !flag_no_header,              "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split
@@ -854,7 +861,7 @@ int main (int argc, char **argv)
                            flag_force ? 60 : 0); // --license --force means output license in Windows installer format (used by Makefile) - 60 is width of InstallForge license text field
 
     if (command == HELP) 
-        return main_print_help (exe_type, true);
+        return main_print_help (true);
 
     flag_concat = (command == ZIP) && (out_filename != NULL);
 

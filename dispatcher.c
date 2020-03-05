@@ -192,7 +192,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
             dd->max_threads = MIN (dd->max_threads, MAX_32BIT_WINDOWS_MEMORY / vb_memory); // TO DO - play with num_lines to, not just compute threads
 #ifdef DEBUG
             char str[30]; 
-            printf ("\nvb_memory=%s max_threads=%u\n", buf_human_readable_size (vb_memory, str), dd->max_threads);
+            fprintf (stderr, "\nvb_memory=%s max_threads=%u\n", buf_human_readable_size (vb_memory, str), dd->max_threads);
 #endif
         }
 #endif

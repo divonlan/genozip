@@ -88,4 +88,6 @@ extern void mtf_initialize_mutex (FileP z_file, unsigned next_variant_i_to_merge
 
 extern void mtf_free_context (MtfContext *ctx);
 
+#define mtf_get_word(ctx, word_index) (&((MtfWord*)(ctx)->word_list.data)[(word_index)])
+
 #endif

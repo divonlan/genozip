@@ -13,7 +13,6 @@
 #endif
 #include <zlib.h>
 #include <bzlib.h>
-
 #include "genozip.h"
 #include "move_to_front.h"
 #include "file.h"
@@ -29,7 +28,8 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             "%s: output file %s already exists: you may use --force to overwrite it", global_cmd, filename);
 
     File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
-
+    file->mode = mode;
+    
     // copy filename 
     unsigned fn_size = strlen (filename) + 1; // inc. \0
     file->name = malloc (fn_size);
@@ -227,6 +227,22 @@ bool file_seek (File *file, int64_t offset,
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
                 bool soft_fail)
 {
+    // check if we can just move the read buffers rather than seeking
+    if (file->mode == READ && file->next_read != file->last_read && whence == SEEK_SET) {
+#ifdef __APPLE__
+        int64_t move_by = offset - ftello ((FILE *)file->file);
+#else
+        int64_t move_by = offset - ftello64 ((FILE *)file->file);
+#endif
+
+        // case: move is within read buffer already in memory (ftello shows the disk location after read of the last buffer)
+        // we just change the buffer pointers rather than discarding the buffer and re-reading
+        if (move_by <= 0 && move_by >= -(int64_t)file->last_read) {
+            file->next_read = file->last_read + move_by;
+            return true;
+        }
+    }
+
 #ifdef __APPLE__
     int ret = fseeko ((FILE *)file->file, offset, whence);
 #else

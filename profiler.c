@@ -68,64 +68,64 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     static const char *os ="Linux";
 #endif
 
-    printf ("\nPROFILER:\n");
-    printf ("OS=%s\n", os);
+    fprintf (stderr, "\nPROFILER:\n");
+    fprintf (stderr, "OS=%s\n", os);
 #ifdef DEBUG
-    printf ("Build=Debug\n");
+    fprintf (stderr, "Build=Debug\n");
 #else
-    printf ("Build=Optimized\n");
+    fprintf (stderr, "Build=Optimized\n");
 #endif
-    printf ("Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
-    printf ("file=%s\n\n", filename ? filename : "(not file)");
+    fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
+    fprintf (stderr, "file=%s\n\n", filename ? filename : "(not file)");
     
-    printf ("Wallclock: %u milliseconds\n", ms (p->wallclock));
+    fprintf (stderr, "Wallclock: %u milliseconds\n", ms (p->wallclock));
 
     if (p->piz_reconstruct_line_components) { // this is a uncompress operation
 
-        printf ("GENOUNZIP I/O thread (piz_dispatcher):\n");
-        printf ("   zfile_read_one_vb: %u\n", ms(p->zfile_read_one_vb));
-        printf ("      read: %u\n", ms(p->read));
-        printf ("      mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
-        printf ("   write: %u\n", ms(p->write));
-        printf ("GENOUNZIP compute threads (piz_uncompress_variant_block): %u\n", ms(p->compute));
-        printf ("   zfile_uncompress_section: %u\n", ms(p->zfile_uncompress_section));
-        printf ("   piz_reconstruct_line_components: %u\n", ms(p->piz_reconstruct_line_components));
-        printf ("      piz_get_variant_data_line: %u\n", ms(p->piz_get_variant_data_line));
-        printf ("          piz_decode_pos: %u\n", ms(p->piz_decode_pos) );
-        printf ("      piz_get_format_info: %u\n", ms(p->piz_get_format_info));
-        printf ("      piz_get_line_subfields: %u\n", ms(p->piz_get_line_subfields));
-        printf ("      piz_get_haplotype_data_line: %u\n", ms(p->piz_get_haplotype_data_line));
-        printf ("      piz_initialize_sample_iterators: %u\n", ms(p->piz_initialize_sample_iterators));
-        printf ("      piz_get_genotype_data_line: %u\n", ms(p->piz_get_genotype_data_line));
-        printf ("      piz_get_phase_data_line: %u\n", ms(p->piz_get_phase_data_line));
-        printf ("      piz_merge_line: %u\n", ms(p->piz_merge_line));
-        printf ("   squeeze: %u\n", ms(p->squeeze));
+        fprintf (stderr, "GENOUNZIP I/O thread (piz_dispatcher):\n");
+        fprintf (stderr, "   zfile_read_one_vb: %u\n", ms(p->zfile_read_one_vb));
+        fprintf (stderr, "      read: %u\n", ms(p->read));
+        fprintf (stderr, "      mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
+        fprintf (stderr, "   write: %u\n", ms(p->write));
+        fprintf (stderr, "GENOUNZIP compute threads (piz_uncompress_variant_block): %u\n", ms(p->compute));
+        fprintf (stderr, "   zfile_uncompress_section: %u\n", ms(p->zfile_uncompress_section));
+        fprintf (stderr, "   piz_reconstruct_line_components: %u\n", ms(p->piz_reconstruct_line_components));
+        fprintf (stderr, "      piz_get_variant_data_line: %u\n", ms(p->piz_get_variant_data_line));
+        fprintf (stderr, "          piz_decode_pos: %u\n", ms(p->piz_decode_pos) );
+        fprintf (stderr, "      piz_get_format_info: %u\n", ms(p->piz_get_format_info));
+        fprintf (stderr, "      piz_get_line_subfields: %u\n", ms(p->piz_get_line_subfields));
+        fprintf (stderr, "      piz_get_haplotype_data_line: %u\n", ms(p->piz_get_haplotype_data_line));
+        fprintf (stderr, "      piz_initialize_sample_iterators: %u\n", ms(p->piz_initialize_sample_iterators));
+        fprintf (stderr, "      piz_get_genotype_data_line: %u\n", ms(p->piz_get_genotype_data_line));
+        fprintf (stderr, "      piz_get_phase_data_line: %u\n", ms(p->piz_get_phase_data_line));
+        fprintf (stderr, "      piz_merge_line: %u\n", ms(p->piz_merge_line));
+        fprintf (stderr, "   squeeze: %u\n", ms(p->squeeze));
     }
     else { // compress
-        printf ("GENOZIP I/O thread (zip_dispatcher):\n");
-        printf ("   read: %u\n", ms(p->read));
-        printf ("   write: %u\n", ms(p->write));
-        printf ("GENOZIP compute threads (zip_compress_one_vb): %u\n", ms(p->compute));
-        printf ("   compressor: %u\n", ms(p->compressor));
-        printf ("   seg_all_data_lines: %u\n", ms(p->seg_all_data_lines));
-        printf ("   zip_generate_haplotype_sections: %u\n", ms(p->zip_generate_haplotype_sections));
-        printf ("      count_alt_alleles: %u\n", ms(p->count_alt_alleles));
-        printf ("      sample_haplotype_data: %u\n", ms(p->sample_haplotype_data));
-        printf ("   zip_generate_genotype_sections: %u\n", ms(p->zip_generate_genotype_sections));
-        printf ("   zip_generate_phase_sections: %u\n", ms(p->zip_generate_phase_sections));
-        printf ("   zip_generate_variant_data_section: %u\n", ms(p->zip_generate_variant_data_section));
-        printf ("   mtf_clone_ctx: %u\n", ms(p->mtf_clone_ctx));
-        printf ("   mtf_merge_in_vb_ctx: %u\n", ms(p->mtf_merge_in_vb_ctx));
-        printf ("      gl_optimize_dictionary: %u\n", ms(p->gl_optimize_dictionary));
+        fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
+        fprintf (stderr, "   read: %u\n", ms(p->read));
+        fprintf (stderr, "   write: %u\n", ms(p->write));
+        fprintf (stderr, "GENOZIP compute threads (zip_compress_one_vb): %u\n", ms(p->compute));
+        fprintf (stderr, "   compressor: %u\n", ms(p->compressor));
+        fprintf (stderr, "   seg_all_data_lines: %u\n", ms(p->seg_all_data_lines));
+        fprintf (stderr, "   zip_generate_haplotype_sections: %u\n", ms(p->zip_generate_haplotype_sections));
+        fprintf (stderr, "      count_alt_alleles: %u\n", ms(p->count_alt_alleles));
+        fprintf (stderr, "      sample_haplotype_data: %u\n", ms(p->sample_haplotype_data));
+        fprintf (stderr, "   zip_generate_genotype_sections: %u\n", ms(p->zip_generate_genotype_sections));
+        fprintf (stderr, "   zip_generate_phase_sections: %u\n", ms(p->zip_generate_phase_sections));
+        fprintf (stderr, "   zip_generate_variant_data_section: %u\n", ms(p->zip_generate_variant_data_section));
+        fprintf (stderr, "   mtf_clone_ctx: %u\n", ms(p->mtf_clone_ctx));
+        fprintf (stderr, "   mtf_merge_in_vb_ctx: %u\n", ms(p->mtf_merge_in_vb_ctx));
+        fprintf (stderr, "      gl_optimize_dictionary: %u\n", ms(p->gl_optimize_dictionary));
     }    
-    printf ("buf_alloc: %u\n", ms(p->buf_alloc));
-    printf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
+    fprintf (stderr, "buf_alloc: %u\n", ms(p->buf_alloc));
+    fprintf (stderr, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
 
-    printf ("\nVariant Block stats:\n");
-    printf ("  Variant blocks: %u\n", num_vbs);
-    printf ("  Maximum permitted variants per block: %u\n", global_max_lines_per_vb);
-    printf ("  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
-    printf ("  Average read time: %u\n", ms(p->read) / num_vbs);
-    printf ("  Average compute time: %u\n", ms(p->compute) / num_vbs);
-    printf ("  Average write time: %u\n", ms(p->write) / num_vbs);
+    fprintf (stderr, "\nVariant Block stats:\n");
+    fprintf (stderr, "  Variant blocks: %u\n", num_vbs);
+    fprintf (stderr, "  Maximum permitted variants per block: %u\n", global_max_lines_per_vb);
+    fprintf (stderr, "  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
+    fprintf (stderr, "  Average read time: %u\n", ms(p->read) / num_vbs);
+    fprintf (stderr, "  Average compute time: %u\n", ms(p->compute) / num_vbs);
+    fprintf (stderr, "  Average write time: %u\n", ms(p->write) / num_vbs);
 }

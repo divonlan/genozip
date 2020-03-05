@@ -774,8 +774,6 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
 
     ASSERT (BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(v1_SectionHeaderVCFHeader)), "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(v1_SectionHeaderVCFHeader));
 
-    ASSERT (!flag_test, "Error when testing %s: --test option is not supported for files compressed with genozip version 1", file_printname (evb->z_file));
-
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
         ASSERT0 (!evb->vcf_file, "Error: not expecting evb->vcf_file to be open already in split mode");
@@ -806,7 +804,7 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
     }
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if (first_vcf || !flag_concat)
+    if ((first_vcf || !flag_split) && !flag_no_header)
         vcffile_write_to_disk (evb->vcf_file, &vcf_header_buf);
     
     // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
@@ -949,14 +947,14 @@ void v1_crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t v
     uint8_t aes_key[AES_KEYLEN]; 
     v1_crypt_generate_aes_key (vb, vb_i, sec_i, aes_key);
 
-    //printf ("command:%d id:%d vb_i=%d sec_i=%d data_len=%u key=%s\n", command, vb->id, vb_i, sec_i, data_len, aes_display_key (aes_key));
+    //fprintf (stderr, "command:%d id:%d vb_i=%d sec_i=%d data_len=%u key=%s\n", command, vb->id, vb_i, sec_i, data_len, aes_display_key (aes_key));
 
     aes_initialize (vb, aes_key);
 
     // encrypt in-place
-    //printf ("BFRE: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
+    //fprintf (stderr, "BFRE: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
     aes_xcrypt_buffer (vb, data, data_len);
-    //printf ("AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
+    //fprintf (stderr, "AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
 }
 
 #endif // V1_CRYPT

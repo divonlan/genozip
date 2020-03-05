@@ -167,6 +167,22 @@ bool vcf_header_vcf_to_genozip (unsigned *line_i, Buffer **first_data_line)
     return true; // everything's good
 }
 
+// genocat: remove trip the vcf header line, in case of --drop-genotypes
+void vcf_header_trim_header_line (Buffer *vcf_header_buf)
+{
+    static const char *standard = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO";
+
+    for (int i=vcf_header_buf->len-2; i >= 0; i--) // -2 - skip last newline
+        if (vcf_header_buf->data[i] == '\n') { 
+            if (!memcmp (&vcf_header_buf->data[i+1], standard, MIN (strlen (standard), vcf_header_buf->len-(i+1)))) {
+                vcf_header_buf->len = i + strlen(standard) + 2; // fixed length of standard VCF header up to INFO
+                vcf_header_buf->data[vcf_header_buf->len-1] = '\n';   
+            }                  
+            return;
+        }
+    // no newline found - nothing to do
+}
+
 // returns offset of header within data, EOF if end of file
 bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
 {
@@ -223,8 +239,10 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
         return false;
     }
 
+    if (flag_drop_genotypes) vcf_header_trim_header_line (&vcf_header_buf);
+
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if (first_vcf || flag_split)
+    if ((first_vcf || flag_split) && !flag_no_header)
         vcffile_write_to_disk (evb->vcf_file, &vcf_header_buf);
     
     buf_free (&vcf_header_section);

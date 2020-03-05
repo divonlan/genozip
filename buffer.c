@@ -172,7 +172,7 @@ void buf_display_memory_usage (bool memory_full)
 
     VariantBlockPool *vb_pool = vb_get_pool ();
 
-    for (int vb_i=-1; vb_i < vb_pool->num_vbs; vb_i++) {
+    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
 
         Buffer *buf_list = (vb_i == -1) ? &evb->buffer_list
                                         : &vb_pool->vb[vb_i].buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
@@ -223,11 +223,11 @@ void buf_display_memory_usage (bool memory_full)
 
     char str[30];
     buf_human_readable_size (total_bytes, str);
-    printf ("Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
+    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
 
     for (unsigned i=0; i < num_stats; i++) {
         buf_human_readable_size (stats[i].bytes, str);
-        printf ("%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
+        fprintf (stderr, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
     }
 }
 
@@ -390,8 +390,8 @@ void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_
 {
     bool full_overlay = !regular_buf_offset && !copy_from;
 
-//printf ("Overlaying onto buffer old_name=%s old_param=%u new_name=%s new_param=%u\n", 
-//        overlaid_buf->name, overlaid_buf->param, regular_buf->name, regular_buf->param);      
+//fprintf (stderr, "Overlaying onto buffer old_name=%s old_param=%u new_name=%s new_param=%u\n", 
+//         overlaid_buf->name, overlaid_buf->param, regular_buf->name, regular_buf->param);      
 
     ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error: cannot buf_overlay to a buffer already in use. overlaid_buf->name=%s", overlaid_buf->name ? overlaid_buf->name : "");
     ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
@@ -485,7 +485,6 @@ void buf_free (Buffer *buf)
             break;
 
         case BUF_FULL_OVERLAY:
-//printf ("Freeing overlay buffer name=%s param=%u\n", buf->name, buf->param);      
             pthread_mutex_lock (&overlay_mutex);
             overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
             (*overlay_count)--;
@@ -550,7 +549,8 @@ void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src,
     ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
     
     unsigned num_entries = max_entries ? MIN (max_entries, src->len - start_entry) : src->len - start_entry;
-
+    if (!bytes_per_entry) bytes_per_entry=1;
+    
     buf_alloc(vb, dst, num_entries * bytes_per_entry, 1, 
               name ? name : src->name, name ? param : src->param); // use realloc rather than malloc to allocate exact size
 

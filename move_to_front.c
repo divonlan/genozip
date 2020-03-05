@@ -196,7 +196,8 @@ uint32_t mtf_get_next_snip (VariantBlock *vb, MtfContext *ctx,
                 ctx->dict_section_type == SEC_FRMT_SUBFIELD_DICT ? "FORMAT" : "",
                 DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->word_list.len);
 
-        MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
+        //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
+        MtfWord *dict_word = mtf_get_word (ctx, word_index);
 
         if (snip) {
             *snip = &ctx->dict.data[dict_word->char_index];
@@ -304,7 +305,7 @@ void mtf_clone_ctx (VariantBlock *vb)
         if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
 
             // overlay the global dict and mtf - these will not change by this (or any other) VB
-            //printf ("mtf_clone_ctx: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->variant_block_i, did_i);
+            //fprintf (stderr,  ("mtf_clone_ctx: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->variant_block_i, did_i);
             buf_overlay (&vb_ctx->ol_dict, &zf_ctx->dict, 0,0,0,0);   
             buf_overlay (&vb_ctx->ol_mtf, &zf_ctx->mtf, 0,0,0,0);   
 
@@ -337,7 +338,7 @@ static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id)
 {
     for (unsigned did_i=0; did_i < vb->z_file->num_dict_ids; did_i++)
         if (dict_id.num == vb->z_file->mtf_ctx[did_i].dict_id.num) {
-            //printf ("Inserting new z_file dict_id=%.8s in did_i=%u\n", dict_id_printable (dict_id).id, did_i);
+            //fprintf (stderr,  ("Inserting new z_file dict_id=%.8s in did_i=%u\n", dict_id_printable (dict_id).id, did_i);
             return did_i;
         }
 
@@ -387,7 +388,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id);
     MtfContext *zf_ctx = &vb->z_file->mtf_ctx[z_did_i];
 
-    //printf ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, vb->variant_block_i, did_i, z_did_i);
+    //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, vb->variant_block_i, did_i, z_did_i);
 
     if (!buf_is_allocated (&vb_ctx->dict)) return; // nothing yet for this dict_id
 
@@ -535,7 +536,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
     // case: dict_id encountered for this first time - initialize a mtf_ctx
     if (did_i == *num_dict_ids) {
 
-        //printf ("Inserting new vb dict_id=%.8s in did_i=num_dict_ids=%u \n", dict_id_printable (dict_id).id, did_i);
+        //fprintf (stderr,  ("Inserting new vb dict_id=%.8s in did_i=num_dict_ids=%u \n", dict_id_printable (dict_id).id, did_i);
         ASSERT (*num_dict_ids+1 < MAX_DICTS, 
                 "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
 
@@ -609,7 +610,8 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
 
     char *start = fragment.data;
     for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
-        MtfWord *word = &((MtfWord *)ctx->word_list.data)[ctx->word_list.len++];
+        //MtfWord *word = &((MtfWord *)ctx->word_list.data)[ctx->word_list.len++];
+        MtfWord *word = mtf_get_word (ctx, ctx->word_list.len++);
 
         char *c=start; while (*c != '\t') c++;
 

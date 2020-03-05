@@ -22,11 +22,14 @@
 #include "aes.h"
 
 typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
+typedef enum {READ, WRITE} FileMode;
 
 typedef struct file_ {
     void *file;
     char *name;                       // allocated by file_open(), freed by file_close()
+    FileMode mode;
     FileType type;
+    
     // these relate to actual bytes on the disk
     int64_t disk_size;                // 0 if not known (eg stdin)
     int64_t disk_so_far;              // data read/write to/from "disk" (using fread/fwrite)
@@ -89,7 +92,6 @@ typedef struct file_ {
     char read_buffer[];                // only allocated for mode=READ files   
 } File;
 
-typedef enum {READ, WRITE} FileMode;
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
 extern void file_close (FileP *vcf_file_p, bool cleanup_memory /* optional */);

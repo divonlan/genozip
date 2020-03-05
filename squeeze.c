@@ -176,13 +176,13 @@ void squeeze_unit_test()
     squeeze(&vb, squeezed, &checksum, normal, 32);
 
 
-    printf ("original: %d %d %d %d %d\n", normal[0], normal[1], normal[2], normal[3], normal[4]);
+    fprintf (stderr, "original: %d %d %d %d %d\n", normal[0], normal[1], normal[2], normal[3], normal[4]);
 
-    printf ("squeezed: %x %x %x %x %x\n", squeezed[0], squeezed[1], squeezed[2], squeezed[3], squeezed[4]);
+    fprintf (stderr, "squeezed: %x %x %x %x %x\n", squeezed[0], squeezed[1], squeezed[2], squeezed[3], squeezed[4]);
 
     unsqueeze (&vb, unsqueezed, squeezed, checksum, 32);
 
-    printf ("unsqueezed: ");
-    for (unsigned i=0; i<32; i++) printf("%d ", unsqueezed[i]);
-    printf ("\n");
+    fprintf (stderr, "unsqueezed: ");
+    for (unsigned i=0; i<32; i++) fprintf (stderr, "%d ", unsqueezed[i]);
+    fprintf (stderr, "\n");
 }

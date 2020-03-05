@@ -166,11 +166,13 @@ void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb)
     unsigned size_written_this_vb = 0;
 
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-        DataLine *dl = &vb->data_lines[line_i];
-        size_written_this_vb += vcffile_write_to_disk (vcf_file, &dl->line);
+        Buffer *line = &vb->data_lines[line_i].line;
+
+        if (line->len) // if this line is not filtered out
+            size_written_this_vb += vcffile_write_to_disk (vcf_file, line);
     }
 
-    ASSERTW (size_written_this_vb == vb->vb_data_size, 
+    ASSERTW (size_written_this_vb == vb->vb_data_size || exe_type == EXE_GENOCAT, 
             "Warning: Variant block %u (first_line=%u last_line=%u num_lines=%u) had %u bytes in the original VCF file but %u bytes in the reconstructed file", 
             vb->variant_block_i, vb->first_line, vb->first_line+vb->num_lines-1, vb->num_lines, vb->vb_data_size, size_written_this_vb);
 

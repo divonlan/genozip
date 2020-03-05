@@ -27,6 +27,9 @@ typedef struct buffer_ {
 } Buffer;
 #define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL}
 
+#define ENT(type, buf, index) (type *)(&(buf)->data[(index) * sizeof(type)])
+#define LASTENT(type, buf) (type *)(&(buf)->data[((buf)->len-1) * sizeof(type)])
+            
 extern void buf_initialize(void);
 
 #define buf_is_allocated(buf_p) ((buf_p)->data != NULL && ((buf_p)->type == BUF_REGULAR || (buf_p)->type == BUF_FULL_OVERLAY || (buf_p)->type == BUF_PARTIAL_OVERLAY))

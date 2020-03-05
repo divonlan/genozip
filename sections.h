@@ -217,8 +217,6 @@ typedef struct {
     uint32_t variant_block_i;             // the vb_i in which this range appears
     uint32_t chrom;                       // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
     uint32_t min_pos, max_pos;            // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
-    uint32_t start_vb_line;               // the first VB line (0-based) where this chrom is found
-    uint32_t num_vb_lines;                // the number of lines (not necessarily contiguous) of this chrom in the VB
 } RAEntry; 
 
 // ------------------------------------------------------------------------------------------------------
@@ -282,7 +280,7 @@ extern void sections_list_concat (VariantBlockP vb, BufferP section_list_buf);
 
 // piz stuff
 extern uint32_t sections_count_info_b250s (unsigned vb_i);
-extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb);
+extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
 extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
 extern bool sections_has_more_vcf_components(void);
 

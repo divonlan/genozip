@@ -32,9 +32,9 @@ void md5_display_ctx (const Md5Context *x) // we're make this non-static to avoi
 {
     static unsigned iteration=1;
 
-    printf ("%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
-    for (unsigned i=0; i<64; i++) printf ("%2.2x", x->buffer.bytes[i]);
-    printf ("\n");
+    fprintf (stderr, "%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
+    for (unsigned i=0; i<64; i++) fprintf (stderr, "%2.2x", x->buffer.bytes[i]);
+    fprintf (stderr, "\n");
 
     iteration++;
 }

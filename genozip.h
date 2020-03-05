@@ -68,15 +68,19 @@ typedef const struct buffer_ *ConstBufferP;
 typedef struct mtfcontext_ *MtfContextP;
 typedef struct mtfnode_ *MtfNodeP;
 
+typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
+
 // global parameters - set before any thread is created, and never change
 extern unsigned    global_num_samples, global_max_lines_per_vb;
 extern const char *global_cmd;            // set once in main()
 extern int command;
+extern ExeType exe_type;
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
-           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions;
+           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions,
+           flag_drop_genotypes, flag_no_header, flag_header_only;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VariantBlockP evb;

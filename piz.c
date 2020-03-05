@@ -181,10 +181,11 @@ static void piz_map_iname_subfields (VariantBlock *vb)
     }
 }
 
-static void piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
+static bool piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
 {
     START_TIMER;
 
+    uint32_t word_index[NUM_VCF_B250S];
     const char *snip[NUM_VCF_B250S]; // snip (pointer into dictionary) and snip_len of each field in this line
     uint32_t snip_len[NUM_VCF_B250S];
     memset (snip_len, 0, sizeof(snip_len));
@@ -199,25 +200,29 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
     SubfieldMapperZip *iname_mapper = NULL;
 
     // extract snips and calculate length of variant data
-    for (VcfFields f=CHROM; f <= FORMAT; f++) {
+    for (VcfFields f=CHROM; f <= (flag_drop_genotypes ? INFO : FORMAT); f++) {
 
         // if the VB doesn't have FORMAT at all - skip it
         if (f==FORMAT && !vb->has_genotype_data && !vb->has_haplotype_data && vb->mtf_ctx[f].dict_section_type != SEC_FORMAT_DICT) continue;
 
-        uint32_t index = mtf_get_next_snip (vb, &vb->mtf_ctx[f], NULL, &snip[f], &snip_len[f], vb->first_line + vb_line_i);
+        word_index[f] = mtf_get_next_snip (vb, &vb->mtf_ctx[f], NULL, &snip[f], &snip_len[f], vb->first_line + vb_line_i);
 
         // reconstruct pos from delta
         if (f == POS) {
             piz_decode_pos (vb, snip[POS], snip_len[POS], pos_str, &snip_len[POS]); 
             snip[POS] = pos_str;
+
+            // in case of --regions - check if this line is needed at all (based on CHROM and POS)
+            if (flag_regions && !regions_is_site_included (word_index[CHROM], atoi (pos_str)))
+                return false;
         }
 
         // add the INFO subfield values
         else if (f == INFO) {
-            ASSERT (index >= 0 && index < vb->iname_mapper_buf.len, 
-                    "Error: iname_mapper index out of range: index=%d, vb->iname_mapper_buf.len=%u", index, vb->iname_mapper_buf.len);
+            ASSERT (word_index[INFO] >= 0 && word_index[INFO] < vb->iname_mapper_buf.len, 
+                    "Error: iname_mapper word_index out of range: word_index=%d, vb->iname_mapper_buf.len=%u", word_index[INFO], vb->iname_mapper_buf.len);
 
-            iname_mapper = &((SubfieldMapperZip *)vb->iname_mapper_buf.data)[index];
+            iname_mapper = &((SubfieldMapperZip *)vb->iname_mapper_buf.data)[word_index[INFO]];
             for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
                                 
                 if (iname_mapper->did_i[sf_i] == (uint8_t)NIL) continue; // a name without values
@@ -270,6 +275,8 @@ static void piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
     }
 
     COPY_TIMER(vb->profile.piz_get_variant_data_line);
+
+    return true;
 }
 
 // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
@@ -596,12 +603,12 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
         vb->data_lines = calloc (global_max_lines_per_vb, sizeof (DataLine));
 
     // initialize phase data if needed
-    if (vb->phase_type == PHASE_MIXED_PHASED) 
+    if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 
         buf_alloc (vb, &vb->line_phase_data, global_num_samples, 1, "line_phase_data", 0);
 
     // initialize haplotype stuff
     const char **ht_columns_data=NULL;
-    if (vb->has_haplotype_data) {
+    if (vb->has_haplotype_data && !flag_drop_genotypes) {
 
         //  memory - realloc for exact size, add 7 because depermuting_loop works on a word (32/64 bit) boundary
         buf_alloc (vb, &vb->line_ht_data, vb->num_haplotypes_per_line + 7, 1, "line_ht_data", 0);
@@ -610,7 +617,7 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
     }
     
     // initialize genotype stuff
-    if (vb->has_genotype_data) {
+    if (vb->has_genotype_data && !flag_drop_genotypes) {
         
         // get info about the different types of FORMAT in this vb (vb->format_info_buf)
         // as well as which is used for each line (dl->format_mtf_i)
@@ -633,20 +640,28 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
         // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->line_variant_data
-        piz_get_variant_data_line (vb, vb_line_i);
+        bool is_line_included = piz_get_variant_data_line (vb, vb_line_i);
+
+        // if line is filtered out, skip it
+        if (!is_line_included) continue;
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
-        if (vb->has_genotype_data)  
-            piz_get_genotype_data_line (vb, vb_line_i);
+        if (!flag_drop_genotypes) {
+            if (vb->has_genotype_data)  
+                piz_get_genotype_data_line (vb, vb_line_i);
 
-        if (vb->phase_type == PHASE_MIXED_PHASED) 
-            piz_get_phase_data_line (vb, vb_line_i);
+            if (vb->phase_type == PHASE_MIXED_PHASED) 
+                piz_get_phase_data_line (vb, vb_line_i);
 
-        if (vb->has_haplotype_data) 
-            piz_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
+            if (vb->has_haplotype_data) 
+                piz_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
 
-        piz_merge_line (vb, vb_line_i);
-        
+            piz_merge_line (vb, vb_line_i);
+        }
+        else 
+            buf_copy (vb, &vb->data_lines[vb_line_i].line, &vb->line_variant_data, 0, 0, 0, 
+                      "dl->line", vb->first_line + vb_line_i);
+            
         // reset len for next line - no need to alloc as all the lines are the same size?
         vb->line_ht_data.len = vb->line_gt_data.len = vb->line_phase_data.len = 0;
         buf_free (&vb->line_variant_data);
@@ -696,7 +711,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         vb->variant_block_i = BGEN32 (header->h.variant_block_i);
     
     // unsqueeze permutation index - if this VCF has samples, AND this vb has any haplotype data
-    if (global_num_samples && vb->num_haplotypes_per_line) {
+    if (global_num_samples && vb->num_haplotypes_per_line && !flag_drop_genotypes) {
 
        zfile_uncompress_section (vb, &vb->z_data.data[section_index[0]], &vb->haplotype_permutation_index_squeezed, 
                                  "haplotype_permutation_index_squeezed", SEC_VB_HEADER);
@@ -730,6 +745,8 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
 
         zfile_uncompress_section (vb, header, &ctx->b250, "mtf_ctx.b250", SEC_INFO_SUBFIELD_B250);    
     }
+
+    if (flag_drop_genotypes) return; // if --drop-genotypes was requested - no need to decompress the following sections
 
     // we allocate memory for the Buffer arrays only once the first time this VariantBlock
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
@@ -817,7 +834,10 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
     zfile_read_all_dictionaries (0);
     
     // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-    regions_get_chrom_index();
+    regions_make_chregs();
+
+    // if the regions are negative, transform them to the positive complement instead
+    regions_transform_negative_to_positive_complement();
 
     // read random access, but only if we are going to need it
     if (flag_regions || flag_show_index) {
@@ -840,11 +860,19 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 
 static void enforce_v1_limitations (bool is_first_vcf_component)
 {
-    ASSERT (!flag_split || is_first_vcf_component,
-            "Error: %s was compressed with genozip v1, --split / -O is not supported. Only the first file was extracted.",
-            file_printname (evb->z_file));
-
-    ASSERT (!flag_regions, "Error: %s was compressed with genozip v1, --regions / -r is not supported.", file_printname (evb->z_file));
+    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s compressed with genozip version 1", (lflag), file_printname (evb->z_file));
+    
+    ENFORCE(flag_test, "--test");
+    ENFORCE(flag_split, "--split");
+    ENFORCE(flag_regions, "--regions");
+    ENFORCE(flag_drop_genotypes, "--drop-genotypes");
+    ENFORCE(flag_show_b250, "--show-b250");
+    ENFORCE(flag_show_dict, "--show-dict");
+    ENFORCE(dict_id_show_one_b250.num, "--show-one-b250");
+    ENFORCE(dict_id_show_one_dict.num, "--show-one-dict");
+    ENFORCE(flag_show_gheader, "--show-gheader");
+    ENFORCE(flag_show_index, "--show-index");
+    ENFORCE(flag_show_headers, "--show-headers");
 }
 
 // returns true is successfully outputted a vcf file
@@ -869,9 +897,8 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     if (is_first_vcf_component) {
         data_type = piz_read_global_area (&original_file_digest);
 
-        bool dummy;
         if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
-            ASSERT (sections_get_next_header_type(&sl_ent, &dummy) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
+            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
     }
 
     if (data_type == EOF) goto finish;
@@ -883,7 +910,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
                                              : v1_vcf_header_genozip_to_vcf (&original_file_digest);
     
     ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", file_printname (z_file));
-    if (!piz_successful) goto finish;
+    if (!piz_successful || flag_header_only) goto finish;
 
     vcf_file = evb->vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
 
@@ -903,12 +930,21 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
             if (z_file->genozip_version > 1) {
                 
                 bool skipped_vb;
-                switch (sections_get_next_header_type(&sl_ent, &skipped_vb)) {
+                static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
+                switch (sections_get_next_header_type(&sl_ent, &skipped_vb, &region_ra_intersection_matrix)) {
                     case SEC_VB_HEADER:  
 
-                        if (skipped_vb) file_seek (evb->z_file, sl_ent->offset, SEEK_SET, false);
+                        // if we skipped VBs or we skipped the sample sections in the last vb, we need to seek forward 
+                        if (skipped_vb || flag_drop_genotypes) file_seek (evb->z_file, sl_ent->offset, SEEK_SET, false); // 1 more VBs were skipped by sections_get_next_header_type() - we seek forward to this vb
 
-                        zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher, sl_ent->variant_block_i)); 
+                        VariantBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->variant_block_i);
+                        
+                        if (region_ra_intersection_matrix.data) {
+                            buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix", next_vb->variant_block_i);
+                            buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
+                        }
+                        
+                        zfile_read_one_vb (next_vb); 
                         compute = true;
                         break;
 
@@ -957,20 +993,22 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     Md5Hash decompressed_file_digest;
     md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
-    if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
+    if (exe_type == EXE_GENOUNZIP) {
+        if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
-        if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
+            if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
 
-        if (flag_md5) printf ("MD5 = %s\n", md5_display (&decompressed_file_digest, false));
-    }
-    else {
-        if (flag_test) 
-            fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
-                     md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
-        
-        else ASSERT (flag_regions || md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
-                     "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
-                     vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
+            if (flag_md5) fprintf (stderr, "MD5 = %s\n", md5_display (&decompressed_file_digest, false));
+        }
+        else {
+            if (flag_test) 
+                fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
+                        md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
+            
+            else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
+                        "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
+                        vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
+        }
     }
 
     if (flag_split) file_close (&evb->vcf_file, true); // close this component file

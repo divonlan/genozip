@@ -109,6 +109,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->show_headers_buf);
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
+    buf_free(&vb->region_ra_intersection_matrix);
     
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
