@@ -8,13 +8,13 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            //"program": "${workspaceFolder}/genocat-debug.exe",
-            "program": "${workspaceFolder}/genozip-debug.exe",
+            "program": "${workspaceFolder}/genocat-debug.exe",
+            //"program": "${workspaceFolder}/genozip-debug.exe",
 
-            //"args": ["test-file.vcf.genozip", "-@1"],
+            "args": ["test-file.vcf.genozip","-r13", "-@1"],
             //"args": ["-t", "-f",  "out.vcf"],
             //"args": ["GFX0241869.filtered.snp.vcf.genozip", "-o", "junk.vcf", "-f", "-G", "--show-memory"],
-            "args": ["test-file.vcf", "-f"],
+            //"args": ["test-file.vcf", "-f"],
 
             //"args": ["-z", "GFX0241869.filtered.snp.vcf", "-f"],
             //"args": ["-d", "GFX0241869.filtered.snp.vcf.genozip","-o", "GFX0241869.filtered.snp.test.vcf", "-f"],

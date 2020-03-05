@@ -124,13 +124,13 @@ void regions_add (const char *region_str)
     char *next_region_token = rs;
 
     while (1) {
-        char *one_rs = strtok_s (next_region_token, ",", &next_region_token);
+        char *one_rs = strtok_r (next_region_token, ",", &next_region_token);
         if (!one_rs) break;
 
         buf_alloc (evb, &regions_buf, MAX (regions_buf.len + 1, 100), 2, "regions_buf", 0);
 
         char *after_colon;
-        char *before_colon = strtok_s (one_rs, ":", &after_colon);
+        char *before_colon = strtok_r (one_rs, ":", &after_colon);
 
         ASSERT (before_colon, "Error: invalid region string: %s", region_str);
 
@@ -142,7 +142,7 @@ void regions_add (const char *region_str)
         reg->chrom = NULL;
 
         // case: we have both chrom and pos - easy!
-        if (after_colon[0]) {
+        if (after_colon && after_colon[0]) {
             ASSERT (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", region_str);
             reg->chrom = before_colon;
             

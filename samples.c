@@ -32,7 +32,7 @@ void samples_add (const char *samples_str)
     strcpy (next_region_token, samples_str + is_negated); // drop the ^ if there is one
 
     while (1) {
-        char *one_sample = strtok_s (next_region_token, ",", &next_region_token);
+        char *one_sample = strtok_r (next_region_token, ",", &next_region_token);
         if (!one_sample) break;
 
         bool is_duplicate = false;
@@ -90,7 +90,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
     // go through the vcf file's samples and add those that are consistent with the --samples requested
     global_number_displayed_samples = 0;
     for (unsigned i=0; i < global_num_samples; i++) {
-        vcf_sample_names[i] = strtok_s (next_token, "\t", &next_token);
+        vcf_sample_names[i] = strtok_r (next_token, "\t", &next_token);
 
         for (unsigned s=0; s < cmd_samples_buf.len; s++)
             if (!strcmp (vcf_sample_names[i], *ENT(char *, &cmd_samples_buf, s))) { // found
