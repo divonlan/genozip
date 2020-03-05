@@ -897,7 +897,6 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     static Dispatcher dispatcher = NULL;
     bool piz_successful = false;
     SectionListEntry *sl_ent = NULL;
-fprintf(stderr, "xxx1\n");
     
     if (flag_split && !sections_has_more_vcf_components()) return false; // no more components
 
@@ -931,7 +930,6 @@ fprintf(stderr, "xxx1\n");
 
     if (flag_split) 
         dispatcher_resume (dispatcher, vcf_file); // accept more input 
-fprintf(stderr, "xxx1\n");
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
@@ -941,7 +939,6 @@ fprintf(stderr, "xxx1\n");
     do {
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a variant block and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
-fprintf(stderr, "pxxx1\n");
 
             bool compute = false;
             if (z_file->genozip_version > 1) {
@@ -994,7 +991,6 @@ fprintf(stderr, "pxxx1\n");
 
         // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
         else if (dispatcher_has_processed_vb (dispatcher, NULL)) {
-fprintf(stderr, "pxxx2\n");
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
     
             vcffile_write_one_variant_block (vcf_file, processed_vb);
@@ -1011,7 +1007,7 @@ fprintf(stderr, "pxxx2\n");
     Md5Hash decompressed_file_digest;
     md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
-    if (exe_type == EXE_GENOUNZIP) {
+    if (exe_type != EXE_GENOCAT) {
         if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
             if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
