@@ -462,7 +462,7 @@ static void main_genounzip (const char *z_filename,
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (char * const exec_name, char * const z_filename)
+static void main_test_after_genozip (char *exec_name, char *z_filename)
 {
     const char *password = crypt_get_password();
 
@@ -487,7 +487,7 @@ static void main_test_after_genozip (char * const exec_name, char * const z_file
     CloseHandle (proc_info.hProcess);        
 #else
     if (!fork()) { // I am the child
-        char * const *test_argv[30]; // an array of constant pointers
+        const char *test_argv[30];
         int test_argc = 0;
         test_argv[test_argc++] = exec_name;
         test_argv[test_argc++] = "-d";
@@ -498,7 +498,7 @@ static void main_test_after_genozip (char * const exec_name, char * const z_file
         if (password)   test_argv[test_argc++] = password;
         test_argv[test_argc] = NULL;
         
-        execvp (exec_name, test_argv);        
+        execvp (exec_name, (char * const *)test_argv);        
     }
     
     wait (NULL); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
