@@ -487,7 +487,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     CloseHandle (proc_info.hProcess);        
 #else
     if (!fork()) { // I am the child
-        const char *test_argv[30];
+        char * const *test_argv[30]; // an array of constant pointers
         int test_argc = 0;
         test_argv[test_argc++] = exec_name;
         test_argv[test_argc++] = "-d";
