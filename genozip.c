@@ -462,7 +462,7 @@ static void main_genounzip (const char *z_filename,
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (char *exec_name, char *z_filename)
+static void main_test_after_genozip (char * const exec_name, char * const z_filename)
 {
     const char *password = crypt_get_password();
 
