@@ -60,7 +60,7 @@ test:
     - which genozip.exe  # [win]
     - genozip --password abc --test test-file.vcf 2>&1  
 
-    extra:
+extra:
   recipe-maintainers:
     - divonlan
    
