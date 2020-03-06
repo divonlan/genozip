@@ -68,7 +68,7 @@ extern void buf_print (Buffer *buf, bool add_newline);
 extern void buf_test_overflows(ConstVariantBlockP vb);
 
 extern int64_t buf_vb_memory_consumption (ConstVariantBlockP vb);
-extern void buf_display_memory_usage (bool memory_full);
+extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
 
 extern char *buf_human_readable_size (int64_t size, char *str /* out */);
 extern char *buf_human_readable_uint (int64_t n, char *str /* out */);

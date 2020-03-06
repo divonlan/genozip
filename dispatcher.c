@@ -125,7 +125,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
                                dd->filename, dd->next_vb_i);
 
     // must be before vb_cleanup_memory() 
-    if (flag_show_memory) buf_display_memory_usage (false);    
+    if (flag_show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
 
     buf_destroy (evb, &dd->compute_threads_buf); // we need to destroy (not marely free) because we are about to free dd
 

@@ -159,7 +159,7 @@ static int buf_stats_sort_by_bytes(const void *a, const void *b)
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
 }
 
-void buf_display_memory_usage (bool memory_full)
+void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads)
 {
     #define MAX_MEMORY_STATS 100
     static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_display_memory_usage is called when malloc fails, so it cannot malloc
@@ -224,6 +224,7 @@ void buf_display_memory_usage (bool memory_full)
     char str[30];
     buf_human_readable_size (total_bytes, str);
     fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
+    fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++) {
         buf_human_readable_size (stats[i].bytes, str);
