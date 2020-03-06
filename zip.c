@@ -23,6 +23,17 @@
 
 static uint32_t global_samples_per_block = 4096; // tradeoff: larger is better compression, but in some cases might be slower retrieval speed
 
+void zip_set_global_samples_per_block (const char *num_samples_str)
+{
+    unsigned len = strlen (num_samples_str);
+    for (unsigned i=0; i < len; i++) 
+        ASSERT (num_samples_str[i] >= '0' && num_samples_str[i] <= '9', "Error: invalid argument of --sblock: %s. Expecting an integer number between 1 and 65535", num_samples_str);
+
+    global_samples_per_block = atoi (num_samples_str);
+
+    ASSERT (global_samples_per_block >= 1 && global_samples_per_block <= 65535, "Error: invalid argument of --sblock: %s. Expecting a number between 1 and 65535", num_samples_str);
+}
+
 // read entire variant block to memory. this is called from the dispatcher thread
 static void zip_read_variant_block (File *vcf_file,
                                     unsigned *line_i,   // in/out next line to be read
@@ -279,6 +290,34 @@ static int sort_by_original_index_comparator(const void *p, const void *q)
     return (l - r); 
 }
 
+static HaploTypeSortHelperIndex *zip_construct_ht_permutation_helper_index (VariantBlock *vb)
+{
+    START_TIMER; 
+
+    buf_alloc (vb, &vb->helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0,
+               "helper_index_buf", vb->variant_block_i);
+    buf_zero (&vb->helper_index_buf);
+    HaploTypeSortHelperIndex *helper_index = (HaploTypeSortHelperIndex *)vb->helper_index_buf.data;
+
+    // build index array 
+    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
+        helper_index[ht_i].index_in_original_line = ht_i;
+
+    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+        for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
+
+            // we count as alt alleles : 1 - 99 (ascii 49 to 147)
+            //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
+            char one_ht = vb->data_lines[line_i].haplotype_data.data[ht_i];
+            if (one_ht >= '1')
+                helper_index[ht_i].num_alt_alleles++;
+        }
+    }
+    COPY_TIMER (vb->profile.count_alt_alleles);
+
+    return helper_index;
+}
+
 // sort haplogroups by alt allele count within the variant group, create an index for it, and split
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 static void zip_generate_haplotype_sections (VariantBlock *vb)
@@ -295,41 +334,21 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
     // if needed.
     
     // create a permutation index for the whole variant block, and permuted haplotypes for each sample block        
-    buf_alloc (vb, &vb->haplotype_permutation_index, vb->num_haplotypes_per_line * sizeof(unsigned), 
+    buf_alloc (vb, &vb->haplotype_permutation_index, vb->num_haplotypes_per_line * sizeof(uint32_t), 
                0, "haplotype_permutation_index", vb->first_line);
 
-    buf_alloc (vb, &vb->helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0,
-               "helper_index_buf", vb->first_line);
-    buf_zero (&vb->helper_index_buf);
-    HaploTypeSortHelperIndex *helper_index = (HaploTypeSortHelperIndex *)vb->helper_index_buf.data;
-
-    { 
-        START_TIMER; 
-        // build index array 
-        for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
-            helper_index[ht_i].index_in_original_line = ht_i;
-
-        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-            for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
-
-                // we count as alt alleles : 1 - 99 (ascii 49 to 147)
-                //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
-                char one_ht = vb->data_lines[line_i].haplotype_data.data[ht_i];
-                if (one_ht >= '1')
-                    helper_index[ht_i].num_alt_alleles++;
-            }
-        }
-        COPY_TIMER (vb->profile.count_alt_alleles);
-    }
-
-    // sort the helper index array by number of alt alleles
-    qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
+    HaploTypeSortHelperIndex *helper_index = zip_construct_ht_permutation_helper_index (vb);
 
     // now build per-sample-block haplotype array, picking haplotypes by the order of the helper index array
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
         unsigned num_haplotypes_in_sample_block = 
             vb->ploidy * vb_num_samples_in_sb (vb, sb_i); 
+
+        unsigned helper_index_sb_i = sb_i * vb->num_samples_per_block * vb->ploidy;
+
+        // sort the portion of the helper index related to this sample block. We sort by number of alt alleles.
+        qsort (&helper_index[helper_index_sb_i], num_haplotypes_in_sample_block, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
 
         // allocate memory for haplotype data for each sample block - one character per haplotype
         buf_alloc (vb, &vb->haplotype_sections_data[sb_i], vb->num_lines * num_haplotypes_in_sample_block, 
@@ -342,7 +361,6 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
         
         {   // this loop, tested with 1KGP data, takes up to 1/5 of total compute time, so its highly optimized
             START_TIMER;
-            unsigned helper_index_sb_i = sb_i * vb->num_samples_per_block * vb->ploidy;
 
             for (unsigned ht_i=0; ht_i < num_haplotypes_in_sample_block; ht_i++) {
                 

@@ -10,4 +10,6 @@
 
 extern void zip_dispatcher (const char *vcf_basename, FileP vcf_file, FileP z_file, unsigned max_threads, bool is_last_file);
 
+extern void zip_set_global_samples_per_block (const char *num_samples_str);
+
 #endif

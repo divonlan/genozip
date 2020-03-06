@@ -651,10 +651,10 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
 void genozip_set_global_max_lines_per_vb (const char *num_lines_str)
 {
     unsigned len = strlen (num_lines_str);
-    ASSERT (len <= 9, "Error: invalid argument of --variant-block: %s. Expecting a number between 1 and 999999999", num_lines_str);
+    ASSERT (len <= 9, "Error: invalid argument of --vblock: %s. Expecting a number between 1 and 999999999", num_lines_str);
 
     for (unsigned i=0; i < len; i++) {
-        ASSERT (num_lines_str[i] >= '0' && num_lines_str[i] <= '9', "Error: invalid argument of --variant-block: %s. Expecting a number between 1 and 999999999", num_lines_str);
+        ASSERT (num_lines_str[i] >= '0' && num_lines_str[i] <= '9', "Error: invalid argument of --vblock: %s. Expecting a number between 1 and 999999999", num_lines_str);
     }
 
     global_max_lines_per_vb = atoi (num_lines_str);
@@ -713,7 +713,8 @@ int main (int argc, char **argv)
         #define _O  {"split",         no_argument,       &flag_split,        1 }
         #define _o  {"output",        required_argument, 0, 'o'                }
         #define _p  {"password",      required_argument, 0, 'p'                }
-        #define _vb {"vblock",        required_argument, 0, 'B'                }
+        #define _B  {"vblock",        required_argument, 0, 'B'                }
+        #define _S  {"sblock",        required_argument, 0, 'S'                }
         #define _r  {"regions",       required_argument, 0, 'r'                }
         #define _tg {"targets",       required_argument, 0, 't'                }
         #define _s  {"samples",       required_argument, 0, 's'                }
@@ -738,17 +739,18 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _vb, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,           _00 };
-        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                              _st, _sm,                     _00 };
-        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                                                   _st, _sm,                     _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _B, _S, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,              _00 };
+        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                              _st, _sm,                        _00 };
+        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                                                   _st, _sm,                        _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
+        // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLqQt^Vzm@:Oo:p:B:", // genozip
-            "cfhLqQt^V@:Oo:p:m",      // genounzip
-            "hLVp:qf",                // genols
-            "hLV@:p:qQ1r:t:s:HGo:f"   // genocat
+            "cdfhlLqQt^Vzm@:Oo:p:B:S:", // genozip
+            "cfhLqQt^V@:Oo:p:m",        // genounzip
+            "hLVp:qf",                  // genols
+            "hLV@:p:qQ1r:t:s:HGo:f"     // genocat
         };
 
         int option_index = -1;
@@ -783,6 +785,7 @@ int main (int argc, char **argv)
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : genozip_set_global_max_lines_per_vb (optarg); break;
+            case 'S' : zip_set_global_samples_per_block (optarg); break;
             case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
