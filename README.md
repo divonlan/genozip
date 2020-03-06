@@ -9,7 +9,7 @@
 <!-- 2. copied as HTML to the Mac installer                                                             -->
 <!-- 3. copied into meta.yaml, after removing all the HTML stuff                                        -->
 <!--                                                                                                    -->
-<h1>genozip</h1>
+<h1>genozip</h1><br>
 <b>genozip</b> is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz or .vcf.bz2 files).<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties of the genomic data, such as linkage disequilibrium, to compress better. It is also a lot faster than gzip.<br>
@@ -27,10 +27,10 @@ The command line options are similar to gzip and bcftools, so if you're familiar
 <b><i>Some advanced options:</i></b><br>
 <br>
 <b><i>Lookups:</i></b><br>
-<b>genocat</b> -r ^Y,MT <i>file1.vcf</i>       -- displays all chromosomes except Y and MT
-<b>genocat</b> -r -10000 <i>file1.vcf</i>      -- displays positions up to 10000
-<b>genocat</b> -s SMPL1,SMPL2 <i>file1.vcf</i> -- displays 2 samples
-Note: there is no need for a separate indexing step or index file
+<b>genocat</b> -r ^Y,MT <i>file1.vcf</i>       -- displays all chromosomes except Y and MT<br>
+<b>genocat</b> -r -10000 <i>file1.vcf</i>      -- displays positions up to 10000<br>
+<b>genocat</b> -s SMPL1,SMPL2 <i>file1.vcf</i> -- displays 2 samples<br>
+Note: there is no need for a separate indexing step or index file<br>
 <br>
 <b><i>Concatenating & splitting:</i></b><br>
 <b>genozip</b> <i>file1.vcf file2.vcf</i> -o <i>concat.vcf.genozip</i> <br>
