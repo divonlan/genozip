@@ -176,7 +176,7 @@ decrement-version:
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating meta.yaml (for conda)"
-	@(cat conda/meta.template.yaml ; sed "s/<.\{1,3\}>//g" README.md |grep -v "<!" | sed 's/^/    /') | \
+	@(cat conda/meta.template.yaml ; sed "s/<br>/\|/g" README.md | sed "s/<.\{1,3\}>//g" |grep -v "<!" | sed 's/^/    /') | \
 		sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
 		sed s/__VERSION__/$(version)/g | \
 		grep -v "^#" \
