@@ -60,10 +60,6 @@ test:
     - which genozip.exe  # [win]
     - genozip --password abc --test test-file.vcf 2>&1  
 
-extra:
-  recipe-maintainers:
-    - divonlan
-   
 about:
   home: https://github.com/divonlan/genozip
   dev_url: https://github.com/divonlan/genozip
@@ -75,4 +71,8 @@ about:
     - LICENSE.commercial.txt
   summary: Compressor for VCF genomic files, up to 5x better than gzip and faster too
   description: |
-# Makefile copies README.md as the description here
+__README_MD__
+
+extra:
+  recipe-maintainers:
+    - divonlan

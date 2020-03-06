@@ -176,12 +176,22 @@ decrement-version:
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating meta.yaml (for conda)"
-	@(cat conda/meta.template.yaml ; cat README.md | sed "s/<.\{1,3\}>//g" |grep -v "<!" | sed 's/^/    /') | \
+	@(  sed /__README_MD__/Q conda/meta.template.yaml ; \
+	    cat README.md | sed "s/<.\{1,3\}>//g" | grep -v "<!" | sed 's/^/    /' ; \
+		sed '0,/__README_MD__/d' conda/meta.template.yaml \
+	 ) | \
 		sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
 		sed s/__VERSION__/$(version)/g | \
 		grep -v "^#" \
 		> $@
- 
+
+junk:
+	(tmpl=`cat conda/meta.template.yaml` ; desc=`sed "s/<.\{1,3\}>//g" README.md | grep -v "<!" | sed 's/^/    /'` ; echo $${tmpl/__README_MD__/$$desc} > junk) 
+	#	sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
+	#	sed s/__VERSION__/$(version)/g | \
+	#	grep -v "^#" \
+	#	> $@
+
 #CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
 CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
