@@ -394,6 +394,12 @@ void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_
 //fprintf (stderr, "Overlaying onto buffer old_name=%s old_param=%u new_name=%s new_param=%u\n", 
 //         overlaid_buf->name, overlaid_buf->param, regular_buf->name, regular_buf->param);      
 
+    // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
+    if (overlaid_buf->type == BUF_REGULAR && overlaid_buf->data == NULL && overlaid_buf->memory) {
+        free (overlaid_buf->memory);
+        overlaid_buf->type = BUF_UNALLOCATED;
+    }
+    
     ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error: cannot buf_overlay to a buffer already in use. overlaid_buf->name=%s", overlaid_buf->name ? overlaid_buf->name : "");
     ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
     ASSERT (!full_overlay || regular_buf->overlayable, "Error: buf_overlay: only overlayble buffers can be fully overlaid. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
