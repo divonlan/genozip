@@ -1,12 +1,14 @@
 <!DOCTYPE html>
-
-<!-- README.md                                                                                           -->
+<!--                                                                                                    -->
+<!-- README.md                                                                                          -->
 <!-- Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>                                              -->
 <!-- Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt -->
 <!--                                                                                                    -->
-<!-- This file needs to be compliant to both Markdown and HTML. It is rendered as README.md by github   -->
-<!-- and it is copied as HTML to the Mac installer                                                      -->
-
+<!-- This file needs to be compliant to both Markdown and HTML. It is:                                  -->
+<!-- 1. rendered as README.md by github                                                                 -->
+<!-- 2. copied as HTML to the Mac installer                                                             -->
+<!-- 3. copied into meta.yaml, after removing all the HTML stuff                                        -->
+<!--                                                                                                    -->
 <h1>genozip</h1>
 <b>genozip</b> is a compressor for VCF genomic files (it compresses .vcf or .vcf.gz or .vcf.bz2 files).<br>
 <br>
@@ -14,7 +16,7 @@ It achieves x2 to x5 better compression ratios than gzip because it leverages so
 <br>
 The compression is lossless - the decompressed VCF file is 100% identical to the original VCF file.<br>
 <br>
-The command line options are very much similar to gzip, so if you're familiar with these, it works pretty much the same. To get started, try: <b>genozip</b> --help<br>
+The command line options are similar to gzip and bcftools, so if you're familiar with these, it works pretty much the same. To get started, try: <b>genozip</b> --help<br>
 <br>
 <b><i>Commands</i></b>: <br>
 <b>genozip</b>   - compress one or more files <br>
@@ -24,14 +26,20 @@ The command line options are very much similar to gzip, so if you're familiar wi
 <br>
 <b><i>Some advanced options:</i></b><br>
 <br>
+<b><i>Lookups:</i></b><br>
+<b>genocat</b> -r ^Y,MT <i>file1.vcf</i>       -- displays all chromosomes except Y and MT
+<b>genocat</b> -r -10000 <i>file1.vcf</i>      -- displays positions up to 10000
+<b>genocat</b> -s SMPL1,SMPL2 <i>file1.vcf</i> -- displays 2 samples
+Note: there is no need for a separate indexing step or index file
+<br>
 <b><i>Concatenating & splitting:</i></b><br>
 <b>genozip</b> <i>file1.vcf file2.vcf</i> -o <i>concat.vcf.genozip</i> <br>
 <b>genounzip</b> <i>concat.vcf.genozip</i> -O <br>
 <br>
-<b><i>Calculate MD5 of the VCF file during compression:</i></b><br>
+<b><i>Viewing the MD5 of the VCF file:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
 <b>genols</b> <i>file.vcf.genozip</i> --md5 <br>
-Note: When compressing with --md5, the md5 is automatically verified during <b>genounzip</b> <br>
+Note: the MD5 is always calculated under the hood in <b>genozip</b>, and automatically verified during <b>genounzip</b> <br>
 <br>
 <b><i>Encryption:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>

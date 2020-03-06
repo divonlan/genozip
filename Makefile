@@ -142,7 +142,7 @@ endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genols$(EXE)
 
-version := $(shell head -n1 version.h |cut -d\" -f2)
+version = $(shell head -n1 version.h |cut -d\" -f2)
 
 SH_VERIFY_ALL_COMMITTED = (( `git status|grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || \
                           (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1)
@@ -176,7 +176,7 @@ decrement-version:
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating meta.yaml (for conda)"
-	@(cat conda/meta.template.yaml ; grep -v "^#" README.md | sed 's/^/    /') | \
+	@(cat conda/meta.template.yaml ; sed "s/<.\{1,3\}>//g" README.md |grep -v "<!" | sed 's/^/    /') | \
 		sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
 		sed s/__VERSION__/$(version)/g | \
 		grep -v "^#" \
