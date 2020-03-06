@@ -14,6 +14,7 @@
 #include "compatability/visual_c_stdbool.h"
 #endif
 
+#include "genozip.h"
 #include "md5.h"
 #include "endianness.h"
 
@@ -31,9 +32,9 @@ void md5_display_ctx (const Md5Context *x) // we're make this non-static to avoi
 {
     static unsigned iteration=1;
 
-    printf ("%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
-    for (unsigned i=0; i<64; i++) printf ("%2.2x", x->buffer.bytes[i]);
-    printf ("\n");
+    fprintf (stderr, "%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
+    for (unsigned i=0; i<64; i++) fprintf (stderr, "%2.2x", x->buffer.bytes[i]);
+    fprintf (stderr, "\n");
 
     iteration++;
 }
@@ -152,7 +153,9 @@ static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t s
 
 void md5_initialize (Md5Context *ctx)
 {
-    memset (ctx, 0, sizeof(Md5Context));
+    // sanity
+    for (unsigned i=0; i < sizeof(Md5Context); i++)
+        ASSERT0 (!((char *)ctx)[i], "Error: md5_initialize expects ctx to be zeros, but its not");
 
     ctx->a = 0x67452301;
     ctx->b = 0xefcdab89;
@@ -161,11 +164,13 @@ void md5_initialize (Md5Context *ctx)
 
     ctx->lo = 0;
     ctx->hi = 0;
+
+    ctx->initialized = true;
 }
 
-void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize)
+void md5_update (Md5Context *ctx, const void *data, unsigned len)
 {
-    if (initialize) md5_initialize (ctx);
+    if (!ctx->initialized) md5_initialize (ctx);
 
     uint32_t    saved_lo;
     uint32_t    used;
@@ -234,14 +239,17 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
     digest->words[1] = LTEN32 (ctx->b);
     digest->words[2] = LTEN32 (ctx->c);
     digest->words[3] = LTEN32 (ctx->d);
+
+    memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
 }
 
 // note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)
 void md5_do (const void *data, unsigned len, Md5Hash *digest)
 {
     Md5Context ctx;
+    memset (&ctx, 0, sizeof(Md5Context));
 
-    md5_update (&ctx, data, len, true);
+    md5_update (&ctx, data, len);
 
     md5_finalize (&ctx, digest);
 }
@@ -252,7 +260,7 @@ const char *md5_display (const Md5Hash *digest, bool prefix_space)
 
     const uint8_t *b = digest->bytes; 
     
-    if (digest->ulls[0] || digest->ulls[1])
+    if (!md5_is_zero (*digest))
         sprintf (str, "%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", prefix_space ? " " : "",
                  b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
     else

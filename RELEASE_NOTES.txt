@@ -5,3 +5,29 @@
 - Optimize MD5 performance (move to 32b and eliminate memory copying)
 - Many bug fixes.
 
+2.0.0
+- New genozip file format 
+- backward compatability to decompress genozip v1 files
+- Columns 1-9 (CHROM to FORMAT) are now put into their own dictionaries (except REF and ALT that are compressed together)
+- Each INFO tag is its own dictionary
+- --vblock for setting the variant block size
+- Allow variant blocks larger than 64K and set the default variant block size based on the number of samples to balance 
+  compression ratio with memory consumption.
+- --sblock for setting the sample block size
+- change haplotype permutation to keep within sample block boundaries
+- create "random access" (index) section 
+- new genozip header section with payload that is list of all sections - at end of file
+- due to random access, .genozip files must be read from a file only and can no longer be streamed from stdin during genounzip / genocat
+- all dictionaries are moved to the end of the genozip file, and are read upfront before any VB, to facilitate random access.
+- genocat --regions to filter specific chromosomes and regions. these are accessed via random access
+- genocat --samples to see specific samples only
+- genocat --no-header to skip showing the VCF header
+- genocat --header-only to show only the VCF header
+- genocat --drop-genotypes to show only columns CHROM-INFO
+- Many new developer --show-* options (see genozip -h -f)
+- Better, more compressable B250 encoding
+- --test for both genozip (compressed and then tests) and genounzip (tests without outputting)
+- Support for --output in genocat
+- Added --noisy which overrides default --quiet when outputting to stdout (using --stdout, or the default in genocat)
+- --list can now show metadata for encrypted files too
+- Many bug fixes, performance and memory consumption optimizations

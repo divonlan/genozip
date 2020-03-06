@@ -13,7 +13,6 @@
 #endif
 #include <zlib.h>
 #include <bzlib.h>
-
 #include "genozip.h"
 #include "move_to_front.h"
 #include "file.h"
@@ -25,10 +24,12 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     bool file_exists = (access (filename, F_OK) == 0);
 
     ASSERT (mode != READ  || file_exists, "%s: cannot open %s for reading: %s", global_cmd, filename, strerror(errno));
-    ASSERT (mode != WRITE || !file_exists || flag_force, "%s: output file %s already exists: you may use --force to overwrite it", global_cmd, filename);
+    ASSERT (mode != WRITE || !file_exists || flag_force || (expected_type==VCF && flag_test), 
+            "%s: output file %s already exists: you may use --force to overwrite it", global_cmd, filename);
 
     File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
-
+    file->mode = mode;
+    
     // copy filename 
     unsigned fn_size = strlen (filename) + 1; // inc. \0
     file->name = malloc (fn_size);
@@ -37,14 +38,26 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     if (expected_type == VCF) {
         if (file_has_ext (file->name, ".vcf")) {
             file->type = VCF;
-            file->file = fopen(file->name, mode == READ ? "r" : "wb"); // "wb" so Windows doesn't add ASCII 13
+
+            // don't actually open the file if we're just testing in genounzip
+            if (flag_test && mode == WRITE) return file;
+
+            file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "rb"/"wb" so libc on Windows doesn't drop/add '\r' between our code and the disk. we will handle the '\r' explicitly.
         }
         else if (file_has_ext (file->name, ".vcf.gz")) {
             file->type = VCF_GZ;
+
+            // don't actually open the file if we're just testing in genounzip
+            if (flag_test && mode == WRITE) return file;
+
             file->file = gzopen64 (file->name, mode == READ ? "rb" : "wb");    
         }
         else if (file_has_ext (file->name, ".vcf.bz2")) {
             file->type = VCF_BZ2;
+
+            // don't actually open the file if we're just testing in genounzip
+            if (flag_test && mode == WRITE) return file;
+
             file->file = BZ2_bzopen (file->name, mode == READ ? "rb" : "wb");    
         }
         else if (file_has_ext (file->name, ".bcf")) {
@@ -81,12 +94,8 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     }
 
     if (mode == READ) {
-        // get file size
-        struct stat64 st;
-        int ret = stat64(file->name, &st);
-        ASSERTW (!ret, "Warning: stat64(%s) failed: %s", file->name, strerror(errno));
 
-        file->disk_size = ret ? 0 : st.st_size;
+        file->disk_size = file_get_size (file->name);
 
         if (file->type == VCF)
             file->vcf_data_size_single = file->vcf_data_size_concat = file->disk_size; 
@@ -111,32 +120,50 @@ File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex)
     return file;
 }
 
-void file_close (File **file_p)
+void file_close (File **file_p, 
+                 bool cleanup_memory) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with splitting concatenated files
 {
     File *file = *file_p;
     *file_p = NULL;
 
-    if (file->type == VCF_GZ) {
-        int ret = gzclose_r((gzFile)file->file);
-        ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
-    }
-    else if (file->type == VCF_BZ2) {
-        BZ2_bzclose((BZFILE *)file->file);
-    }
-    else {
-        int ret = fclose((FILE *)file->file);
-        ASSERTW (!ret, "Warning: failed to close vcf file %s: %s", file->name ? file->name : "", strerror(errno));
-    } 
+    if (file->file) {
 
-    for (unsigned i=0; i < file->num_subfields; i++) 
+        if (file->type == VCF_GZ) {
+            int ret = gzclose_r((gzFile)file->file);
+            ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
+        }
+        else if (file->type == VCF_BZ2) {
+            BZ2_bzclose((BZFILE *)file->file);
+        }
+        else {
+            int ret = fclose((FILE *)file->file);
+
+            if (ret && !errno) { // this is a telltale sign of a memory overflow
+                buf_test_overflows(evb); // failing to close for no reason is a sign of memory issues
+                // if its not a buffer - maybe its file->file itself
+                fprintf (stderr, "Error: fclose() failed without an error, possible file->file pointer is corrupted\n");
+            }
+
+            ASSERTW (!ret, "Warning: failed to close file %s: %s", file->name ? file->name : "", strerror(errno)); // vcf or genozip
+        } 
+    }
+
+    for (unsigned i=0; i < file->num_dict_ids; i++) 
         mtf_free_context (&file->mtf_ctx[i]);
 
     if (file->mutex_initialized) 
         pthread_mutex_destroy (&file->mutex);
 
+    if (cleanup_memory) {
+        if (file->dict_data.memory) buf_destroy (evb, &file->dict_data);
+        if (file->ra_buf.memory) buf_destroy (evb, &file->ra_buf);
+        if (file->section_list_buf.memory) buf_destroy (evb, &file->section_list_buf);
+        if (file->section_list_dict_buf.memory) buf_destroy (evb, &file->section_list_dict_buf);
+        if (file->v1_next_vcf_header.memory) buf_destroy (evb, &file->v1_next_vcf_header);
+    }
+
     if (file->name) free (file->name);
     
-    // note: we don't free file->name, because it might come from getopt - and should not be freed
     free (file);
 }
 
@@ -192,4 +219,78 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
     sprintf (basename, "%.*s", (int)len, start);
 
     return basename;
+}
+
+// returns true if successful. depending on soft_fail, a failure will either emit an error 
+// (and exit) or a warning (and return).
+bool file_seek (File *file, int64_t offset, 
+                int whence, // SEEK_SET, SEEK_CUR or SEEK_END
+                bool soft_fail)
+{
+    // check if we can just move the read buffers rather than seeking
+    if (file->mode == READ && file->next_read != file->last_read && whence == SEEK_SET) {
+#ifdef __APPLE__
+        int64_t move_by = offset - ftello ((FILE *)file->file);
+#else
+        int64_t move_by = offset - ftello64 ((FILE *)file->file);
+#endif
+
+        // case: move is within read buffer already in memory (ftello shows the disk location after read of the last buffer)
+        // we just change the buffer pointers rather than discarding the buffer and re-reading
+        if (move_by <= 0 && move_by >= -(int64_t)file->last_read) {
+            file->next_read = file->last_read + move_by;
+            return true;
+        }
+    }
+
+#ifdef __APPLE__
+    int ret = fseeko ((FILE *)file->file, offset, whence);
+#else
+    int ret = fseeko64 ((FILE *)file->file, offset, whence);
+#endif
+
+    if (soft_fail) {
+        if (!flag_stdout) {
+            ASSERTW (!ret, errno == EINVAL ? "Error while reading file %s: it is too small%s" 
+                                        : "Warning: fseeko failed on file %s: %s", 
+                    file_printname (file),  errno == EINVAL ? "" : strerror (errno));
+        }
+    } 
+    else {
+        ASSERT (!ret, "Error: fseeko failed on file %s: %s", file_printname (file), strerror (errno));
+    }
+
+    // reset the read buffers
+    if (!ret) file->next_read = file->last_read = READ_BUFFER_SIZE;
+
+    return !ret;
+}
+
+uint64_t file_tell (File *file)
+{
+#ifdef __APPLE__
+    return ftello ((FILE *)file->file);
+#else
+    return ftello64 ((FILE *)file->file);
+#endif
+}
+
+uint64_t file_get_size (const char *filename)
+{
+    struct stat64 st;
+    
+    int ret = stat64(filename, &st);
+    ASSERT (!ret, "Error: failed accessing %s: %s", filename, strerror(errno));
+    
+    return st.st_size;
+}
+
+bool file_is_dir (const char *filename)
+{
+    struct stat64 st;
+    
+    int ret = stat64(filename, &st);
+    ASSERT (!ret, "Error: failed accessing %s: %s", filename, strerror(errno));
+    
+    return S_ISDIR (st.st_mode);
 }

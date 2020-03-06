@@ -8,20 +8,31 @@
 
 #include "genozip.h"
 
-// values 0 to 249 are used as numerals in base-250. 
-// The remaining 6 values below are control characters, and can only appear in numerals[0].
+// the number is stored as a 4-byte Big Endian (MSB first), unless it is one of the below, in which case 
+// only 1 byte is used
 #define BASE250_EMPTY_SF   250 // subfield declared in FORMAT is empty, terminating : present
 #define BASE250_MISSING_SF 251 // subfield declared in FORMAT is missing at end of cell, no :
-#define BASE250_2_NUMERALS 253 // this number has 2 numerals, starting from numerals[1]
-#define BASE250_3_NUMERALS 254 // this number has 3 numerals
-#define BASE250_4_NUMERALS 255 // this number has 4 numerals
+#define BASE250_ONE_UP     252 // value is one higher than previous value. used in B250_ENC_8
+#define BASE250_MOST_FREQ0 253 // this translates to 0,1,2 representing the most frequent values (according to vb_i=1 sorting). used in B250_ENC_16
+#define BASE250_MOST_FREQ1 254
+#define BASE250_MOST_FREQ2 255
+
+#define MAX_BASE250_NUMERALS 4
 typedef struct {
-    uint8_t numerals[5];       // number in base-250 (i.e. 0-249), digit[0] is least significant digit. If num_numerals=2,3 or 4 then numerals[1] is 250,251 or 252
-    uint8_t num_numerals;      // legal values - 1,2,3,4
-    uint8_t unused[2];         // padding to 64 bit
+    uint32_t n;                                  // the number being encoded
+    union {
+        uint8_t numerals[MAX_BASE250_NUMERALS];  // 4-byte big endian except if a 1 byte value 250-255
+        uint32_t bgen;                           // big endian
+    } encoded;
 } Base250;
 
 extern Base250 base250_encode (uint32_t n);
-extern uint32_t base250_decode (const uint8_t *str);
+extern uint32_t base250_decode (const uint8_t **str_p); // decodes and advances str_p
+#define base250_len(data) ((*(data) < 250) ? 4 : 1)
+#define base250_copy(dst, b250) memcpy (dst, (b250).encoded.numerals, base250_len((b250).encoded.numerals))
+
+// v1 compatability
+extern uint32_t v1_base250_decode (const uint8_t **str);
+#define v1_base250_len(data) ((*(data) <= 252) ? 1 : *(data) - 250) // 3 or 4 or 5
 
 #endif

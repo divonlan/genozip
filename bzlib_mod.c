@@ -18,6 +18,27 @@ typedef struct {
     bz_stream strm;
 } bzFile;
 
+const char *BZ2_errstr (int err)
+{
+    switch (err) {
+        case BZ_OK:               return "BZ_OK";
+        case BZ_RUN_OK:           return "BZ_RUN_OK";
+        case BZ_FLUSH_OK:         return "BZ_FLUSH_OK";
+        case BZ_FINISH_OK:        return "BZ_FINISH_OK";
+        case BZ_STREAM_END:       return "BZ_STREAM_END";
+        case BZ_SEQUENCE_ERROR:   return "BZ_SEQUENCE_ERROR";
+        case BZ_PARAM_ERROR:      return "BZ_PARAM_ERROR";
+        case BZ_MEM_ERROR:        return "BZ_MEM_ERROR";
+        case BZ_DATA_ERROR:       return "BZ_DATA_ERROR";
+        case BZ_DATA_ERROR_MAGIC: return "BZ_DATA_ERROR_MAGIC";
+        case BZ_IO_ERROR:         return "BZ_IO_ERROR";
+        case BZ_UNEXPECTED_EOF:   return "BZ_UNEXPECTED_EOF";
+        case BZ_OUTBUFF_FULL:     return "BZ_OUTBUFF_FULL";
+        case BZ_CONFIG_ERROR:     return "BZ_CONFIG_ERROR";
+        default:                  return "Unknown BZ2 error";
+    }
+}
+
 // this should go into bzlib.c
 unsigned long long BZ2_bzoffset (BZFILE* b)
 {

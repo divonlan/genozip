@@ -30,11 +30,16 @@ typedef struct {
         uint8_t  bytes[64];
         uint32_t words[16];
     } buffer;
+    bool initialized;
 } Md5Context;
 
 extern void md5_do (const void *data, unsigned len, Md5Hash *digest);
-extern void md5_update (Md5Context *ctx, const void *data, unsigned len, bool initialize);
+extern void md5_update (Md5Context *ctx, const void *data, unsigned len);
 extern void md5_finalize (Md5Context *ctx, Md5Hash *digest);
 extern const char *md5_display (const Md5Hash *digest, bool prefix_space);
+
+#define md5_is_equal(digest1,digest2) ((digest1).ulls[0] == (digest2).ulls[0] && (digest1).ulls[1] == (digest2).ulls[1])
+#define md5_is_zero(digest) (!(digest).ulls[0] && !(digest).ulls[1])
+#define md5_set_zero(digest) { (digest)->ulls[0] = (digest)->ulls[1] = 0; }
 
 #endif

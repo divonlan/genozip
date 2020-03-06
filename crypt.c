@@ -16,6 +16,11 @@ void crypt_set_password (char *new_password)
     password = new_password;
 }
 
+const char *crypt_get_password()
+{
+    return password;
+}
+
 bool crypt_have_password ()
 {
     return password != NULL;
@@ -67,7 +72,7 @@ unsigned crypt_max_padding_len()
 // each hash is a hash of the password concatenated with a constant string
 // we add data_len to the hash to give it a near-uniqueness for each section
 static void crypt_generate_aes_key (VariantBlock *vb,                
-                                    uint32_t vb_i, int16_t sec_i, // used to generate an aes key unique to each block
+                                    uint32_t vb_i, SectionType sec_type, bool is_header, // used to generate an aes key unique to each block
                                     uint8_t *aes_key /* out */)
 {
     const char *salt   = "frome";     
@@ -80,14 +85,17 @@ static void crypt_generate_aes_key (VariantBlock *vb,
         pepper_len = strlen (pepper);
     }
 
-    buf_alloc (vb, &vb->spiced_pw, pw_len + sizeof (uint32_t) + sizeof (int16_t) + salt_len + pepper_len, 1, "spiced_pw", 0);
+    buf_alloc (vb, &vb->spiced_pw, pw_len + sizeof (uint32_t) + sizeof (uint8_t) + sizeof (uint8_t) + salt_len + pepper_len, 1, "spiced_pw", 0);
     buf_add (&vb->spiced_pw, password, pw_len);
 
     Md5Hash salty_hash, peppered_hash;
-    
+    uint8_t sec_type_byte  = (uint8_t)sec_type; // convert to a byte, as enum and bool might be represented differently by different compilers
+    uint8_t is_header_byte = (uint8_t)is_header;
+
     // add some salt to the password, mixed with vb_i and sec_i for uniqueness
     buf_add (&vb->spiced_pw, &vb_i, sizeof (uint32_t));
-    buf_add (&vb->spiced_pw, &sec_i, sizeof (int16_t));
+    buf_add (&vb->spiced_pw, &sec_type_byte, sizeof (uint8_t));
+    buf_add (&vb->spiced_pw, &is_header_byte, sizeof (uint8_t));
     buf_add (&vb->spiced_pw, salt, salt_len);
     md5_do (vb->spiced_pw.data, vb->spiced_pw.len, &salty_hash);
 
@@ -102,27 +110,22 @@ static void crypt_generate_aes_key (VariantBlock *vb,
     buf_free (&vb->spiced_pw);
 }
 
-// we generate a different key for each block by salting the password with vb_i and sec_i
-// for sec_i we use (-1-section_i) for the section header and section_i for the section body
-// the VCF header section: vb_i=0 (for all components) and sec_i=0 (i.e: 0 for the body, (-1 - 0)=-1 for header)
-// the Variant Data section: vb_i={global consecutive number starting at 1}, sec_i=0 (body=0, header=-1)
-// Other sections: vb_i same as Variant Data, sec_i consecutive running starting at 1 
-void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i) // used to generate an aes key unique to each block
+// we generate a different key for each block by salting the password with vb_i, sec_type and is_header
+void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, 
+               uint32_t vb_i, SectionType sec_type, bool is_header)  // used to generate an aes key unique to each block
 {
-    //fprintf (stderr, "id:%u vb_i=%d sec_i=%d data_len=%u\n", vb->id, vb_i, sec_i, data_len);
-
     // generate an AES key just for this one section - combining the pasword with vb_i and sec_i
     uint8_t aes_key[AES_KEYLEN]; 
-    crypt_generate_aes_key (vb, vb_i, sec_i, aes_key);
+    crypt_generate_aes_key (vb, vb_i, sec_type, is_header, aes_key);
 
-    //printf ("vb_i=%u sec_i=%d key= %s\n", vb_i, sec_i, aes_display_key (aes_key)); // DEBUG
+    //fprintf (stderr, "command:%d id:%d vb_i=%d sec_type=%s%s data_len=%u key=%s\n", command, vb->id, vb_i, st_name (sec_type), is_header ? "(Hdr)": "", data_len, aes_display_key (aes_key));
 
     aes_initialize (vb, aes_key);
 
     // encrypt in-place
-    //printf ("BFRE: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
+    //fprintf (stderr, "BFRE: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
     aes_xcrypt_buffer (vb, data, data_len);
-    //printf ("AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
+    //fprintf (stderr, "AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
 }
 
 void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len)
@@ -143,3 +146,7 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
     
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }
+
+
+#define V1_CRYPT
+#include "v1.c"

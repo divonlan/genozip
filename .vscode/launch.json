@@ -8,17 +8,19 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
+            //"program": "${workspaceFolder}/genocat-debug.exe",
             "program": "${workspaceFolder}/genozip-debug.exe",
-            "args": [ "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-f", "--show-time"],
-            //"args": [ "test-file3.vcf","-m", "-f"],
-            //"args": [ "test-file3.vcf.genozip", "-d", "-f", "-q", "-o", "junk.vcf"],
-            //"args": [ "test-file1.vcf",  "-o", "concat3.vcf.genozip", "-q", "-f", "-m", "-p", "abc"],
-            //"args": [ "-d", "concat3.vcf.genozip", "-f", "-O", "-p", "abc", "-q"],
-            //"args": [ "-d", "test-file.vcf.genozip", "test-file.vcf.genozip",  "-o", "junk.vcf", "-f"],
 
-            //"args": [ "minimal.vcf", "minimal2.vcf", "-o", "mc.vcf.genozip", "-f", "-p", "abc", "-q"],
-            //"args": [ "-d", "ttt-pw.vcf.genozip", "-f", "-@", "1", "-p", "abc"],
-            
+            "args": ["test-file.vcf","-f", "-t"],
+            //"args": ["-t", "-f",  "out.vcf"],
+            //"args": ["GFX0241869.filtered.snp.vcf.genozip", "-o", "junk.vcf", "-f", "-G", "--show-memory"],
+            //"args": ["test-file.vcf", "-f"],
+
+            //"args": ["-z", "GFX0241869.filtered.snp.vcf", "-f"],
+            //"args": ["-d", "GFX0241869.filtered.snp.vcf.genozip","-o", "GFX0241869.filtered.snp.test.vcf", "-f"],
+
+            //"args": ["-f", "-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "junk.vcf", "--show-headers"],   
+
             // for benchmark files used in the paper
 
             // benchmark file1:
@@ -34,7 +36,6 @@
             //"args": ["-f", "-d", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip", "-o", "ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.test.vcf"],
             
             //"args": ["-f", "-z", "-m", "data/minimal.vcf", "data/minimal copy.vcf", "-o", "xxx.vcf.genozip"],
-            //"args": ["-f", "-d", "xxx.vcf.genozip"],
 
             // test file
             //"args": ["-f", "-z", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-o", "data/junk.vcf.genozip"],

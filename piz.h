@@ -10,9 +10,6 @@
 
 // returns true is successfully outputted a vcf file
 extern bool piz_dispatcher (const char *z_basename, FileP z_file, FileP vcf_file, 
-                            bool test_mode, unsigned max_threads);
-
-extern void piz_reconstruct_line_components (VariantBlockP vb);
-extern void piz_merge_all_lines (VariantBlockP vb);
+                            unsigned max_threads, bool is_first_vcf_component, bool is_last_file);
 
 #endif

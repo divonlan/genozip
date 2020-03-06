@@ -12,6 +12,13 @@
         "crypt.h": "c",
         "vb.h": "c",
         "endianness.h": "c",
-        "zfile.h": "c"
+        "zfile.h": "c",
+        "typeinfo": "c",
+        "sstream": "c",
+        "cstddef": "c",
+        "array": "c",
+        "string": "c",
+        "string_view": "c"
     },
+    "C_Cpp.dimInactiveRegions": false,
 }

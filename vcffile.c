@@ -3,8 +3,6 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
  
-#include <sys/types.h>
-#include <sys/stat.h>
 #include "profiler.h"
 
 #ifdef __APPLE__
@@ -93,9 +91,9 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
     double *avg_line_len_so_far = vb ? &file->avg_data_line_len : &file->avg_header_line_len;
     unsigned *lines_so_far      = vb ? &file->data_lines_so_far : &file->header_lines_so_far;
 
-    // allocate only if buffer not allocated already - otherwise try to make do with what we have first
+    // note: we start small with only 100, to support single-individual files with global_max_lines_per_vb=128K  
     unsigned buf_len = line->size ? buf_alloc (vb, line, line->size, 1, buf_name, line_i_in_file) // just make buffer allocated, without mallocing new memory
-                                  : buf_alloc (vb, line, MAX(1000, (unsigned)(*avg_line_len_so_far * 1.2)), 1, buf_name, line_i_in_file); // we reuse the same buffer for every line
+                                  : buf_alloc (vb, line, MAX(100, (unsigned)(*avg_line_len_so_far * 1.2)), 1, buf_name, line_i_in_file); // we reuse the same buffer for every line
     unsigned str_len = 0;
 
     do {
@@ -103,8 +101,6 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
 
         if (c == EOF) {
             ASSERT0 (!str_len, "Invalid VCF file: Expecting file to end with a newline");
-
-            file->eof = true;
 
             buf_free(line);
             return false;
@@ -117,6 +113,14 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
 
     } while (line->data[str_len-1] != '\n');
             
+    // if this file somehow passed through Windows and had \n replace by \r\n - remove the \r
+    bool windows_style_newline = str_len >= 2 && line->data[str_len-2] == '\r';
+    
+    if (windows_style_newline) {
+        line->data[str_len-2] = '\n';
+        str_len--;
+    }
+
     line->data[str_len] = '\0'; // terminate string
 
     *avg_line_len_so_far = (double)((*avg_line_len_so_far * *lines_so_far) + (str_len+1)) / (double)(*lines_so_far+1);
@@ -124,17 +128,12 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
     
     line->len = str_len;
 
-    file->vcf_data_so_far += str_len;
+    file->vcf_data_so_far += str_len + windows_style_newline;
 
-    if (flag_md5 && flag_concat_mode && (!skip_md5_vcf_header || line->data[0] != '#')) { // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
-        md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len, !vb->z_file->has_md5);
-        vb->z_file->has_md5 = true;
-    }
+    if (flag_concat && (!skip_md5_vcf_header || line->data[0] != '#'))  // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
+        md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len);
 
-    if (flag_md5) {
-        md5_update (&vb->z_file->md5_ctx_single, line->data, line->len, line_i_in_file==1);
-        vb->z_file->has_md5 = true;
-    }
+    md5_update (&vb->z_file->md5_ctx_single, line->data, line->len);
 
     return true;
 }
@@ -144,14 +143,15 @@ unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
     unsigned len = buf->len;
     char *next = buf->data;
 
-    while (len) {
-        unsigned bytes_written = file_write (vcf_file, next, len);
-        len  -= bytes_written;
-        next += bytes_written;
+    if (!flag_test) {
+        while (len) {
+            unsigned bytes_written = file_write (vcf_file, next, len);
+            len  -= bytes_written;
+            next += bytes_written;
+        }
     }
 
-    if (vcf_file->has_md5)
-        md5_update (&vcf_file->md5_ctx_concat, buf->data, buf->len, !vcf_file->vcf_data_so_far);
+    md5_update (&vcf_file->md5_ctx_concat, buf->data, buf->len);
 
     vcf_file->vcf_data_so_far += buf->len;
     vcf_file->disk_so_far     += buf->len;
@@ -166,76 +166,15 @@ void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb)
     unsigned size_written_this_vb = 0;
 
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-        DataLine *dl = &vb->data_lines[line_i];
-        size_written_this_vb += vcffile_write_to_disk (vcf_file, &dl->line);
+        Buffer *line = &vb->data_lines[line_i].line;
+
+        if (line->len) // if this line is not filtered out
+            size_written_this_vb += vcffile_write_to_disk (vcf_file, line);
     }
 
-    ASSERTW (size_written_this_vb == vb->vb_data_size, 
+    ASSERTW (size_written_this_vb == vb->vb_data_size || exe_type == EXE_GENOCAT, 
             "Warning: Variant block %u (first_line=%u last_line=%u num_lines=%u) had %u bytes in the original VCF file but %u bytes in the reconstructed file", 
             vb->variant_block_i, vb->first_line, vb->first_line+vb->num_lines-1, vb->num_lines, vb->vb_data_size, size_written_this_vb);
 
     COPY_TIMER (vb->profile.write);
-}
-
-void vcffile_compare_pipe_to_file (FILE *from_pipe, File *vcf_file)
-{
-    const unsigned buf_size = 500000;
-
-    char *data_pipe = (char *)calloc (buf_size, 1);
-    ASSERT0 (data_pipe, "Error: Failed to allocate data_pipe");
-
-    char *data_file = (char *)calloc (buf_size, 1);
-    ASSERT0 (data_file, "Error: Failed to allocate data_file");
-
-    unsigned len_file=0, len_pipe=0;
-    uint64_t total_len=0;
-    do {
-        len_pipe = fread (data_pipe, 1, buf_size, from_pipe);
-        
-        if (vcf_file->type == VCF)
-            len_file =   fread (data_file, 1, buf_size, (FILE *)vcf_file->file);
-        else if (vcf_file->type == VCF_GZ)
-            len_file = gzfread (data_file, 1, buf_size, (gzFile)vcf_file->file);
-        else if (vcf_file->type == VCF_BZ2) 
-            len_file = BZ2_bzread ((BZFILE *)vcf_file->file, data_file, buf_size);
-        else
-            ABORT0 ("Unknown file type");
-
-        const char *failed_text = "FAILED!!! Please contact bugs@genozip.com to help fix this bug in genozip";
-
-        unsigned min_len = MIN (len_file, len_pipe);
-        bool failed = false;
-        if (memcmp (data_pipe, data_file, min_len)) {
-
-            for (int i=0; i < (int)min_len ; i++) {
-                if (data_pipe[i] != data_file[i]) {
-                    int display_start = MAX (i-50, 0);
-                    printf (
-#ifdef _MSC_VER
-                            "Data differs from pipe in character %I64u of the file. Showing the buffers around this character:\n***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", 
-#else
-                            "Data differs from pipe in character %"PRIu64" of the file. Showing the buffers around this character:\n"
-                            "***** After ZIP & PIZ *****\n%.*s\n****** ORIGINAL FILE ******\n%.*s\n", 
-#endif
-                            total_len + i, MIN (len_pipe, 100), &data_pipe[display_start], MIN (len_file, 100), &data_file[display_start]);                     
-                    break;
-                }
-            }
-            failed = true;
-        } 
-
-        if (len_pipe != len_file) {
-            printf ("Length differs - and zip & piz length=%u ; original file length=%u\n", len_pipe, len_file);
-            failed = true;
-        }
-
-        ASSERT (!failed, "%s", failed_text);
-
-        total_len += len_pipe;
-    } while (len_pipe);
-
-    fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
-
-    free (data_pipe);
-    free (data_file);
 }

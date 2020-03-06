@@ -21,8 +21,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->zfile_uncompress_section          += src->zfile_uncompress_section;
     dst->squeeze                           += src->squeeze;
     dst->buf_alloc                         += src->buf_alloc;
-    dst->piz_get_line_get_num_subfields    += src->piz_get_line_get_num_subfields;
-    dst->piz_get_genotype_sample_starts    += src->piz_get_genotype_sample_starts;
+    dst->piz_get_format_info               += src->piz_get_format_info;
+    dst->piz_initialize_sample_iterators    += src->piz_initialize_sample_iterators;
     dst->piz_get_line_subfields            += src->piz_get_line_subfields;
     dst->piz_merge_line                    += src->piz_merge_line;
     dst->zfile_read_one_vb                 += src->zfile_read_one_vb;
@@ -92,10 +92,10 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "   piz_reconstruct_line_components: %u\n", ms(p->piz_reconstruct_line_components));
         fprintf (stderr, "      piz_get_variant_data_line: %u\n", ms(p->piz_get_variant_data_line));
         fprintf (stderr, "          piz_decode_pos: %u\n", ms(p->piz_decode_pos) );
-        fprintf (stderr, "      piz_get_line_get_num_subfields: %u\n", ms(p->piz_get_line_get_num_subfields));
+        fprintf (stderr, "      piz_get_format_info: %u\n", ms(p->piz_get_format_info));
         fprintf (stderr, "      piz_get_line_subfields: %u\n", ms(p->piz_get_line_subfields));
         fprintf (stderr, "      piz_get_haplotype_data_line: %u\n", ms(p->piz_get_haplotype_data_line));
-        fprintf (stderr, "      piz_get_genotype_sample_starts: %u\n", ms(p->piz_get_genotype_sample_starts));
+        fprintf (stderr, "      piz_initialize_sample_iterators: %u\n", ms(p->piz_initialize_sample_iterators));
         fprintf (stderr, "      piz_get_genotype_data_line: %u\n", ms(p->piz_get_genotype_data_line));
         fprintf (stderr, "      piz_get_phase_data_line: %u\n", ms(p->piz_get_phase_data_line));
         fprintf (stderr, "      piz_merge_line: %u\n", ms(p->piz_merge_line));
@@ -105,7 +105,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
         fprintf (stderr, "   read: %u\n", ms(p->read));
         fprintf (stderr, "   write: %u\n", ms(p->write));
-        fprintf (stderr, "GENOZIP compute threads (zip_compress_variant_block): %u\n", ms(p->compute));
+        fprintf (stderr, "GENOZIP compute threads (zip_compress_one_vb): %u\n", ms(p->compute));
         fprintf (stderr, "   compressor: %u\n", ms(p->compressor));
         fprintf (stderr, "   seg_all_data_lines: %u\n", ms(p->seg_all_data_lines));
         fprintf (stderr, "   zip_generate_haplotype_sections: %u\n", ms(p->zip_generate_haplotype_sections));
@@ -123,6 +123,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
 
     fprintf (stderr, "\nVariant Block stats:\n");
     fprintf (stderr, "  Variant blocks: %u\n", num_vbs);
+    fprintf (stderr, "  Maximum permitted variants per block: %u\n", global_max_lines_per_vb);
     fprintf (stderr, "  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
     fprintf (stderr, "  Average read time: %u\n", ms(p->read) / num_vbs);
     fprintf (stderr, "  Average compute time: %u\n", ms(p->compute) / num_vbs);

@@ -121,6 +121,15 @@ void unsqueeze (VariantBlock *vb,
 {
     START_TIMER;
     
+    // handle the trivial case where there is only one haplotype per line, and therefore no need for an index.
+    // we construct an index for consistency anyway
+    if (vb->num_haplotypes_per_line == 1) {
+        normal[0] = 0;
+        return;
+    }    
+    
+    ASSERT (squeezed, "Error: squeezed is NULL in variant_block_i=%u", vb->variant_block_i);
+
     unsigned squeezed_len = squeeze_len (normal_len);
 
     uint16_t my_squeezed_checksum = 0;
@@ -163,16 +172,17 @@ void squeeze_unit_test()
     uint16_t checksum;
 
     VariantBlock vb;
+    vb.num_haplotypes_per_line = sizeof (unsqueezed) / sizeof (unsqueezed[0]);
     squeeze(&vb, squeezed, &checksum, normal, 32);
 
 
-    printf ("original: %d %d %d %d %d\n", normal[0], normal[1], normal[2], normal[3], normal[4]);
+    fprintf (stderr, "original: %d %d %d %d %d\n", normal[0], normal[1], normal[2], normal[3], normal[4]);
 
-    printf ("squeezed: %x %x %x %x %x\n", squeezed[0], squeezed[1], squeezed[2], squeezed[3], squeezed[4]);
+    fprintf (stderr, "squeezed: %x %x %x %x %x\n", squeezed[0], squeezed[1], squeezed[2], squeezed[3], squeezed[4]);
 
     unsqueeze (&vb, unsqueezed, squeezed, checksum, 32);
 
-    printf ("unsqueezed: ");
-    for (unsigned i=0; i<32; i++) printf("%d ", unsqueezed[i]);
-    printf ("\n");
+    fprintf (stderr, "unsqueezed: ");
+    for (unsigned i=0; i<32; i++) fprintf (stderr, "%d ", unsqueezed[i]);
+    fprintf (stderr, "\n");
 }

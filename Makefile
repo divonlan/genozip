@@ -33,8 +33,9 @@ else
 	CFLAGS += -O2
 endif
 
-MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c \
-	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c
+MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c random_access.c sections.c\
+	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
+		  regions.c samples.c
 
 CONDA_COMPATIBILITY_SRCS = compatability/visual_c_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
 
@@ -45,10 +46,10 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = aes.h dispatcher.h gloptimize.h profiler.h subfield.h vcffile.h zip.h \
+CONDA_INCS = aes.h dispatcher.h gloptimize.h profiler.h dict_id.h vcffile.h zip.h v1.c \
              base250.h endianness.h md5.h sections.h text_help.h vcf_header.h \
              buffer.h file.h move_to_front.h segregate.h text_license.h version.h \
-             crypt.h genozip.h piz.h squeeze.h vb.h zfile.h \
+             crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h regions.h samples.h \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
              compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
              compatability/visual_c_pthread.h \
@@ -91,7 +92,7 @@ EXECUTABLES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
 all: $(EXECUTABLES)
 
 debug : CFLAGS  += -DDEBUG -g -O0
-debug : genozip-debug$(EXE)
+debug : genozip-debug$(EXE) genounzip-debug$(EXE) genols-debug$(EXE) genocat-debug$(EXE)
 
 -include $(DEPS)
 
@@ -120,6 +121,11 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@rm -f $@ 
 	@ln $^ $@
 
+genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
+	@echo Hard linking $@
+	@rm -f $@ 
+	@ln $^ $@
+
 LICENSE.non-commercial.txt: text_license.h
 	@echo Generating $@
 	@./genozip$(EXE) --license > $@
@@ -138,6 +144,9 @@ endif
 
 version := $(shell head -n1 version.h |cut -d\" -f2)
 
+SH_VERIFY_ALL_COMMITTED = (( `git status|grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || \
+                          (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1)
+
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
@@ -148,7 +157,7 @@ ifeq ($(OS),Windows_NT)
 # the genozip file header SectionHeaderVCFHeader.genozip_version
 increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
-	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` = 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@bash increment-version.sh
 	@git commit -m "increment version" version.h 
 
@@ -158,8 +167,8 @@ decrement-version:
 	@echo "Change version.h to the last version that still has a tag"
 
 .archive.tar.gz : increment-version $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
-	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@echo Creating github tag genozip-$(version) and archive
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push 
 	@git tag genozip-$(version)
 	@git push origin genozip-$(version)
@@ -178,8 +187,8 @@ CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
-	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
-	@echo " "
+	@echo "Publishing to conda-forge"
+	@$(SH_VERIFY_ALL_COMMITTED)
 #	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
 #	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)  # needed for initial stage-recipes step, keeping here for future reference
 	@echo " "
@@ -221,7 +230,8 @@ windows/LICENSE.for-installer.txt: text_license.h
 windows/genozip-installer.exe: windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
                                LICENSE.commercial.txt LICENSE.non-commercial.txt windows/LICENSE.for-installer.txt \
 							   windows/readme.txt test-file.vcf
-	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
+	@echo 'Creating Windows installer'
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
@@ -235,14 +245,14 @@ windows/genozip-installer.exe: windows/genozip.exe windows/genounzip.exe windows
 	@git push
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
+	@echo "Creating Mac installer"
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo "Pushing all committed changes to github"
-	@(( `git status|grep 'Changes not staged for commit\|Untracked files'|wc -l ` == 0 )) || \
-	 (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@(( `git push |& grep "Everything up-to-date"  | wc -l` > 0 )) || (echo "Pushed some stuff... waiting 5 seconds for it to settle in" ; sleep 5)
 	@echo "Logging in to remote mac" 
 	@# Get IP address - check if the previous IP address still works or ask for a new one. Assuming a LAN on an Android hotspot.
 	@ip=`cat mac/.mac_ip_address` ; a=`echo $$ip|cut -d. -f4`; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a ; echo $$ip > mac/.mac_ip_address
-	@[ -f mac/.mac_username ] || ( echo Error: file mac/.mac_username missing && exit 1 )
+	@[ -f mac/.mac_username ] || ( echo ERROR: file mac/.mac_username missing && exit 1 )
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
@@ -285,8 +295,8 @@ signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Develop
 
 mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
                  $(MACSCTDIR)/postinstall
-	@(( `git status|grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || (echo Error: there are some uncommitted changes: ; echo ; git status ; exit 1)
 	@echo "Building Mac package $@"
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
 	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
 
@@ -321,7 +331,7 @@ endif # Darwin
 
 clean:
 	@echo Cleaning up
-	@rm -f $(DEPS) $(OBJS) genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE) 
+	@rm -f $(DEPS) $(OBJS) $(EXECUTABLES)
 
 clean-debug:
 	@echo Cleaning up debug
