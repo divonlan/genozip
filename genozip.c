@@ -86,12 +86,12 @@ static int main_print (const char **text, unsigned num_lines,
         bool wrapped = false;
         while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
             int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); c>=0 && line[c] != ' '; c--); // find 
-            fprintf (stderr, "%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
+            printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + 1; // skip space too
             line_len -= c + 1;
             wrapped = true;
         }
-        fprintf (stderr, "%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
+        printf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
     }
     return 0;
 }
