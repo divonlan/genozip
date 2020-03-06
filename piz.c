@@ -421,7 +421,7 @@ static void piz_get_phase_data_line (VariantBlock *vb, unsigned vb_line_i)
 // of pointers, each pointer being a beginning of column data within the section array
 static const char **piz_get_ht_columns_data (VariantBlock *vb)
 {
-    buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 7), 1, "ht_columns_data", 0); // realloc for exact size
+    buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 15), 1, "ht_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
 
     const char **ht_columns_data = (const char **)vb->ht_columns_data.data;
 
@@ -444,7 +444,7 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
         buf_zero (&vb->column_of_zeros);
     } 
 
-    for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 7; ht_i++)
+    for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 15; ht_i++)
         ht_columns_data[ht_i] = vb->column_of_zeros.data;
 
     return ht_columns_data;
@@ -455,16 +455,29 @@ static void piz_get_haplotype_data_line (VariantBlock *vb, unsigned vb_line_i, c
 {
     START_TIMER;
 
-    // this loop can consume up to 50% of the entire decompress compute time (tested with 1KGP data)
-    // note: we do memory assignment 32 bit at time (its about 10% faster than byte-by-byte)
-    // TO DO: this is LITTLE ENDIAN, need an #ifdef to support BIG ENDIAN
-    // TO DO: we can also #ifdef between 32bit and 64bit compilers and do 8 at a time for the latter
-    unsigned *next = (unsigned *)vb->line_ht_data.data;
-    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i += 4) 
-        *(next++) = ((unsigned)(unsigned char)ht_columns_data[ht_i    ][vb_line_i]      ) |  // this is LITTLE ENDIAN order
-                    ((unsigned)(unsigned char)ht_columns_data[ht_i + 1][vb_line_i] << 8 ) |
-                    ((unsigned)(unsigned char)ht_columns_data[ht_i + 2][vb_line_i] << 16) |
-                    ((unsigned)(unsigned char)ht_columns_data[ht_i + 3][vb_line_i] << 24) ;  // no worries if num_haplotypes_per_line is not a multiple of 4 - we have extra columns of zero
+    // this loop can consume up to 25-50% of the entire decompress compute time (tested with 1KGP data)
+    // note: we do memory assignment 64 bit at time (its about 10% faster than byte-by-byte)
+    uint64_t *next = (uint64_t *)vb->line_ht_data.data;
+    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i += 8) 
+#ifdef __LITTLE_ENDIAN__
+        *(next++) = ((uint64_t)(uint8_t)ht_columns_data[ht_i    ][vb_line_i]      ) |  // this is LITTLE ENDIAN order
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 1][vb_line_i] << 8 ) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 2][vb_line_i] << 16) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 3][vb_line_i] << 24) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 4][vb_line_i] << 32) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 5][vb_line_i] << 40) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 6][vb_line_i] << 48) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 7][vb_line_i] << 56) ;  // no worries if num_haplotypes_per_line is not a multiple of 4 - we have extra columns of zero
+#else
+        *(next++) = ((uint64_t)(uint8_t)ht_columns_data[ht_i    ][vb_line_i] << 56) |  // this is BIG ENDIAN order
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 1][vb_line_i] << 48) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 2][vb_line_i] << 40) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 3][vb_line_i] << 32) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 4][vb_line_i] << 24) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 5][vb_line_i] << 16) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 6][vb_line_i] << 8 ) |
+                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 7][vb_line_i]      ) ;  
+#endif
 
     // check if this row has now haplotype data (no GT field) despite some other rows in the VB having data
     DataLine *dl = &vb->data_lines[vb_line_i];

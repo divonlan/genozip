@@ -19,10 +19,10 @@
 
 #define MAX_BASE250_NUMERALS 4
 typedef struct {
-    uint32_t n;            // the number being encoded
+    uint32_t n;                                  // the number being encoded
     union {
-        uint8_t numerals[4];  // 4-byte big endian except if a 1 byte value 250-255
-        uint32_t bgen;        // big endian
+        uint8_t numerals[MAX_BASE250_NUMERALS];  // 4-byte big endian except if a 1 byte value 250-255
+        uint32_t bgen;                           // big endian
     } encoded;
 } Base250;
 

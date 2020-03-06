@@ -111,16 +111,13 @@ typedef struct variant_block_ {
     Buffer haplotype_permutation_index_squeezed; // used by piz to unsqueeze the index and zfile to compress it
     Buffer optimized_gl_dict;  // GL dictionary data after extra optimization
 
-    // these are Buffer arrays of size vb->num_sample_blocks allocated once when used for the first time and never freed. 
-    // Subsequent variant blocks that re-use the memory have the same number of samples by VCF spec. Each buffer is a string of the data as written to the GENOZIP file
+    // these are Buffer arrays of size vb->num_sample_blocks allocated once when used for the first time and never freed,
+    // unless a subsequent VCF file has more sample blocks, in which case they are first destroyed by vb_cleanup_memory().
+    // Each buffer is a string of the data as written to the GENOZIP file
 
-    // Note: The sample blocks for phase and genotype data are subsequent blocks of num_samples_per_block samples.
-    // in contrast the sample blocks of haplotypes are num_samples_per_block*ploidy haplotypes as permuted. 
-    // e.g. genotypes and phase in sample_block_i=1 don't necessary correspond to haplotypes in sample_block_i=1.
-
-    Buffer *haplotype_sections_data;  // this is the haplotype character for each haplotype in the transposed sample group
-    Buffer *phase_sections_data;      // this is the phase character for each genotype in the sample group
-    Buffer *genotype_sections_data;   // this is for piz - each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
+    Buffer *haplotype_sections_data;  // ZIP & PIZ: this is the haplotype character for each haplotype in the transposed sample group
+    Buffer *phase_sections_data;      // ZIP & PIZ: this is the phase character for each genotype in the sample group
+    Buffer *genotype_sections_data;   // PIZ only:  each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
     Buffer genotype_one_section_data; // for zip we need only one section data
     
     // compresssed file data 

@@ -328,10 +328,6 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
     if (!vb->haplotype_sections_data) 
         vb->haplotype_sections_data = (Buffer *)calloc (vb->num_sample_blocks, sizeof(Buffer)); // allocate once, never free
-
-    // TO DO : there's a bug in this allocation ^ if a user is compressing multiple VCF, they 
-    // may not have the same num_sample_blocks. We should remember how many we allocated and add more
-    // if needed.
     
     // create a permutation index for the whole variant block, and permuted haplotypes for each sample block        
     buf_alloc (vb, &vb->haplotype_permutation_index, vb->num_haplotypes_per_line * sizeof(uint32_t), 
@@ -474,9 +470,8 @@ static void zip_compress_one_vb (VariantBlock *vb)
         
         if (vb->has_genotype_data) {
 
-            // in the worst case scenario, each subfield is represnted by 5 bytes in Base250
-            // TO DO: this is a huge waste of memory, as normally each subfield consumes ~ 1.5 B, better allocate less and realloc
-            buf_alloc (vb, &vb->genotype_one_section_data, max_genotype_section_len * 5, 1, "genotype_one_section_data", sb_i);
+            // in the worst case scenario, each subfield is represnted by 4 bytes in Base250
+            buf_alloc (vb, &vb->genotype_one_section_data, max_genotype_section_len * MAX_BASE250_NUMERALS, 1, "genotype_one_section_data", sb_i);
 
             // we compress each section at a time to save memory
             zip_generate_genotype_one_section (vb, sb_i); 
