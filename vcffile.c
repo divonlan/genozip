@@ -16,6 +16,7 @@
 #include "vcffile.h"
 #include "vb.h"
 #include "file.h"
+#include "dispatch.h"
 
 // we implement our own "getc" which manages read buffers a lot more efficiently
 static inline char vcffile_get_char(VariantBlock *vb)
@@ -31,6 +32,7 @@ static inline char vcffile_get_char(VariantBlock *vb)
     if (file->next_read == file->last_read) {
         
         START_TIMER;
+        if (flag_show_threads) dispatcher_show_time ("Reading disk buffer", -1, vb->variant_block_i);
 
         file->next_read = 0;
 
@@ -69,6 +71,8 @@ static inline char vcffile_get_char(VariantBlock *vb)
         else {
             ABORT0 ("Invalid file type");
         }
+
+        if (flag_show_threads) dispatcher_show_time ("Finished reading disk buffer", -1, vb->variant_block_i);
 
         COPY_TIMER (vb->profile.read);
     }
@@ -131,9 +135,9 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
     file->vcf_data_so_far += str_len + windows_style_newline;
 
     if (flag_concat && (!skip_md5_vcf_header || line->data[0] != '#'))  // note that we ignore the directive to skip md5 for a concatenated header, if we discover this is actually the first line of the body
-        md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len);
+        {} //md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len);
 
-    md5_update (&vb->z_file->md5_ctx_single, line->data, line->len);
+    //md5_update (&vb->z_file->md5_ctx_single, line->data, line->len);
 
     return true;
 }
