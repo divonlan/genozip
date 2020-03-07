@@ -16,7 +16,7 @@
 #include "vcffile.h"
 #include "vb.h"
 #include "file.h"
-#include "dispatch.h"
+#include "dispatcher.h"
 
 // we implement our own "getc" which manages read buffers a lot more efficiently
 static inline char vcffile_get_char(VariantBlock *vb)
