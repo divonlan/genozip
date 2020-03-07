@@ -526,6 +526,8 @@ static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section
 
     if (flag_show_headers && buf_is_allocated (&processed_vb->show_headers_buf))
         buf_print (&processed_vb->show_headers_buf, false);
+
+    if (flag_show_threads) dispatcher_show_time ("Write genozip data done", -1, processed_vb->variant_block_i);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -613,6 +615,8 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
 
             zip_read_variant_block (vcf_file, &line_i, first_data_line, next_vb);
             first_data_line = NULL;
+
+            if (flag_show_threads) dispatcher_show_time ("Read VCF data done", -1, next_vb->variant_block_i);
 
             if (next_vb->num_lines)  // we found some data 
                 next_vb->ready_to_dispatch = true;

@@ -56,7 +56,7 @@ typedef struct {
 
 static TimeSpecType profiler_timer; // wallclock
 
-static inline void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i)
+void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i)
 {
     TimeSpecType timer; 
     clock_gettime(CLOCK_REALTIME, &timer); 
