@@ -273,7 +273,7 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
     if (!buf->memory) {
         buf_test_overflows(vb);
 #ifdef DEBUG
-        buf_display_memory_usage (true);
+        buf_display_memory_usage (true, 0, 0);
 #endif
         ABORT ("Error: Failed to allocate %u bytes name=%s param=%u", size + overhead_size, name, param);
     }

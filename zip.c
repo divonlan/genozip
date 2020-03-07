@@ -583,13 +583,19 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
     VariantBlock *next_vb;
     do {
         next_vb = dispatcher_get_next_vb (dispatcher);
-        
+        bool has_free_thread = dispatcher_has_free_thread (dispatcher);
+
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
-        if (next_vb && next_vb->ready_to_dispatch && dispatcher_has_free_thread (dispatcher)) 
+        if (next_vb && next_vb->ready_to_dispatch && has_free_thread) 
             dispatcher_compute (dispatcher, zip_compress_one_vb);
 
         // PRIORITY 2: output completed vbs, so they can be released and re-used
-        else if (dispatcher_has_processed_vb (dispatcher, NULL)) {
+        // 2 cases: 1. there is a VB who's compute processing is completed
+        //          2. we have a VB ready to dispatch but all compute threads are occupied. we wait 
+        //             here for one to complete
+        else if (dispatcher_has_processed_vb (dispatcher, NULL) ||              // case 1
+                 (next_vb && next_vb->ready_to_dispatch && !has_free_thread)) { // case 2
+           
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL);
             if (!processed_vb) continue; // no running compute threads or vb processing not completed
             

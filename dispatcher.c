@@ -76,12 +76,12 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *
     dd->filename      = filename;
     dd->last_len      = 2;
 
-    vb_create_pool (MAX (2,max_threads));
+    vb_create_pool (MAX (2,max_threads+1 /* one for evb */));
 
     evb->vcf_file = vcf_file;
     evb->z_file   = z_file;
 
-    buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads-1), 1, "compute_threads_buf", 0);
+    buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
     if (dd->show_progress && !flag_split) // note: for flag_split, we print this in dispatcher_resume() 
@@ -180,7 +180,7 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
         unsigned err = pthread_create(&th->thread_id, NULL, dispatcher_thread_entry, th);
         ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->variant_block_i, err);
 
-        dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % (dd->max_threads-1);
+        dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;
     }
     else {     // single thread or (Windows 32bit and first VB)
         func(dd->next_vb);            
@@ -213,7 +213,7 @@ bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final)
 
     if (is_final) *is_final = my_is_final;
 
-    return my_is_final || th->vb->is_processed;
+    return my_is_final || (th->vb && th->vb->is_processed);
 }
 
 VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
@@ -221,8 +221,6 @@ VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     if (dd->max_threads > 1 && !dd->num_running_compute_threads) return NULL; // no running compute threads 
-
-    ASSERT0 (dispatcher_has_processed_vb (dispatcher, is_final), "Dispatcher has no processed vb ready");
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 
@@ -234,7 +232,7 @@ VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final
     
     memset (th, 0, sizeof(Thread));
     dd->num_running_compute_threads--;
-    dd->next_thread_to_be_joined = (dd->next_thread_to_be_joined + 1) % MAX (1, dd->max_threads-1);
+    dd->next_thread_to_be_joined = (dd->next_thread_to_be_joined + 1) % MAX (1, dd->max_threads);
 
     return dd->processed_vb;
 }
@@ -242,7 +240,7 @@ VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final
 bool dispatcher_has_free_thread (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-    return dd->num_running_compute_threads < MAX(1, dd->max_threads-1);
+    return dd->num_running_compute_threads < MAX(1, dd->max_threads);
 }
 
 VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
