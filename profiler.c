@@ -27,6 +27,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->piz_merge_line                    += src->piz_merge_line;
     dst->zfile_read_one_vb                 += src->zfile_read_one_vb;
 
+    dst->vcffile_get_line                  += src->vcffile_get_line;
     dst->seg_all_data_lines                += src->seg_all_data_lines;
     dst->zip_generate_haplotype_sections   += src->zip_generate_haplotype_sections;
     dst->count_alt_alleles                 += src->count_alt_alleles;
@@ -103,7 +104,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     }
     else { // compress
         fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
-        fprintf (stderr, "   read: %u\n", ms(p->read));
+        fprintf (stderr, "   vcffile_get_line: %u\n", ms(p->vcffile_get_line));
+        fprintf (stderr, "      read: %u\n", ms(p->read));
         fprintf (stderr, "   write: %u\n", ms(p->write));
         fprintf (stderr, "GENOZIP compute threads (zip_compress_one_vb): %u\n", ms(p->compute));
         fprintf (stderr, "   compressor: %u\n", ms(p->compressor));

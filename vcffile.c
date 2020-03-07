@@ -86,6 +86,8 @@ static inline char vcffile_get_char (VariantBlock *vb)
 // unlike fgets, the line is not limited by any particular length
 bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, bool skip_md5_vcf_header, Buffer *line, const char *buf_name)
 {    
+    START_TIMER;
+
     File *file = vb->vcf_file; // for code readability
 
     double *avg_line_len_so_far = vb ? &file->avg_data_line_len : &file->avg_header_line_len;
@@ -134,6 +136,8 @@ bool vcffile_get_line(VariantBlock *vb, unsigned line_i_in_file /* 1-based */, b
         {} //md5_update (&vb->z_file->md5_ctx_concat, line->data, line->len);
 
     //md5_update (&vb->z_file->md5_ctx_single, line->data, line->len);
+
+    COPY_TIMER (vb->profile.vcffile_get_line);
 
     return true;
 }
