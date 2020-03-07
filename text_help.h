@@ -86,6 +86,8 @@ static const char *help_genozip_developer[] = {
     "   --show-index      Show the content of the random access index"
     "",
     "   --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file)",
+    "",
+    "   --show-threads    Show thread dispatcher activity",
 };
 
 static const char *help_genounzip[] = {

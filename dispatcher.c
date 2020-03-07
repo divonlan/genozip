@@ -18,7 +18,7 @@
 #include "dispatcher.h"
 #include "vb.h"
 #include "file.h"
-
+#include "profiler.h"
 typedef struct {
     pthread_t thread_id;
     VariantBlock *vb;
@@ -55,6 +55,14 @@ typedef struct {
 } DispatcherData;
 
 static TimeSpecType profiler_timer; // wallclock
+
+static inline void dispatcher_show_time (const char *stage, uint32_t vb_i)
+{
+    TimeSpecType timer; 
+    clock_gettime(CLOCK_REALTIME, &timer); 
+
+    fprintf (stderr, "%-3u %u.%06u %s\n", vb_i, (unsigned)(timer.tv_sec % 0x10000), (unsigned)(timer.tv_nsec / 1000), stage);
+}
 
 Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *vcf_file, File *z_file,
                             bool test_mode, bool is_last_file, const char *filename)
@@ -155,6 +163,8 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 
     dd->next_vb_i = vb_i ? vb_i : dd->next_vb_i+1;
 
+    if (flag_show_threads) dispatcher_show_time ("Generate vb", dd->next_vb_i);
+
     dd->next_vb = vb_get_vb (dd->vcf_file, dd->z_file, dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
 
@@ -168,6 +178,8 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
 
     th->vb = dd->next_vb;
     th->func = func;
+
+    if (flag_show_threads) dispatcher_show_time ("Start compute", th->vb->variant_block_i);
 
     if (dd->max_threads > 1 
 #if defined _WIN32 && ! defined _WIN64 // note: _WIN32 is defined for both Windows 32 & 64 bit
@@ -224,9 +236,13 @@ VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 
+    if (flag_show_threads) dispatcher_show_time ("Wait for thread", th->vb->variant_block_i);
+
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
         pthread_join(th->thread_id, NULL);
+
+    if (flag_show_threads) dispatcher_show_time ("Join (end compute)", th->vb->variant_block_i);
 
     dd->processed_vb = th->vb;
     

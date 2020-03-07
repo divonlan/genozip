@@ -55,7 +55,7 @@ unsigned global_max_threads = DEFAULT_MAX_THREADS;
 // the flags - representing command line options - available globally
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, 
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
-    flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0,
+    flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_noisy=0;
 
@@ -736,13 +736,14 @@ int main (int argc, char **argv)
         #define _sh {"show-headers",  no_argument,       &flag_show_headers, 1 } 
         #define _si {"show-index",    no_argument,       &flag_show_index  , 1 } 
         #define _sr {"show-gheader",  no_argument,       &flag_show_gheader, 1 }  
+        #define _sT {"show-threads",  no_argument,       &flag_show_threads, 1 }  
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _B, _S, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,              _00 };
-        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                              _st, _sm,                        _00 };
-        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                                                   _st, _sm,                        _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _B, _S, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,              _00 };
+        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                   _st, _sm,                        _00 };
+        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                _sT,                                    _st, _sm,                        _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -847,7 +848,7 @@ int main (int argc, char **argv)
     if (command == UNZIP && flag_stdout) flag_quiet=true; 
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
-    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || 
+    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
         dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_alleles || (flag_show_index && command==UNZIP))
         flag_quiet=true; // don't show progress
 
