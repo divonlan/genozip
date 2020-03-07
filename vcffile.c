@@ -19,7 +19,7 @@
 #include "dispatcher.h"
 
 // we implement our own "getc" which manages read buffers a lot more efficiently
-static inline char vcffile_get_char(VariantBlock *vb)
+static inline char vcffile_get_char (VariantBlock *vb)
 {
     // read buffer - critically impacts performace. 
     // for hard drives: If the buffer size is too big it drastically slows read time because it forces waits on the disk) 
