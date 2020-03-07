@@ -613,6 +613,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
 
             next_vb->first_line = line_i;
 
+            if (flag_show_threads) dispatcher_show_time ("Read VCF data", -1, next_vb->variant_block_i);
             zip_read_variant_block (vcf_file, &line_i, first_data_line, next_vb);
             first_data_line = NULL;
 

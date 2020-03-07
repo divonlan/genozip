@@ -58,10 +58,26 @@ static TimeSpecType profiler_timer; // wallclock
 
 void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i)
 {
+    static bool initialized = false;
+    static const char *prev_stage;
+    static int32_t prev_thread_index;
+    static uint32_t prev_vb_i;
+    static TimeSpecType prev_timer;
+
     TimeSpecType timer; 
     clock_gettime(CLOCK_REALTIME, &timer); 
 
-    fprintf (stderr, "TH=%-2d VB=%-3u %u.%06u %s\n", thread_index, vb_i, (unsigned)(timer.tv_sec % 0x10000), (unsigned)(timer.tv_nsec / 1000), stage);
+    int diff_micro = 0;
+    if (initialized) {
+        diff_micro = 1000000 *(timer.tv_sec - prev_timer.tv_sec) + (int)((int64_t)timer.tv_nsec - (int64_t)prev_timer.tv_nsec) / 1000;
+        fprintf (stderr, "TH=%-2d VB=%-3u Stage='%s' Microsec_in_this_stage=%u\n", prev_thread_index, prev_vb_i, prev_stage, diff_micro);
+    }
+
+    initialized = true;
+    prev_stage        = stage;
+    prev_timer        = timer;
+    prev_thread_index = thread_index;
+    prev_vb_i         = vb_i;
 }
 
 Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *vcf_file, File *z_file,
