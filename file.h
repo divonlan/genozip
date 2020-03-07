@@ -86,7 +86,7 @@ typedef struct file_ {
     uint32_t num_sections[NUM_SEC_TYPES];    // used only for Z files - number of sections of this type
 
     // USED FOR READING ALL FILES
-#   define READ_BUFFER_SIZE (1<<22)    // 512KB
+#   define READ_BUFFER_SIZE (1<<20)    // 1MB
     uint32_t next_read, last_read;     // indices into read_buffer
     //bool eof;                          // we reached EOF
     char read_buffer[];                // only allocated for mode=READ files   

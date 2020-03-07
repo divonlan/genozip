@@ -16,7 +16,6 @@
 #include "vcffile.h"
 #include "vb.h"
 #include "file.h"
-#include "dispatcher.h"
 
 // we implement our own "getc" which manages read buffers a lot more efficiently
 static inline char vcffile_get_char (VariantBlock *vb)
@@ -32,7 +31,6 @@ static inline char vcffile_get_char (VariantBlock *vb)
     if (file->next_read == file->last_read) {
         
         START_TIMER;
-        if (flag_show_threads) dispatcher_show_time ("Reading disk buffer", -1, vb->variant_block_i);
 
         file->next_read = 0;
 
@@ -71,8 +69,6 @@ static inline char vcffile_get_char (VariantBlock *vb)
         else {
             ABORT0 ("Invalid file type");
         }
-
-        if (flag_show_threads) dispatcher_show_time ("Finished reading disk buffer", -1, vb->variant_block_i);
 
         COPY_TIMER (vb->profile.read);
     }
