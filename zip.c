@@ -33,7 +33,7 @@ void zip_set_global_samples_per_block (const char *num_samples_str)
 
     ASSERT (global_samples_per_block >= 1 && global_samples_per_block <= 65535, "Error: invalid argument of --sblock: %s. Expecting a number between 1 and 65535", num_samples_str);
 }
-
+/*
 // read entire variant block to memory. this is called from the dispatcher thread
 static void zip_read_variant_block (File *vcf_file,
                                     unsigned *line_i,   // in/out next line to be read
@@ -71,7 +71,7 @@ static void zip_read_variant_block (File *vcf_file,
 
     vb->num_lines = vb_line_i;
 }
-
+*/
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
 // Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
@@ -536,7 +536,8 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     File *file = evb->z_file;
 
     // output dictionaries to disk
-    zip_output_processed_vb (evb, &file->section_list_dict_buf, NULL, false);  
+    if (buf_is_allocated (&file->section_list_dict_buf)) // not allocated for vcf-header-only files
+        zip_output_processed_vb (evb, &file->section_list_dict_buf, NULL, false);  
     
     // compress all random access records into evb->z_data
     if (flag_show_index) random_access_show_index();
@@ -566,14 +567,11 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
     Dispatcher dispatcher = dispatcher_init (max_threads, last_variant_block_i, vcf_file, z_file, false, is_last_file, vcf_basename);
 
-    unsigned line_i = 0; // last line read (first line in file = 1, consistent with script line numbers)
-
-    // first compress the VCF header
-    Buffer *first_data_line = NULL; // contains a value only for first variant block, otherwise empty. 
+    unsigned vcf_line_i = 1; // the next line to be read (first line = 1)
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t vcf_header_header_pos = z_file->disk_so_far;
-    bool success = vcf_header_vcf_to_genozip (&line_i, &first_data_line);
+    bool success = vcf_header_vcf_to_genozip (&vcf_line_i);
     if (!success) goto finish;
 
     mtf_initialize_mutex (z_file, last_variant_block_i+1);
@@ -611,11 +609,12 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
 
             next_vb = dispatcher_generate_next_vb (dispatcher, 0);
 
-            next_vb->first_line = line_i;
+            next_vb->first_line = vcf_line_i;
 
             if (flag_show_threads) dispatcher_show_time ("Read VCF data", -1, next_vb->variant_block_i);
-            zip_read_variant_block (vcf_file, &line_i, first_data_line, next_vb);
-            first_data_line = NULL;
+            
+            vcffile_read_variant_block (next_vb);
+            vcf_line_i += next_vb->num_lines;
 
             if (flag_show_threads) dispatcher_show_time ("Read VCF data done", -1, next_vb->variant_block_i);
 

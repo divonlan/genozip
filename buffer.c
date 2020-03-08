@@ -404,19 +404,19 @@ void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_
     ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
     ASSERT (!full_overlay || regular_buf->overlayable, "Error: buf_overlay: only overlayble buffers can be fully overlaid. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
 
-    overlaid_buf->size   = 0;
-    overlaid_buf->len    = copy_from ? copy_from->len : 0;
-    overlaid_buf->type   = full_overlay ? BUF_FULL_OVERLAY : BUF_PARTIAL_OVERLAY;
-    overlaid_buf->memory = 0;
+    overlaid_buf->size        = 0;
+    overlaid_buf->len         = copy_from ? copy_from->len : 0;
+    overlaid_buf->type        = full_overlay ? BUF_FULL_OVERLAY : BUF_PARTIAL_OVERLAY;
+    overlaid_buf->memory      = 0;
     overlaid_buf->overlayable = false;
 
     if (name) {
-        overlaid_buf->name   = name;
-        overlaid_buf->param  = param;
+        overlaid_buf->name    = name;
+        overlaid_buf->param   = param;
     }
     else {
-        overlaid_buf->name  = regular_buf->name;
-        overlaid_buf->param = regular_buf->param;
+        overlaid_buf->name    = regular_buf->name;
+        overlaid_buf->param   = regular_buf->param;
     }
 
     if (!full_overlay) {
@@ -550,18 +550,21 @@ void buf_destroy (VariantBlock *vb, Buffer *buf)
 
 void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src, 
                unsigned bytes_per_entry, // how many bytes are counted by a unit of .len
-               unsigned start_entry, unsigned max_entries,  // if 0 copies the entire buffer 
+               unsigned src_start_entry, unsigned max_entries,  // if 0 copies the entire buffer 
                const char *name, unsigned param)
 {
     ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
     
-    unsigned num_entries = max_entries ? MIN (max_entries, src->len - start_entry) : src->len - start_entry;
+    ASSERT (!max_entries || src_start_entry < src->len, 
+            "Error buf_copy of name=%s param=%u: src_start_entry=%u is larger than src->len=%u", src->name, src->param, src_start_entry, src->len);
+
+    unsigned num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
     buf_alloc(vb, dst, num_entries * bytes_per_entry, 1, 
               name ? name : src->name, name ? param : src->param); // use realloc rather than malloc to allocate exact size
 
-    memcpy (dst->data, &src->data[start_entry * bytes_per_entry], num_entries * bytes_per_entry);
+    memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
 
     dst->len = num_entries;  
 }   

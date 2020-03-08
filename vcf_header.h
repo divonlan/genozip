@@ -17,7 +17,7 @@ typedef enum { CHROM, POS, ID, REFALT, QUAL, FILTER, INFO, FORMAT } VcfFields;
 extern const char *vcf_field_names[];
 
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
-extern bool vcf_header_vcf_to_genozip (unsigned *line_i, BufferP *first_data_line);
+extern bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i);
 extern bool vcf_header_genozip_to_vcf (Md5Hash *digest);
 
 extern void vcf_header_initialize(void);

@@ -506,6 +506,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     wait (&wstatus); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
     if (wstatus) fprintf (stderr, "genozip test exited with status %d\n", wstatus);
 #endif
+
 }
 
 static void main_genozip (const char *vcf_filename, 

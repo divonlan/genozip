@@ -302,11 +302,22 @@ static void seg_increase_ploidy (VariantBlock *vb, unsigned new_ploidy, unsigned
     for (unsigned i=0; i < vb_line_i; i++) {
         DataLine *dl = &vb->data_lines[i];
 
+        // note: dl->haplotype_data is overlaid on vb->vcf_data. We now create a new regular buffer
+        if (dl->haplotype_data.type == BUF_PARTIAL_OVERLAY) {
+            Buffer temp_haplotype_data = EMPTY_BUFFER;
+            buf_alloc (vb, &temp_haplotype_data, global_num_samples * new_ploidy, 1, "dl->haplotype_data", vcf_line_i);
+            buf_copy (vb, &temp_haplotype_data, &dl->haplotype_data, 0,0,0, "dl->haplotype_data", vcf_line_i);
+            buf_free (&dl->haplotype_data);
+            buf_move (vb, &dl->haplotype_data, &temp_haplotype_data);
+            buf_destroy (vb, &temp_haplotype_data); // remove it from the buffer list
+        }
+        else // 2nd+ increase (is that possible?), buffer is already regular, just alloc
+            buf_alloc (vb, &dl->haplotype_data, global_num_samples * new_ploidy, 1, "dl->haplotype_data", vcf_line_i);
+
         dl->haplotype_data.len = global_num_samples * new_ploidy; // increase len
 
-        // note: line_ht_data is overlaid at the end of dl->line
-        unsigned new_total_len = dl->haplotype_data.len + dl->genotype_data.len + dl->phase_data.len;            
-        buf_alloc (vb, &dl->line, new_total_len, 1, "dl->line", vcf_line_i);
+        //unsigned new_total_len = dl->haplotype_data.len + dl->genotype_data.len + dl->phase_data.len;            
+        //buf_alloc (vb, &dl->line, new_total_len, 1, "dl->line", vcf_line_i);
 
         // incease ploidy if this row has haplotypes already. if not, will add it at the end.
         if (dl->has_haplotype_data)
@@ -642,19 +653,17 @@ static void seg_data_line (VariantBlock *vb, /* may be NULL if testing */
 
     // now, overlay the data over the line memory so we can re-use our working buffers vb->line_* for the next line
     unsigned total_len = vb->line_gt_data.len + vb->line_phase_data.len + vb->line_ht_data.len;
-    buf_alloc (vb, &dl->line, total_len, 1, "dl->line", vcf_line_i);
-
-    unsigned offset_in_line = 0;
+    buf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + total_len, 1.1, "vb->vcf_data", vcf_line_i);
 
     // note we put haplotype_data at the end to ease realloc in case of ploidy increase
     if (dl->has_genotype_data) 
-        buf_overlay (&dl->genotype_data, &dl->line, &vb->line_gt_data, &offset_in_line, "dl->genotype_data", vcf_line_i);
+        buf_overlay (&dl->genotype_data, &vb->vcf_data, &vb->line_gt_data, &vb->vcf_data_next_offset, "dl->genotype_data", vcf_line_i);
 
     if (dl->has_haplotype_data && dl->phase_type == PHASE_MIXED_PHASED)
-        buf_overlay (&dl->phase_data, &dl->line, &vb->line_phase_data, &offset_in_line, "dl->phase_data", vcf_line_i);    
+        buf_overlay (&dl->phase_data, &vb->vcf_data, &vb->line_phase_data, &vb->vcf_data_next_offset, "dl->phase_data", vcf_line_i);    
 
     if (dl->has_haplotype_data) {
-        buf_overlay (&dl->haplotype_data, &dl->line, &vb->line_ht_data, &offset_in_line, "dl->haplotype_data", vcf_line_i);
+        buf_overlay (&dl->haplotype_data, &vb->vcf_data, &vb->line_ht_data, &vb->vcf_data_next_offset, "dl->haplotype_data", vcf_line_i);
         
         if (flag_show_alleles)
             buf_print (&dl->haplotype_data, true);
@@ -693,10 +702,10 @@ void seg_complete_missing_lines (VariantBlock *vb)
 
         if (vb->has_haplotype_data && !dl->has_haplotype_data) {
             // realloc line which is the buffer on which haplotype data is overlaid
-            buf_alloc (vb, &dl->line, dl->line.len + vb->num_haplotypes_per_line, 1, dl->line.name, dl->line.param);
+            buf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + vb->num_haplotypes_per_line, 1, vb->vcf_data.name, vb->vcf_data.param);
 
             // overlay the haplotype buffer overlaid at the end of the line buffer
-            buf_overlay (&dl->haplotype_data, &dl->line, NULL, &dl->line.len, "dl->haplotype_data", vb->first_line + vb_line_i);
+            buf_overlay (&dl->haplotype_data, &vb->vcf_data, NULL, &vb->vcf_data_next_offset, "dl->haplotype_data", vb->first_line + vb_line_i);
 
             memset (dl->haplotype_data.data, '-', vb->num_haplotypes_per_line); // '-' means missing haplotype - note: ascii 45 (haplotype values start at ascii 48)
             dl->haplotype_data.len = vb->num_haplotypes_per_line;
@@ -707,10 +716,10 @@ void seg_complete_missing_lines (VariantBlock *vb)
 
         if (vb->has_genotype_data && !dl->has_genotype_data) {
             // realloc line which is the buffer on which haplotype data is overlaid
-            buf_alloc (vb, &dl->line, dl->line.len + global_num_samples * sizeof(uint32_t), 1, dl->line.name, dl->line.param);
+            buf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + global_num_samples * sizeof(uint32_t), 1, vb->vcf_data.name, vb->vcf_data.param);
 
             // overlay the haplotype buffer overlaid at the end of the line buffer
-            buf_overlay (&dl->genotype_data, &dl->line, NULL, &dl->line.len, "dl->genotype_data", vb->first_line + vb_line_i);
+            buf_overlay (&dl->genotype_data, &vb->vcf_data, NULL, &vb->vcf_data_next_offset, "dl->genotype_data", vb->first_line + vb_line_i);
             for (unsigned i=0; i < global_num_samples; i++) 
                 ((uint32_t*)dl->genotype_data.data)[i] = WORD_INDEX_MISSING_SF;
 

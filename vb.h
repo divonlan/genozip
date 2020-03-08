@@ -29,7 +29,7 @@ typedef struct {
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
 
-    uint32_t line_i;         // line in VCF file (starting from 1)
+    uint32_t vcf_line_i;         // line in VCF file (starting from 1)
 
     // initially, data from vcf file line, later segregated to components "stored" in the overlay buffers below
     Buffer line;             
@@ -55,6 +55,7 @@ typedef struct {
 // IMPORTANT: if changing fields in VariantBlock, also update vb_release_vb
 typedef struct variant_block_ {
 
+    uint32_t variant_block_i;  // number of variant block within VCF file
     int id;                    // id of vb within the vb pool (-1 is the external vb)
 
     FileP vcf_file, z_file;    // pointers to objects that span multiple VBs
@@ -69,10 +70,9 @@ typedef struct variant_block_ {
     DataLine *data_lines;      // if allocated, this array is of length global_max_lines_per_vb. for ZIP this is determined by the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
     uint32_t num_lines;        // number of lines in this variant block
     uint32_t first_line;       // line number in VCF file (counting from 1), of this variant block
-    uint32_t variant_block_i;  // number of variant block within VCF file
 
     // tracking execution
-    int32_t vb_data_size;      // size of variant block as it appears in the source file
+    int32_t vb_data_size;      // redundant in ZIP - same as vcf_data.len
     uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation
 
     ProfilerRec profile;
@@ -120,8 +120,11 @@ typedef struct variant_block_ {
     Buffer *genotype_sections_data;   // PIZ only:  each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
     Buffer genotype_one_section_data; // for zip we need only one section data
     
-    // compresssed file data 
+    // file data 
     Buffer z_data;                    // all headers and section data as read from disk
+    
+    Buffer vcf_data;                  // ZIP only: vcf_data as read from disk - either the VCF header (in evb) or the VB data lines
+    uint32_t vcf_data_next_offset;    // we re-use vcf_data memory to overlay stuff in segregate
 
     int16_t z_next_header_i;          // next header of this VB to be encrypted or decrypted
 

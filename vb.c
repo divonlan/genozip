@@ -38,7 +38,7 @@ void vb_release_vb (VariantBlock **vb_p)
         for (unsigned i=0; i < global_max_lines_per_vb; i++) {
             DataLine *dl = &vb->data_lines[i];
             
-            dl->line_i = dl->genotype_data.len = 0;
+            dl->vcf_line_i = dl->genotype_data.len = 0;
             dl->phase_type = PHASE_UNKNOWN;
             dl->has_haplotype_data = dl->has_genotype_data = 0;
             dl->format_mtf_i = dl->info_mtf_i = 0;
@@ -60,7 +60,7 @@ void vb_release_vb (VariantBlock **vb_p)
         if (vb->phase_sections_data)     buf_free(&vb->phase_sections_data[i]);
     }
 
-    vb->num_lines = vb->first_line = vb->variant_block_i = 0;
+    vb->num_lines = vb->first_line = vb->variant_block_i = vb->vcf_data_next_offset = 0;
     vb->vb_data_size = vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = vb->ready_to_dispatch = vb->is_processed = false;
     vb->phase_type = PHASE_UNKNOWN;
@@ -100,6 +100,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->gt_sb_line_lengths_buf);
     buf_free(&vb->helper_index_buf);
     buf_free(&vb->compressed);
+    buf_free(&vb->vcf_data);
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->ht_columns_data);

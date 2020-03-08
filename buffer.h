@@ -54,7 +54,7 @@ extern void buf_destroy (VariantBlockP vb, Buffer *buf);
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
 
 extern void buf_copy (VariantBlockP vb, Buffer *dst, const Buffer *src, unsigned bytes_per_entry,
-                      unsigned start_entry, unsigned max_entries, // if 0 copies the entire buffer
+                      unsigned src_start_entry, unsigned max_entries, // if 0 copies the entire buffer
                       const char *name, unsigned param);
 
 extern void buf_move (VariantBlockP vb, Buffer *dst, Buffer *src);

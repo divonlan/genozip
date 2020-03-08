@@ -42,8 +42,8 @@ typedef struct file_ {
                                       // GENOZIP: VCF data so far of original VCF file currently being processed
 
     // Used for READING VCF/VCF_GZ/VCF_BZ2 files: stats used to optimize memory allocation
-    double avg_header_line_len, avg_data_line_len;   // average length of data line so far. 
-    uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
+//    double avg_header_line_len, avg_data_line_len;   // average length of data line so far. 
+//    uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
 
     // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)
     Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
@@ -85,10 +85,12 @@ typedef struct file_ {
     int64_t section_entries[NUM_SEC_TYPES]; // used only for Z files - number of entries of this type (dictionary entries or base250 entries)
     uint32_t num_sections[NUM_SEC_TYPES];    // used only for Z files - number of sections of this type
 
-    // USED FOR READING ALL FILES
-#   define READ_BUFFER_SIZE (1<<20)    // 1MB
+#   define READ_BUFFER_SIZE (1<<19)    // 512KB
+    // Used for reading vcf files
+    Buffer vcf_unconsumed_data;         // excess data read from the vcf file - moved to the next VB
+    
+    // Used for reading genozip files
     uint32_t next_read, last_read;     // indices into read_buffer
-    //bool eof;                          // we reached EOF
     char read_buffer[];                // only allocated for mode=READ files   
 } File;
 
