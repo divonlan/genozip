@@ -615,13 +615,21 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
 {
     START_TIMER;
 
-    if (!vb->data_lines) 
-        vb->data_lines = calloc (vb->num_lines, sizeof (DataLine));
-    else if (vb->num_data_lines_allocated < vb->num_lines) {
-        vb->data_lines = REALLOC (vb->data_lines, vb->num_lines * sizeof (DataLine));
-        memset (&vb->data_lines[vb->num_data_lines_allocated], 0, (vb->num_lines - vb->num_data_lines_allocated) * sizeof(DataLine));
+    ASSERT (!!vb->data_lines == !!vb->num_data_lines_allocated, 
+            "Error: expecting vb->data_lines to be nonzero iff vb->num_data_lines_allocated is nonzero. vb_i=%u", vb->variant_block_i);
+
+    if (!vb->data_lines) {
+        vb->num_data_lines_allocated = vb->num_lines * 1.5; // larger than num_lines so that future VBs are less likely to need to realloc
+        vb->data_lines = calloc (vb->num_data_lines_allocated, sizeof (DataLine));
     }
-    vb->num_data_lines_allocated = vb->num_lines;
+    
+    else if (vb->num_data_lines_allocated < vb->num_lines) {
+
+        uint32_t new_num_data_lines_allocated = vb->num_lines * 1.5; 
+        seg_realloc_datalines (vb, new_num_data_lines_allocated, true); // uses vb->num_data_lines_allocated      
+
+        vb->num_data_lines_allocated = new_num_data_lines_allocated; 
+    }
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 

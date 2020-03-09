@@ -38,12 +38,37 @@ static void seg_store (VariantBlock *vb, Buffer *dst_buf,
         buf_alloc (vb, dst_buf, size, 1, buf_name, vcf_line_i);
 }
 
+void seg_realloc_datalines (VariantBlock *vb, uint32_t new_num_data_lines, bool use_line)
+{
+    // we need to remove the Buffers within the DataLine from the buffer list, and re-add them with their new address
+    for (uint32_t i=0; i < vb->num_data_lines_allocated ; i++) {
+        buf_remove_from_buffer_list (vb, &vb->data_lines[i].haplotype_data);
+        buf_remove_from_buffer_list (vb, &vb->data_lines[i].genotype_data);
+        buf_remove_from_buffer_list (vb, &vb->data_lines[i].phase_data);
+        if (use_line) buf_remove_from_buffer_list (vb, &vb->data_lines[i].line);
+    }
+
+    vb->data_lines = REALLOC (vb->data_lines, new_num_data_lines * sizeof (DataLine));
+    memset (&vb->data_lines[vb->num_data_lines_allocated], 0, (new_num_data_lines - vb->num_data_lines_allocated) * sizeof(DataLine));
+
+    for (uint32_t i=0; i < vb->num_data_lines_allocated ; i++) { // only those that *might* have been allocated need to be added now, if we allocate any additional, they will be added by buf_alloc
+        buf_add_to_buffer_list (vb, &vb->data_lines[i].haplotype_data);
+        buf_add_to_buffer_list (vb, &vb->data_lines[i].genotype_data);
+        buf_add_to_buffer_list (vb, &vb->data_lines[i].phase_data);
+        if (use_line) buf_add_to_buffer_list (vb, &vb->data_lines[i].line);
+    }
+}
+
 static void seg_allocate_per_line_memory (VariantBlock *vb)
 {
-    uint32_t old_num_lines = vb->num_lines;
-    
-    // first line - we calculate an estimated number of lines
-    if (!vb->num_lines) { 
+    ASSERT (!!vb->data_lines == !!vb->num_data_lines_allocated, 
+            "Error: expecting vb->data_lines to be nonzero iff vb->num_data_lines_allocated is nonzero. vb_i=%u", vb->variant_block_i);
+
+    ASSERT (vb->num_data_lines_allocated >= vb->num_lines, 
+            "Error: expecting vb->num_data_lines_allocated >= vb->num_lines. vb_i=%u", vb->variant_block_i);
+
+    // first line in this vb.id - we calculate an estimated number of lines
+    if (!vb->num_data_lines_allocated) { 
         // get first line length
         uint32_t len=0; for (; len < vb->vcf_data.len && vb->vcf_data.data[len] != '\n'; len++) {};
 
@@ -51,30 +76,20 @@ static void seg_allocate_per_line_memory (VariantBlock *vb)
 
         // set initial number of lines based on an estimate. it might grow during segmentation if it turns out the
         // estimate is too low, and will be set to its actual real value at the end of segmentation
-        vb->num_lines = (uint32_t)(((double)vb->vcf_data.len / (double)len) * 1.2);
-    }
-    else 
-        vb->num_lines *= 1.5;
+        vb->num_lines = vb->num_data_lines_allocated = (uint32_t)(((double)vb->vcf_data.len / (double)len) * 1.5);
 
-    if (!vb->data_lines) 
         vb->data_lines = calloc (vb->num_lines, sizeof (DataLine));
-    else if (vb->num_data_lines_allocated < vb->num_lines) {
+    }
 
-        // we need to remove the Buffers within the DataLine from the buffer list, and re-add them with their new address
-        for (uint32_t i=0; i < old_num_lines ; i++) {
-            buf_remove_from_buffer_list (vb, &vb->data_lines[i].haplotype_data);
-            buf_remove_from_buffer_list (vb, &vb->data_lines[i].genotype_data);
-            buf_remove_from_buffer_list (vb, &vb->data_lines[i].phase_data);
-        }
+    // first line in the VB, but allocation exists from previous reincarnation of this VB structure - keep
+    // what's already allocated
+    else if (vb->num_lines < vb->num_data_lines_allocated) 
+        vb->num_lines = vb->num_data_lines_allocated;
 
-        vb->data_lines = REALLOC (vb->data_lines, vb->num_lines * sizeof (DataLine));
-        memset (&vb->data_lines[vb->num_data_lines_allocated], 0, (vb->num_lines - vb->num_data_lines_allocated) * sizeof(DataLine));
-
-        for (uint32_t i=0; i < old_num_lines ; i++) {
-            buf_add_to_buffer_list (vb, &vb->data_lines[i].haplotype_data);
-            buf_add_to_buffer_list (vb, &vb->data_lines[i].genotype_data);
-            buf_add_to_buffer_list (vb, &vb->data_lines[i].phase_data);
-        }
+    // we already have lines - but we need more. reallocate.
+    else {
+        vb->num_lines = vb->num_data_lines_allocated * 1.5;
+        seg_realloc_datalines (vb, vb->num_lines, false);        
     }
     vb->num_data_lines_allocated = vb->num_lines;
 }
