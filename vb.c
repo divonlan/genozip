@@ -216,11 +216,11 @@ void vb_cleanup_memory ()
             for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
                 DataLine *dl = &vb->data_lines[i];
                 
-                if (dl->line.memory)            buf_destroy(vb, &dl->line);
-                if (dl->v1_variant_data.memory) buf_destroy(vb, &dl->v1_variant_data);
-                if (dl->genotype_data.memory)   buf_destroy(vb, &dl->genotype_data);
-                if (dl->haplotype_data.memory)  buf_destroy(vb, &dl->haplotype_data);
-                if (dl->phase_data.memory)      buf_destroy(vb, &dl->phase_data);
+                buf_destroy(vb, &dl->line);
+                buf_destroy(vb, &dl->v1_variant_data);
+                buf_destroy(vb, &dl->genotype_data);
+                buf_destroy(vb, &dl->haplotype_data);
+                buf_destroy(vb, &dl->phase_data);
             }
             FREE (vb->data_lines);
             vb->data_lines = NULL;

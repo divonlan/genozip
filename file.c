@@ -155,12 +155,12 @@ void file_close (File **file_p,
         pthread_mutex_destroy (&file->mutex);
 
     if (cleanup_memory) {
-        if (file->dict_data.memory) buf_destroy (evb, &file->dict_data);
-        if (file->ra_buf.memory) buf_destroy (evb, &file->ra_buf);
-        if (file->section_list_buf.memory) buf_destroy (evb, &file->section_list_buf);
-        if (file->section_list_dict_buf.memory) buf_destroy (evb, &file->section_list_dict_buf);
-        if (file->v1_next_vcf_header.memory) buf_destroy (evb, &file->v1_next_vcf_header);
-        if (file->vcf_unconsumed_data.memory) buf_destroy (evb, &file->vcf_unconsumed_data);
+        buf_destroy (evb, &file->dict_data);
+        buf_destroy (evb, &file->ra_buf);
+        buf_destroy (evb, &file->section_list_buf);
+        buf_destroy (evb, &file->section_list_dict_buf);
+        buf_destroy (evb, &file->v1_next_vcf_header);
+        buf_destroy (evb, &file->vcf_unconsumed_data);
     }
 
     if (file->name) FREE (file->name);
