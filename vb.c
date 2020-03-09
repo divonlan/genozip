@@ -211,26 +211,8 @@ void vb_cleanup_memory ()
         vb_free_buffer_array (vb, &vb->genotype_sections_data, vb->num_sample_blocks);
         vb_free_buffer_array (vb, &vb->haplotype_sections_data, vb->num_sample_blocks);
         vb_free_buffer_array (vb, &vb->phase_sections_data, vb->num_sample_blocks);
-
-        if (vb->data_lines) {
-            for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
-                DataLine *dl = &vb->data_lines[i];
-                
-                buf_destroy(vb, &dl->line);
-                buf_destroy(vb, &dl->v1_variant_data);
-                buf_destroy(vb, &dl->genotype_data);
-                buf_destroy(vb, &dl->haplotype_data);
-                buf_destroy(vb, &dl->phase_data);
-            }
-            FREE (vb->data_lines);
-            vb->data_lines = NULL;
-        }
-
         vb->num_sample_blocks = 0;
-        buf_free (&vb->column_of_zeros);
     }
 
-    // note: this function is never called in test mode because it is always is_last_file. this is lucky, bc both sides use these globals
-    global_max_memory_per_vb = DEFAULT_MAX_MEMORY_PER_VB;
     global_num_samples = 0;
 }

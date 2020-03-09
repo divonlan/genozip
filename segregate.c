@@ -57,6 +57,8 @@ void seg_realloc_datalines (VariantBlock *vb, uint32_t new_num_data_lines, bool 
         buf_add_to_buffer_list (vb, &vb->data_lines[i].phase_data);
         if (use_line) buf_add_to_buffer_list (vb, &vb->data_lines[i].line);
     }
+
+    vb->num_data_lines_allocated = new_num_data_lines;
 }
 
 static void seg_allocate_per_line_memory (VariantBlock *vb)
@@ -68,7 +70,7 @@ static void seg_allocate_per_line_memory (VariantBlock *vb)
             "Error: expecting vb->num_data_lines_allocated >= vb->num_lines. vb_i=%u", vb->variant_block_i);
 
     // first line in this vb.id - we calculate an estimated number of lines
-    if (!vb->num_data_lines_allocated) { 
+    if (!vb->num_lines) { 
         // get first line length
         uint32_t len=0; for (; len < vb->vcf_data.len && vb->vcf_data.data[len] != '\n'; len++) {};
 
@@ -76,9 +78,23 @@ static void seg_allocate_per_line_memory (VariantBlock *vb)
 
         // set initial number of lines based on an estimate. it might grow during segmentation if it turns out the
         // estimate is too low, and will be set to its actual real value at the end of segmentation
-        vb->num_lines = vb->num_data_lines_allocated = (uint32_t)(((double)vb->vcf_data.len / (double)len) * 1.5);
+        
+        uint32_t lower_end_estimate  = MAX (100, (uint32_t)((double)vb->vcf_data.len / (double)len));
+        uint32_t higher_end_estimate = MAX (100, (uint32_t)(((double)vb->vcf_data.len / (double)len) * 1.3));
 
-        vb->data_lines = calloc (vb->num_lines, sizeof (DataLine));
+        // if we have enough according to the lower end of the estimate, go for it
+        if (vb->num_data_lines_allocated >= lower_end_estimate) 
+            vb->num_lines = vb->num_data_lines_allocated;
+        
+        else if (!vb->num_data_lines_allocated) {
+            vb->num_lines = vb->num_data_lines_allocated = higher_end_estimate;
+            vb->data_lines = calloc (vb->num_lines, sizeof (DataLine));
+        }
+        // num_data_lines_allocated is non-zero, but too low - reallocate 
+        else { 
+            seg_realloc_datalines (vb, higher_end_estimate, false); // uses and updates vb->num_data_lines_allocated       
+            vb->num_lines = vb->num_data_lines_allocated;
+        }
     }
 
     // first line in the VB, but allocation exists from previous reincarnation of this VB structure - keep
@@ -88,10 +104,9 @@ static void seg_allocate_per_line_memory (VariantBlock *vb)
 
     // we already have lines - but we need more. reallocate.
     else {
-        vb->num_lines = vb->num_data_lines_allocated * 1.5;
-        seg_realloc_datalines (vb, vb->num_lines, false);        
+        seg_realloc_datalines (vb, vb->num_data_lines_allocated * 1.5, false);        
+        vb->num_lines = vb->num_data_lines_allocated;
     }
-    vb->num_data_lines_allocated = vb->num_lines;
 }
 
 // returns the node index

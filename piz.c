@@ -623,13 +623,8 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
         vb->data_lines = calloc (vb->num_data_lines_allocated, sizeof (DataLine));
     }
     
-    else if (vb->num_data_lines_allocated < vb->num_lines) {
-
-        uint32_t new_num_data_lines_allocated = vb->num_lines * 1.5; 
-        seg_realloc_datalines (vb, new_num_data_lines_allocated, true); // uses vb->num_data_lines_allocated      
-
-        vb->num_data_lines_allocated = new_num_data_lines_allocated; 
-    }
+    else if (vb->num_data_lines_allocated < vb->num_lines) 
+        seg_realloc_datalines (vb, vb->num_lines * 1.5, true); // uses and updates vb->num_data_lines_allocated      
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 

@@ -23,11 +23,11 @@ Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file r
 // global - this names go into the dictionary names on disk. to preserve backward compatability, they should not be changed.
 const char *vcf_field_names[] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
 
+// PIZ: called before reading each genozip file
 void vcf_header_initialize()
 {
     global_num_samples              = 0;
     global_number_displayed_samples = 0;
-    global_max_memory_per_vb        = DEFAULT_MAX_MEMORY_PER_VB;
     buf_free (&global_vcf_header_line);
 }
 
