@@ -858,6 +858,8 @@ int main (int argc, char **argv)
     // override these ^ if user chose to be --noisy
     if (flag_noisy) flag_quiet=false;
 
+    if (flag_test) flag_md5=true; // test requires md5
+    
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split
     if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);

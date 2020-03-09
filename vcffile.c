@@ -118,10 +118,12 @@ void vcffile_read_variant_block (VariantBlock *vb)
     file->disk_size        = file->disk_so_far; // in case it was not known
     vb->vb_data_size       = vb->vcf_data.len; // vb_data_size is redundant in ZIP at least, we can get rid of it one day
 
-    if (flag_concat)
-        md5_update (&vb->z_file->md5_ctx_concat, vb->vcf_data.data, vb->vcf_data.len);
-    
-    md5_update (&vb->z_file->md5_ctx_single, vb->vcf_data.data, vb->vcf_data.len);
+    if (flag_md5) {
+        if (flag_concat)
+            md5_update (&vb->z_file->md5_ctx_concat, vb->vcf_data.data, vb->vcf_data.len);
+        
+        md5_update (&vb->z_file->md5_ctx_single, vb->vcf_data.data, vb->vcf_data.len);
+    }
 
     COPY_TIMER (vb->profile.vcffile_read_variant_block);
 }
@@ -180,10 +182,12 @@ void vcffile_read_vcf_header (bool is_first_vcf)
         file->vcf_data_so_far += bytes_read;
     }
 
-    if (flag_concat && is_first_vcf)
-        md5_update (&evb->z_file->md5_ctx_concat, evb->vcf_data.data, evb->vcf_data.len);
-    
-    md5_update (&evb->z_file->md5_ctx_single, evb->vcf_data.data, evb->vcf_data.len);
+    if (flag_md5) {
+        if (flag_concat && is_first_vcf)
+            md5_update (&evb->z_file->md5_ctx_concat, evb->vcf_data.data, evb->vcf_data.len);
+        
+        md5_update (&evb->z_file->md5_ctx_single, evb->vcf_data.data, evb->vcf_data.len);
+    }
 
 finish:        
     file->disk_size = file->disk_so_far; // in case it was not known
@@ -191,7 +195,7 @@ finish:
     COPY_TIMER (evb->profile.vcffile_read_vcf_header);
 }
 
-unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
+unsigned vcffile_write_to_disk (File *vcf_file, const Buffer *buf)
 {
     unsigned len = buf->len;
     char *next = buf->data;
@@ -204,8 +208,7 @@ unsigned vcffile_write_to_disk(File *vcf_file, const Buffer *buf)
         }
     }
 
-    md5_update (&vcf_file->md5_ctx_concat, buf->data, buf->len);
-    
+    if (flag_md5) md5_update (&vcf_file->md5_ctx_concat, buf->data, buf->len);
 
     vcf_file->vcf_data_so_far += buf->len;
     vcf_file->disk_so_far     += buf->len;

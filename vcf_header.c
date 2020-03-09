@@ -91,52 +91,12 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
 {    
     evb->z_file->disk_at_beginning_of_this_vcf_file = evb->z_file->disk_so_far;
 
-    //static Buffer vcf_header_line = EMPTY_BUFFER; // serves to read the header, then its the first line in the data, and again the header when starting the next vcf file
-    //static Buffer vcf_header_text = EMPTY_BUFFER;
-
-    // in concat mode, we write the header to the genozip file, only for the first vcf file
-    //bool use_vcf_header = !flag_concat || !buf_is_allocated (&global_vcf_header_line) /* first vcf */;
-    
-    // line might be used as the first line, so it cannot be free at the end of this function
-    // however, by the time we come here again, at the next VCF file, it is no longer needed
-    //if (buf_is_allocated (&vcf_header_line)) buf_free (&vcf_header_line); 
-
-    //*first_data_line = NULL;
-
-    //const unsigned INITIAL_BUF_SIZE = 65536;
-
-    //buf_alloc (evb, &vcf_header_text, INITIAL_BUF_SIZE, 0, "vcf_header_text", 0);
-
     bool is_first_vcf = !buf_is_allocated (&global_vcf_header_line); 
 
     vcffile_read_vcf_header (is_first_vcf); // reads into evb->vcf_data and evb->num_lines
     
     *vcf_line_i += evb->num_lines;
-/*
-    while (1) {
-        bool success = vcffile_get_line (evb, *vcf_line_i + 1, skip_md5_vcf_header, &vcf_header_line, "vcf_header_line");
-        if (!success) break; // end of header - no data lines in this VCF file
 
-        (*vcf_line_i)++;
-
-        // case : we reached the end of the header - we exit here
-
-        if (vcf_header_line.data[0] != '#') { // end of header - we have read the first data line
-            vcf_header_line.data[vcf_header_line.len] = '\0'; // remove newline - data line reader is expecting lines without the newline
-
-            *first_data_line = &vcf_header_line;
-
-            break;
-        }
-
-        buf_alloc (evb, &vcf_header_text, vcf_header_line.len + vcf_header_text.len + 1, 2, "vcf_header_text", 1); // +1 for terminating \0
-
-        memcpy (&vcf_header_text.data[vcf_header_text.len], vcf_header_line.data, vcf_header_line.len);
-        
-        vcf_header_text.len += vcf_header_line.len;
-        vcf_header_text.data[vcf_header_text.len] = '\0';
-    }
-*/
     // case - vcf header was found 
     if (evb->vcf_data.len) {
 
@@ -153,19 +113,15 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
         evb->z_file  ->section_bytes[SEC_VCF_HEADER] = evb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
         evb->z_file  ->num_sections [SEC_VCF_HEADER]++;
         evb->z_file  ->num_vcf_components_so_far++; // when compressing
-   }
+    }
 
-    // case : header not found - so we're not expecting first_data_line either
- //   else 
-   //     ASSERT0 (! *first_data_line, "Error: file has no VCF header");
+    if (flag_md5) {
+        if (flag_concat && is_first_vcf) 
+            md5_update (&evb->z_file->md5_ctx_concat, evb->vcf_data.data, evb->vcf_data.len);
 
+        md5_update (&evb->z_file->md5_ctx_single, evb->vcf_data.data, evb->vcf_data.len);
+    }
 
-    if (flag_concat && is_first_vcf) 
-        md5_update (&evb->z_file->md5_ctx_concat, evb->vcf_data.data, evb->vcf_data.len);
-
-    md5_update (&evb->z_file->md5_ctx_single, evb->vcf_data.data, evb->vcf_data.len);
-
-    // case : empty file - not an error (caller will see that *first_data_line is NULL)
     buf_free (&evb->vcf_data);
     
     return true; // everything's good

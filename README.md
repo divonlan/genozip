@@ -36,7 +36,7 @@ Note: there is no need for a separate indexing step or index file<br>
 <b>genozip</b> <i>file1.vcf file2.vcf</i> -o <i>concat.vcf.genozip</i> <br>
 <b>genounzip</b> <i>concat.vcf.genozip</i> -O <br>
 <br>
-<b><i>Viewing the MD5 of the VCF file:</i></b><br>
+<b><i>Calculating the MD5 of the VCF file:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
 <b>genols</b> <i>file.vcf.genozip</i> --md5 <br>
 Note: the MD5 is always calculated under the hood in <b>genozip</b>, and automatically verified during <b>genounzip</b> <br>

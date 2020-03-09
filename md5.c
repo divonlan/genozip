@@ -17,6 +17,8 @@
 #include "genozip.h"
 #include "md5.h"
 #include "endianness.h"
+#include "profiler.h"
+#include "vb.h"
 
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
 #define G( x, y, z )            ( (y) ^ ((z) & ((x) ^ (y))) )
@@ -170,6 +172,8 @@ void md5_initialize (Md5Context *ctx)
 
 void md5_update (Md5Context *ctx, const void *data, unsigned len)
 {
+    START_TIMER;
+
     if (!ctx->initialized) md5_initialize (ctx);
 
     uint32_t    saved_lo;
@@ -207,11 +211,14 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len)
 
 finish:
     //md5_display_ctx (ctx);
+    COPY_TIMER (evb->profile.md5);
     return;
 }
 
 void md5_finalize (Md5Context *ctx, Md5Hash *digest)
 {
+    START_TIMER;
+
     uint32_t    used;
     uint32_t    free;
 
@@ -241,6 +248,8 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
     digest->words[3] = LTEN32 (ctx->d);
 
     memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
+
+    COPY_TIMER (evb->profile.md5);
 }
 
 // note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)

@@ -926,6 +926,9 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
 
         if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
             ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
+
+        ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
+                "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5", file_printname (z_file));
     }
 
     if (data_type == EOF) goto finish;
@@ -1015,42 +1018,35 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
 
     } while (!dispatcher_is_done (dispatcher));
 
-    // verify file integrity, if the genozip compress was run with --md5
-    static Buffer md5_verif_str = EMPTY_BUFFER;
-    Md5Hash decompressed_file_digest;
-    md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
+    // verify file integrity, if the genounzip compress was run with --md5 or --test
+    if (flag_md5) {
+        Md5Hash decompressed_file_digest;
+        md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
-    if (exe_type != EXE_GENOCAT) {
-        if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
+        if (md5_is_zero (original_file_digest)) 
+            fprintf (stderr, "MD5 = %s Note: unable to compare this to the original file as file was not originally compressed with --md5\n", md5_display (&decompressed_file_digest, false));
+        
+        else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
             if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
 
-            if (flag_md5) fprintf (stderr, "MD5 = %s\n", md5_display (&decompressed_file_digest, false));
+            if (flag_md5) fprintf (stderr, "MD5 = %s verified as identical to the original VCF\n", md5_display (&decompressed_file_digest, false));
         }
-        else {
-            if (flag_test) 
-                fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
-                        md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
+        else if (flag_test) 
+            fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
+                    md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
             
-            else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
-                        "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
-                        vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
-        }
+        else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
+                    "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
+                    vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
     }
 
     if (flag_split) file_close (&evb->vcf_file, true); // close this component file
 
 finish:
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
-    if (!flag_split || !piz_successful) {
-
+    if (!flag_split || !piz_successful) 
         dispatcher_finish (&dispatcher, NULL);
-
-        if (buf_is_allocated (&md5_verif_str)) {
-            fprintf (stderr, "%.*s", md5_verif_str.len, md5_verif_str.data);
-            buf_free (&md5_verif_str);
-        }
-    }
     else
         dispatcher_pause (dispatcher);
 

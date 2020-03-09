@@ -808,7 +808,8 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
         vcffile_write_to_disk (evb->vcf_file, &vcf_header_buf);
     
     // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
-    else md5_update (&evb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
+    else if (flag_md5)
+        md5_update (&evb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
 
     buf_free (&evb->z_file->v1_next_vcf_header);
     buf_free (&vcf_header_buf);

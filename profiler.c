@@ -36,6 +36,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->zip_generate_genotype_sections    += src->zip_generate_genotype_sections;
     dst->zip_generate_phase_sections       += src->zip_generate_phase_sections;
     dst->zip_generate_variant_data_section += src->zip_generate_variant_data_section;
+    dst->md5                               += src->md5;
     
     dst->mtf_merge_in_vb_ctx               += src->mtf_merge_in_vb_ctx;
     dst->gl_optimize_dictionary            += src->gl_optimize_dictionary;
@@ -108,6 +109,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "   vcffile_read_vcf_header: %u\n", ms(p->vcffile_read_vcf_header));
         fprintf (stderr, "   vcffile_read_variant_block: %u\n", ms(p->vcffile_read_variant_block));
         fprintf (stderr, "      read: %u\n", ms(p->read));
+        fprintf (stderr, "      md5: %u\n", ms(p->md5));
         fprintf (stderr, "   write: %u\n", ms(p->write));
         fprintf (stderr, "GENOZIP compute threads (zip_compress_one_vb): %u\n", ms(p->compute));
         fprintf (stderr, "   compressor: %u\n", ms(p->compressor));
