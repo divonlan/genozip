@@ -577,7 +577,7 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
     START_TIMER;
 
     if (!vb->data_lines.piz) 
-        vb->data_lines.piz = calloc (evb->vcf_file->max_lines_per_vb, sizeof (v1_PizDataLine));
+        vb->data_lines.piz = calloc (evb->vcf_file->max_lines_per_vb, sizeof (PizDataLine));
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED) 
