@@ -71,7 +71,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     static const char *os ="Linux";
 #endif
 
-    fprintf (stderr, "\nPROFILER:\n");
+    fprintf (stderr, "\n%s PROFILER:\n", command == ZIP ? "ZIP" : "UNZIP");
     fprintf (stderr, "OS=%s\n", os);
 #ifdef DEBUG
     fprintf (stderr, "Build=Debug\n");
@@ -83,7 +83,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     
     fprintf (stderr, "Wallclock: %u milliseconds\n", ms (p->wallclock));
 
-    if (p->piz_reconstruct_line_components) { // this is a uncompress operation
+    if (command != ZIP) { // this is a uncompress operation
 
         fprintf (stderr, "GENOUNZIP I/O thread (piz_dispatcher):\n");
         fprintf (stderr, "   zfile_read_one_vb: %u\n", ms(p->zfile_read_one_vb));
