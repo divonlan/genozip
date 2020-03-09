@@ -136,8 +136,6 @@ void vcffile_read_vcf_header (bool is_first_vcf)
     }
 
 finish:        
-    file->disk_size = file->disk_so_far; // in case it was not known
-
     // md5 header - with logic related to is_first_vcf
     vcffile_update_md5 (evb->vcf_data.data, evb->vcf_data.len, !is_first_vcf);
 
@@ -198,7 +196,6 @@ void vcffile_read_variant_block (VariantBlock *vb)
     }
 
     file->vcf_data_so_far += vb->vcf_data.len;
-    file->disk_size        = file->disk_so_far; // in case it was not known
     vb->vb_data_size       = vb->vcf_data.len; // vb_data_size is redundant in ZIP at least, we can get rid of it one day
 
     COPY_TIMER (vb->profile.vcffile_read_variant_block);
