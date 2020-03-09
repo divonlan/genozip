@@ -173,7 +173,9 @@ void md5_initialize (Md5Context *ctx)
 void md5_update (Md5Context *ctx, const void *data, unsigned len)
 {
     START_TIMER;
-printf ("md5_update: %.*s\n", len, data);
+
+    //printf ("md5_update: %.*s\n", len, data);
+    
     if (!ctx->initialized) md5_initialize (ctx);
 
     uint32_t    saved_lo;
