@@ -18,7 +18,7 @@
 #include "vb.h"
 #include "file.h"
 
-static void vcffile_update_md5(const char *data, uint32_t len, bool is_2ndplus_vcf_header)
+static void vcffile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_vcf_header)
 {
     if (flag_md5) {
         if (flag_concat && !is_2ndplus_vcf_header)
@@ -81,64 +81,6 @@ static uint32_t vcffile_read_block (File *file, char *data)
     return bytes_read;
 }
 
-void vcffile_read_variant_block (VariantBlock *vb) 
-{
-    START_TIMER;
-
-    File *file = vb->vcf_file;
-
-    buf_alloc (vb, &vb->vcf_data, global_max_memory_per_vb, 1, "vcf_data", vb->variant_block_i);    
-
-    // start with using the unconsumed data from the previous VB (note: copy & free and not move! so we can reuse vcf_data next vb)
-    if (buf_is_allocated (&file->vcf_unconsumed_data)) {
-        buf_copy (vb, &vb->vcf_data, &file->vcf_unconsumed_data, 0 ,0 ,0, "vcf_data", vb->variant_block_i);
-        buf_free (&file->vcf_unconsumed_data);
-
-        vcffile_update_md5 (vb->vcf_data.data, vb->vcf_data.len, false);
-    }
-
-    // read data from the file until either 1. EOF is reached 2. end of block is reached
-    while (vb->vcf_data.len <= global_max_memory_per_vb - READ_BUFFER_SIZE) {  // make sure there's at least READ_BUFFER_SIZE space available
-
-        uint32_t bytes_one_read = vcffile_read_block (file, &vb->vcf_data.data[vb->vcf_data.len]);
-
-        if (!bytes_one_read) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
-            ASSERT (!vb->vcf_data.len || vb->vcf_data.data[vb->vcf_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", file_printname (file));
-            break;
-        }
-
-        // note: we md_udpate after every block, rather on the complete data (vb or vcf header) when its done
-        // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
-        vcffile_update_md5 (&vb->vcf_data.data[vb->vcf_data.len], bytes_one_read, false);
-
-        vb->vcf_data.len += bytes_one_read;
-    }
-
-    // drop the final partial line which we will move to the next vb
-    for (int32_t i=vb->vcf_data.len-1; i >= 0; i--) {
-
-        if (vb->vcf_data.data[i] == '\n') {
-            // case: still have some unconsumed data, that we wish  to pass to the next vb
-            uint32_t unconsumed_len = vb->vcf_data.len-1 - i;
-            if (unconsumed_len) {
-
-                // the unconcusmed data is for the next vb to read 
-                buf_copy (evb, &file->vcf_unconsumed_data, &vb->vcf_data, 1, // evb, because dst buffer belongs to File
-                        vb->vcf_data.len - unconsumed_len, unconsumed_len, "vcf_file->vcf_unconsumed_data", vb->variant_block_i);
-
-                vb->vcf_data.len -= unconsumed_len;
-            }
-            break;
-        }
-    }
-
-    file->vcf_data_so_far += vb->vcf_data.len;
-    file->disk_size        = file->disk_so_far; // in case it was not known
-    vb->vb_data_size       = vb->vcf_data.len; // vb_data_size is redundant in ZIP at least, we can get rid of it one day
-
-    COPY_TIMER (vb->profile.vcffile_read_variant_block);
-}
-
 // returns the number of lines read 
 void vcffile_read_vcf_header (bool is_first_vcf) 
 {
@@ -196,9 +138,70 @@ void vcffile_read_vcf_header (bool is_first_vcf)
 finish:        
     file->disk_size = file->disk_so_far; // in case it was not known
 
+    // md5 header - with logic related to is_first_vcf
     vcffile_update_md5 (evb->vcf_data.data, evb->vcf_data.len, !is_first_vcf);
 
+    // md5 vcf_unconsumed_data - always
+    vcffile_update_md5 (file->vcf_unconsumed_data.data, file->vcf_unconsumed_data.len, false);
+
     COPY_TIMER (evb->profile.vcffile_read_vcf_header);
+}
+
+void vcffile_read_variant_block (VariantBlock *vb) 
+{
+    START_TIMER;
+
+    File *file = vb->vcf_file;
+
+    buf_alloc (vb, &vb->vcf_data, global_max_memory_per_vb, 1, "vcf_data", vb->variant_block_i);    
+
+    // start with using the unconsumed data from the previous VB (note: copy & free and not move! so we can reuse vcf_data next vb)
+    if (buf_is_allocated (&file->vcf_unconsumed_data)) {
+        buf_copy (vb, &vb->vcf_data, &file->vcf_unconsumed_data, 0 ,0 ,0, "vcf_data", vb->variant_block_i);
+        buf_free (&file->vcf_unconsumed_data);
+    }
+
+    // read data from the file until either 1. EOF is reached 2. end of block is reached
+    while (vb->vcf_data.len <= global_max_memory_per_vb - READ_BUFFER_SIZE) {  // make sure there's at least READ_BUFFER_SIZE space available
+
+        uint32_t bytes_one_read = vcffile_read_block (file, &vb->vcf_data.data[vb->vcf_data.len]);
+
+        if (!bytes_one_read) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
+            ASSERT (!vb->vcf_data.len || vb->vcf_data.data[vb->vcf_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", file_printname (file));
+            break;
+        }
+
+        // note: we md_udpate after every block, rather on the complete data (vb or vcf header) when its done
+        // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
+        // Note: we md5 everything we read - even unconsumed data
+        vcffile_update_md5 (&vb->vcf_data.data[vb->vcf_data.len], bytes_one_read, false);
+
+        vb->vcf_data.len += bytes_one_read;
+    }
+
+    // drop the final partial line which we will move to the next vb
+    for (int32_t i=vb->vcf_data.len-1; i >= 0; i--) {
+
+        if (vb->vcf_data.data[i] == '\n') {
+            // case: still have some unconsumed data, that we wish  to pass to the next vb
+            uint32_t unconsumed_len = vb->vcf_data.len-1 - i;
+            if (unconsumed_len) {
+
+                // the unconcusmed data is for the next vb to read 
+                buf_copy (evb, &file->vcf_unconsumed_data, &vb->vcf_data, 1, // evb, because dst buffer belongs to File
+                        vb->vcf_data.len - unconsumed_len, unconsumed_len, "vcf_file->vcf_unconsumed_data", vb->variant_block_i);
+
+                vb->vcf_data.len -= unconsumed_len;
+            }
+            break;
+        }
+    }
+
+    file->vcf_data_so_far += vb->vcf_data.len;
+    file->disk_size        = file->disk_so_far; // in case it was not known
+    vb->vb_data_size       = vb->vcf_data.len; // vb_data_size is redundant in ZIP at least, we can get rid of it one day
+
+    COPY_TIMER (vb->profile.vcffile_read_variant_block);
 }
 
 unsigned vcffile_write_to_disk (File *vcf_file, const Buffer *buf)

@@ -174,7 +174,7 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len)
 {
     START_TIMER;
 
-    //printf ("md5_update: %.*s\n", len, data);
+    //printf ("%.*s", len, (char*)data);
     
     if (!ctx->initialized) md5_initialize (ctx);
 
