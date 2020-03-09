@@ -193,10 +193,10 @@ void vcffile_read_vcf_header (bool is_first_vcf)
         file->vcf_data_so_far += bytes_read;
     }
 
-    vcffile_update_md5 (evb->vcf_data.data, evb->vcf_data.len, !is_first_vcf);
-
 finish:        
     file->disk_size = file->disk_so_far; // in case it was not known
+
+    vcffile_update_md5 (evb->vcf_data.data, evb->vcf_data.len, !is_first_vcf);
 
     COPY_TIMER (evb->profile.vcffile_read_vcf_header);
 }

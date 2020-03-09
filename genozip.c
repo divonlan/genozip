@@ -859,7 +859,7 @@ int main (int argc, char **argv)
     if (flag_noisy) flag_quiet=false;
 
     if (flag_test) flag_md5=true; // test requires md5
-    
+
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split
     if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
@@ -887,7 +887,7 @@ int main (int argc, char **argv)
     if (command == HELP) 
         return main_print_help (true);
 
-    flag_concat = (command == ZIP) && (out_filename != NULL);
+    flag_concat = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
