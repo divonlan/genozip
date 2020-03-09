@@ -134,4 +134,5 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     fprintf (stderr, "  Average read time: %u\n", ms(p->read) / num_vbs);
     fprintf (stderr, "  Average compute time: %u\n", ms(p->compute) / num_vbs);
     fprintf (stderr, "  Average write time: %u\n", ms(p->write) / num_vbs);
+    fprintf (stderr, "\n");
 }
