@@ -115,13 +115,6 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
         evb->z_file  ->num_vcf_components_so_far++; // when compressing
     }
 
-    if (flag_md5) {
-        if (flag_concat && is_first_vcf) 
-            md5_update (&evb->z_file->md5_ctx_concat, evb->vcf_data.data, evb->vcf_data.len);
-
-        md5_update (&evb->z_file->md5_ctx_single, evb->vcf_data.data, evb->vcf_data.len);
-    }
-
     buf_free (&evb->vcf_data);
     
     return true; // everything's good

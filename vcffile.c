@@ -22,7 +22,7 @@ static uint32_t vcffile_read_block (File *file, char *data)
 {
     START_TIMER;
 
-    uint32_t bytes_read;
+    uint32_t bytes_read=0;
 
     if (file->type == VCF || file->type == STDIN) {
         
@@ -64,6 +64,15 @@ static uint32_t vcffile_read_block (File *file, char *data)
         ABORT0 ("Invalid file type");
     }
     
+    // note: we md_udpate after every block, rather on the complete data (vb or vcf header) when its done
+    // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
+    if (flag_md5) {
+        if (flag_concat)
+            md5_update (&evb->z_file->md5_ctx_concat, data, bytes_read);
+        
+        md5_update (&evb->z_file->md5_ctx_single, data, bytes_read);
+    }
+
     COPY_TIMER (evb->profile.read);
 
     return bytes_read;
@@ -117,13 +126,6 @@ void vcffile_read_variant_block (VariantBlock *vb)
     file->vcf_data_so_far += vb->vcf_data.len;
     file->disk_size        = file->disk_so_far; // in case it was not known
     vb->vb_data_size       = vb->vcf_data.len; // vb_data_size is redundant in ZIP at least, we can get rid of it one day
-
-    if (flag_md5) {
-        if (flag_concat)
-            md5_update (&vb->z_file->md5_ctx_concat, vb->vcf_data.data, vb->vcf_data.len);
-        
-        md5_update (&vb->z_file->md5_ctx_single, vb->vcf_data.data, vb->vcf_data.len);
-    }
 
     COPY_TIMER (vb->profile.vcffile_read_variant_block);
 }
