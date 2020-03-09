@@ -9,6 +9,7 @@
 #define off64_t __int64_t // needed for for conda mac - otherwise zlib.h throws compilation errors
 #endif
 #define Z_LARGE64
+#include <errno.h>
 #include <zlib.h>
 #include <bzlib.h>
 
@@ -17,16 +18,27 @@
 #include "vb.h"
 #include "file.h"
 
+static void vcffile_update_md5(const char *data, uint32_t len, bool is_2ndplus_vcf_header)
+{
+    if (flag_md5) {
+        if (flag_concat && !is_2ndplus_vcf_header)
+            md5_update (&evb->z_file->md5_ctx_concat, data, len);
+        
+        md5_update (&evb->z_file->md5_ctx_single, data, len);
+    }
+}
+
 // peformms a single I/O read operation - returns number of bytes read 
 static uint32_t vcffile_read_block (File *file, char *data)
 {
     START_TIMER;
 
-    uint32_t bytes_read=0;
+    int32_t bytes_read=0;
 
     if (file->type == VCF || file->type == STDIN) {
         
         bytes_read = read (fileno((FILE *)file->file), data, READ_BUFFER_SIZE);
+        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", file_printname(file), strerror(errno));
 
         file->disk_so_far += (int64_t)bytes_read;
 
@@ -64,15 +76,6 @@ static uint32_t vcffile_read_block (File *file, char *data)
         ABORT0 ("Invalid file type");
     }
     
-    // note: we md_udpate after every block, rather on the complete data (vb or vcf header) when its done
-    // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
-    if (flag_md5) {
-        if (flag_concat)
-            md5_update (&evb->z_file->md5_ctx_concat, data, bytes_read);
-        
-        md5_update (&evb->z_file->md5_ctx_single, data, bytes_read);
-    }
-
     COPY_TIMER (evb->profile.read);
 
     return bytes_read;
@@ -90,6 +93,8 @@ void vcffile_read_variant_block (VariantBlock *vb)
     if (buf_is_allocated (&file->vcf_unconsumed_data)) {
         buf_copy (vb, &vb->vcf_data, &file->vcf_unconsumed_data, 0 ,0 ,0, "vcf_data", vb->variant_block_i);
         buf_free (&file->vcf_unconsumed_data);
+
+        vcffile_update_md5 (vb->vcf_data.data, vb->vcf_data.len, false);
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
@@ -101,6 +106,10 @@ void vcffile_read_variant_block (VariantBlock *vb)
             ASSERT (!vb->vcf_data.len || vb->vcf_data.data[vb->vcf_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", file_printname (file));
             break;
         }
+
+        // note: we md_udpate after every block, rather on the complete data (vb or vcf header) when its done
+        // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
+        vcffile_update_md5 (&vb->vcf_data.data[vb->vcf_data.len], bytes_one_read, false);
 
         vb->vcf_data.len += bytes_one_read;
     }
@@ -136,13 +145,13 @@ void vcffile_read_vcf_header (bool is_first_vcf)
     START_TIMER;
 
     File *file = evb->vcf_file;
-    uint32_t bytes_read;
+    int32_t bytes_read;
 
     // read data from the file until either 1. EOF is reached 2. end of vcf header is reached
     while (1) { 
 
         // enlarge if needed        
-        if (evb->vcf_data.size - evb->vcf_data.len < READ_BUFFER_SIZE) 
+        if (!evb->vcf_data.data || evb->vcf_data.size - evb->vcf_data.len < READ_BUFFER_SIZE) 
             buf_alloc (evb, &evb->vcf_data, evb->vcf_data.size + READ_BUFFER_SIZE, 1.2, "vcf_data", 0);    
 
         bytes_read = vcffile_read_block (file, &evb->vcf_data.data[evb->vcf_data.len]);
@@ -184,12 +193,7 @@ void vcffile_read_vcf_header (bool is_first_vcf)
         file->vcf_data_so_far += bytes_read;
     }
 
-    if (flag_md5) {
-        if (flag_concat && is_first_vcf)
-            md5_update (&evb->z_file->md5_ctx_concat, evb->vcf_data.data, evb->vcf_data.len);
-        
-        md5_update (&evb->z_file->md5_ctx_single, evb->vcf_data.data, evb->vcf_data.len);
-    }
+    vcffile_update_md5 (evb->vcf_data.data, evb->vcf_data.len, !is_first_vcf);
 
 finish:        
     file->disk_size = file->disk_so_far; // in case it was not known
