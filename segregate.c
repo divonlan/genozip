@@ -45,7 +45,7 @@ static void seg_allocate_per_line_memory (VariantBlock *vb)
     // first line - we calculate an estimated number of lines
     if (!vb->num_lines) { 
         // get first line length
-        uint32_t len=0; for (; len < vb->vcf_data.len && vb->vcf_data.data[len] != '\n'; len++);
+        uint32_t len=0; for (; len < vb->vcf_data.len && vb->vcf_data.data[len] != '\n'; len++) {};
 
         ASSERT (len < vb->vcf_data.len, "Error: cannot from a newline in the entire vb. vb_i=%u", vb->variant_block_i);
 
