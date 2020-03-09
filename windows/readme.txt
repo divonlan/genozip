@@ -31,11 +31,11 @@ Flags:
 
    -p --password     <password>. Password-protected - encrypted with 256-bit AES
 
-   -m --md5          Shows the MD5 hash of the VCF file. genozip always calculates and stores the md5, and when the
-                     resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF.
-                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original,
-                     uncompressed file. In addition, if the VCF file has Windows-style \r\n line endings, the md5 will
-                     be that of the modified file with the \r removed
+   -m --md5          Calculates the MD5 hash of the VCF file. When the resulting file is decompressed, this MD5 will be
+                     compared to the MD5 of the decompressed VCF. 
+Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. 
+In addition, if the VCF file has Windows-style \r\n line endings, the md5 will be that of the modified file with the \r
+                     removed
 
    -q --quiet        Don't show the progress indicator or warnings
 
@@ -43,7 +43,8 @@ Flags:
                      of warnings
 
    -t --test         After compressing normally, decompresss in memory (i.e. without writing the decompressed file to
-                     disk) - comparing the MD5 of the resulting decompressed file to that of the original VCF
+                     disk) - comparing the MD5 of the resulting decompressed file to that of the original VCF. This
+                     option also activates --md5.
 
    -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores
                      available. The number of threads actually used may be less, if sufficient to balance CPU and I/O
@@ -54,13 +55,12 @@ Flags:
                      regions are padded, and 2-digit allele values are replaced by an ascii character
 
 Optimizing:
-   -B --vblock       <number>. Sets the number of variants (sites) in a variant block. By default, the variant block
-                     size is set to a value between 4096 (for VCF files with 1024 samples or more) and 131,072 (for VCF
-                     files with 31 samples or less). The variant block is the basic unit of data on which genozip and
-                     genounzip operate. This value affects a number of things: 1. Memory consumption of both
-                     compression and decompression are linear with the variant block size. 2. Compression is sometimes
-                     better with larger block sizes, in particular if the number of samples is small. 3. Smaller blocks
-                     will result in faster 'genocat --regions' lookups
+   -B --vblock       <number>. Sets the maximum size of memory (in megabytes) of VCF file data that can go into one
+                     variant block. By default, this is set to 128MB. The variant block is the basic unit of data on
+                     which genozip and genounzip operate. This value affects a number of things: 1. Memory consumption
+                     of both compression and decompression are linear with the variant block size. 2. Compression is
+                     sometimes better with larger block sizes, in particular if the number of samples is small. 3.
+                     Smaller blocks will result in faster 'genocat --regions' lookups
 
    -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 4096. When
                      compressing or decompressing a variant block, the samples within the block are divided to sample
@@ -100,10 +100,11 @@ Options:
 
    -p --password     <password>. Provide password to access file(s) that were compressed with --password
 
-   -m --md5          Shows the MD5 hash of the VCF file. genozip always compares the MD5 of the original VCF file to
-                     the MD5 of the decompressed VCF. Note: for compressed files, e.g. myfile.vcf.gz, the MD5
-                     calculated is that of the original, uncompressed file. In addition, if the VCF file has
-                     Windows-style \r\n line endings, the md5 will be that of the modified file with the \r removed
+   -m --md5          Shows the MD5 hash of the decompressed VCF file. If the file was originally compressed with --md5,
+                     it also verifies that the MD5 of the original VCF file is identical to the MD5 of the decompressed
+                     VCF.
+Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. 
+Note: if the VCF file has Windows-style \r\n line endings, the md5 will be that of the modified file with the \r removed
 
    -q --quiet        Don't show the progress indicator or warnings
 
@@ -111,7 +112,8 @@ Options:
                      of warnings
 
    -t --test         Decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of
-                     the resulting decompressed file to that of the original VCF
+                     the resulting decompressed file to that of the original VCF. Works only if the file was compressed
+                     with --md5
 
    -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores
                      available. The number of threads actually used may be less, if sufficient to balance CPU and I/O
