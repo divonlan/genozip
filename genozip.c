@@ -469,9 +469,13 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     const char *password = crypt_get_password();
 
 #ifdef _WIN32
-    char *cmd_line = malloc (strlen (exec_name) + (password ? strlen (password) : 0) + 50);
-    sprintf (cmd_line, "%s -d -t %s %s %s %s", exec_name, (flag_quiet ? "-q" : ""), 
-             (password ? "-p" : ""), (password ? password : ""), z_filename);
+    char *cmd_line = malloc (strlen (exec_name) + (password ? strlen (password) : 0) + 300);
+    sprintf (cmd_line, "%s -d -t %s %s %s %s %s %s", exec_name, 
+             (flag_quiet       ? "-q" : ""), 
+             (password         ? "-p" : ""), (password ? password : ""), 
+             (flag_show_memory ? "--show-memory" : ""),
+             (flag_show_time   ? "--show-time"   : ""),
+             z_filename);
 
     STARTUPINFO startup_info;
     memset (&startup_info, 0, sizeof startup_info);
@@ -498,6 +502,8 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
         if (flag_quiet) test_argv[test_argc++] = "-q";
         if (password)   test_argv[test_argc++] = "-p";
         if (password)   test_argv[test_argc++] = password;
+        if (flag_show_memory)   test_argv[test_argc++] = "--show-memory";
+        if (flag_show_time)   test_argv[test_argc++] = "--show-time";
         test_argv[test_argc] = NULL;
         
         execvp (exec_name, (char * const *)test_argv);        
