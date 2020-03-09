@@ -13,6 +13,4 @@ extern void seg_all_data_lines (VariantBlockP vb);
 
 extern DictIdType seg_get_format_subfield (const char **data, uint32_t *len, unsigned line_i);
 
-extern void seg_realloc_datalines (VariantBlockP vb, uint32_t new_num_data_lines, bool use_line);
-
 #endif

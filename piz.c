@@ -126,7 +126,7 @@ static void piz_get_format_info (VariantBlock *vb)
 
     // now, get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) 
-        vb->data_lines[line_i].format_mtf_i = mtf_get_next_snip (vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
+        vb->data_lines.piz[line_i].format_mtf_i = mtf_get_next_snip (vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
 
     // reset format_ctx reader iterator fields, as we are going to traverse FORMAT again when reconstructing the lines
     mtf_init_iterator (format_ctx);
@@ -310,7 +310,7 @@ static void piz_initialize_sample_iterators (VariantBlock *vb)
             // (gt data is stored transposed - i.e. column by column)
             for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
                 
-                FormatInfo *line_format_info = &format_num_subfields[vb->data_lines[line_i].format_mtf_i];
+                FormatInfo *line_format_info = &format_num_subfields[vb->data_lines.piz[line_i].format_mtf_i];
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
@@ -336,7 +336,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i)
 {
     START_TIMER;
 
-    DataLine *dl = &vb->data_lines[vb_line_i];
+    PizDataLine *dl = &vb->data_lines.piz[vb_line_i];
 
     SnipIterator *sample_iterator = (SnipIterator *)vb->sample_iterator.data; // for convenience
 
@@ -477,7 +477,7 @@ static void piz_get_haplotype_data_line (VariantBlock *vb, unsigned vb_line_i, c
 #endif
 
     // check if this row has now haplotype data (no GT field) despite some other rows in the VB having data
-    DataLine *dl = &vb->data_lines[vb_line_i];
+    PizDataLine *dl = &vb->data_lines.piz[vb_line_i];
     dl->has_haplotype_data = vb->line_ht_data.data[0] != '-'; // either the entire line is '-' or there is no '-' in the line
 
     COPY_TIMER(vb->profile.piz_get_haplotype_data_line);
@@ -488,7 +488,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
 {
     START_TIMER;
 
-    DataLine *dl = &vb->data_lines[vb_line_i]; 
+    PizDataLine *dl = &vb->data_lines.piz[vb_line_i]; 
 
     // calculate the line length & allocate it
     unsigned ht_digits_len  = dl->has_haplotype_data ? vb->num_haplotypes_per_line : 0; 
@@ -609,22 +609,37 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
     COPY_TIMER (vb->profile.piz_merge_line);
 }
 
+static void piz_realloc_datalines (VariantBlock *vb, uint32_t new_num_data_lines)
+{
+    // we need to remove the Buffers within the PizDataLine from the buffer list, and re-add them with their new address
+    for (uint32_t i=0; i < vb->num_data_lines_allocated ; i++) 
+        buf_remove_from_buffer_list (vb, &vb->data_lines.piz[i].line);
+
+    vb->data_lines.piz = REALLOC (vb->data_lines.piz, new_num_data_lines * sizeof (PizDataLine));
+    memset (&vb->data_lines.piz[vb->num_data_lines_allocated], 0, (new_num_data_lines - vb->num_data_lines_allocated) * sizeof(PizDataLine));
+
+    for (uint32_t i=0; i < vb->num_data_lines_allocated ; i++) // only those that *might* have been allocated need to be added now, if we allocate any additional, they will be added by buf_alloc
+        buf_add_to_buffer_list (vb, &vb->data_lines.piz[i].line);
+
+    vb->num_data_lines_allocated = new_num_data_lines;
+}
+
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block
 static void piz_reconstruct_line_components (VariantBlock *vb)
 {
     START_TIMER;
 
-    ASSERT (!!vb->data_lines == !!vb->num_data_lines_allocated, 
+    ASSERT (!!vb->data_lines.piz == !!vb->num_data_lines_allocated, 
             "Error: expecting vb->data_lines to be nonzero iff vb->num_data_lines_allocated is nonzero. vb_i=%u", vb->variant_block_i);
 
-    if (!vb->data_lines) {
-        vb->num_data_lines_allocated = vb->num_lines * 1.5; // larger than num_lines so that future VBs are less likely to need to realloc
-        vb->data_lines = calloc (vb->num_data_lines_allocated, sizeof (DataLine));
+    if (!vb->data_lines.piz) {
+        vb->num_data_lines_allocated = vb->num_lines * 1.2; // larger than num_lines so that future VBs are less likely to need to realloc
+        vb->data_lines.piz = calloc (vb->num_data_lines_allocated, sizeof (PizDataLine));
     }
     
     else if (vb->num_data_lines_allocated < vb->num_lines) 
-        seg_realloc_datalines (vb, vb->num_lines * 1.5, true); // uses and updates vb->num_data_lines_allocated      
+        piz_realloc_datalines (vb, vb->num_lines * 1.2); // uses and updates vb->num_data_lines_allocated      
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 
@@ -683,7 +698,7 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
             piz_merge_line (vb, vb_line_i);
         }
         else 
-            buf_copy (vb, &vb->data_lines[vb_line_i].line, &vb->line_variant_data, 0, 0, 0, 
+            buf_copy (vb, &vb->data_lines.piz[vb_line_i].line, &vb->line_variant_data, 0, 0, 0, 
                       "dl->line", vb->first_line + vb_line_i);
             
         // reset len for next line - no need to alloc as all the lines are the same size?

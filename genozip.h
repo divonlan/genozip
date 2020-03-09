@@ -66,8 +66,15 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 // global parameters - set before any thread is created, and never change
 extern uint32_t    global_num_samples, global_number_displayed_samples, global_max_memory_per_vb;
 extern const char *global_cmd;            // set once in main()
-extern int command;
 extern ExeType exe_type;
+
+#define ZIP        'z'
+#define UNZIP      'd'
+#define LIST       'l'
+#define LICENSE    'L'
+#define VERSION    'V'
+#define HELP       'h'
+extern int command;
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, 

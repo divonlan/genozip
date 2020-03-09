@@ -232,7 +232,7 @@ void vcffile_write_one_variant_block (File *vcf_file, VariantBlock *vb)
     unsigned size_written_this_vb = 0;
 
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-        Buffer *line = &vb->data_lines[line_i].line;
+        Buffer *line = &vb->data_lines.piz[line_i].line;
 
         if (line->len) // if this line is not filtered out
             size_written_this_vb += vcffile_write_to_disk (vcf_file, line);

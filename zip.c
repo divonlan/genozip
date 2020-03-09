@@ -102,9 +102,9 @@ static unsigned zip_get_genotype_vb_start_len (VariantBlock *vb)
     // calculate offsets and lengths of genotype data of each sample block
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
 
-        uint32_t *gt_data  = (uint32_t*)vb->data_lines[line_i].genotype_data.data;
+        uint32_t *gt_data  = (uint32_t*)vb->data_lines.zip[line_i].genotype_data.data;
         
-        unsigned format_mtf_i = vb->data_lines[line_i].format_mtf_i;
+        unsigned format_mtf_i = vb->data_lines.zip[line_i].format_mtf_i;
         SubfieldMapperZip *format_mapper = &((SubfieldMapperZip *)vb->format_mapper_buf.data)[format_mtf_i];
         
         for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -144,7 +144,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
             if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i + vb->first_line);
 
-            DataLine *dl = &vb->data_lines[line_i];
+            ZipDataLine *dl = &vb->data_lines.zip[line_i];
 
             SubfieldMapperZip *format_mapper = &((SubfieldMapperZip *)vb->format_mapper_buf.data)[dl->format_mtf_i];
 
@@ -216,7 +216,7 @@ static void zip_generate_phase_sections (VariantBlock *vb)
         
         for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
             
-            DataLine *dl = &vb->data_lines[line_i];
+            ZipDataLine *dl = &vb->data_lines.zip[line_i];
             if (dl->phase_type == PHASE_MIXED_PHASED) 
                 memcpy (next, &dl->phase_data.data[sb_i * num_samples_in_sb], num_samples_in_sb);
             else
@@ -269,7 +269,7 @@ static HaploTypeSortHelperIndex *zip_construct_ht_permutation_helper_index (Vari
 
             // we count as alt alleles : 1 - 99 (ascii 49 to 147)
             //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
-            char one_ht = vb->data_lines[line_i].haplotype_data.data[ht_i];
+            char one_ht = vb->data_lines.zip[line_i].haplotype_data.data[ht_i];
             if (one_ht >= '1')
                 helper_index[ht_i].num_alt_alleles++;
         }
@@ -322,9 +322,9 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
             for (unsigned ht_i=0; ht_i < num_haplotypes_in_sample_block; ht_i++) {
                 
                 unsigned haplotype_data_char_i = helper_index[helper_index_sb_i + ht_i].index_in_original_line;
-                char **ht_data_ptr = &vb->data_lines[0].haplotype_data.data; // this pointer moves sizeof(DataLine) bytes each iteration - i.e. to the exact same field in the next line
+                char **ht_data_ptr = &vb->data_lines.zip[0].haplotype_data.data; // this pointer moves sizeof(ZipDataLine) bytes each iteration - i.e. to the exact same field in the next line
 
-                for (unsigned line_i=0; line_i < vb->num_lines; line_i++, ht_data_ptr += sizeof(DataLine)/sizeof(char*)) 
+                for (unsigned line_i=0; line_i < vb->num_lines; line_i++, ht_data_ptr += sizeof(ZipDataLine)/sizeof(char*)) 
                     *(next++) = (*ht_data_ptr)[haplotype_data_char_i];
             }
             COPY_TIMER (vb->profile.sample_haplotype_data);

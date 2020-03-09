@@ -664,13 +664,6 @@ void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 
 int main (int argc, char **argv)
 {
-    #define ZIP        'z'
-    #define UNZIP      'd'
-    #define LIST       'l'
-    #define LICENSE    'L'
-    #define VERSION    'V'
-    #define HELP       'h'
-
 #ifdef _WIN32
     // lowercase argv to allow case-insensitive comparison in Windows
     for (char *c=argv[0]; *c; c++) 

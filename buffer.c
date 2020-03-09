@@ -247,10 +247,17 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
         }
     }
 
-    stats[num_stats].name    = "abandoned_mem_high_watermark";
-    stats[num_stats].bytes   = abandoned_mem_high_watermark;
+    // add data_lines that are calloced
+    stats[num_stats].name    = "data_lines";
+    stats[num_stats].bytes   = 0;
     stats[num_stats].buffers = 0;
     num_stats++;
+
+    for (int vb_i=0; vb_i < (int)vb_pool->num_vbs; vb_i++) 
+        if (vb_pool->vb[vb_i].num_data_lines_allocated) {
+            stats[num_stats-1].bytes += vb_pool->vb[vb_i].num_data_lines_allocated * (command==ZIP ? sizeof (ZipDataLine) : sizeof (PizDataLine));
+            stats[num_stats-1].buffers += 1;
+        }
 
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);
@@ -276,7 +283,8 @@ int64_t buf_vb_memory_consumption (const VariantBlock *vb)
     // memory of the structure itself
     int64_t vb_memory = sizeof (*vb);
 
-    vb_memory += vb->num_data_lines_allocated * sizeof (DataLine);
+    // small BUG: This doesn't work - at the time it is called, num_data_lines_allocated is still 0
+    vb_memory += vb->num_data_lines_allocated * (command == ZIP ? sizeof (ZipDataLine) : sizeof (PizDataLine));
 
     // memory allocated outside of Buffer (direct calloc)
     if (vb->haplotype_sections_data) vb_memory += vb->num_sample_blocks * sizeof (Buffer);

@@ -28,15 +28,9 @@ typedef struct {
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-
-    uint32_t vcf_line_i;     // line in VCF file (starting from 1)
-
-    Buffer line;             // PIZ only - used to reconstruct line
-
     // the following 3 buffers are overlay buffers onto line, so that they don't consume memory
     Buffer genotype_data;    // \t separated genotype data for the line. last one has \t too. no \0. exists if any variant in the variant blck has FORMAT other that "GT"
     Buffer haplotype_data;   // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
-
     Buffer phase_data;       // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
     PhaseType phase_type;    // phase type of this line
     
@@ -45,11 +39,19 @@ typedef struct {
 
     uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
     uint32_t info_mtf_i;     // the mtf_i into mtx_ctx[INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
+} ZipDataLine;
 
-    // backward compatability with genozip v1
-    Buffer v1_variant_data;
+// IMPORTANT: if changing fields in DataLine, also update vb_release_vb
+typedef struct {
+    Buffer line;             // PIZ only - used to reconstruct line
 
-} DataLine;
+    bool has_haplotype_data; // FORMAT field contains GT
+    bool has_genotype_data;  // FORMAT field contains subfields other than GT
+
+    uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    
+    Buffer v1_variant_data;  // backward compatability with genozip v1
+} PizDataLine;
 
 // IMPORTANT: if changing fields in VariantBlock, also update vb_release_vb
 typedef struct variant_block_ {
@@ -67,7 +69,11 @@ typedef struct variant_block_ {
     bool in_use;               // this vb is in use
         
     uint32_t num_data_lines_allocated;
-    DataLine *data_lines;      // if allocated, this array is of length num_data_lines_allocated. for ZIP this is determined by the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
+    union {
+        ZipDataLine *zip; // ZIP: if allocated, this array is of length num_data_lines_allocated. its size is determined by the number of the max variant block size
+        PizDataLine *piz; // PIZ: if allocated, this array is of length num_data_lines_allocated. its size is determined by the SectionHeaderVCFHeader.max_lines_per_vb
+    } data_lines;
+
     uint32_t num_lines;        // number of lines in this variant block
     uint32_t first_line;       // line number in VCF file (counting from 1), of this variant block
 

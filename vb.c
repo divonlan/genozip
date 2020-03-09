@@ -34,22 +34,31 @@ void vb_release_vb (VariantBlock **vb_p)
     VariantBlock *vb = *vb_p;
     *vb_p = NULL;
 
-    if (vb->data_lines) {
+    // note: vb->data_line is not freed but rather used by subsequent vbs
+    if (command == ZIP && vb->data_lines.zip) {
         for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
-            DataLine *dl = &vb->data_lines[i];
+            ZipDataLine *dl = &vb->data_lines.zip[i];
             
-            dl->vcf_line_i = dl->genotype_data.len = 0;
+            dl->genotype_data.len = 0;
             dl->phase_type = PHASE_UNKNOWN;
             dl->has_haplotype_data = dl->has_genotype_data = 0;
             dl->format_mtf_i = dl->info_mtf_i = 0;
 
-            buf_free(&dl->line);
-            buf_free(&dl->v1_variant_data);
             buf_free(&dl->genotype_data);
             buf_free(&dl->haplotype_data);
             buf_free(&dl->phase_data);
         }
-        // note: vb->data_line is not freed but rather used by subsequent vbs
+    }
+    else if (command != ZIP && vb->data_lines.piz) {
+        for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
+            PizDataLine *dl = &vb->data_lines.piz[i];
+            
+            dl->has_haplotype_data = dl->has_genotype_data = 0;
+            dl->format_mtf_i = 0;
+
+            buf_free(&dl->line);
+            buf_free(&dl->v1_variant_data);
+        }
     }
 
     for (unsigned i=0; i < vb->num_sample_blocks; i++) {

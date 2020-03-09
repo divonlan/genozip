@@ -525,7 +525,7 @@ static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, in
 
     vb->line_gt_data.len = next - vb->line_gt_data.data;
 
-    vb->data_lines[line_i].has_genotype_data = vb->line_gt_data.len > global_num_samples; // not all just \t
+    vb->data_lines.piz[line_i].has_genotype_data = vb->line_gt_data.len > global_num_samples; // not all just \t
 
     COPY_TIMER(vb->profile.piz_get_genotype_data_line);
 }
@@ -576,8 +576,8 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
 {
     START_TIMER;
 
-    if (!vb->data_lines) 
-        vb->data_lines = calloc (evb->vcf_file->max_lines_per_vb, sizeof (DataLine));
+    if (!vb->data_lines.piz) 
+        vb->data_lines.piz = calloc (evb->vcf_file->max_lines_per_vb, sizeof (v1_PizDataLine));
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED) 
