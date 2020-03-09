@@ -33,6 +33,7 @@
 - Many bug fixes, performance and memory consumption optimizations
 
 2.1.0
-- Rewrite VCF file data reader to avoid redudant copies passes on the data
-- Moved to block-constained rather than number-of-lines constraints variant blocks - change in --vblocks logic.
+- Rewrote VCF file data reader to avoid redudant copies and passes on the data
+- Moved to size-constained rather than number-of-lines constrained variant blocks - change in --vblocks logic.
 - Changes in --md5 logic
+- Improved memory consumption for large VCFs with a single or small number of samples

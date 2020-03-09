@@ -214,6 +214,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo " "
 	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
 #	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
+	@echo "and: https://github.com/conda-forge/genozip-feedstock/compare/master...divonlan:genozip?expand=1"
 	@echo "and: https://github.com/conda-forge/genozip-feedstock/pulls"
 
 windows/%.exe: %.exe
