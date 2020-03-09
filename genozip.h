@@ -23,12 +23,7 @@
 
 #define GENOZIP_EXT ".genozip"
 
-// this was carefully picked as the optimal number based on testing with 1000-genomes chromosome 22 - 1024 samples:
-// there is a tradeoff: we sort haplotypes by number of 1s for this entire variant block, and maintain and Index that is 
-// #haplotypes x roundup(log2(#haplotypes)) - and we the number of indices we have in the final file depends on the number
-// of variant blocks - the less the better. On the other hand - smaller variant blocks result in more linkage disequilibrium between
-// variants in the block (assuming the VCF is sorted by POS), resulting in our sorting by number of 1s more likely to result
-// in similar haplotypes grouped together - improving the compression.
+#define DEFAULT_MAX_MEMORY_PER_VB (128*1024*1024)
 
 #define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if MAX_PLOIDY > 65535
@@ -69,7 +64,7 @@ typedef struct mtfnode_ *MtfNodeP;
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
 // global parameters - set before any thread is created, and never change
-extern uint32_t    global_num_samples, global_number_displayed_samples, global_max_lines_per_vb;
+extern uint32_t    global_num_samples, global_number_displayed_samples, global_max_memory_per_vb;
 extern const char *global_cmd;            // set once in main()
 extern int command;
 extern ExeType exe_type;
@@ -78,7 +73,7 @@ extern ExeType exe_type;
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, 
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
            flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions,
-           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads;
+           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_debug_memory;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VariantBlockP evb;

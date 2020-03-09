@@ -438,11 +438,8 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
     }
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 32bit and 64bit assignments)
-    if (!buf_is_allocated (&vb->column_of_zeros)) {
-        // a constant array of zero, preserved between VBs and concatenated files - as global_max_lines_per_vb is not changed
-        buf_alloc (vb, &vb->column_of_zeros, global_max_lines_per_vb, 1, "column_of_zeros", 0);
-        buf_zero (&vb->column_of_zeros);
-    } 
+    buf_alloc (vb, &vb->column_of_zeros, vb->vcf_file->max_lines_per_vb, 1, "column_of_zeros", 0);
+    buf_zero (&vb->column_of_zeros);
 
     for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 15; ht_i++)
         ht_columns_data[ht_i] = vb->column_of_zeros.data;
@@ -619,7 +616,12 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
     START_TIMER;
 
     if (!vb->data_lines) 
-        vb->data_lines = calloc (global_max_lines_per_vb, sizeof (DataLine));
+        vb->data_lines = calloc (vb->num_lines, sizeof (DataLine));
+    else if (vb->num_data_lines_allocated < vb->num_lines) {
+        vb->data_lines = REALLOC (vb->data_lines, vb->num_lines * sizeof (DataLine));
+        memset (&vb->data_lines[vb->num_data_lines_allocated], 0, (vb->num_lines - vb->num_data_lines_allocated) * sizeof(DataLine));
+    }
+    vb->num_data_lines_allocated = vb->num_lines;
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 
@@ -841,8 +843,6 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
         void v1_piz_reconstruct_line_components (VariantBlockP vb);
         v1_piz_reconstruct_line_components (vb);
     }
-
-    buf_test_overflows(vb);
 
     COPY_TIMER (vb->profile.compute);
 

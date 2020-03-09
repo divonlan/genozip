@@ -290,7 +290,7 @@ void regions_transform_negative_to_positive_complement()
     
     is_negative_regions = false; // yay!
 
-    free (neg_chregs);
+    FREE (neg_chregs);
 
     regions_display("After regions_transform_negative_to_positive_complement"); 
 }

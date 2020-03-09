@@ -29,10 +29,9 @@ typedef struct {
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
 
-    uint32_t vcf_line_i;         // line in VCF file (starting from 1)
+    uint32_t vcf_line_i;     // line in VCF file (starting from 1)
 
-    // initially, data from vcf file line, later segregated to components "stored" in the overlay buffers below
-    Buffer line;             
+    Buffer line;             // PIZ only - used to reconstruct line
 
     // the following 3 buffers are overlay buffers onto line, so that they don't consume memory
     Buffer genotype_data;    // \t separated genotype data for the line. last one has \t too. no \0. exists if any variant in the variant blck has FORMAT other that "GT"
@@ -67,7 +66,8 @@ typedef struct variant_block_ {
     bool is_processed;         // thread completed processing this VB - it is ready for outputting
     bool in_use;               // this vb is in use
         
-    DataLine *data_lines;      // if allocated, this array is of length global_max_lines_per_vb. for ZIP this is determined by the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
+    uint32_t num_data_lines_allocated;
+    DataLine *data_lines;      // if allocated, this array is of length num_data_lines_allocated. for ZIP this is determined by the number of samples, and for PIZ by the SectionHeaderVCFHeader.max_lines_per_vb
     uint32_t num_lines;        // number of lines in this variant block
     uint32_t first_line;       // line number in VCF file (counting from 1), of this variant block
 

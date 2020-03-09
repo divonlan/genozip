@@ -33,45 +33,7 @@ void zip_set_global_samples_per_block (const char *num_samples_str)
 
     ASSERT (global_samples_per_block >= 1 && global_samples_per_block <= 65535, "Error: invalid argument of --sblock: %s. Expecting a number between 1 and 65535", num_samples_str);
 }
-/*
-// read entire variant block to memory. this is called from the dispatcher thread
-static void zip_read_variant_block (File *vcf_file,
-                                    unsigned *line_i,   // in/out next line to be read
-                                    Buffer *first_data_line,    // first line might be supplied by caller 
-                                    VariantBlock *vb)
-{
-    unsigned first_line= *line_i;
 
-    if (!vb->data_lines) 
-        vb->data_lines = calloc (global_max_lines_per_vb, sizeof (DataLine));
-    
-    unsigned vb_line_i;
-    vb->vb_data_size = 0; // size of variant block as it appears in the source file
-    for (vb_line_i=0; vb_line_i < global_max_lines_per_vb; vb_line_i++) 
-    {
-        DataLine *dl = &vb->data_lines[vb_line_i];
-
-        if (vb_line_i > 0 || !first_data_line) { // first line might be supplied by caller
-
-            // allocate line Buffer and read line from file 
-            bool success = vcffile_get_line (vb, first_line + vb_line_i, false, &dl->line, "dl->line"); 
-            if (!success) break; // no more lines - we're done
-        }
-        else {
-            buf_copy (vb, &dl->line, first_data_line, 1, 0, 0, "dl->line", vb->variant_block_i);
-            buf_free (first_data_line); 
-        }
-        dl->line_i = first_line + vb_line_i;
-
-        (*line_i)++;
-        
-        // count bytes in the source file, for sanity check after we reconstruct
-        vb->vb_data_size += dl->line.len;
-    }
-
-    vb->num_lines = vb_line_i;
-}
-*/
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
 // Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
@@ -192,7 +154,6 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
             // lookup word indices in the global dictionary for all the subfields
             const uint8_t *dst_start = dst_next;
 
-            // IS THIS A BUG? WE DON'T SEEM TO EVER USE THIS VARIABLE num_subfields
             int num_subfields = format_mapper->num_subfields;
             ASSERT (num_subfields >= 0, "Error: format_mapper->num_subfields=%d", format_mapper->num_subfields);
 
@@ -404,15 +365,13 @@ static void zip_compress_one_vb (VariantBlock *vb)
     vb->num_samples_per_block = global_samples_per_block;
     vb->num_sample_blocks = ceil((float)global_num_samples / (float)vb->num_samples_per_block);
 
-    // if testing, make a copy of the original lines read from the file, to compare to the result of vunblocking later
-    Buffer *lines_orig = NULL;
     unsigned max_genotype_section_len=0; // length in subfields
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     mtf_clone_ctx (vb);
 
     // split each lines in this variant block to its components
-    seg_all_data_lines (vb, lines_orig);
+    seg_all_data_lines (vb);
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
@@ -433,7 +392,7 @@ static void zip_compress_one_vb (VariantBlock *vb)
     if (vb->phase_type == PHASE_MIXED_PHASED) 
         zip_generate_phase_sections (vb);
 
-    unsigned variant_data_header_pos = vb->z_data.len;
+    //unsigned variant_data_header_pos = vb->z_data.len;
     zfile_compress_vb_header (vb); // variant data header + ht index
 
     // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
@@ -451,7 +410,7 @@ static void zip_compress_one_vb (VariantBlock *vb)
     }
 
     // generate & write b250 data for all INFO subfields
-    unsigned num_info_subfields=0;
+    uint32_t num_info_subfields=0;
     for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
                 
         MtfContext *ctx = &vb->mtf_ctx[did_i];
@@ -489,45 +448,45 @@ static void zip_compress_one_vb (VariantBlock *vb)
     }
 
     // update z_data in memory (its not written to disk yet)
-    zfile_update_compressed_vb_header (vb, variant_data_header_pos, num_info_subfields);
+    //zfile_update_compressed_vb_header (vb, variant_data_header_pos, num_info_subfields);
     
     COPY_TIMER (vb->profile.compute);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
-static void zip_output_processed_vb (VariantBlock *processed_vb, Buffer *section_list_buf, File *vcf_file, bool is_z_data)
+static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf, File *vcf_file, bool is_z_data)
 {
     START_TIMER;
 
-    File *z_file = processed_vb->z_file;
-    Buffer *data_buf = is_z_data ? &processed_vb->z_data : &z_file->dict_data;
+    File *z_file = vb->z_file;
+    Buffer *data_buf = is_z_data ? &vb->z_data : &z_file->dict_data;
 
-    if (section_list_buf) sections_list_concat (processed_vb, section_list_buf);
+    if (section_list_buf) sections_list_concat (vb, section_list_buf);
 
     file_write (z_file, data_buf->data, data_buf->len);
-    COPY_TIMER (processed_vb->profile.write);
+    COPY_TIMER (vb->profile.write);
 
     z_file->disk_so_far += (long long)data_buf->len;
     
     if (is_z_data) {
-        z_file->vcf_data_so_far  += (long long)processed_vb->vb_data_size;
-        z_file->num_lines_single += (long long)processed_vb->num_lines;
-        z_file->num_lines_concat += (long long)processed_vb->num_lines;
+        z_file->vcf_data_so_far  += (long long)vb->vb_data_size;
+        z_file->num_lines_single += (long long)vb->num_lines;
+        z_file->num_lines_concat += (long long)vb->num_lines;
     }
 
     // update section stats
     for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        if (vcf_file) vcf_file->section_bytes[sec_i]  += processed_vb->vcf_section_bytes[sec_i];
-        z_file->num_sections[sec_i]     += processed_vb->z_num_sections[sec_i];
-        z_file->section_bytes[sec_i]    += processed_vb->z_section_bytes[sec_i];
-        z_file->section_entries[sec_i]  += processed_vb->z_section_entries[sec_i];
+        if (vcf_file) vcf_file->section_bytes[sec_i]  += vb->vcf_section_bytes[sec_i];
+        z_file->num_sections[sec_i]     += vb->z_num_sections[sec_i];
+        z_file->section_bytes[sec_i]    += vb->z_section_bytes[sec_i];
+        z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
     }
 
-    if (flag_show_headers && buf_is_allocated (&processed_vb->show_headers_buf))
-        buf_print (&processed_vb->show_headers_buf, false);
+    if (flag_show_headers && buf_is_allocated (&vb->show_headers_buf))
+        buf_print (&vb->show_headers_buf, false);
 
-    if (flag_show_threads) dispatcher_show_time ("Write genozip data done", -1, processed_vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->variant_block_i);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
@@ -576,6 +535,8 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
 
     mtf_initialize_mutex (z_file, last_variant_block_i+1);
 
+    uint32_t max_lines_per_vb=0;
+
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In there is a new variant block avaialble, and a compute thread available to take it - dispatch it
     // 2. If there is no new variant block available, but input is not exhausted yet - read one
@@ -596,12 +557,17 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
            
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
-            
+
+            // update z_data in memory (its not written to disk yet)
+            zfile_update_compressed_vb_header (processed_vb, vcf_line_i);
+
+            max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->num_lines);
+            vcf_line_i += processed_vb->num_lines;
+
             zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, vcf_file, true);
 
             dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
                                         z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
-
         }        
         
         // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - read one
@@ -609,16 +575,13 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
 
             next_vb = dispatcher_generate_next_vb (dispatcher, 0);
 
-            next_vb->first_line = vcf_line_i;
-
             if (flag_show_threads) dispatcher_show_time ("Read VCF data", -1, next_vb->variant_block_i);
             
             vcffile_read_variant_block (next_vb);
-            vcf_line_i += next_vb->num_lines;
 
             if (flag_show_threads) dispatcher_show_time ("Read VCF data done", -1, next_vb->variant_block_i);
 
-            if (next_vb->num_lines)  // we found some data 
+            if (next_vb->vcf_data.len)  // we found some data 
                 next_vb->ready_to_dispatch = true;
             else {
                 // this vb has no data
@@ -645,7 +608,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5;
     if (z_file && z_file->type == GENOZIP && vcf_header_header_pos >= 0) 
-        success = zfile_update_vcf_header_section_header (vcf_header_header_pos, &single_component_md5);
+        success = zfile_update_vcf_header_section_header (vcf_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);

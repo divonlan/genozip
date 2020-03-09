@@ -577,7 +577,7 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
     START_TIMER;
 
     if (!vb->data_lines) 
-        vb->data_lines = calloc (global_max_lines_per_vb, sizeof (DataLine));
+        vb->data_lines = calloc (evb->vcf_file->max_lines_per_vb, sizeof (DataLine));
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED) 
@@ -783,7 +783,7 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
     extern Buffer global_vcf_header_line; // defined in vcf_header.c
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
 
-    global_max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
+    evb->vcf_file->max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
 
     if (first_vcf || !flag_concat) {
         evb->z_file->num_lines_concat     = evb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);

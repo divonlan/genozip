@@ -137,8 +137,8 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
 
     // allocate what we think will be enough memory. usually this realloc does nothing, as the
     // memory we pre-allocate for z_data is sufficient
-    buf_alloc (vb, z_data, z_data->len + compressed_offset + MAX (data_uncompressed_len / 10, 500) + encryption_padding_reserve, // usually compression is a lot better than 10X so this should be enough, except for small data
-               1.5, "z_data", 0);
+    buf_alloc (vb, z_data, z_data->len + compressed_offset + MAX (data_uncompressed_len / 2, 500) + encryption_padding_reserve, // usually compression is a lot better than 2X so this should be enough
+               1.5, z_data->name ? z_data->name : "z_data", z_data->param);
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
@@ -150,7 +150,8 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, SectionHeader *hea
 
         // if output buffer is too small, increase it, and try again
         if (ret == BZ_FINISH_OK) {
-            buf_alloc (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len + 50 /* > BZ_N_OVERSHOOT */, 1, "zfile_compress", 0);
+            buf_alloc (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len + 50 /* > BZ_N_OVERSHOOT */, 1,
+                       z_data->name ? z_data->name : "z_data", z_data->param);
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
 
             zfile_compress_do (vb, z_data, data, compressed_offset, data_uncompressed_len, &data_compressed_len, false);
@@ -318,9 +319,9 @@ static void zfile_get_metadata(char *metadata)
     ASSERT0 (strlen (metadata) < FILE_METADATA_LEN, "Error: metadata too long");
 }
 
-void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_first_vcf)
+void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
 {
-    File *file = vb->z_file;
+    File *file = evb->z_file;
     
     SectionHeaderVCFHeader vcf_header;
     memset (&vcf_header, 0, sizeof(vcf_header)); // safety
@@ -330,27 +331,26 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_
     vcf_header.h.data_uncompressed_len = BGEN32 (vcf_header_text->len);
     vcf_header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderVCFHeader));
     vcf_header.num_samples             = BGEN32 (global_num_samples);
-    vcf_header.vcf_data_size           = BGEN64 (vb->vcf_file->vcf_data_size_single) /* 0 if gzipped - will be updated later. */; 
+    vcf_header.vcf_data_size           = BGEN64 (evb->vcf_file->vcf_data_size_single) /* 0 if gzipped - will be updated later. */; 
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
-    vcf_header.max_lines_per_vb        = BGEN32 (global_max_lines_per_vb);
     
-    switch (vb->vcf_file->type) {
+    switch (evb->vcf_file->type) {
         case VCF     : vcf_header.compression_type = COMPRESSION_TYPE_NONE  ; break;
         case VCF_GZ  : vcf_header.compression_type = COMPRESSION_TYPE_GZIP  ; break;
         case VCF_BZ2 : vcf_header.compression_type = COMPRESSION_TYPE_BZIP2 ; break;
-        default      : ABORT ("Error: invalid vcf_file->type=%u", vb->vcf_file->type);
+        default      : ABORT ("Error: invalid vcf_file->type=%u", evb->vcf_file->type);
     }
 
-    file_basename (vb->vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
-    if (vb->vcf_file->type == VCF_GZ)  vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-3] = '\0'; // remove the .gz
-    if (vb->vcf_file->type == VCF_BZ2) vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-4] = '\0'; // remove the .gz
+    file_basename (evb->vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
+    if (evb->vcf_file->type == VCF_GZ)  vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-3] = '\0'; // remove the .gz
+    if (evb->vcf_file->type == VCF_BZ2) vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-4] = '\0'; // remove the .gz
     
     static Buffer vcf_header_buf = EMPTY_BUFFER;
 
-    buf_alloc ((VariantBlock*)vb, &vcf_header_buf, vcf_header_text->len / 3, // generous guess of compressed size
+    buf_alloc ((VariantBlock*)evb, &vcf_header_buf, vcf_header_text->len / 3, // generous guess of compressed size
                1, "vcf_header_buf", 0); 
 
-    zfile_compress ((VariantBlock*)vb, &vcf_header_buf, (SectionHeader*)&vcf_header, vcf_header_text->data);
+    zfile_compress ((VariantBlock*)evb, &vcf_header_buf, (SectionHeader*)&vcf_header, vcf_header_text->data);
 
     file_write (file, vcf_header_buf.data, vcf_header_buf.len);
 
@@ -361,9 +361,9 @@ void zfile_write_vcf_header (VariantBlock *vb, Buffer *vcf_header_text, bool is_
 
     // copy it to z_file - we might need to update it at the very end in zfile_update_vcf_header_section_header()
     if (is_first_vcf)
-        memcpy (&vb->z_file->vcf_header_first, &vcf_header, sizeof (vcf_header));
+        memcpy (&evb->z_file->vcf_header_first, &vcf_header, sizeof (vcf_header));
 
-    memcpy (&vb->z_file->vcf_header_single, &vcf_header, sizeof (vcf_header));
+    memcpy (&evb->z_file->vcf_header_single, &vcf_header, sizeof (vcf_header));
 }
 
 void zfile_compress_vb_header (VariantBlock *vb)
@@ -416,13 +416,13 @@ void zfile_compress_vb_header (VariantBlock *vb)
 
 // ZIP only: updating of the already compressed variant data section, after completion of all other sections
 // note: this updates the z_data in memory (not on disk)
-void zfile_update_compressed_vb_header (VariantBlock *vb,
-                                        uint32_t pos, // index in vb->z_data
-                                        uint32_t num_info_subfields)
+void zfile_update_compressed_vb_header (VariantBlock *vb, uint32_t vcf_first_line_i)
 {
+    uint32_t pos=0;
+
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)&vb->z_data.data[pos];
-//    vb_header->num_info_subfields               = BGEN32 (num_info_subfields);
-    vb_header->z_data_bytes                     = BGEN32 ((uint32_t)vb->z_data.len);
+    vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
+    vb_header->first_line   = BGEN32 (vcf_first_line_i);
 
     // now we can finally encrypt the header - if needed
     if (vb_header->h.data_encrypted_len)  // non-zero if encrypted
@@ -917,7 +917,8 @@ bool zfile_get_genozip_header (File *z_file,
 // the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
 // when we're done. num_lines can only be known after we're done with this VCF component.
 // if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
-bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, Md5Hash *md5 /* out */)
+bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb,
+                                             Md5Hash *md5 /* out */)
 {
     // rewind to beginning of current (latest) vcf header - nothing to do if we can't
     if (!file_seek (evb->z_file, pos_of_current_vcf_header, SEEK_SET, true)) return false;
@@ -926,9 +927,10 @@ bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, 
 
     // update the header of the single (current) vcf. 
     SectionHeaderVCFHeader *curr_header = &evb->z_file->vcf_header_single;
-    curr_header->vcf_data_size = BGEN64 (evb->z_file->vcf_data_size_single);
-    curr_header->num_lines     = BGEN64 (evb->z_file->num_lines_single);
-    
+    curr_header->vcf_data_size    = BGEN64 (evb->z_file->vcf_data_size_single);
+    curr_header->num_lines        = BGEN64 (evb->z_file->num_lines_single);
+    curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
+
     md5_finalize (&evb->z_file->md5_ctx_single, &curr_header->md5_hash_single);
     *md5 = curr_header->md5_hash_single;
     if (flag_md5) fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));

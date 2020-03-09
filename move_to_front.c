@@ -306,8 +306,8 @@ void mtf_clone_ctx (VariantBlock *vb)
 
             // overlay the global dict and mtf - these will not change by this (or any other) VB
             //fprintf (stderr,  ("mtf_clone_ctx: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dict_id_printable (zf_ctx->dict_id).id, vb->variant_block_i, did_i);
-            buf_overlay (&vb_ctx->ol_dict, &zf_ctx->dict, 0,0,0,0);   
-            buf_overlay (&vb_ctx->ol_mtf, &zf_ctx->mtf, 0,0,0,0);   
+            buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, 0,0,0,0);   
+            buf_overlay (vb, &vb_ctx->ol_mtf, &zf_ctx->mtf, 0,0,0,0);   
 
             // copy the hash table (core + used entries only of extension) - we're copying and not overlaying as we might be changing it
             buf_copy (vb, &vb_ctx->hash, &zf_ctx->hash, sizeof(HashEnt), 0, zf_ctx->hash.len, 0, 0);
@@ -405,11 +405,11 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
         buf_move (vb, &zf_ctx->dict, &vb_ctx->dict);
         buf_set_overlayable (&zf_ctx->dict);
-        buf_overlay (&vb_ctx->ol_dict, &zf_ctx->dict, 0,0,0,0);
+        buf_overlay (vb, &vb_ctx->ol_dict, &zf_ctx->dict, 0,0,0,0);
 
         buf_move (vb, &zf_ctx->mtf,  &vb_ctx->mtf);
         buf_set_overlayable (&zf_ctx->mtf);
-        buf_overlay (&vb_ctx->ol_mtf, &zf_ctx->mtf, 0,0,0,0);
+        buf_overlay (vb, &vb_ctx->ol_mtf, &zf_ctx->mtf, 0,0,0,0);
 
         buf_move (vb, &zf_ctx->hash, &vb_ctx->hash); // vb_ctx no longer needs the hash table - zf_ctx can take it
 
@@ -655,8 +655,8 @@ void mtf_overlay_dictionaries_to_vb (VariantBlock *vb)
             vb_ctx->dict_section_type = zf_ctx->dict_section_type;
             mtf_init_iterator (vb_ctx);
 
-            buf_overlay (&vb_ctx->dict, &zf_ctx->dict, 0,0,0,0);    
-            buf_overlay (&vb_ctx->word_list, &zf_ctx->word_list, 0,0,0,0);
+            buf_overlay (vb, &vb_ctx->dict, &zf_ctx->dict, 0,0,0,0);    
+            buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, 0,0,0,0);
 
             // count dictionaries of genotype data subfields
             if (dict_id_is_gtdata_subfield (vb_ctx->dict_id)) {
@@ -706,7 +706,7 @@ void mtf_sort_dictionaries_vb_1(VariantBlock *vb)
             next += node->snip_len + 1;
         }
 
-        buf_free (&old_dict);
+        buf_destroy (vb, &old_dict);
     }
 }
 

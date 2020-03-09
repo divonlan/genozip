@@ -54,7 +54,7 @@ static const char *help_genozip[] = {
     "   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
     "",
     "Optimizing:",    
-    "   -B --vblock       <number>. Sets the number of variants (sites) in a variant block. By default, the variant block size is set to a value between 4096 (for VCF files with 1024 samples or more) and 131,072 (for VCF files with 31 samples or less). The variant block is the basic unit of data on which genozip and genounzip operate. This value affects a number of things: 1. Memory consumption of both compression and decompression are linear with the variant block size. 2. Compression is sometimes better with larger block sizes, in particular if the number of samples is small. 3. Smaller blocks will result in faster 'genocat --regions' lookups",    
+    "   -B --vblock       <number>. Sets the maximum size of memory (in megabytes) of VCF file data that can go into one variant block. By default, this is set to 128MB. The variant block is the basic unit of data on which genozip and genounzip operate. This value affects a number of things: 1. Memory consumption of both compression and decompression are linear with the variant block size. 2. Compression is sometimes better with larger block sizes, in particular if the number of samples is small. 3. Smaller blocks will result in faster 'genocat --regions' lookups",    
     "",
     "   -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 4096. When compressing or decompressing a variant block, the samples within the block are divided to sample blocks which are compressed separately. A higher value will result in a better compression ratio, while a lower value will result in faster 'genocat --samples' lookups",
     "",
@@ -83,11 +83,13 @@ static const char *help_genozip_developer[] = {
     "",
     "   --show-headers    Show the sections headers (works for genounzip too)",
     "",
-    "   --show-index      Show the content of the random access index"
+    "   --show-index      Show the content of the random access index",
     "",
     "   --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file)",
     "",
     "   --show-threads    Show thread dispatcher activity",
+    "",
+    "   --debug-memory    Buffer allocations and destroyings",
 };
 
 static const char *help_genounzip[] = {

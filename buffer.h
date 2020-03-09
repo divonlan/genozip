@@ -19,13 +19,16 @@ typedef struct buffer_ {
     BufferType type;
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     const char *name; // name of allocator - used for memory debugging & statistics
-    unsigned param;   // parameter provided by allocator - used for memory debugging & statistics
-    unsigned size;    // number of bytes allocated to memory
-    unsigned len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
+    uint32_t param;   // parameter provided by allocator - used for memory debugging & statistics
+    uint32_t size;    // number of bytes allocated to memory
+    uint32_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
+    uint32_t vb_i;    // the variant_block_i that allocated this buffer
+    const char *func; // the allocating function
+    unsigned code_line;
     char *data;       // =memory+2*sizeof(long long) if buffer is allocated or NULL if not
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 } Buffer;
-#define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL}
+#define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,0,NULL,0,NULL,NULL}
 
 #define ENT(type, buf, index) (type *)(&(buf)->data[(index) * sizeof(type)])
 #define LASTENT(type, buf) (type *)(&(buf)->data[((buf)->len-1) * sizeof(type)])
@@ -37,19 +40,27 @@ extern void buf_initialize(void);
 extern unsigned buf_alloc_do (VariantBlockP vb,
                               Buffer *buf, 
                               unsigned requested_size, 
-                              float grow_at_least_factor, // grow more than new_size    
+                              float grow_at_least_factor, // grow more than new_size   
+                              const char *func, unsigned code_line,
                               const char *name, unsigned param); // for debugging
 
 // efficient wrapper
 #define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) \
-  ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((vb), (buf), (requested_size), (grow_at_least_factor), (name), (param)) \
+  ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((vb), (buf), (requested_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
                                                     : (buf)->size) 
 
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 
-extern void buf_overlay (Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_from, unsigned *regular_buf_offset, const char *name, unsigned param);
-extern void buf_free (Buffer *buf); // free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
-extern void buf_destroy (VariantBlockP vb, Buffer *buf);
+extern void buf_overlay_do (VariantBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_whole_buf_from, 
+                            unsigned *regular_buf_offset, const char *func, uint32_t code_line, const char *name, unsigned param);
+#define buf_overlay(vb, overlaid_buf, regular_buf, copy_whole_buf_from, regular_buf_offset, name, param) \
+     buf_overlay_do(vb, overlaid_buf, regular_buf, copy_whole_buf_from, regular_buf_offset, __FUNCTION__, __LINE__, name, param) 
+
+extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
+#define buf_free(buf) buf_free_do (buf, __FUNCTION__, __LINE__);
+
+extern void buf_destroy_do (VariantBlockP vb, Buffer *buf, const char *func, uint32_t code_line);
+#define buf_destroy(vb, buf) buf_destroy_do (vb, buf, __FUNCTION__, __LINE__)
 
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
 
@@ -76,5 +87,15 @@ extern char *buf_human_readable_uint (int64_t n, char *str /* out */);
 extern char *buf_display_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/);
 
 #define buf_zero(buf_p) { memset ((buf_p)->data, 0, (buf_p)->size); }
+
+extern void buf_add_to_buffer_list (VariantBlockP vb, Buffer *buf);
+extern void buf_remove_from_buffer_list (VariantBlockP vb, Buffer *buf);
+
+extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
+#define FREE(p) buf_low_level_free (p, __FUNCTION__, __LINE__);
+
+extern void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t code_line);
+#define REALLOC(p,size) buf_low_level_realloc (p, size, __FUNCTION__, __LINE__);
+
 
 #endif

@@ -80,7 +80,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "wb" so Windows doesn't add ASCII 13
             
             if (expected_type == GENOZIP_TEST && !file->file) {
-                free (file);
+                FREE (file);
                 return NULL;
             }
 
@@ -163,9 +163,9 @@ void file_close (File **file_p,
         if (file->vcf_unconsumed_data.memory) buf_destroy (evb, &file->vcf_unconsumed_data);
     }
 
-    if (file->name) free (file->name);
+    if (file->name) FREE (file->name);
     
-    free (file);
+    FREE (file);
 }
 
 size_t file_write (File *file, const void *data, unsigned len)

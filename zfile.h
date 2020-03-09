@@ -17,11 +17,11 @@ extern bool zfile_get_genozip_header (FileP z_file, uint64_t *uncompressed_data_
                                       uint64_t *num_items_concat, Md5Hash *md5_hash_concat, char *created, unsigned created_len);
 
 
-extern void zfile_write_vcf_header (VariantBlockP vb, BufferP vcf_header_text, bool is_first_vcf);
+extern void zfile_write_vcf_header (BufferP vcf_header_text, bool is_first_vcf);
 
 extern void zfile_compress_section_data (VariantBlockP vb, SectionType section_type, BufferP section_data);
 extern void zfile_compress_vb_header (VariantBlockP vb);
-extern void zfile_update_compressed_vb_header (VariantBlockP vb, uint32_t pos, uint32_t num_info_subfields);
+extern void zfile_update_compressed_vb_header (VariantBlockP vb, uint32_t vcf_first_line_i);
 
 extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */);
 extern void zfile_compress_dictionary_data (VariantBlockP vb, MtfContextP ctx, 
@@ -43,7 +43,7 @@ extern void zfile_uncompress_section (VariantBlockP vb, void *section_header,
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
-extern bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, Md5Hash *md5);
+extern bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
 
 // v1 compatability
 extern bool v1_zfile_read_one_vb (VariantBlockP vb);

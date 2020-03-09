@@ -57,7 +57,8 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
-    flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_noisy=0;
+    flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_noisy=0,
+    flag_debug_memory=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
@@ -456,7 +457,7 @@ static void main_genounzip (const char *z_filename,
 
     file_close (&z_file, false);
 
-    free ((void *)basename);
+    FREE ((void *)basename);
 
     if (flag_replace && vcf_filename && z_filename) file_remove (z_filename); 
 }
@@ -584,7 +585,7 @@ static void main_genozip (const char *vcf_filename,
 
     if (remove_vcf_file) file_remove (vcf_filename); 
 
-    free ((void *)basename);
+    FREE ((void *)basename);
 
     // test the compression, if the user requested --test
     if (flag_test && (!flag_concat || is_last_file)) main_test_after_genozip (exec_name, z_filename);
@@ -646,19 +647,19 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
                  "Warning: two files with the same name '%s' - if you later split with 'genounzip --split %s', these files will overwrite each other", 
                  &basenames[i * BASENAME_LEN], out_filename);
 
-    free (basenames);    
+    FREE (basenames);    
 }
 
-void genozip_set_global_max_lines_per_vb (const char *num_lines_str)
+void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 {
-    unsigned len = strlen (num_lines_str);
-    ASSERT (len <= 9, "Error: invalid argument of --vblock: %s. Expecting a number between 1 and 999999999", num_lines_str);
+    unsigned len = strlen (mem_size_mb_str);
+    ASSERT (len <= 5 || (len==1 && mem_size_mb_str[0]=='0'), "Error: invalid argument of --vblock: %s. Expecting a number between 1 and 99999 (number of megabytes)", mem_size_mb_str);
 
     for (unsigned i=0; i < len; i++) {
-        ASSERT (num_lines_str[i] >= '0' && num_lines_str[i] <= '9', "Error: invalid argument of --vblock: %s. Expecting a number between 1 and 999999999", num_lines_str);
+        ASSERT (mem_size_mb_str[i] >= '0' && mem_size_mb_str[i] <= '9', "Error: invalid argument of --vblock: %s. Expecting an integer number between 1 and 99999", mem_size_mb_str);
     }
 
-    global_max_lines_per_vb = atoi (num_lines_str);
+    global_max_memory_per_vb = atoi (mem_size_mb_str) * 1024 * 1024;
 }
 
 int main (int argc, char **argv)
@@ -738,13 +739,14 @@ int main (int argc, char **argv)
         #define _si {"show-index",    no_argument,       &flag_show_index  , 1 } 
         #define _sr {"show-gheader",  no_argument,       &flag_show_gheader, 1 }  
         #define _sT {"show-threads",  no_argument,       &flag_show_threads, 1 }  
+        #define _dm {"debug-memory",  no_argument,       &flag_debug_memory, 1 }  
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _B, _S, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,              _00 };
-        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                   _st, _sm,                        _00 };
-        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                _sT,                                    _st, _sm,                        _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _B, _S, _dm, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,              _dm, _00 };
+        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                   _st, _sm,                        _dm, _00 };
+        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                _sT,                                    _st, _sm,                        _dm, _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -786,7 +788,7 @@ int main (int argc, char **argv)
             case 'o' : out_filename = optarg       ; break;
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
-            case 'B' : genozip_set_global_max_lines_per_vb (optarg); break;
+            case 'B' : genozip_set_global_max_memory_per_vb (optarg); break;
             case 'S' : zip_set_global_samples_per_block (optarg); break;
             case 'p' : crypt_set_password (optarg) ; break;
 

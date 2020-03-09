@@ -14,6 +14,71 @@
 
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
+static void seg_store (VariantBlock *vb, Buffer *dst_buf, 
+                       Buffer *src_buf, uint32_t size, // Either src_buf OR size must be given
+                       const char *limit_vcf_data, 
+                       const char *buf_name, uint32_t vcf_line_i)
+{
+    if (src_buf) size = src_buf->len;
+
+    // if we have room in vb->vcf_data, we copy our segregation outputs to there, instead of allocating them
+    // there own memory, thereby significantly saving memory and allocation time
+    if (vb->vcf_data.data + vb->vcf_data_next_offset + size < limit_vcf_data) { // we have space in vcf_data - we can overlay
+        buf_overlay (vb, dst_buf, &vb->vcf_data, src_buf, &vb->vcf_data_next_offset, buf_name, vcf_line_i);     
+        if (src_buf) buf_free (src_buf);
+    }
+
+    // in rather rare edge cases where there is novcf_datat enough memory, we reluctantly keep the regular buffer
+    else if (src_buf) { 
+        buf_move (vb, dst_buf, src_buf);
+        dst_buf->name = buf_name;
+        dst_buf->param = vcf_line_i;
+    }
+    else
+        buf_alloc (vb, dst_buf, size, 1, buf_name, vcf_line_i);
+}
+
+static void seg_allocate_per_line_memory (VariantBlock *vb)
+{
+    uint32_t old_num_lines = vb->num_lines;
+    
+    // first line - we calculate an estimated number of lines
+    if (!vb->num_lines) { 
+        // get first line length
+        uint32_t len=0; for (; len < vb->vcf_data.len && vb->vcf_data.data[len] != '\n'; len++);
+
+        ASSERT (len < vb->vcf_data.len, "Error: cannot from a newline in the entire vb. vb_i=%u", vb->variant_block_i);
+
+        // set initial number of lines based on an estimate. it might grow during segmentation if it turns out the
+        // estimate is too low, and will be set to its actual real value at the end of segmentation
+        vb->num_lines = (uint32_t)(((double)vb->vcf_data.len / (double)len) * 1.2);
+    }
+    else 
+        vb->num_lines *= 1.5;
+
+    if (!vb->data_lines) 
+        vb->data_lines = calloc (vb->num_lines, sizeof (DataLine));
+    else if (vb->num_data_lines_allocated < vb->num_lines) {
+
+        // we need to remove the Buffers within the DataLine from the buffer list, and re-add them with their new address
+        for (uint32_t i=0; i < old_num_lines ; i++) {
+            buf_remove_from_buffer_list (vb, &vb->data_lines[i].haplotype_data);
+            buf_remove_from_buffer_list (vb, &vb->data_lines[i].genotype_data);
+            buf_remove_from_buffer_list (vb, &vb->data_lines[i].phase_data);
+        }
+
+        vb->data_lines = REALLOC (vb->data_lines, vb->num_lines * sizeof (DataLine));
+        memset (&vb->data_lines[vb->num_data_lines_allocated], 0, (vb->num_lines - vb->num_data_lines_allocated) * sizeof(DataLine));
+
+        for (uint32_t i=0; i < old_num_lines ; i++) {
+            buf_add_to_buffer_list (vb, &vb->data_lines[i].haplotype_data);
+            buf_add_to_buffer_list (vb, &vb->data_lines[i].genotype_data);
+            buf_add_to_buffer_list (vb, &vb->data_lines[i].phase_data);
+        }
+    }
+    vb->num_data_lines_allocated = vb->num_lines;
+}
+
 // returns the node index
 static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, unsigned vcf_line_i, VcfFields f, 
                                bool *is_new) // optional out
@@ -231,8 +296,8 @@ static void seg_info_field (VariantBlock *vb, DataLine *dl, const char *info_str
                 // allocate memory if needed (check before calling buf_alloc - we're in a tight loop)
                 Buffer *mtf_i_buf = &ctx->mtf_i;
                 if (!buf_is_allocated(mtf_i_buf) || (mtf_i_buf->len + 1) * sizeof(uint32_t) > mtf_i_buf->size)
-                    buf_alloc (vb, mtf_i_buf, MIN (global_max_lines_per_vb, mtf_i_buf->len + 1) * sizeof (uint32_t),
-                               1.15, "mtf_ctx->mtf_i", ctx->dict_section_type);
+                    buf_alloc (vb, mtf_i_buf, MIN (vb->num_lines, mtf_i_buf->len + 1) * sizeof (uint32_t),
+                               1.5, "mtf_ctx->mtf_i", ctx->dict_section_type);
 
                 MtfNode *sf_node;
 
@@ -298,12 +363,12 @@ static void seg_increase_ploidy (VariantBlock *vb, unsigned new_ploidy, unsigned
 {
     unsigned vb_line_i = vcf_line_i - vb->first_line;
 
-    // increase ploidy of all previous lines. at this point, dl->haplotype_data is overlaid dl->line_data
+    // increase ploidy of all previous lines. at this point, dl->haplotype_data is overlaid vb->vcf_data
     for (unsigned i=0; i < vb_line_i; i++) {
         DataLine *dl = &vb->data_lines[i];
 
         // note: dl->haplotype_data is overlaid on vb->vcf_data. We now create a new regular buffer
-        if (dl->haplotype_data.type == BUF_PARTIAL_OVERLAY) {
+        if (dl->haplotype_data.type == BUF_PARTIAL_OVERLAY) {            
             Buffer temp_haplotype_data = EMPTY_BUFFER;
             buf_alloc (vb, &temp_haplotype_data, global_num_samples * new_ploidy, 1, "dl->haplotype_data", vcf_line_i);
             buf_copy (vb, &temp_haplotype_data, &dl->haplotype_data, 0,0,0, "dl->haplotype_data", vcf_line_i);
@@ -315,9 +380,6 @@ static void seg_increase_ploidy (VariantBlock *vb, unsigned new_ploidy, unsigned
             buf_alloc (vb, &dl->haplotype_data, global_num_samples * new_ploidy, 1, "dl->haplotype_data", vcf_line_i);
 
         dl->haplotype_data.len = global_num_samples * new_ploidy; // increase len
-
-        //unsigned new_total_len = dl->haplotype_data.len + dl->genotype_data.len + dl->phase_data.len;            
-        //buf_alloc (vb, &dl->line, new_total_len, 1, "dl->line", vcf_line_i);
 
         // incease ploidy if this row has haplotypes already. if not, will add it at the end.
         if (dl->has_haplotype_data)
@@ -477,7 +539,7 @@ static void seg_genotype_area (VariantBlock *vb, DataLine *dl,
         vb->vcf_section_bytes[SEC_GENOTYPE_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
 }
 
-static inline const char *seg_get_next_item (const char *str, unsigned *str_len, bool allow_newline, bool allow_tab, bool allow_colon, unsigned vcf_line_i, // line in vcf file,
+static inline const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, unsigned vcf_line_i, // line in vcf file,
                                              unsigned *len, char *separator, const char *item_name) // out
 {
     unsigned i=0; for (; i < *str_len; i++)
@@ -533,23 +595,24 @@ static void seg_add_samples_missing_in_line (VariantBlock *vb, DataLine *dl, uns
    3. haplotype data (the GT subfield) - a string of eg 1 or 0 (no whitespace) - ordered by the permutation order
    4. phase data - only if MIXED phase - a string of | and / - one per sample
 */
-static void seg_data_line (VariantBlock *vb, /* may be NULL if testing */
-                           DataLine *dl, 
-                           unsigned vcf_line_i) // line in original VCF file
+static const char *seg_data_line (VariantBlock *vb, /* may be NULL if testing */
+                                  DataLine *dl, 
+                                  const char *field_start_line,     // index in vb->vcf_data where this line starts
+                                  uint32_t vcf_line_i) // line in original VCF file
 {
     dl->phase_type = PHASE_UNKNOWN;
 
     unsigned sample_i = 0;
     unsigned gt_line_len=0;
 
-    const char *field_start, *next_field;
+    const char *next_field, *field_start;
     unsigned field_len;
     char separator;
 
-    unsigned len = dl->line.len;
+    int32_t len = &vb->vcf_data.data[vb->vcf_data.len] - field_start_line;
 
     // CHROM
-    field_start = dl->line.data;
+    field_start = field_start_line;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vcf_line_i, &field_len, &separator, "CHROM");
     seg_chrom_field (vb, field_start, field_len, vcf_line_i);
 
@@ -652,26 +715,23 @@ static void seg_data_line (VariantBlock *vb, /* may be NULL if testing */
     vb->max_gt_line_len = MAX (vb->max_gt_line_len, gt_line_len);
 
     // now, overlay the data over the line memory so we can re-use our working buffers vb->line_* for the next line
-    unsigned total_len = vb->line_gt_data.len + vb->line_phase_data.len + vb->line_ht_data.len;
-    buf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + total_len, 1.1, "vb->vcf_data", vcf_line_i);
-
-    // note we put haplotype_data at the end to ease realloc in case of ploidy increase
+    //uint32_t seg_total_len = vb->line_gt_data.len + vb->line_phase_data.len + vb->line_ht_data.len;
+    
+    // we don't need vcf_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate new buffers
     if (dl->has_genotype_data) 
-        buf_overlay (&dl->genotype_data, &vb->vcf_data, &vb->line_gt_data, &vb->vcf_data_next_offset, "dl->genotype_data", vcf_line_i);
+        seg_store (vb, &dl->genotype_data, &vb->line_gt_data, 0, next_field, "dl->genotype_data", vcf_line_i);
 
     if (dl->has_haplotype_data && dl->phase_type == PHASE_MIXED_PHASED)
-        buf_overlay (&dl->phase_data, &vb->vcf_data, &vb->line_phase_data, &vb->vcf_data_next_offset, "dl->phase_data", vcf_line_i);    
+        seg_store (vb, &dl->phase_data, &vb->line_phase_data, 0, next_field, "dl->phase_data", vcf_line_i);
 
     if (dl->has_haplotype_data) {
-        buf_overlay (&dl->haplotype_data, &vb->vcf_data, &vb->line_ht_data, &vb->vcf_data_next_offset, "dl->haplotype_data", vcf_line_i);
+        seg_store (vb, &dl->haplotype_data, &vb->line_ht_data, 0, next_field, "dl->haplotype_data", vcf_line_i);
         
         if (flag_show_alleles)
             buf_print (&dl->haplotype_data, true);
     }
 
-    buf_free (&vb->line_ht_data);
-    buf_free (&vb->line_phase_data);
-    buf_free (&vb->line_gt_data);
+    return next_field;
 }
 
 static void seg_update_vb_from_dl (VariantBlock *vb, DataLine *dl)
@@ -690,9 +750,10 @@ static void seg_update_vb_from_dl (VariantBlock *vb, DataLine *dl)
         vb->phase_type = PHASE_MIXED_PHASED;    
 }
 
+
 // complete haplotype and genotypes of lines that don't have them, if we found out that some
 // other line has them, and hence all lines in the vb must have them
-void seg_complete_missing_lines (VariantBlock *vb)
+void seg_complete_missing_lines (VariantBlock *vb, const char *next_field)
 {
     vb->num_haplotypes_per_line = vb->ploidy * global_num_samples;
     
@@ -701,11 +762,12 @@ void seg_complete_missing_lines (VariantBlock *vb)
         DataLine *dl = &vb->data_lines[vb_line_i];                                
 
         if (vb->has_haplotype_data && !dl->has_haplotype_data) {
+            seg_store (vb, &dl->haplotype_data, NULL, vb->num_haplotypes_per_line, next_field, "dl->haplotype_data", vb->first_line + vb_line_i);
             // realloc line which is the buffer on which haplotype data is overlaid
-            buf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + vb->num_haplotypes_per_line, 1, vb->vcf_data.name, vb->vcf_data.param);
+            // BUGbuf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + vb->num_haplotypes_per_line, 1, vb->vcf_data.name, vb->vcf_data.param);
 
             // overlay the haplotype buffer overlaid at the end of the line buffer
-            buf_overlay (&dl->haplotype_data, &vb->vcf_data, NULL, &vb->vcf_data_next_offset, "dl->haplotype_data", vb->first_line + vb_line_i);
+            //buf_overlay (&dl->haplotype_data, &vb->vcf_data, NULL, &vb->vcf_data_next_offset, "dl->haplotype_data", vb->first_line + vb_line_i);
 
             memset (dl->haplotype_data.data, '-', vb->num_haplotypes_per_line); // '-' means missing haplotype - note: ascii 45 (haplotype values start at ascii 48)
             dl->haplotype_data.len = vb->num_haplotypes_per_line;
@@ -715,11 +777,12 @@ void seg_complete_missing_lines (VariantBlock *vb)
         }
 
         if (vb->has_genotype_data && !dl->has_genotype_data) {
+            seg_store (vb, &dl->genotype_data, NULL, global_num_samples * sizeof(uint32_t), next_field, "dl->genotype_data", vb->first_line + vb_line_i);
             // realloc line which is the buffer on which haplotype data is overlaid
-            buf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + global_num_samples * sizeof(uint32_t), 1, vb->vcf_data.name, vb->vcf_data.param);
+            //BUG  buf_alloc (vb, &vb->vcf_data, vb->vcf_data_next_offset + global_num_samples * sizeof(uint32_t), 1, vb->vcf_data.name, vb->vcf_data.param);
 
             // overlay the haplotype buffer overlaid at the end of the line buffer
-            buf_overlay (&dl->genotype_data, &vb->vcf_data, NULL, &vb->vcf_data_next_offset, "dl->genotype_data", vb->first_line + vb_line_i);
+            //buf_overlay (&dl->genotype_data, &vb->vcf_data, NULL, &vb->vcf_data_next_offset, "dl->genotype_data", vb->first_line + vb_line_i);
             for (unsigned i=0; i < global_num_samples; i++) 
                 ((uint32_t*)dl->genotype_data.data)[i] = WORD_INDEX_MISSING_SF;
 
@@ -730,11 +793,13 @@ void seg_complete_missing_lines (VariantBlock *vb)
 
 
 // split each lines in this variant block to its components
-void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
+void seg_all_data_lines (VariantBlock *vb)
 {
     START_TIMER;
-    
+
     vb->num_dict_ids = MAX (FORMAT+1, vb->num_dict_ids); // first 8 mtf_ctx are reserved for the VCF fields (up to FORMAT) (vb->num_dict_ids might be already higher due to previous VBs)
+
+    seg_allocate_per_line_memory (vb); // set vb->num_lines to an initial estimate
 
     for (VcfFields f=CHROM; f <= FORMAT; f++) {
         buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->num_lines * sizeof (uint32_t), 1, "mtf_ctx.mtf_i", f);
@@ -746,18 +811,29 @@ void seg_all_data_lines (VariantBlock *vb, Buffer *lines_orig /* for testing */)
         vb->mtf_ctx[f].dict_section_type = SEC_CHROM_DICT + f*2;
     }
 
+    const char *field_start = vb->vcf_data.data;
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+
+        if (field_start - vb->vcf_data.data == vb->vcf_data.len) { // we're done
+            vb->num_lines = vb_line_i; // update to actual number of lines
+            break;
+        }
 
         //fprintf (stderr, "vb_line_i=%u\n", vb_line_i);
         DataLine *dl = &vb->data_lines[vb_line_i];
 
-        if (lines_orig) buf_copy (vb, &lines_orig[vb_line_i], &dl->line, 1, 0, dl->line.len+1, "lines_orig", vb->variant_block_i); // if testing
-        seg_data_line (vb, dl, vb->first_line + vb_line_i);
+        field_start = seg_data_line (vb, dl, field_start, vb->first_line + vb_line_i);
+
         seg_update_vb_from_dl (vb, dl);
+
+        // if our estimate number of lines was too small, increase it
+        if (vb_line_i == vb->num_lines-1 && field_start - vb->vcf_data.data != vb->vcf_data.len) {
+            seg_allocate_per_line_memory (vb); // increase number of lines as evidently we need more
+        }
     }
 
     if (/*vb->has_genotype_data || */vb->has_haplotype_data)
-        seg_complete_missing_lines(vb);
+        seg_complete_missing_lines(vb, field_start);
 
     COPY_TIMER(vb->profile.seg_all_data_lines);
 }

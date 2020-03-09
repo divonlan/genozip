@@ -41,13 +41,10 @@ typedef struct file_ {
     int64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
                                       // GENOZIP: VCF data so far of original VCF file currently being processed
 
-    // Used for READING VCF/VCF_GZ/VCF_BZ2 files: stats used to optimize memory allocation
-//    double avg_header_line_len, avg_data_line_len;   // average length of data line so far. 
-//    uint32_t header_lines_so_far, data_lines_so_far; // number of lines read so far
-
     // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)
     Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
     Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single vcf component
+    uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderVCFHeader
 
     // Used for READING GENOZIP files
     Buffer v1_next_vcf_header;         // genozip v1 only: next VCF header - used when reading in --split mode
