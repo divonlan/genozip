@@ -89,10 +89,12 @@ DEPS       := $(SRCS:.c=.d)
 
 EXECUTABLES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
 
+DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
+
 all: $(EXECUTABLES)
 
 debug : CFLAGS  += -DDEBUG -g -O0
-debug : genozip-debug$(EXE) genounzip-debug$(EXE) genols-debug$(EXE) genocat-debug$(EXE)
+debug : $(DEBUG_EXECUTABLES)
 
 -include $(DEPS)
 
@@ -346,7 +348,7 @@ clean:
 
 clean-debug:
 	@echo Cleaning up debug
-	@rm -f $(DEPS) $(DEBUG_OBJS) genozip-debug$(EXE) 
+	@rm -f $(DEPS) $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) 
 
 .PHONY: clean clean-debug clean-all git-pull macos mac/.remote_mac_timestamp
 
