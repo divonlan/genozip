@@ -424,6 +424,13 @@ void zfile_update_compressed_vb_header (VariantBlock *vb, uint32_t vcf_first_lin
     vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
     vb_header->first_line   = BGEN32 (vcf_first_line_i);
 
+    if (flag_show_vblocks) {
+        fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u uncomprssed=%u compressed=%u num_sample_blocks=%u ht_per_line=%u max_gt_line_len=%u\n",
+                 vb->variant_block_i, vcf_first_line_i, BGEN32 (vb_header->num_lines), 
+                 BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
+                 BGEN32 (vb_header->num_sample_blocks), BGEN32 (vb_header->num_haplotypes_per_line), 
+                 BGEN32 (vb_header->max_gt_line_len));
+    }
     // now we can finally encrypt the header - if needed
     if (vb_header->h.data_encrypted_len)  // non-zero if encrypted
         crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
@@ -838,7 +845,7 @@ void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_co
         else 
             header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file
     }
-    
+
     zfile_get_metadata (header.created);
 
     if (is_encrypted) {
