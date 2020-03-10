@@ -75,7 +75,8 @@ extern uint32_t mtf_evaluate_snip (VariantBlockP vb, MtfContext *ctx, const char
 extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
 extern int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VariantBlockP vb);
-extern MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict /* optional */, uint32_t *snip_len /* optional */);
+extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+#define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VariantBlockP vb);
 extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, unsigned *num_subfields, DictIdType dict_id, SectionType dict_section_type);
 extern int mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id);

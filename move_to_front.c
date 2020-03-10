@@ -71,11 +71,14 @@ static inline uint32_t mtf_insert_to_dict (VariantBlock *vb, MtfContext *ctx, co
 }
 
 // ZIP only (PIZ doesn't have mtf) mtf index to node - possibly in ol_mtf, or in mtf
-MtfNode *mtf_node (const MtfContext *ctx, uint32_t mtf_i, 
-                   const char **snip_in_dict, uint32_t *snip_len) // optional outs
+MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, 
+                      const char **snip_in_dict, uint32_t *snip_len,  // optional outs
+                      const char *func, uint32_t code_line)
 {
     ASSERT0 (ctx->dict_id.num, "Error: this ctx is not initialized");
-    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error: mtf_i=%u out of range: mtf.len=%u ol_mtf.len=%u", mtf_i, ctx->mtf.len, ctx->ol_mtf.len);
+    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node: out of range: dict=%.*s %s mtf_i=%u mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
+            DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
+            mtf_i, ctx->mtf.len, ctx->ol_mtf.len, func, code_line);
 
     bool is_ol = mtf_i < ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
 
