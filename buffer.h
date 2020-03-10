@@ -39,8 +39,8 @@ extern void buf_initialize(void);
 
 extern unsigned buf_alloc_do (VariantBlockP vb,
                               Buffer *buf, 
-                              unsigned requested_size, 
-                              float grow_at_least_factor, // grow more than new_size   
+                              uint32_t requested_size, 
+                              double grow_at_least_factor, // grow more than new_size   
                               const char *func, unsigned code_line,
                               const char *name, unsigned param); // for debugging
 

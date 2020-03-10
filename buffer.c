@@ -132,23 +132,23 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool test_all_if_unde
         char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN], s3[POINTER_STR_LEN];
         if (buf->memory) {
             if (buf->type < BUF_UNALLOCATED || buf->type > BUF_PARTIAL_OVERLAY) {
-                fprintf (stderr, "Memory corruption: buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", buf_display_pointer (buf, s1), buf_i);
+                fprintf (stderr, "\n\nMemory corruption: buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", buf_display_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (!buf->name) {
-                fprintf (stderr, "Memory corruption: buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", buf_display_pointer (buf, s1), buf_i);
+                fprintf (stderr, "\n\nMemory corruption: buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", buf_display_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
                 fprintf (stderr, 
                         buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
-                         "Memory corruption: data!=memory+8: vb_id=%d allocating_vb_i=%u buf_i=%u buffer=%s memory=%s func=%s:%u : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=%s\n", 
+                         "\n\nMemory corruption: data!=memory+8: vb_id=%d allocating_vb_i=%u buf_i=%u buffer=%s memory=%s func=%s:%u : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=%s\n", 
                          vb ? vb->id : 0, buf->vb_i, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->func, buf->code_line, buf->name, buf->param, buf_display_pointer(buf->data,s3));
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, 
-                        "Memory corruption: Underflow: buffer: %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u. Found in buf_list of vb.id=%d. Fence=%c%c%c%c%c%c%c%c\n",
+                        "\n\nMemory corruption: Underflow: buffer: %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u. Found in buf_list of vb.id=%d. Fence=%c%c%c%c%c%c%c%c\n",
                         buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb_i, buf_i, vb ? vb->id : -999, 
                         buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
@@ -160,7 +160,7 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool test_all_if_unde
             else if (buf_has_overflowed(buf)) {
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
-                        "Memory corruption: Overflow: buffer: %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u. Found in buf_list of vb.id=%d. Fence=%c%c%c%c%c%c%c%c\n",
+                        "\n\nMemory corruption: Overflow: buffer: %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u. Found in buf_list of vb.id=%d. Fence=%c%c%c%c%c%c%c%c\n",
                         buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb_i, buf_i, vb ? vb->id : -999, 
                         of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
@@ -169,12 +169,6 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool test_all_if_unde
 
                 corruption = true;
             }
-/*            else if (buf->data && buf->vb_i && buf->vb_i != vb->variant_block_i) {
-                fprintf (stderr, 
-                        "test_vb_i=%u vb_id=%d allocating_vb_i==%u buf_i=%u buffer=%s memory=%s : Buffer %.30s param=%u was allocated by a different variant block\n", 
-                         vb->variant_block_i, vb ? vb->id : 0, buf->vb_i, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->name, buf->param); 
-                corruption = true;
-            }*/
         }
     }
     return corruption;
@@ -352,8 +346,8 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
 // the overlaid buffer) and allocates new memory
 unsigned buf_alloc_do (VariantBlock *vb,
                        Buffer *buf, 
-                       unsigned requested_size,
-                       float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
+                       uint32_t requested_size,
+                       double grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
                        const char *func, unsigned code_line,
                        const char *name, unsigned param)      
 {
@@ -374,8 +368,11 @@ unsigned buf_alloc_do (VariantBlock *vb,
         goto finish;
     }
 
+    // add an epsilon to avoid floating point mutliplication ending up slightly less that the integer
+    grow_at_least_factor = MAX (1, grow_at_least_factor) + 0.000000001; 
+
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
-    uint32_t new_size = (uint32_t)(requested_size * MAX (grow_at_least_factor, 1) + 7) & 0xfffffff8; 
+    uint32_t new_size = (uint32_t)(requested_size * grow_at_least_factor + 7) & 0xfffffff8UL; 
 
     // case 2: we need to allocate memory - buffer is already allocated so copy over the data
     if (buf->memory) {
