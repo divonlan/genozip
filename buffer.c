@@ -142,7 +142,7 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool test_all_if_unde
             else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
                 fprintf (stderr, 
                         buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
-                         "\n\nMemory corruption: data!=memory+8: vb_id=%d allocating_vb_i=%u buf_i=%u buffer=%s memory=%s func=%s:%u : Corrupt Buffer structure - expecting data+8 == memory. name=%.30s param=%u buf->data=%s\n", 
+                         "\n\nMemory corruption: data!=memory+8: vb_id=%d allocating_vb_i=%u buf_i=%u buffer=%s memory=%s func=%s:%u : Corrupt Buffer structure - expecting data+8 == memory. name=%s:%u buf->data=%s\n", 
                          vb ? vb->id : 0, buf->vb_i, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->func, buf->code_line, buf->name, buf->param, buf_display_pointer(buf->data,s3));
                 corruption = true;
             }
@@ -308,7 +308,7 @@ void buf_add_to_buffer_list (VariantBlock *vb, Buffer *buf)
 
     if (flag_debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
         char s[POINTER_STR_LEN];
-        fprintf (stderr, "Init: %s (%u): size=%u buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, vb->buffer_list.len-1);
+        fprintf (stderr, "Init: %s:%u: size=%u buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, vb->buffer_list.len-1);
     }
 }
 
@@ -320,7 +320,9 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
 #ifdef DEBUG
         buf_display_memory_usage (true, 0, 0);
 #endif
-        ABORT ("Error: Failed to allocate %u bytes name=%s param=%u", size + overhead_size, name, param);
+        ABORT ("Error: Out of memroy. %sDetails: failed to allocate %u bytes name=%s:%u in %s:%u", 
+               (command==ZIP ? "Try running with a lower variant block size using --vblock. " : ""), 
+                size + overhead_size, name, param, func, code_line);
     }
 
     buf->data        = buf->memory + sizeof (uint64_t);
@@ -373,6 +375,8 @@ unsigned buf_alloc_do (VariantBlock *vb,
 
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
     uint32_t new_size = (uint32_t)(requested_size * grow_at_least_factor + 7) & 0xfffffff8UL; 
+
+    ASSERT (new_size >= requested_size, "Error: allocated to little memory: requested=%u, allocated=%u", requested_size, new_size); // floating point paranoia
 
     // case 2: we need to allocate memory - buffer is already allocated so copy over the data
     if (buf->memory) {
@@ -439,7 +443,7 @@ void buf_overlay_do (VariantBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf
 {
     bool full_overlay = !regular_buf_offset && !copy_from;
 
-//fprintf (stderr, "Overlaying onto buffer old_name=%s old_param=%u new_name=%s new_param=%u\n", 
+//fprintf (stderr, "Overlaying onto buffer old_name=%s:=%u new_name=%s:%u\n", 
 //         overlaid_buf->name, overlaid_buf->param, regular_buf->name, regular_buf->param);      
 
     // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
@@ -577,7 +581,7 @@ void buf_remove_from_buffer_list (VariantBlock *vb, Buffer *buf)
     
             if (flag_debug_memory) {
                 char s[POINTER_STR_LEN];
-                fprintf (stderr, "Destroy:%s (%u): buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf_display_pointer(buf,s), vb->id, i);
+                fprintf (stderr, "Destroy:%s:%u: buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf_display_pointer(buf,s), vb->id, i);
             }
             break;
         }
@@ -616,7 +620,7 @@ void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src,
     ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
     
     ASSERT (!max_entries || src_start_entry < src->len, 
-            "Error buf_copy of name=%s param=%u: src_start_entry=%u is larger than src->len=%u", src->name, src->param, src_start_entry, src->len);
+            "Error buf_copy of name=%s:%u: src_start_entry=%u is larger than src->len=%u", src->name, src->param, src_start_entry, src->len);
 
     unsigned num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
@@ -632,7 +636,7 @@ void buf_copy (VariantBlock *vb, Buffer *dst, const Buffer *src,
 // moves all the data from one buffer to another, leaving the source buffer unallocated
 void buf_move (VariantBlock *vb, Buffer *dst, Buffer *src)
 {
-    ASSERT (dst->type == BUF_UNALLOCATED, "Error: attempt to move to an already-allocated src: name=%s param=%u dst: name=%s param=%u",
+    ASSERT (dst->type == BUF_UNALLOCATED, "Error: attempt to move to an already-allocated src: name=%s:%u dst: name=%s:%u",
             src->name, src->param, dst->name, dst->param);
 
     buf_remove_from_buffer_list (vb, src); // must be before the memset - otherwise memory will be 0 and it won't work
