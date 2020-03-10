@@ -63,6 +63,8 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0,
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
 
+static char *threads_str  = NULL;
+
 static int main_print (const char **text, unsigned num_lines,
                        const char *wrapped_line_prefix, 
                        const char *newline_separator, 
@@ -470,11 +472,12 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 
 #ifdef _WIN32
     char *cmd_line = malloc (strlen (exec_name) + (password ? strlen (password) : 0) + 300);
-    sprintf (cmd_line, "%s -d -t %s %s %s %s %s %s", exec_name, 
+    sprintf (cmd_line, "%s -d -t %s %s %s %s %s %s %s %s", exec_name, 
              (flag_quiet       ? "-q" : ""), 
              (password         ? "-p" : ""), (password ? password : ""), 
              (flag_show_memory ? "--show-memory" : ""),
              (flag_show_time   ? "--show-time"   : ""),
+             (threads_str      ? "-@" : ""), (threads_str ? threads_str : ""),
              z_filename);
 
     STARTUPINFO startup_info;
@@ -499,11 +502,13 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
         test_argv[test_argc++] = "-d";
         test_argv[test_argc++] = "-t";
         test_argv[test_argc++] = z_filename;
-        if (flag_quiet) test_argv[test_argc++] = "-q";
-        if (password)   test_argv[test_argc++] = "-p";
-        if (password)   test_argv[test_argc++] = password;
-        if (flag_show_memory)   test_argv[test_argc++] = "--show-memory";
+        if (flag_quiet)       test_argv[test_argc++] = "-q";
+        if (password)         test_argv[test_argc++] = "-p";
+        if (password)         test_argv[test_argc++] = password;
+        if (flag_show_memory) test_argv[test_argc++] = "--show-memory";
         if (flag_show_time)   test_argv[test_argc++] = "--show-time";
+        if (threads_str)      test_argv[test_argc++] = "-@";
+        if (threads_str)      test_argv[test_argc++] = threads_str;
         test_argv[test_argc] = NULL;
         
         execvp (exec_name, (char * const *)test_argv);        
@@ -687,7 +692,6 @@ int main (int argc, char **argv)
     buf_initialize();
 
     char *out_filename = NULL;
-    char *threads_str  = NULL;
 
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
