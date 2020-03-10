@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "zip.h"
 
 static const char *help_genozip[] = {
     "",
@@ -59,7 +60,7 @@ static const char *help_genozip[] = {
     "Optimizing:",    
     "   -B --vblock       <number>. Sets the maximum size of memory (in megabytes) of VCF file data that can go into one variant block. By default, this is set to 128MB. The variant block is the basic unit of data on which genozip and genounzip operate. This value affects a number of things: 1. Memory consumption of both compression and decompression are linear with the variant block size. 2. Compression is sometimes better with larger block sizes, in particular if the number of samples is small. 3. Smaller blocks will result in faster 'genocat --regions' lookups",    
     "",
-    "   -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 4096. When compressing or decompressing a variant block, the samples within the block are divided to sample blocks which are compressed separately. A higher value will result in a better compression ratio, while a lower value will result in faster 'genocat --samples' lookups",
+    "   -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to "SAMPLES_PER_BLOCK_STR". When compressing or decompressing a variant block, the samples within the block are divided to sample blocks which are compressed separately. A higher value will result in a better compression ratio, while a lower value will result in faster 'genocat --samples' lookups",
     "",
     "One or more file names may be given, or if omitted, standard input is used instead",
     "",

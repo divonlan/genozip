@@ -21,7 +21,7 @@
 #include "random_access.h"
 #include "endianness.h"
 
-static uint32_t global_samples_per_block = 4096; // tradeoff: larger is better compression, but in some cases might be slower retrieval speed
+static uint32_t global_samples_per_block = SAMPLES_PER_BLOCK; 
 
 void zip_set_global_samples_per_block (const char *num_samples_str)
 {

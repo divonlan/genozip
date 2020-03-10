@@ -35,5 +35,9 @@
 2.1.0
 - Rewrote VCF file data reader to avoid redudant copies and passes on the data
 - Moved to size-constained rather than number-of-lines constrained variant blocks - change in --vblocks logic.
-- Changes in --md5 logic
+- Make MD5 calculation non-default, requires --md5. genounzip --test possible only if file was compressed with --md5
 - Improved memory consumption for large VCFs with a single or small number of samples
+
+2.1.1
+- Fix floating point rounding error that affected very large memory allocations
+- Improved help text
