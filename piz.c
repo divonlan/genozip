@@ -915,6 +915,7 @@ static void enforce_v1_limitations (bool is_first_vcf_component)
     ENFORCE(flag_show_dict, "--show-dict");
     ENFORCE(dict_id_show_one_b250.num, "--show-one-b250");
     ENFORCE(dict_id_show_one_dict.num, "--show-one-dict");
+    ENFORCE(dict_id_dump_one_b250.num, "--dump-one-b250");
     ENFORCE(flag_show_gheader, "--show-gheader");
     ENFORCE(flag_show_index, "--show-index");
     ENFORCE(flag_show_headers, "--show-headers");

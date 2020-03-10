@@ -78,6 +78,9 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
         fprintf (stderr, "%.*s", vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
+
+    if (dict_id_printable (ctx->dict_id).num == dict_id_dump_one_b250.num) 
+        fwrite (ctx->b250.data, 1, ctx->b250.len, stdout);
 }
 
 #define SBL(line_i,sb_i) ((line_i) * vb->num_sample_blocks + (sb_i))

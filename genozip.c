@@ -61,7 +61,8 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0,
     flag_debug_memory=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
-           dict_id_show_one_dict = { 0 };  // argument of --show-dict-one
+           dict_id_show_one_dict = { 0 },  // argument of --show-dict-one
+           dict_id_dump_one_b250 = { 0 };  // argument of --dump-b250-one
 
 static char *threads_str  = NULL;
 
@@ -735,6 +736,8 @@ int main (int argc, char **argv)
         #define _s2 {"show-b250",     no_argument,       &flag_show_b250,    1 } 
         #define _s5 {"show-one-b250", required_argument, 0, '2'                }
         #define _s6 {"show-b250-one", required_argument, 0, '2'                }
+        #define _s7 {"dump-one-b250", required_argument, 0, '5'                }
+        #define _s8 {"dump-b250-one", required_argument, 0, '5'                }
         #define _sa {"show-alleles",  no_argument,       &flag_show_alleles, 1 }
         #define _st {"show-time",     no_argument,       &flag_show_time   , 1 } 
         #define _sm {"show-memory",   no_argument,       &flag_show_memory , 1 } 
@@ -746,7 +749,7 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _sa, _st, _sm, _sh, _si, _sr, _B, _S, _dm, _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _B, _S, _dm, _00 };
         static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,              _dm, _00 };
         static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                   _st, _sm,                        _dm, _00 };
         static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                _sT,                                    _st, _sm,                        _dm, _00 };
@@ -790,6 +793,7 @@ int main (int argc, char **argv)
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
+            case '5' : dict_id_dump_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : genozip_set_global_max_memory_per_vb (optarg); break;
             case 'S' : zip_set_global_samples_per_block (optarg); break;
@@ -855,7 +859,8 @@ int main (int argc, char **argv)
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
-        dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_alleles || (flag_show_index && command==UNZIP))
+        dict_id_show_one_b250.num || dict_id_show_one_dict.num || dict_id_dump_one_b250.num || 
+        flag_show_alleles || (flag_show_index && command==UNZIP))
         flag_quiet=true; // don't show progress
 
     // override these ^ if user chose to be --noisy
