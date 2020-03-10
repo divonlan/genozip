@@ -37,9 +37,9 @@ static const char *help_genozip[] = {
     "",
     "   -p --password     <password>. Password-protected - encrypted with 256-bit AES",
     "",
-    "   -m --md5          Calculates the MD5 hash of the VCF file. When the resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF. ",
-                          "Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. ",
-                          "In addition, if the VCF file has Windows-style \\r\\n line endings, the md5 will be that of the modified file with the \\r removed",
+    "   -m --md5          Calculates the MD5 hash of the VCF file. When the resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF.",
+    "                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. ",
+    "                     In addition, if the VCF file has Windows-style \\r\\n line endings, the md5 will be that of the modified file with the \\r removed",
     "",
     "   -q --quiet        Don't show the progress indicator or warnings",    
     "",
@@ -48,6 +48,9 @@ static const char *help_genozip[] = {
     "   -t --test         After compressing normally, decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting decompressed file to that of the original VCF. This option also activates --md5.",
     "",
     "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+#if !defined _WIN32 && !defined __APPLE__ // not relevant for personal computers
+    "                     Tip: if you're concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
+#endif
     "",
     "   --show-content    Show the information content of VCF files and the compression ratios of each component",
     "",
@@ -114,8 +117,8 @@ static const char *help_genounzip[] = {
     "   -p --password     <password>. Provide password to access file(s) that were compressed with --password",
     "",
     "   -m --md5          Shows the MD5 hash of the decompressed VCF file. If the file was originally compressed with --md5, it also verifies that the MD5 of the original VCF file is identical to the MD5 of the decompressed VCF.",
-                          "Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. ",
-                          "Note: if the VCF file has Windows-style \\r\\n line endings, the md5 will be that of the modified file with the \\r removed",
+    "                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. ",
+    "                     Note: if the VCF file has Windows-style \\r\\n line endings, the md5 will be that of the modified file with the \\r removed",
     "",
     "   -q --quiet        Don't show the progress indicator or warnings",    
     "",
@@ -124,6 +127,9 @@ static const char *help_genounzip[] = {
     "   -t --test         Decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting decompressed file to that of the original VCF. Works only if the file was compressed with --md5",
     "",
     "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+#if !defined _WIN32 && !defined __APPLE__ // not relevant for personal computers
+    "                     Tip: if you're concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
+#endif
     "",
     "   -h --help         Show this help page. Use with -f to see developer options.",
     "",
@@ -195,6 +201,9 @@ static const char *help_genocat[] = {
     "   -p --password     Provide password to access file(s) that were compressed with --password",
     "",
     "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+#if !defined _WIN32 && !defined __APPLE__ // not relevant for personal computers
+    "                     Tip: if you're concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
+#endif
     "",
     "   -q --quiet        Don't show warnings",    
     "",
