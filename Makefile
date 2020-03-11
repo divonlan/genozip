@@ -66,7 +66,7 @@ else
     uname := $(shell uname -s)
     ifeq ($(uname),Linux)
 # Linux
-        LDFLAGS += -lrt -s
+        LDFLAGS += -lrt
     endif
     ifeq ($(uname),Darwin)
 # Mac
