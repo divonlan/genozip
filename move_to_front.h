@@ -86,7 +86,7 @@ extern void mtf_sort_dictionaries_vb_1(VariantBlockP vb);
 extern void mtf_zero_all_sorters (VariantBlockP vb);
 
 extern void mtf_initialize_mutex (FileP z_file, unsigned next_variant_i_to_merge);
-
+extern void mtf_update_stats (VariantBlockP vb);
 extern void mtf_free_context (MtfContext *ctx);
 
 #define mtf_get_word(ctx, word_index) (&((MtfWord*)(ctx)->word_list.data)[(word_index)])
