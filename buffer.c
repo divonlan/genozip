@@ -110,6 +110,11 @@ static inline bool buf_has_underflowed (const Buffer *buf)
 static bool buf_test_overflows_do (const VariantBlock *vb, bool primary);
 static void buf_test_overflows_all_other_vb(const VariantBlock *caller_vb)
 {
+    // IMPORTANT: this function is not thread safe as it checks OTHER thread's memories which
+    // may be dealloced as it checking them causing weird errors.
+    // That's why the "return" is here. It can be removed when debugging specific cases.
+    return; 
+
     VariantBlockPool *vb_pool = vb_get_pool();
 
     fprintf (stderr, "Testing all other VBs:\n");
@@ -179,12 +184,15 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool primary)
             }
         }
     }
+    
+    ASSERT0 (!primary || !corruption, "Aborting due to memory corruption"); // primary will exit on corruption
+
     return corruption;
 }
 
 void buf_test_overflows (const VariantBlock *vb)
 {
-    ASSERT0 (!buf_test_overflows_do (vb, true), "Aborting due to memory corruption");
+    buf_test_overflows_do (vb, true);
 }
 
 typedef struct {
@@ -362,6 +370,7 @@ unsigned buf_alloc_do (VariantBlock *vb,
                        const char *name, unsigned param)      
 {
     START_TIMER;
+buf_test_overflows(vb); // DEBUG
 
     if (!requested_size) return 0; // nothing to do
 

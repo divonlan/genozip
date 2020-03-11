@@ -461,7 +461,10 @@ static void zip_compress_one_vb (VariantBlock *vb)
     
     COPY_TIMER (vb->profile.compute);
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
+    // tell dispatcher this thread is done and can be joined. 
+    // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
+    // this this operation needn't be atomic, but it likely is anyway
+    vb->is_processed = true; 
 }
 
 static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf, File *vcf_file, bool is_z_data)
