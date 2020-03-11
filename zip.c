@@ -495,7 +495,9 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
         z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
     }
 
-    mtf_update_stats (vb);
+    // this function holds the mutex and hence has a non-trival performance penalty. we call
+    // it only if the user specifically requested --show-sections
+    if (flag_show_sections) mtf_update_stats (vb);
 
     if (flag_show_headers && buf_is_allocated (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);

@@ -724,6 +724,10 @@ void mtf_zero_all_sorters (VariantBlock *vb)
 
 void mtf_update_stats (VariantBlock *vb)
 {
+    // we protect with a mutex because z_file->num_dict_ids can be changed by other threads while 
+    // we're here causing unpredictable results
+    pthread_mutex_lock (&vb->z_file->mutex);
+
     // zf_ctx doesn't store mtf_i, but we just use mtf_i.len as a counter for displaying in genozip_show_sections
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
         MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
@@ -733,6 +737,8 @@ void mtf_update_stats (VariantBlock *vb)
         
         zf_ctx->mtf_i.len++;
     }
+
+    pthread_mutex_unlock (&vb->z_file->mutex);
 }
 
 void mtf_free_context (MtfContext *ctx)
