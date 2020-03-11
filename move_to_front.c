@@ -722,6 +722,19 @@ void mtf_zero_all_sorters (VariantBlock *vb)
     }
 }
 
+void mtf_update_stats (VariantBlock *vb)
+{
+    // zf_ctx doesn't store mtf_i, but we just use mtf_i.len as a counter for displaying in genozip_show_sections
+    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
+        MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
+    
+        unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id);
+        MtfContext *zf_ctx = &vb->z_file->mtf_ctx[z_did_i];
+        
+        zf_ctx->mtf_i.len++;
+    }
+}
+
 void mtf_free_context (MtfContext *ctx)
 {
     buf_free (&ctx->ol_dict);

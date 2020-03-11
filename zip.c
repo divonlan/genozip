@@ -492,6 +492,8 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
         z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
     }
 
+    mtf_update_stats (vb);
+
     if (flag_show_headers && buf_is_allocated (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);
 

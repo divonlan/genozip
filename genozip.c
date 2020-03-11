@@ -170,9 +170,9 @@ static void main_show_file_metadata (const File *vcf_file, const File *z_file)
 #ifdef _MSC_VER
              "Individuals: %u   Variants: %I64u   Non-GT subfields: %u\n", 
 #else
-             "Individuals: %u   Variants: %"PRIu64"   Non-GT subfields: %u\n", 
+             "Individuals: %u   Variants: %"PRIu64"   INFO & FORMAT tags: %u\n", 
 #endif
-             global_num_samples, z_file->num_lines_concat, z_file->num_dict_ids);
+             global_num_samples, z_file->num_lines_concat, z_file->num_dict_ids-8);
 }
 
 static void main_show_sections (const File *vcf_file, const File *z_file)
@@ -182,8 +182,8 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
     char vsize[30], zsize[30], zentries_str[30];
 
     fprintf (stderr, "Sections stats:\n");
-    fprintf (stderr, "                           #Sec  #Entries            VCF     %%       GENOZIP     %%   Ratio\n");
-    const char *format = "%22s    %5u  %13s  %8s %5.1f      %8s %5.1f  %6.1f%s\n";
+    fprintf (stderr, "                           #Sec  #Entries             VCF     %%        GENOZIP     %%   Ratio\n");
+    const char *format = "%22s    %5u  %13s  %9s %5.1f      %9s %5.1f  %6.1f%s\n";
 
     // the order in which we want them displayed
     const SectionType secs[] = {
@@ -202,7 +202,7 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
         "CHROM b250", "CHROM dict", "POS b250", "POS dict", "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
         "QUAL b250", "QUAL dict", "FILTER b250", "FILTER dict",
         "INFO names b250", "INFO names dict", "INFO values b250", "INFO values dict", 
-        "FORMAT b250", "FORMAT dict", "Non-GT b250", "Non-GT dict",
+        "FORMAT b250", "FORMAT dict", "Tags b250", "Tags dict",
         "Haplotype data", "HT separator char", "Phasing char"
     };
 
@@ -236,6 +236,15 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
              buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
+
+    fprintf (stderr, "\nTag dictionaries:\n");
+    fprintf (stderr, "ID       Type    #B250s  #Words   Dictsize\n");
+    for (uint32_t i=8; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
+        const MtfContext *ctx = &z_file->mtf_ctx[i];
+        fprintf (stderr, "%*.*s %s %7u %7u %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
+                 dict_id_is_info_subfield (ctx->dict_id) ? "INFO  " : "FORMAT",
+                 ctx->mtf_i.len, ctx->mtf.len, buf_human_readable_size(ctx->dict.len, vsize));
+    }
 
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);

@@ -467,7 +467,6 @@ void zfile_compress_dictionary_data (VariantBlock *vb, MtfContext *ctx,
 }
 
 void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
-//DictIdType dict_id, SectionType section_type, Buffer *section_data, uint32_t num_b250_items)
 {
     SectionHeaderBase250 header;
     memset (&header, 0, sizeof(header)); // safety
