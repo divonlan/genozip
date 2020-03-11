@@ -433,8 +433,8 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
             
             MtfNode *zf_node;
             bool is_new;
-            uint32_t zf_node_index = mtf_evaluate_snip (vb, zf_ctx, &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len, &zf_node, &is_new);
-            ASSERT (zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%u out of range - len=%i", zf_node_index, vb_ctx->mtf.len);
+            int32_t zf_node_index = mtf_evaluate_snip (vb, zf_ctx, &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len, &zf_node, &is_new);
+            ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%d out of range - len=%i", zf_node_index, vb_ctx->mtf.len);
 
             // set word_index to be indexing the global dict - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
             if (is_new)
@@ -506,7 +506,7 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
 
     // now, we merge vb->ra_buf into z_file->ra_buf
     random_access_merge_in_vb (vb);
-
+    
     pthread_mutex_unlock (&vb->z_file->mutex);
 
     COPY_TIMER (vb->profile.mtf_merge_in_vb_ctx)

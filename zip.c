@@ -103,10 +103,9 @@ static unsigned zip_get_genotype_vb_start_len (VariantBlock *vb)
     unsigned *gt_sb_line_lengths = (unsigned *)vb->gt_sb_line_lengths_buf.data; 
     
     // calculate offsets and lengths of genotype data of each sample block
-    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+    for (uint32_t line_i=0; line_i < vb->num_lines; line_i++) {
 
-        uint32_t *gt_data  = (uint32_t*)vb->data_lines.zip[line_i].genotype_data.data;
-        
+        uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, &vb->data_lines.zip[line_i]);        
         unsigned format_mtf_i = vb->data_lines.zip[line_i].format_mtf_i;
         SubfieldMapperZip *format_mapper = &((SubfieldMapperZip *)vb->format_mapper_buf.data)[format_mtf_i];
         
@@ -221,7 +220,7 @@ static void zip_generate_phase_sections (VariantBlock *vb)
             
             ZipDataLine *dl = &vb->data_lines.zip[line_i];
             if (dl->phase_type == PHASE_MIXED_PHASED) 
-                memcpy (next, &dl->phase_data.data[sb_i * num_samples_in_sb], num_samples_in_sb);
+                memcpy (next, &PHASE_DATA(vb,dl)[sb_i * num_samples_in_sb], num_samples_in_sb);
             else
                 memset (next, (char)dl->phase_type, num_samples_in_sb);
 
@@ -272,7 +271,10 @@ static HaploTypeSortHelperIndex *zip_construct_ht_permutation_helper_index (Vari
 
             // we count as alt alleles : 1 - 99 (ascii 49 to 147)
             //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
-            char one_ht = vb->data_lines.zip[line_i].haplotype_data.data[ht_i];
+            //char one_ht = vb->data_lines.zip[line_i].haplotype_data.data[ht_i];
+            
+            char *haplotype_data = HAPLOTYPE_DATA (vb, &vb->data_lines.zip[line_i]);
+            char one_ht = haplotype_data[ht_i];
             if (one_ht >= '1')
                 helper_index[ht_i].num_alt_alleles++;
         }
@@ -298,6 +300,10 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
                0, "haplotype_permutation_index", vb->first_line);
 
     HaploTypeSortHelperIndex *helper_index = zip_construct_ht_permutation_helper_index (vb);
+
+    // set dl->haplotype_ptr for all lines (for effeciency in the time loop below)
+    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) 
+        vb->data_lines.zip[line_i].haplotype_ptr = HAPLOTYPE_DATA (vb, &vb->data_lines.zip[line_i]);
 
     // now build per-sample-block haplotype array, picking haplotypes by the order of the helper index array
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -325,7 +331,7 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
             for (unsigned ht_i=0; ht_i < num_haplotypes_in_sample_block; ht_i++) {
                 
                 unsigned haplotype_data_char_i = helper_index[helper_index_sb_i + ht_i].index_in_original_line;
-                char **ht_data_ptr = &vb->data_lines.zip[0].haplotype_data.data; // this pointer moves sizeof(ZipDataLine) bytes each iteration - i.e. to the exact same field in the next line
+                const char **ht_data_ptr = &vb->data_lines.zip[0].haplotype_ptr; // this pointer moves sizeof(ZipDataLine) bytes each iteration - i.e. to the exact same field in the next line
 
                 for (unsigned line_i=0; line_i < vb->num_lines; line_i++, ht_data_ptr += sizeof(ZipDataLine)/sizeof(char*)) 
                     *(next++) = (*ht_data_ptr)[haplotype_data_char_i];

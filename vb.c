@@ -35,7 +35,9 @@ void vb_release_vb (VariantBlock **vb_p)
     *vb_p = NULL;
 
     // note: vb->data_line is not freed but rather used by subsequent vbs
-    if (command == ZIP && vb->data_lines.zip) {
+    if (command == ZIP && vb->data_lines.zip)
+        memset (vb->data_lines.zip, 0, sizeof(ZipDataLine) * vb->num_data_lines_allocated);
+/*     {
         for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
             ZipDataLine *dl = &vb->data_lines.zip[i];
             
@@ -48,7 +50,7 @@ void vb_release_vb (VariantBlock **vb_p)
             buf_free(&dl->haplotype_data);
             buf_free(&dl->phase_data);
         }
-    }
+    }*/
     else if (command != ZIP && vb->data_lines.piz) {
         for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
             PizDataLine *dl = &vb->data_lines.piz[i];
@@ -108,6 +110,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->helper_index_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->vcf_data);
+    buf_free(&vb->vcf_data_spillover);
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->ht_columns_data);

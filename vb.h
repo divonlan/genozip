@@ -26,12 +26,21 @@ typedef struct {
 
 #define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->mtf_ctx[(mapper)->did_i[(sf)]] : NULL)
 
+#define GENOTYPE_DATA(vb,dl)  ((dl)->genotype_data_spillover  ? &(vb)->vcf_data_spillover.data[(dl)->genotype_data_start] \
+                                                              : &(vb)->vcf_data.data[(dl)->genotype_data_start])
+#define HAPLOTYPE_DATA(vb,dl) ((dl)->haplotype_data_spillover ? &(vb)->vcf_data_spillover.data[(dl)->haplotype_data_start] \
+                                                              : &(vb)->vcf_data.data[(dl)->haplotype_data_start])
+#define PHASE_DATA(vb,dl)     ((dl)->phase_data_spillover     ? &(vb)->vcf_data_spillover.data[(dl)->phase_data_start] \
+                                                              : &(vb)->vcf_data.data[(dl)->phase_data_start])
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-    // the following 3 buffers are overlay buffers onto line, so that they don't consume memory
-    Buffer genotype_data;    // \t separated genotype data for the line. last one has \t too. no \0. exists if any variant in the variant blck has FORMAT other that "GT"
-    Buffer haplotype_data;   // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
-    Buffer phase_data;       // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
+    // the following 3 are indeces, lens into vcf_data or vcf_data_spillover. 
+    bool genotype_data_spillover, haplotype_data_spillover, phase_data_spillover;
+    uint32_t genotype_data_start, haplotype_data_start, phase_data_start;
+    uint32_t genotype_data_len, haplotype_data_len, phase_data_len;
+
+    const char *haplotype_ptr; // this is HAPLOTYPE_DATA - set for effeciency AFTER segregation is complete and there will be no more reallocs of vcf_data_spillover
+
     PhaseType phase_type;    // phase type of this line
     
     bool has_haplotype_data; // FORMAT field contains GT
@@ -131,6 +140,7 @@ typedef struct variant_block_ {
     
     Buffer vcf_data;                  // ZIP only: vcf_data as read from disk - either the VCF header (in evb) or the VB data lines
     uint32_t vcf_data_next_offset;    // we re-use vcf_data memory to overlay stuff in segregate
+    Buffer vcf_data_spillover;        // when re-using vcf_data, if it is too small, we spill over to this buffer
 
     int16_t z_next_header_i;          // next header of this VB to be encrypted or decrypted
 
