@@ -636,7 +636,7 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
 {
     if (!buf) return; // nothing to do
 
-    buf_remove_from_buffer_list (buf->allocating_vb, buf); // remove buffer regardless of memory - since the buffer itself might be free()d following the destroy
+    if (buf->allocating_vb) buf_remove_from_buffer_list (buf->allocating_vb, buf); // remove buffer regardless of memory - since the buffer itself might be free()d following the destroy
 
     if (buf->memory) {
     
