@@ -41,16 +41,16 @@ static pthread_mutex_t wait_for_vb_1_mutex;
 
 static inline void mtf_lock_do (VariantBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
-    if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u LOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
+    //if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u LOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
     pthread_mutex_lock (mutex);
-    if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u LOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
+    //if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u LOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
 }
 #define mtf_lock(vb, mutex, name, param) mtf_lock_do (vb, mutex, __FUNCTION__, __LINE__, name, param)
 
 static inline void mtf_unlock_do (VariantBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
     pthread_mutex_unlock (mutex);
-    if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u UNLOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
+    //if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u UNLOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
 }
 #define mtf_unlock(vb, mutex, name, param) mtf_unlock_do (vb, mutex, __FUNCTION__, __LINE__, name, param)
 
