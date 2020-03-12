@@ -32,10 +32,11 @@ Flags:
    -p --password     <password>. Password-protected - encrypted with 256-bit AES
 
    -m --md5          Calculates the MD5 hash of the VCF file. When the resulting file is decompressed, this MD5 will be
-                     compared to the MD5 of the decompressed VCF. 
-Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. 
-In addition, if the VCF file has Windows-style \r\n line endings, the md5 will be that of the modified file with the \r
-                     removed
+                     compared to the MD5 of the decompressed VCF.
+                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original,
+                     uncompressed file. 
+                     In addition, if the VCF file has Windows-style \r\n line endings, the md5 will be that of the
+                     modified file with the \r removed
 
    -q --quiet        Don't show the progress indicator or warnings
 
@@ -62,7 +63,7 @@ Optimizing:
                      sometimes better with larger block sizes, in particular if the number of samples is small. 3.
                      Smaller blocks will result in faster 'genocat --regions' lookups
 
-   -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 4096. When
+   -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 1024. When
                      compressing or decompressing a variant block, the samples within the block are divided to sample
                      blocks which are compressed separately. A higher value will result in a better compression ratio,
                      while a lower value will result in faster 'genocat --samples' lookups
@@ -103,8 +104,10 @@ Options:
    -m --md5          Shows the MD5 hash of the decompressed VCF file. If the file was originally compressed with --md5,
                      it also verifies that the MD5 of the original VCF file is identical to the MD5 of the decompressed
                      VCF.
-Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. 
-Note: if the VCF file has Windows-style \r\n line endings, the md5 will be that of the modified file with the \r removed
+                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original,
+                     uncompressed file. 
+                     Note: if the VCF file has Windows-style \r\n line endings, the md5 will be that of the modified
+                     file with the \r removed
 
    -q --quiet        Don't show the progress indicator or warnings
 
