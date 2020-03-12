@@ -873,29 +873,32 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
     int16_t data_type = zfile_read_genozip_header (original_file_digest);
     if (data_type == MAYBE_V1 || data_type == EOF) return data_type;
 
-    // read dictionaries (this also seeks to the start of the dictionaries)
-    zfile_read_all_dictionaries (0);
-    
-    // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-    regions_make_chregs();
+    // if the user wants to see only the VCF header, we can skip the dictionaries, regions and random access
+    if (!flag_header_only) {
+        // read dictionaries (this also seeks to the start of the dictionaries)
+        zfile_read_all_dictionaries (0);
+        
+        // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
+        regions_make_chregs();
 
-    // if the regions are negative, transform them to the positive complement instead
-    regions_transform_negative_to_positive_complement();
+        // if the regions are negative, transform them to the positive complement instead
+        regions_transform_negative_to_positive_complement();
 
-    // read random access, but only if we are going to need it
-    if (flag_regions || flag_show_index) {
-        zfile_read_one_section (evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
+        // read random access, but only if we are going to need it
+        if (flag_regions || flag_show_index) {
+            zfile_read_one_section (evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
 
-        zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
+            zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
 
-        z_file->ra_buf.len /= random_access_sizeof_entry();
-        BGEN_random_access();
+            z_file->ra_buf.len /= random_access_sizeof_entry();
+            BGEN_random_access();
 
-        if (flag_show_index) random_access_show_index();
+            if (flag_show_index) random_access_show_index();
 
-        buf_free (&evb->z_data);
+            buf_free (&evb->z_data);
+        }
     }
-
+    
     file_seek (z_file, 0, SEEK_SET, false);
 
     return DATA_TYPE_VCF;
