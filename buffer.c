@@ -24,7 +24,7 @@
 
 static const unsigned overhead_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
-static pthread_mutex_t overlay_mutex = NULL; // used to thread-protect overlay counters
+static pthread_mutex_t overlay_mutex; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
