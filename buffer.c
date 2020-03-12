@@ -142,8 +142,6 @@ static void buf_find_underflow_culprit (const char *memory)
 
             if (buf) {
                 char *after_buf = buf->memory + buf->size + overhead_size;
-fprintf (stderr, "memory: %s after_buf:%s after_buf <= memory:%u (after_buf + 100 > memory):%u\n",
-buf_display_pointer (memory, s1), buf_display_pointer (after_buf, s2), after_buf <= memory, (after_buf + 100 > memory));
                 if (after_buf <= memory && (after_buf + 100 > memory)) {
                     char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                     fprintf (stderr,

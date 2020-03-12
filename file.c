@@ -155,8 +155,8 @@ void file_close (File **file_p,
     for (unsigned i=0; i < file->num_dict_ids; i++) 
         mtf_free_context (&file->mtf_ctx[i]);
 
-    if (file->mutex_initialized) 
-        pthread_mutex_destroy (&file->mutex);
+    if (file->dicts_mutex_initialized) 
+        pthread_mutex_destroy (&file->dicts_mutex);
 
     if (cleanup_memory) {
         buf_destroy (&file->dict_data);

@@ -3,6 +3,7 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <pthread.h>
 #include "buffer.h"
 #include "random_access.h"
 #include "vb.h"
@@ -10,12 +11,18 @@
 #include "endianness.h"
 #include "regions.h"
 
-// we pack this, because it gets written to disk in SEC_RANDOM_ACCESS. On disk, it is stored in Big Endian.
+static pthread_mutex_t ra_mutex;
+static bool ra_mutex_initialized = false;
 
-#pragma pack(push, 1) // structures that are part of the genozip format are packed.
+void random_access_initialize(void)
+{
+    if (ra_mutex_initialized) return;
 
+    unsigned ret = pthread_mutex_init (&ra_mutex, NULL);
+    ASSERT0 (!ret, "Error: pthread_mutex_init failed for ra_mutex");
 
-#pragma pack(pop)
+    ra_mutex_initialized = true;
+}
 
 // ZIP only: called from seg_chrom_field when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
@@ -61,6 +68,8 @@ void random_access_update_pos (VariantBlock *vb, int32_t this_pos)
 // called by ZIP compute thread, while holding the z_file mutex: merge in the VB's ra_buf in the global z_file one
 void random_access_merge_in_vb (VariantBlock *vb)
 {
+    pthread_mutex_lock (&ra_mutex);
+
     buf_alloc (evb, &z_file->ra_buf, (z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf", 0);
 
     RAEntry *dst_ra = &((RAEntry *)z_file->ra_buf.data)[z_file->ra_buf.len];
@@ -79,6 +88,8 @@ void random_access_merge_in_vb (VariantBlock *vb)
     }
 
     z_file->ra_buf.len += vb->ra_buf.len;
+
+    pthread_mutex_unlock (&ra_mutex);
 }
 
 // PIZ I/O thread: check if for the given VB,

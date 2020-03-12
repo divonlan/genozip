@@ -63,10 +63,10 @@ typedef struct file_ {
     uint8_t vcf_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
-    pthread_mutex_t mutex;
-    bool mutex_initialized;
-    unsigned next_variant_i_to_merge;  // merging vb's dictionaries into mtf_ctx needs to be in the variant_block_i order
-    unsigned num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
+    pthread_mutex_t dicts_mutex;
+    bool dicts_mutex_initialized;
+    unsigned num_dict_ids;             // protected by mutex: length of populated subfield_ids and mtx_ctx;
+    
     MtfContext mtf_ctx[MAX_DICTS];     // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
     Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file

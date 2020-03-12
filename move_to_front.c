@@ -37,6 +37,22 @@ unzip:
 
 #define INITIAL_NUM_NODES 10000
 
+static inline void mtf_lock_do (pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
+{
+    //printf ("thread %u LOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
+    pthread_mutex_lock (&z_file->dicts_mutex);
+    //printf ("thread %u LOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
+}
+#define mtf_lock(mutex, name, param) mtf_lock_do (mutex, __FUNCTION__, __LINE__, name, param);
+
+static inline void mtf_unlock_do (pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
+{
+    //printf ("thread %u UNLOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
+    pthread_mutex_unlock (&z_file->dicts_mutex);
+    //printf ("thread %u UNLOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
+}
+#define mtf_unlock(mutex, name, param) mtf_unlock_do (mutex, __FUNCTION__, __LINE__, name, param);
+
 // tested hash table sizes up to 5M. turns out smaller tables (up to a point) are faster, despite having longer
 // average linked lists. probably bc the CPU can store the entire hash and mtf arrays in L1 or L2
 // memory cache during segmentation
@@ -300,13 +316,18 @@ static void mtf_init_mapper (VariantBlock *vb, VcfFields field_i, Buffer *mapper
 // ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.
 void mtf_clone_ctx (VariantBlock *vb)
 {
-    pthread_mutex_lock (&z_file->mutex);
+    mtf_lock (&z_file->dicts_mutex, "dicts_mutex", 0);
+    unsigned z_num_dict_ids = z_file->num_dict_ids;
+    mtf_unlock (&z_file->dicts_mutex, "dicts_mutex", 0);
 
     START_TIMER; // careful not to include the mutex waiting in the time measured
 
-    for (unsigned did_i=0; did_i < z_file->num_dict_ids; did_i++) {
+    for (unsigned did_i=0; did_i < z_num_dict_ids; did_i++) {
         MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
         MtfContext *zf_ctx = &z_file->mtf_ctx[did_i];
+
+        ASSERT (zf_ctx->mutex_initialized, "Error: expected zf_ctx->mutex_initialized for did_i=%u", did_i);
+        mtf_lock (&zf_ctx->mutex, "zf_ctx", did_i);
 
         if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
 
@@ -324,61 +345,83 @@ void mtf_clone_ctx (VariantBlock *vb)
         vb_ctx->dict_section_type = zf_ctx->dict_section_type;
         vb_ctx->b250_section_type = zf_ctx->b250_section_type;
         mtf_init_iterator (vb_ctx);
+
+        mtf_unlock (&zf_ctx->mutex, "zf_ctx", did_i);
     }
 
-    vb->num_dict_ids = z_file->num_dict_ids;
-
-    COPY_TIMER (vb->profile.mtf_clone_ctx)
-
-    pthread_mutex_unlock (&z_file->mutex);
+    vb->num_dict_ids = z_num_dict_ids;
 
     // initialize mappers for FORMAT and INFO
     mtf_init_mapper (vb, FORMAT, &vb->format_mapper_buf, "format_mapper_buf");    
     mtf_init_mapper (vb, INFO, &vb->iname_mapper_buf, "iname_mapper_buf");    
+
+    COPY_TIMER (vb->profile.mtf_clone_ctx)
+}
+
+void mtf_initialize_mutex (void)
+{
+    if (z_file->dicts_mutex_initialized) return;
+
+    unsigned ret = pthread_mutex_init (&z_file->dicts_mutex, NULL);
+    ASSERT0 (!ret, "pthread_mutex_init failed for z_file->dicts_mutex");
+
+    z_file->dicts_mutex_initialized = true;
 }
 
 // find the z_file context that corresponds to dict_id. It could be possibly a different did_i
 // than in the vb - in case this dict_id is new to this vb, but another vb already inserted
 // it to z_file
-static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id)
+static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id, bool mutex_already_locked)
 {
+    uint32_t result;
+
+    if (!mutex_already_locked) mtf_lock (&z_file->dicts_mutex, "dicts_mutex", 0);
+
     for (unsigned did_i=0; did_i < z_file->num_dict_ids; did_i++)
         if (dict_id.num == z_file->mtf_ctx[did_i].dict_id.num) {
             //fprintf (stderr,  ("Inserting new z_file dict_id=%.8s in did_i=%u\n", dict_id_printable (dict_id).id, did_i);
-            return did_i;
+            result = did_i;
+            goto finish;
         }
 
     // z_file doesn't yet have this dict_id - add it now
+    // thread safety: num_dict_ids is protected by dicts_mutex so no one can access it until
+    // we're done creating the new ctx, and any one that already has it, has it with the previous value
     ASSERT (z_file->num_dict_ids+1 < MAX_DICTS, 
             "Error: z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
 
-    z_file->mtf_ctx[z_file->num_dict_ids].did_i   = z_file->num_dict_ids;
-    z_file->mtf_ctx[z_file->num_dict_ids].dict_id = dict_id;
-    z_file->num_dict_ids++;
+    MtfContext *zf_ctx = &z_file->mtf_ctx[z_file->num_dict_ids++];
+    zf_ctx->did_i   = z_file->num_dict_ids;
+    zf_ctx->dict_id = dict_id;
 
-    return z_file->num_dict_ids-1;
-}
+    ASSERT (!pthread_mutex_init (&zf_ctx->mutex, NULL), 
+            "pthread_mutex_init failed for zf_ctx->mutex did_i=%u", zf_ctx->did_i);
+    zf_ctx->mutex_initialized = true;
+    zf_ctx->next_variant_i_to_merge = vb->variant_block_i;
 
-void mtf_initialize_mutex (unsigned next_variant_i_to_merge)
-{
-    unsigned ret = pthread_mutex_init (&z_file->mutex, NULL);
-    z_file->mutex_initialized = true;
-    ASSERT0 (!ret, "pthread_mutex_init failed");
+    result = z_file->num_dict_ids-1;
 
-    z_file->next_variant_i_to_merge = next_variant_i_to_merge;
+finish:
+    if (!mutex_already_locked) mtf_unlock (&z_file->dicts_mutex, "dicts_mutex", 0);
+
+    return result;
 }
 
 // we need to add "our" new words to the global dictionaries in the correct order of VBs
-static void mtf_wait_for_my_turn(VariantBlock *vb)
+static void mtf_wait_for_my_turn (MtfContext *zf_ctx, uint32_t my_vb_i)
 {
     for (unsigned i=0; ; i++) {
-        pthread_mutex_lock (&z_file->mutex);
+        mtf_lock (&zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
 
-        if (z_file->next_variant_i_to_merge == vb->variant_block_i) 
+        ASSERT (zf_ctx->next_variant_i_to_merge <= my_vb_i, 
+                "Error: invalid zf_ctx->next_variant_i_to_merge=%u larger than my_vb_i=%u",
+                zf_ctx->next_variant_i_to_merge, my_vb_i)
+
+        if (zf_ctx->next_variant_i_to_merge == my_vb_i) 
             return; // our turn now
 
         else {
-            pthread_mutex_unlock (&z_file->mutex);
+            mtf_unlock (&zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
             usleep (100000); // wait 100 millisec and try again
         }
 
@@ -387,16 +430,21 @@ static void mtf_wait_for_my_turn(VariantBlock *vb)
 }
 
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
+// each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
+// we are careful never to hold two muteces at the same time to avoid deadlocks
 static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 {
     MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
 
-    unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id);
+    // mtf_get_z_file_did_i() must be called before mtf_wait_for_my_turn() because it locks the z_file mutex
+    unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id, false);
     MtfContext *zf_ctx = &z_file->mtf_ctx[z_did_i];
+
+    mtf_wait_for_my_turn (zf_ctx, vb->variant_block_i); // we grab the mutex in the sequencial order of VBs
 
     //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, vb->variant_block_i, did_i, z_did_i);
 
-    if (!buf_is_allocated (&vb_ctx->dict)) return; // nothing yet for this dict_id
+    if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
 
     uint32_t start_dict_len = zf_ctx->dict.len;
     uint32_t start_mtf_len  = zf_ctx->mtf.len;
@@ -466,14 +514,15 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
      
         zfile_compress_dictionary_data (vb, zf_ctx, added_words, start_dict, added_chars);
     }
+
+finish:
+    zf_ctx->next_variant_i_to_merge++;
+    mtf_unlock (&zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
 }
 
-// ZIP only: merge new words added in this vb into the z_file.mtf_ctx, and compresses dictionaries
-// while holding exclusive access to the z_file dictionaries. returns num_dictionary_sections
+// ZIP only: merge new words added in this vb into the z_file.mtf_ctx, and compresses dictionaries.
 void mtf_merge_in_vb_ctx (VariantBlock *vb)
 {
-    mtf_wait_for_my_turn(vb); // we grab the mutex in the sequencial order of VBs
-
     START_TIMER; // note: careful not to count time spent waiting for the mutex
 
     // first, all field dictionaries    
@@ -500,23 +549,17 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
             vb->mtf_ctx[did_i].dict_section_type == SEC_FRMT_SUBFIELD_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (vb, did_i);
 
-    z_file->next_variant_i_to_merge++;
-
     // note: z_file->num_dict_ids might be larger than vb->num_dict_ids at this point, for example:
     // vb_i=1 started, z_file is empty, created 20 contexts
     // vb_i=2 started, z_file is empty, created 10 contexts
     // vb_i=1 completes, merges 20 contexts to z_file, which has 20 contexts after
     // vb_i=2 completes, merges 10 contexts, of which 5 (for example) are shared with vb_i=1. Now z_file has 25 contexts after.
-
-    // now, we merge vb->ra_buf into z_file->ra_buf
-    random_access_merge_in_vb (vb);
     
-    pthread_mutex_unlock (&z_file->mutex);
-
     COPY_TIMER (vb->profile.mtf_merge_in_vb_ctx)
 }
 
-// gets did_id if the dictionary exists, or returns NIL, if not
+// PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
+// or returns NIL, if not
 int mtf_get_existing_did_i_by_dict_id (VariantBlock *vb, DictIdType dict_id)
 {
     //MtfContext *mtf_ctx = z_file->mtf_ctx;
@@ -528,6 +571,7 @@ int mtf_get_existing_did_i_by_dict_id (VariantBlock *vb, DictIdType dict_id)
 }
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
+// threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
 MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */, 
                                     unsigned *num_dict_ids, 
                                     unsigned *num_subfields, // variable to increment if a new context is added
@@ -720,6 +764,8 @@ void mtf_sort_dictionaries_vb_1(VariantBlock *vb)
 // zero all sorters - this is called in case of a re-do of the first VB due to ploidy overflow
 void mtf_zero_all_sorters (VariantBlock *vb)
 {
+    ASSERT (vb->variant_block_i == 1, "Error in mtf_zero_all_sorters: expected vb_i==1, but vb_i==%u", vb->variant_block_i);
+    
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
         MtfContext *ctx = &vb->mtf_ctx[did_i];
         buf_zero (&ctx->sorter);
@@ -730,19 +776,19 @@ void mtf_update_stats (VariantBlock *vb)
 {
     // we protect with a mutex because z_file->num_dict_ids can be changed by other threads while 
     // we're here causing unpredictable results
-    pthread_mutex_lock (&z_file->mutex);
+    mtf_lock (&z_file->dicts_mutex, "dicts_mutex", 0);
 
     // zf_ctx doesn't store mtf_i, but we just use mtf_i.len as a counter for displaying in genozip_show_sections
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
         MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
     
-        unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id);
+        unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id, true);
         MtfContext *zf_ctx = &z_file->mtf_ctx[z_did_i];
         
-        zf_ctx->mtf_i.len++;
+        zf_ctx->mtf_i.len++; // zf_ctx->mtf_i.len is protect by z_file->dicts_mutex and NOT zf_ctx->mutex
     }
 
-    pthread_mutex_unlock (&z_file->mutex);
+    mtf_unlock (&z_file->dicts_mutex, "dicts_mutex", 0);
 }
 
 void mtf_free_context (MtfContext *ctx)
@@ -760,5 +806,7 @@ void mtf_free_context (MtfContext *ctx)
     ctx->dict_section_type = ctx->b250_section_type = 0;
     ctx->iterator.next_b250 = NULL;
     ctx->iterator.prev_word_index =0;
+
+    if (ctx->mutex_initialized) pthread_mutex_destroy (&ctx->mutex);
 }
 

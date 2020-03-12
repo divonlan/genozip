@@ -407,9 +407,10 @@ static void zip_compress_one_vb (VariantBlock *vb)
     // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
     // zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
-    // at the same time, we also merge in ra_buf (random access index) into z_file
-    
     mtf_merge_in_vb_ctx(vb);
+
+    // now, we merge vb->ra_buf into z_file->ra_buf
+    random_access_merge_in_vb (vb);
 
     // generate & write b250 data for all fields (CHROM to FORMAT)
     for (VcfFields f=CHROM ; f <= FORMAT ; f++) {
@@ -546,7 +547,8 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     bool success = vcf_header_vcf_to_genozip (&vcf_line_i);
     if (!success) goto finish;
 
-    mtf_initialize_mutex (last_variant_block_i+1);
+    mtf_initialize_mutex();
+    //mtf_initialize_mutex (last_variant_block_i+1);
 
     uint32_t max_lines_per_vb=0;
 

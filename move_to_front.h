@@ -6,6 +6,7 @@
 #ifndef MOVE_TO_FRONT_INCLUDED
 #define MOVE_TO_FRONT_INCLUDED
 
+#include <pthread.h>
 #include "genozip.h"
 #include "buffer.h"
 #include "base250.h"
@@ -67,6 +68,11 @@ typedef struct mtfcontext_ {
     
     // PIZ only: these two fields are used to iterate on the context, reading one b250 word_index at a time
     SnipIterator iterator;
+
+    pthread_mutex_t mutex;     // ZIP only: MtfContext in z_file (only) is protected by a mutex 
+    bool mutex_initialized;
+    uint32_t next_variant_i_to_merge; // the next vb_i permitted to lock the mutex
+    
 } MtfContext;
 
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
@@ -85,7 +91,7 @@ extern void mtf_overlay_dictionaries_to_vb (VariantBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlockP vb);
 extern void mtf_zero_all_sorters (VariantBlockP vb);
 
-extern void mtf_initialize_mutex (unsigned next_variant_i_to_merge);
+extern void mtf_initialize_mutex (void);
 extern void mtf_update_stats (VariantBlockP vb);
 extern void mtf_free_context (MtfContext *ctx);
 
