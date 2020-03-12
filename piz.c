@@ -438,7 +438,7 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
     }
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 32bit and 64bit assignments)
-    buf_alloc (vb, &vb->column_of_zeros, vb->vcf_file->max_lines_per_vb, 1, "column_of_zeros", 0);
+    buf_alloc (vb, &vb->column_of_zeros, vcf_file->max_lines_per_vb, 1, "column_of_zeros", 0);
     buf_zero (&vb->column_of_zeros);
 
     for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 15; ht_i++)
@@ -845,7 +845,7 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 {
     START_TIMER;
 
-    if (vb->z_file->genozip_version > 1) {
+    if (z_file->genozip_version > 1) {
         piz_uncompress_all_sections (vb);
 
         // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
@@ -870,8 +870,6 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
 static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 {
-    File *zfile = evb->z_file;
-
     int16_t data_type = zfile_read_genozip_header (original_file_digest);
     if (data_type == MAYBE_V1 || data_type == EOF) return data_type;
 
@@ -888,9 +886,9 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
     if (flag_regions || flag_show_index) {
         zfile_read_one_section (evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
 
-        zfile_uncompress_section (evb, evb->z_data.data, &zfile->ra_buf, "ra_buf", SEC_RANDOM_ACCESS);
+        zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
 
-        zfile->ra_buf.len /= random_access_sizeof_entry();
+        z_file->ra_buf.len /= random_access_sizeof_entry();
         BGEN_random_access();
 
         if (flag_show_index) random_access_show_index();
@@ -898,14 +896,14 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
         buf_free (&evb->z_data);
     }
 
-    file_seek (zfile, 0, SEEK_SET, false);
+    file_seek (z_file, 0, SEEK_SET, false);
 
     return DATA_TYPE_VCF;
 }
 
 static void enforce_v1_limitations (bool is_first_vcf_component)
 {
-    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s compressed with genozip version 1", (lflag), file_printname (evb->z_file));
+    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s compressed with genozip version 1", (lflag), file_printname (z_file));
     
     ENFORCE(flag_test, "--test");
     ENFORCE(flag_split, "--split");
@@ -922,7 +920,7 @@ static void enforce_v1_limitations (bool is_first_vcf_component)
 }
 
 // returns true is successfully outputted a vcf file
-bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsigned max_threads, 
+bool piz_dispatcher (const char *z_basename, unsigned max_threads, 
                      bool is_first_vcf_component, bool is_last_file)
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
@@ -933,7 +931,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     if (flag_split && !sections_has_more_vcf_components()) return false; // no more components
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (max_threads, 0, vcf_file, z_file, flag_test, is_last_file, z_basename);
+        dispatcher = dispatcher_init (max_threads, 0, flag_test, is_last_file, z_basename);
     
     // read genozip header
     Md5Hash original_file_digest;
@@ -961,10 +959,10 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
     ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", file_printname (z_file));
     if (!piz_successful || flag_header_only) goto finish;
 
-    vcf_file = evb->vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
+    vcf_file = vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
 
     if (flag_split) 
-        dispatcher_resume (dispatcher, vcf_file); // accept more input 
+        dispatcher_resume (dispatcher); // accept more input 
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
@@ -984,7 +982,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
                     case SEC_VB_HEADER:  
 
                         // if we skipped VBs or we skipped the sample sections in the last vb, we need to seek forward 
-                        if (skipped_vb || flag_drop_genotypes) file_seek (evb->z_file, sl_ent->offset, SEEK_SET, false); // 1 more VBs were skipped by sections_get_next_header_type() - we seek forward to this vb
+                        if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); // 1 more VBs were skipped by sections_get_next_header_type() - we seek forward to this vb
 
                         VariantBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->variant_block_i);
                         
@@ -1028,7 +1026,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
         else { // if (dispatcher_has_processed_vb (dispatcher, NULL)) {
             VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
     
-            vcffile_write_one_variant_block (vcf_file, processed_vb);
+            vcffile_write_one_variant_block (processed_vb);
 
             z_file->vcf_data_so_far += processed_vb->vb_data_size; 
 
@@ -1060,7 +1058,7 @@ bool piz_dispatcher (const char *z_basename, File *z_file, File *vcf_file, unsig
                     vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
     }
 
-    if (flag_split) file_close (&evb->vcf_file, true); // close this component file
+    if (flag_split) file_close (&vcf_file, true); // close this component file
 
 finish:
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

@@ -89,7 +89,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
 // reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
 bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
 {    
-    evb->z_file->disk_at_beginning_of_this_vcf_file = evb->z_file->disk_so_far;
+    z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
 
     bool is_first_vcf = !buf_is_allocated (&global_vcf_header_line); 
 
@@ -100,19 +100,19 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
     // case - vcf header was found 
     if (evb->vcf_data.len) {
 
-        bool can_concatenate = vcf_header_set_globals(evb, evb->vcf_file->name, &evb->vcf_data);
+        bool can_concatenate = vcf_header_set_globals(evb, vcf_file->name, &evb->vcf_data);
         if (!can_concatenate) { 
             // this is the second+ file in a concatenation list, but its samples are incompatible
             buf_free (&evb->vcf_data);
             return false;
         }
 
-        if (evb->z_file) zfile_write_vcf_header (&evb->vcf_data, is_first_vcf); // we write all headers in concat mode too, to support --split
+        if (z_file) zfile_write_vcf_header (&evb->vcf_data, is_first_vcf); // we write all headers in concat mode too, to support --split
 
-        evb->vcf_file->section_bytes[SEC_VCF_HEADER] = evb->vcf_data.len;
-        evb->z_file  ->section_bytes[SEC_VCF_HEADER] = evb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
-        evb->z_file  ->num_sections [SEC_VCF_HEADER]++;
-        evb->z_file  ->num_vcf_components_so_far++; // when compressing
+        vcf_file->section_bytes[SEC_VCF_HEADER] = evb->vcf_data.len;
+        z_file  ->section_bytes[SEC_VCF_HEADER] = evb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
+        z_file  ->num_sections [SEC_VCF_HEADER]++;
+        z_file  ->num_vcf_components_so_far++; // when compressing
     }
 
     buf_free (&evb->vcf_data);
@@ -139,7 +139,7 @@ void vcf_header_trim_header_line (Buffer *vcf_header_buf)
 // returns offset of header within data, EOF if end of file
 bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
 {
-    evb->z_file->disk_at_beginning_of_this_vcf_file = evb->z_file->disk_so_far;
+    z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
     static Buffer vcf_header_section = EMPTY_BUFFER;
 
     int header_offset = zfile_read_one_section (evb, 0, &vcf_header_section, "vcf_header_section", 
@@ -157,18 +157,18 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
-        ASSERT0 (!evb->vcf_file, "Error: not expecting evb->vcf_file to be open already in split mode");
-        evb->vcf_file = file_open (header->vcf_filename, WRITE, VCF);
-        evb->z_file->vcf_data_size_single = BGEN64 (header->vcf_data_size);
+        ASSERT0 (!vcf_file, "Error: not expecting vcf_file to be open already in split mode");
+        vcf_file = file_open (header->vcf_filename, WRITE, VCF);
+        z_file->vcf_data_size_single = BGEN64 (header->vcf_data_size);
     }
 
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
 
-    evb->vcf_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
+    vcf_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
 
     if (first_vcf || flag_split) {
-        evb->z_file->num_lines_concat     = evb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
-        evb->z_file->vcf_data_size_concat = evb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
+        z_file->num_lines_concat     = vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
+        z_file->vcf_data_size_concat = vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
     }
 
     if (flag_split) *digest = header->md5_hash_single; // override md5 from genozip header
@@ -177,7 +177,7 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
     static Buffer vcf_header_buf = EMPTY_BUFFER;
     zfile_uncompress_section (evb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
 
-    bool can_concatenate = vcf_header_set_globals (evb, evb->z_file->name, &vcf_header_buf);
+    bool can_concatenate = vcf_header_set_globals (evb, z_file->name, &vcf_header_buf);
     if (!can_concatenate) {
         buf_free (&vcf_header_section);
         buf_free (&vcf_header_buf);
@@ -188,12 +188,12 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
     if ((first_vcf || flag_split) && !flag_no_header)
-        vcffile_write_to_disk (evb->vcf_file, &vcf_header_buf);
+        vcffile_write_to_disk (&vcf_header_buf);
     
     buf_free (&vcf_header_section);
     buf_free (&vcf_header_buf);
 
-    evb->z_file->num_vcf_components_so_far++;
+    z_file->num_vcf_components_so_far++;
 
     return true;
 }

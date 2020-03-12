@@ -30,7 +30,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     SectionHeader *header = zfile_read_from_disk (vb, data, requested_bytes, false); // note: header in file can be shorter than header_size if its an earlier version
     ASSERT (header || allow_eof, "Error: genozip v1 file - Failed to read header, section_type=%s", st_name(expected_sec_type));
     
-    // if this is the first VCF header, part of it was already read by zfile_read_genozip_header() and placed in data (which is vb->z_file->v1_next_vcf_header)
+    // if this is the first VCF header, part of it was already read by zfile_read_genozip_header() and placed in data (which is z_file->v1_next_vcf_header)
     if (expected_sec_type == SEC_VCF_HEADER) header = (SectionHeader *)data->data;
 
     if (!header) return EOF; 
@@ -38,7 +38,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     // decrypt header
     if (is_encrypted) {
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
-                "Error: genozip v1 file - password provided, but file %s is not encrypted", file_printname (vb->z_file));
+                "Error: genozip v1 file - password provided, but file %s is not encrypted", file_printname (z_file));
 
         v1_crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
     }
@@ -61,7 +61,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     }
 
     if (!is_magical && is_encrypted && expected_sec_type == SEC_VCF_HEADER) {
-        ABORT ("Error: genozip v1 file - password is wrong for file %s", file_printname (vb->z_file)); // mostly likely its because of a wrong password
+        ABORT ("Error: genozip v1 file - password is wrong for file %s", file_printname (z_file)); // mostly likely its because of a wrong password
     }
 
     // case: encryption failed because this is actually a SEC_VCF_HEADER of a new vcf component of a concatenated file
@@ -99,7 +99,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
         }
     } 
 
-    ASSERT (is_magical, "Error: genozip v1 file - corrupt data (magic is wrong) when reading file %s", file_printname (vb->z_file));
+    ASSERT (is_magical, "Error: genozip v1 file - corrupt data (magic is wrong) when reading file %s", file_printname (z_file));
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: genozip v1 file - header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
@@ -125,7 +125,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
     // case: this is actually not a v1 file, but it got truncated so the v2 reader didn't find the genozip header section
     // and referred it to v1
     ASSERT (!(header->section_type == SEC_VCF_HEADER && compressed_offset == sizeof(SectionHeaderVCFHeader)), 
-            "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (vb->z_file));
+            "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (z_file));
 
     ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VB_HEADER, // for variant data, we also have the permutation index
             "Error: genozip v1 file - invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
@@ -169,7 +169,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
 
         if (flag_split) {
             // move the header from vb->z_data to z_file->v1_next_vcf_header
-            buf_copy (vb, &vb->z_file->v1_next_vcf_header, data, 1, header_offset, data->len - header_offset, "z_file->v1_next_vcf_header", 0);
+            buf_copy (vb, &z_file->v1_next_vcf_header, data, 1, header_offset, data->len - header_offset, "z_file->v1_next_vcf_header", 0);
             data->len = header_offset; // shrink - remove the vcf header that doesn't belong to this component
 
             return EOF; // end of VCF component in flag_split mode
@@ -193,8 +193,8 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
     if (vardata_header_offset == EOF) {
 
         // update size - in case they were not known (pipe, gzip etc)
-        if (!vb->z_file->disk_size) 
-            vb->z_file->disk_size = vb->z_file->disk_so_far;
+        if (!z_file->disk_size) 
+            z_file->disk_size = z_file->disk_so_far;
             
         COPY_TIMER (vb->profile.zfile_read_one_vb);
         return false; // end of file
@@ -443,14 +443,14 @@ static void v1_piz_get_line_subfields (VariantBlock *vb, unsigned line_i, // lin
         DictIdType subfield = seg_get_format_subfield (&subfields_start, &len, line_i);
 
         // the dictionaries were already read, so all subfields are expected to have a ctx
-        unsigned did_i=0 ; for (; did_i < vb->z_file->num_dict_ids; did_i++) 
-            if (subfield.num == vb->z_file->mtf_ctx[did_i].dict_id.num) {
+        unsigned did_i=0 ; for (; did_i < z_file->num_dict_ids; did_i++) 
+            if (subfield.num == z_file->mtf_ctx[did_i].dict_id.num) {
                 // entry i corresponds to subfield i in FORMAT (excluding GT), and contains the index in mtf_ctx of this subfield
                 line_subfields[i] = did_i;
                 break;
             }
 #ifdef DEBUG
-        ASSERTW (did_i < vb->z_file->num_dict_ids, 
+        ASSERTW (did_i < z_file->num_dict_ids, 
                  "Warning: subfield %.*s not found in dictionaries, line=%u. This can happen legitimately if the subfield is declared in FORMAT, but a value is never provided in any sample", DICT_ID_LEN, subfield.id, line_i);
 #endif
         if (subfields_start[-1] == '\t' || subfields_start[-1] == '\n') break;
@@ -577,7 +577,7 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
     START_TIMER;
 
     if (!vb->data_lines.piz) 
-        vb->data_lines.piz = calloc (evb->vcf_file->max_lines_per_vb, sizeof (PizDataLine));
+        vb->data_lines.piz = calloc (vcf_file->max_lines_per_vb, sizeof (PizDataLine));
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED) 
@@ -752,23 +752,23 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
 {
     // read vcf header if its not already read. it maybe already read, if we're in flag_split mode, for second component onwards
     // (it would have been read by previous component and stored for us)
-    if (!buf_is_allocated (&evb->z_file->v1_next_vcf_header) ||
-        evb->z_file->v1_next_vcf_header.len < sizeof(v1_SectionHeaderVCFHeader)) { // first VCF header, data moved here by zfile_read_genozip_header()
+    if (!buf_is_allocated (&z_file->v1_next_vcf_header) ||
+        z_file->v1_next_vcf_header.len < sizeof(v1_SectionHeaderVCFHeader)) { // first VCF header, data moved here by zfile_read_genozip_header()
         
         int ret;
-        ret = v1_zfile_read_one_section (evb, &evb->z_file->v1_next_vcf_header, "z_file->v1_next_vcf_header", 
+        ret = v1_zfile_read_one_section (evb, &z_file->v1_next_vcf_header, "z_file->v1_next_vcf_header", 
                                          sizeof(v1_SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
 
         if (ret == EOF) {
-            buf_free (&evb->z_file->v1_next_vcf_header);
+            buf_free (&z_file->v1_next_vcf_header);
             return false; // empty file (or in case of split mode - no more components) - not an error
         }
     }
 
     // handle the GENOZIP header of the VCF header section
-    v1_SectionHeaderVCFHeader *header = (v1_SectionHeaderVCFHeader *)evb->z_file->v1_next_vcf_header.data;
+    v1_SectionHeaderVCFHeader *header = (v1_SectionHeaderVCFHeader *)z_file->v1_next_vcf_header.data;
 
-    evb->z_file->genozip_version = header->genozip_version;
+    z_file->genozip_version = header->genozip_version;
     
     ASSERT0 (header->genozip_version == 1, "Error: v1_vcf_header_genozip_to_vcf() can only handle v1 VCF Header sections");
 
@@ -776,18 +776,18 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
-        ASSERT0 (!evb->vcf_file, "Error: not expecting evb->vcf_file to be open already in split mode");
-        evb->vcf_file = file_open (header->vcf_filename, WRITE, VCF);
+        ASSERT0 (!vcf_file, "Error: not expecting vcf_file to be open already in split mode");
+        vcf_file = file_open (header->vcf_filename, WRITE, VCF);
     }
 
     extern Buffer global_vcf_header_line; // defined in vcf_header.c
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
 
-    evb->vcf_file->max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
+    vcf_file->max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
 
     if (first_vcf || !flag_concat) {
-        evb->z_file->num_lines_concat     = evb->vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
-        evb->z_file->vcf_data_size_concat = evb->vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
+        z_file->num_lines_concat     = vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
+        z_file->vcf_data_size_concat = vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
     }
 
     *digest = flag_split ? header->md5_hash_single : header->md5_hash_concat;
@@ -796,30 +796,29 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
     static Buffer vcf_header_buf = EMPTY_BUFFER;
     zfile_uncompress_section (evb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
 
-    bool can_concatenate = vcf_header_set_globals (evb, evb->z_file->name, &vcf_header_buf);
+    bool can_concatenate = vcf_header_set_globals (evb, z_file->name, &vcf_header_buf);
     if (!can_concatenate) {
-        buf_free (&evb->z_file->v1_next_vcf_header);
+        buf_free (&z_file->v1_next_vcf_header);
         buf_free (&vcf_header_buf);
         return false;
     }
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
     if ((first_vcf || !flag_split) && !flag_no_header)
-        vcffile_write_to_disk (evb->vcf_file, &vcf_header_buf);
+        vcffile_write_to_disk (&vcf_header_buf);
     
     // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
     else if (flag_md5)
-        md5_update (&evb->vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
+        md5_update (&vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
 
-    buf_free (&evb->z_file->v1_next_vcf_header);
+    buf_free (&z_file->v1_next_vcf_header);
     buf_free (&vcf_header_buf);
 
     return true;
 }
 
 // returns the the VCF header section's header from a GENOZIP file - used by main_list
-bool v1_vcf_header_get_vcf_header (File *z_file, 
-                                   uint64_t *uncompressed_data_size,
+bool v1_vcf_header_get_vcf_header (uint64_t *uncompressed_data_size,
                                    uint32_t *num_samples,
                                    uint64_t *num_items_concat,
                                    Md5Hash  *md5_hash_concat,

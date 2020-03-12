@@ -13,7 +13,7 @@
 
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_component_md5);
-extern bool zfile_get_genozip_header (FileP z_file, uint64_t *uncompressed_data_size, uint32_t *num_samples,
+extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,
                                       uint64_t *num_items_concat, Md5Hash *md5_hash_concat, char *created, unsigned created_len);
 
 

@@ -103,9 +103,13 @@ static void seg_allocate_per_line_memory (VariantBlock *vb)
 
     // we already have lines - but we need more. reallocate.
     else {
-        seg_realloc_datalines (vb, vb->num_data_lines_allocated * 1.2);        
+        seg_realloc_datalines (vb, vb->num_data_lines_allocated * 1.5);        
         vb->num_lines = vb->num_data_lines_allocated;
     }
+
+    // allocate (or realloc) the mtf_i for CHROM->FORMAT fields which each have num_lines entries
+    for (VcfFields f=CHROM; f <= FORMAT; f++) 
+        buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->num_lines * sizeof (uint32_t), 1, "mtf_ctx.mtf_i", f);
 }
 
 // returns the node index
@@ -113,14 +117,18 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
                                bool *is_new) // optional out
 {
     uint32_t *this_field_section = (uint32_t *)vb->mtf_ctx[f].mtf_i.data;
+    ASSERT (vb->mtf_ctx[f].mtf_i.len * sizeof(uint32_t) < vb->mtf_ctx[f].mtf_i.size,
+            "Error: mtf_i overflow vb_i=%u f=%u len*sizeof(uint32_t)=%u size=%u - no room for another one", 
+            vb->variant_block_i, f, vb->mtf_ctx[f].mtf_i.len * (unsigned)sizeof(uint32_t), vb->mtf_ctx[f].mtf_i.size);
 
     MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
-    uint32_t node_index = mtf_evaluate_snip (vb, ctx, str, len, &node, is_new);
+    uint32_t node_index = mtf_evaluate_snip (vb, ctx, false, str, len, &node, is_new);
+buf_test_overflows(vb);
     this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
+buf_test_overflows(vb);
 
     vb->vcf_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
-
     return node_index;
 }
 
@@ -284,7 +292,6 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
     // get name / value pairs - and insert values to the "name" dictionary
     bool reading_name = true;
     for (unsigned i=0; i < info_len + 1; i++) {
-
         char c = (i==info_len) ? ';' : info_str[i]; // add an artificial ; at the end of the INFO data
 
         if (reading_name) {
@@ -331,7 +338,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
                 MtfNode *sf_node;
 
                 ((uint32_t *)mtf_i_buf->data)[mtf_i_buf->len++] = 
-                    mtf_evaluate_snip (vb, ctx, this_value, this_value_len, &sf_node, NULL);
+                    mtf_evaluate_snip (vb, ctx, false, this_value, this_value_len, &sf_node, NULL);
 
                 vb->vcf_section_bytes[SEC_INFO_SUBFIELD_B250] += (this_value_len+1); // including the separator (; or \n)
 
@@ -352,7 +359,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
     MtfContext *info_ctx = &vb->mtf_ctx[INFO];
     MtfNode *node;
     bool is_new;
-    uint32_t node_index = mtf_evaluate_snip (vb, info_ctx, iname, iname_len, &node, &is_new);
+    uint32_t node_index = mtf_evaluate_snip (vb, info_ctx, false, iname, iname_len, &node, &is_new);
     info_field_mtf_i[vb->mtf_ctx[INFO].mtf_i.len++] = node_index;
 
     // if this is a totally new subfield (first time in this file) - make a new SubfieldMapperZip for it.
@@ -546,7 +553,7 @@ static void seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data);
 
         MtfNode *node;
-        uint32_t node_index = mtf_evaluate_snip (vb, MAPPER_CTX (format_mapper, sf), cell_gt_data, len, &node, NULL);
+        uint32_t node_index = mtf_evaluate_snip (vb, MAPPER_CTX (format_mapper, sf), false, cell_gt_data, len, &node, NULL);
         *(next++) = node_index;
 
         if (node_index != WORD_INDEX_MISSING_SF) // don't skip the \t if we might have more missing subfields
@@ -707,6 +714,7 @@ static const char *seg_data_line (VariantBlock *vb, /* may be NULL if testing */
             if (has_genotype_data) { // FORMAT declares other subfields, we may have them or not
                 field_start = next_field;
                 next_field = seg_get_next_item (field_start, &len, true, true, false, vcf_line_i, &field_len, &separator, "Non-GT");
+
                 ASSERT (field_len, "Error: invalid VCF file - expecting sample data for sample # %u on line %u, but found a tab character", 
                         sample_i+1, vcf_line_i);
 
@@ -814,17 +822,15 @@ void seg_all_data_lines (VariantBlock *vb)
 
     vb->num_dict_ids = MAX (FORMAT+1, vb->num_dict_ids); // first 8 mtf_ctx are reserved for the VCF fields (up to FORMAT) (vb->num_dict_ids might be already higher due to previous VBs)
 
-    seg_allocate_per_line_memory (vb); // set vb->num_lines to an initial estimate
-
+    // Set ctx stuff for CHROM->FORMAT fields (note: mtf_i is allocated by seg_allocate_per_line_memory)
     for (VcfFields f=CHROM; f <= FORMAT; f++) {
-        buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->num_lines * sizeof (uint32_t), 1, "mtf_ctx.mtf_i", f);
-     
         strcpy ((char *)vb->mtf_ctx[f].dict_id.id, vcf_field_names[f]); // length of all is <= 7 so fits in id
         vb->mtf_ctx[f].dict_id = dict_id_vardata_field (vb->mtf_ctx[f].dict_id);
-
         vb->mtf_ctx[f].b250_section_type = SEC_CHROM_B250 + f*2;
         vb->mtf_ctx[f].dict_section_type = SEC_CHROM_DICT + f*2;
     }
+
+    seg_allocate_per_line_memory (vb); // set vb->num_lines to an initial estimate
 
     const char *field_start = vb->vcf_data.data;
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
@@ -842,9 +848,8 @@ void seg_all_data_lines (VariantBlock *vb)
         seg_update_vb_from_dl (vb, dl);
 
         // if our estimate number of lines was too small, increase it
-        if (vb_line_i == vb->num_lines-1 && field_start - vb->vcf_data.data != vb->vcf_data.len) {
+        if (vb_line_i == vb->num_lines-1 && field_start - vb->vcf_data.data != vb->vcf_data.len) 
             seg_allocate_per_line_memory (vb); // increase number of lines as evidently we need more
-        }
     }
 
     if (/*vb->has_genotype_data || */vb->has_haplotype_data)

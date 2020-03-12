@@ -13,7 +13,8 @@
 
 struct variant_block_; 
 
-typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_FULL_OVERLAY, BUF_PARTIAL_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
+typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
+#define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY" }
 
 typedef struct buffer_ {
     BufferType type;
@@ -22,20 +23,24 @@ typedef struct buffer_ {
     uint32_t param;   // parameter provided by allocator - used for memory debugging & statistics
     uint32_t size;    // number of bytes allocated to memory
     uint32_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
+    char *data;       // ==memory+8 if buffer is allocated or NULL if not
+    char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
+
+    // info on the allocator of this buffer
+    VariantBlockP allocating_vb;
     uint32_t vb_i;    // the variant_block_i that allocated this buffer
     const char *func; // the allocating function
     unsigned code_line;
-    char *data;       // =memory+2*sizeof(long long) if buffer is allocated or NULL if not
-    char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 } Buffer;
-#define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,0,NULL,0,NULL,NULL}
+
+#define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL,NULL,0,NULL,0}
 
 #define ENT(type, buf, index) (type *)(&(buf)->data[(index) * sizeof(type)])
 #define LASTENT(type, buf) (type *)(&(buf)->data[((buf)->len-1) * sizeof(type)])
             
 extern void buf_initialize(void);
 
-#define buf_is_allocated(buf_p) ((buf_p)->data != NULL && ((buf_p)->type == BUF_REGULAR || (buf_p)->type == BUF_FULL_OVERLAY || (buf_p)->type == BUF_PARTIAL_OVERLAY))
+#define buf_is_allocated(buf_p) ((buf_p)->data != NULL && ((buf_p)->type == BUF_REGULAR || (buf_p)->type == BUF_OVERLAY))
 
 extern unsigned buf_alloc_do (VariantBlockP vb,
                               Buffer *buf, 
@@ -51,24 +56,26 @@ extern unsigned buf_alloc_do (VariantBlockP vb,
 
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 
-extern void buf_overlay_do (VariantBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const Buffer *copy_whole_buf_from, 
-                            unsigned *regular_buf_offset, const char *func, uint32_t code_line, const char *name, unsigned param);
-#define buf_overlay(vb, overlaid_buf, regular_buf, copy_whole_buf_from, regular_buf_offset, name, param) \
-     buf_overlay_do(vb, overlaid_buf, regular_buf, copy_whole_buf_from, regular_buf_offset, __FUNCTION__, __LINE__, name, param) 
+extern void buf_overlay_do (VariantBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line, const char *name, uint32_t param);
+#define buf_overlay(vb, overlaid_buf, regular_buf, name, param) \
+     buf_overlay_do(vb, overlaid_buf, regular_buf, __FUNCTION__, __LINE__, name, param) 
 
 extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
 #define buf_free(buf) buf_free_do (buf, __FUNCTION__, __LINE__);
 
-extern void buf_destroy_do (VariantBlockP vb, Buffer *buf, const char *func, uint32_t code_line);
-#define buf_destroy(vb, buf) buf_destroy_do (vb, buf, __FUNCTION__, __LINE__)
+extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
+#define buf_destroy(buf) buf_destroy_do (buf, __FUNCTION__, __LINE__)
 
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
 
-extern void buf_copy (VariantBlockP vb, Buffer *dst, const Buffer *src, unsigned bytes_per_entry,
-                      unsigned src_start_entry, unsigned max_entries, // if 0 copies the entire buffer
-                      const char *name, unsigned param);
+extern void buf_copy_do (VariantBlockP vb, Buffer *dst, const Buffer *src, unsigned bytes_per_entry,
+                         unsigned src_start_entry, unsigned max_entries, // if 0 copies the entire buffer
+                         const char *func, unsigned code_line,
+                         const char *name, unsigned param);
+#define buf_copy(vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name,param) \
+  buf_copy_do (vb,dst,src,bytes_per_entry,src_start_entry,max_entries,__FUNCTION__,__LINE__,name,param)
 
-extern void buf_move (VariantBlockP vb, Buffer *dst, Buffer *src);
+extern void buf_move (VariantBlockP dst_vb, Buffer *dst, VariantBlockP src_vb, Buffer *src);
 
 #define buf_add(buf, new_data, new_data_len) { memcpy (&(buf)->data[(buf)->len], (new_data), (new_data_len));  (buf)->len += (new_data_len); }
 extern void buf_add_string (VariantBlockP vb, Buffer *buf, const char *str);

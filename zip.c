@@ -471,7 +471,6 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
 {
     START_TIMER;
 
-    File *z_file = vb->z_file;
     Buffer *data_buf = is_z_data ? &vb->z_data : &z_file->dict_data;
 
     if (section_list_buf) sections_list_concat (vb, section_list_buf);
@@ -508,19 +507,17 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
 // write all the sections at the end of the file, after all VB stuff has been written
 static void zip_write_global_area (const Md5Hash *single_component_md5)
 {
-    File *file = evb->z_file;
-
     // output dictionaries to disk
-    if (buf_is_allocated (&file->section_list_dict_buf)) // not allocated for vcf-header-only files
-        zip_output_processed_vb (evb, &file->section_list_dict_buf, NULL, false);  
+    if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
+        zip_output_processed_vb (evb, &z_file->section_list_dict_buf, NULL, false);  
     
     // compress all random access records into evb->z_data
     if (flag_show_index) random_access_show_index();
     
     BGEN_random_access(); // make ra_buf into big endian
 
-    file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
-    zfile_compress_section_data (evb, SEC_RANDOM_ACCESS, &file->ra_buf);
+    z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
+    zfile_compress_section_data (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf);
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5);    
@@ -533,14 +530,14 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, unsigned max_threads, bool is_last_file)
+void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_last_file)
 {
     static unsigned last_variant_block_i = 0; // used if we're concatenating files - the variant_block_i will continue from one file to the next
     if (!flag_concat) last_variant_block_i = 0; // reset if we're not concatenating
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, last_variant_block_i, vcf_file, z_file, false, is_last_file, vcf_basename);
+    Dispatcher dispatcher = dispatcher_init (max_threads, last_variant_block_i, false, is_last_file, vcf_basename);
 
     unsigned vcf_line_i = 1; // the next line to be read (first line = 1)
     
@@ -549,7 +546,7 @@ void zip_dispatcher (const char *vcf_basename, File *vcf_file, File *z_file, uns
     bool success = vcf_header_vcf_to_genozip (&vcf_line_i);
     if (!success) goto finish;
 
-    mtf_initialize_mutex (z_file, last_variant_block_i+1);
+    mtf_initialize_mutex (last_variant_block_i+1);
 
     uint32_t max_lines_per_vb=0;
 

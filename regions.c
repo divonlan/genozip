@@ -193,7 +193,7 @@ void regions_make_chregs(void)
     if (!flag_regions) return; // nothing to do
 
     Region *regions = (Region *)regions_buf.data;
-    MtfContext *chrom_ctx = &evb->z_file->mtf_ctx[CHROM];
+    MtfContext *chrom_ctx = &z_file->mtf_ctx[CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
     chregs = calloc (num_chroms, sizeof (Buffer));
@@ -224,7 +224,7 @@ void regions_make_chregs(void)
         }
     }
 
-    buf_destroy (evb, &regions_buf); // free the memory, we don't need it again
+    buf_destroy (&regions_buf); // free the memory, we don't need it again
 
     regions_display("After regions_make_chregs");
 }
@@ -286,7 +286,7 @@ void regions_transform_negative_to_positive_complement()
 
     // copy the destroy the negative buffers
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) 
-        buf_destroy (evb, &neg_chregs[chr_i]);
+        buf_destroy (&neg_chregs[chr_i]);
     
     is_negative_regions = false; // yay!
 

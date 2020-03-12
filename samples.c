@@ -110,6 +110,6 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
     for (unsigned s=0; s < cmd_samples_buf.len; s++)
         ASSERTW (false, "Warning: requested sample %s is not found in the VCF file, ignoring it", *ENT(char *, &cmd_samples_buf, s));
 
-    //for (i=0; i<global_num_samples; i++) printf ("%u ", vcf_samples_is_included[i]); // DEBUG
+    //for (i=0; i<global_num_samples; i++) printf ("%u ", vcf_samples_is_included[i]); 
 }
 

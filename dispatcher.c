@@ -40,8 +40,6 @@ typedef struct {
     unsigned num_running_compute_threads;
     unsigned next_vb_i;
     unsigned max_threads;
-    File *vcf_file;
-    File *z_file;
     bool test_mode;
     bool is_last_file;
 
@@ -80,7 +78,7 @@ void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_
     prev_vb_i         = vb_i;
 }
 
-Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *vcf_file, File *z_file,
+Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
                             bool test_mode, bool is_last_file, const char *filename)
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
@@ -92,8 +90,6 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *
 
     dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the variant_block_i will continue from one file to the next
     dd->max_threads   = max_threads;
-    dd->vcf_file      = vcf_file;
-    dd->z_file        = z_file;
     dd->test_mode     = test_mode;
     dd->is_last_file  = is_last_file;
     dd->show_progress = !flag_quiet && !!isatty(2);
@@ -101,9 +97,6 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i, File *
     dd->last_len      = 2;
 
     vb_create_pool (MAX (2,max_threads+1 /* one for evb */));
-
-    evb->vcf_file = vcf_file;
-    evb->z_file   = z_file;
 
     buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
@@ -122,14 +115,13 @@ void dispatcher_pause (Dispatcher dispatcher)
 }
 
 // reinit dispatcher, used when splitting a genozip to its vcf components, using a single dispatcher object
-void dispatcher_resume (Dispatcher dispatcher, File *vcf_file)
+void dispatcher_resume (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     clock_gettime(CLOCK_REALTIME, &dd->start_time); 
 
     dd->input_exhausted = false;
-    dd->vcf_file        = vcf_file;
     dd->last_len        = 2;
     dd->filename        = vcf_file->name;
     
@@ -151,7 +143,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
 
-    buf_destroy (evb, &dd->compute_threads_buf); // we need to destroy (not marely free) because we are about to free dd
+    buf_destroy (&dd->compute_threads_buf); // we need to destroy (not marely free) because we are about to free dd
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
@@ -181,7 +173,7 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 
     if (flag_show_threads) dispatcher_show_time ("Generate vb", -1, dd->next_vb_i);
 
-    dd->next_vb = vb_get_vb (dd->vcf_file, dd->z_file, dd->next_vb_i);
+    dd->next_vb = vb_get_vb (dd->next_vb_i);
     dd->max_vb_id_so_far = MAX (dd->max_vb_id_so_far, dd->next_vb->id);
 
     return dd->next_vb;
@@ -338,12 +330,12 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
     // in split mode - dispatcher is not done if there's another component after this one
-    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&dd->z_file->v1_next_vcf_header));
+    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&z_file->v1_next_vcf_header));
 
     if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
 
         if (!dispatcher_is_done (dispatcher) ||
-            (flag_split && buf_is_allocated (&dd->z_file->v1_next_vcf_header))) { 
+            (flag_split && buf_is_allocated (&z_file->v1_next_vcf_header))) { 
 
             // time remaining
             char time_str[70], progress[100];
@@ -394,6 +386,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
     if (dd->processed_vb) {
 
         buf_test_overflows(dd->processed_vb); // just to be safe, this isn't very expensive
+        buf_test_overflows(evb); 
 
         if (flag_show_time) 
             profiler_add (&evb->profile, &dd->processed_vb->profile);

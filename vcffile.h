@@ -12,7 +12,7 @@
 
 extern void vcffile_read_vcf_header (bool is_first_vcf);
 extern void vcffile_read_variant_block (VariantBlockP vb);
-extern void vcffile_write_one_variant_block (FileP vcf_file, VariantBlockP vb);
-extern unsigned vcffile_write_to_disk(FileP vcf_file, ConstBufferP buf);
+extern void vcffile_write_one_variant_block (VariantBlockP vb);
+extern unsigned vcffile_write_to_disk (ConstBufferP buf);
 
 #endif

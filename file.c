@@ -17,6 +17,10 @@
 #include "move_to_front.h"
 #include "file.h"
 
+// globals
+File *z_file   = NULL;
+File *vcf_file = NULL;
+
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
     ASSERT0 (filename, "Error: filename is null");
@@ -155,12 +159,12 @@ void file_close (File **file_p,
         pthread_mutex_destroy (&file->mutex);
 
     if (cleanup_memory) {
-        buf_destroy (evb, &file->dict_data);
-        buf_destroy (evb, &file->ra_buf);
-        buf_destroy (evb, &file->section_list_buf);
-        buf_destroy (evb, &file->section_list_dict_buf);
-        buf_destroy (evb, &file->v1_next_vcf_header);
-        buf_destroy (evb, &file->vcf_unconsumed_data);
+        buf_destroy (&file->dict_data);
+        buf_destroy (&file->ra_buf);
+        buf_destroy (&file->section_list_buf);
+        buf_destroy (&file->section_list_dict_buf);
+        buf_destroy (&file->v1_next_vcf_header);
+        buf_destroy (&file->vcf_unconsumed_data);
     }
 
     if (file->name) FREE (file->name);

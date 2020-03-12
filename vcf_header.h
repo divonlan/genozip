@@ -24,7 +24,7 @@ extern void vcf_header_initialize(void);
 
 // v1 compatability
 extern bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest);
-extern bool v1_vcf_header_get_vcf_header (FileP z_file, uint64_t *uncompressed_data_size, uint32_t *num_samples,uint64_t *num_items_concat,
+extern bool v1_vcf_header_get_vcf_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,uint64_t *num_items_concat,
                                           Md5Hash  *md5_hash_concat, char *created, unsigned created_len);
 
 #endif

@@ -37,20 +37,7 @@ void vb_release_vb (VariantBlock **vb_p)
     // note: vb->data_line is not freed but rather used by subsequent vbs
     if (command == ZIP && vb->data_lines.zip)
         memset (vb->data_lines.zip, 0, sizeof(ZipDataLine) * vb->num_data_lines_allocated);
-/*     {
-        for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
-            ZipDataLine *dl = &vb->data_lines.zip[i];
-            
-            dl->genotype_data.len = 0;
-            dl->phase_type = PHASE_UNKNOWN;
-            dl->has_haplotype_data = dl->has_genotype_data = 0;
-            dl->format_mtf_i = dl->info_mtf_i = 0;
 
-            buf_free(&dl->genotype_data);
-            buf_free(&dl->haplotype_data);
-            buf_free(&dl->phase_data);
-        }
-    }*/
     else if (command != ZIP && vb->data_lines.piz) {
         for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
             PizDataLine *dl = &vb->data_lines.piz[i];
@@ -73,7 +60,6 @@ void vb_release_vb (VariantBlock **vb_p)
     vb->vb_data_size = vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = vb->ready_to_dispatch = vb->is_processed = false;
     vb->phase_type = PHASE_UNKNOWN;
-    vb->vcf_file = vb->z_file = NULL;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = vb->num_format_subfields = 0;
     vb->last_pos = 0;
@@ -121,7 +107,8 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
-    
+    buf_free(&vb->column_of_zeros);
+
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
             mtf_free_context (&vb->mtf_ctx[i]);
@@ -129,8 +116,6 @@ void vb_release_vb (VariantBlock **vb_p)
     for (unsigned i=0; i < NUM_COMPRESS_BUFS; i++)
         buf_free (&vb->compress_bufs[i]);
         
-    vb->z_file = vb->vcf_file = NULL; // we're not freeing them, must setting the point to null
-
     vb->in_use = false; // released the VB back into the pool - it may now be reused
 
     // backward compatability with genozip v1
@@ -141,10 +126,10 @@ void vb_release_vb (VariantBlock **vb_p)
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->num_data_lines_allocated
-    // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used
+    // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used/
+    //                   we have logic in vb_get_vb() to update its vb_i
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change
     //                         between VBs of a file or concatenated files.
-    // vb->column_of_zeros : we don't free this as its a constant array of zeros
 }
 
 void vb_create_pool (unsigned num_vbs)
@@ -175,7 +160,7 @@ void vb_external_vb_initialize()
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
-VariantBlock *vb_get_vb (FileP vcf_file, FileP z_file, unsigned variant_block_i)
+VariantBlock *vb_get_vb (unsigned variant_block_i)
 {
     VariantBlock *vb=NULL;
     
@@ -194,9 +179,8 @@ VariantBlock *vb_get_vb (FileP vcf_file, FileP z_file, unsigned variant_block_i)
 
     vb->in_use           = true;
     vb->variant_block_i  = variant_block_i;
-    vb->vcf_file         = vcf_file;
-    vb->z_file           = z_file;
-    
+    vb->buffer_list.vb_i = variant_block_i;
+
     return vb;
 }
 
@@ -206,7 +190,7 @@ static void vb_free_buffer_array (VariantBlock *vb, Buffer **buf_array, unsigned
     if (! (*buf_array)) return; // array not allocated - nothing to do
 
     for (unsigned i=0; i < buf_array_len; i++) 
-        buf_destroy (vb, &(*buf_array)[i]);
+        buf_destroy (&(*buf_array)[i]);
 
     FREE (*buf_array);
 

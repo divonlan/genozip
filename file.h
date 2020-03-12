@@ -91,6 +91,8 @@ typedef struct file_ {
     char read_buffer[];                // only allocated for mode=READ files   
 } File;
 
+extern File *z_file, *vcf_file; // globals
+
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
 extern void file_close (FileP *vcf_file_p, bool cleanup_memory /* optional */);

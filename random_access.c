@@ -61,9 +61,9 @@ void random_access_update_pos (VariantBlock *vb, int32_t this_pos)
 // called by ZIP compute thread, while holding the z_file mutex: merge in the VB's ra_buf in the global z_file one
 void random_access_merge_in_vb (VariantBlock *vb)
 {
-    buf_alloc (vb, &vb->z_file->ra_buf, (vb->z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf", 0);
+    buf_alloc (evb, &z_file->ra_buf, (z_file->ra_buf.len + vb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf", 0);
 
-    RAEntry *dst_ra = &((RAEntry *)vb->z_file->ra_buf.data)[vb->z_file->ra_buf.len];
+    RAEntry *dst_ra = &((RAEntry *)z_file->ra_buf.data)[z_file->ra_buf.len];
     RAEntry *src_ra = ((RAEntry *)vb->ra_buf.data);
 
     MtfContext *chrom_ctx = &vb->mtf_ctx[CHROM];
@@ -78,7 +78,7 @@ void random_access_merge_in_vb (VariantBlock *vb)
         dst_ra[i].max_pos         = src_ra[i].max_pos;
     }
 
-    vb->z_file->ra_buf.len += vb->ra_buf.len;
+    z_file->ra_buf.len += vb->ra_buf.len;
 }
 
 // PIZ I/O thread: check if for the given VB,
@@ -94,17 +94,17 @@ bool random_access_is_vb_included (uint32_t vb_i,
     ASSERT (!buf_is_allocated (region_ra_intersection_matrix), "Error: expecting region_ra_intersection_matrix to be unallcoated vb_i=%u", vb_i);
 
     unsigned num_regions = regions_max_num_chregs();
-    buf_alloc (evb, region_ra_intersection_matrix, evb->z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix", vb_i);
+    buf_alloc (evb, region_ra_intersection_matrix, z_file->ra_buf.len * num_regions, 1, "region_ra_intersection_matrix", vb_i);
     buf_zero (region_ra_intersection_matrix);
 
     static const RAEntry *next_ra = NULL;
     ASSERT0 ((vb_i==1) == !next_ra, "Error: expecting next_ra==NULL iff vb_i==1");
-    if (!next_ra) next_ra = (const RAEntry *)evb->z_file->ra_buf.data; // initialize static on first call
+    if (!next_ra) next_ra = (const RAEntry *)z_file->ra_buf.data; // initialize static on first call
 
 
     bool vb_is_included=false;
     for (unsigned ra_i=0; 
-         ra_i < evb->z_file->ra_buf.len && next_ra->variant_block_i == vb_i;
+         ra_i < z_file->ra_buf.len && next_ra->variant_block_i == vb_i;
          ra_i++, next_ra++) {
 
         if (regions_get_ra_intersection (next_ra->chrom_index, next_ra->min_pos, next_ra->max_pos,
@@ -120,9 +120,9 @@ bool random_access_is_vb_included (uint32_t vb_i,
 // Called by PIZ I/O thread (piz_read_global_area) and ZIP I/O thread (zip_write_global_area)
 void BGEN_random_access()
 {
-    RAEntry *ra = (RAEntry *)evb->z_file->ra_buf.data;
+    RAEntry *ra = (RAEntry *)z_file->ra_buf.data;
 
-    for (unsigned i=0; i < evb->z_file->ra_buf.len; i++) {
+    for (unsigned i=0; i < z_file->ra_buf.len; i++) {
         ra[i].variant_block_i = BGEN32 (ra[i].variant_block_i);
         ra[i].chrom_index     = BGEN32 (ra[i].chrom_index);
         ra[i].min_pos         = BGEN32 (ra[i].min_pos);
@@ -139,7 +139,7 @@ void random_access_show_index ()
 {
     fprintf (stderr, "Random-access index contents (result of --show-index):\n");
     
-    const Buffer *ra_buf = &evb->z_file->ra_buf;
+    const Buffer *ra_buf = &z_file->ra_buf;
 
     for (unsigned i=0; i < ra_buf->len; i++) {
         

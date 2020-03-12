@@ -68,8 +68,6 @@ typedef struct variant_block_ {
     uint32_t variant_block_i;  // number of variant block within VCF file
     int id;                    // id of vb within the vb pool (-1 is the external vb)
 
-    FileP vcf_file, z_file;    // pointers to objects that span multiple VBs
-
     // memory management
     Buffer buffer_list;        // a buffer containing an array of pointers to all buffers allocated for this VB (either by the I/O thread or its compute thread)
 
@@ -196,7 +194,7 @@ typedef struct variant_block_ {
 } VariantBlock;
 
 extern void vb_cleanup_memory(void);
-extern VariantBlock *vb_get_vb (FileP vcf_file, FileP z_file, unsigned variant_block_i);
+extern VariantBlock *vb_get_vb (unsigned variant_block_i);
 extern void vb_external_vb_initialize(void);
 extern unsigned vb_num_samples_in_sb (const VariantBlock *vb, unsigned sb_i);
 extern unsigned vb_num_sections(VariantBlock *vb);

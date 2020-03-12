@@ -162,7 +162,7 @@ static unsigned main_get_num_cores()
 #endif
 }
 
-static void main_show_file_metadata (const File *vcf_file, const File *z_file)
+static void main_show_file_metadata (void)
 {
     fprintf (stderr, "\n\n");
     if (vcf_file->name) fprintf (stderr, "File name: %s\n", vcf_file->name);
@@ -175,9 +175,9 @@ static void main_show_file_metadata (const File *vcf_file, const File *z_file)
              global_num_samples, z_file->num_lines_concat, z_file->num_dict_ids-8);
 }
 
-static void main_show_sections (const File *vcf_file, const File *z_file)
+static void main_show_sections (void)
 {
-    main_show_file_metadata (vcf_file, z_file);
+    main_show_file_metadata();
 
     char vsize[30], zsize[30], zentries_str[30];
 
@@ -254,9 +254,9 @@ static void main_show_sections (const File *vcf_file, const File *z_file)
 
 }
 
-static void main_show_content (const File *vcf_file, const File *z_file)
+static void main_show_content (void)
 {
-    main_show_file_metadata (vcf_file, z_file);
+    main_show_file_metadata();
 
     char vsize[30], zsize[30];
     int64_t total_vcf=0, total_z=0;
@@ -363,7 +363,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         first_file = false;
     }
     
-    File *z_file = file_open(z_filename, READ, GENOZIP_TEST);    
+    z_file = file_open(z_filename, READ, GENOZIP_TEST);    
     if (!z_file) {
         files_ignored++;
         goto finish;
@@ -375,7 +375,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     uint32_t num_samples;
     Md5Hash md5_hash_concat;
     char created[FILE_METADATA_LEN];
-    bool success = zfile_get_genozip_header (z_file, &vcf_data_size, &num_samples, &num_lines, 
+    bool success = zfile_get_genozip_header (&vcf_data_size, &num_samples, &num_lines, 
                                              &md5_hash_concat, created, FILE_METADATA_LEN);
     if (!success) goto finish;
 
@@ -410,9 +410,6 @@ static void main_genounzip (const char *z_filename,
                             unsigned max_threads,
                             bool is_last_file)
 {
-    static File *vcf_file = NULL; 
-    File *z_file;
-
     vcf_header_initialize();
 
     // get input FILE
@@ -457,7 +454,7 @@ static void main_genounzip (const char *z_filename,
     bool piz_successful;
     unsigned num_vcf_components=0;
     do {
-        piz_successful = piz_dispatcher (basename, z_file, vcf_file, max_threads, num_vcf_components==0, is_last_file);
+        piz_successful = piz_dispatcher (basename, max_threads, num_vcf_components==0, is_last_file);
         if (piz_successful) num_vcf_components++;
     } while (flag_split && piz_successful); 
 
@@ -537,9 +534,6 @@ static void main_genozip (const char *vcf_filename,
                           bool is_first_file, bool is_last_file,
                           char *exec_name)
 {
-    File *vcf_file;
-    static File *z_file = NULL; // static to support concat mode
-
     // get input file
     if (vcf_filename) {
         // skip this file if its size is 0
@@ -592,10 +586,10 @@ static void main_genozip (const char *vcf_filename,
     else ABORT0 ("Error: No output channel");
     
     const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
-    zip_dispatcher (basename, vcf_file, z_file, max_threads, is_last_file);
+    zip_dispatcher (basename, max_threads, is_last_file);
 
-    if (flag_show_sections) main_show_sections (vcf_file, z_file);
-    if (flag_show_content)  main_show_content  (vcf_file, z_file);
+    if (flag_show_sections) main_show_sections();
+    if (flag_show_content)  main_show_content();
 
     bool remove_vcf_file = z_file && flag_replace && vcf_filename;
 
