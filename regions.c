@@ -181,7 +181,7 @@ void regions_add (const char *region_str)
             }
         }
 
-        regions_display ("After regions_add"); 
+        //regions_display ("After regions_add"); 
     }
 }
 
@@ -226,7 +226,7 @@ void regions_make_chregs(void)
 
     buf_destroy (&regions_buf); // free the memory, we don't need it again
 
-    regions_display("After regions_make_chregs");
+    //regions_display("After regions_make_chregs");
 }
 
 void regions_transform_negative_to_positive_complement()
@@ -292,7 +292,7 @@ void regions_transform_negative_to_positive_complement()
 
     FREE (neg_chregs);
 
-    regions_display("After regions_transform_negative_to_positive_complement"); 
+    //regions_display("After regions_transform_negative_to_positive_complement"); 
 }
 
 // PIZ: we calculate which regions (specified in the command line -r/-R) intersect with 
