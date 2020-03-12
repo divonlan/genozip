@@ -485,7 +485,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
             MtfNode *zf_node;
             bool is_new;
             // use evb and not vb because zf_context is z_file (which belongs to evb)
-            int32_t zf_node_index = mtf_evaluate_snip (evb, zf_ctx, true, &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len, &zf_node, &is_new);
+            int32_t zf_node_index = mtf_evaluate_snip (vb, zf_ctx, true, &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len, &zf_node, &is_new);
             ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%d out of range - len=%i", zf_node_index, vb_ctx->mtf.len);
 
             // set word_index to be indexing the global dict - to be used by zip_generate_genotype_one_section() and zip_generate_b250_section()
