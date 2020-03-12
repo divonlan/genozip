@@ -124,9 +124,7 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
     MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
     uint32_t node_index = mtf_evaluate_snip (vb, ctx, false, str, len, &node, is_new);
-buf_test_overflows(vb);
     this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
-buf_test_overflows(vb);
 
     vb->vcf_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
     return node_index;
