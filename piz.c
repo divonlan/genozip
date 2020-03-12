@@ -933,6 +933,8 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (!dispatcher) 
         dispatcher = dispatcher_init (max_threads, 0, flag_test, is_last_file, z_basename);
     
+    dict_id_initialize();
+    
     // read genozip header
     Md5Hash original_file_digest;
 

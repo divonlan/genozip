@@ -11,8 +11,11 @@
 #include "vcf_header.h"
 #include "endianness.h"
 #include "random_access.h"
+#include "ploptimize.h"
 
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
+
+uint64_t dict_id_PL, dict_id_GL; // globals externed in dict_id.h and initialized in dict_id_initialize
 
 // store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from vcf_data,
 // but in the part of vcf_data has been already consumed and no longer needed.
@@ -237,7 +240,7 @@ static void seg_format_field (VariantBlock *vb, ZipDataLine *dl,
 
             DictIdType subfield = seg_get_format_subfield (&str, (unsigned *)&len, vcf_line_i);
 
-            ASSERT (dict_id_is_gtdata_subfield (subfield), 
+            ASSERT (dict_id_is_format_subfield (subfield), 
                     "Error: string %.*s in the FORMAT field of line=%u is not a legal subfield", DICT_ID_LEN, subfield.id, vcf_line_i);
 
             MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields, subfield, SEC_FRMT_SUBFIELD_DICT);
@@ -549,9 +552,22 @@ static void seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
 
         // move next to the beginning of the subfield data, if there is any
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data);
+        MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
 
         MtfNode *node;
-        uint32_t node_index = mtf_evaluate_snip (vb, MAPPER_CTX (format_mapper, sf), false, cell_gt_data, len, &node, NULL);
+        uint32_t node_index;
+        unsigned optimized_snip_len;
+        char optimized_snip[PL_MAX_SNIP_LEN];
+
+        if (flag_optimize && ctx->dict_id.num == dict_id_PL && 
+            pl_optimize (cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
+
+            node_index = mtf_evaluate_snip (vb, ctx, false, optimized_snip, optimized_snip_len, &node, NULL);
+            vb->vb_data_size -= (int)len - (int)optimized_snip_len;
+        }
+        else 
+            node_index = mtf_evaluate_snip (vb, ctx, false, cell_gt_data, len, &node, NULL);
+
         *(next++) = node_index;
 
         if (node_index != WORD_INDEX_MISSING_SF) // don't skip the \t if we might have more missing subfields

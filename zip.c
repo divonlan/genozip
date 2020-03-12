@@ -544,6 +544,8 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
     Dispatcher dispatcher = dispatcher_init (max_threads, last_variant_block_i, false, is_last_file, vcf_basename);
 
+    dict_id_initialize();
+
     unsigned vcf_line_i = 1; // the next line to be read (first line = 1)
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file

@@ -53,7 +53,7 @@ int command = -1;  // must be static or global to initialize list_options
 unsigned global_max_threads = DEFAULT_MAX_THREADS;
 
 // the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, 
+int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
@@ -718,6 +718,8 @@ int main (int argc, char **argv)
         #define _z  {"compress",      no_argument,       &command, ZIP         }
         #define _m  {"md5",           no_argument,       &flag_md5,          1 }
         #define _t  {"test",          no_argument,       &flag_test,         1 }
+        #define _9  {"optimize",      no_argument,       &flag_optimize,     1 } // US spelling
+        #define _9a {"optimise",      no_argument,       &flag_optimize,     1 } // British spelling
         #define _th {"threads",       required_argument, 0, '@'                }
         #define _O  {"split",         no_argument,       &flag_split,        1 }
         #define _o  {"output",        required_argument, 0, 'o'                }
@@ -753,18 +755,18 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm, _00 };
-        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                   _st, _sm,                                       _dm, _00 };
-        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                _sT,                                    _st, _sm,                                       _dm, _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,          _00 };
+        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                   _st, _sm,                                       _dm,          _00 };
+        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                _sT,                                    _st, _sm,                                       _dm,          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLqQt^Vzm@:Oo:p:B:S:", // genozip
-            "cfhLqQt^V@:Oo:p:m",        // genounzip
-            "hLVp:qf",                  // genols
-            "hLV@:p:qQ1r:t:s:HGo:f"     // genocat
+            "cdfhlLqQt^Vzm@:Oo:p:B:S:9", // genozip
+            "cfhLqQt^V@:Oo:p:m",         // genounzip
+            "hLVp:qf",                   // genols
+            "hLV@:p:qQ1r:t:s:HGo:f"      // genocat
         };
 
         int option_index = -1;
@@ -786,6 +788,7 @@ int main (int argc, char **argv)
             case '^' : flag_replace       = 1      ; break;
             case 'q' : flag_quiet         = 1      ; break;
             case 'Q' : flag_noisy         = 1      ; break;
+            case '9' : flag_optimize      = 1      ; break;
             case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
                        // fall through for genocat -r
             case 'r' : flag_regions = true; regions_add (optarg); break;
@@ -855,6 +858,8 @@ int main (int argc, char **argv)
     ASSERT (!flag_test   || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
     ASSERT (!flag_header_only || !flag_no_header,              "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
     ASSERT (!flag_quiet  || !flag_noisy,                       "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
+    ASSERT (!flag_test   || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
+    ASSERT (!flag_md5    || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
 
     // deal with final setting of flag_quiet that suppresses warnings 
     

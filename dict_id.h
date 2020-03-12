@@ -27,17 +27,23 @@ static inline DictIdType dict_id_make(const char *str, unsigned str_len) { DictI
 #define dict_id_is(dict_id, str) (dict_id_make(str, strlen(str)).num == dict_id_printable (dict_id).num)
 
 // 2 MSb of first byte determine dictionary type
-#define dict_id_is_gtdata_subfield(dict_id) ((dict_id.id[0] >> 6) == 1)
-#define dict_id_is_field_subfield(dict_id)  ((dict_id.id[0] >> 6) == 0)
-#define dict_id_is_info_subfield(dict_id)   ((dict_id.id[0] >> 6) == 3)
 
+#define dict_id_is_format_subfield(dict_id) ((dict_id.id[0] >> 6) == 1)
+#define dict_id_is_info_subfield(dict_id)   ((dict_id.id[0] >> 6) == 3)
+#define dict_id_is_vardata_field(dict_id)   ((dict_id.id[0] >> 6) == 0)
+
+static inline DictIdType dict_id_format_subfield(DictIdType dict_id) {                                       return dict_id; } // no change - keep Msb 01
 static inline DictIdType dict_id_info_subfield(DictIdType dict_id)   { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
 static inline DictIdType dict_id_vardata_field(DictIdType dict_id)   { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
-static inline DictIdType dict_id_gtdata_subfield(DictIdType dict_id) {                                       return dict_id; } // no change - keep Nsb 01
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
+
+extern uint64_t dict_id_PL, dict_id_GL; // declared in segregate.c
+
+static inline void dict_id_initialize(void) { dict_id_PL = dict_id_make ("PL", 2).num;\
+                                              dict_id_GL = dict_id_make ("GL", 2).num;} // note: these values will be different in big and little endian machines
 
 #endif

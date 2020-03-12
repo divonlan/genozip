@@ -523,7 +523,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     // compress incremental part of dictionary added by this vb. note: dispatcher calls this function in the correct order of VBs.
     if (added_chars) {
         // special optimization for the GL dictionary
-        if (dict_id_is (zf_ctx->dict_id, "GL")) 
+        if (zf_ctx->dict_id.num == dict_id_GL) 
             start_dict = gl_optimize_dictionary (vb, &zf_ctx->dict, &((MtfNode *)zf_ctx->mtf.data)[start_mtf_len], start_dict_len, added_words);
 
         // we need to protect z_file->dict_data while we're writing to it. this ensures a single writer
@@ -665,7 +665,7 @@ void mtf_integrate_dictionary_fragment (VariantBlock *vb, char *section_data)
     zfile_uncompress_section (vb, section_data, &fragment, "fragment", header->h.section_type);
 
     // special treatment if this is GL - de-optimize
-    if (dict_id_is (header->dict_id, "GL"))
+    if (header->dict_id.num == dict_id_GL)
         gl_deoptimize_dictionary (fragment.data, fragment.len);
 
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
@@ -740,7 +740,8 @@ void mtf_overlay_dictionaries_to_vb (VariantBlock *vb)
             buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, "ctx->word_list", did_i);
 
             // count dictionaries of genotype data subfields
-            if (dict_id_is_gtdata_subfield (vb_ctx->dict_id)) {
+            // note: this is needed only for V1 files...
+            if (dict_id_is_format_subfield (vb_ctx->dict_id)) {
                 vb->num_format_subfields++;
                 ASSERT (vb->num_format_subfields <= MAX_SUBFIELDS, 
                         "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 

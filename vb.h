@@ -85,7 +85,7 @@ typedef struct variant_block_ {
     uint32_t first_line;       // line number in VCF file (counting from 1), of this variant block
 
     // tracking execution
-    int32_t vb_data_size;      // redundant in ZIP - same as vcf_data.len
+    int32_t vb_data_size;      // expected size of decompressed VCF. Might be different than original if --optimize is used.
     uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation
 
     ProfilerRec profile;

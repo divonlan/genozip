@@ -193,7 +193,7 @@ void vcffile_read_variant_block (VariantBlock *vb)
     }
 
     vcf_file->vcf_data_so_far += vb->vcf_data.len;
-    vb->vb_data_size       = vb->vcf_data.len; // vb_data_size is redundant in ZIP at least, we can get rid of it one day
+    vb->vb_data_size = vb->vcf_data.len; // initial value. it may change if --optimize is used.
 
     COPY_TIMER (vb->profile.vcffile_read_variant_block);
 }

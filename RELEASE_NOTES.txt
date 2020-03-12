@@ -43,3 +43,6 @@
 - New developer options --show-threads and --debug-memory
 - Many bug fixes
 - Improved help text
+
+2.1.2
+- Added --optimize and optimization for PL
