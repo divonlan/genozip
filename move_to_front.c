@@ -346,7 +346,7 @@ void mtf_clone_ctx (VariantBlock *vb)
             buf_overlay (vb, &vb_ctx->ol_mtf, &zf_ctx->mtf, "ctx->ol_mtf", did_i);   
 
             // copy the hash table (core + used entries only of extension) - we're copying and not overlaying as we might be changing it
-            buf_copy (vb, &vb_ctx->hash, &zf_ctx->hash, sizeof(HashEnt), 0, zf_ctx->hash.len, "ctx->hash", did_i);
+            buf_copy (vb, &vb_ctx->hash, &zf_ctx->hash, sizeof(HashEnt), 0, zf_ctx->hash.len, "z_file->mtf_ctx->hash", did_i);
         }
 
         vb_ctx->did_i             = did_i;
