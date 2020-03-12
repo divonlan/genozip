@@ -393,7 +393,6 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
                       const char *func, unsigned code_line, const char *name, unsigned param)
 {
     if (!buf->memory) {
-        buf_test_overflows(vb);
 #ifdef DEBUG
         buf_display_memory_usage (true, 0, 0);
 #endif
