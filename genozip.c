@@ -883,8 +883,8 @@ int main (int argc, char **argv)
 
     unsigned num_files = argc - optind;
 
-    ASSERT0 (num_files <= 1 || !flag_show_sections, "Error: --show-content can only work on one file at time");
-    ASSERT0 (num_files <= 1 || !flag_show_content,  "Error: --show-sections can only work on one file at time");
+    ASSERT0 (num_files <= 1 || !flag_show_sections, "Error: --show-sections can only work on one file at time");
+    ASSERT0 (num_files <= 1 || !flag_show_content,  "Error: --show-content can only work on one file at time");
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
