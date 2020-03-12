@@ -39,5 +39,7 @@
 - Improved memory consumption for large VCFs with a single or small number of samples
 
 2.1.1
-- Fix floating point rounding error that affected very large memory allocations
+- Reduced thread serialization to improve CPU core scalability
+- New developer options --show-threads and --debug-memory
+- Many bug fixes
 - Improved help text
