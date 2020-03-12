@@ -19,7 +19,7 @@
             //"args": ["test-file.vcf","-f"],
             //"args": ["-t", "-f",  "out.vcf"],
             //"args": ["GFX0241869.filtered.snp.vcf", "-o", "junk.vcf.genozip", "-f"],
-            "args": ["45K.vcf", "-f"],
+            "args": ["-d", "concat.vcf.genozip", "-fO"],
 
             //"args": ["-z", "GFX0241869.filtered.snp.vcf", "-f"],
             //"args": ["-d", "GFX0241869.filtered.snp.vcf.genozip","-o", "GFX0241869.filtered.snp.test.vcf", "-f"],
