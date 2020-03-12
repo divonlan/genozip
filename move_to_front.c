@@ -38,6 +38,7 @@ unzip:
 #define INITIAL_NUM_NODES 10000
 
 static pthread_mutex_t wait_for_vb_1_mutex;
+static pthread_mutex_t compress_dictionary_data_mutex;
 
 static inline void mtf_lock_do (VariantBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
@@ -373,7 +374,11 @@ void mtf_initialize_mutex (void)
     unsigned ret = pthread_mutex_init (&z_file->dicts_mutex, NULL);
     ASSERT0 (!ret, "pthread_mutex_init failed for z_file->dicts_mutex");
 
-    z_file->dicts_mutex_initialized = true;
+    ret = pthread_mutex_init (&wait_for_vb_1_mutex, NULL);
+    ASSERT0 (!ret, "pthread_mutex_init failed for wait_for_vb_1_mutex");
+
+    ret = pthread_mutex_init (&compress_dictionary_data_mutex, NULL);
+    ASSERT0 (!ret, "pthread_mutex_init failed for compress_dictionary_data_mutex");
 }
 
 // find the z_file context that corresponds to dict_id. It could be possibly a different did_i
@@ -405,7 +410,7 @@ static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id, bool
     ASSERT (!pthread_mutex_init (&zf_ctx->mutex, NULL), 
             "pthread_mutex_init failed for zf_ctx->mutex did_i=%u", zf_ctx->did_i);
     zf_ctx->mutex_initialized = true;
-    zf_ctx->next_variant_i_to_merge = vb->variant_block_i;
+    //zf_ctx->next_variant_i_to_merge = vb->variant_block_i;
 
     result = z_file->num_dict_ids-1;
 
@@ -517,16 +522,23 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
     // compress incremental part of dictionary added by this vb. note: dispatcher calls this function in the correct order of VBs.
     if (added_chars) {
-
         // special optimization for the GL dictionary
        if (dict_id_is (zf_ctx->dict_id, "GL")) 
             start_dict = gl_optimize_dictionary (vb, &zf_ctx->dict, &((MtfNode *)zf_ctx->mtf.data)[start_mtf_len], start_dict_len, added_words);
-     
+    }
+
+
+    if (added_chars) {
+        // we need to protect z_file->dict_data while we're writing to it. this ensures a single writer
+        // to this data. we also need this mutex embedded in the zf_ctx->mutex, so that fragments of
+        // a dictionary are written in the order they are created. 
+        mtf_lock (vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", vb->variant_block_i);
         zfile_compress_dictionary_data (vb, zf_ctx, added_words, start_dict, added_chars);
+        mtf_unlock (vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", vb->variant_block_i);
     }
 
 finish:
-    zf_ctx->next_variant_i_to_merge++;
+    //zf_ctx->next_variant_i_to_merge++;
     mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
 }
 

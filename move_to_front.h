@@ -71,7 +71,7 @@ typedef struct mtfcontext_ {
 
     pthread_mutex_t mutex;     // ZIP only: MtfContext in z_file (only) is protected by a mutex 
     bool mutex_initialized;
-    uint32_t next_variant_i_to_merge; // the next vb_i permitted to lock the mutex
+    //uint32_t next_variant_i_to_merge; // the next vb_i permitted to lock the mutex
     
 } MtfContext;
 

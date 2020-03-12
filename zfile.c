@@ -440,6 +440,7 @@ void zfile_update_compressed_vb_header (VariantBlock *vb, uint32_t vcf_first_lin
 void zfile_compress_dictionary_data (VariantBlock *vb, MtfContext *ctx, 
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
+//printf ("Start compress dict vb_i=%u did_i=%u\n", vb->variant_block_i, ctx->did_i);
     ASSERT (section_type_is_dictionary(ctx->dict_section_type),
             "Error: dict_section_type=%s is not a dictionary section", st_name(ctx->dict_section_type));
 
@@ -465,6 +466,7 @@ void zfile_compress_dictionary_data (VariantBlock *vb, MtfContext *ctx,
 
     z_file->dict_data.name = "z_file->dict_data"; // zfile_compress requires that it is set in advance
     zfile_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data);
+//printf ("End compress dict vb_i=%u did_i=%u\n", vb->variant_block_i, ctx->did_i);
 }
 
 void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
