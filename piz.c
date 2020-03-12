@@ -959,8 +959,6 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", file_printname (z_file));
     if (!piz_successful || flag_header_only) goto finish;
 
-    vcf_file = vcf_file; // update local var - in case vcf file was opened by vcf_header_genozip_to_vcf()
-
     if (flag_split) 
         dispatcher_resume (dispatcher); // accept more input 
 
