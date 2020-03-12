@@ -37,21 +37,29 @@ unzip:
 
 #define INITIAL_NUM_NODES 10000
 
-static inline void mtf_lock_do (pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
-{
-    //printf ("thread %u LOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
-    pthread_mutex_lock (&z_file->dicts_mutex);
-    //printf ("thread %u LOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
-}
-#define mtf_lock(mutex, name, param) mtf_lock_do (mutex, __FUNCTION__, __LINE__, name, param);
+static pthread_mutex_t wait_for_vb_1_mutex;
 
-static inline void mtf_unlock_do (pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
+static inline void mtf_lock_do (VariantBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
-    //printf ("thread %u UNLOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
-    pthread_mutex_unlock (&z_file->dicts_mutex);
-    //printf ("thread %u UNLOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), name, param, func, code_line);
+    if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u LOCKING %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
+    pthread_mutex_lock (mutex);
+    if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u LOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
 }
-#define mtf_unlock(mutex, name, param) mtf_unlock_do (mutex, __FUNCTION__, __LINE__, name, param);
+#define mtf_lock(vb, mutex, name, param) mtf_lock_do (vb, mutex, __FUNCTION__, __LINE__, name, param)
+
+static inline void mtf_unlock_do (VariantBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
+{
+    pthread_mutex_unlock (mutex);
+    if (mutex != &z_file->dicts_mutex) printf ("thread %u vb_i=%u UNLOCKED %s:%u from %s:%u\n", (unsigned)pthread_self(), vb->variant_block_i, name, param, func, code_line);
+}
+#define mtf_unlock(vb, mutex, name, param) mtf_unlock_do (vb, mutex, __FUNCTION__, __LINE__, name, param)
+
+void mtf_vb_1_lock (VariantBlockP vb)
+{
+    ASSERT0 (vb->variant_block_i == 1, "Error: Only vb_i=1 can call mtf_vb_1_lock");
+
+    mtf_lock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
+}
 
 // tested hash table sizes up to 5M. turns out smaller tables (up to a point) are faster, despite having longer
 // average linked lists. probably bc the CPU can store the entire hash and mtf arrays in L1 or L2
@@ -316,9 +324,9 @@ static void mtf_init_mapper (VariantBlock *vb, VcfFields field_i, Buffer *mapper
 // ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.
 void mtf_clone_ctx (VariantBlock *vb)
 {
-    mtf_lock (&z_file->dicts_mutex, "dicts_mutex", 0);
+    mtf_lock (vb, &z_file->dicts_mutex, "dicts_mutex", 0);
     unsigned z_num_dict_ids = z_file->num_dict_ids;
-    mtf_unlock (&z_file->dicts_mutex, "dicts_mutex", 0);
+    mtf_unlock (vb, &z_file->dicts_mutex, "dicts_mutex", 0);
 
     START_TIMER; // careful not to include the mutex waiting in the time measured
 
@@ -327,7 +335,7 @@ void mtf_clone_ctx (VariantBlock *vb)
         MtfContext *zf_ctx = &z_file->mtf_ctx[did_i];
 
         ASSERT (zf_ctx->mutex_initialized, "Error: expected zf_ctx->mutex_initialized for did_i=%u", did_i);
-        mtf_lock (&zf_ctx->mutex, "zf_ctx", did_i);
+        mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", did_i);
 
         if (buf_is_allocated (&zf_ctx->dict)) {  // something already for this dict_id
 
@@ -346,7 +354,7 @@ void mtf_clone_ctx (VariantBlock *vb)
         vb_ctx->b250_section_type = zf_ctx->b250_section_type;
         mtf_init_iterator (vb_ctx);
 
-        mtf_unlock (&zf_ctx->mutex, "zf_ctx", did_i);
+        mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx", did_i);
     }
 
     vb->num_dict_ids = z_num_dict_ids;
@@ -375,7 +383,7 @@ static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id, bool
 {
     uint32_t result;
 
-    if (!mutex_already_locked) mtf_lock (&z_file->dicts_mutex, "dicts_mutex", 0);
+    if (!mutex_already_locked) mtf_lock (vb, &z_file->dicts_mutex, "dicts_mutex", 0);
 
     for (unsigned did_i=0; did_i < z_file->num_dict_ids; did_i++)
         if (dict_id.num == z_file->mtf_ctx[did_i].dict_id.num) {
@@ -402,16 +410,16 @@ static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id, bool
     result = z_file->num_dict_ids-1;
 
 finish:
-    if (!mutex_already_locked) mtf_unlock (&z_file->dicts_mutex, "dicts_mutex", 0);
+    if (!mutex_already_locked) mtf_unlock (vb, &z_file->dicts_mutex, "dicts_mutex", 0);
 
     return result;
 }
 
 // we need to add "our" new words to the global dictionaries in the correct order of VBs
-static void mtf_wait_for_my_turn (MtfContext *zf_ctx, uint32_t my_vb_i)
+/*static void mtf_wait_for_my_turn (MtfContext *zf_ctx, uint32_t my_vb_i)
 {
     for (unsigned i=0; ; i++) {
-        mtf_lock (&zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
+        mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
 
         ASSERT (zf_ctx->next_variant_i_to_merge <= my_vb_i, 
                 "Error: invalid zf_ctx->next_variant_i_to_merge=%u larger than my_vb_i=%u",
@@ -421,13 +429,14 @@ static void mtf_wait_for_my_turn (MtfContext *zf_ctx, uint32_t my_vb_i)
             return; // our turn now
 
         else {
-            mtf_unlock (&zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
+            mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
             usleep (100000); // wait 100 millisec and try again
         }
 
         ASSERT0 (i < 600, "Error: timeout while waiting for mutex")
     }
 }
+*/
 
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
@@ -440,7 +449,8 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id, false);
     MtfContext *zf_ctx = &z_file->mtf_ctx[z_did_i];
 
-    mtf_wait_for_my_turn (zf_ctx, vb->variant_block_i); // we grab the mutex in the sequencial order of VBs
+    //mtf_wait_for_my_turn (zf_ctx, vb->variant_block_i); // we grab the mutex in the sequencial order of VBs
+    mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
 
     //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, vb->variant_block_i, did_i, z_did_i);
 
@@ -517,7 +527,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
 finish:
     zf_ctx->next_variant_i_to_merge++;
-    mtf_unlock (&zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
+    mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
 }
 
 // ZIP only: merge new words added in this vb into the z_file.mtf_ctx, and compresses dictionaries.
@@ -525,6 +535,14 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
 {
     START_TIMER; // note: careful not to count time spent waiting for the mutex
 
+    // vb_i=1 goes first, as it has the sorted dictionaries, other vbs can go in
+    // arbitrary order. at the end of this function, vb_i releases the mutex it locked along time ago,
+    // while the other vbs wait for vb_1 by attempting to lock the mutex
+    if (vb->variant_block_i != 1) {
+        mtf_lock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", vb->variant_block_i);
+        mtf_unlock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", vb->variant_block_i);
+    }
+    
     // first, all field dictionaries    
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
         if (!buf_is_allocated (&vb->mtf_ctx[did_i].dict)) continue;
@@ -554,7 +572,10 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
     // vb_i=2 started, z_file is empty, created 10 contexts
     // vb_i=1 completes, merges 20 contexts to z_file, which has 20 contexts after
     // vb_i=2 completes, merges 10 contexts, of which 5 (for example) are shared with vb_i=1. Now z_file has 25 contexts after.
-    
+
+    if (vb->variant_block_i == 1)  
+        mtf_unlock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
+
     COPY_TIMER (vb->profile.mtf_merge_in_vb_ctx)
 }
 
@@ -776,7 +797,7 @@ void mtf_update_stats (VariantBlock *vb)
 {
     // we protect with a mutex because z_file->num_dict_ids can be changed by other threads while 
     // we're here causing unpredictable results
-    mtf_lock (&z_file->dicts_mutex, "dicts_mutex", 0);
+    mtf_lock (vb, &z_file->dicts_mutex, "dicts_mutex", 0);
 
     // zf_ctx doesn't store mtf_i, but we just use mtf_i.len as a counter for displaying in genozip_show_sections
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
@@ -788,7 +809,7 @@ void mtf_update_stats (VariantBlock *vb)
         zf_ctx->mtf_i.len++; // zf_ctx->mtf_i.len is protect by z_file->dicts_mutex and NOT zf_ctx->mutex
     }
 
-    mtf_unlock (&z_file->dicts_mutex, "dicts_mutex", 0);
+    mtf_unlock (vb, &z_file->dicts_mutex, "dicts_mutex", 0);
 }
 
 void mtf_free_context (MtfContext *ctx)

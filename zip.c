@@ -365,6 +365,10 @@ static void zip_compress_one_vb (VariantBlock *vb)
 { 
     START_TIMER;
 
+    // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need
+    // to wait for our merge. that is because our dictionaries are sorted
+    if (vb->variant_block_i == 1) mtf_vb_1_lock(vb);
+
     // allocate memory for the final compressed data of this vb. allocate 20% of the 
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
     buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
