@@ -410,7 +410,6 @@ static unsigned mtf_get_z_file_did_i (VariantBlock *vb, DictIdType dict_id, bool
     ASSERT (!pthread_mutex_init (&zf_ctx->mutex, NULL), 
             "pthread_mutex_init failed for zf_ctx->mutex did_i=%u", zf_ctx->did_i);
     zf_ctx->mutex_initialized = true;
-    //zf_ctx->next_variant_i_to_merge = vb->variant_block_i;
 
     result = z_file->num_dict_ids-1;
 
@@ -419,29 +418,6 @@ finish:
 
     return result;
 }
-
-// we need to add "our" new words to the global dictionaries in the correct order of VBs
-/*static void mtf_wait_for_my_turn (MtfContext *zf_ctx, uint32_t my_vb_i)
-{
-    for (unsigned i=0; ; i++) {
-        mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
-
-        ASSERT (zf_ctx->next_variant_i_to_merge <= my_vb_i, 
-                "Error: invalid zf_ctx->next_variant_i_to_merge=%u larger than my_vb_i=%u",
-                zf_ctx->next_variant_i_to_merge, my_vb_i)
-
-        if (zf_ctx->next_variant_i_to_merge == my_vb_i) 
-            return; // our turn now
-
-        else {
-            mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
-            usleep (100000); // wait 100 millisec and try again
-        }
-
-        ASSERT0 (i < 600, "Error: timeout while waiting for mutex")
-    }
-}
-*/
 
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
@@ -454,8 +430,9 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id, false);
     MtfContext *zf_ctx = &z_file->mtf_ctx[z_did_i];
 
-    //mtf_wait_for_my_turn (zf_ctx, vb->variant_block_i); // we grab the mutex in the sequencial order of VBs
     mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
+
+    START_TIMER; // note: careful not to count time spent waiting for the mutex
 
     //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, vb->variant_block_i, did_i, z_did_i);
 
@@ -535,15 +512,14 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     }
 
 finish:
-    //zf_ctx->next_variant_i_to_merge++;
+    COPY_TIMER (vb->profile.mtf_merge_in_vb_ctx)
+
     mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
 }
 
 // ZIP only: merge new words added in this vb into the z_file.mtf_ctx, and compresses dictionaries.
 void mtf_merge_in_vb_ctx (VariantBlock *vb)
 {
-    START_TIMER; // note: careful not to count time spent waiting for the mutex
-
     // vb_i=1 goes first, as it has the sorted dictionaries, other vbs can go in
     // arbitrary order. at the end of this function, vb_i releases the mutex it locked along time ago,
     // while the other vbs wait for vb_1 by attempting to lock the mutex
@@ -584,8 +560,6 @@ void mtf_merge_in_vb_ctx (VariantBlock *vb)
 
     if (vb->variant_block_i == 1)  
         mtf_unlock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
-
-    COPY_TIMER (vb->profile.mtf_merge_in_vb_ctx)
 }
 
 // PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
