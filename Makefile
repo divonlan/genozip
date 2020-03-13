@@ -201,8 +201,6 @@ CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo "Publishing to conda-forge"
 	@$(SH_VERIFY_ALL_COMMITTED)
-#	@echo Rebasing my staged-recipes fork, and pushing changes to genozip branch of the fork
-#	@(cd ../staged-recipes/; git checkout master; git pull --rebase upstream master ; git push origin master --force ; git checkout genozip)  # needed for initial stage-recipes step, keeping here for future reference
 	@echo " "
 	@echo "Copying meta.yaml build.sh bld.bat to conda-forge"
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
@@ -210,14 +208,16 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
-#	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/staged-recipes genozip)
 	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
-	@echo " "
-	@echo "Check status on: https://dev.azure.com/conda-forge/feedstock-builds/_build"
-#	@echo "and: https://github.com/conda-forge/staged-recipes/pull/10617"
-	@echo "and: https://github.com/conda-forge/genozip-feedstock/compare/master...divonlan:genozip?expand=1"
-	@echo "and: https://github.com/conda-forge/genozip-feedstock/pulls"
+	@echo "CONDA: Using a browser:"
+	@echo "  (1) Go to https://github.com/conda-forge/genozip-feedstock/pulls"
+	@echo "  (2) Click 'Create pull request' and wait 30 seconds for the test to start"
+	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build"
+	@echo "  (4) Click on genozip and wait (~5 min) for the test to complete. Fix any issues."
+	@echo "  (5) Go back to the tan in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
+	@echo "  (6) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build and watch the build - it should be fine"
+	@echo "  (7) In 2-3 hours users can 'conda update genozip'"
 
 windows/%.exe: %.exe
 	@echo Copying $<
@@ -245,7 +245,7 @@ windows/genozip-installer.exe: windows/genozip.exe windows/genounzip.exe windows
 							   windows/readme.txt test-file.vcf
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
-	@echo 'Using the UI:'
+	@echo 'WINDOWS: Using the UI:'
 	@echo '  (1) Open windows/genozip.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
 	@echo '  (3) Verify the files Setup-Files, and the license from LICENSE.for-installer.txt are up to date'
