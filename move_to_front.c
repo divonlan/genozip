@@ -430,8 +430,10 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id, false);
     MtfContext *zf_ctx = &z_file->mtf_ctx[z_did_i];
 
-    mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
-
+    { START_TIMER; 
+      mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
+      COPY_TIMER (vb->profile.lock_mutex_zf_ctx);  
+    }
     START_TIMER; // note: careful not to count time spent waiting for the mutex
 
     //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, vb->variant_block_i, did_i, z_did_i);
@@ -506,13 +508,16 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
         // we need to protect z_file->dict_data while we're writing to it. this ensures a single writer
         // to this data. we also need this mutex embedded in the zf_ctx->mutex, so that fragments of
         // a dictionary are written in the order they are created. 
-        mtf_lock (vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", vb->variant_block_i);
+        {   START_TIMER; 
+            mtf_lock (vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", vb->variant_block_i);
+            COPY_TIMER (vb->profile.lock_mutex_compress_dict);
+        }  
         zfile_compress_dictionary_data (vb, zf_ctx, added_words, start_dict, added_chars);
         mtf_unlock (vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", vb->variant_block_i);
     }
 
 finish:
-    COPY_TIMER (vb->profile.mtf_merge_in_vb_ctx)
+    COPY_TIMER (vb->profile.mtf_merge_in_vb_ctx_one_dict_id)
 
     mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
 }
