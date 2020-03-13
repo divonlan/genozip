@@ -366,7 +366,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i, bo
                         sf_i, vb_line_i + vb->first_line, sample_i+1);
 
                 // add a colon before, if needed
-                if (snip) *(next++) = ':'; // this works for empty "" snip too
+                if (snip && is_line_included) *(next++) = ':'; // this works for empty "" snip too
 
                 unsigned snip_len;
                 mtf_get_next_snip (vb, sf_ctx, &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + vb_line_i);
@@ -377,16 +377,18 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i, bo
                 }
             }
 
-            // if we ended with a : - remove it
-            next -= (next[-1] == ':');
+            if (is_line_included) {
+                // if we ended with a : - remove it
+                next -= (next[-1] == ':');
 
-            // add sample terminator - \t
-            *(next++) = '\t';
+                // add sample terminator - \t
+                *(next++) = '\t';
 
-            // safety
-            ASSERT (next <= vb->line_gt_data.data + vb->line_gt_data.size, 
-                    "Error: line_gt_data buffer overflow. variant_block_i=%u line_i=%u sb_i=%u sample_i=%u",
-                    vb->variant_block_i, vb_line_i + vb->first_line, sb_i, sample_i);
+                // safety
+                ASSERT (next <= vb->line_gt_data.data + vb->line_gt_data.size, 
+                        "Error: line_gt_data buffer overflow. variant_block_i=%u line_i=%u sb_i=%u sample_i=%u",
+                        vb->variant_block_i, vb_line_i + vb->first_line, sb_i, sample_i);
+            }
         } // for sample
     } // for sample block
     
