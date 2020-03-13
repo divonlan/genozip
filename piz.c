@@ -332,7 +332,7 @@ static void piz_initialize_sample_iterators (VariantBlock *vb)
 // convert genotype data from sample block format of indices in base-250 to line format
 // of tab-separated genotype data string, each string being a colon-seperated list of subfields, 
 // the subfields being defined in the FORMAT of this line
-static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i)
+static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i, bool is_line_included)
 {
     START_TIMER;
 
@@ -371,7 +371,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i)
                 unsigned snip_len;
                 mtf_get_next_snip (vb, sf_ctx, &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + vb_line_i);
 
-                if (snip && snip_len) { // it can be a valid empty subfield if snip="" and snip_len=0
+                if (snip && snip_len && is_line_included) { // it can be a valid empty subfield if snip="" and snip_len=0
                     memcpy (next, snip, snip_len); 
                     next += snip_len;
                 }
@@ -681,21 +681,21 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
         // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->line_variant_data
         bool is_line_included = piz_get_variant_data_line (vb, vb_line_i);
 
-        // if line is filtered out, skip it
-        if (!is_line_included) continue;
-
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
+            // note: we always call piz_get_genotype_data_line even if !is_line_included, bc we need to advance the iterators
             if (vb->has_genotype_data)  
-                piz_get_genotype_data_line (vb, vb_line_i);
+                piz_get_genotype_data_line (vb, vb_line_i, is_line_included);
 
-            if (vb->phase_type == PHASE_MIXED_PHASED) 
-                piz_get_phase_data_line (vb, vb_line_i);
+            if (is_line_included)  {
+                if (vb->phase_type == PHASE_MIXED_PHASED) 
+                    piz_get_phase_data_line (vb, vb_line_i);
 
-            if (vb->has_haplotype_data) 
-                piz_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
+                if (vb->has_haplotype_data) 
+                    piz_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
 
-            piz_merge_line (vb, vb_line_i);
+                piz_merge_line (vb, vb_line_i);
+            }
         }
         else 
             buf_copy (vb, &vb->data_lines.piz[vb_line_i].line, &vb->line_variant_data, 0, 0, 0, 

@@ -104,7 +104,7 @@ static bool regions_is_valid_chrom (const char *str)
     return true;
 }
 
-
+// called from main when parsing the command line to add the argument of --regions
 void regions_add (const char *region_str)
 {
     ASSERT0 (region_str, "Error: region_str is NULL");
@@ -229,6 +229,8 @@ void regions_make_chregs(void)
     //regions_display("After regions_make_chregs");
 }
 
+// a user can specific a negative region eg ^13:100-200. We convert the set of negative regions
+// to the complementary set of positive regions
 void regions_transform_negative_to_positive_complement()
 {
     if (!is_negative_regions) return; // nothing to do
