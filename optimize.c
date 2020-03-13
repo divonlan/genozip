@@ -55,7 +55,11 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
 
         if (snip[i] == ',' || i == len) { // end of number
 
+            char save = snip[i];
+            ((char*)snip)[i] = 0;
             double fp = atof (&snip[i-digit_i]);
+            ((char*)snip)[i] = save;
+            
             if (fp > 0) return false; // GL numbers must be <= 0
 
             #define NUM_EXPS 7
