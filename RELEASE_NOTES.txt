@@ -46,3 +46,6 @@
 
 2.1.2
 - Added --optimize and within it optimization for PL and GL
+
+2.1.3
+- Fixed bug in optimization in GL in --optimize
