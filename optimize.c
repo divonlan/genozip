@@ -12,7 +12,7 @@
 
 static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
-    if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
+    if (len > OPTIMIZE_MAX_SNIP_LEN) goto fail; // too long - we can't optimize - return unchanged
 
     char *writer = optimized_snip;
     unsigned digit_i=0;
@@ -29,7 +29,7 @@ static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_
                 *(writer++) = snip[i-2];
                 *(writer++) = snip[i-1];
             }
-            else return false; // digit_i==0
+            else goto fail; // digit_i==0
 
             if (i < len) *(writer++) = ',';
             digit_i=0;
@@ -37,17 +37,20 @@ static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_
         else if (snip[i] >= '0' && snip[i] <= '9')
             digit_i++;
         
-        else // another character
-            return false;
+        else goto fail;// another character
     }
     
     *optimized_snip_len = writer - optimized_snip;
     return true;
+
+fail:
+    *optimized_snip_len = 0;
+    return false;
 }
 
 static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
-    if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
+    if (len > OPTIMIZE_MAX_SNIP_LEN) goto fail; // too long - we can't optimize - return unchanged
 
     char *writer = optimized_snip;
     unsigned digit_i=0;
@@ -61,7 +64,7 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
             double fp = atof (&snip[i-digit_i]);
             ((char*)snip)[i] = save;
             
-            if (fp > 0) return false; // GL numbers must be <= 0
+            if (fp > 0 || fp <= -10) goto fail; // GL numbers must be in the range (-10,0]
 
             #define NUM_EXPS 7
             static const double exps[NUM_EXPS]    = { -1.0, -0.1, -0.01, -0.001, -0.0001, -0.00001, -0.000001 };
@@ -74,7 +77,8 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
                     writer += e+1 + (e>=1);
                     *(writer++) = twodigits / 10 + '0';
                     if (!e) *(writer++) = '.';
-                    *(writer++) = twodigits % 10 + '0';
+                    unsigned second_digit = twodigits % 10;
+                    if (second_digit || !e) *(writer++) = twodigits % 10 + '0'; // trailing 0: we write 2.0 but 0.2 (not 0.20)
                     break;
                 }
 
@@ -91,6 +95,10 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
 
     *optimized_snip_len = writer - optimized_snip;
     return true;
+
+fail:
+    *optimized_snip_len = 0;
+    return false;
 }
 
 bool optimize (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
