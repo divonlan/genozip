@@ -232,9 +232,12 @@ void vcffile_write_one_variant_block (VariantBlock *vb)
             size_written_this_vb += vcffile_write_to_disk (line);
     }
 
+    char s1[20], s2[20];
     ASSERTW (size_written_this_vb == vb->vb_data_size || exe_type == EXE_GENOCAT, 
-            "Warning: Variant block %u (first_line=%u last_line=%u num_lines=%u) had %u bytes in the original VCF file but %u bytes in the reconstructed file", 
-            vb->variant_block_i, vb->first_line, vb->first_line+vb->num_lines-1, vb->num_lines, vb->vb_data_size, size_written_this_vb);
+            "Warning: Variant block %u (first_line=%u last_line=%u num_lines=%u) had %s bytes in the original VCF file but %s bytes in the reconstructed file (diff=%d)", 
+            vb->variant_block_i, vb->first_line, vb->first_line+vb->num_lines-1, vb->num_lines, 
+            buf_human_readable_uint (vb->vb_data_size, s1), buf_human_readable_uint (size_written_this_vb, s2), 
+            (int32_t)size_written_this_vb - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (vb->profile.write);
 }
