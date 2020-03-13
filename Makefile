@@ -215,7 +215,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo "  (2) Click 'Create pull request' and wait 30 seconds for the test to start"
 	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build"
 	@echo "  (4) Click on genozip and wait (~5 min) for the test to complete. Fix any issues."
-	@echo "  (5) Go back to the tan in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
+	@echo "  (5) Go back to the tab in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
 	@echo "  (6) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build and watch the build - it should be fine"
 	@echo "  (7) In 2-3 hours users can 'conda update genozip'"
 
