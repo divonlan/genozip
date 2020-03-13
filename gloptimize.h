@@ -11,4 +11,6 @@
 extern const char *gl_optimize_dictionary (VariantBlockP vb, BufferP dict, MtfNodeP nodes, unsigned dict_start_char, unsigned num_words);
 extern void gl_deoptimize_dictionary (char *data, int len);
 
+extern bool gl_optimize (const char *snip, unsigned len, char *updated_snip, unsigned *updated_len);
+
 #endif

@@ -213,3 +213,4 @@ void gl_deoptimize_dictionary (char *data, int len)
         ASSERT0 (data[-1] == '\t', "Error: missing \\t at end of dictionary");
     }
 }
+

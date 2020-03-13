@@ -11,6 +11,7 @@
 #else
 #include "compatability/visual_c_stdint.h"
 #endif
+#include "genozip.h"
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 

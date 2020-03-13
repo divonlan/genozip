@@ -13,13 +13,13 @@
             //"program": "${workspaceFolder}/genounzip-debug.exe",
             //"program": "${workspaceFolder}/genozip.exe",
 
-            //"args": ["data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-fojunk.vcf.genozip"],
+            "args": ["-@1", "-9", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-fojunk.vcf.genozip"],
 
             //"args": ["test-file.vcf","GFX0241869.filtered.snp.vcf","-f"],
             //"args": ["test-file.vcf","-f"],
-            //"args": ["-t", "-f",  "out.vcf"],
+            //"args": ["45K.vcf", "-f", "45K.ploptimize.vcf.genozip"],
             //"args": ["GFX0241869.filtered.snp.vcf", "-o", "junk.vcf.genozip", "-f"],
-            "args": ["-d", "concat.vcf.genozip", "-fO"],
+            //"args": ["-d", "concat.vcf.genozip", "-fO"],
 
             //"args": ["-z", "GFX0241869.filtered.snp.vcf", "-f"],
             //"args": ["-d", "GFX0241869.filtered.snp.vcf.genozip","-o", "GFX0241869.filtered.snp.test.vcf", "-f"],

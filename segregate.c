@@ -11,7 +11,7 @@
 #include "vcf_header.h"
 #include "endianness.h"
 #include "random_access.h"
-#include "ploptimize.h"
+#include "optimize.h"
 
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
@@ -557,10 +557,10 @@ static void seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
         MtfNode *node;
         uint32_t node_index;
         unsigned optimized_snip_len;
-        char optimized_snip[PL_MAX_SNIP_LEN];
+        char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
-        if (flag_optimize && ctx->dict_id.num == dict_id_PL && 
-            pl_optimize (cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
+        if (flag_optimize && (ctx->dict_id.num == dict_id_PL || ctx->dict_id.num == dict_id_GL) && 
+            optimize (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
 
             node_index = mtf_evaluate_snip (vb, ctx, false, optimized_snip, optimized_snip_len, &node, NULL);
             vb->vb_data_size -= (int)len - (int)optimized_snip_len;
