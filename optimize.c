@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 #include "optimize.h"
 #include "dict_id.h"
 
@@ -53,19 +54,27 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
     for (unsigned i=0; i <= len; i++) { 
 
         if (snip[i] == ',' || i == len) { // end of number
+
             double fp = atof (&snip[i-digit_i]);
             if (fp > 0) return false; // GL numbers must be <= 0
 
             #define NUM_EXPS 7
-            static const double exps[NUM_EXPS] = { -1.0, -0.1, -0.01, -0.001, -0.0001, -0.00001, -0.000001 };
-            unsigned e=0; for (; e < sizeof(exps)/sizeof(exps[0]); e++)
-                if (fp <= exps[e]) {      // eg -1, -4.3212
-                    sprintf (writer, "%.*f", e+1, fp);
-                    writer += strlen (writer);
+            static const double exps[NUM_EXPS]    = { -1.0, -0.1, -0.01, -0.001, -0.0001, -0.00001, -0.000001 };
+            static const double mult_by[NUM_EXPS] = { 10,   100,  1000,  10000,  100000,  1000000,  10000000  };
+            static const char *prefix = "-0.0000000000000000000";
+            unsigned e=0; for (; e < NUM_EXPS; e++)
+                if (fp <= exps[e]) {
+                    int twodigits = -round (fp * mult_by[e]); // eg -4.31->43 -4.39->44 -0.0451->45
+                    memcpy (writer, prefix, e+1 + (e>=1));
+                    writer += e+1 + (e>=1);
+                    *(writer++) = twodigits / 10 + '0';
+                    if (!e) *(writer++) = '.';
+                    *(writer++) = twodigits % 10 + '0';
                     break;
                 }
+
             if (e == NUM_EXPS) {
-                strcpy (writer, "-0.0");
+                memcpy (writer, "-0.0", 4);
                 writer += 4;
             }
 
@@ -78,6 +87,69 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
     *optimized_snip_len = writer - optimized_snip;
     return true;
 }
+/*
+            // we its a simple number, do it the fast way without any external functions
+            if (!e_fomrat) {
+                char *d1=NULL; // first significant digit
+                bool dec_point=false;
+                bool found_integer
+                for (unsigned j=i-digit_i; j < i; j++) {
+                    // case: we've not reached a significant digit yet
+                    if ((!d1 && snip[j] == '0')
+                        *(writer++) = snip[j];
+
+                    else if (snip[j] == '-') {
+                        if (j) return false; // - can only appear as the first character
+                        *(writer++) = snip[j];
+                    } 
+                    
+                    else (snip[j] == '.') {
+                        if (dec_point) return false;  // only one decimal point allowed
+                        dec_point = true;
+                        *(writer++) = snip[j];
+                    }
+
+                    else if (snip[j] < '0' || snip[j] > '9')
+                        return false; // not a number - can't optimize
+
+                    else if (!dec_point && snip[j] > )
+                    // case: first significant digit
+                    else if (!d1) { 
+                        d1 = writer;
+                        *(writer++) = snip[j];
+                    }
+
+                    // case second significant digit - no rounding needed
+                    else if (j+1 == i || snip[j+1] <= '4') { 
+                        *(writer++) = snip[j];
+                        break; // we have 2 significant digits - we're done
+                    }
+
+                    // case second significant digit - need to round up, but only the second digit
+                    else if (snip[j] < '9') {
+                        *(writer++) = snip[j] + 1;
+                        break; // we have 2 significant digits - we're done
+                    }
+                    
+                    // case second significant digit - need to round up first digit too, but it is not 9
+                    else if (*d1 < '9') {
+                        *(writer++) = '0'; // second digit rounds fom 9 to 0
+                        *d1++; // first digit increments
+                        break; // we have 2 significant digits - we're done
+                    }
+
+                    // case - rounding, 9.9 -> 10.0
+                    else if (snip[j-1] == '.')
+                        *(writer-2) = '1';
+                        *(writer-1) = '0';
+                        
+                        i                            
+                        }
+                        if ()
+                    }
+                }
+*/
+
 
 bool optimize (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
