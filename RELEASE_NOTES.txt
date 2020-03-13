@@ -45,4 +45,4 @@
 - Improved help text
 
 2.1.2
-- Added --optimize and optimization for PL
+- Added --optimize and within it optimization for PL and GL
