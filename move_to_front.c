@@ -346,7 +346,7 @@ void mtf_clone_ctx (VariantBlock *vb)
             buf_overlay (vb, &vb_ctx->ol_mtf, &zf_ctx->mtf, "ctx->ol_mtf", did_i);   
 
             // copy the hash table (core + used entries only of extension) - we're copying and not overlaying as we might be changing it
-            buf_copy (vb, &vb_ctx->hash, &zf_ctx->hash, sizeof(HashEnt), 0, zf_ctx->hash.len, "z_file->mtf_ctx->hash", did_i);
+            buf_copy (vb, &vb_ctx->hash, &zf_ctx->hash, sizeof(HashEnt), 0, zf_ctx->hash.len, "mtf_ctx->hash", did_i);
         }
 
         vb_ctx->did_i             = did_i;
@@ -442,7 +442,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
 
     uint32_t start_dict_len = zf_ctx->dict.len;
     uint32_t start_mtf_len  = zf_ctx->mtf.len;
-
+    
     if (!buf_is_allocated (&zf_ctx->dict)) {
 
         // first data for this dict (usually, but not always, vb_i=1) - move to zf_ctx and leave overlay
@@ -473,6 +473,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *vb, unsigned did_i)
     }
     else {
         // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
+        // (vb_ctx->mtf contains only new words, old words from previous vbs are in vb_ctx->ol_mtf)
         for (unsigned i=0; i < vb_ctx->mtf.len; i++) {
             MtfNode *vb_node = &((MtfNode *)vb_ctx->mtf.data)[i];
             

@@ -122,10 +122,10 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "   zip_generate_phase_sections: %u\n", ms(p->zip_generate_phase_sections));
         fprintf (stderr, "   zip_generate_variant_data_section: %u\n", ms(p->zip_generate_variant_data_section));
         fprintf (stderr, "   mtf_clone_ctx: %u\n", ms(p->mtf_clone_ctx));
-        fprintf (stderr, "   mtf_merge_in_vb_ctx_one_dict_id: %u\n", ms(p->mtf_merge_in_vb_ctx_one_dict_id));
-        fprintf (stderr, "      lock_mutex_zf_ctx: %u\n", ms(p->lock_mutex_zf_ctx));
+        fprintf (stderr, "   lock_mutex_zf_ctx: %u\n", ms(p->lock_mutex_zf_ctx));
+        fprintf (stderr, "      mtf_merge_in_vb_ctx_one_dict_id: %u\n", ms(p->mtf_merge_in_vb_ctx_one_dict_id));
         fprintf (stderr, "      lock_mutex_compress_dict: %u\n", ms(p->lock_mutex_compress_dict));
-        fprintf (stderr, "      zfile_compress_dictionary_data: %u\n", ms(p->gl_optimize_dictionary));
+        fprintf (stderr, "         zfile_compress_dictionary_data: %u\n", ms(p->gl_optimize_dictionary));
         fprintf (stderr, "      gl_optimize_dictionary: %u\n", ms(p->gl_optimize_dictionary));
     }    
     fprintf (stderr, "buf_alloc: %u\n", ms(p->buf_alloc));
