@@ -20,6 +20,15 @@ Actions - use at most one of these actions:
    -V --version      Display version number
 
 Flags:
+   -9 --optimize     Modify the VCF file in ways that are likely insignificant for analytical purposes, but make a
+                     signficant difference for compression. At the moment, these optimizations include:
+                     - PL data: Phred values of over 60 are changed to 60.   Example: '0,18,270' -> '0,18,60'
+                     - GL data: Numbers are rounded to 2 significant digits. Example: '-2.61618,-0.447624,-0.193264' ->
+                     '-2.6,-0.45,-0.19'
+                     Note: due to these data modifications, files compressed with --optimized are NOT identical as the
+                     original VCF after decompression. For this reason, it is not possible to use this option in
+                     combination with --test or --md5
+
    -c --stdout       Send output to standard output instead of a file
 
    -f --force        Force overwrite of the output file, or force writing .vcf.genozip data to standard output
