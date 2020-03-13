@@ -55,6 +55,7 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
 
         if (snip[i] == ',' || i == len) { // end of number
 
+            // temporarily null-terminate string and get number
             char save = snip[i];
             ((char*)snip)[i] = 0;
             double fp = atof (&snip[i-digit_i]);
