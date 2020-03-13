@@ -538,14 +538,15 @@ static inline unsigned seg_snip_len_tnc (const char *snip)
     return s - snip;
 }
 
-static void seg_genotype_area (VariantBlock *vb, ZipDataLine *dl, 
-                               const char *cell_gt_data, 
-                               unsigned cell_gt_data_len,  // not including the \t or \n 
-                               unsigned vcf_line_i,
-                               bool is_vcf_string)
+static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl, 
+                                   const char *cell_gt_data, 
+                                   unsigned cell_gt_data_len,  // not including the \t or \n 
+                                   unsigned vcf_line_i,
+                                   bool is_vcf_string)
 {
     uint32_t *next = (uint32_t *)(&vb->line_gt_data.data[vb->line_gt_data.len]);
     SubfieldMapperZip *format_mapper = &((SubfieldMapperZip *)vb->format_mapper_buf.data)[dl->format_mtf_i];
+    int optimized_cell_gt_data_len = cell_gt_data_len;
 
     bool end_of_cell = !cell_gt_data_len;
     for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
@@ -564,6 +565,7 @@ static void seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
 
             node_index = mtf_evaluate_snip (vb, ctx, false, optimized_snip, optimized_snip_len, &node, NULL);
             vb->vb_data_size -= (int)len - (int)optimized_snip_len;
+            optimized_cell_gt_data_len -= (int)len - (int)optimized_snip_len;
         }
         else 
             node_index = mtf_evaluate_snip (vb, ctx, false, cell_gt_data, len, &node, NULL);
@@ -582,6 +584,8 @@ static void seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
     if (is_vcf_string)
         // size including : (if we have both ht and gt), but not including \t which goes into SEC_STATS_HT_SEPERATOR
         vb->vcf_section_bytes[SEC_GENOTYPE_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
+
+    return optimized_cell_gt_data_len;
 }
 
 static inline const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, unsigned vcf_line_i, // line in vcf file,
@@ -732,8 +736,9 @@ static const char *seg_data_line (VariantBlock *vb, /* may be NULL if testing */
                 ASSERT (field_len, "Error: invalid VCF file - expecting sample data for sample # %u on line %u, but found a tab character", 
                         sample_i+1, vcf_line_i);
 
-                seg_genotype_area (vb, dl, field_start, field_len, vcf_line_i, true);
-                gt_line_len += field_len + 1; // including the \t or \n
+                // note: length can change as a result of optimize()
+                unsigned updated_field_len = seg_genotype_area (vb, dl, field_start, field_len, vcf_line_i, true);
+                gt_line_len += updated_field_len + 1; // including the \t or \n
             }
 
             sample_i++;

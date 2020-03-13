@@ -386,7 +386,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i, bo
 
                 // safety
                 ASSERT (next <= vb->line_gt_data.data + vb->line_gt_data.size, 
-                        "Error: line_gt_data buffer overflow. variant_block_i=%u line_i=%u sb_i=%u sample_i=%u",
+                        "Error: line_gt_data buffer overflow. variant_block_i=%u vcf_line_i=%u sb_i=%u sample_i=%u",
                         vb->variant_block_i, vb_line_i + vb->first_line, sb_i, sample_i);
             }
         } // for sample
