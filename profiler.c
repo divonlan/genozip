@@ -26,7 +26,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->piz_get_line_subfields            += src->piz_get_line_subfields;
     dst->piz_merge_line                    += src->piz_merge_line;
     dst->zfile_read_one_vb                 += src->zfile_read_one_vb;
-
+    dst->zfile_compress_dictionary_data    += src->zfile_compress_dictionary_data,
     dst->vcffile_read_variant_block        += src->vcffile_read_variant_block;
     dst->vcffile_read_vcf_header           += src->vcffile_read_vcf_header;
     dst->seg_all_data_lines                += src->seg_all_data_lines;
@@ -122,6 +122,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "   zip_generate_variant_data_section: %u\n", ms(p->zip_generate_variant_data_section));
         fprintf (stderr, "   mtf_clone_ctx: %u\n", ms(p->mtf_clone_ctx));
         fprintf (stderr, "   mtf_merge_in_vb_ctx: %u\n", ms(p->mtf_merge_in_vb_ctx));
+        fprintf (stderr, "      zfile_compress_dictionary_data: %u\n", ms(p->gl_optimize_dictionary));
         fprintf (stderr, "      gl_optimize_dictionary: %u\n", ms(p->gl_optimize_dictionary));
     }    
     fprintf (stderr, "buf_alloc: %u\n", ms(p->buf_alloc));

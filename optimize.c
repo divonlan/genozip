@@ -92,69 +92,6 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
     *optimized_snip_len = writer - optimized_snip;
     return true;
 }
-/*
-            // we its a simple number, do it the fast way without any external functions
-            if (!e_fomrat) {
-                char *d1=NULL; // first significant digit
-                bool dec_point=false;
-                bool found_integer
-                for (unsigned j=i-digit_i; j < i; j++) {
-                    // case: we've not reached a significant digit yet
-                    if ((!d1 && snip[j] == '0')
-                        *(writer++) = snip[j];
-
-                    else if (snip[j] == '-') {
-                        if (j) return false; // - can only appear as the first character
-                        *(writer++) = snip[j];
-                    } 
-                    
-                    else (snip[j] == '.') {
-                        if (dec_point) return false;  // only one decimal point allowed
-                        dec_point = true;
-                        *(writer++) = snip[j];
-                    }
-
-                    else if (snip[j] < '0' || snip[j] > '9')
-                        return false; // not a number - can't optimize
-
-                    else if (!dec_point && snip[j] > )
-                    // case: first significant digit
-                    else if (!d1) { 
-                        d1 = writer;
-                        *(writer++) = snip[j];
-                    }
-
-                    // case second significant digit - no rounding needed
-                    else if (j+1 == i || snip[j+1] <= '4') { 
-                        *(writer++) = snip[j];
-                        break; // we have 2 significant digits - we're done
-                    }
-
-                    // case second significant digit - need to round up, but only the second digit
-                    else if (snip[j] < '9') {
-                        *(writer++) = snip[j] + 1;
-                        break; // we have 2 significant digits - we're done
-                    }
-                    
-                    // case second significant digit - need to round up first digit too, but it is not 9
-                    else if (*d1 < '9') {
-                        *(writer++) = '0'; // second digit rounds fom 9 to 0
-                        *d1++; // first digit increments
-                        break; // we have 2 significant digits - we're done
-                    }
-
-                    // case - rounding, 9.9 -> 10.0
-                    else if (snip[j-1] == '.')
-                        *(writer-2) = '1';
-                        *(writer-1) = '0';
-                        
-                        i                            
-                        }
-                        if ()
-                    }
-                }
-*/
-
 
 bool optimize (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {

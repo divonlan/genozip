@@ -23,7 +23,7 @@ typedef struct {
         seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
         zip_generate_genotype_sections, zip_generate_phase_sections, zip_generate_variant_data_section,
         mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx, gl_optimize_dictionary,
-        md5,
+        md5,zfile_compress_dictionary_data,
         tmp1, tmp2, tmp3, tmp4, tmp5;
 } ProfilerRec;
 
