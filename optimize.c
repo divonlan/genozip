@@ -44,7 +44,7 @@ static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_
     return true;
 
 fail:
-    *optimized_snip_len = 0;
+    *optimized_snip_len = len;
     return false;
 }
 
@@ -64,8 +64,9 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
             double fp = atof (&snip[i-digit_i]);
             ((char*)snip)[i] = save;
             
-            if (fp > 0 || fp <= -10) goto fail; // GL numbers must be in the range (-10,0]
+            if (fp > 0 || fp <= -9) goto fail; // GL numbers must be in the range (-9,0]
 
+            // effecient outputing of two significant digits - a lot faster that sprintf
             #define NUM_EXPS 7
             static const double exps[NUM_EXPS]    = { -1.0, -0.1, -0.01, -0.001, -0.0001, -0.00001, -0.000001 };
             static const double mult_by[NUM_EXPS] = { 10,   100,  1000,  10000,  100000,  1000000,  10000000  };
@@ -73,6 +74,10 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
             unsigned e=0; for (; e < NUM_EXPS; e++)
                 if (fp <= exps[e]) {
                     int twodigits = -round (fp * mult_by[e]); // eg -4.31->43 -4.39->44 -0.0451->45
+                    if (twodigits == 100) { // cannot happen with e=0 because we restrict the integer to be up to 8 in the condition above
+                        e--;
+                        twodigits = 10;
+                    }
                     memcpy (writer, prefix, e+1 + (e>=1));
                     writer += e+1 + (e>=1);
                     *(writer++) = twodigits / 10 + '0';
@@ -97,7 +102,7 @@ static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_
     return true;
 
 fail:
-    *optimized_snip_len = 0;
+    *optimized_snip_len = len;
     return false;
 }
 
