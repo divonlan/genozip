@@ -241,9 +241,14 @@ static void main_show_sections (void)
     fprintf (stderr, "ID       Type    #B250s  #Words   Dictsize\n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
         const MtfContext *ctx = &z_file->mtf_ctx[i];
+        
+        const char *type;
+        if (i <= FORMAT) type = "FIELD";
+        else if (dict_id_is_info_subfield (ctx->dict_id)) type = "INFO";
+        else type = "FORMAT";
+
         fprintf (stderr, "%*.*s %s %7u %7u %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
-                 dict_id_is_info_subfield (ctx->dict_id) ? "INFO  " : "FORMAT",
-                 ctx->mtf_i.len, ctx->mtf.len, buf_human_readable_size(ctx->dict.len, vsize));
+                 type, ctx->mtf_i.len, ctx->mtf.len, buf_human_readable_size(ctx->dict.len, vsize));
     }
 
     char s1[20], s2[20];
