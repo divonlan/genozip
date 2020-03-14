@@ -310,8 +310,10 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
                 this_value = &info_str[i+1]; 
                 this_value_len = 0;
             }
-            else if (c == ';' && i==info_len) { // name without value, can happen for example if the field is "." only
+            // name without value - valid in VCF format
+            else if (c == ';' && i==info_len) { 
                 iname_len--; // remove ;
+                vb->vcf_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n)
                 continue;
             }
             
@@ -341,7 +343,8 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
                 ((uint32_t *)mtf_i_buf->data)[mtf_i_buf->len++] = 
                     mtf_evaluate_snip (vb, ctx, false, this_value, this_value_len, &sf_node, NULL);
 
-                vb->vcf_section_bytes[SEC_INFO_SUBFIELD_B250] += (this_value_len+1); // including the separator (; or \n)
+                vb->vcf_section_bytes[SEC_INFO_SUBFIELD_B250] += this_value_len; 
+                vb->vcf_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n) 
 
                 reading_name = true;  // end of value - move to the next time
                 this_name = &info_str[i+1]; // move to next field in info string
@@ -377,7 +380,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
 
     dl->info_mtf_i = node_index;
 
-    vb->vcf_section_bytes[SEC_INFO_B250] += iname_len + !sf_i; // this includes all the = (the \t is included with the values, except if there are none)
+    vb->vcf_section_bytes[SEC_INFO_B250] += iname_len; // this includes all the =
 }
 
 static void seg_increase_ploidy_one_line (VariantBlock *vb, char *line_ht_data, unsigned new_ploidy, unsigned num_samples)
