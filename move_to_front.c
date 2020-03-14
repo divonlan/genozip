@@ -588,26 +588,15 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
                                     DictIdType dict_id,
                                     SectionType dict_section_type)
 {
-    int did_i=-1;
-
-    // if its a vardata field - the did_i is constant    
-    if (dict_id_is_vardata_field (dict_id)) {
-        for (VcfFields f=CHROM; f <= FORMAT; f++)
-            if (dict_id_vardata_fields[f] == dict_id.num)
-                did_i = f;
-        ASSERT (did_i >= 0, "Error: invalid vardata dict_id %.*s", DICT_ID_LEN, dict_id.id);
-    }
-
-    else {
-        // non vardata field: check if we have this dict_id already
-        for (did_i=8; did_i < *num_dict_ids; did_i++) 
-            if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
-    }
+    
+    // check if we have this dict_id already
+    unsigned did_i=0 ; for (; did_i < *num_dict_ids; did_i++) 
+        if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
 
     MtfContext *ctx = &mtf_ctx[did_i];
 
     // case: dict_id encountered for this first time - initialize a mtf_ctx
-    if (!ctx->dict_id.num) {
+    if (did_i == *num_dict_ids) {
 
         //fprintf (stderr,  ("Inserting new vb dict_id=%.8s in did_i=num_dict_ids=%u \n", dict_id_printable (dict_id).id, did_i);
         ASSERT (*num_dict_ids+1 < MAX_DICTS, 
@@ -623,7 +612,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
         // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
         (*num_dict_ids)++; 
 
-        *num_subfields = MAX (8 + (did_i >= 8), (*num_subfields)+1); // first vardata will make this value 8, first non-vardata will make it 9, subsequent non-vardata will grow it by 1
+        if (num_subfields) (*num_subfields)++;
     }
 
     ASSERT (ctx->dict_section_type == dict_section_type, "Error: mismatch in dict_id=%.*s dict_section_type: requested %s but in the ctx says: %s",

@@ -10,7 +10,7 @@
 #include "optimize.h"
 #include "dict_id.h"
 
-// optimize numbers in the range (-99.95,99.95) to 2 significant digits
+// optimize numbers in the range (-99.5,99.5) to 2 significant digits
 static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len, 
                                              char *optimized_snip, unsigned *optimized_snip_len)
 {
@@ -24,7 +24,7 @@ static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len,
 
     if (negative) fp = -fp; // fp is always positive
 
-    if (fp >= 99.949999999) return false; // numbers must be in the range (-9.95,9.95) for this optimization (add epsilon to account for floating point rounding)
+    if (fp >= 99.49999999) return false; // numbers must be in the range (-9.5,9.5) for this optimization (add epsilon to account for floating point rounding)
 
     char *writer = optimized_snip;
 
@@ -64,7 +64,7 @@ static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len,
     return true;
 }
 
-static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+static inline bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
 
@@ -131,7 +131,9 @@ static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_
 // less conditions - as the caller knows if he is format or info
 bool optimize_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
-    if (dict_id.num == dict_id_GL) return optimize_gl (snip, len, optimized_snip, optimized_snip_len);
+    if (dict_id.num == dict_id_GL) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
+    if (dict_id.num == dict_id_GP) return 
+    optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
     if (dict_id.num == dict_id_PL) return optimize_pl (snip, len, optimized_snip, optimized_snip_len);
     
     ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);

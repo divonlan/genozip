@@ -49,3 +49,7 @@
 
 2.1.3
 - Fixed bug in optimization in GL in --optimize
+
+2.1.4
+- --show-sections now shows all dictionaries, not just FORMAT and INFO
+- --added optimization for VQSLOD

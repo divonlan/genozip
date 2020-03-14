@@ -31,6 +31,7 @@ static const char *help_genozip[] = {
     "   -9 --optimize     Modify the VCF file in ways that are likely insignificant for analytical purposes, but make a signficant difference for compression. At the moment, these optimizations include:",    
     "                     - PL data: Phred values of over 60 are changed to 60.     Example: '0,18,270' -> '0,18,60'",    
     "                     - GL data: Numbers are rounded to 2 significant digits.   Example: '-2.61618,-0.447624,-0.193264' -> '-2.6,-0.45,-0.19'",    
+    "                     - GP data: Numbers are rounded to 2 significant digits, as with GL.",
     "                     - VQSLOD data: Number is rounded to 2 significant digits. Example: '-4.19494' -> '-4.2'",
     "                     Note: due to these data modifications, files compressed with --optimized are NOT identical as the original VCF after decompression. For this reason, it is not possible to use this option in combination with --test or --md5",    
     "",

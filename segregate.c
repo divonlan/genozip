@@ -346,6 +346,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
                 if (flag_optimize && (ctx->dict_id.num == dict_id_VQSLOD) &&
                     optimize_info (ctx->dict_id, this_value, this_value_len, optimized_snip, &optimized_snip_len)) {
                  
+                    vb->vb_data_size -= (int)this_value_len - (int)optimized_snip_len;
                     this_value = optimized_snip;
                     this_value_len = optimized_snip_len;
                 }
@@ -569,7 +570,8 @@ static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
         unsigned optimized_snip_len;
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
-        if (flag_optimize && cell_gt_data && len && (ctx->dict_id.num == dict_id_PL || ctx->dict_id.num == dict_id_GL) && 
+        if (flag_optimize && cell_gt_data && len && 
+            (ctx->dict_id.num == dict_id_PL || ctx->dict_id.num == dict_id_GL || ctx->dict_id.num == dict_id_GP) && 
             optimize_format (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
 
             node_index = mtf_evaluate_snip (vb, ctx, false, optimized_snip, optimized_snip_len, &node, NULL);

@@ -789,8 +789,8 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
 
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, header->dict_id, 
-                                                  SEC_INFO_SUBFIELD_DICT);
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, 
+                                                  header->dict_id, SEC_INFO_SUBFIELD_DICT);
 
         zfile_uncompress_section (vb, header, &ctx->b250, "mtf_ctx.b250", SEC_INFO_SUBFIELD_B250);    
     }
