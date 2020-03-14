@@ -238,13 +238,13 @@ static void main_show_sections (void)
              (double)total_vcf / (double)total_z, "");
 
     fprintf (stderr, "\nDictionaries:\n");
-    fprintf (stderr, "ID       Type    #Words  #Uniq   uncomp_dict_size\n");
+    fprintf (stderr, "ID       Type    #Words   #Uniq   uncomp_dict_size\n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
         const MtfContext *ctx = &z_file->mtf_ctx[i];
         
         const char *type;
-        if (i <= FORMAT) type = "FIELD";
-        else if (dict_id_is_info_subfield (ctx->dict_id)) type = "INFO";
+        if (i <= FORMAT) type = "FIELD ";
+        else if (dict_id_is_info_subfield (ctx->dict_id)) type = "INFO  ";
         else type = "FORMAT";
 
         fprintf (stderr, "%*.*s %s %7u %7u %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
