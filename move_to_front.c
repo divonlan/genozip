@@ -796,7 +796,7 @@ void mtf_update_stats (VariantBlock *vb)
         unsigned z_did_i = mtf_get_z_file_did_i (vb, vb_ctx->dict_id, true);
         MtfContext *zf_ctx = &z_file->mtf_ctx[z_did_i];
         
-        zf_ctx->mtf_i.len++; // zf_ctx->mtf_i.len is protect by z_file->dicts_mutex and NOT zf_ctx->mutex
+        zf_ctx->mtf_i.len += vb_ctx->mtf_i.len; // zf_ctx->mtf_i.len is protect by z_file->dicts_mutex and NOT zf_ctx->mutex
     }
 
     mtf_unlock (vb, &z_file->dicts_mutex, "dicts_mutex", 0);

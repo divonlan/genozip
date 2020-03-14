@@ -238,7 +238,7 @@ static void main_show_sections (void)
              (double)total_vcf / (double)total_z, "");
 
     fprintf (stderr, "\nDictionaries:\n");
-    fprintf (stderr, "ID       Type    #B250s  #Words   Dictsize\n");
+    fprintf (stderr, "ID       Type    #Words  #Uniq   uncomp_dict_size\n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
         const MtfContext *ctx = &z_file->mtf_ctx[i];
         
