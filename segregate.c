@@ -15,8 +15,6 @@
 
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
-uint64_t dict_id_PL, dict_id_GL; // globals externed in dict_id.h and initialized in dict_id_initialize
-
 // store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from vcf_data,
 // but in the part of vcf_data has been already consumed and no longer needed.
 // if there's not enough space in vcf_data, we allocate on vcf_data_spillover
@@ -328,7 +326,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
                 // find (or create) an MTF context (= a dictionary) for this name
                 DictIdType dict_id = dict_id_info_subfield (dict_id_make (this_name, this_name_len));
 
-                // find which DictId (did_i) this subfield belongs to
+                // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
                 MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, dict_id, SEC_INFO_SUBFIELD_DICT);
                 iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
 
@@ -340,11 +338,19 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
 
                 MtfNode *sf_node;
 
-                ((uint32_t *)mtf_i_buf->data)[mtf_i_buf->len++] = 
-                    mtf_evaluate_snip (vb, ctx, false, this_value, this_value_len, &sf_node, NULL);
-
                 vb->vcf_section_bytes[SEC_INFO_SUBFIELD_B250] += this_value_len; 
                 vb->vcf_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n) 
+
+                unsigned optimized_snip_len;
+                char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
+                if (flag_optimize && (ctx->dict_id.num == dict_id_VQSLOD) &&
+                    optimize_info (ctx->dict_id, this_value, this_value_len, optimized_snip, &optimized_snip_len)) {
+                 
+                    this_value = optimized_snip;
+                    this_value_len = optimized_snip_len;
+                }
+                ((uint32_t *)mtf_i_buf->data)[mtf_i_buf->len++] = 
+                    mtf_evaluate_snip (vb, ctx, false, this_value, this_value_len, &sf_node, NULL);
 
                 reading_name = true;  // end of value - move to the next time
                 this_name = &info_str[i+1]; // move to next field in info string
@@ -564,7 +570,7 @@ static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
         if (flag_optimize && cell_gt_data && len && (ctx->dict_id.num == dict_id_PL || ctx->dict_id.num == dict_id_GL) && 
-            optimize (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
+            optimize_format (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
 
             node_index = mtf_evaluate_snip (vb, ctx, false, optimized_snip, optimized_snip_len, &node, NULL);
             vb->vb_data_size -= (int)len - (int)optimized_snip_len;

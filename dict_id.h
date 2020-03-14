@@ -42,9 +42,8 @@ static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] =
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
 
-extern uint64_t dict_id_PL, dict_id_GL; // declared in segregate.c
+extern uint64_t dict_id_vardata_fields[], dict_id_PL, dict_id_GL, dict_id_VQSLOD;
 
-static inline void dict_id_initialize(void) { dict_id_PL = dict_id_make ("PL", 2).num;\
-                                              dict_id_GL = dict_id_make ("GL", 2).num;} // note: these values will be different in big and little endian machines
+extern void dict_id_initialize(void);
 
 #endif

@@ -10,9 +10,92 @@
 #include "optimize.h"
 #include "dict_id.h"
 
+// optimize numbers in the range (-99.95,99.95) to 2 significant digits
+static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len, 
+                                             char *optimized_snip, unsigned *optimized_snip_len)
+{
+    bool negative = (snip[0] == '-');
+
+    // temporarily null-terminate string and get number
+    char save = snip[len];
+    ((char*)snip)[len] = 0;
+    double fp = atof (snip);
+    ((char*)snip)[len] = save;
+
+    if (negative) fp = -fp; // fp is always positive
+
+    if (fp >= 99.949999999) return false; // numbers must be in the range (-9.95,9.95) for this optimization (add epsilon to account for floating point rounding)
+
+    char *writer = optimized_snip;
+
+    // effecient outputing of two significant digits - a lot faster that sprintf
+    #define NUM_EXPS 8
+    #define MAX_NUM_LEN (1 /* hyphen */ + (NUM_EXPS-1) /* prefix */ + 2 /* digits */)
+
+    static const double exps[NUM_EXPS]    = { 10, 1, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001 };
+    static const double mult_by[NUM_EXPS] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000 };
+    static const char *prefix = "0.0000000000000000000";
+    unsigned e=0; for (; e < NUM_EXPS; e++)
+        if (fp >= exps[e]) {
+            int twodigits = round (fp * mult_by[e]); // eg 4.31->43 ; 4.39->44 ; 0.0451->45
+            if (twodigits == 100) { // cannot happen with e=0 because we restrict the integer to be up to 8 in the condition above
+                e--;
+                twodigits = 10;
+            }
+            if (negative) *(writer++) = '-';
+
+            if (e >= 2) {
+                memcpy (writer, prefix, e);
+                writer += e;
+            }
+
+            *(writer++) = twodigits / 10 + '0';
+            unsigned second_digit = twodigits % 10;
+            if (e==1 && second_digit) *(writer++) = '.';
+            if (!e || second_digit) *(writer++) = twodigits % 10 + '0'; // trailing 0: we write 2 (not 2.0) and 0.2 (not 0.20)
+            break;
+        }
+
+    if (e == NUM_EXPS) *(writer++) = '0'; // rounding a very small positive or negative number to 0
+
+    *optimized_snip_len = writer - optimized_snip;
+    
+    //printf ("snip:%.*s optimized:%.*s\n", len, snip, *optimized_snip_len, optimized_snip);
+    return true;
+}
+
+static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+{
+    if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
+
+    char *writer = optimized_snip;
+    unsigned digit_i=0;
+    for (unsigned i=0; i <= len; i++) { 
+
+        if (snip[i] == ',' || i == len) { // end of number
+
+            // optimize might actually increase the length in edge cases, e.g. -.1 -> -0.1, so we
+            // make sure we have enough room for another number
+            if ((writer - optimized_snip) + MAX_NUM_LEN > OPTIMIZE_MAX_SNIP_LEN) return false;
+
+            unsigned one_number_len;
+            bool ret = optimize_float_2_sig_dig (&snip[i-digit_i], digit_i, writer, &one_number_len);
+            if (!ret) return false;
+            writer += one_number_len;
+
+            if (i < len) *(writer++) = ',';
+            digit_i=0;
+        }
+        else digit_i++;
+    }
+
+    *optimized_snip_len = writer - optimized_snip;
+    return true;
+}
+
 static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
-    if (len > OPTIMIZE_MAX_SNIP_LEN) goto fail; // too long - we can't optimize - return unchanged
+    if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
 
     char *writer = optimized_snip;
     unsigned digit_i=0;
@@ -29,7 +112,7 @@ static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_
                 *(writer++) = snip[i-2];
                 *(writer++) = snip[i-1];
             }
-            else goto fail; // digit_i==0
+            else return false; // digit_i==0
 
             if (i < len) *(writer++) = ',';
             digit_i=0;
@@ -37,79 +120,28 @@ static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_
         else if (snip[i] >= '0' && snip[i] <= '9')
             digit_i++;
         
-        else goto fail;// another character
+        else return false; // another character
     }
     
     *optimized_snip_len = writer - optimized_snip;
     return true;
-
-fail:
-    *optimized_snip_len = len;
-    return false;
 }
 
-static inline bool optimize_gl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
-{
-    if (len > OPTIMIZE_MAX_SNIP_LEN) goto fail; // too long - we can't optimize - return unchanged
-
-    char *writer = optimized_snip;
-    unsigned digit_i=0;
-    for (unsigned i=0; i <= len; i++) { 
-
-        if (snip[i] == ',' || i == len) { // end of number
-
-            // temporarily null-terminate string and get number
-            char save = snip[i];
-            ((char*)snip)[i] = 0;
-            double fp = atof (&snip[i-digit_i]);
-            ((char*)snip)[i] = save;
-            
-            if (fp > 0 || fp <= -9) goto fail; // GL numbers must be in the range (-9,0]
-
-            // effecient outputing of two significant digits - a lot faster that sprintf
-            #define NUM_EXPS 7
-            static const double exps[NUM_EXPS]    = { -1.0, -0.1, -0.01, -0.001, -0.0001, -0.00001, -0.000001 };
-            static const double mult_by[NUM_EXPS] = { 10,   100,  1000,  10000,  100000,  1000000,  10000000  };
-            static const char *prefix = "-0.0000000000000000000";
-            unsigned e=0; for (; e < NUM_EXPS; e++)
-                if (fp <= exps[e]) {
-                    int twodigits = -round (fp * mult_by[e]); // eg -4.31->43 -4.39->44 -0.0451->45
-                    if (twodigits == 100) { // cannot happen with e=0 because we restrict the integer to be up to 8 in the condition above
-                        e--;
-                        twodigits = 10;
-                    }
-                    memcpy (writer, prefix, e+1 + (e>=1));
-                    writer += e+1 + (e>=1);
-                    *(writer++) = twodigits / 10 + '0';
-                    if (!e) *(writer++) = '.';
-                    unsigned second_digit = twodigits % 10;
-                    if (second_digit || !e) *(writer++) = twodigits % 10 + '0'; // trailing 0: we write 2.0 but 0.2 (not 0.20)
-                    break;
-                }
-
-            if (e == NUM_EXPS) {
-                memcpy (writer, "-0.0", 4);
-                writer += 4;
-            }
-
-            if (i < len) *(writer++) = ',';
-            digit_i=0;
-        }
-        else digit_i++;
-    }
-
-    *optimized_snip_len = writer - optimized_snip;
-    return true;
-
-fail:
-    *optimized_snip_len = len;
-    return false;
-}
-
-bool optimize (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+// we separate to too almost identical functions optimize_format, optimize_info to gain a bit of performace -
+// less conditions - as the caller knows if he is format or info
+bool optimize_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (dict_id.num == dict_id_GL) return optimize_gl (snip, len, optimized_snip, optimized_snip_len);
     if (dict_id.num == dict_id_PL) return optimize_pl (snip, len, optimized_snip, optimized_snip_len);
+    
+    ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
+    return 0; // never reaches here, avoid compiler warning
+}
+
+bool optimize_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+{
+    if (dict_id.num == dict_id_VQSLOD) 
+        return optimize_float_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
     
     ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
     return 0; // never reaches here, avoid compiler warning
