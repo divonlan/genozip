@@ -237,20 +237,21 @@ static void main_show_sections (void)
              buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
 
-    fprintf (stderr, "\nTag dictionaries:\n");
+    fprintf (stderr, "\nDictionaries:\n");
     fprintf (stderr, "ID       Type    #B250s  #Words   Dictsize\n");
-    for (uint32_t i=8; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
+    for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
         const MtfContext *ctx = &z_file->mtf_ctx[i];
         fprintf (stderr, "%*.*s %s %7u %7u %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
                  dict_id_is_info_subfield (ctx->dict_id) ? "INFO  " : "FORMAT",
                  ctx->mtf_i.len, ctx->mtf.len, buf_human_readable_size(ctx->dict.len, vsize));
     }
 
-    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
-             total_z, z_file->disk_size, z_file->disk_size - total_z);
+    char s1[20], s2[20];
+    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%u)", 
+             buf_human_readable_uint (total_z, s1), buf_human_readable_uint (z_file->disk_size, s2), (uint32_t)(z_file->disk_size - total_z));
 
-    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
-             total_vcf, vcf_file->vcf_data_size_single, vcf_file->vcf_data_size_single - total_vcf);
+    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%s but file size is %s (diff=%u)", 
+             buf_human_readable_uint (total_vcf, s1), buf_human_readable_uint (vcf_file->vcf_data_size_single, s2), (uint32_t)(vcf_file->vcf_data_size_single - total_vcf));
 
 }
 
