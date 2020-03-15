@@ -699,7 +699,7 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
                 piz_merge_line (vb, vb_line_i);
             }
         }
-        else 
+        else if (is_line_included)
             buf_copy (vb, &vb->data_lines.piz[vb_line_i].line, &vb->line_variant_data, 0, 0, 0, 
                       "dl->line", vb->first_line + vb_line_i);
             
