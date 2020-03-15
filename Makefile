@@ -212,7 +212,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@touch $@
 	@echo "CONDA: Using a browser:"
 	@echo "  (1) Go to https://github.com/conda-forge/genozip-feedstock/pulls"
-	@echo "  (2) Click 'Create pull request' and wait 30 seconds for the test to start"
+	@echo "  (2) Click 'Compare and pull request' then 'Create pull request' and wait 30 seconds for the test to start"
 	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build"
 	@echo "  (4) Click on genozip and wait (~5 min) for the test to complete. Fix any issues."
 	@echo "  (5) Go back to the tab in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
