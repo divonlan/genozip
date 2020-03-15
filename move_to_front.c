@@ -398,7 +398,7 @@ finish:
 static void mtf_merge_in_vb_ctx_one_dict_id (VariantBlock *merging_vb, unsigned did_i)
 {
     MtfContext *vb_ctx = &merging_vb->mtf_ctx[did_i];
-if (vb_ctx->dict_id.num == dict_id_FORMAT_PL) printf ("%u\n", vb_ctx->mtf.len); // DEBUG
+
     // get the ctx or create a new one. note: mtf_add_new_zf_ctx() must be called before mtf_lock() because it locks the z_file mutex (avoid a deadlock)
     MtfContext *zf_ctx = mtf_get_zf_ctx (vb_ctx->dict_id);
     if (!zf_ctx) zf_ctx = mtf_add_new_zf_ctx (merging_vb, vb_ctx); 

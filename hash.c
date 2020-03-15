@@ -30,7 +30,7 @@ typedef struct {
 #pragma pack (pop)
 
 // get the size of the hash table - a primary number between roughly 0.5K and 8M that is close to size, or a bit bigger
-static uint32_t hash_next_size_up (uint32_t size)
+static uint32_t hash_next_size_up (uint64_t size)
 {
     // primary numbers just beneath the powers of 2
     #define NUM_HASH_SIZES 19
@@ -39,7 +39,7 @@ static uint32_t hash_next_size_up (uint32_t size)
                                                    33554393, 67108859, 134217689 };
 
     for (int i=0; i < NUM_HASH_SIZES; i++)
-        if (size < hash_sizes[i]) return hash_sizes[i];
+        if (size < (uint64_t)hash_sizes[i]) return hash_sizes[i];
 
     return hash_sizes[NUM_HASH_SIZES-1]; // the maximal size
 }
@@ -104,77 +104,77 @@ void hash_alloc_local (VariantBlock *segging_vb, MtfContext *vb_ctx)
 // an attempt is made to set the cache size according to the expected needs. for this, we use data
 // about how many entries were added in the first half of the vb vs the second half, as well as the file size,
 // to extrapolate the expected growth
+// it is very important to get this as accurate as possible: merge is our bottleneck for core-count scalability
+// as the merge is protected by a per-dictionary mutex. if the global hash table size is too small, search time
+// goes up (because of the need to traverse linked lists) during the bottleneck time. Coversely, if the hash
+// table size is too big, it both consumes a lot memory, as well as slows down the search time as the dictionary
+// is less likely to fit into the CPU memory caches
 void hash_alloc_global (VariantBlock *merging_vb, MtfContext *zf_ctx, const MtfContext *first_merging_vb_ctx)
 {
-    // an approximation of the number of VBs we expect with similar data. It is inaccurate in these cases:
-    // 1. when the file is not roughly uniform - i.e. if other VBs look differently
-    // 2. if there are more concatenated VCF files coming - we don't take them into account
-    // 3. if we don't have the file size because it is coming from redirected stdin
-    // 4. if we don't have the file size because it is a compressed (gz/bz2) file - we attempt to correct for this
-    uint64_t estimated_vcf_file_size = vcf_file->disk_size;
+    double estimated_vcf_file_size = vcf_file->disk_size;
     if (vcf_file->type == VCF_BZ2) estimated_vcf_file_size *= 15; // compression ratio of bzip2 of a "typical" vcf file
     if (vcf_file->type == VCF_GZ)  estimated_vcf_file_size *= 8;  // compression ratio of gzip of a "typical" vcf file
 
-    uint64_t expected_num_vbs = MAX (1, estimated_vcf_file_size / (uint64_t)merging_vb->vcf_data.len);
+    double estimated_num_vbs = MAX (1, (double)estimated_vcf_file_size / (double)merging_vb->vcf_data.len);
+    double estimated_num_lines = estimated_num_vbs * (double)merging_vb->num_lines;
 
     double n1 = first_merging_vb_ctx->mtf_len_at_half;
     double n2 = (int)first_merging_vb_ctx->ol_mtf.len - (int)first_merging_vb_ctx->mtf_len_at_half;
 
-    // method 1 - we got it with trial and error - more accurate than method 2 with large dictionaries,
-    // but tends to under-estimate with small ones
-    double reduction_factor_per_vb = MIN (1, ((n1 > 0) ? (n2 / n1) * (n2 / n1) : 0.000001)); // a number (0,1] )
+    static struct { uint64_t vbs, factor; } growth_plan[] =
+    { 
+        { 2, 2 },
+        { 5, 4 },
+        { 9, 8 },
+        { 17, 16 },
+        { 44, 23 },
+        { 114, 32 },
+        { 295, 45 },
+        { 765, 64 },
+        { 1981, 91 },
+        { 5132, 128 },
+        { 13291, 181 },
+        { 34423, 256 },
+        { 89155, 362 },
+        { 230912, 512 },
+        { 598063, 724 },
+        { 1548983, 1024 },
+    };
 
-    double method_1_total = n1+n2; 
-    double growth_by = n1+n2; 
+    double estimated_entries=0;
+    double n_ratio = n2 ? n1/n2 : 0;
 
-    for (unsigned vb_i=1; vb_i < expected_num_vbs && growth_by > 500; vb_i++) {
-        growth_by *= reduction_factor_per_vb;
-        reduction_factor_per_vb = pow (reduction_factor_per_vb, 0.818); // magic number
-        method_1_total += growth_by; 
+    if (n2 == 0) 
+        estimated_entries = zf_ctx->mtf.len;
+
+    else if (n_ratio > 0.8 && n_ratio < 1.2)  // looks like almost linear growth
+        estimated_entries = estimated_num_lines * ((n1+n2 )/ merging_vb->num_lines) * 0.75;
+    
+    else {
+        unsigned max_growth_plan;
+        if      (n_ratio > 2.5) max_growth_plan = 1;
+        else if (n_ratio > 2.1) max_growth_plan = 3;
+        else if (n_ratio > 1.8) max_growth_plan = 2;
+        else if (n_ratio > 1.5) max_growth_plan = 4;
+        else                    max_growth_plan = sizeof(growth_plan) / sizeof(growth_plan[0])-1;
+        
+        for (int i=max_growth_plan; i >= 0 ; i--)
+            if (estimated_num_vbs > growth_plan[i].vbs) {
+                estimated_entries = zf_ctx->mtf.len * growth_plan[i].factor;
+                break;
+            }
     }
 
-    // method 2 - somewhat more scientific - accurate results for smaller dictionaries but underestimates
-    // for larger ones 
+    if (!estimated_entries) estimated_entries = 100000000000; // very very big
 
-    // some math: definitions:
-    // simplifying assumptions: 
-    // 1. we assume each value is random across a uniform space (i.e. values are spread across the file without structure)
-    // 2. we assume that when the second half of the lines were checking if entries exist, they only checked those
-    //    entries from the first half. this is of course false, but it is an ok approximation in most cases
-    // 3. we assume that VBs and the number of lines in each VB is similar, so we will take the first VB data
-    //    to be representative of all VBs to come
-    //
-    // n1, n2 - the number of entries, as counted in the vb, in each one of approximately half of the lines of the vb
-    // L1, L2 - the number of lines acorss which n1 and n2 were counted
-    // N - the unknown size of the uniform space
-    // calculation regarding the H2 (second half of the vb), when n1 out of the possible (unkown) N values are already in ctx:
-    // approximation of EXPECTED number of rows to be NOT in ctx in H2: (L2 - (((n1+2)/N) * L2). 
-    // We equate this is ACTUAL = n2 and extract N:
-    // N = (n1*L2) / (L2-n2)
-    // For the next VB with L3 lines, and np previous entires (starting with total_so_far = n1+n2), the expected 
-    //     % of hits = (1 - (total_so_far / N)) * L3
-
-    // note: we do the calculations in "double" for more accurate divisions, and to support large intermediate numbers
-    double line_factor = dict_id_is_format_subfield (zf_ctx->dict_id) ? global_num_samples : 1; // for FORMAT subfields - the number of "slots" for items is lines x samples
-    double L2 = ((int)merging_vb->num_lines - (int)first_merging_vb_ctx->num_lines_at_half) * line_factor;    
-    double N = (L2 != n2) ? (((n1+n2)*L2) / (L2-n2)) : 0;
-    double method_2_total = n1+n2; 
-
-    if (N > 0) {
-        // now, we iterate to calculate how many entries is each VB expected to add, and what do we
-        // expect the total number of entries to be
-        for (unsigned vb_i=1; vb_i < expected_num_vbs; vb_i++) 
-            method_2_total += (MIN (N, 1 - MIN (1, method_2_total / N)) * merging_vb->num_lines * line_factor);  // merging_vb->num_lines is an approximation of next VBs num_lines
-    }
-
-    // our final estimate is the maximum of method 1 and method 2
+    zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
+    // printf ("dict=%.8s n1=%u n2=%u n1/n2=%2.2lf vbs=%u num_lines=%u zf_ctx->mtf.len=%u entries=%u hashsize=%u\n", dict_id_printable(zf_ctx->dict_id).id, (unsigned)n1, (unsigned)n2,  n2 ? n1/n2 : 777, (unsigned)estimated_num_vbs, (unsigned)estimated_num_lines, zf_ctx->mtf.len, (unsigned)estimated_entries, zf_ctx->global_hash_prime); 
 
     // we allocate 5X total_so_far to leave the hash table a bit less crowded - less spill over
     // (this is the global table - only 1 copy of it shared by all threads (unless there are reallocs) -
     // so we can be a bit more generous with space). reallocs are also less likely with larger spaces
     // (less entries spill over), so it might even not add up that much more memory.
-    zf_ctx->global_hash_prime = hash_next_size_up ((uint32_t)MAX(method_1_total, method_2_total) * 5);
-
+    //zf_ctx->global_hash_prime = hash_next_size_up ((uint32_t)MAX(method_1_total, method_2_total) * 5);
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->mtf_ctx->global_hash", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->global_hash);
@@ -225,7 +225,7 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
             // thread safety: VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
             // and accessing it. we make sure that the setting of g_hashent->merge_num is atomic and the other threads will at all times either
             // see NIL or merge_num - both of which indicate the this entry is effectively NIL as they have an older merge_num
-// clang: check __c11_atomic_store: https://clang.llvm.org/docs/LanguageExtensions.html#langext-c11-atomic
+
             g_hashent->next = NO_NEXT;
             g_hashent->mtf_i = new_mtf_i_if_no_old_one;
             __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the mtf_i
@@ -295,7 +295,7 @@ int32_t hash_get_entry_for_seg (VariantBlock *segging_vb, MtfContext *vb_ctx,
         if (next == NO_NEXT || /* case 1 */ next >= vb_ctx->global_hash.len) // case 4
             break;
 
-        g_hashent = ENT(GlobalHashEnt, &vb_ctx->global_hash, g_hashent->next);
+        g_hashent = ENT(GlobalHashEnt, &vb_ctx->global_hash, next);
 
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
         uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_RELAXED);
