@@ -15,6 +15,18 @@
 
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
+static void seg_set_hash_hints (VariantBlock *vb, uint32_t vb_line_i)
+{
+    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
+
+        MtfContext *ctx = &vb->mtf_ctx[did_i];
+        if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
+
+        ctx->mtf_len_at_half = ctx->mtf.len;
+        ctx->num_lines_at_half = vb_line_i + 1;
+    }
+}
+
 // store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from vcf_data,
 // but in the part of vcf_data has been already consumed and no longer needed.
 // if there's not enough space in vcf_data, we allocate on vcf_data_spillover
@@ -124,7 +136,7 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
 
     MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
-    uint32_t node_index = mtf_evaluate_snip (vb, ctx, false, str, len, &node, is_new);
+    uint32_t node_index = mtf_evaluate_snip_seg (vb, ctx, str, len, &node, is_new);
     this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
 
     vb->vcf_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
@@ -343,7 +355,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
 
                 unsigned optimized_snip_len;
                 char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
-                if (flag_optimize && (ctx->dict_id.num == dict_id_VQSLOD) &&
+                if (flag_optimize && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
                     optimize_info (ctx->dict_id, this_value, this_value_len, optimized_snip, &optimized_snip_len)) {
                  
                     vb->vb_data_size -= (int)this_value_len - (int)optimized_snip_len;
@@ -351,7 +363,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
                     this_value_len = optimized_snip_len;
                 }
                 ((uint32_t *)mtf_i_buf->data)[mtf_i_buf->len++] = 
-                    mtf_evaluate_snip (vb, ctx, false, this_value, this_value_len, &sf_node, NULL);
+                    mtf_evaluate_snip_seg (vb, ctx, this_value, this_value_len, &sf_node, NULL);
 
                 reading_name = true;  // end of value - move to the next time
                 this_name = &info_str[i+1]; // move to next field in info string
@@ -370,7 +382,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, const char *info_
     MtfContext *info_ctx = &vb->mtf_ctx[INFO];
     MtfNode *node;
     bool is_new;
-    uint32_t node_index = mtf_evaluate_snip (vb, info_ctx, false, iname, iname_len, &node, &is_new);
+    uint32_t node_index = mtf_evaluate_snip_seg (vb, info_ctx, iname, iname_len, &node, &is_new);
     info_field_mtf_i[vb->mtf_ctx[INFO].mtf_i.len++] = node_index;
 
     // if this is a totally new subfield (first time in this file) - make a new SubfieldMapperZip for it.
@@ -571,15 +583,15 @@ static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
         if (flag_optimize && cell_gt_data && len && 
-            (ctx->dict_id.num == dict_id_PL || ctx->dict_id.num == dict_id_GL || ctx->dict_id.num == dict_id_GP) && 
+            (ctx->dict_id.num == dict_id_FORMAT_PL || ctx->dict_id.num == dict_id_FORMAT_GL || ctx->dict_id.num == dict_id_FORMAT_GP) && 
             optimize_format (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
 
-            node_index = mtf_evaluate_snip (vb, ctx, false, optimized_snip, optimized_snip_len, &node, NULL);
+            node_index = mtf_evaluate_snip_seg (vb, ctx, optimized_snip, optimized_snip_len, &node, NULL);
             vb->vb_data_size -= (int)len - (int)optimized_snip_len;
             optimized_cell_gt_data_len -= (int)len - (int)optimized_snip_len;
         }
         else 
-            node_index = mtf_evaluate_snip (vb, ctx, false, cell_gt_data, len, &node, NULL);
+            node_index = mtf_evaluate_snip_seg (vb, ctx, cell_gt_data, len, &node, NULL);
 
         *(next++) = node_index;
 
@@ -863,6 +875,7 @@ void seg_all_data_lines (VariantBlock *vb)
     seg_allocate_per_line_memory (vb); // set vb->num_lines to an initial estimate
 
     const char *field_start = vb->vcf_data.data;
+    bool hash_hints_set = false;
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
         if (field_start - vb->vcf_data.data == vb->vcf_data.len) { // we're done
@@ -880,6 +893,13 @@ void seg_all_data_lines (VariantBlock *vb)
         // if our estimate number of lines was too small, increase it
         if (vb_line_i == vb->num_lines-1 && field_start - vb->vcf_data.data != vb->vcf_data.len) 
             seg_allocate_per_line_memory (vb); // increase number of lines as evidently we need more
+
+        // if there is no global_hash yet, and we've past half of the data,
+        // collect stats to help mtf_merge create one when we merge
+        if (!hash_hints_set && (field_start - vb->vcf_data.data) > vb->vcf_data.len / 2) {
+            seg_set_hash_hints (vb, vb_line_i);
+            hash_hints_set = true;
+        }
     }
 
     if (/*vb->has_genotype_data || */vb->has_haplotype_data)

@@ -42,7 +42,9 @@ static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] =
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
 
-extern uint64_t dict_id_vardata_fields[], dict_id_PL, dict_id_GL, dict_id_GP, dict_id_VQSLOD;
+extern uint64_t dict_id_vardata_fields[], 
+                dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, 
+                dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD;
 
 extern void dict_id_initialize(void);
 

@@ -64,8 +64,8 @@ typedef struct file_ {
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     pthread_mutex_t dicts_mutex;
-    bool dicts_mutex_initialized;
-    unsigned num_dict_ids;             // protected by mutex: length of populated subfield_ids and mtx_ctx;
+    bool dicts_mutex_initialized;      // this mutex protects mtf_ctx and num_dict_ids from concurrent adding of a new dictionary
+    unsigned num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
     
     MtfContext mtf_ctx[MAX_DICTS];     // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)

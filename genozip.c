@@ -238,7 +238,7 @@ static void main_show_sections (void)
              (double)total_vcf / (double)total_z, "");
 
     fprintf (stderr, "\nDictionaries:\n");
-    fprintf (stderr, "Name     Type         #Words        #Uniq   uncomp_dict_size\n");
+    fprintf (stderr, "Name     Type         #Words        #Uniq         Hash    uncomp_dict_size\n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
         const MtfContext *ctx = &z_file->mtf_ctx[i];
         
@@ -247,10 +247,10 @@ static void main_show_sections (void)
         else if (dict_id_is_info_subfield (ctx->dict_id)) type = "INFO  ";
         else type = "FORMAT";
 
-        char s1[20], s2[20];
-        fprintf (stderr, "%*.*s %s %12s %12s %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
+        char s1[20], s2[20], s3[20];
+        fprintf (stderr, "%*.*s %s %12s %12s %12s %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
                  type, buf_human_readable_uint (ctx->mtf_i.len, s1), buf_human_readable_uint (ctx->mtf.len, s2), 
-                 buf_human_readable_size(ctx->dict.len, vsize));
+                 buf_human_readable_uint (ctx->global_hash_prime, s3), buf_human_readable_size(ctx->dict.len, vsize));
     }
 
     char s1[20], s2[20];

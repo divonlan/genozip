@@ -142,19 +142,19 @@ static void buf_find_underflow_culprit (const char *memory)
 
             if (buf) {
                 char *after_buf = buf->memory + buf->size + overhead_size;
-                if (after_buf <= memory && (after_buf + 100 > memory)) {
+                if (after_buf <= memory && (after_buf + 100 > memory) && buf_has_overflowed (buf)) {
                     char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                     fprintf (stderr,
                             "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
                             vb ? vb->id : -999, vb->variant_block_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(after_buf-1,s3), buf->name, buf->param,
                             buf->func, buf->code_line, buf->vb_i, buf_i, 
                             of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
+                    found = true;
                 }
-                found = true;
             }
         }
     }
-    if (!found) fprintf (stderr, "Cannot find a Buffer that is just before the underflowed buffer\n");
+    if (!found) fprintf (stderr, "Cannot find a Buffer which has overflowed, and located just before the underflowed buffer\n\n");
 }
 
 static bool buf_test_overflows_do (const VariantBlock *vb, bool primary);

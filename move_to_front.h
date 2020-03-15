@@ -32,11 +32,6 @@ typedef struct {
     uint32_t snip_len;
 } MtfWord;
 
-typedef struct {        
-    int32_t mtf_i;            // index into MtfContext.ol_mtf (if < ol_mtf.len) or MtfContext.mtf or NIL
-    int32_t next;             // linked list - index into MtfContext.hash or NIL
-} HashEnt;
-
 // used by variant_block_i=1 to collect frequency statistics
 typedef struct {
     int32_t mtf_i;             // index into MtfContext.mtf
@@ -49,35 +44,58 @@ typedef struct {
 } SnipIterator;
 
 typedef struct mtfcontext_ {
+    // ----------------------------
+    // common fields for ZIP & PIZ
+    // ----------------------------
     unsigned did_i;            // the index of this ctx within the array vb->mtf_ctx
-    DictIdType dict_id;        // ZIP & PIZ. which dict_id is this MTF dealing with
+    DictIdType dict_id;        // which dict_id is this MTF dealing with
     SectionType b250_section_type; // section type where the the corresponding b250 data goes
     SectionType dict_section_type; // section type for dictionary statistics (this is a "fake" section type, not one that we write to disk)
-    Buffer ol_dict;            // ZIP only. tab-delimited list of all unique snips - overlayed all previous VB dictionaries
-    Buffer ol_mtf;             // ZIP only. MTF nodes - overlayed all previous VB dictionaries. char/word indeces are into ol_dict.
-    Buffer dict;               // ZIP & PIZ. tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
-    Buffer mtf;                // ZIP only. array of MtfNode - in this VB that don't exist in ol_mtf. char/word indeces are into dict.
-    Buffer hash;               // ZIP only. hash table of entries HashEnt - initialized as a copy of all previous VBs. For entries are
+    Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
+    Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. Used by vardata fields 
+                               // and INFO subfields. Not used by FORMAT subfields - those are stored in genotype_data.
+    // ----------------------------
+    // ZIP only fields
+    // ----------------------------
+    Buffer ol_dict;            // tab-delimited list of all unique snips - overlayed all previous VB dictionaries
+    Buffer ol_mtf;             // MTF nodes - overlayed all previous VB dictionaries. char/word indeces are into ol_dict.
+    Buffer mtf;                // array of MtfNode - in this VB that don't exist in ol_mtf. char/word indeces are into dict.
+    Buffer mtf_i;              // contains 32bit indeces into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
+    
+    // hash stuff 
+    Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list
-    Buffer sorter;             // ZIP only. used by the first VB only of ZIP to sort the dictionary - entries of SorterEnt
-    Buffer word_list;          // PIZ only. word list. an array of MtfWord - referring to the snips in dictionary
-    
-    Buffer mtf_i;              // ZIP only: contains 32bit indeces into the ctx->mtf - this is an intermediate step before generating fields_sections_data 
-    
-    Buffer b250;               // ZIP & PIZ: The buffer of b250 data containing indeces (in b250) to word_list
-    
-    // PIZ only: these two fields are used to iterate on the context, reading one b250 word_index at a time
-    SnipIterator iterator;
+    uint32_t local_hash_prime; // prime number - size of the core (without extensions) has table 
+    int32_t num_new_entries_prev_merged_vb; // zf_ctx: updated in every merge - how many new words happened in this VB
+                               // vb_ctx: copied from zf_ctx during clone, and used to initialize the size of local_hash
+                               //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
+    Buffer global_hash;        // global hash table that is populated during merge in zf_ctx and is overlayed to vb_ctx during clone.
+    uint32_t global_hash_prime; // prime number - size of the core (without extensions) has table 
 
-    pthread_mutex_t mutex;     // ZIP only: MtfContext in z_file (only) is protected by a mutex 
+    uint32_t merge_num;        // in vb_ctx: the merge_num when global_hash was cloned. only entries with merge_num <= this number 
+                               // are valid. other entries may be added by later merges and should be ignored.
+                               // in zf_ctx: incremented with every merge into this ctx.
+    // the next 2 are used in merge to set the size of the global hash table, when the first vb to create a ctx does so
+    uint32_t mtf_len_at_half;  // value of mtf->len after an estimated half of the lines have been segmented
+    uint32_t num_lines_at_half;// the number of lines segmented when mtf_len_at_half was set
+
+    Buffer sorter;             // used by the vb_i==1 only of ZIP to sort the dictionary - entries of SorterEnt
+
+    // used by zf_ctx only in ZIP only    
+    pthread_mutex_t mutex;     // MtfContext in z_file (only) is protected by a mutex 
     bool mutex_initialized;
-    //uint32_t next_variant_i_to_merge; // the next vb_i permitted to lock the mutex
     
+    // ----------------------------
+    // UNZIP only fields
+    // ----------------------------
+    Buffer word_list;          // PIZ only. word list. an array of MtfWord - referring to the snips in dictionary
+    SnipIterator iterator;     // PIZ only: used to iterate on the context, reading one b250 word_index at a time
+
 } MtfContext;
 
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
-extern uint32_t mtf_evaluate_snip (VariantBlockP vb, MtfContext *ctx, bool is_zf_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
+extern uint32_t mtf_evaluate_snip_seg (VariantBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
 extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
 extern int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VariantBlockP vb);

@@ -51,5 +51,8 @@
 - Fixed bug in optimization in GL in --optimize
 
 2.1.4
+- rewrote the Hash subsystem - 
+  (1) by removing a thread synchronization bottleneck, genozip now scales better with number of cores (esp better in files with very large dictionaries)
+  (2) more advanced shared memory management reduces the overall memory consumption of hash tables, and allows to make them bigger - improving speed
 - --show-sections now shows all dictionaries, not just FORMAT and INFO
 - --added optimization for VQSLOD
