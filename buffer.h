@@ -37,6 +37,7 @@ typedef struct buffer_ {
 
 #define ENT(type, buf, index) ((type *)(&(buf)->data[(index) * sizeof(type)]))
 #define LASTENT(type, buf)    ((type *)(&(buf)->data[((buf)->len-1) * sizeof(type)]))
+#define NEXTENT(type, buf)    ((type *)(&(buf)->data[((buf)->len++) * sizeof(type)]))
             
 extern void buf_initialize(void);
 
@@ -53,6 +54,9 @@ extern unsigned buf_alloc_do (VariantBlockP vb,
 #define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) \
   ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((vb), (buf), (requested_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
                                                     : (buf)->size) 
+
+#define buf_alloc_more(vb, buf, more, type, grow_at_least_factor) \
+  buf_alloc ((vb), (buf), ((buf)->len+(more))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
 
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 

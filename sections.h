@@ -39,6 +39,8 @@ typedef enum {
     SEC_FORMAT_DICT        = 22,  SEC_FORMAT_B250        = 23,
     SEC_INFO_SUBFIELD_DICT = 24,  SEC_INFO_SUBFIELD_B250 = 25,
     
+    SEC_HAPLOTYPE_GTSHARK  = 26, // added in version 2.1.5
+
     // These sections are not real sections - they don't appear in the genozip file - just for stats. They can be changed if needed.
     SEC_STATS_HT_SEPERATOR, 
 } SectionType;
@@ -60,6 +62,8 @@ typedef enum {
     "SEC_INFO_DICT"         ,  "SEC_INFO_B250",\
     "SEC_FORMAT_DICT"       ,  "SEC_FORMAT_B250",\
     "SEC_INFO_SUBFIELD_DICT",  "SEC_INFO_SUBFIELD_B250",\
+    \
+    "SEC_HAPLOTYPE_GTSHARK",\
     \
     "SEC_STATS_HT_SEPERATOR" \
 }
@@ -173,7 +177,8 @@ typedef struct {
     
     // flags
     uint8_t has_genotype_data : 1;     // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
-    uint8_t for_future_use    : 7;
+    uint8_t is_gtshark        : 1;     // 1 if the haplotype sections are compressed with gtshark instead of bzip2
+    uint8_t for_future_use    : 6;
     uint16_t ploidy;
 
     // features of the data
@@ -201,6 +206,18 @@ typedef struct {
     uint32_t num_b250_items;           // number of items in b250 items
     DictIdType dict_id;           
 } SectionHeaderBase250;     
+
+// haplotype data compressed with gtshark
+// this section is made of 6 subsections in this order: 
+// exception exception_line_i (offset=0), exception_ht_i, exception alleles, db_db_data, db_gt_data
+typedef struct {
+    SectionHeader h;
+    //       exceptions_line_i         // big endian array of uint32_t offset into uncompressed data of exception lines. first array - offset always 0
+    uint32_t exceptions_ht_i_offset;   // big endian array of uint16_t - delta-encoded (within the line) list of ht_i. For each exception line, there's the list of its ht_i's followed by a 0.
+    uint32_t exceptions_allele_offset; // array of char - each index (including terminating 0) corresponding to the index in exception_ht_i_offset
+    uint32_t db_db_data_offset;        // data as read from gtshark's files
+    uint32_t db_gt_data_offset;
+} SectionHeaderHaplotypeGtshark;     
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct {

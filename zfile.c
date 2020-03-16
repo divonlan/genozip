@@ -19,6 +19,7 @@
 #include "endianness.h"
 #include "version.h"
 #include "sections.h"
+#include "gtshark.h"
 
 #define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
 
@@ -124,7 +125,7 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, bool is_z_file_buf
 { 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
-    unsigned data_compressed_len   = 0;
+    unsigned data_compressed_len   = BGEN32 (header->data_compressed_len); // 0, except for SEC_HAPLOTYPE_GTSHARK
     unsigned data_encrypted_len=0, data_padding=0, header_padding=0;
 
     bool is_encrypted = false;
@@ -137,25 +138,34 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, bool is_z_file_buf
 
     // allocate what we think will be enough memory. usually this realloc does nothing, as the
     // memory we pre-allocate for z_data is sufficient
-    buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + MAX (data_uncompressed_len / 2, 500) + encryption_padding_reserve, // usually compression is a lot better than 2X so this should be enough
-               1.5, z_data->name, z_data->param); // name and param need to be set in advance
+    if (header->section_type != SEC_HAPLOTYPE_GTSHARK)
+        buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + MAX (data_uncompressed_len / 2, 500) + encryption_padding_reserve, // usually compression is a lot better than 2X so this should be enough
+                   1.5, z_data->name, z_data->param); // name and param need to be set in advance
+    else 
+        // for SEC_HAPLOTYPE_GTSHARK we know exactly how much we need
+        buf_alloc (vb, z_data, z_data->len + compressed_offset + data_compressed_len, 1.5, z_data->name, z_data->param);
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
+     
+        if (header->section_type != SEC_HAPLOTYPE_GTSHARK) {
 
-        // compress data
-        data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the realloc, because z_data is pre-allocated
+            // compress data
+            data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the realloc, because z_data is pre-allocated
 
-        int ret = zfile_compress_do (vb, z_data, data, compressed_offset, data_uncompressed_len, &data_compressed_len, true);
+            int ret = zfile_compress_do (vb, z_data, data, compressed_offset, data_uncompressed_len, &data_compressed_len, true);
 
-        // if output buffer is too small, increase it, and try again
-        if (ret == BZ_FINISH_OK) {
-            buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + data_uncompressed_len + 50 /* > BZ_N_OVERSHOOT */, 1,
-                       z_data->name ? z_data->name : "z_data", z_data->param);
-            data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
+            // if output buffer is too small, increase it, and try again
+            if (ret == BZ_FINISH_OK) {
+                buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + data_uncompressed_len + 50 /* > BZ_N_OVERSHOOT */, 1,
+                        z_data->name ? z_data->name : "z_data", z_data->param);
+                data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
 
-            zfile_compress_do (vb, z_data, data, compressed_offset, data_uncompressed_len, &data_compressed_len, false);
+                zfile_compress_do (vb, z_data, data, compressed_offset, data_uncompressed_len, &data_compressed_len, false);
+            }
         }
+        else // SEC_HAPLOTYPE_GTSHARK
+            gtshark_copy_to_z_data (vb, z_data, compressed_offset);
 
         // get encryption related lengths
         if (is_encrypted) {
@@ -488,6 +498,43 @@ void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
     header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
             
     zfile_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data);
+}
+
+void zfile_compress_haplotype_data_gtshark (VariantBlock *vb, const Buffer *haplotype_sections_data, unsigned sb_i)
+{
+    gtshark_compress (vb, haplotype_sections_data, sb_i); // populates vb->gtshark_*
+    
+    SectionHeaderHaplotypeGtshark header;
+    memset (&header, 0, sizeof(header)); // safety
+
+    header.h.magic                  = BGEN32 (GENOZIP_MAGIC);
+    header.h.section_type           = SEC_HAPLOTYPE_GTSHARK;
+    header.h.data_uncompressed_len  = BGEN32 (haplotype_sections_data->len);
+    header.h.compressed_offset      = BGEN32 (sizeof(header));
+    header.h.variant_block_i        = BGEN32 (vb->variant_block_i);
+    header.h.section_i              = BGEN16 (vb->z_next_header_i++);
+
+    uint32_t offset = vb->gtshark_exceptions_line_i.len * sizeof(uint32_t);
+    header.exceptions_ht_i_offset   = BGEN32 (offset);
+    offset += vb->gtshark_exceptions_ht_i.len * sizeof (uint16_t);
+    header.exceptions_allele_offset = BGEN32 (offset);
+    offset += vb->gtshark_exceptions_allele.len;
+    header.db_db_data_offset        = BGEN32 (offset);
+    offset += vb->gtshark_db_db_data.len;
+    header.db_gt_data_offset        = BGEN32 (offset);
+    offset += vb->gtshark_db_gt_data.len;
+    header.h.data_compressed_len    = BGEN32 (offset);
+
+    vb->z_data.name  = "z_data"; // zfile_compress requires that these are pre-set
+    vb->z_data.param = vb->variant_block_i;
+    zfile_compress (vb, &vb->z_data, false, (SectionHeader*)&header, NULL);
+
+    // free buffers - they will be needed by the next section
+    buf_free (&vb->gtshark_exceptions_line_i);
+    buf_free (&vb->gtshark_exceptions_ht_i);
+    buf_free (&vb->gtshark_exceptions_allele);
+    buf_free (&vb->gtshark_db_db_data);
+    buf_free (&vb->gtshark_db_gt_data);
 }
 
 void zfile_compress_section_data (VariantBlock *vb, SectionType section_type, Buffer *section_data)

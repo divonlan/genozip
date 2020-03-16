@@ -299,3 +299,20 @@ bool file_is_dir (const char *filename)
     
     return S_ISDIR (st.st_mode);
 }
+
+void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param)
+{
+    uint64_t size = file_get_size (filename);
+
+    buf_alloc (vb, buf, size, 1, buf_name, buf_param);
+
+    FILE *file = fopen (filename, "rb");
+    ASSERT (file, "Error: cannot open %s: %s", filename, strerror (errno));
+
+    size_t bytes_read = fread (buf->data, 1, size, file);
+    ASSERT (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));
+
+    buf->len = size;
+    
+    fclose (file);
+}

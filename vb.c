@@ -118,6 +118,14 @@ void vb_release_vb (VariantBlock **vb_p)
         
     vb->in_use = false; // released the VB back into the pool - it may now be reused
 
+    if (flag_gtshark) {
+        buf_free(&vb->gtshark_db_db_data);
+        buf_free(&vb->gtshark_db_gt_data);
+        buf_free(&vb->gtshark_exceptions_line_i);
+        buf_free(&vb->gtshark_exceptions_ht_i);
+        buf_free(&vb->gtshark_exceptions_allele);
+    }
+
     // backward compatability with genozip v1
     buf_free(&vb->v1_subfields_start_buf);        
     buf_free(&vb->v1_subfields_len_buf);

@@ -28,6 +28,8 @@ extern void zfile_compress_dictionary_data (VariantBlockP vb, MtfContextP ctx,
                                             uint32_t num_words, const char *data, uint32_t num_chars);
 extern void zfile_compress_b250_data (VariantBlockP vb, MtfContextP ctx);
 
+extern void zfile_compress_haplotype_data_gtshark (VariantBlockP vb, ConstBufferP haplotype_sections_data, unsigned sb_i);
+
 extern void zfile_read_one_vb (VariantBlockP vb);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)

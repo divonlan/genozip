@@ -105,6 +105,7 @@ extern void file_remove (const char *filename);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
+extern void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param);
 #define file_printname(file) (file->name ? file->name : "(stdin)")
 
 // a hacky addition to bzip2

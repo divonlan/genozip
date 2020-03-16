@@ -314,7 +314,8 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
         unsigned helper_index_sb_i = sb_i * vb->num_samples_per_block * vb->ploidy;
 
         // sort the portion of the helper index related to this sample block. We sort by number of alt alleles.
-        qsort (&helper_index[helper_index_sb_i], num_haplotypes_in_sample_block, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
+        if (!flag_gtshark) // gtshark does better without sorting
+            qsort (&helper_index[helper_index_sb_i], num_haplotypes_in_sample_block, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
 
         // allocate memory for haplotype data for each sample block - one character per haplotype
         buf_alloc (vb, &vb->haplotype_sections_data[sb_i], vb->num_lines * num_haplotypes_in_sample_block, 
@@ -457,8 +458,12 @@ static void zip_compress_one_vb (VariantBlock *vb)
         if (vb->phase_type == PHASE_MIXED_PHASED)
             zfile_compress_section_data (vb, SEC_PHASE_DATA, &vb->phase_sections_data[sb_i]);
 
-        if (vb->has_haplotype_data)
-            zfile_compress_section_data (vb, SEC_HAPLOTYPE_DATA, &vb->haplotype_sections_data[sb_i]);
+        if (vb->has_haplotype_data) {
+            if (!flag_gtshark)
+                zfile_compress_section_data (vb, SEC_HAPLOTYPE_DATA, &vb->haplotype_sections_data[sb_i]);
+            else 
+                zfile_compress_haplotype_data_gtshark (vb, &vb->haplotype_sections_data[sb_i], sb_i);
+        }
     }
 
     // update z_data in memory (its not written to disk yet)

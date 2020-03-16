@@ -35,7 +35,7 @@ endif
 
 MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c random_access.c sections.c\
 	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
-		  regions.c samples.c optimize.c dict_id.c hash.c
+		  regions.c samples.c optimize.c dict_id.c hash.c gtshark.c
 
 CONDA_COMPATIBILITY_SRCS = compatability/visual_c_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
 
@@ -48,12 +48,12 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h gloptimize.h optimize.h profiler.h dict_id.h vcffile.h zip.h v1.c \
              base250.h endianness.h md5.h sections.h text_help.h vcf_header.h hash.h \
-             buffer.h file.h move_to_front.h segregate.h text_license.h version.h \
+             buffer.h file.h move_to_front.h segregate.h text_license.h version.h gtshark.h \
              crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h regions.h samples.h \
              compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
              compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
              compatability/visual_c_pthread.h \
-             compatability/mac_gettime.h  # doesn't include version.h bc it would create a circular dependency 
+             compatability/mac_gettime.h  
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/visual_c_pthread.c

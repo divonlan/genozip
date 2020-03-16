@@ -394,6 +394,11 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
         vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
     }
     
+    if (dispatcher_is_done (dispatcher) && bytes_compressed) {
+        file_seek (z_file, 0, SEEK_END, true); // past the genozip header
+        bytes_compressed = file_tell (z_file);
+    }
+
     dispatcher_show_progress (dispatcher, file, vcf_data_written_so_far, bytes_compressed);
 }                           
 

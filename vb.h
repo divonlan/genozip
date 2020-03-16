@@ -171,6 +171,13 @@ typedef struct variant_block_ {
     Buffer iname_mapper_buf;           // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[INFO].mtf
     Buffer format_mapper_buf;          // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[FORMAT].mtf
     
+    // stuff related to compressing haplotype data with gtshark
+    Buffer gtshark_db_db_data;
+    Buffer gtshark_db_gt_data;
+    Buffer gtshark_exceptions_line_i;  // uint32_t list of vb_line_i that have any allele >= '3'
+    Buffer gtshark_exceptions_ht_i;    // delta-encoded (within the line) list of ht_i. For each exception line, there's the list of its ht_i's followed by a 0.
+    Buffer gtshark_exceptions_allele;  // each index (including terminating 0) corresponding to the index in exception_ht_i_offset
+
     // regions & filters
     Buffer region_ra_intersection_matrix;      // a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region
     

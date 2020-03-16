@@ -81,7 +81,7 @@ extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
            flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions,
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_debug_memory,
-           flag_show_vblocks, flag_optimize;
+           flag_show_vblocks, flag_optimize, flag_gtshark;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VariantBlockP evb;
@@ -102,5 +102,6 @@ static inline void my_exit(void) { exit(1); }// an exit function so we can put a
 #define RETURNW0(condition, ret, string)     { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n%s\n", string); return ret; } }
 #define ABORT(format, ...)                   { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit();}
 #define ABORT0(string)                       { fprintf (stderr, "\n%s\n", string); my_exit();}
+#define ASSERTGOTO(condition, format, ...)   { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }}
 
 #endif
