@@ -43,7 +43,7 @@
 #include "endianness.h"
 #include "regions.h"
 #include "samples.h"
-
+#include "gtshark.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -58,7 +58,7 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_noisy=0,
-    flag_debug_memory=0, flag_show_vblocks=0, flag_gtshark=0;
+    flag_debug_memory=0, flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 },  // argument of --show-dict-one
@@ -476,7 +476,7 @@ static void main_genounzip (const char *z_filename,
 
     FREE ((void *)basename);
 
-    if (flag_replace && vcf_filename && z_filename) file_remove (z_filename); 
+    if (flag_replace && vcf_filename && z_filename) file_remove (z_filename, true); 
 }
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
@@ -606,7 +606,7 @@ static void main_genozip (const char *vcf_filename,
     if ((is_last_file || !flag_concat) && !flag_stdout && z_file) 
         file_close (&z_file, false); 
 
-    if (remove_vcf_file) file_remove (vcf_filename); 
+    if (remove_vcf_file) file_remove (vcf_filename, true); 
 
     FREE ((void *)basename);
 
@@ -675,14 +675,19 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
 
 void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 {
+    const char *err_msg = "Error: invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The VCF file will be read and processed in blocks of this number of megabytes.";
+
     unsigned len = strlen (mem_size_mb_str);
-    ASSERT (len <= 5 || (len==1 && mem_size_mb_str[0]=='0'), "Error: invalid argument of --vblock: %s. Expecting a number between 1 and 99999 (number of megabytes)", mem_size_mb_str);
+    ASSERT (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
 
     for (unsigned i=0; i < len; i++) {
-        ASSERT (mem_size_mb_str[i] >= '0' && mem_size_mb_str[i] <= '9', "Error: invalid argument of --vblock: %s. Expecting an integer number between 1 and 99999", mem_size_mb_str);
+        ASSERT (mem_size_mb_str[i] >= '0' && mem_size_mb_str[i] <= '9', err_msg, mem_size_mb_str);
     }
 
-    global_max_memory_per_vb = atoi (mem_size_mb_str) * 1024 * 1024;
+    unsigned mem_size_mb = atoi (mem_size_mb_str);
+    ASSERT (mem_size_mb <= 2048, err_msg, mem_size_mb_str);
+
+    global_max_memory_per_vb = mem_size_mb * 1024 * 1024;
 }
 
 int main (int argc, char **argv)
@@ -811,8 +816,12 @@ int main (int argc, char **argv)
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '5' : dict_id_dump_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
-            case 'B' : genozip_set_global_max_memory_per_vb (optarg); break;
-            case 'S' : zip_set_global_samples_per_block (optarg); break;
+            case 'B' : genozip_set_global_max_memory_per_vb (optarg); 
+                       flag_vblock = true;
+                       break;
+            case 'S' : zip_set_global_samples_per_block (optarg); 
+                       flag_sblock = true;
+                       break;
             case 'p' : crypt_set_password (optarg) ; break;
 
             case 0   : // a long option - already handled; except for 'o' and '@'
@@ -889,6 +898,12 @@ int main (int argc, char **argv)
     if (flag_noisy) flag_quiet=false;
 
     if (flag_test) flag_md5=true; // test requires md5
+
+    // --gtshark modifies the sblock and vblock defaults, but these may be overridden by the user
+    if (flag_gtshark) {
+        if (!flag_vblock) genozip_set_global_max_memory_per_vb (GTSHARK_DEFAULT_MEMORY_PER_VB_STR); // if user didn't override 
+        if (!flag_sblock) zip_set_global_samples_per_block     (GTSHARK_DEFAULT_SAMPLES_PER_BLOCK_STR); 
+    }
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split

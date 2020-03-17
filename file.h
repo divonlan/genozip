@@ -101,11 +101,11 @@ extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail);
 extern uint64_t file_tell (File *file);
 extern uint64_t file_get_size (const char *filename);
 extern bool file_is_dir (const char *filename);
-extern void file_remove (const char *filename);
+extern void file_remove (const char *filename, bool fail_quietly);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
-extern void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param);
+extern void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
 #define file_printname(file) (file->name ? file->name : "(stdin)")
 
 // a hacky addition to bzip2

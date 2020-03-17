@@ -21,6 +21,7 @@
 #include "random_access.h"
 #include "regions.h"
 #include "samples.h"
+#include "gtshark.h"
 
 typedef struct {
     unsigned num_subfields;         // number of subfields this FORMAT has
@@ -557,7 +558,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
 
                 else { // allele 0 to 99
                     unsigned allele = ht - '0'; // allele 0->99 represented by ascii 48->147
-                    ASSERT (allele <= 99, "Error: allele out of range: %u line_i=%u sample_i=%u", allele, vb->first_line + vb_line_i, sample_i+1);
+                    ASSERT (allele <= MAX_ALLELE_VALUE, "Error: allele out of range: %u (ht=ascii(%u)) line_i=%u sample_i=%u", allele, (unsigned)ht, vb->first_line + vb_line_i, sample_i+1);
                     
                     if (allele >= 10) *(next++) = '0' + allele / 10;
                     *(next++) = '0' + allele % 10;
@@ -722,7 +723,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     // 4. All sample data: up 3 sections per sample block:
     //    4a. SEC_GENOTYPE_DATA - genotype data
     //    4b. SEC_PHASE_DATA - phase data
-    //    4c. SEC_HAPLOTYPE_DATA - haplotype data
+    //    4c. SEC_HAPLOTYPE_DATA or SEC_HAPLOTYPE_GTSHARK - haplotype data
 
     unsigned *section_index = (unsigned *)vb->z_section_headers.data;
 
@@ -738,7 +739,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
     vb->ploidy                  = BGEN16 (header->ploidy);
     vb->max_gt_line_len         = BGEN32 (header->max_gt_line_len);
     vb->vb_data_size            = BGEN32 (header->vb_data_size);
-    
+
     // this can if 1. VCF has no samples or 2. num_samples was not re-written to genozip header (for example if we were writing to stdout)
     if (!global_num_samples) 
         global_num_samples = BGEN32 (header->num_samples);
@@ -832,8 +833,32 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         // finally, comes haplotype data
         if (vb->has_haplotype_data) {
             
-            zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->haplotype_sections_data[sb_i], "haplotype_sections_data", SEC_HAPLOTYPE_DATA);
-            
+            if (!header->is_gtshark) {
+                zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->haplotype_sections_data[sb_i], 
+                                          "haplotype_sections_data", SEC_HAPLOTYPE_DATA);
+            }
+            else { // gtshark
+
+                zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_exceptions_line_i, 
+                                          "gtshark_exceptions_line_i", SEC_HT_GTSHARK_X_LINE);
+                vb->gtshark_exceptions_line_i.len /= sizeof (uint32_t);
+
+                zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_exceptions_ht_i, 
+                                          "gtshark_exceptions_ht_i", SEC_HT_GTSHARK_X_HTI);
+                vb->gtshark_exceptions_ht_i.len /= sizeof (uint16_t);
+
+                zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_exceptions_allele, 
+                                          "gtshark_exceptions_allele", SEC_HT_GTSHARK_X_ALLELE);
+
+                zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_db_db_data, 
+                                          "gtshark_db_db_data", SEC_HT_GTSHARK_DB_DB);
+
+                zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_db_gt_data, 
+                                          "gtshark_db_gt_data", SEC_HT_GTSHARK_DB_GT);
+
+                gtshark_uncompress_haplotype_data (vb, sb_i);
+            }
+
             unsigned expected_size = vb->num_lines * num_samples_in_sb * vb->ploidy;
             ASSERT (vb->haplotype_sections_data[sb_i].len == expected_size, 
                     "Error: unexpected size of haplotype_sections_data[%u]: expecting %u but got %u", sb_i, expected_size, vb->haplotype_sections_data[sb_i].len)

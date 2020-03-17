@@ -181,10 +181,10 @@ size_t file_write (File *file, const void *data, unsigned len)
     return bytes_written;
 }
 
-void file_remove (const char *filename)
+void file_remove (const char *filename, bool fail_quietly)
 {
     int ret = remove (filename); 
-    ASSERTW (!ret, "Warning: failed to remove %s: %s", filename, strerror (errno));
+    ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
 }
 
 bool file_has_ext (const char *filename, const char *extension)
@@ -300,11 +300,12 @@ bool file_is_dir (const char *filename)
     return S_ISDIR (st.st_mode);
 }
 
-void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param)
+void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param,
+                    bool add_string_terminator)
 {
     uint64_t size = file_get_size (filename);
 
-    buf_alloc (vb, buf, size, 1, buf_name, buf_param);
+    buf_alloc (vb, buf, size + add_string_terminator, 1, buf_name, buf_param);
 
     FILE *file = fopen (filename, "rb");
     ASSERT (file, "Error: cannot open %s: %s", filename, strerror (errno));
@@ -313,6 +314,8 @@ void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const c
     ASSERT (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));
 
     buf->len = size;
-    
+
+    if (add_string_terminator) buf->data[size] = 0;
+
     fclose (file);
 }

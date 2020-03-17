@@ -625,7 +625,8 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
                 z_file->vcf_data_size_concat += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
 
                 dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
-                                            z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
+                                            z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file
+                                               + z_file->dict_data.len); // this accounting is missing genozip header (with the section list), and the random_access section
             }
         }
     } while (!dispatcher_is_done (dispatcher));

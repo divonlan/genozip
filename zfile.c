@@ -104,7 +104,7 @@ static void zfile_show_header (const SectionHeader *header, VariantBlock *vb /* 
 
     char str[1000];
 
-    sprintf (str, "%-22s %*.*s vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-23s %*.*s vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              BGEN32 (header->variant_block_i), BGEN16 (header->section_i), 
              BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
@@ -125,8 +125,11 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, bool is_z_file_buf
 { 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
-    unsigned data_compressed_len   = BGEN32 (header->data_compressed_len); // 0, except for SEC_HAPLOTYPE_GTSHARK
+    unsigned data_compressed_len   = 0;
     unsigned data_encrypted_len=0, data_padding=0, header_padding=0;
+
+    // for DB_DB and DB_GT we don't compress as they are already compressed
+    bool need_compression = (header->section_type != SEC_HT_GTSHARK_DB_DB && header->section_type != SEC_HT_GTSHARK_DB_GT);
 
     bool is_encrypted = false;
     unsigned encryption_padding_reserve = 0;
@@ -138,17 +141,16 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, bool is_z_file_buf
 
     // allocate what we think will be enough memory. usually this realloc does nothing, as the
     // memory we pre-allocate for z_data is sufficient
-    if (header->section_type != SEC_HAPLOTYPE_GTSHARK)
+    if (need_compression)
         buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + MAX (data_uncompressed_len / 2, 500) + encryption_padding_reserve, // usually compression is a lot better than 2X so this should be enough
                    1.5, z_data->name, z_data->param); // name and param need to be set in advance
     else 
-        // for SEC_HAPLOTYPE_GTSHARK we know exactly how much we need
-        buf_alloc (vb, z_data, z_data->len + compressed_offset + data_compressed_len, 1.5, z_data->name, z_data->param);
+        buf_alloc (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len, 1.5, z_data->name, z_data->param);
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
      
-        if (header->section_type != SEC_HAPLOTYPE_GTSHARK) {
+        if (need_compression) {
 
             // compress data
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the realloc, because z_data is pre-allocated
@@ -164,9 +166,11 @@ static void zfile_compress (VariantBlock *vb, Buffer *z_data, bool is_z_file_buf
                 zfile_compress_do (vb, z_data, data, compressed_offset, data_uncompressed_len, &data_compressed_len, false);
             }
         }
-        else // SEC_HAPLOTYPE_GTSHARK
-            gtshark_copy_to_z_data (vb, z_data, compressed_offset);
-
+        else { // no compression
+            data_compressed_len = data_uncompressed_len;
+            memcpy (&z_data->data[z_data->len + compressed_offset], data, data_uncompressed_len);
+        }
+        
         // get encryption related lengths
         if (is_encrypted) {
             data_encrypted_len = data_compressed_len;
@@ -252,6 +256,10 @@ void zfile_uncompress_section (VariantBlock *vb,
                                SectionType expected_section_type) 
 {
     START_TIMER;
+
+    // for DB_DB and DB_GT are not compressed by us as they are already compressed by gtshark
+    bool need_decompression = (expected_section_type != SEC_HT_GTSHARK_DB_DB && expected_section_type != SEC_HT_GTSHARK_DB_GT);
+
     SectionHeader *section_header = (SectionHeader *)section_header_p;
     
     uint32_t compressed_offset     = BGEN32 (section_header->compressed_offset);
@@ -275,29 +283,34 @@ void zfile_uncompress_section (VariantBlock *vb,
         else
             v1_crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, variant_block_i, section_i);
     }
+
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
         buf_alloc (vb, uncompressed_data, data_uncompressed_len + 1, 1.1, uncompressed_data_buf_name, 0); // +1 for \0
             
         uncompressed_data->len = data_uncompressed_len;
-        
-        bz_stream strm;
-        strm.bzalloc = zfile_bzalloc;
-        strm.bzfree  = zfile_bzfree;
-        strm.opaque  = vb; // just passed to malloc/free
 
-        int ret = BZ2_bzDecompressInit (&strm, 0, 0);
-        ASSERT0 (ret == BZ_OK, "Error: BZ2_bzDecompressInit failed");
+        if (need_decompression) {
+            bz_stream strm;
+            strm.bzalloc = zfile_bzalloc;
+            strm.bzfree  = zfile_bzfree;
+            strm.opaque  = vb; // just passed to malloc/free
 
-        strm.next_in   = (char*)section_header + compressed_offset;
-        strm.next_out  = uncompressed_data->data;
-        strm.avail_in  = data_compressed_len;
-        strm.avail_out = uncompressed_data->len;
+            int ret = BZ2_bzDecompressInit (&strm, 0, 0);
+            ASSERT0 (ret == BZ_OK, "Error: BZ2_bzDecompressInit failed");
 
-        ret = BZ2_bzDecompress (&strm);
-        ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
+            strm.next_in   = (char*)section_header + compressed_offset;
+            strm.next_out  = uncompressed_data->data;
+            strm.avail_in  = data_compressed_len;
+            strm.avail_out = uncompressed_data->len;
 
-        BZ2_bzDecompressEnd (&strm);
+            ret = BZ2_bzDecompress (&strm);
+            ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
+
+            BZ2_bzDecompressEnd (&strm);
+        }
+        else 
+            memcpy (uncompressed_data->data, (char*)section_header + compressed_offset, data_compressed_len);
     }
 
     if (flag_show_b250 && section_type_is_b250 (expected_section_type)) 
@@ -399,6 +412,7 @@ void zfile_compress_vb_header (VariantBlock *vb)
     vb_header.ploidy                  = BGEN16 (vb->ploidy);
     vb_header.vb_data_size            = BGEN32 (vb->vb_data_size);
     vb_header.max_gt_line_len         = BGEN32 (vb->max_gt_line_len);
+    vb_header.is_gtshark              = flag_gtshark;
 
     // create squeezed index - IF we have haplotype data AND more than one haplotype per line (i.e. my_squeeze_len > 0)
     if (my_squeeze_len) {
@@ -502,32 +516,16 @@ void zfile_compress_b250_data (VariantBlock *vb, MtfContext *ctx)
 
 void zfile_compress_haplotype_data_gtshark (VariantBlock *vb, const Buffer *haplotype_sections_data, unsigned sb_i)
 {
-    gtshark_compress (vb, haplotype_sections_data, sb_i); // populates vb->gtshark_*
+    gtshark_compress_haplotype_data (vb, haplotype_sections_data, sb_i); // populates vb->gtshark_*
     
-    SectionHeaderHaplotypeGtshark header;
-    memset (&header, 0, sizeof(header)); // safety
+    vb->gtshark_exceptions_line_i.len *= sizeof (uint32_t);
+    vb->gtshark_exceptions_ht_i.len *= sizeof (uint16_t);
 
-    header.h.magic                  = BGEN32 (GENOZIP_MAGIC);
-    header.h.section_type           = SEC_HAPLOTYPE_GTSHARK;
-    header.h.data_uncompressed_len  = BGEN32 (haplotype_sections_data->len);
-    header.h.compressed_offset      = BGEN32 (sizeof(header));
-    header.h.variant_block_i        = BGEN32 (vb->variant_block_i);
-    header.h.section_i              = BGEN16 (vb->z_next_header_i++);
-
-    uint32_t offset = vb->gtshark_exceptions_line_i.len * sizeof(uint32_t);
-    header.exceptions_ht_i_offset   = BGEN32 (offset);
-    offset += vb->gtshark_exceptions_ht_i.len * sizeof (uint16_t);
-    header.exceptions_allele_offset = BGEN32 (offset);
-    offset += vb->gtshark_exceptions_allele.len;
-    header.db_db_data_offset        = BGEN32 (offset);
-    offset += vb->gtshark_db_db_data.len;
-    header.db_gt_data_offset        = BGEN32 (offset);
-    offset += vb->gtshark_db_gt_data.len;
-    header.h.data_compressed_len    = BGEN32 (offset);
-
-    vb->z_data.name  = "z_data"; // zfile_compress requires that these are pre-set
-    vb->z_data.param = vb->variant_block_i;
-    zfile_compress (vb, &vb->z_data, false, (SectionHeader*)&header, NULL);
+    zfile_compress_section_data (vb, SEC_HT_GTSHARK_X_LINE, &vb->gtshark_exceptions_line_i);
+    zfile_compress_section_data (vb, SEC_HT_GTSHARK_X_HTI, &vb->gtshark_exceptions_ht_i);
+    zfile_compress_section_data (vb, SEC_HT_GTSHARK_X_ALLELE, &vb->gtshark_exceptions_allele);
+    zfile_compress_section_data (vb, SEC_HT_GTSHARK_DB_DB, &vb->gtshark_db_db_data);
+    zfile_compress_section_data (vb, SEC_HT_GTSHARK_DB_GT, &vb->gtshark_db_gt_data);
 
     // free buffers - they will be needed by the next section
     buf_free (&vb->gtshark_exceptions_line_i);
@@ -728,7 +726,7 @@ void zfile_read_one_vb (VariantBlock *vb)
     // 4. All sample data: up 3 sections per sample block:
     //    4a. SEC_GENOTYPE_DATA - genotype data
     //    4b. SEC_PHASE_DATA - phase data
-    //    4c. SEC_HAPLOTYPE_DATA - haplotype data
+    //    4c. SEC_HAPLOTYPE_DATA or SEC_HAPLOTYPE_GTSHARK - haplotype data
 
     int vb_header_offset = zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data",
                                                    sizeof(SectionHeaderVbHeader), SEC_VB_HEADER);
@@ -781,9 +779,26 @@ void zfile_read_one_vb (VariantBlock *vb)
             zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA);
         }
 
-        if (vb_header->num_haplotypes_per_line != 0) {
+        if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
             zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA);    
+        }
+
+        if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
+            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_LINE);    
+
+            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_HTI);    
+
+            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_ALLELE);    
+
+            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_DB);    
+
+            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_GT);    
         }
     }
     
@@ -873,7 +888,8 @@ void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_co
     header.h.magic                      = BGEN32 (GENOZIP_MAGIC);
     header.h.compressed_offset          = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len      = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
-    header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;  
+    // gtshark is the only difference between version 2 and 3. therefore without gtshark we can leave it at 2.
+    header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type                    = BGEN16 (data_type);
     header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
     header.uncompressed_data_size       = BGEN64 (z_file->vcf_data_size_concat);

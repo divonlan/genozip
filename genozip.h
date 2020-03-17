@@ -24,6 +24,7 @@
 #define GENOZIP_EXT ".genozip"
 
 #define DEFAULT_MAX_MEMORY_PER_VB (128*1024*1024)
+#define DEFAULT_MAX_MEMORY_PER_VB_STR "128" // MB
 
 #define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if MAX_PLOIDY > 65535
@@ -36,6 +37,8 @@
 #if MAX_DICTS > 255
 #error "MAX_DICTS cannot go beyond 255 as SubfieldMapperZip and SubfieldInfoMapperPiz represent did_i as uint_8, and NIL=255"
 #endif
+
+#define MAX_ALLELE_VALUE   99 // the code currently allows for 2-digit alleles.
 
 // Note: the algorithm will use as many cores as it can - but there's no speed penalty for a higher MAX_COMPUTE_THREADS
 // that number of cores - it will not be faster, but also not slower.
@@ -81,7 +84,7 @@ extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
            flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions,
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_debug_memory,
-           flag_show_vblocks, flag_optimize, flag_gtshark;
+           flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VariantBlockP evb;

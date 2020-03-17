@@ -36,7 +36,9 @@ typedef struct buffer_ {
 #define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL,NULL,0,NULL,0}
 
 #define ENT(type, buf, index) ((type *)(&(buf)->data[(index) * sizeof(type)]))
+#define FIRSTENT(type, buf)   ((type *)( (buf)->data))
 #define LASTENT(type, buf)    ((type *)(&(buf)->data[((buf)->len-1) * sizeof(type)]))
+#define AFTERENT(type, buf)   ((type *)(&(buf)->data[((buf)->len  ) * sizeof(type)]))
 #define NEXTENT(type, buf)    ((type *)(&(buf)->data[((buf)->len++) * sizeof(type)]))
             
 extern void buf_initialize(void);

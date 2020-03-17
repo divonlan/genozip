@@ -15,7 +15,7 @@
 #endif
 
 typedef struct {
-    long long wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 
+    int64_t wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 
         piz_get_haplotype_data_line, piz_get_format_info,
         piz_initialize_sample_iterators, piz_get_line_subfields, piz_merge_line, 
         piz_get_phase_data_line, piz_get_genotype_data_line, zfile_uncompress_section,
@@ -42,6 +42,10 @@ typedef struct timespec TimeSpecType;
                             clock_gettime(CLOCK_REALTIME, &tb); \
                             res += (tb.tv_sec-profiler_timer.tv_sec)*1000000000ULL + (tb.tv_nsec-profiler_timer.tv_nsec); \
                         }
+
+#define PRINT_TIMER(str) { TimeSpecType tb; \
+                           clock_gettime(CLOCK_REALTIME, &tb); \
+                           printf ("%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
 
 extern void profiler_add (ProfilerRec *dst, const ProfilerRec *src);
 extern const char *profiler_print_short (const ProfilerRec *p);

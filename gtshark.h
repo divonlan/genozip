@@ -7,10 +7,14 @@
 #define GTSHARK_INCLUDED
 
 #include "genozip.h"
+#include "sections.h"
 
-extern void gtshark_compress (VariantBlockP vb, ConstBufferP section_data, unsigned sb_i);
+#define GTSHARK_DEFAULT_MEMORY_PER_VB_STR     "128"
+#define GTSHARK_DEFAULT_SAMPLES_PER_BLOCK_STR "16384"
 
-extern void gtshark_copy_to_z_data (VariantBlockP vb, BufferP z_data, uint32_t compressed_offset);
+extern void gtshark_compress_haplotype_data (VariantBlockP vb, ConstBufferP section_data, unsigned sb_i);
+
+extern void gtshark_uncompress_haplotype_data (VariantBlockP vb, unsigned sb_i);
 
 #endif
 

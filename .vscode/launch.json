@@ -15,7 +15,7 @@
 
             //"args": ["-@1", "-B5", "-9", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-fojunk.vcf.genozip"],
 
-            "args": ["minimal.vcf","-f"],
+            //"args": ["minimal.vcf","-f"],
             //"args": ["test-file.vcf.genozip","-Gr13", "-@1"],
             //"args": ["45K.vcf", "-f", "45K.ploptimize.vcf.genozip"],
             //"args": ["GFX0241869.filtered.snp.vcf", "-f"],
@@ -28,7 +28,7 @@
             // benchmark file1:
             // file1 can be downloaded here: ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
             //"args": ["-f", "-t", "--show-content", "--show-memory", "--show-time", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf"],
-            //"args": ["-f", "-z", "--show-content", "--show-time", "--show-memory", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.bz2", "-o", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.frombz2.vcf.genozip"],
+            "args": ["-f", "-z", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf", "-f"],
             //"args": ["-f", "-d", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.genozip", "-o", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.test.vcf"],
             
             // benchmark file2:

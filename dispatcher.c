@@ -358,6 +358,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
             dispatcher_human_time (seconds_so_far, time_str);
 
             if (bytes_compressed) {
+
                 if (file->type == VCF)  // source file was plain VCF
                     fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
                 
@@ -379,7 +380,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
 }
 
 void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
-                                 uint64_t bytes_compressed /* possibly 0 */)
+                                 uint64_t bytes_compressed /* 0 for PIZ */)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -393,7 +394,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
 
         vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
     }
-    
+
     if (dispatcher_is_done (dispatcher) && bytes_compressed) {
         file_seek (z_file, 0, SEEK_END, true); // past the genozip header
         bytes_compressed = file_tell (z_file);
