@@ -62,6 +62,7 @@ endif
 ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
+	LDFLAGS += -static -static-libgcc
 else
     uname := $(shell uname -s)
     ifeq ($(uname),Linux)
