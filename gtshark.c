@@ -91,7 +91,8 @@ error:
 }
 
 #define PIPE_MAX_BYTES 10000
-static void gtshark_check_pipe_for_errors (char *data, int fd, uint32_t vb_i, uint32_t sb_i, bool is_stderr) // not static to avoid compiler warnings
+// not static to avoid compiler warnings on Windows 
+void gtshark_check_pipe_for_errors (char *data, int fd, uint32_t vb_i, uint32_t sb_i, bool is_stderr) 
 {
     char *next = data;
 
