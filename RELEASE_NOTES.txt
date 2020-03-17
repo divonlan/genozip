@@ -56,3 +56,9 @@
   (2) more advanced shared memory management reduces the overall memory consumption of hash tables, and allows to make them bigger - improving speed
 - --show-sections now shows all dictionaries, not just FORMAT and INFO
 - --added optimization for VQSLOD
+
+3.0.0
+- added --gtshark allowing the final stage of allele compression to be done with gtshark (provided it is installed
+  on the computer an accessible on the path) instead of the default bzlib. This required a change to the genozip 
+  file format and hence increment in major version. As usual, genozip is, and will always be, backward compatible -
+  newer versions of genozip can uncompress files compressed with older versions.
