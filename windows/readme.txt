@@ -20,17 +20,6 @@ Actions - use at most one of these actions:
    -V --version      Display version number
 
 Flags:
-   -9 --optimize     Modify the VCF file in ways that are likely insignificant for analytical purposes, but make a
-                     signficant difference for compression. At the moment, these optimizations include:
-                     - PL data: Phred values of over 60 are changed to 60.     Example: '0,18,270' -> '0,18,60'
-                     - GL data: Numbers are rounded to 2 significant digits.   Example: '-2.61618,-0.447624,-0.193264'
-                     -> '-2.6,-0.45,-0.19'
-                     - GP data: Numbers are rounded to 2 significant digits, as with GL.
-                     - VQSLOD data: Number is rounded to 2 significant digits. Example: '-4.19494' -> '-4.2'
-                     Note: due to these data modifications, files compressed with --optimized are NOT identical as the
-                     original VCF after decompression. For this reason, it is not possible to use this option in
-                     combination with --test or --md5
-
    -c --stdout       Send output to standard output instead of a file
 
    -f --force        Force overwrite of the output file, or force writing .vcf.genozip data to standard output
@@ -63,21 +52,39 @@ Flags:
 
    --show-content    Show the information content of VCF files and the compression ratios of each component
 
-   --show-alleles    Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy
-                     regions are padded, and 2-digit allele values are replaced by an ascii character
-
 Optimizing:
-   -B --vblock       <number>. Sets the maximum size of memory (in megabytes) of VCF file data that can go into one
-                     variant block. By default, this is set to 128MB. The variant block is the basic unit of data on
-                     which genozip and genounzip operate. This value affects a number of things: 1. Memory consumption
-                     of both compression and decompression are linear with the variant block size. 2. Compression is
-                     sometimes better with larger block sizes, in particular if the number of samples is small. 3.
-                     Smaller blocks will result in faster 'genocat --regions' lookups
+   -9 --optimize     Modify the VCF file in ways that are likely insignificant for analytical purposes, but make a
+                     signficant difference for compression. At the moment, these optimizations include:
+                     - PL data: Phred values of over 60 are changed to 60.     Example: '0,18,270' -> '0,18,60'
+                     - GL data: Numbers are rounded to 2 significant digits.   Example: '-2.61618,-0.447624,-0.193264'
+                     -> '-2.6,-0.45,-0.19'
+                     - GP data: Numbers are rounded to 2 significant digits, as with GL.
+                     - VQSLOD data: Number is rounded to 2 significant digits. Example: '-4.19494' -> '-4.2'
+                     Note: due to these data modifications, files compressed with --optimized are NOT identical as the
+                     original VCF after decompression. For this reason, it is not possible to use this option in
+                     combination with --test or --md5
+
+   -B --vblock       <number between 1 and 2048>. Sets the maximum size of memory (in megabytes) of VCF file data that
+                     can go into one variant block. By default, this is set to 128 MB. The variant block is the basic
+                     unit of data on which genozip and genounzip operate. This value affects a number of things: 1.
+                     Memory consumption of both compression and decompression are linear with the variant block size.
+                     2. Compression is sometimes better with larger block sizes, in particular if the number of samples
+                     is small. 3. Smaller blocks will result in faster 'genocat --regions' lookups
 
    -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 1024. When
                      compressing or decompressing a variant block, the samples within the block are divided to sample
                      blocks which are compressed separately. A higher value will result in a better compression ratio,
                      while a lower value will result in faster 'genocat --samples' lookups
+
+   --gtshark         Use gtshark instead of the default bzlib as the final compression step for allele data (the GT
+                     subfield in the sample data). 
+                     Note: For this to work, gtshark needs to be installed and in the execution path - it is a separate
+                     package, not part of genozip. 
+                     Note: gtshark also needs to be installed for decompressing files that were compressed with this
+                     option. 
+                     Note: When using --gtshark, the default vblock is 128 MB and the default sblock 16384. You may
+                     override these defaults with the --vblock and --sblock options respectively
+                     Note: This option isn't supported on Windows
 
 One or more file names may be given, or if omitted, standard input is used instead
 
