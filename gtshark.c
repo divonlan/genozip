@@ -52,7 +52,7 @@ static void gtshark_create_vcf_file (VariantBlock *vb, const Buffer *section_dat
             
             // case: gtshark can't handle alleles>2 (natively, it splits them to several lines).
             // we put this allele in the exception list and change it to '0' for gtshark.
-            if (c > '2') {
+            if (c < '0' || c > '2') {
                 if (!num_exceptions_in_line) { // first exception for this line 
                     buf_alloc_more (vb, &vb->gtshark_exceptions_line_i, 1, uint32_t, 2);
                     *NEXTENT (uint32_t, &vb->gtshark_exceptions_line_i) = BGEN32 (vb_line_i);
@@ -91,7 +91,7 @@ error:
 }
 
 #define PIPE_MAX_BYTES 10000
-void gtshark_check_pipe_for_errors (char *data, int fd, uint32_t vb_i, uint32_t sb_i, bool is_stderr) // not static to avoid compiler warnings
+static void gtshark_check_pipe_for_errors (char *data, int fd, uint32_t vb_i, uint32_t sb_i, bool is_stderr) // not static to avoid compiler warnings
 {
     char *next = data;
 
@@ -110,7 +110,7 @@ void gtshark_check_pipe_for_errors (char *data, int fd, uint32_t vb_i, uint32_t 
 }
 
 // ZIP & PIZ
-static void gtshark_run (uint32_t vb_i, unsigned sb_i,
+static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
                          const char *command, const char *filename_1, const char *filename_2) 
 {
 #ifndef _WIN32
@@ -138,7 +138,8 @@ static void gtshark_run (uint32_t vb_i, unsigned sb_i,
         argv[argc] = NULL;
         
         execvp ("gtshark", (char * const *)argv); // if successful, doesn't return
-        ABORT ("Error executing gtshark: %s", strerror (errno)); 
+        #define EXEC_FAILURE_STR "genozip failed to execute gtshark"
+        ABORT (EXEC_FAILURE_STR ": %s", strerror (errno));  // this will go to the stderr pipe, with exit code 1
     }
     // I am the parent
 
@@ -155,6 +156,11 @@ static void gtshark_run (uint32_t vb_i, unsigned sb_i,
     int wstatus;
     waitpid (child_pid, &wstatus, 0); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
 
+    bool failed_to_execvp = strstr (stderr_data, EXEC_FAILURE_STR); 
+    if (!command && failed_to_execvp) return false; // this is main() testing
+
+    ASSERT0 (!failed_to_execvp, stderr_data); // just pass the message from ABORT of the child process
+
     ASSERT (!WEXITSTATUS (wstatus), 
             "Error: gtshark exited with status=%u for vb_i=%u sb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
             WEXITSTATUS (wstatus), vb_i, sb_i, stdout_data, stderr_data);
@@ -167,6 +173,12 @@ static void gtshark_run (uint32_t vb_i, unsigned sb_i,
             "Error: gtshark failed to exist normally for vb_i=%u sb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
             vb_i, sb_i, stdout_data, stderr_data);
 #endif
+    return true; // successfully executed gtshark
+}
+
+bool gtshark_is_installed (void)
+{
+    return gtshark_run (0, 0, NULL, NULL, NULL);
 }
 
 // ZIP

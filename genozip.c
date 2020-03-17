@@ -882,6 +882,10 @@ int main (int argc, char **argv)
 #ifdef _WIN32
     ASSERT0 (!flag_gtshark, "--gtshark is not supported on Windows");
 #endif
+    ASSERT (!flag_gtshark || gtshark_is_installed(), 
+            "%s: to use --gtshark, gtshark needs to be installed and in the execution path.\n"
+            "gtshark is a separate software package that is not affiliated with genozip in any way.\n"
+            "You can find it here: https://github.com/refresh-bio/GTShark", global_cmd);
 
     // deal with final setting of flag_quiet that suppresses warnings 
     
