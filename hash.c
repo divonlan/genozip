@@ -33,10 +33,9 @@ typedef struct {
 static uint32_t hash_next_size_up (uint64_t size)
 {
     // primary numbers just beneath the powers of 2
-    #define NUM_HASH_SIZES 19
-    static uint32_t hash_sizes[NUM_HASH_SIZES] = { 509, 1021, 2039, 4039, 8191, 16381, 32749, 65521, 131071, 
-                                                   262139, 524287, 1048573, 2097143, 4194301, 8388593, 16777213, 
-                                                   33554393, 67108859, 134217689 };
+    static uint32_t hash_sizes[] = { 509, 1021, 2039, 4039, 8191, 16381, 32749, 65521, 131071, 
+                                     262139, 524287, 1048573, 2097143, 4194301, 8388593, 16777213, 33554393 };
+    #define NUM_HASH_SIZES (sizeof(hash_sizes) / sizeof(hash_sizes[0]))
 
     for (int i=0; i < NUM_HASH_SIZES; i++)
         if (size < (uint64_t)hash_sizes[i]) return hash_sizes[i];
@@ -123,7 +122,7 @@ void hash_alloc_global (VariantBlock *merging_vb, MtfContext *zf_ctx, const MtfC
 
     static struct { uint64_t vbs, factor; } growth_plan[] =
     { 
-        { 2, 2 },
+        { 1, 2 },
         { 5, 4 },
         { 9, 8 },
         { 17, 16 },
