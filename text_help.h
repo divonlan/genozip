@@ -62,6 +62,7 @@ static const char *help_genozip[] = {
     "                     - GL data: Numbers are rounded to 2 significant digits.   Example: '-2.61618,-0.447624,-0.193264' -> '-2.6,-0.45,-0.19'",    
     "                     - GP data: Numbers are rounded to 2 significant digits, as with GL.",
     "                     - VQSLOD data: Number is rounded to 2 significant digits. Example: '-4.19494' -> '-4.2'",
+    "                     - QUAL data: Phred value is capped at 60 and rounded to 2 siginificant digts. Example: '257.2' -> '60' and '3.57' -> '3.6'",
     "                     Note: due to these data modifications, files compressed with --optimized are NOT identical as the original VCF after decompression. For this reason, it is not possible to use this option in combination with --test or --md5",    
     "",
     "   -B --vblock       <number between 1 and 2048>. Sets the maximum size of memory (in megabytes) of VCF file data that can go into one variant block. By default, this is set to "VCF_DATA_PER_VB" MB. The variant block is the basic unit of data on which genozip and genounzip operate. This value affects a number of things: 1. Memory consumption of both compression and decompression are linear with the variant block size. 2. Compression is sometimes better with larger block sizes, in particular if the number of samples is small. 3. Smaller blocks will result in faster 'genocat --regions' lookups",    

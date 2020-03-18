@@ -9,11 +9,14 @@
 #include <math.h>
 #include "optimize.h"
 #include "dict_id.h"
+#include "vcf_header.h"
 
 // optimize numbers in the range (-99.5,99.5) to 2 significant digits
-static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len, 
+static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_at /* 0 if no cap */,
                                              char *optimized_snip, unsigned *optimized_snip_len)
 {
+    if ((snip[0] < '0' || snip[0] > '9') && snip[0] != '.' && snip[0] != '-') return false; // not a number
+
     bool negative = (snip[0] == '-');
 
     // temporarily null-terminate string and get number
@@ -21,6 +24,9 @@ static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len,
     ((char*)snip)[len] = 0;
     double fp = atof (snip);
     ((char*)snip)[len] = save;
+
+    // cap value if requested
+    if (cap_value_at && fp > cap_value_at) fp = cap_value_at;
 
     if (negative) fp = -fp; // fp is always positive
 
@@ -79,7 +85,7 @@ static inline bool optimize_vector_2_sig_dig (const char *snip, unsigned len, ch
             if ((writer - optimized_snip) + MAX_NUM_LEN > OPTIMIZE_MAX_SNIP_LEN) return false;
 
             unsigned one_number_len;
-            bool ret = optimize_float_2_sig_dig (&snip[i-digit_i], digit_i, writer, &one_number_len);
+            bool ret = optimize_float_2_sig_dig (&snip[i-digit_i], digit_i, 0, writer, &one_number_len);
             if (!ret) return false;
             writer += one_number_len;
 
@@ -143,8 +149,13 @@ bool optimize_format (DictIdType dict_id, const char *snip, unsigned len, char *
 bool optimize_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (dict_id.num == dict_id_INFO_VQSLOD) 
-        return optimize_float_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
+        return optimize_float_2_sig_dig (snip, len, 0, optimized_snip, optimized_snip_len);
     
     ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
     return 0; // never reaches here, avoid compiler warning
+}
+
+bool optimize_qual (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+{
+    return optimize_float_2_sig_dig (snip, len, 60, optimized_snip, optimized_snip_len);
 }

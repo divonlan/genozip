@@ -66,3 +66,6 @@
 3.0.2
 - changed default number of sample blocks from 1024 for non-gtshark and 16384 in gtshark to 4096 for both modes.
 - bug fixes
+
+3.0.9
+- added --optimize optimization for QUAL values
