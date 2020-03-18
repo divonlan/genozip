@@ -50,7 +50,7 @@ const char *global_cmd = NULL;
 ExeType exe_type;
 int command = -1;  // must be static or global to initialize list_options 
 
-unsigned global_max_threads = DEFAULT_MAX_THREADS;
+unsigned global_max_threads = DEFAULT_MAX_THREADS; 
 
 // the flags - representing command line options - available globally
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0,
@@ -903,11 +903,9 @@ int main (int argc, char **argv)
 
     if (flag_test) flag_md5=true; // test requires md5
 
-    // --gtshark modifies the sblock and vblock defaults, but these may be overridden by the user
-    if (flag_gtshark) {
-        if (!flag_vblock) genozip_set_global_max_memory_per_vb (GTSHARK_DEFAULT_MEMORY_PER_VB_STR); // if user didn't override 
-        if (!flag_sblock) zip_set_global_samples_per_block     (GTSHARK_DEFAULT_SAMPLES_PER_BLOCK_STR); 
-    }
+    // default values, if not overridden by the user
+    if (!flag_vblock) genozip_set_global_max_memory_per_vb (VCF_DATA_PER_VB); 
+    if (!flag_sblock) zip_set_global_samples_per_block     (SAMPLES_PER_BLOCK); 
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split

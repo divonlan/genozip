@@ -16,7 +16,7 @@
 
 uint32_t global_num_samples              = 0; // number of samples in the file
 uint32_t global_number_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that global_num_samples if --samples is used
-uint32_t global_max_memory_per_vb        = DEFAULT_MAX_MEMORY_PER_VB; // ZIP only: used for reading VCF data
+uint32_t global_max_memory_per_vb        = 0; // ZIP only: used for reading VCF data
 
 Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
 

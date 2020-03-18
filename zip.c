@@ -21,7 +21,7 @@
 #include "random_access.h"
 #include "endianness.h"
 
-static uint32_t global_samples_per_block = SAMPLES_PER_BLOCK; 
+static uint32_t global_samples_per_block = 0; 
 
 void zip_set_global_samples_per_block (const char *num_samples_str)
 {

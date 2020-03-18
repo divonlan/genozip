@@ -21,10 +21,16 @@
 #include "compatability/visual_c_misc_funcs.h"
 #endif
 
+// -----------------
+// system parameters
+// -----------------
 #define GENOZIP_EXT ".genozip"
 
-#define DEFAULT_MAX_MEMORY_PER_VB (128*1024*1024)
-#define DEFAULT_MAX_MEMORY_PER_VB_STR "128" // MB
+// default max amount of VCF data in each variant block. this is user-configurable with --vblock
+#define VCF_DATA_PER_VB   "128" // MB
+
+// default max number of samples in each sample block within a variant block. user configurable with --sblock
+#define SAMPLES_PER_BLOCK "4096" 
 
 #define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if MAX_PLOIDY > 65535
@@ -35,26 +41,18 @@
 
 #define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined). 
 #if MAX_DICTS > 255
-#error "MAX_DICTS cannot go beyond 255 as SubfieldMapperZip and SubfieldInfoMapperPiz represent did_i as uint_8, and NIL=255"
+#error "MAX_DICTS cannot go beyond 255 as SubfieldMapperZip and SubfieldInfoMapperPiz represent did_i as uint8_t, and NIL=255"
 #endif
 
 #define MAX_ALLELE_VALUE   99 // the code currently allows for 2-digit alleles.
 
-// Note: the algorithm will use as many cores as it can - but there's no speed penalty for a higher MAX_COMPUTE_THREADS
-// that number of cores - it will not be faster, but also not slower.
-// However, each thread adds memory consumption approximately linearly
-
-// the optimal number of compute threads is determined by the ratio between CPU time and I/O time. 
-// For uncompress, 3 or more threads result in similar performance for HD and SSD, with 7 seaming to be about optimal (but not a big difference than 3). 
-// Adding threads doesn't help. 2 or less threads result in significantly slower execution time. 
-// Memory consumption is linear with the number of threads (each allocated a VB)
-
-#define DEFAULT_MAX_THREADS 8 // maximum compute threads created - one I/O thread, and the rest of compute threads. This can be changed with command line option -@
+#define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
  
 #define MAX_32BIT_WINDOWS_MEMORY (1.7*1024*1024*1024) // 1.7GB - so Windows 32bit code doesn't explode at 2GB. TO DO - make this platform specific or get ulimits
 
-
+// ----------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity)
+// ----------------------------------------------------------------------------------------------
 typedef struct variant_block_ *VariantBlockP;
 typedef const struct variant_block_ *ConstVariantBlockP;
 typedef struct file_ *FileP;
