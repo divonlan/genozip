@@ -71,7 +71,7 @@ Optimizing:
                      2. Compression is sometimes better with larger block sizes, in particular if the number of samples
                      is small. 3. Smaller blocks will result in faster 'genocat --regions' lookups
 
-   -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 1024. When
+   -S --sblock       <number>. Sets the number of samples per sample block. By default, it is set to 4096. When
                      compressing or decompressing a variant block, the samples within the block are divided to sample
                      blocks which are compressed separately. A higher value will result in a better compression ratio,
                      while a lower value will result in faster 'genocat --samples' lookups
@@ -82,8 +82,6 @@ Optimizing:
                      package, not part of genozip. 
                      Note: gtshark also needs to be installed for decompressing files that were compressed with this
                      option. 
-                     Note: When using --gtshark, the default vblock is 128 MB and the default sblock 16384. You may
-                     override these defaults with the --vblock and --sblock options respectively
                      Note: This option isn't supported on Windows
 
 One or more file names may be given, or if omitted, standard input is used instead
