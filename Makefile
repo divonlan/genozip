@@ -209,7 +209,8 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
-	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
+	@(cd $(CONDA_RECIPE_DIR); request-pull master hithub.com://conda-forge/genozip-feedstock master)
+#	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
 	@echo "CONDA: Using a browser:"
 	@echo "  (1) Go to https://github.com/conda-forge/genozip-feedstock/pulls"
