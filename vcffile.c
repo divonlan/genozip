@@ -60,7 +60,7 @@ static uint32_t vcffile_read_block (char *data)
             vcf_file->type = VCF; // we only accept VCF from stdin. TO DO: identify the file type by the magic number (first 2 bytes for gz and bz2)
         }
     }
-    else if (vcf_file->type == VCF_GZ) { 
+    else if (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ) { 
         bytes_read = gzfread (data, 1, READ_BUFFER_SIZE, (gzFile)vcf_file->file);
         
         if (bytes_read)

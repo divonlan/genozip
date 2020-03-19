@@ -21,7 +21,10 @@
 #include "move_to_front.h"
 #include "aes.h"
 
-typedef enum {UNKNOWN, VCF, VCF_GZ, VCF_BZ2, GENOZIP, GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
+typedef enum      {UNKNOWN, VCF,   VCF_GZ,    VCF_BGZ,    VCF_BZ2,   GENOZIP,     GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
+#define FILE_EXTS { "N/A", ".vcf", ".vcf.gz", ".vcf.bgz", ".vcf.bz2", GENOZIP_EXT, "N/A", "N/A", "N/A", "N/A" }
+extern char *file_exts[];
+
 typedef enum {READ, WRITE} FileMode;
 
 typedef struct file_ {

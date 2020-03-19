@@ -342,6 +342,7 @@ static void zfile_get_metadata(char *metadata)
     ASSERT0 (strlen (metadata) < FILE_METADATA_LEN, "Error: metadata too long");
 }
 
+// ZIP
 void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
 {
     SectionHeaderVCFHeader vcf_header;
@@ -357,14 +358,14 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
     
     switch (vcf_file->type) {
         case VCF     : vcf_header.compression_type = COMPRESSION_TYPE_NONE  ; break;
-        case VCF_GZ  : vcf_header.compression_type = COMPRESSION_TYPE_GZIP  ; break;
+        case VCF_GZ  :
+        case VCF_BGZ : vcf_header.compression_type = COMPRESSION_TYPE_GZIP  ; break;
         case VCF_BZ2 : vcf_header.compression_type = COMPRESSION_TYPE_BZIP2 ; break;
         default      : ABORT ("Error: invalid vcf_file->type=%u", vcf_file->type);
     }
 
     file_basename (vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
-    if (vcf_file->type == VCF_GZ)  vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-3] = '\0'; // remove the .gz
-    if (vcf_file->type == VCF_BZ2) vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)-4] = '\0'; // remove the .gz
+    vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)- (strlen(file_exts[vcf_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
     
     static Buffer vcf_header_buf = EMPTY_BUFFER;
 

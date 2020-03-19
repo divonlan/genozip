@@ -112,7 +112,7 @@ void hash_alloc_global (VariantBlock *merging_vb, MtfContext *zf_ctx, const MtfC
 {
     double estimated_vcf_file_size = vcf_file->disk_size;
     if (vcf_file->type == VCF_BZ2) estimated_vcf_file_size *= 15; // compression ratio of bzip2 of a "typical" vcf file
-    if (vcf_file->type == VCF_GZ)  estimated_vcf_file_size *= 8;  // compression ratio of gzip of a "typical" vcf file
+    if (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ) estimated_vcf_file_size *= 8;  // compression ratio of gzip of a "typical" vcf file
 
     double estimated_num_vbs = MAX (1, (double)estimated_vcf_file_size / (double)merging_vb->vcf_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->num_lines;

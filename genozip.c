@@ -566,16 +566,9 @@ static void main_genozip (const char *vcf_filename,
                 z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
-                if (vcf_file->type == VCF)
-                    sprintf (z_filename, "%s" GENOZIP_EXT, vcf_filename); // .vcf -> .vcf.genozip
-                else if (vcf_file->type == VCF_GZ)
-                    sprintf (z_filename, "%.*s" GENOZIP_EXT, fn_len-3, vcf_filename); // .vcf.gz -> .vcf.genozip
-                else if (vcf_file->type == VCF_BZ2)
-                    sprintf (z_filename, "%.*s" GENOZIP_EXT, fn_len-4, vcf_filename); // .vcf.bz2 -> .vcf.genozip
-                else
-                    ABORT ("Invalid file type: %u", vcf_file->type);
+                // get name, e.g. xx.vcf.gz -> xx.vcf.genozip
+                sprintf (z_filename, "%.*s" GENOZIP_EXT, (int)(fn_len - (strlen (file_exts[vcf_file->type])-4)), vcf_filename); 
             }
-
             z_file = file_open (z_filename, WRITE, GENOZIP);
         }
 

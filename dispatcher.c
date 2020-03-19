@@ -362,11 +362,11 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
                 if (file->type == VCF)  // source file was plain VCF
                     fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
                 
-                else // source was .vcf.gz or .vcf.bz2
+                else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
                     fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
                              dd->last_len, eraser, time_str, 
                              (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
-                             file->type == VCF_GZ ? ".gz" : ".bz2",
+                             file_exts[file->type],
                              (double)file->disk_size / (double)bytes_compressed);            // compression vs .gz/.bz2 size
             } else
                 fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);

@@ -21,6 +21,8 @@
 File *z_file   = NULL;
 File *vcf_file = NULL;
 
+char *file_exts[] = FILE_EXTS;
+
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
     ASSERT0 (filename, "Error: filename is null");
@@ -50,8 +52,12 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
         }
         else if (file_has_ext (file->name, ".vcf.gz")) {
             file->type = VCF_GZ;
+            if (flag_test && mode == WRITE) return file;
 
-            // don't actually open the file if we're just testing in genounzip
+            file->file = gzopen64 (file->name, mode == READ ? "rb" : "wb");    
+        }
+        else if (file_has_ext (file->name, ".vcf.bgz")) {
+            file->type = VCF_BGZ;
             if (flag_test && mode == WRITE) return file;
 
             file->file = gzopen64 (file->name, mode == READ ? "rb" : "wb");    
@@ -132,7 +138,7 @@ void file_close (File **file_p,
 
     if (file->file) {
 
-        if (file->type == VCF_GZ) {
+        if (file->type == VCF_GZ || file->type == VCF_BGZ) {
             int ret = gzclose_r((gzFile)file->file);
             ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
         }

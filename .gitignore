@@ -5,6 +5,7 @@
 *.d
 *.genozip
 *.gz
+*.bgz
 *.bz2
 *.xz
 !backward-compatability-test/*.genozip
