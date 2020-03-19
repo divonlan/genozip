@@ -78,6 +78,10 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             ABORT ("To genozip BCF files, use in conjuction with bcftools, e.g.:\n"
                    "bcftools view -Ov %s | %s -o %.*s.vcf" GENOZIP_EXT, file->name, global_cmd, (int)(strlen(file->name)-7), file->name);
         }
+        else if (file_has_ext (file->name, ".bcf.bgz")) {
+            ABORT ("To genozip BCF files, use in conjuction with bcftools, e.g.:\n"
+                   "bcftools view -Ov %s | %s -o %.*s.vcf" GENOZIP_EXT, file->name, global_cmd, (int)(strlen(file->name)-8), file->name);
+        }
         else {
             ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz or .vcf.bz2 extension", global_cmd, file->name);
         }
