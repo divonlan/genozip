@@ -27,6 +27,8 @@ extern char *file_exts[];
 
 typedef enum {READ, WRITE} FileMode;
 
+#define file_is_zip_read(file) ((file)->mode == READ && command == ZIP)
+
 typedef struct file_ {
     void *file;
     char *name;                       // allocated by file_open(), freed by file_close()

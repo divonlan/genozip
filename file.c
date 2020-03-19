@@ -162,24 +162,31 @@ void file_close (File **file_p,
         } 
     }
 
-    for (unsigned i=0; i < file->num_dict_ids; i++) 
-        mtf_free_context (&file->mtf_ctx[i]);
-
-    if (file->dicts_mutex_initialized) 
-        pthread_mutex_destroy (&file->dicts_mutex);
-
+    // free resources if we are NOT near the end of the execution. If we are at the end of the execution
+    // it is faster to just let the process die
     if (cleanup_memory) {
-        buf_destroy (&file->dict_data);
-        buf_destroy (&file->ra_buf);
-        buf_destroy (&file->section_list_buf);
-        buf_destroy (&file->section_list_dict_buf);
-        buf_destroy (&file->v1_next_vcf_header);
-        buf_destroy (&file->vcf_unconsumed_data);
-    }
+            
+        if (file->type == GENOZIP) {
+            for (unsigned i=0; i < file->num_dict_ids; i++)
+                mtf_destroy_context (&file->mtf_ctx[i]);
 
-    if (file->name) FREE (file->name);
-    
-    FREE (file);
+            if (file->dicts_mutex_initialized) 
+                pthread_mutex_destroy (&file->dicts_mutex);
+
+            buf_destroy (&file->dict_data);
+            buf_destroy (&file->ra_buf);
+            buf_destroy (&file->section_list_buf);
+            buf_destroy (&file->section_list_dict_buf);
+            buf_destroy (&file->v1_next_vcf_header);
+        }
+
+        if (file_is_zip_read(file))
+            buf_destroy (&file->vcf_unconsumed_data);
+
+        if (file->name) FREE (file->name);
+        
+        FREE (file);
+    }
 }
 
 size_t file_write (File *file, const void *data, unsigned len)

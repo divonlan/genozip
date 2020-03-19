@@ -561,6 +561,7 @@ static void main_genozip (const char *vcf_filename,
     if (!flag_stdout) {
 
         if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
+
             if (!z_filename) {
                 unsigned fn_len = strlen (vcf_filename);
                 z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
@@ -594,10 +595,10 @@ static void main_genozip (const char *vcf_filename,
 
     bool remove_vcf_file = z_file && flag_replace && vcf_filename;
 
-    file_close (&vcf_file, false);
+    file_close (&vcf_file, !is_last_file);
 
     if ((is_last_file || !flag_concat) && !flag_stdout && z_file) 
-        file_close (&z_file, false); 
+        file_close (&z_file, !is_last_file); 
 
     if (remove_vcf_file) file_remove (vcf_filename, true); 
 

@@ -112,6 +112,8 @@ extern void mtf_zero_all_sorters (VariantBlockP vb);
 extern void mtf_initialize_mutex (void);
 extern void mtf_update_stats (VariantBlockP vb);
 extern void mtf_free_context (MtfContext *ctx);
+extern void mtf_destroy_context (MtfContext *ctx);
+
 extern void mtf_vb_1_lock (VariantBlockP vb);
 
 #define mtf_get_word(ctx, word_index) (&((MtfWord*)(ctx)->word_list.data)[(word_index)])

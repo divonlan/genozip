@@ -802,3 +802,22 @@ void mtf_free_context (MtfContext *ctx)
     }
 }
 
+// Called by file_close ahead of freeing File memory containing mtf_ctx
+void mtf_destroy_context (MtfContext *ctx)
+{
+    buf_destroy (&ctx->ol_dict);
+    buf_destroy (&ctx->ol_mtf);
+    buf_destroy (&ctx->dict);
+    buf_destroy (&ctx->mtf);
+    buf_destroy (&ctx->word_list);
+    buf_destroy (&ctx->local_hash);
+    buf_destroy (&ctx->global_hash);
+    buf_destroy (&ctx->sorter);
+    buf_destroy (&ctx->mtf_i);
+    buf_destroy (&ctx->b250);
+
+    if (ctx->mutex_initialized) {
+        pthread_mutex_destroy (&ctx->mutex);
+        ctx->mutex_initialized = false;
+    }
+}
