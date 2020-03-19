@@ -1,4 +1,8 @@
 ##fileformat=VCFv4.1
+##
+## WHAT IS THIS FILE? This is a test file for testing edge cases during development on genozip. It is not a normal
+## VCF file and results in many warnings when running genozip against it - this is expected
+##
 ## Things tested in this file
 # 1. lines with and without non-GT subfields
 # 2. lines with and without GT subfields
