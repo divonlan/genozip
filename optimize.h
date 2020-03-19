@@ -13,6 +13,5 @@
 
 extern bool optimize_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
 extern bool optimize_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
-extern bool optimize_qual (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
 
 #endif

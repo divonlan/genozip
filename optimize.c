@@ -154,8 +154,3 @@ bool optimize_info (DictIdType dict_id, const char *snip, unsigned len, char *op
     ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
     return 0; // never reaches here, avoid compiler warning
 }
-
-bool optimize_qual (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
-{
-    return optimize_float_2_sig_dig (snip, len, 60, optimized_snip, optimized_snip_len);
-}

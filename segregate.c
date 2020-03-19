@@ -711,15 +711,7 @@ static const char *seg_data_line (VariantBlock *vb, /* may be NULL if testing */
     // QUAL
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vcf_line_i, &field_len, &separator, "QUAL");
-
-    unsigned optimized_snip_len;
-    char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
-    if (flag_optimize && optimize_qual (field_start, field_len, optimized_snip, &optimized_snip_len)) {
-        seg_one_field (vb, optimized_snip, optimized_snip_len, vcf_line_i, QUAL, NULL);
-        vb->vcf_section_bytes[QUAL] += (int)field_len - (int)optimized_snip_len;
-        vb->vb_data_size            -= (int)field_len - (int)optimized_snip_len;
-    }
-    else seg_one_field (vb, field_start, field_len, vcf_line_i, QUAL, NULL);
+    seg_one_field (vb, field_start, field_len, vcf_line_i, QUAL, NULL);
 
     // FILTER
     field_start = next_field;

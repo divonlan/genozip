@@ -68,4 +68,3 @@
 - bug fixes
 
 3.0.9
-- added --optimize optimization for QUAL values
