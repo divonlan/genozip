@@ -8,33 +8,33 @@ From:ubuntu
 Help me. I'm in the container.
 
 %environment
-    PATH=/genozip:${PATH}
+    PATH=/code:${PATH}
     export PATH
 
 %post
     echo "Installing genozip into container..."
 
     # Here we are at the base, /, of the container
-    git clone https://github.com/divonlan/genozip
-    cd /genozip
+    #git clone https://github.com/divonlan/genozip
+    #cd /genozip
     make
     
 %runscript
-    exec /genozip/genozip "$@"
+    exec /code/genozip "$@"
 
 # apps
 
 %apprun genozip
-    exec /genozip/genozip "$@"
+    exec /code/genozip "$@"
 
 %apprun genounzip
-    exec /genozip/genounzip "$@"
+    exec /code/genounzip "$@"
 
 %apprun genocat
-    exec /genozip/genocat "$@"
+    exec /code/genocat "$@"
 
 %apprun genols
-    exec /genozip/genols "$@"
+    exec /code/genols "$@"
 
 %apphelp genozip
     This is the help for genozip app.
