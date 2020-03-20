@@ -635,7 +635,7 @@ static inline const char *seg_get_next_item (const char *str, int *str_len, bool
     ABORT ("Error: while segmenting %s in line %u: expecting a %s %s %s after \"%.*s\"", 
             item_name, vcf_line_i, 
             allow_newline ? "NEWLINE" : "", allow_tab ? "TAB" : "", allow_colon ? "\":\"" : "", 
-            MIN (i, 1000), str);
+            MIN (i-1, 1000), str);
 
     return 0; // avoid compiler warning - never reaches here
 }
