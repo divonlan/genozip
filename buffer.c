@@ -525,9 +525,9 @@ void buf_overlay_do (VariantBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf
         overlaid_buf->type = BUF_UNALLOCATED;
     }
     
-    ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error: cannot buf_overlay to a buffer already in use. overlaid_buf->name=%s", overlaid_buf->name ? overlaid_buf->name : "");
-    ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
-    ASSERT (regular_buf->overlayable, "Error: buf_overlay: only overlayble buffers can be fully overlaid. regular_buf->name=%s", regular_buf->name ? regular_buf->name : "");
+    ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error in %s:%u: cannot buf_overlay to a buffer already in use. overlaid_buf->name=%s", func, code_line, overlaid_buf->name ? overlaid_buf->name : "");
+    ASSERT (regular_buf->type == BUF_REGULAR, "Error in %s:%u: regular_buf in buf_overlay must be a regular buffer. regular_buf->name=%s", func, code_line, regular_buf->name ? regular_buf->name : "");
+    ASSERT (regular_buf->overlayable, "Error in %s:%u: buf_overlay: only overlayble buffers can be fully overlaid. regular_buf->name=%s",  func, code_line, regular_buf->name ? regular_buf->name : "");
 
     overlaid_buf->size        = 0;
     overlaid_buf->len         = 0;

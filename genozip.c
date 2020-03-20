@@ -162,6 +162,15 @@ static unsigned main_get_num_cores()
 #endif
 }
 
+static bool main_am_i_in_docker (void)
+{
+    FILE *fp = fopen ("/.dockerenv", "r");
+    if (!fp) return false;
+
+    fclose (fp);
+    return true;
+}
+
 static void main_show_file_metadata (void)
 {
     fprintf (stderr, "\n\n");
@@ -847,10 +856,13 @@ int main (int argc, char **argv)
     // if command not chosen explicitly, use the default determined by the executable name
     if (command < 0) { 
 
-        // genozip with no input filename, no output filename, and no output or input redirection - show help
         if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
         
-        else if (command == -1 && optind == argc && !out_filename && isatty(0) && isatty(1)) 
+        // genozip with no input filename, no output filename, and no output or input redirection - show help
+        // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
+        // coming from a pipe. the user must use "-" to redirect from stdin
+        else if (command == -1 && optind == argc && !out_filename && 
+                 (isatty(0) || main_am_i_in_docker()) && isatty(1)) 
             return main_print_help (false);
 
         else if (exe_type == EXE_GENOUNZIP) command = UNZIP;
