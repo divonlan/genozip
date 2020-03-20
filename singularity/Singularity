@@ -17,6 +17,7 @@ Help me. I'm in the container.
     # Here we are at the base, /, of the container
     #git clone https://github.com/divonlan/genozip
     #cd /genozip
+    apt-get install build-essential
     make
     
 %runscript
