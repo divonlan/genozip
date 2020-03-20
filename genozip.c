@@ -57,7 +57,7 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
-    flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_noisy=0,
+    flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_noisy=0, flag_strip=0,
     flag_debug_memory=0, flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
@@ -740,6 +740,7 @@ int main (int argc, char **argv)
         #define _G  {"drop-genotypes",no_argument,       &flag_drop_genotypes,1}
         #define _H1 {"no-header",     no_argument,       &flag_no_header,    1 }
         #define _H0 {"header-only",   no_argument,       &flag_header_only,  1 }
+        #define _sp {"strip",         no_argument,       &flag_strip,        1 }
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
         #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
@@ -763,10 +764,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                            _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,               _00 };
-        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                   _st, _sm,                                       _dm,               _00 };
-        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1,                _sT,                                    _st, _sm,                                       _dm,               _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                          _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,               _00 };
+        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                       _st, _sm,                                       _dm,               _00 };
+        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1, _sp,               _sT,                                    _st, _sm,                                       _dm,               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
