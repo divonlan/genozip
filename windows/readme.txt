@@ -79,7 +79,8 @@ Optimizing:
    --gtshark         Use gtshark instead of the default bzlib as the final compression step for allele data (the GT
                      subfield in the sample data). 
                      Note: For this to work, gtshark needs to be installed and in the execution path - it is a separate
-                     package, not part of genozip. 
+                     software package that is not affliated with genozip in any way. It can be found here:
+                     https://github.com/refresh-bio/GTShark
                      Note: gtshark also needs to be installed for decompressing files that were compressed with this
                      option. 
                      Note: This option isn't supported on Windows
@@ -220,6 +221,9 @@ Options:
    -H --no-header    Don't output the VCF header
 
       --header-only  Output only the VCF header
+
+      --strip        Don't output values for ID, QUAL, FILTER, INFO; FORMAT is only GT (at most); Samples include
+                     allele values (i.e. GT subfield) only
 
    -o --output       <output-filename>. Output to this filename instead of stdout
 
