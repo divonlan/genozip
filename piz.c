@@ -206,12 +206,12 @@ static bool piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
     for (VcfFields f=CHROM; f <= (flag_drop_genotypes ? INFO : FORMAT); f++) {
 
         // if the VB doesn't have FORMAT at all - skip it
-        if (f==FORMAT && !vb->has_genotype_data && !vb->has_haplotype_data && vb->mtf_ctx[f].dict_section_type != SEC_FORMAT_DICT) continue;
+        if (f == FORMAT && !vb->has_genotype_data && !vb->has_haplotype_data && vb->mtf_ctx[f].dict_section_type != SEC_FORMAT_DICT) continue;
 
-        if (flag_strip && (f == ID || f >= QUAL)) {
-            if (f == FORMAT) { snip[FORMAT] = "GT"; snip_len[FORMAT] = 2;} 
-            else             { snip[f]      = "." ; snip_len[f]      = 1;}
-        }
+        if (f == FORMAT && (flag_gt_only || flag_strip)) { snip[FORMAT] = "GT"; snip_len[FORMAT] = 2;} 
+        
+        else if ((f == ID || f >= QUAL) && flag_strip) { snip[f] = "." ; snip_len[f] = 1;}
+
         else {
             word_index[f] = mtf_get_next_snip (vb, &vb->mtf_ctx[f], NULL, &snip[f], &snip_len[f], vb->first_line + vb_line_i);
 
@@ -664,27 +664,26 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
         ht_columns_data = piz_get_ht_columns_data (vb);
     }
     
-    if (!flag_strip) {
-        // initialize genotype stuff
-        if (vb->has_genotype_data && !flag_drop_genotypes) {
-            
-            // get info about the different types of FORMAT in this vb (vb->format_info_buf)
-            // as well as which is used for each line (dl->format_mtf_i)
-            piz_get_format_info (vb);
+    // initialize genotype stuff
+    if (vb->has_genotype_data && !flag_drop_genotypes && !flag_strip && !flag_gt_only) {
+        
+        // get info about the different types of FORMAT in this vb (vb->format_info_buf)
+        // as well as which is used for each line (dl->format_mtf_i)
+        piz_get_format_info (vb);
 
-            // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
-            piz_initialize_sample_iterators(vb);
+        // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
+        piz_initialize_sample_iterators(vb);
 
-            buf_alloc (vb, &vb->line_gt_data, vb->max_gt_line_len, 1, "line_gt_data", vb->variant_block_i);
-        }
-
-        // this arrays (for fields) and iname_mapper->next (for info subfields)  contain pointers to the next b250 item.
-        // every line, in the for loop, MAY progress the pointer by 1, if that b250 was used for that row (all are used for the 
-        // fields, but only those info subfields defined in the INFO names of a particular line are used in that line).
-                
-        // create mapping for info subfields
-        piz_map_iname_subfields (vb);
+        buf_alloc (vb, &vb->line_gt_data, vb->max_gt_line_len, 1, "line_gt_data", vb->variant_block_i);
     }
+
+    // these arrays (for fields) and iname_mapper->next (for info subfields) contain pointers to the next b250 item.
+    // every line, in the for loop, MAY progress the pointer by 1, if that b250 was used for that row (all are used for the 
+    // fields, but only those info subfields defined in the INFO names of a particular line are used in that line).
+            
+    // create mapping for info subfields
+    if (!flag_strip)        
+        piz_map_iname_subfields (vb);
 
     // now reconstruct the lines, one line at a time
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
@@ -695,7 +694,7 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
             // note: we always call piz_get_genotype_data_line even if !is_line_included, bc we need to advance the iterators
-            if (vb->has_genotype_data && !flag_strip)  
+            if (vb->has_genotype_data && !flag_strip && !flag_gt_only)  
                 piz_get_genotype_data_line (vb, vb_line_i, is_line_included);
 
             if (is_line_included)  {
@@ -790,7 +789,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
 
         if (flag_strip && (f == ID || f >= QUAL)) continue; // we don't need most of the fields if --strip
-        if (flag_drop_genotypes && f==FORMAT)     continue; // we don't need FORMAT if --drop-genotypes
+        if ((flag_drop_genotypes || flag_gt_only) && f==FORMAT) continue; // we don't need FORMAT if --gt-only or --drop-genotypes
 
         zfile_uncompress_section (vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", SEC_CHROM_B250 + f*2);
     }
@@ -829,7 +828,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
 
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) {
-            if (!flag_strip) 
+            if (!flag_strip && !flag_gt_only) 
                 zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i], &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_GENOTYPE_DATA);
             section_i++;
         }                

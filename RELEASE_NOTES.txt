@@ -72,3 +72,6 @@
 
 3.0.11
 - added genocat --strip
+
+3.0.12
+- added genocat --GT-only
