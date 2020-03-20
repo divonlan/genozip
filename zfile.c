@@ -839,7 +839,9 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     ASSERT (data_type == DATA_TYPE_VCF, "Error: unrecognized data_type=%d", data_type);
 
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
-            "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s). You might want to consider upgrading genozip to the newest version.",
+            "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
+            "You might want to consider upgrading genozip to the newest version.\n"
+            "Note: genozip is backward-compatible: newer versions of genozip can always decompress files compressed with older versions",
             file_printname (z_file), header->genozip_version, GENOZIP_CODE_VERSION);
 
     ASSERT (header->encryption_type != ENCRYPTION_TYPE_NONE || !crypt_have_password(), 
