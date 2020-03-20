@@ -34,6 +34,23 @@ void zip_set_global_samples_per_block (const char *num_samples_str)
     ASSERT (global_samples_per_block >= 1 && global_samples_per_block <= 65535, "Error: invalid argument of --sblock: %s. Expecting a number between 1 and 65535", num_samples_str);
 }
 
+static void zip_display_compression_ratio (Dispatcher dispatcher)
+{
+    const char *runtime = dispatcher_get_runtime (dispatcher);
+
+    double z_bytes   = (double)z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file; // in case of concat - we show the ratio of one file. the last file accounts for the genozip header...
+    double vcf_bytes = z_file->vcf_data_size_single;
+    double ratio     = vcf_bytes / z_bytes;
+    
+    if (vcf_file->type == VCF)  // source file was plain VCF
+        fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
+    
+    else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
+        fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
+                    runtime, ratio, file_exts[vcf_file->type],
+                    (double)vcf_file->disk_size / z_bytes); // compression vs .gz/.bz2 size
+}
+
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
 // Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
@@ -592,8 +609,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
             zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, vcf_file, true);
 
-            dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
-                                        z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file);
+            dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far);
         }        
         
         // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - read one
@@ -624,9 +640,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
                 z_file->vcf_data_size_concat += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
 
-                dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far,
-                                            z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file
-                                               + z_file->dict_data.len); // this accounting is missing genozip header (with the section list), and the random_access section
+                dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far); // this accounting is missing genozip header (with the section list), and the random_access section
             }
         }
     } while (!dispatcher_is_done (dispatcher));
@@ -639,6 +653,8 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);
+
+    zip_display_compression_ratio (dispatcher);
 
 finish:
     z_file->disk_size = z_file->disk_so_far;

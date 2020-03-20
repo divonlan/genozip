@@ -1062,7 +1062,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 dispatcher_input_exhausted (dispatcher);
 
                 if (header_only_file)
-                    dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far, 0);
+                    dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far);
             }
         }
 
@@ -1074,7 +1074,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
             z_file->vcf_data_so_far += processed_vb->vb_data_size; 
 
-            dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far, 0);
+            dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far);
         }
 
     } while (!dispatcher_is_done (dispatcher));
@@ -1104,7 +1104,10 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
     if (flag_split) file_close (&vcf_file, true); // close this component file
 
+    fprintf (stderr, "Done (%s)           \n", dispatcher_get_runtime (dispatcher));
+
 finish:
+
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
     if (!flag_split || !piz_successful) 
         dispatcher_finish (&dispatcher, NULL);

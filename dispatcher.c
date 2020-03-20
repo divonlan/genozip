@@ -287,8 +287,22 @@ static void dispatcher_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
-                                      uint64_t bytes_compressed /* possibly 0 */)
+const char *dispatcher_get_runtime (Dispatcher dispatcher)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+
+    TimeSpecType tb; 
+    clock_gettime(CLOCK_REALTIME, &tb); 
+    
+    int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
+
+    static char time_str[70];
+    dispatcher_human_time (seconds_so_far, time_str);
+
+    return time_str;
+}
+
+static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -351,36 +365,13 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
         }
     }
 
-    if (done) {
-    
-        if (!dd->test_mode) {
-            char time_str[70];
-            dispatcher_human_time (seconds_so_far, time_str);
-
-            if (bytes_compressed) {
-
-                if (file->type == VCF)  // source file was plain VCF
-                    fprintf (stderr, "%.*sDone (%s, compression ratio: %1.1f)           \n", dd->last_len, eraser, time_str, (double)total / (double)bytes_compressed);
-                
-                else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
-                    fprintf (stderr, "%.*sDone (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
-                             dd->last_len, eraser, time_str, 
-                             (double)file->vcf_data_size_single / (double)bytes_compressed,  // compression vs vcf data size
-                             file_exts[file->type],
-                             (double)file->disk_size / (double)bytes_compressed);            // compression vs .gz/.bz2 size
-            } else
-                fprintf (stderr, "%.*sDone (%s)                         \n", dd->last_len, eraser, time_str);
-
-        } else
-            fprintf (stderr, "%.*s", dd->last_len, eraser); // test result comes after
-    }
+    if (done) fprintf (stderr, "%.*s", dd->last_len, eraser);
 
     dd->last_percent = percent;
     dd->last_seconds_so_far = seconds_so_far;
 }
 
-void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far,
-                                 uint64_t bytes_compressed /* 0 for PIZ */)
+void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -395,12 +386,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
         vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
     }
 
-    if (dispatcher_is_done (dispatcher) && bytes_compressed) {
-        file_seek (z_file, 0, SEEK_END, true); // past the genozip header
-        bytes_compressed = file_tell (z_file);
-    }
-
-    dispatcher_show_progress (dispatcher, file, vcf_data_written_so_far, bytes_compressed);
+    dispatcher_show_progress (dispatcher, file, vcf_data_written_so_far);
 }                           
 
 void dispatcher_input_exhausted (Dispatcher dispatcher)
