@@ -36,7 +36,7 @@ void zip_set_global_samples_per_block (const char *num_samples_str)
 
 static void zip_display_compression_ratio (Dispatcher dispatcher)
 {
-    const char *runtime = dispatcher_get_runtime (dispatcher);
+    const char *runtime = dispatcher_ellapsed_time (dispatcher);
 
     double z_bytes   = (double)z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file; // in case of concat - we show the ratio of one file. the last file accounts for the genozip header...
     double vcf_bytes = z_file->vcf_data_size_single;

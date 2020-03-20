@@ -28,6 +28,6 @@ extern void dispatcher_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
-extern const char *dispatcher_get_runtime (Dispatcher dispatcher);
+extern const char *dispatcher_ellapsed_time (Dispatcher dispatcher);
 
 #endif

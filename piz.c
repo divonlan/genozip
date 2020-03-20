@@ -1103,7 +1103,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
     if (flag_split) file_close (&vcf_file, true); // close this component file
 
-    if (!flag_test) fprintf (stderr, "Done (%s)           \n", dispatcher_get_runtime (dispatcher));
+    if (!flag_test) fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher));
 
 finish:
 

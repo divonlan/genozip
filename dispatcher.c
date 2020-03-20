@@ -287,7 +287,7 @@ static void dispatcher_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-const char *dispatcher_get_runtime (Dispatcher dispatcher)
+const char *dispatcher_ellapsed_time (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
