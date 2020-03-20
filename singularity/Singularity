@@ -15,7 +15,7 @@ Help me. I'm in the container.
     echo "Installing genozip into container..."
 
     # Here we are at the base, /, of the container
-    git clone https://github.com/divonlan/genozip.git
+    git clone https://github.com/divonlan/genozip
     cd /genozip
     make
     
