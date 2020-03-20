@@ -393,7 +393,7 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
     if (!buf->memory) {
 #ifdef DEBUG
         buf_display_memory_usage (true, 0, 0);
-#endif
+#endif 
         ABORT ("Error: Out of memroy. %sDetails: failed to allocate %u bytes name=%s:%u in %s:%u", 
                (command==ZIP ? "Try running with a lower variant block size using --vblock. " : ""), 
                 size + overhead_size, name, param, func, code_line);
