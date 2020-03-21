@@ -222,6 +222,8 @@ Options:
 
       --header-only  Output only the VCF header
 
+      --GT-only      For samples, output only genotype (GT) data, dropping the other subfields
+
       --strip        Don't output values for ID, QUAL, FILTER, INFO; FORMAT is only GT (at most); Samples include
                      allele values (i.e. GT subfield) only
 
