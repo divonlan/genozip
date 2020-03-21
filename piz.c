@@ -22,6 +22,7 @@
 #include "regions.h"
 #include "samples.h"
 #include "gtshark.h"
+#include "dict_id.h"
 
 typedef struct {
     unsigned num_subfields;         // number of subfields this FORMAT has
@@ -120,8 +121,8 @@ static void piz_get_format_info (VariantBlock *vb)
 
             // get the did_i of this subfield. note: did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
-            int did_i = mtf_get_existing_did_i_by_dict_id (vb, dict_id);
-            format_num_subfields[format_i].ctx[sf_i] = (did_i != NIL) ? &vb->mtf_ctx[did_i] : NULL;
+            uint8_t did_i = mtf_get_existing_did_i_by_dict_id (vb, dict_id);
+            format_num_subfields[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &vb->mtf_ctx[did_i] : NULL;
         }
     }
 
@@ -137,6 +138,7 @@ static void piz_get_format_info (VariantBlock *vb)
 
 // for each unique type of INFO fields (each one containing multiple names), create a unique mapping
 // info field node index (i.e. in b250) -> list of names, lengths and the context of the subfields
+static void v2v3_piz_map_iname_subfields (VariantBlock *vb); // forward declaration (see v2v3.c)
 static void piz_map_iname_subfields (VariantBlock *vb)
 {
     // terminology: we call a list of INFO subfield names, an "iname". An iname looks something like
@@ -146,19 +148,19 @@ static void piz_map_iname_subfields (VariantBlock *vb)
 
     const MtfContext *info_ctx = &vb->mtf_ctx[INFO];
     vb->iname_mapper_buf.len = info_ctx->word_list.len;
-    buf_alloc (vb, &vb->iname_mapper_buf, sizeof (SubfieldMapperZip) * vb->iname_mapper_buf.len,
+    buf_alloc (vb, &vb->iname_mapper_buf, sizeof (SubfieldMapper) * vb->iname_mapper_buf.len,
                1, "iname_mapper_buf", 0);
     buf_zero (&vb->iname_mapper_buf);
 
-    SubfieldMapperZip *all_iname_mappers = (SubfieldMapperZip*)vb->iname_mapper_buf.data;
+    SubfieldMapper *all_iname_mappers = (SubfieldMapper*)vb->iname_mapper_buf.data;
 
     const MtfWord *all_inames = (const MtfWord *)info_ctx->word_list.data;
 
     for (unsigned iname_i=0; iname_i < vb->iname_mapper_buf.len; iname_i++) {
 
-        const char *iname = (const char *)&info_ctx->dict.data[all_inames[iname_i].char_index]; // e.g. "I1=I2=I3=" - pointer into the INFO dictionary
+        char *iname = &info_ctx->dict.data[all_inames[iname_i].char_index]; // e.g. "I1=I2=I3=" - pointer into the INFO dictionary
         unsigned iname_len = all_inames[iname_i].snip_len; 
-        SubfieldMapperZip *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
+        SubfieldMapper *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
 
         // get INFO subfield snips - which are the values of the INFO subfield, where the names are
         // in the INFO snip in the format "info1=info2=info3="). 
@@ -171,20 +173,57 @@ static void piz_map_iname_subfields (VariantBlock *vb)
             // traverse the iname, and get the dict_id for each subfield name (using only the first 8 characers)
             dict_id.num = 0;
             unsigned j=0; 
-            while (iname[i] != '=' && iname[i] != '\t') { // value-less INFO names can be terminated by the end-of-word \t in the dictionary
+            while (iname[i] != '=' && iname[i] != ';' && iname[i] != '\t') { // value-less INFO names can be terminated by the end-of-word \t in the dictionary
                 if (j < DICT_ID_LEN) 
                     dict_id.id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
                 i++, j++;
             }
             dict_id = dict_id_info_subfield (dict_id);
 
-            iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (vb, dict_id); // it will be NIL if this is an INFO name without values            
+            // case - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
+            if (dict_id.num == dict_id_INFO_13) {
+                iname_mapper->did_i[iname_mapper->num_subfields] = DID_I_HAS_13;
+                if (i>=2 && iname[i-2] == ';')
+                    iname[iname_len-2] = '\t'; // chop off the ";#" at the end of the INFO word in the dictionary (happens if previous subfield is value-less)
+                else     
+                    iname[iname_len-1] = '\t'; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
+            }
+            else 
+                iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (vb, dict_id); // it will be NIL if this is an INFO name without values            
+            
             iname_mapper->num_subfields++;
         }
     }
 }
 
-static bool piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
+static inline void v2v3_piz_reconstruct_info (VariantBlock *vb, const SubfieldMapper *iname_mapper, const char *snip,
+                                              const char **info_sf_value_snip, uint32_t *info_sf_value_snip_len, bool dummy);
+
+static inline void piz_reconstruct_info (VariantBlock *vb, const SubfieldMapper *iname_mapper, const char *snip,
+                                         const char **info_sf_value_snip, uint32_t *info_sf_value_snip_len, bool has_13)
+{
+    for (unsigned sf_i=0; sf_i < iname_mapper->num_subfields ; sf_i++) {
+        
+        // get the name eg "AF="
+        const char *start = snip;
+        for (; *snip != '=' && *snip != ';' && *snip != '\t'; snip++);
+        if (*snip == '=') snip++; // move past the '=' 
+
+        buf_add (&vb->line_variant_data, start, (unsigned)(snip-start)); // name inc. '=' e.g. "Info1="
+
+        uint8_t did_i = iname_mapper->did_i[sf_i];
+        if (did_i != DID_I_NONE && did_i != DID_I_HAS_13)  // some info names can be without values, in which case there will be no ctx
+            buf_add (&vb->line_variant_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
+
+        if (sf_i < iname_mapper->num_subfields - 1 - has_13) {
+            buf_add (&vb->line_variant_data, ";", 1); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
+            if (*snip == ';') snip++;
+        }
+    }
+}
+
+static bool piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i, 
+                                       bool *has_13) // out: original vcf line ended with Windows-style \r\n
 {
     START_TIMER;
 
@@ -200,7 +239,7 @@ static bool piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
     // get mtf_i and variant data length
     unsigned line_len = 0;
     char pos_str[50];
-    SubfieldMapperZip *iname_mapper = NULL;
+    SubfieldMapper *iname_mapper = NULL;
 
     // extract snips and calculate length of variant data
     for (VcfFields f=CHROM; f <= (flag_drop_genotypes ? INFO : FORMAT); f++) {
@@ -230,10 +269,16 @@ static bool piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
                 ASSERT (word_index[INFO] >= 0 && word_index[INFO] < vb->iname_mapper_buf.len, 
                         "Error: iname_mapper word_index out of range: word_index=%d, vb->iname_mapper_buf.len=%u", word_index[INFO], vb->iname_mapper_buf.len);
 
-                iname_mapper = &((SubfieldMapperZip *)vb->iname_mapper_buf.data)[word_index[INFO]];
+                iname_mapper = &((SubfieldMapper *)vb->iname_mapper_buf.data)[word_index[INFO]];
                 for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
-                                    
-                    if (iname_mapper->did_i[sf_i] == (uint8_t)NIL) continue; // a name without values
+
+                    uint8_t did_i = iname_mapper->did_i[sf_i];
+                    if (did_i == DID_I_NONE) continue; // a name without values
+                    
+                    if (did_i == DID_I_HAS_13) {
+                        *has_13 = true; // line needs to end with a \r\n
+                        continue;
+                    }
 
                     mtf_get_next_snip (vb, MAPPER_CTX (iname_mapper, sf_i), NULL, &info_sf_value_snip[sf_i], &info_sf_value_snip_len[sf_i], vb->first_line + vb_line_i);
 
@@ -256,24 +301,9 @@ static bool piz_get_variant_data_line (VariantBlock *vb, unsigned vb_line_i)
 
         // info subfield eg "info1=value1;info2=value2" - "info1=", "info2=" are the name snips
         // while "value1" and "value2" are the value snips - we merge them here
-        if (f == INFO && !flag_strip) {
-            const char *c = snip[INFO];
-            for (unsigned sf_i=0; sf_i < iname_mapper->num_subfields ; sf_i++) {
-                
-                // get the name eg "AF="
-                const char *start = c;
-                for (; *c != '=' && *c != '\t'; c++);
-                if (*c == '=') c++; // move past the '=' 
-
-                buf_add (&vb->line_variant_data, start, (unsigned)(c-start)); // name inc. '=' e.g. "Info1="
-
-                if (iname_mapper->did_i[sf_i] != (uint8_t)NIL)  // some info names can be without values, in which case there will be no ctx
-                    buf_add (&vb->line_variant_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
-    
-                if (sf_i != iname_mapper->num_subfields-1)
-                    buf_add (&vb->line_variant_data, ";", 1); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
-            }
-        }
+        if (f == INFO && !flag_strip) 
+            (z_file->genozip_version >= 4 ? piz_reconstruct_info : v2v3_piz_reconstruct_info)
+                (vb, iname_mapper, snip[INFO], info_sf_value_snip, info_sf_value_snip_len, *has_13);
 
         // other, non-INFO fields
         else if (snip_len[f])  // FORMAT can have snip_len=0, in which case its the end of the line and no \t either
@@ -493,7 +523,7 @@ static void piz_get_haplotype_data_line (VariantBlock *vb, unsigned vb_line_i, c
 }
 
 // merge line components (variant, haplotype, genotype, phase) back into a line
-static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
+static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i, bool has_13)
 {
     START_TIMER;
 
@@ -527,7 +557,7 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
     // VBs. By having a 1.1 growth factor, we avoid most of the reallocs and significantly bring down the overall
     // execution time of genounzip
     
-    dl->line.len = var_data_len + ht_digits_len + phase_sepr_len + gt_colon_len + gt_data_len; 
+    dl->line.len = var_data_len + ht_digits_len + phase_sepr_len + gt_colon_len + gt_data_len + has_13; 
     buf_alloc (vb, &dl->line, (dl->line.len + 2), 1.1, "dl->line", vb->first_line + vb_line_i); // +1 for string terminator, +1 for temporary additonal phase in case of '*'
 
     char *next    = dl->line.data;
@@ -606,7 +636,13 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i)
     // trim trailing tabs due to missing data
     for (; next >= dl->line.data+2 && next[-2] == '\t'; next--); // after this loop, next points to the first tab after the last non-tab character
 
-    next[-1] = '\n'; // replace the last tab with a newline
+    // now, we need to replace the last tab with \n or with \r\n (depending on has_13)
+    if (has_13) { 
+        next++;
+        next[-2] = '\r';
+    }
+
+    next[-1] = '\n'; 
     next[0]  = '\0'; // end of string
     
     // sanity check (the actual can be smaller in a line with missing samples)
@@ -683,13 +719,14 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
             
     // create mapping for info subfields
     if (!flag_strip)        
-        piz_map_iname_subfields (vb);
+        (z_file->genozip_version >= 4 ? piz_map_iname_subfields : v2v3_piz_map_iname_subfields)(vb);
 
     // now reconstruct the lines, one line at a time
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
         // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->line_variant_data
-        bool is_line_included = piz_get_variant_data_line (vb, vb_line_i);
+        bool has_13 = false;
+        bool is_line_included = piz_get_variant_data_line (vb, vb_line_i, &has_13);
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
@@ -704,7 +741,7 @@ static void piz_reconstruct_line_components (VariantBlock *vb)
                 if (vb->has_haplotype_data) 
                     piz_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
 
-                piz_merge_line (vb, vb_line_i);
+                piz_merge_line (vb, vb_line_i, has_13);
             }
         }
         else if (is_line_included)
@@ -1052,7 +1089,6 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 }
             }
             else compute = v1_zfile_read_one_vb (dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
-
             if (compute) {
                 dispatcher_compute (dispatcher, piz_uncompress_variant_block);
                 header_only_file = false;                
@@ -1118,3 +1154,5 @@ finish:
 
 #define V1_PIZ // select the piz functions of v1.c
 #include "v1.c"
+
+#include "v2v3.c"

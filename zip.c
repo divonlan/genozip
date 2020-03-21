@@ -124,7 +124,7 @@ static unsigned zip_get_genotype_vb_start_len (VariantBlock *vb)
 
         uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, &vb->data_lines.zip[line_i]);        
         unsigned format_mtf_i = vb->data_lines.zip[line_i].format_mtf_i;
-        SubfieldMapperZip *format_mapper = &((SubfieldMapperZip *)vb->format_mapper_buf.data)[format_mtf_i];
+        SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[format_mtf_i];
         
         for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
@@ -165,7 +165,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
             ZipDataLine *dl = &vb->data_lines.zip[line_i];
 
-            SubfieldMapperZip *format_mapper = &((SubfieldMapperZip *)vb->format_mapper_buf.data)[dl->format_mtf_i];
+            SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[dl->format_mtf_i];
 
             unsigned **sb_lines = (uint32_t**)vb->gt_sb_line_starts_buf.data;
             unsigned *this_line = sb_lines[SBL(line_i, sb_i)];

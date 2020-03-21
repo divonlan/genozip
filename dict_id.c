@@ -10,7 +10,8 @@
 // globals externed in dict_id.h and initialized in dict_id_initialize
 uint64_t dict_id_vardata_fields[8] = {0,0,0,0,0,0,0,0},
          dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, 
-         dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0; 
+         dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
+         dict_id_INFO_13=0;
 
 void dict_id_initialize(void) 
 {   // note: this uint64_t values will be different in big and little endian machines 
@@ -27,5 +28,7 @@ void dict_id_initialize(void)
     dict_id_INFO_AN     = dict_id_info_subfield   (dict_id_make ("AN", 2)).num;
     dict_id_INFO_DP     = dict_id_info_subfield   (dict_id_make ("DP", 2)).num;
     dict_id_INFO_VQSLOD = dict_id_info_subfield   (dict_id_make ("VQSLOD", 6)).num;
+
+    dict_id_INFO_13     = dict_id_info_subfield   (dict_id_make ("#", 1)).num; // This appears if the VCF line has a Windows-style \r\n line ending
 }
 

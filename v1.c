@@ -651,7 +651,7 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
         if (vb->has_haplotype_data) 
             piz_get_haplotype_data_line (vb, line_i, ht_columns_data);
 
-        piz_merge_line (vb, line_i);
+        piz_merge_line (vb, line_i, false);
     }
 
     COPY_TIMER(vb->profile.piz_reconstruct_line_components);

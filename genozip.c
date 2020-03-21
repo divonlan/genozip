@@ -263,11 +263,11 @@ static void main_show_sections (void)
     }
 
     char s1[20], s2[20];
-    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%u)", 
-             buf_human_readable_uint (total_z, s1), buf_human_readable_uint (z_file->disk_size, s2), (uint32_t)(z_file->disk_size - total_z));
+    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
+             buf_human_readable_uint (total_z, s1), buf_human_readable_uint (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
 
-    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%s but file size is %s (diff=%u)", 
-             buf_human_readable_uint (total_vcf, s1), buf_human_readable_uint (vcf_file->vcf_data_size_single, s2), (uint32_t)(vcf_file->vcf_data_size_single - total_vcf));
+    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%s but file size is %s (diff=%d)", 
+             buf_human_readable_uint (total_vcf, s1), buf_human_readable_uint (vcf_file->vcf_data_size_single, s2), (int32_t)(vcf_file->vcf_data_size_single - total_vcf));
 
 }
 

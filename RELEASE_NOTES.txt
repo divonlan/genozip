@@ -75,3 +75,12 @@
 
 3.0.12
 - added genocat --GT-only
+
+4.0.0
+- a bug that existed between versions 2.x.x and 3.x.x, related to an edge case in compression of INFO subfields. 
+  fixing the bug resulted in the corrected intended file format that is slightly different than that used in v2/3.
+  Because of this file format change, we are increasing the major version number. Backward compatability is provided
+  for correctly decompressing all files compressed with v2/3.
+
+- VCF files that contain lines with Windows-style line ending \r\n will now compress losslessly preserving the line 
+  ending

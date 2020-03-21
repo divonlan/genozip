@@ -276,10 +276,10 @@ static void mtf_init_mapper (VariantBlock *vb, VcfFields field_i, Buffer *mapper
         
     mapper_buf->len = vb->mtf_ctx[field_i].ol_mtf.len;
     
-    buf_alloc (vb, mapper_buf,  mapper_buf->len * sizeof (SubfieldMapperZip), 2, name, 0);
+    buf_alloc (vb, mapper_buf,  mapper_buf->len * sizeof (SubfieldMapper), 2, name, 0);
     
     for (unsigned i=0; i < mapper_buf->len; i++) 
-        ((SubfieldMapperZip *)mapper_buf->data)[i].num_subfields = (uint8_t)NIL;
+        ((SubfieldMapper *)mapper_buf->data)[i].num_subfields = (uint8_t)NIL;
 }
 
 // ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.
@@ -546,14 +546,14 @@ void mtf_merge_in_vb_ctx (VariantBlock *merging_vb)
 
 // PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
 // or returns NIL, if not
-int mtf_get_existing_did_i_by_dict_id (VariantBlock *vb, DictIdType dict_id)
+uint8_t mtf_get_existing_did_i_by_dict_id (VariantBlock *vb, DictIdType dict_id)
 {
     //MtfContext *mtf_ctx = z_file->mtf_ctx;
 
-    for (unsigned did_i=0; did_i < z_file->num_dict_ids; did_i++) 
+    for (uint8_t did_i=0; did_i < z_file->num_dict_ids; did_i++) 
         if (dict_id.num == vb->mtf_ctx[did_i].dict_id.num) return did_i;
 
-    return NIL; // not found
+    return DID_I_NONE; // not found
 }
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered

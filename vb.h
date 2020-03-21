@@ -19,10 +19,14 @@ typedef enum { PHASE_UNKNOWN      = '-',
                PHASE_NOT_PHASED   = '/',
                PHASE_MIXED_PHASED = '+'    } PhaseType;
 
+// PIZ only: can appear in did_i of an INFO subfield mapping, indicating that this INFO has an added
+// ":#" indicating that the original VCF line had a Windows-style \r\n ending
+#define DID_I_HAS_13 254 
+#define DID_I_NONE   255
 typedef struct {
     uint8_t num_subfields; // (uint8_t)NIL if this mapper is not defined
     uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]
-} SubfieldMapperZip;
+} SubfieldMapper;
 
 #define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->mtf_ctx[(mapper)->did_i[(sf)]] : NULL)
 
@@ -168,8 +172,8 @@ typedef struct variant_block_ {
                                       // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     MtfContext mtf_ctx[MAX_DICTS];    
 
-    Buffer iname_mapper_buf;           // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[INFO].mtf
-    Buffer format_mapper_buf;          // an array of type SubfieldMapperZip - one entry per entry in vb->mtf_ctx[FORMAT].mtf
+    Buffer iname_mapper_buf;           // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[INFO].mtf
+    Buffer format_mapper_buf;          // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[FORMAT].mtf
     
     // stuff related to compressing haplotype data with gtshark
     Buffer gtshark_db_db_data;         // ZIP & PIZ

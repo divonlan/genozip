@@ -103,7 +103,7 @@ extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char *
 #define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VariantBlockP vb);
 extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, unsigned *num_subfields, DictIdType dict_id, SectionType dict_section_type);
-extern int mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id);
+extern uint8_t mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id);
 extern void mtf_integrate_dictionary_fragment (VariantBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VariantBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VariantBlockP vb);

@@ -15,8 +15,9 @@
 
             //"args": ["-@1", "-B5", "-9", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-fojunk.vcf.genozip"],
 
-            //"args": ["test-file.vcf.genozip", "--strip"],
-            "args": ["stripped.vcf", "-f"],
+            "args": ["a1.vcf", "-f"],
+            //"args": ["a1.vcf.genozip", "-f"],
+            //"args": ["GFX0241869.filtered.snp.vcf","-f"],
             //"args": ["45K.vcf", "-f", "45K.ploptimize.vcf.genozip"],
             //"args": ["GFX0241869.filtered.snp.vcf", "-f"],
             //"args": ["-d", "concat.vcf.genozip", "-fO"],

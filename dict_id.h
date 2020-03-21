@@ -44,7 +44,8 @@ extern DictIdType dict_id_dump_one_b250;                        // arguments of 
 
 extern uint64_t dict_id_vardata_fields[], 
                 dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, 
-                dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD;
+                dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD,
+                dict_id_INFO_13;
 
 extern void dict_id_initialize(void);
 
