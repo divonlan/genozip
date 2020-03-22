@@ -86,6 +86,7 @@ void vcffile_read_vcf_header (bool is_first_vcf)
     START_TIMER;
 
     int32_t bytes_read;
+    char prev_char=0;
 
     // read data from the file until either 1. EOF is reached 2. end of vcf header is reached
     while (1) { 
@@ -111,22 +112,22 @@ void vcffile_read_vcf_header (bool is_first_vcf)
         for (int i=0; i < bytes_read; i++) { // start from 1 back just in case it is a newline, and end 1 char before bc our test is 2 chars
             if (this_read[i] == '\n') 
                 evb->num_lines++;   
-                
-            if ((i < bytes_read - 1 && this_read[i+1] != '#' && this_read[i] == '\n') ||   // vcf header ended if a line begins with a non-#
-                (i==0 && evb->vcf_data.len>0 && this_read[i] != '#' && evb->vcf_data.data[evb->vcf_data.len-1]=='\n')) {
 
-                uint32_t vcf_header_len = evb->vcf_data.len + i + 1;
+            if (prev_char == '\n' && this_read[i] != '#') {  
+
+                uint32_t vcf_header_len = evb->vcf_data.len + i;
                 evb->vcf_data.len += bytes_read; // increase all the way - just for buf_copy
 
                 // the excess data is for the next vb to read 
                 buf_copy (evb, &vcf_file->vcf_unconsumed_data, &evb->vcf_data, 1, vcf_header_len,
-                          bytes_read - (i+1), "vcf_file->vcf_unconsumed_data", 0);
+                          bytes_read - i, "vcf_file->vcf_unconsumed_data", 0);
 
-                vcf_file->vcf_data_so_far += i+1; 
+                vcf_file->vcf_data_so_far += i; 
                 evb->vcf_data.len = vcf_header_len;
 
                 goto finish;
             }
+            prev_char = this_read[i];
         }
 
         evb->vcf_data.len += bytes_read;
