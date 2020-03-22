@@ -13,7 +13,5 @@ extern void gtshark_compress_haplotype_data (VariantBlockP vb, ConstBufferP sect
 
 extern void gtshark_uncompress_haplotype_data (VariantBlockP vb, unsigned sb_i);
 
-extern bool gtshark_is_installed (void);
-
 #endif
 

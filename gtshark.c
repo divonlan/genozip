@@ -141,11 +141,6 @@ static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
     return true; // successfully executed gtshark
 }
 
-bool gtshark_is_installed (void)
-{
-    return gtshark_run (0, 0, NULL, NULL, NULL);
-}
-
 // ZIP
 static void gtshark_run_compress (VariantBlock *vb, unsigned sb_i,
                                   const char *gtshark_vcf_name, const char *gtshark_db_name,

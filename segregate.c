@@ -137,6 +137,11 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
     MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
     uint32_t node_index = mtf_evaluate_snip_seg (vb, ctx, str, len, &node, is_new);
+
+    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len, "Error in seg_one_field: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
+            DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
+            node_index, ctx->mtf.len, ctx->ol_mtf.len);
+    
     this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
 
     vb->vcf_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
@@ -146,6 +151,8 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
 // returns true if this line has the same chrom as this VB, or if it is the first line
 static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned chrom_str_len, unsigned vcf_line_i)
 {
+    ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
+
     uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vcf_line_i, CHROM, NULL);
 
     random_access_update_chrom (vb, vcf_line_i - vb->first_line, chrom_node_index);
@@ -903,7 +910,8 @@ void seg_complete_missing_lines (VariantBlock *vb, const char *next_field)
 void seg_all_data_lines (VariantBlock *vb)
 {
     START_TIMER;
-
+printf ("vb->vcf_data.len=%u\n",vb->vcf_data.len);
+printf ("vcf_data=%30.30s\n",vb->vcf_data.data);
     vb->num_dict_ids = MAX (FORMAT+1, vb->num_dict_ids); // first 8 mtf_ctx are reserved for the VCF fields (up to FORMAT) (vb->num_dict_ids might be already higher due to previous VBs)
 
     // Set ctx stuff for CHROM->FORMAT fields (note: mtf_i is allocated by seg_allocate_per_line_memory)

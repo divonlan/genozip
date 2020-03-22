@@ -334,3 +334,16 @@ void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const c
 
     fclose (file);
 }
+
+double file_estimated_compression_factor_vs_vcf (FileType type)
+{
+    switch (type) {
+        case VCF: case STDIN:                return 1;
+        case VCF_BZ2:                        return 15; // compression ratio of bzip2 of a "typical" vcf file
+        case VCF_XZ:                         return 12; // compression ratio of xz of a "typical" vcf file
+        case VCF_GZ: case VCF_BGZ:           return 8; 
+        case BCF: case BCF_GZ: case BCF_BGZ: return 8;  // we're guessing a BCF file is compressed, but we don't know for sure (BCF supports both bgzip compression and no compression)
+        default: ABORT ("Error in file_estimated_compression_factor_vs_vcf: unknown type %u", type);
+    }
+    return 1; // never reaches here
+}

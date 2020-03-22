@@ -28,6 +28,9 @@ void random_access_initialize(void)
 // might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
 void random_access_update_chrom (VariantBlock *vb, uint32_t vb_line_i, int32_t chrom_node_index)
 {
+    ASSERT (chrom_node_index >= 0, "Error in random_access_update_chrom: chrom_node_index=%d in vb_i=%u", 
+            chrom_node_index, vb->variant_block_i);
+
     if (vb->curr_ra_ent && vb->curr_ra_ent->chrom_index == chrom_node_index) return; // all good - current chrom continues
 
     RAEntry *ra = ((RAEntry *)vb->ra_buf.data);

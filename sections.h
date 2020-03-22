@@ -145,6 +145,8 @@ typedef struct {
 #define COMPRESSION_TYPE_GZIP  1
 #define COMPRESSION_TYPE_BZIP2 2
 #define COMPRESSION_TYPE_BGZIP 3
+#define COMPRESSION_TYPE_XZ    4
+#define COMPRESSION_TYPE_BCF   5
 
 // The VCF header section appears once in the file (or multiple times in case of concatenation), and includes the VCF file header 
 typedef struct {

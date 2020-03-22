@@ -20,7 +20,7 @@
 #define WORD_INDEX_EMPTY_SF   0xfffffffeUL // subfield is missing, terminating : present
 #define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
-#define NIL -1
+#define NIL ((int32_t)-1)
 typedef struct mtfnode_ {
     uint32_t char_index;      // character index into dictionary array
     uint32_t snip_len;        // not including \t terminator present in dictionary array
