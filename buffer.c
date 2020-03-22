@@ -44,7 +44,7 @@ static const char *bt_str (const Buffer *buf)
         return "INVALID";
 }
 
-char *buf_human_readable_size (int64_t size, char *str /* out */)
+char *buf_display_size (int64_t size, char *str /* out */)
 {
     if      (size > (1LL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
     else if (size > (1LL << 30)) sprintf (str, "%3.1lf GB", ((double)size) / (double)(1LL << 30));
@@ -55,7 +55,7 @@ char *buf_human_readable_size (int64_t size, char *str /* out */)
     return str; // for convenience so caller can use in printf directly
 }
 
-char *buf_human_readable_uint (int64_t n, char *str /* out */)
+char *buf_display_uint (int64_t n, char *str /* out */)
 {
     unsigned len = 0, orig_len=0;
 
@@ -335,12 +335,12 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
     char str[30];
-    buf_human_readable_size (total_bytes, str);
+    buf_display_size (total_bytes, str);
     fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
     fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++) {
-        buf_human_readable_size (stats[i].bytes, str);
+        buf_display_size (stats[i].bytes, str);
         fprintf (stderr, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
     }
 }

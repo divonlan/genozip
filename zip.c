@@ -648,7 +648,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     // go back and update some fields in the vcf header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5;
-    if (z_file && z_file->type == GENOZIP && vcf_header_header_pos >= 0) 
+    if (z_file && z_file->type == VCF_GENOZIP && vcf_header_header_pos >= 0) 
         success = zfile_update_vcf_header_section_header (vcf_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries

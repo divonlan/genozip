@@ -35,30 +35,29 @@ static uint32_t vcffile_read_block (char *data)
 
     int32_t bytes_read=0;
 
-    if (vcf_file->type == VCF || vcf_file->type == STDIN) {
+    if (file_is_plain_vcf (vcf_file)) {
         
         bytes_read = read (fileno((FILE *)vcf_file->file), data, READ_BUFFER_SIZE);
         ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", file_printname(vcf_file), strerror(errno));
 
         vcf_file->disk_so_far += (int64_t)bytes_read;
+//        vcf_file->type = VCF; // we only accept VCF from stdin or streamed pipe.
 
-        if (vcf_file->type == STDIN) {
 #ifdef _WIN32
-            // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
-            if (vcf_file->disk_so_far == (int64_t)bytes_read &&  // start of file
-                bytes_read >= 3  && 
-                (uint8_t)vcf_file->read_buffer[0] == 0xEF && 
-                (uint8_t)vcf_file->read_buffer[1] == 0xBB && 
-                (uint8_t)vcf_file->read_buffer[2] == 0xBF) {
+        // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
+        if (vcf_file->type == STDIN && 
+            vcf_file->disk_so_far == (int64_t)bytes_read &&  // start of file
+            bytes_read >= 3  && 
+            (uint8_t)vcf_file->read_buffer[0] == 0xEF && 
+            (uint8_t)vcf_file->read_buffer[1] == 0xBB && 
+            (uint8_t)vcf_file->read_buffer[2] == 0xBF) {
 
-                // Bomb the BOM
-                bytes_read -= 3;
-                memcpy (data, data + 3, bytes_read);
-                vcf_file->disk_so_far -= 3;
-            }
-#endif
-            vcf_file->type = VCF; // we only accept VCF from stdin. TO DO: identify the file type by the magic number (first 2 bytes for gz and bz2)
+            // Bomb the BOM
+            bytes_read -= 3;
+            memcpy (data, data + 3, bytes_read);
+            vcf_file->disk_so_far -= 3;
         }
+#endif
     }
     else if (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ) { 
         bytes_read = gzfread (data, 1, READ_BUFFER_SIZE, (gzFile)vcf_file->file);
@@ -236,7 +235,7 @@ void vcffile_write_one_variant_block (VariantBlock *vb)
     ASSERTW (size_written_this_vb == vb->vb_data_size || exe_type == EXE_GENOCAT, 
             "Warning: Variant block %u (first_line=%u last_line=%u num_lines=%u) had %s bytes in the original VCF file but %s bytes in the reconstructed file (diff=%d)", 
             vb->variant_block_i, vb->first_line, vb->first_line+vb->num_lines-1, vb->num_lines, 
-            buf_human_readable_uint (vb->vb_data_size, s1), buf_human_readable_uint (size_written_this_vb, s2), 
+            buf_display_uint (vb->vb_data_size, s1), buf_display_uint (size_written_this_vb, s2), 
             (int32_t)size_written_this_vb - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (vb->profile.write);

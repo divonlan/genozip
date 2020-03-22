@@ -12,20 +12,15 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
-#ifdef _WIN32
-#include <windows.h>
-#include <process.h>
-#elif defined __APPLE__
+#ifndef WIN32
 #include <sys/ioctl.h>
-#include <sys/sysctl.h>
-#include <sys/wait.h>
 #include <termios.h>
+#ifdef __APPLE__
+#include <sys/sysctl.h>
 #else // LINUX
 #include <sched.h>
-#include <sys/ioctl.h>
 #include <sys/sysinfo.h>
-#include <sys/wait.h>
-#include <termios.h>
+#endif
 #endif
 
 #include "genozip.h"
@@ -44,6 +39,7 @@
 #include "regions.h"
 #include "samples.h"
 #include "gtshark.h"
+#include "stream.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -227,11 +223,11 @@ static void main_show_sections (void)
         int64_t zentries  = z_file->section_entries[secs[sec_i]];
         int32_t zsections = z_file->num_sections[secs[sec_i]];
 
-        char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_human_readable_size(vbytes, vsize) : "       ";
+        char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_display_size(vbytes, vsize) : "       ";
         
-        fprintf (stderr, format, categories[sec_i], zsections, buf_human_readable_uint (zentries, zentries_str),
+        fprintf (stderr, format, categories[sec_i], zsections, buf_display_uint (zentries, zentries_str),
                  vcf_size_str, 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
-                 buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
+                 buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
                  !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
 
@@ -241,33 +237,28 @@ static void main_show_sections (void)
         total_z        += zbytes;
     }
 
-    fprintf (stderr, format, "TOTAL", total_sections, buf_human_readable_uint (total_entries, zentries_str),
-             buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
-             buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
+    fprintf (stderr, format, "TOTAL", total_sections, buf_display_uint (total_entries, zentries_str),
+             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
+             buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
 
     fprintf (stderr, "\nDictionaries:\n");
     fprintf (stderr, "Name     Type         #Words        #Uniq         Hash    uncomp_dict_size\n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
         const MtfContext *ctx = &z_file->mtf_ctx[i];
-        
-        const char *type;
-        if (i <= FORMAT) type = "FIELD ";
-        else if (dict_id_is_info_subfield (ctx->dict_id)) type = "INFO  ";
-        else type = "FORMAT";
-
+    
         char s1[20], s2[20], s3[20];
-        fprintf (stderr, "%*.*s %s %12s %12s %12s %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
-                 type, buf_human_readable_uint (ctx->mtf_i.len, s1), buf_human_readable_uint (ctx->mtf.len, s2), 
-                 buf_human_readable_uint (ctx->global_hash_prime, s3), buf_human_readable_size(ctx->dict.len, vsize));
+        fprintf (stderr, "%*.*s %-6.6s %12s %12s %12s %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
+                 dict_id_display_type (ctx->dict_id), buf_display_uint (ctx->mtf_i.len, s1), buf_display_uint (ctx->mtf.len, s2), 
+                 buf_display_uint (ctx->global_hash_prime, s3), buf_display_size(ctx->dict.len, vsize));
     }
 
     char s1[20], s2[20];
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             buf_human_readable_uint (total_z, s1), buf_human_readable_uint (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
+             buf_display_uint (total_z, s1), buf_display_uint (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
 
     ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             buf_human_readable_uint (total_vcf, s1), buf_human_readable_uint (vcf_file->vcf_data_size_single, s2), (int32_t)(vcf_file->vcf_data_size_single - total_vcf));
+             buf_display_uint (total_vcf, s1), buf_display_uint (vcf_file->vcf_data_size_single, s2), (int32_t)(vcf_file->vcf_data_size_single - total_vcf));
 
 }
 
@@ -305,8 +296,8 @@ static void main_show_content (void)
         }
 
         fprintf (stderr, format, categories[i], 
-                 buf_human_readable_size(vbytes, vsize), 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
-                 buf_human_readable_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
+                 buf_display_size(vbytes, vsize), 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
+                 buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
                  !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
 
@@ -315,8 +306,8 @@ static void main_show_content (void)
     }
 
     fprintf (stderr, format, "TOTAL", 
-             buf_human_readable_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
-             buf_human_readable_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
+             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
+             buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
 
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
@@ -362,8 +353,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     if (finalize) {
         if (files_listed > 1) {
-            buf_human_readable_size(total_compressed_len, c_str);
-            buf_human_readable_size(total_uncompressed_len, u_str);
+            buf_display_size(total_compressed_len, c_str);
+            buf_display_size(total_uncompressed_len, u_str);
             unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
             bufprintf (evb, &str_buf, foot_format, c_str, u_str, ratio);
@@ -380,8 +371,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         first_file = false;
     }
     
-    z_file = file_open(z_filename, READ, GENOZIP_TEST);    
-    if (!z_file) {
+    if (!file_has_ext (z_filename, VCF_GENOZIP_) || access (z_filename, F_OK)!=0) {
         files_ignored++;
         goto finish;
     }
@@ -398,9 +388,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     unsigned ratio = z_file->disk_size ? ((double)vcf_data_size / (double)z_file->disk_size) : 0;
     
-    buf_human_readable_size (z_file->disk_size, c_str);
-    buf_human_readable_size (vcf_data_size, u_str);
-    buf_human_readable_uint (num_lines, s_str);
+    buf_display_size (z_file->disk_size, c_str);
+    buf_display_size (vcf_data_size, u_str);
+    buf_display_uint (num_lines, s_str);
 
     bufprintf (evb, &str_buf, item_format, num_samples, s_str, 
                c_str, u_str, ratio, 
@@ -434,8 +424,6 @@ static void main_genounzip (const char *z_filename,
 
     unsigned fn_len = strlen (z_filename);
 
-    ASSERT (file_has_ext (z_filename, ".vcf" GENOZIP_EXT), "%s: file: \"%s\" - expecting a file with a .vcf" GENOZIP_EXT " extension", global_cmd, z_filename);
-
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
@@ -446,7 +434,7 @@ static void main_genounzip (const char *z_filename,
         sprintf ((char *)vcf_filename, "%.*s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename);    // .vcf.genozip -> .vcf
     }
 
-    z_file = file_open (z_filename, READ, GENOZIP);    
+    z_file = file_open (z_filename, READ, VCF_GENOZIP);    
 
     // get output FILE 
     if (vcf_filename) {
@@ -494,55 +482,19 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 {
     const char *password = crypt_get_password();
 
-#ifdef _WIN32
-    char *cmd_line = malloc (strlen (exec_name) + (password ? strlen (password) : 0) + 300);
-    sprintf (cmd_line, "%s -d -t %s %s %s %s %s %s %s %s", exec_name, 
-             (flag_quiet       ? "-q" : ""), 
-             (password         ? "-p" : ""), (password ? password : ""), 
-             (flag_show_memory ? "--show-memory" : ""),
-             (flag_show_time   ? "--show-time"   : ""),
-             (threads_str      ? "-@" : ""), (threads_str ? threads_str : ""),
-             z_filename);
+    Stream test = stream_create (0, 0, 0, exec_name, "-d", "-t", z_filename,
+                                 flag_quiet       ? "--quiet"       : SKIP_ARG,
+                                 password         ? "--password"    : SKIP_ARG,
+                                 password         ? password        : SKIP_ARG,
+                                 flag_show_memory ? "--show-memory" : SKIP_ARG,
+                                 flag_show_time   ? "--show-time"   : SKIP_ARG,
+                                 threads_str      ? "--threads"     : SKIP_ARG,
+                                 threads_str      ? threads_str     : SKIP_ARG,
+                                 NULL);
 
-    STARTUPINFO startup_info;
-    memset (&startup_info, 0, sizeof startup_info);
-    startup_info.cb = sizeof startup_info;
-
-    PROCESS_INFORMATION proc_info;
-    memset (&proc_info, 0, sizeof proc_info);
-
-    bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
-                                  NULL, NULL, &startup_info, &proc_info);
-    ASSERT (success, "Error: failed CreateProcess() to run test: GetLastError=%lu", GetLastError());
-
-    // wait for child, so that the terminal doesn't print the prompt until the child is done
-    WaitForSingleObject (proc_info.hProcess, INFINITE);
-    CloseHandle (proc_info.hProcess);        
-#else
-    if (!fork()) { // I am the child
-        const char *test_argv[30];
-        int test_argc = 0;
-        test_argv[test_argc++] = exec_name;
-        test_argv[test_argc++] = "-d";
-        test_argv[test_argc++] = "-t";
-        test_argv[test_argc++] = z_filename;
-        if (flag_quiet)       test_argv[test_argc++] = "-q";
-        if (password)         test_argv[test_argc++] = "-p";
-        if (password)         test_argv[test_argc++] = password;
-        if (flag_show_memory) test_argv[test_argc++] = "--show-memory";
-        if (flag_show_time)   test_argv[test_argc++] = "--show-time";
-        if (threads_str)      test_argv[test_argc++] = "-@";
-        if (threads_str)      test_argv[test_argc++] = threads_str;
-        test_argv[test_argc] = NULL;
-        
-        execvp (exec_name, (char * const *)test_argv);        
-    }
-    
-    int wstatus;
-    wait (&wstatus); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
-    if (wstatus) fprintf (stderr, "genozip test exited with status %d\n", wstatus);
-#endif
-
+    // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
+    int exit_code = stream_wait_for_exit (test);
+    ASSERTW (!exit_code, "genozip test exited with status %d\n", exit_code);
 }
 
 static void main_genozip (const char *vcf_filename, 
@@ -579,7 +531,7 @@ static void main_genozip (const char *vcf_filename,
                 // get name, e.g. xx.vcf.gz -> xx.vcf.genozip
                 sprintf (z_filename, "%.*s" GENOZIP_EXT, (int)(fn_len - (strlen (file_exts[vcf_file->type])-4)), vcf_filename); 
             }
-            z_file = file_open (z_filename, WRITE, GENOZIP);
+            z_file = file_open (z_filename, WRITE, VCF_GENOZIP);
         }
 
         z_file->vcf_data_so_far                    = 0; // reset these as they relate to the VCF data of the VCF file currently being processed
@@ -888,13 +840,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_test   || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
     ASSERT (!flag_md5    || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
 
-#ifdef _WIN32
-    ASSERT0 (!flag_gtshark, "--gtshark is not supported on Windows");
-#endif
-    ASSERT (!flag_gtshark || gtshark_is_installed(), 
-            "%s: to use --gtshark, gtshark needs to be installed and in the execution path.\n"
-            "gtshark is a separate software package that is not affiliated with genozip in any way.\n"
-            "You can find it here: https://github.com/refresh-bio/GTShark", global_cmd);
+    if (flag_gtshark) stream_abort_if_cannot_run ("gtshark"); 
 
     // deal with final setting of flag_quiet that suppresses warnings 
     

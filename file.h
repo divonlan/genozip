@@ -21,13 +21,31 @@
 #include "move_to_front.h"
 #include "aes.h"
 
-typedef enum      {UNKNOWN, VCF,   VCF_GZ,    VCF_BGZ,    VCF_BZ2,   GENOZIP,     GENOZIP_TEST, PIPE, STDIN, STDOUT} FileType;
-#define FILE_EXTS { "N/A", ".vcf", ".vcf.gz", ".vcf.bgz", ".vcf.bz2", GENOZIP_EXT, "N/A", "N/A", "N/A", "N/A" }
+#define VCF_         ".vcf"
+#define VCF_GZ_      ".vcf.gz"
+#define VCF_BGZ_     ".vcf.bgz"
+#define VCF_BZ2_     ".vcf.bz2"
+#define VCF_XZ_      ".vcf.xz"
+#define BCF_         ".bcf"
+#define BCF_GZ_      ".bcf.gz"
+#define BCF_BGZ_     ".bcf.bgz"
+#define VCF_GENOZIP_ ".vcf" GENOZIP_EXT
+
+typedef enum      {UNKNOWN_EXT, VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  END_OF_EXTS, PIPE, STDIN, STDOUT} FileType;
+#define FILE_EXTS {"Unknown",   VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, "N/A", "N/A", "N/A", "N/A", "N/A" }
 extern char *file_exts[];
 
-typedef enum {READ, WRITE} FileMode;
+#define VCF_EXTENSIONS VCF_ " " VCF_GZ_ " " VCF_BGZ_ " " VCF_BZ2_ " " VCF_XZ_ " " BCF_ " " BCF_GZ_ " " BCF_BGZ_
+
+typedef const char *FileMode;
+extern FileMode READ, WRITE; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 #define file_is_zip_read(file) ((file)->mode == READ && command == ZIP)
+
+#define file_is_plain_vcf(file) (((file)->type == VCF    || (file)->type == VCF_XZ  || (file)->type == BCF || \
+                                 (file)->type == BCF_GZ || (file)->type == BCF_BGZ || (file)->type == STDIN))
+
+#define file_is_vcf(file) (file_is_plain_vcf(file) || (file)->type == VCF_GZ || (file)->type == VCF_BGZ || (file)->type == VCF_BZ2)
 
 typedef struct file_ {
     void *file;

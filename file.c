@@ -16,12 +16,25 @@
 #include "genozip.h"
 #include "move_to_front.h"
 #include "file.h"
+#include "stream.h"
 
 // globals
 File *z_file   = NULL;
 File *vcf_file = NULL;
 
+// global pointers - so the can be compared eg "if (mode == READ)"
+const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
+const char *WRITE = "wb";
+
 char *file_exts[] = FILE_EXTS;
+
+static FileType file_get_type (const char *filename)
+{
+    for (FileType ft=UNKNOWN_EXT+1; ft <= END_OF_EXTS-1; ft++)
+        if (file_has_ext (filename, file_exts[ft])) return ft;
+
+    return UNKNOWN_EXT;
+}
 
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
@@ -34,78 +47,63 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             "%s: output file %s already exists: you may use --force to overwrite it", global_cmd, filename);
 
     File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
-    file->mode = mode;
-    
+
     // copy filename 
     unsigned fn_size = strlen (filename) + 1; // inc. \0
     file->name = malloc (fn_size);
     memcpy (file->name, filename, fn_size);
 
+    file->mode = mode;
+    file->type = file_get_type (file->name);
+
+    // sanity check
+    if (file->mode == READ  && command == ZIP)   ASSERT (file_is_vcf (file), "%s: input file must have one of the following extensions: " VCF_EXTENSIONS, global_cmd);
+    if (file->mode == WRITE && command == ZIP)   ASSERT (file->type == VCF_GENOZIP, "%s: output file must have a " VCF_GENOZIP_ " extension", global_cmd);
+    if (file->mode == READ  && command == UNZIP) ASSERT (file->type == VCF_GENOZIP, "%s: input file must have a " VCF_GENOZIP_ " extension", global_cmd); 
+    if (file->mode == WRITE && command == UNZIP) ASSERT (file->type == VCF,         "%s: output file must have a .vcf extension", global_cmd); 
+
     if (expected_type == VCF) {
-        if (file_has_ext (file->name, ".vcf")) {
-            file->type = VCF;
 
+        switch (file->type) {
+        case VCF:
             // don't actually open the file if we're just testing in genounzip
             if (flag_test && mode == WRITE) return file;
 
-            file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "rb"/"wb" so libc on Windows doesn't drop/add '\r' between our code and the disk. we will handle the '\r' explicitly.
-        }
-        else if (file_has_ext (file->name, ".vcf.gz")) {
-            file->type = VCF_GZ;
-            if (flag_test && mode == WRITE) return file;
+            file->file = fopen (file->name, mode); // "rb"/"wb" so libc on Windows doesn't drop/add '\r' between our code and the disk. we will handle the '\r' explicitly.
+            break;
 
-            file->file = gzopen64 (file->name, mode == READ ? "rb" : "wb");    
-        }
-        else if (file_has_ext (file->name, ".vcf.bgz")) {
-            file->type = VCF_BGZ;
-            if (flag_test && mode == WRITE) return file;
+        case VCF_GZ:
+        case VCF_BGZ:
+            file->file = gzopen64 (file->name, mode);    
+            break;
 
-            file->file = gzopen64 (file->name, mode == READ ? "rb" : "wb");    
-        }
-        else if (file_has_ext (file->name, ".vcf.bz2")) {
-            file->type = VCF_BZ2;
+        case VCF_BZ2:
+            file->file = BZ2_bzopen (file->name, mode);    
+            break;
 
-            // don't actually open the file if we're just testing in genounzip
-            if (flag_test && mode == WRITE) return file;
-
-            file->file = BZ2_bzopen (file->name, mode == READ ? "rb" : "wb");    
-        }
-        else if (file_has_ext (file->name, ".bcf")) {
-            ABORT ("To genozip BCF files, use in conjuction with bcftools, e.g.:\n"
-                   "bcftools view -Ov %s | %s -o %.*s.vcf" GENOZIP_EXT, file->name, global_cmd, (int)(strlen(file->name)-4), file->name);
-        }
-        else if (file_has_ext (file->name, ".bcf.gz")) {
-            ABORT ("To genozip BCF files, use in conjuction with bcftools, e.g.:\n"
-                   "bcftools view -Ov %s | %s -o %.*s.vcf" GENOZIP_EXT, file->name, global_cmd, (int)(strlen(file->name)-7), file->name);
-        }
-        else if (file_has_ext (file->name, ".bcf.bgz")) {
-            ABORT ("To genozip BCF files, use in conjuction with bcftools, e.g.:\n"
-                   "bcftools view -Ov %s | %s -o %.*s.vcf" GENOZIP_EXT, file->name, global_cmd, (int)(strlen(file->name)-8), file->name);
-        }
-        else {
-            ABORT ("%s: file: %s - file must have a .vcf or .vcf.gz or .vcf.bz2 extension", global_cmd, file->name);
-        }
-
-        ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
-    }
-    else { // GENOZIP
-        if (file_has_ext (file->name, ".vcf" GENOZIP_EXT)) {
-            file->type = GENOZIP;
-            file->file = fopen(file->name, mode == READ ? "rb" : "wb"); // "wb" so Windows doesn't add ASCII 13
-            
-            if (expected_type == GENOZIP_TEST && !file->file) {
-                FREE (file);
-                return NULL;
-            }
-
-            ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
-        }
-        else if (expected_type == GENOZIP_TEST)
-            return NULL;
+        case VCF_XZ:
+            file->file = stream_create (true, false, false, "xz", filename , "--threads=8", "--decompress", 
+                                        "--keep", "--stdout", flag_quiet ? "--quiet" : NULL, NULL).from_stream_stdout;
+            break;
+        case BCF:
+        case BCF_GZ:
+        case BCF_BGZ:
+            file->file = stream_create (true, false, false, "bcftools", "view", "-Ov", "--threads", "8", 
+                                        filename, NULL).from_stream_stdout;
+            break;
         
-        else
-            ABORT ("%s: file: %s - file must have a .vcf" GENOZIP_EXT " extension", global_cmd, file->name);
+        default:
+            ABORT ("%s: unrecognized file type: %s", global_cmd, file->name);
+        }
     }
+    
+    else if (expected_type == VCF_GENOZIP) 
+        file->file = fopen (file->name, mode);
+
+    else 
+        ABORT ("Error: invalid expected_type: %u", expected_type);
+
+    ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     if (mode == READ) {
 
@@ -166,7 +164,7 @@ void file_close (File **file_p,
     // it is faster to just let the process die
     if (cleanup_memory) {
             
-        if (file->type == GENOZIP) {
+        if (file->type == VCF_GENOZIP) { // reading or writing a .vcf.genozip (no need to worry about STDIN or STDOUT - they are by definition a single file - so cleaned up when process exits)
             for (unsigned i=0; i < file->num_dict_ids; i++)
                 mtf_destroy_context (&file->mtf_ctx[i]);
 

@@ -32,3 +32,10 @@ void dict_id_initialize(void)
     dict_id_INFO_13     = dict_id_info_subfield   (dict_id_make ("#", 1)).num; // This appears if the VCF line has a Windows-style \r\n line ending
 }
 
+const char *dict_id_display_type (DictIdType dict_id)
+{
+    if (dict_id_is_format_subfield (dict_id)) return "FORMAT";
+    if (dict_id_is_info_subfield (dict_id)) return "INFO";
+    if (dict_id_is_vardata_field (dict_id)) return "FIELD";
+    return "ERROR!n";
+}

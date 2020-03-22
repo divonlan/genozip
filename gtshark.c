@@ -15,6 +15,7 @@
 #include "buffer.h"
 #include "file.h"
 #include "endianness.h"
+#include "stream.h"
 
 static void gtshark_create_vcf_file (VariantBlock *vb, const Buffer *section_data, unsigned sb_i,
                                      const char *gtshark_vcf_name)
@@ -90,17 +91,13 @@ error:
     my_exit();
 }
 
-#define PIPE_MAX_BYTES 10000
-// not static to avoid compiler warnings on Windows 
-void gtshark_check_pipe_for_errors (char *data, int fd, uint32_t vb_i, uint32_t sb_i, bool is_stderr) 
-{
-    char *next = data;
+#define PIPE_MAX_BYTES 32768
 
-    // get stdout output of the gtshark process
-    while (read (fd, next, 1) > 0 && (next - data < PIPE_MAX_BYTES-1)) next++;
-    *next = 0; // string terminator
-    
-    close (fd);
+// check stdout / stderr output of the gtshark process for errors
+static void gtshark_check_pipe_for_errors (char *data, FILE *fp, uint32_t vb_i, uint32_t sb_i, bool is_stderr) 
+{
+    unsigned bytes = fread (data, 1, PIPE_MAX_BYTES-1, fp); // -1 to leave room for \0
+    data[bytes] = '\0';
 
     ASSERT (!strstr (data, "error")   && 
             !strstr (data, "E::")     && 
@@ -114,66 +111,33 @@ void gtshark_check_pipe_for_errors (char *data, int fd, uint32_t vb_i, uint32_t 
 static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
                          const char *command, const char *filename_1, const char *filename_2) 
 {
-#ifndef _WIN32
-    int stdout_pipe[2], stderr_pipe[2];
-    int ret = pipe (stdout_pipe);
-    ASSERT (!ret, "Error: failed to created stdout_pipe pipe: %s", strerror (errno));
-
-    ret = pipe (stderr_pipe);
-    ASSERT (!ret, "Error: failed to created stderr_pipe pipe: %s", strerror (errno));
-
-    pid_t child_pid = fork();
-    if (!child_pid) { // i am the child
-        // redirect stdout a pipe
-        dup2 (stdout_pipe[1], STDOUT_FILENO);
-        dup2 (stderr_pipe[1], STDERR_FILENO);
-        close (stdout_pipe[0]); // close reading side of the pipes    
-        close (stderr_pipe[0]); // close reading side of the pipes    
-
-        const char *argv[30];
-        int argc = 0;
-        argv[argc++] = "gtshark";
-        argv[argc++] = command;
-        argv[argc++] = filename_1;
-        argv[argc++] = filename_2;
-        argv[argc] = NULL;
-        
-        execvp ("gtshark", (char * const *)argv); // if successful, doesn't return
-        #define EXEC_FAILURE_STR "genozip failed to execute gtshark"
-        ABORT (EXEC_FAILURE_STR ": %s", strerror (errno));  // this will go to the stderr pipe, with exit code 1
-    }
-    // I am the parent
-
-    // close writing side of the pipes
-    close (stdout_pipe[1]);
-    close (stderr_pipe[1]);
+    Stream gtshark = stream_create (DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 
+                                    "gtshark", command, filename_1, filename_2, NULL);
 
     // read pipe (up to 10000 characters)
     char stdout_data[PIPE_MAX_BYTES], stderr_data[PIPE_MAX_BYTES];
-    gtshark_check_pipe_for_errors (stdout_data, stdout_pipe[0], vb_i, sb_i, false);
-    gtshark_check_pipe_for_errors (stderr_data, stderr_pipe[0], vb_i, sb_i, true);
+    gtshark_check_pipe_for_errors (stdout_data, gtshark.from_stream_stdout, vb_i, sb_i, false);
+    gtshark_check_pipe_for_errors (stderr_data, gtshark.from_stream_stderr, vb_i, sb_i, true);
 
     // wait for gtshark to complete
-    int wstatus;
-    waitpid (child_pid, &wstatus, 0); // I am the parent - wait for child, so that the terminal doesn't print the prompt until the child is done
+    int exit_status = stream_wait_for_exit (gtshark);
 
-    bool failed_to_execvp = strstr (stderr_data, EXEC_FAILURE_STR); 
-    if (!command && failed_to_execvp) return false; // this is main() testing
+    stream_close (&gtshark);
 
-    ASSERT0 (!failed_to_execvp, stderr_data); // just pass the message from ABORT of the child process
-
-    ASSERT (!WEXITSTATUS (wstatus), 
+#ifndef _WIN32
+    ASSERT (!WEXITSTATUS (exit_status), 
             "Error: gtshark exited with status=%u for vb_i=%u sb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
-            WEXITSTATUS (wstatus), vb_i, sb_i, stdout_data, stderr_data);
+            WEXITSTATUS (exit_status), vb_i, sb_i, stdout_data, stderr_data);
 
-    ASSERT (!WIFSIGNALED (wstatus),
+    ASSERT (!WIFSIGNALED (exit_status),
             "Error: gtshark process was killed by a signal, it was running for vb_i=%u sb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
             vb_i, sb_i, stdout_data, stderr_data);
-
-    ASSERT (WIFEXITED (wstatus), 
-            "Error: gtshark failed to exist normally for vb_i=%u sb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
-            vb_i, sb_i, stdout_data, stderr_data);
 #endif
+
+    ASSERT (!exit_status, 
+            "Error: gtshark failed to exit normally for vb_i=%u sb_i=%u. Here is its STDOUT:\n%s\nHere is the STDERR:\n%s\n", 
+            vb_i, sb_i, stdout_data, stderr_data);
+
     return true; // successfully executed gtshark
 }
 

@@ -49,4 +49,6 @@ extern uint64_t dict_id_vardata_fields[],
 
 extern void dict_id_initialize(void);
 
+extern const char *dict_id_display_type (DictIdType dict_id);
+
 #endif
