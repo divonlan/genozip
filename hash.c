@@ -110,7 +110,7 @@ void hash_alloc_local (VariantBlock *segging_vb, MtfContext *vb_ctx)
 // is less likely to fit into the CPU memory caches
 void hash_alloc_global (VariantBlock *merging_vb, MtfContext *zf_ctx, const MtfContext *first_merging_vb_ctx)
 {
-    double estimated_vcf_file_size = vcf_file->disk_size * file_estimated_compression_factor_vs_vcf (vcf_file->type);
+    double estimated_vcf_file_size = vcf_file->disk_size * file_estimated_compression_factor_vs_vcf[vcf_file->type];
     double estimated_num_vbs = MAX (1, (double)estimated_vcf_file_size / (double)merging_vb->vcf_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->num_lines;
 

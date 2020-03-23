@@ -31,8 +31,10 @@
 #define BCF_BGZ_     ".bcf.bgz"
 #define VCF_GENOZIP_ ".vcf" GENOZIP_EXT
 
-typedef enum      {UNKNOWN_EXT, VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  END_OF_EXTS, PIPE, STDIN, STDOUT} FileType;
-#define FILE_EXTS {"Unknown",   VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, "N/A", "N/A", "N/A", "N/A", "N/A" }
+typedef enum      {UNKNOWN_EXT, VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  STDIN,   STDOUT} FileType;
+#define FILE_EXTS {"Unknown",   VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, "stdin", "stdout" }
+#define FILE_ESTIMATED_COMPRESSION_FACTOR_VS_VCF \
+                  {0,           1,    8,       8,        15,       12,      8,    8,       8,        20,           1,       0}
 extern char *file_exts[];
 
 #define VCF_EXTENSIONS VCF_ " " VCF_GZ_ " " VCF_BGZ_ " " VCF_BZ2_ " " VCF_XZ_ " " BCF_ " " BCF_GZ_ " " BCF_BGZ_
@@ -114,8 +116,11 @@ typedef struct file_ {
     char read_buffer[];                // only allocated for mode=READ files   
 } File;
 
-extern File *z_file, *vcf_file; // globals
+// globals
+extern File *z_file, *vcf_file; 
+extern const unsigned file_estimated_compression_factor_vs_vcf[];
 
+// methods
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
 extern void file_close (FileP *vcf_file_p, bool cleanup_memory /* optional */);
@@ -129,7 +134,7 @@ extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
 extern void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
-extern double file_estimated_compression_factor_vs_vcf (FileType type);
+
 #define file_printname(file) (file->name ? file->name : "(stdin)")
 
 // a hacky addition to bzip2

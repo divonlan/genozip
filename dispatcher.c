@@ -19,6 +19,7 @@
 #include "vb.h"
 #include "file.h"
 #include "profiler.h"
+
 typedef struct {
     pthread_t thread_id;
     VariantBlock *vb;
@@ -78,6 +79,144 @@ void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_
     prev_vb_i         = vb_i;
 }
 
+static void dispatcher_human_time (unsigned secs, char *str /* out */)
+{
+    unsigned hours = secs / 3600;
+    unsigned mins  = (secs % 3600) / 60;
+             secs  = secs % 60;
+
+    if (hours) 
+        sprintf (str, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
+    else if (mins)
+        sprintf (str, "%u %s %u %s", mins, mins==1 ? "minute" : "minutes", secs, secs==1 ? "second" : "seconds");
+    else 
+        sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
+}
+
+const char *dispatcher_ellapsed_time (Dispatcher dispatcher)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+
+    TimeSpecType tb; 
+    clock_gettime(CLOCK_REALTIME, &tb); 
+    
+    int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
+
+    static char time_str[70];
+    dispatcher_human_time (seconds_so_far, time_str);
+
+    return time_str;
+}
+
+static void dispatcher_show_start (DispatcherData *dd)
+{
+    if (!dd->show_progress) return; 
+
+    const char *progress = (command == ZIP && vcf_file->type == STDIN) ? "Compressing\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
+    
+    fprintf (stderr, "%s%s %s: %s", dd->test_mode ? "testing " : "", global_cmd, dd->filename, progress); 
+             
+    dd->last_len = strlen (progress); // so dispatcher_show_progress knows how many characters to erase
+}
+
+static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+    
+    if (!dd->show_progress) return; 
+
+    TimeSpecType tb; 
+    clock_gettime(CLOCK_REALTIME, &tb); 
+    
+    int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
+
+    static double ratio_so_far = 1;
+
+    uint64_t total, sofar;
+    
+    // case: genozip of plain vcf files and always for genounzip - we go by the amount of VCF content processed 
+    if (command == UNZIP || 
+        (command == ZIP && file->type == VCF)) { 
+        total = file->vcf_data_size_single;
+        sofar = vcf_data_written_so_far;
+    } 
+    
+    // case: locally decompressed files (genozip only) - .vcf.gz .vcf.bgz .vcf.bz2 - we go by the physical disk size 
+    // and how much the compressor has consumed from it
+    else if (command == ZIP && (file->type == VCF_GZ || file->type == VCF_BGZ || file->type == VCF_BZ2)) {
+        total = file->disk_size; 
+        sofar = file->disk_so_far; 
+
+        // sofar can be -1LL bc it seems that gzoffset64 returns that for values over 2GB on Windows -
+        // as a work around, use the previous ratio as an estimate
+        if (sofar > 9000000000000000000ULL)
+            sofar = ratio_so_far * (double)vcf_data_written_so_far * 0.97; // underestimate by bit (97%) - better err on the side of under-estimation
+        else
+            ratio_so_far = (double)sofar / (double)vcf_data_written_so_far;
+    } 
+    
+    // case: files streamed - we estimate the total VCF content of the file =based on the disk size and the typical
+    // compression of the file format, and compare that to the VCF content processed
+    else if (command == ZIP && (file->type == VCF_XZ || file->type == BCF || file->type == BCF_GZ || file->type == BCF_BGZ)) {
+        // in this case we prefer to over-estimate the compression vs under-estimate it - so we delight the 
+        // user with finishing earlier than expected rather than being late
+        total = file->disk_size * file_estimated_compression_factor_vs_vcf[file->type] * 2; // *2 to over-estimate 
+        sofar = vcf_data_written_so_far; 
+    }
+    
+    // case: genozip with user redirecting input from a pipe - we have no idea how big the file is going to be
+    else if (command == ZIP && file->type == STDIN)
+        return; // we can't show anything if we don't know the file size
+
+    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u file->type=%u", command, file->type);
+
+    double percent;
+    if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
+        percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
+    else
+        percent = MIN (((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
+    
+    // need to update progress indicator, max once a second or if 100% is reached
+    const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+
+    // in split mode - dispatcher is not done if there's another component after this one
+    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&z_file->v1_next_vcf_header));
+
+    if (!done) percent = MIN (percent, 99); // we don't show 100% until done
+
+    // case: we've reached 99% prematurely... we under-estimated the time
+    if (!done && percent == 99) {
+        const char *progress = "Still working...";
+        dd->last_len = strlen (progress);
+    }
+    
+    // case: we're making progress... show % and time remaining
+    else if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
+
+        if (!dispatcher_is_done (dispatcher) ||
+            (flag_split && buf_is_allocated (&z_file->v1_next_vcf_header))) { 
+
+            // time remaining
+            char time_str[70], progress[100];
+            unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
+            dispatcher_human_time (secs, time_str);
+
+            sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
+
+            // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
+            fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
+
+            dd->last_len = strlen (progress);
+        }
+    }
+
+    // case: we're done - caller will print the "Done" message after finalizing the genozip header etc
+    else if (done) fprintf (stderr, "%.*s", dd->last_len, eraser); 
+
+    dd->last_percent = percent;
+    dd->last_seconds_so_far = seconds_so_far;
+}
+
 Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
                             bool test_mode, bool is_last_file, const char *filename)
 {
@@ -94,15 +233,13 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
     dd->is_last_file  = is_last_file;
     dd->show_progress = !flag_quiet && !!isatty(2);
     dd->filename      = filename;
-    dd->last_len      = 2;
 
     vb_create_pool (MAX (2,max_threads+1 /* one for evb */));
 
     buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (dd->show_progress && !flag_split) // note: for flag_split, we print this in dispatcher_resume() 
-        fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
+    if (!flag_split) dispatcher_show_start (dd); // note: for flag_split, we print this in dispatcher_resume() 
 
     return dd;
 }
@@ -125,8 +262,7 @@ void dispatcher_resume (Dispatcher dispatcher)
     dd->last_len        = 2;
     dd->filename        = vcf_file->name;
     
-    if (dd->show_progress)
-        fprintf (stderr, "%s%s %s: 0%%", dd->test_mode ? "testing " : "", global_cmd, dd->filename);
+    dispatcher_show_start (dd);    
 }
 
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
@@ -271,104 +407,6 @@ VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->next_vb;
-}
-
-static void dispatcher_human_time (unsigned secs, char *str /* out */)
-{
-    unsigned hours = secs / 3600;
-    unsigned mins  = (secs % 3600) / 60;
-             secs  = secs % 60;
-
-    if (hours) 
-        sprintf (str, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
-    else if (mins)
-        sprintf (str, "%u %s %u %s", mins, mins==1 ? "minute" : "minutes", secs, secs==1 ? "second" : "seconds");
-    else 
-        sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
-}
-
-const char *dispatcher_ellapsed_time (Dispatcher dispatcher)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-
-    TimeSpecType tb; 
-    clock_gettime(CLOCK_REALTIME, &tb); 
-    
-    int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
-
-    static char time_str[70];
-    dispatcher_human_time (seconds_so_far, time_str);
-
-    return time_str;
-}
-
-static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-
-    if (!dd->show_progress) return; 
-
-    TimeSpecType tb; 
-    clock_gettime(CLOCK_REALTIME, &tb); 
-    
-    int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
-
-    static double ratio_so_far = 1;
-
-    uint64_t total, sofar;
-    if (file->vcf_data_size_single) { // if we have the VCF data size, go by it 
-        total = file->vcf_data_size_single;
-        sofar = vcf_data_written_so_far;
-    
-    } else if (file->disk_size) {
-        total = file->disk_size; // in case of .vcf.gz
-        sofar = file->disk_so_far; 
-
-        // sofar can be -1LL bc it seems that gzoffset64 returns that for values over 2GB on Windows -
-        // as a work around, use the previous ratio as an estimate
-        if (sofar > 9000000000000000000ULL)
-            sofar = ratio_so_far * (double)vcf_data_written_so_far * 0.97; // underestimate by bit (97%) - better err on the side of under-estimation
-        else
-            ratio_so_far = (double)sofar / (double)vcf_data_written_so_far;
-    } 
-    else // in case of a file over a pipe
-        return; // we can't show anything if we don't know the file size
-
-    double percent;
-    if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
-        percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
-    else
-        percent = MIN (((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
-    
-    // need to update progress indicator, max once a second or if 100% is reached
-    const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-
-    // in split mode - dispatcher is not done if there's another component after this one
-    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&z_file->v1_next_vcf_header));
-
-    if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
-
-        if (!dispatcher_is_done (dispatcher) ||
-            (flag_split && buf_is_allocated (&z_file->v1_next_vcf_header))) { 
-
-            // time remaining
-            char time_str[70], progress[100];
-            unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
-            dispatcher_human_time (secs, time_str);
-
-            sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
-
-            // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
-            fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
-
-            dd->last_len = strlen (progress);
-        }
-    }
-
-    if (done) fprintf (stderr, "%.*s", dd->last_len, eraser);
-
-    dd->last_percent = percent;
-    dd->last_seconds_so_far = seconds_so_far;
 }
 
 void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far)

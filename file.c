@@ -22,6 +22,8 @@
 File *z_file   = NULL;
 File *vcf_file = NULL;
 
+const unsigned file_estimated_compression_factor_vs_vcf[] = FILE_ESTIMATED_COMPRESSION_FACTOR_VS_VCF;
+
 // global pointers - so the can be compared eg "if (mode == READ)"
 const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
 const char *WRITE = "wb";
@@ -30,7 +32,7 @@ char *file_exts[] = FILE_EXTS;
 
 static FileType file_get_type (const char *filename)
 {
-    for (FileType ft=UNKNOWN_EXT+1; ft <= END_OF_EXTS-1; ft++)
+    for (FileType ft=UNKNOWN_EXT+1; ft < STDIN; ft++)
         if (file_has_ext (filename, file_exts[ft])) return ft;
 
     return UNKNOWN_EXT;
@@ -83,7 +85,7 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
 
         case VCF_XZ:
             file->file = stream_create (true, false, false, "xz", filename , "--threads=8", "--decompress", 
-                                        "--keep", "--stdout", flag_quiet ? "--quiet" : NULL, NULL).from_stream_stdout;
+                                        "--keep", "--stdout", flag_quiet ? "--quiet" : SKIP_ARG, NULL).from_stream_stdout;
             break;
         case BCF:
         case BCF_GZ:
@@ -333,17 +335,4 @@ void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const c
     if (add_string_terminator) buf->data[size] = 0;
 
     fclose (file);
-}
-
-double file_estimated_compression_factor_vs_vcf (FileType type)
-{
-    switch (type) {
-        case VCF: case STDIN:                return 1;
-        case VCF_BZ2:                        return 15; // compression ratio of bzip2 of a "typical" vcf file
-        case VCF_XZ:                         return 12; // compression ratio of xz of a "typical" vcf file
-        case VCF_GZ: case VCF_BGZ:           return 8; 
-        case BCF: case BCF_GZ: case BCF_BGZ: return 8;  // we're guessing a BCF file is compressed, but we don't know for sure (BCF supports both bgzip compression and no compression)
-        default: ABORT ("Error in file_estimated_compression_factor_vs_vcf: unknown type %u", type);
-    }
-    return 1; // never reaches here
 }

@@ -910,8 +910,7 @@ void seg_complete_missing_lines (VariantBlock *vb, const char *next_field)
 void seg_all_data_lines (VariantBlock *vb)
 {
     START_TIMER;
-printf ("vb->vcf_data.len=%u\n",vb->vcf_data.len);
-printf ("vcf_data=%30.30s\n",vb->vcf_data.data);
+
     vb->num_dict_ids = MAX (FORMAT+1, vb->num_dict_ids); // first 8 mtf_ctx are reserved for the VCF fields (up to FORMAT) (vb->num_dict_ids might be already higher due to previous VBs)
 
     // Set ctx stuff for CHROM->FORMAT fields (note: mtf_i is allocated by seg_allocate_per_line_memory)

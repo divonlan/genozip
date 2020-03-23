@@ -42,7 +42,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher)
     double vcf_bytes = z_file->vcf_data_size_single;
     double ratio     = vcf_bytes / z_bytes;
     
-    if (vcf_file->type == VCF)  // source file was plain VCF
+    if (vcf_file->type == VCF || vcf_file->type == STDIN)  // source file was plain VCF
         fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
     
     else // source was .vcf.gz or .vcf.bgz or .vcf.bz2

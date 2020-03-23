@@ -357,6 +357,7 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
     
     switch (vcf_file->type) {
+        case STDIN   :
         case VCF     : vcf_header.compression_type = COMPRESSION_TYPE_NONE  ; break;
         case VCF_GZ  :
         case VCF_BGZ : vcf_header.compression_type = COMPRESSION_TYPE_GZIP  ; break;
