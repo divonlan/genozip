@@ -22,25 +22,18 @@ extern int fcntl (int __fd, int __cmd, ...); // defined in fcntl.h but not linux
 #include <linux/fcntl.h> // for F_SETPIPE_SZ - if needed for porting, you can delete this include (the code with F_SETPIPE_SZ is #ifdefed)
 #endif
 
-
 #include "stream.h"
+#include "file.h"
 
 #ifdef _WIN32
 static const char *stream_windows_error (void)
 {
-    char *lpMsgBuf;
-
-    FormatMessage(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-        FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        GetLastError(),
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (LPTSTR) &lpMsgBuf,
-        0, NULL );
-
-    return lpMsgBuf;
+    char *msg;
+    FormatMessage (FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, GetLastError(),
+                   MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   (LPTSTR)&msg, 0, NULL);
+    return msg;
 }
 #endif
 
@@ -73,7 +66,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
         memset (max_pipe_size_str, 0, 30);
         size_t bytes = fread (max_pipe_size_str, 1, 29, pipe_max_size_file);
         if (bytes) pipe_size = MIN (pipe_size, atoi (max_pipe_size_str));
-        fclose (pipe_max_size_file);
+        FCLOSE (pipe_max_size_file, "pipe_max_size_file");
     }
 
     // set the pipe size
@@ -96,7 +89,7 @@ static void stream_abort_cannot_exec (const char *exec_name)
 
 #ifdef _WIN32
 static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
-                                 unsigned argc, char * const *argv)
+                                 FILE *redirect_stdout_file, unsigned argc, char * const *argv)
 {
     int cmd_line_len = 0;
     for (int i=0; i < argc; i++)
@@ -112,10 +105,14 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
     STARTUPINFO startup_info;
     memset (&startup_info, 0, sizeof startup_info);
     startup_info.cb         = sizeof startup_info;
-    startup_info.hStdOutput = stream_stdout_to_genozip ? (HANDLE)_get_osfhandle (stream_stdout_to_genozip[1]) : GetStdHandle (STD_ERROR_HANDLE);
-    startup_info.hStdError  = stream_stderr_to_genozip ? (HANDLE)_get_osfhandle (stream_stderr_to_genozip[1]) : GetStdHandle (STD_OUTPUT_HANDLE);
+    startup_info.hStdError  = stream_stderr_to_genozip ? (HANDLE)_get_osfhandle (stream_stderr_to_genozip[1]) : GetStdHandle (STD_ERROR_HANDLE);
     startup_info.hStdInput  = genozip_to_stream_stdin  ? (HANDLE)_get_osfhandle (genozip_to_stream_stdin[0])  : INVALID_HANDLE_VALUE;
     startup_info.dwFlags    = STARTF_USESTDHANDLES;
+
+    // determine where the child's stdout will go 
+    if (stream_stdout_to_genozip)  startup_info.hStdOutput = (HANDLE)_get_osfhandle (stream_stdout_to_genozip[1]);
+    else if (redirect_stdout_file) startup_info.hStdOutput = (HANDLE)_get_osfhandle (fileno (redirect_stdout_file));
+    else                           startup_info.hStdOutput = GetStdHandle (STD_OUTPUT_HANDLE);
 
     PROCESS_INFORMATION proc_info;
     memset (&proc_info, 0, sizeof proc_info);
@@ -125,9 +122,9 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
     if (!success) stream_abort_cannot_exec (argv[0]);
     
     // close handles we (the parent process) don't need
-    if (stream_stdout_to_genozip) close (stream_stdout_to_genozip[1]); // this also closes the Windows HANDLE
-    if (stream_stderr_to_genozip) close (stream_stderr_to_genozip[1]);
-    if (genozip_to_stream_stdin)  close (genozip_to_stream_stdin[0]);
+    if (stream_stdout_to_genozip) CLOSE (stream_stdout_to_genozip[1], "stream_stdout_to_genozip[1]"); // this also closes the Windows HANDLE
+    if (stream_stderr_to_genozip) CLOSE (stream_stderr_to_genozip[1], "stream_stderr_to_genozip[1]");
+    if (genozip_to_stream_stdin)  CLOSE (genozip_to_stream_stdin[0],  "genozip_to_stream_stdin[0]");
     CloseHandle (proc_info.hThread); // child process's main thread
 
     return proc_info.hProcess;
@@ -135,22 +132,32 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 
 #else // not Windows
 static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
-                                unsigned argc, char * const *argv)
+                                FILE *redirect_stdout_file, unsigned argc, char * const *argv)
 {
     pid_t child_pid = fork();
     if (child_pid) return child_pid; // parent returns
 
+    // redirect child stdin to our pipe if needed
+    if (genozip_to_stream_stdin) {         
+        dup2 (genozip_to_stream_stdin[0], STDIN_FILENO);
+        CLOSE (genozip_to_stream_stdin[1], "genozip_to_stream_stdin[1]"); // child closes writing side of the pipe  
+    }
+
     // redirect child stdout to our pipe if needed
-    if (stream_stdout_to_genozip) {         
+    if (redirect_stdout_file)          
+        dup2 (fileno (redirect_stdout_file), STDOUT_FILENO);
+ 
+    // or - redirect child stdout to a file if requested
+    else if (stream_stdout_to_genozip) {         
         dup2 (stream_stdout_to_genozip[1], STDOUT_FILENO);
-        close (stream_stdout_to_genozip[0]); // close reading side of the pipe  
+        CLOSE (stream_stdout_to_genozip[0], "stream_stdout_to_genozip[0]"); // child closes reading side of the pipe  
     }
 
     // redirect child stderr to our pipe if needed
     if (stream_stderr_to_genozip) {
         dup2 (STDERR_FILENO, 3); // keep the original stderr in fd=3 in case we can't execute and need to report an error
         dup2 (stream_stderr_to_genozip[1], STDERR_FILENO);
-        close (stream_stderr_to_genozip[0]); // close reading side of the pipe
+        CLOSE (stream_stderr_to_genozip[0], "stream_stderr_to_genozip[0]"); // child closes reading side of the pipe
     }
 
     execvp (argv[0], (char * const *)argv); // if successful, doesn't return
@@ -165,8 +172,10 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
 #endif
 
 Stream stream_create (uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream_stdin,
-                      const char *exec_name, ...)
+                      FILE *redirect_stdout_file, const char *exec_name, ...)
 {
+    ASSERT0 (!from_stream_stdout || !redirect_stdout_file, "Error in stream_create: cannot redirect child output to both genozip and a file");
+
     int stream_stdout_to_genozip[2], stream_stderr_to_genozip[2], genozip_to_stream_stdin[2];
     
     if (from_stream_stdout) stream_pipe (stream_stdout_to_genozip, from_stream_stdout, true);
@@ -179,10 +188,13 @@ Stream stream_create (uint32_t from_stream_stdout, uint32_t from_stream_stderr, 
     // copy our function arguments to argv
     va_list argp;
     va_start (argp, exec_name);
+
     const char *argv[MAX_ARGC];
     memset (argv, 0, sizeof(argv));
     unsigned argc = 0;
+
     argv[argc++] = exec_name;
+
     const char *arg;
     while (argc < MAX_ARGC) {
         arg = va_arg (argp, const char *);
@@ -197,22 +209,26 @@ Stream stream_create (uint32_t from_stream_stdout, uint32_t from_stream_stderr, 
     stream.pid = stream_exec_child (from_stream_stdout ? stream_stdout_to_genozip : NULL, 
                                     from_stream_stderr ? stream_stderr_to_genozip : NULL, 
                                     to_stream_stdin    ? genozip_to_stream_stdin  : NULL, 
+                                    redirect_stdout_file,
                                     argc, (char * const *)argv); 
+
+    if (redirect_stdout_file) 
+        FCLOSE (redirect_stdout_file, "redirect_stdout_file"); // the child has this file open, we don't need it
 
     // store our side of the pipe, and close the side used by the child
     if (from_stream_stdout) {
-        stream.from_stream_stdout = fdopen (stream_stdout_to_genozip[0], "rb");
-        close (stream_stdout_to_genozip[1]);
+        stream.from_stream_stdout = fdopen (stream_stdout_to_genozip[0], READ);
+        CLOSE (stream_stdout_to_genozip[1], "stream_stdout_to_genozip[1]");
     }
 
     if (from_stream_stderr) {
-        stream.from_stream_stderr = fdopen (stream_stderr_to_genozip[0], "rb");
-        close (stream_stderr_to_genozip[1]);
+        stream.from_stream_stderr = fdopen (stream_stderr_to_genozip[0], READ);
+        CLOSE (stream_stderr_to_genozip[1], "stream_stderr_to_genozip[1]");
     }
 
     if (to_stream_stdin) {
-        stream.to_stream_stdin = fdopen (genozip_to_stream_stdin[1], "wb");
-        close (genozip_to_stream_stdin[0]);
+        stream.to_stream_stdin = fdopen (genozip_to_stream_stdin[1], WRITE);
+        CLOSE (genozip_to_stream_stdin[0], "genozip_to_stream_stdin[0]");
     }
 
     return stream;
@@ -226,9 +242,9 @@ void stream_close (Stream *stream)
     kill (stream->pid, 9); // ignore errors
 #endif
 
-    if (stream->from_stream_stdout) fclose (stream->from_stream_stdout);
-    if (stream->from_stream_stderr) fclose (stream->from_stream_stderr);
-    if (stream->to_stream_stdin)    fclose (stream->to_stream_stdin);
+    if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout");
+    if (stream->from_stream_stderr) FCLOSE (stream->from_stream_stderr, "stream->from_stream_stderr");
+    if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->to_stream_stdin");
 
     memset (stream, 0, sizeof (Stream));
 }
@@ -259,7 +275,7 @@ int stream_wait_for_exit (Stream stream)
 
 void stream_abort_if_cannot_run (const char *exec_name)
 {
-    Stream stream = stream_create (1024, 1024, 0, exec_name, NULL); // will abort if cannot run
+    Stream stream = stream_create (1024, 1024, 0, 0, exec_name, NULL); // will abort if cannot run
 
 // in Windows, the main process fails to CreateProcess and exits. In Unix, it is the child process that 
 // fails to execv, and exits and code 99. The main process catches it in stream_wait_for_exit, and exits.

@@ -134,16 +134,16 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
 
     uint64_t total, sofar;
     
-    // case: genozip of plain vcf files and always for genounzip - we go by the amount of VCF content processed 
-    if (command == UNZIP || 
-        (command == ZIP && file->type == VCF)) { 
+    // case: genozip of plain vcf files - we go by the amount of VCF content processed 
+    if (command == ZIP && file->type == VCF) { 
         total = file->vcf_data_size_single;
         sofar = vcf_data_written_so_far;
     } 
     
-    // case: locally decompressed files (genozip only) - .vcf.gz .vcf.bgz .vcf.bz2 - we go by the physical disk size 
-    // and how much the compressor has consumed from it
-    else if (command == ZIP && (file->type == VCF_GZ || file->type == VCF_BGZ || file->type == VCF_BZ2)) {
+    // case: UNZIP: always ; ZIP: locally decompressed files - .vcf.gz .vcf.bgz .vcf.bz2 - 
+    // we go by the physical disk size and how much has been consumed from it so far
+    else if (command == UNZIP || 
+             (command == ZIP && (file->type == VCF_GZ || file->type == VCF_BGZ || file->type == VCF_BZ2))) {
         total = file->disk_size; 
         sofar = file->disk_so_far; 
 
@@ -182,14 +182,16 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     // in split mode - dispatcher is not done if there's another component after this one
     bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&z_file->v1_next_vcf_header));
 
-    if (!done) percent = MIN (percent, 99); // we don't show 100% until done
-
     // case: we've reached 99% prematurely... we under-estimated the time
-    if (!done && percent == 99) {
+    if (!done && percent > 99 && (dd->last_seconds_so_far < seconds_so_far)) {
         const char *progress = "Still working...";
+
+        // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
+        fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
+
         dd->last_len = strlen (progress);
     }
-    
+
     // case: we're making progress... show % and time remaining
     else if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
 

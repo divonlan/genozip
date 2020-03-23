@@ -135,8 +135,11 @@ extern const char *file_basename (const char *filename, bool remove_exe, const c
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
 extern void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
 
-#define file_printname(file) (file->name ? file->name : "(stdin)")
+#define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))
 
+#define CLOSE(fd,name)  ASSERTW (!close (fd),  "Warning: Failed to close %s: %s", (name), strerror(errno));
+#define FCLOSE(fp,name) ASSERTW (!fclose (fp), "Warning: Failed to close %s: %s", (name), strerror(errno));
+ 
 // a hacky addition to bzip2
 extern unsigned long long BZ2_bzoffset (void* b);
 extern const char *BZ2_errstr (int err);

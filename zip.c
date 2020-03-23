@@ -46,7 +46,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher)
         fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
     
     else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
-        fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f ; ratio vs %s: %1.1f)\n", 
+        fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
                     runtime, ratio, file_exts[vcf_file->type],
                     (double)vcf_file->disk_size / z_bytes); // compression vs .gz/.bz2 size
 }

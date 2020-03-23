@@ -46,10 +46,10 @@ const char *global_cmd = NULL;
 ExeType exe_type;
 int command = -1;  // must be static or global to initialize list_options 
 
-unsigned global_max_threads = DEFAULT_MAX_THREADS; 
+uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
 // the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0,
+int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
@@ -427,11 +427,13 @@ static void main_genounzip (const char *z_filename,
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
-    if (!vcf_filename && !flag_stdout && !flag_split) {
+    if (!vcf_filename && (!flag_stdout || flag_bgzip) && !flag_split) {
         vcf_filename = (char *)malloc(fn_len + 10);
         ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
 
-        sprintf ((char *)vcf_filename, "%.*s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename);    // .vcf.genozip -> .vcf
+        // .vcf.genozip -> .vcf or .vcf.gz
+        sprintf ((char *)vcf_filename, "%.*s%s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename,
+                 flag_bgzip ? ".gz" : "");    
     }
 
     z_file = file_open (z_filename, READ, VCF_GENOZIP);    
@@ -482,7 +484,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 {
     const char *password = crypt_get_password();
 
-    Stream test = stream_create (0, 0, 0, exec_name, "-d", "-t", z_filename,
+    Stream test = stream_create (0, 0, 0, 0, exec_name, "-d", "-t", z_filename,
                                  flag_quiet       ? "--quiet"       : SKIP_ARG,
                                  password         ? "--password"    : SKIP_ARG,
                                  password         ? password        : SKIP_ARG,
@@ -683,7 +685,7 @@ int main (int argc, char **argv)
         #define _Q  {"noisy",         no_argument,       &flag_noisy,        1 }
         #define _DL {"replace",       no_argument,       &flag_replace,      1 }
         #define _V  {"version",       no_argument,       &command, VERSION     }
-        #define _z  {"compress",      no_argument,       &command, ZIP         }
+        #define _z  {"bgzip",         no_argument,       &flag_bgzip,        1 }
         #define _m  {"md5",           no_argument,       &flag_md5,          1 }
         #define _t  {"test",          no_argument,       &flag_test,         1 }
         #define _9  {"optimize",      no_argument,       &flag_optimize,     1 } // US spelling
@@ -727,8 +729,8 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                           _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                                     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,               _00 };
+        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                           _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
+        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                                     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,               _00 };
         static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                                  _st, _sm,                                       _dm,               _00 };
         static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _H0, _H1, _sp, _Gt, _GT,                _sT,                                    _st, _sm,                                       _dm,               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
@@ -736,7 +738,7 @@ int main (int argc, char **argv)
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
             "cdfhlLqQt^Vzm@:Oo:p:B:S:9", // genozip
-            "cfhLqQt^V@:Oo:p:m",         // genounzip
+            "czfhLqQt^V@:Oo:p:m",        // genounzip
             "hLVp:qf",                   // genols
             "hLV@:p:qQ1r:t:s:HGo:f"      // genocat
         };
@@ -749,13 +751,14 @@ int main (int argc, char **argv)
         is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
 
         switch (c) {
-            case ZIP : case UNZIP : case LIST : case LICENSE : 
+            case UNZIP : case LIST : case LICENSE : 
             case VERSION  : case HELP :
                 ASSERT(command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
                 command=c; 
                 break;
 
             case 'c' : flag_stdout        = 1      ; break;
+            case 'z' : flag_bgzip         = 1      ; break;
             case 'f' : flag_force         = 1      ; break;
             case '^' : flag_replace       = 1      ; break;
             case 'q' : flag_quiet         = 1      ; break;
@@ -803,7 +806,7 @@ int main (int argc, char **argv)
             case '?' : // unrecognized option - error message already displayed by libc
             default  :
                 fprintf(stderr, "Usage: %s [OPTIONS] filename1 filename2...\nTry %s --help for more information.\n", global_cmd, global_cmd);
-                abort();  
+                exit(0);  
         }
     }
 

@@ -62,7 +62,8 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     if (file->mode == READ  && command == ZIP)   ASSERT (file_is_vcf (file), "%s: input file must have one of the following extensions: " VCF_EXTENSIONS, global_cmd);
     if (file->mode == WRITE && command == ZIP)   ASSERT (file->type == VCF_GENOZIP, "%s: output file must have a " VCF_GENOZIP_ " extension", global_cmd);
     if (file->mode == READ  && command == UNZIP) ASSERT (file->type == VCF_GENOZIP, "%s: input file must have a " VCF_GENOZIP_ " extension", global_cmd); 
-    if (file->mode == WRITE && command == UNZIP) ASSERT (file->type == VCF,         "%s: output file must have a .vcf extension", global_cmd); 
+    if (file->mode == WRITE && command == UNZIP) ASSERT (file->type == VCF || file->type == VCF_GZ || file->type == VCF_BGZ, 
+                                                         "%s: output file must have a .vcf or .vcf.gz or .vcf.bgz extension", global_cmd); 
 
     if (expected_type == VCF) {
 
@@ -76,7 +77,26 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
 
         case VCF_GZ:
         case VCF_BGZ:
-            file->file = gzopen64 (file->name, mode);    
+            if (mode == READ)
+                file->file = gzopen64 (file->name, mode);    
+
+            else {
+                char threads_str[20];
+                sprintf (threads_str, "%u", global_max_threads);
+
+                FILE *redirected_stdout_file = NULL;
+                if (!flag_stdout) {
+                    redirected_stdout_file = fopen (file->name, mode); // bgzip will redirect its output to this file
+                    ASSERT (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
+                }
+                file->file = stream_create (0, 0, global_max_memory_per_vb, 
+                                            redirected_stdout_file, // output is redirected unless flag_stdout
+                                            //"cat", "-",
+                                            "bgzip", 
+                                            "--stdout", // either to the terminal or redirected to output file
+                                            "--threads", threads_str,
+                                            NULL).to_stream_stdin;
+            }
             break;
 
         case VCF_BZ2:
@@ -84,13 +104,13 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             break;
 
         case VCF_XZ:
-            file->file = stream_create (true, false, false, "xz", filename , "--threads=8", "--decompress", 
+            file->file = stream_create (global_max_memory_per_vb, 0, 0, NULL, "xz", filename , "--threads=8", "--decompress", 
                                         "--keep", "--stdout", flag_quiet ? "--quiet" : SKIP_ARG, NULL).from_stream_stdout;
             break;
         case BCF:
         case BCF_GZ:
         case BCF_BGZ:
-            file->file = stream_create (true, false, false, "bcftools", "view", "-Ov", "--threads", "8", 
+            file->file = stream_create (global_max_memory_per_vb, 0, 0, NULL, "bcftools", "view", "-Ov", "--threads", "8", 
                                         filename, NULL).from_stream_stdout;
             break;
         
@@ -142,9 +162,9 @@ void file_close (File **file_p,
 
     if (file->file) {
 
-        if (file->type == VCF_GZ || file->type == VCF_BGZ) {
+        if (file->mode == READ && (file->type == VCF_GZ || file->type == VCF_BGZ)) {
             int ret = gzclose_r((gzFile)file->file);
-            ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file->name ? file->name : "");
+            ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file_printname (file));
         }
         else if (file->type == VCF_BZ2) {
             BZ2_bzclose((BZFILE *)file->file);
@@ -158,7 +178,7 @@ void file_close (File **file_p,
                 fprintf (stderr, "Error: fclose() failed without an error, possible file->file pointer is corrupted\n");
             }
 
-            ASSERTW (!ret, "Warning: failed to close file %s: %s", file->name ? file->name : "", strerror(errno)); // vcf or genozip
+            ASSERTW (!ret, "Warning: failed to close file %s: %s", file_printname (file), strerror(errno)); // vcf or genozip
         } 
     }
 

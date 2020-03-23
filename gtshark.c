@@ -111,7 +111,7 @@ static void gtshark_check_pipe_for_errors (char *data, FILE *fp, uint32_t vb_i, 
 static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
                          const char *command, const char *filename_1, const char *filename_2) 
 {
-    Stream gtshark = stream_create (DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 
+    Stream gtshark = stream_create (DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0,
                                     "gtshark", command, filename_1, filename_2, NULL);
 
     // read pipe (up to 10000 characters)

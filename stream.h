@@ -29,7 +29,8 @@ typedef struct {
 
 #define DEFAULT_PIPE_SIZE 65536
 #define SKIP_ARG ((const char *)-1)
-extern Stream stream_create (uint32_t from_stream, uint32_t from_stream_stderr, uint32_t to_stream, const char *exec_name, ...);
+extern Stream stream_create (uint32_t from_stream, uint32_t from_stream_stderr, uint32_t to_stream, 
+                             FILE *redirect_stdout_file, const char *exec_name, ...);
 
 extern void stream_close (Stream *stream);
 

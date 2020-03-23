@@ -8,14 +8,14 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/genozip-debug.exe",
+            //"program": "${workspaceFolder}/genozip-debug.exe",
             //"program": "${workspaceFolder}/genocat-debug.exe",
-            //"program": "${workspaceFolder}/genounzip-debug.exe",
+            "program": "${workspaceFolder}/genounzip-debug.exe",
             //"program": "${workspaceFolder}/genozip.exe",
 
             //"args": ["-@1", "-B5", "-9", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-fojunk.vcf.genozip"],
 
-            "args": ["a1.vcf", "-f"],
+            "args": ["a.vcf.genozip", "-zf"],
             //"args": ["a1.vcf.genozip", "-f"],
             //"args": ["GFX0241869.filtered.snp.vcf","-f"],
             //"args": ["45K.vcf", "-f", "45K.ploptimize.vcf.genozip"],
