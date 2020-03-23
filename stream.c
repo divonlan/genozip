@@ -10,11 +10,13 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <process.h>
-//#elif defined __APPLE__
-//#include <sys/sysctl.h>
 #else // non-Windows
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#endif
+
+#ifdef __APPLE__
+#include <signal.h> // for kill()
 #endif
 
 #ifdef __linux__ 

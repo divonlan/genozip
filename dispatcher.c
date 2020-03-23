@@ -132,7 +132,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
 
     static double ratio_so_far = 1;
 
-    uint64_t total, sofar;
+    uint64_t total=0, sofar=0;
     
     // case: genozip of plain vcf files - we go by the amount of VCF content processed 
     if (command == ZIP && file->type == VCF) { 
