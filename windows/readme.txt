@@ -5,10 +5,10 @@ Usage: genozip [options]... [files]...
 
 See also: genounzip genocat genols
 
-Actions - use at most one of these actions:
-   -z --compress     This is the default action. Compress a .vcf, .vcf.gz or .vcf.bz2 file (Yes! You can compress an
-                     already-compressed file). The source file is left unchanged. This is the default action of genozip
+Supported input file types: .vcf .vcf.gz .vcf.bgz .vcf.bz2 .vcf.xz .bcf .bcf.gz .bcf.bgz
+Note: for .bcf files, bcftools needs to be installed, and for .xz files, xz needs to be installed
 
+Actions - use at most one of these actions:
    -d --decompress   Same as running genounzip. For more details, run: genounzip --help
 
    -l --list         Same as running genols. For more details, run: genols --help
@@ -78,9 +78,8 @@ Optimizing:
 
    --gtshark         Use gtshark instead of the default bzlib as the final compression step for allele data (the GT
                      subfield in the sample data). 
-                     Note: For this to work, gtshark needs to be installed and in the execution path - it is a separate
-                     software package that is not affliated with genozip in any way. It can be found here:
-                     https://github.com/refresh-bio/GTShark
+                     Note: For this to work, gtshark needs to be installed - it is a separate software package that is
+                     not affliated with genozip in any way. It can be found here: https://github.com/refresh-bio/GTShark
                      Note: gtshark also needs to be installed for decompressing files that were compressed with this
                      option. 
                      Note: This option isn't supported on Windows
@@ -107,6 +106,10 @@ See also: genozip genocat genols
 
 Options:
    -c --stdout       Send output to standard output instead of a file
+
+   -z --bgzip        Compress the output VCF file(s) with bgzip
+                     Note: this option is implicit if --output specifies a filename ending with .gz or .bgz
+                     Note: bgzip needs to be installed for this option to work
 
    -f --force        Force overwrite of the output file
 
