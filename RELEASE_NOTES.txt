@@ -88,3 +88,7 @@
 4.0.2
 - genozip can now compress .bcf .bcf.gz .bcf.bgz and .xz files
 - genounzip can now de-compress into a bgzip-ed .vcf.gz file
+
+4.0.4
+- add support for compressing a file directly from a URL
+- remove support for 32-bit Windows (its been broken for a while)

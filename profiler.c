@@ -62,14 +62,14 @@ const char *profiler_print_short (const ProfilerRec *p)
 
 void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
 {
-#if defined _WIN32 && defined _WIN64
-    static const char *os ="Windows (64 bit)";
-#elif defined _WIN32 
-    static const char *os ="Windows (32 bit)";
+#if defined _WIN32
+    static const char *os ="Windows";
 #elif defined __APPLE__
     static const char *os ="MacOS";
-#else
+#elif defined __linux__
     static const char *os ="Linux";
+#else
+    static const char *os ="Unknown OS";
 #endif
 
     fprintf (stderr, "\n%s PROFILER:\n", command == ZIP ? "ZIP" : "UNZIP");

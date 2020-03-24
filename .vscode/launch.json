@@ -8,21 +8,16 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            //"program": "${workspaceFolder}/genozip-debug.exe",
+            "program": "${workspaceFolder}/genozip-debug.exe",
             //"program": "${workspaceFolder}/genocat-debug.exe",
-            "program": "${workspaceFolder}/genounzip-debug.exe",
+            //"program": "${workspaceFolder}/genounzip-debug.exe",
+            //"program": "${workspaceFolder}/genols-debug.exe",
             //"program": "${workspaceFolder}/genozip.exe",
 
-            //"args": ["-@1", "-B5", "-9", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-fojunk.vcf.genozip"],
-
-            "args": ["a.vcf.genozip", "-zf"],
-            //"args": ["a1.vcf.genozip", "-f"],
-            //"args": ["GFX0241869.filtered.snp.vcf","-f"],
-            //"args": ["45K.vcf", "-f", "45K.ploptimize.vcf.genozip"],
-            //"args": ["GFX0241869.filtered.snp.vcf", "-f"],
-            //"args": ["-d", "concat.vcf.genozip", "-fO"],
-
-            //"args": ["-f", "-d", "backward-compatability-test/test-file.1.1.3.vcf.genozip", "-o", "junk.vcf", "--show-headers"],   
+            "args":["file:///c:/users/user/projects/genozip/a.vcf.xz", "file:///c:/users/user/projects/genozip/a2.vcf.xz", "-f"]
+            //"args":["ALL.chrY.phase3_integrated_v1b.20130502.genotypes.vcf", "-f"]
+            //"args": ["ftp://ftp.ncbi.nlm.nih.gov/1000genomes/ftp/release/20130502/ALL.chrY.phase3_integrated_v1b.20130502.genotypes.vcf.gz", "-f"],
+            //"args": ["file:///c:/users/user/projects/genozip/x.bcf.gz", "-f"],
 
             // for benchmark files used in the paper
 

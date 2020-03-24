@@ -900,7 +900,7 @@ void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_co
     header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type                    = BGEN16 (data_type);
     header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
-    header.uncompressed_data_size       = BGEN64 (z_file->vcf_data_size_concat);
+    header.uncompressed_data_size       = BGEN64 (z_file->vcf_data_so_far);
     header.num_samples                  = BGEN32 (global_num_samples);
     header.num_items_concat             = BGEN64 (z_file->num_lines_concat);
     header.num_sections                 = BGEN32 (num_sections); 

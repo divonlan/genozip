@@ -94,7 +94,8 @@ extern VariantBlockP evb;
 #endif
 
 // sanity checks
-static inline void my_exit(void) { exit(1); }// an exit function so we can put a debugging break point when ASSERT exits
+extern void my_exit(void);
+
 #define ASSERT(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); my_exit(); }}
 #define ASSERT0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); my_exit(); }}
 #define ASSERTW(condition, format, ...)      { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}

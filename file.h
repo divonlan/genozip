@@ -62,7 +62,6 @@ typedef struct file_ {
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t vcf_data_size_single;     // VCF: size of the VCF data (if known)
                                       // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
-    int64_t vcf_data_size_concat;     // concatenated vcf_data_size of all files compressed
     int64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
                                       // GENOZIP: VCF data so far of original VCF file currently being processed
 
@@ -134,11 +133,12 @@ extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
 extern void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
+extern void file_kill_external_compressors (void);
 
 #define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))
 
-#define CLOSE(fd,name)  ASSERTW (!close (fd),  "Warning: Failed to close %s: %s", (name), strerror(errno));
-#define FCLOSE(fp,name) ASSERTW (!fclose (fp), "Warning: Failed to close %s: %s", (name), strerror(errno));
+#define CLOSE(fd,name)  { ASSERTW (!close (fd),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));}
+#define FCLOSE(fp,name) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; }
  
 // a hacky addition to bzip2
 extern unsigned long long BZ2_bzoffset (void* b);

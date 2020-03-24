@@ -17,10 +17,14 @@
 #include "move_to_front.h"
 #include "file.h"
 #include "stream.h"
+#include "url.h"
 
 // globals
 File *z_file   = NULL;
 File *vcf_file = NULL;
+
+static StreamP input_decompressor  = NULL; // bcftools or xz - only one at a time
+static StreamP output_compressor = NULL; // bgzip
 
 const unsigned file_estimated_compression_factor_vs_vcf[] = FILE_ESTIMATED_COMPRESSION_FACTOR_VS_VCF;
 
@@ -42,13 +46,35 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
     ASSERT0 (filename, "Error: filename is null");
 
-    bool file_exists = (access (filename, F_OK) == 0);
+    File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
-    ASSERT (mode != READ  || file_exists, "%s: cannot open %s for reading: %s", global_cmd, filename, strerror(errno));
+    bool is_remote = url_is_url (filename);
+    bool file_exists;
+
+    // is_remote is only possible in READ mode
+    ASSERT (mode != WRITE || !is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
+
+    int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
+    const char *error = NULL;
+    if (is_remote) {
+        error = url_get_status (filename, &file_exists, &url_file_size); // accessing is expensive - get existance and size in one call
+        if (url_file_size >= 0) file->disk_size = (uint64_t)url_file_size;
+    }
+    else {
+        file_exists = (access (filename, F_OK) == 0);
+        error = strerror (errno);
+        if (file_exists && mode == READ) file->disk_size = file_get_size (filename);
+    }
+
+    // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
+    if (mode == READ && expected_type == VCF && file_exists && !file->disk_size && !url_file_size) {
+        FREE (file);
+        return NULL; 
+    }
+
+    ASSERT (mode != READ  || file_exists, "%s: cannot open %s for reading: %s", global_cmd, filename, error);
     ASSERT (mode != WRITE || !file_exists || flag_force || (expected_type==VCF && flag_test), 
             "%s: output file %s already exists: you may use --force to overwrite it", global_cmd, filename);
-
-    File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
 
     // copy filename 
     unsigned fn_size = strlen (filename) + 1; // inc. \0
@@ -64,7 +90,6 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     if (file->mode == READ  && command == UNZIP) ASSERT (file->type == VCF_GENOZIP, "%s: input file must have a " VCF_GENOZIP_ " extension", global_cmd); 
     if (file->mode == WRITE && command == UNZIP) ASSERT (file->type == VCF || file->type == VCF_GZ || file->type == VCF_BGZ, 
                                                          "%s: output file must have a .vcf or .vcf.gz or .vcf.bgz extension", global_cmd); 
-
     if (expected_type == VCF) {
 
         switch (file->type) {
@@ -72,14 +97,19 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             // don't actually open the file if we're just testing in genounzip
             if (flag_test && mode == WRITE) return file;
 
-            file->file = fopen (file->name, mode); // "rb"/"wb" so libc on Windows doesn't drop/add '\r' between our code and the disk. we will handle the '\r' explicitly.
+            file->file = is_remote ? url_open (NULL, file->name) : fopen (file->name, mode);
             break;
 
         case VCF_GZ:
         case VCF_BGZ:
-            if (mode == READ)
-                file->file = gzopen64 (file->name, mode);    
-
+            if (mode == READ) {
+                if (is_remote) { 
+                    FILE *url_fp = url_open (NULL, file->name);
+                    file->file = gzdopen (fileno(url_fp), mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+                }
+                else
+                    file->file = gzopen64 (file->name, mode); // for local files we decompress ourselves
+            }
             else {
                 char threads_str[20];
                 sprintf (threads_str, "%u", global_max_threads);
@@ -89,29 +119,54 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
                     redirected_stdout_file = fopen (file->name, mode); // bgzip will redirect its output to this file
                     ASSERT (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
                 }
-                file->file = stream_create (0, 0, global_max_memory_per_vb, 
-                                            redirected_stdout_file, // output is redirected unless flag_stdout
-                                            //"cat", "-",
-                                            "bgzip", 
-                                            "--stdout", // either to the terminal or redirected to output file
-                                            "--threads", threads_str,
-                                            NULL).to_stream_stdin;
+                output_compressor = stream_create (0, 0, 0, global_max_memory_per_vb, 
+                                                   redirected_stdout_file, // output is redirected unless flag_stdout
+                                                   0,
+                                                   "bgzip", 
+                                                   "--stdout", // either to the terminal or redirected to output file
+                                                   "--threads", threads_str,
+                                                   NULL);
+                file->file = stream_to_stream_stdin (output_compressor);
             }
             break;
 
         case VCF_BZ2:
-            file->file = BZ2_bzopen (file->name, mode);    
+            if (is_remote) {            
+                FILE *url_fp = url_open (NULL, file->name);
+                file->file = BZ2_bzdopen (fileno(url_fp), mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+            }
+            else
+                file->file = BZ2_bzopen (file->name, mode);  // for local files we decompress ourselves   
             break;
 
         case VCF_XZ:
-            file->file = stream_create (global_max_memory_per_vb, 0, 0, NULL, "xz", filename , "--threads=8", "--decompress", 
-                                        "--keep", "--stdout", flag_quiet ? "--quiet" : SKIP_ARG, NULL).from_stream_stdout;
+            stream_abort_if_cannot_run ("xz");
+
+            // TO DO (xz and bcftools) - we suck the stderr into a pipe but we never show it - perhaps
+            // in some cases we should?
+
+            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+                                               is_remote ? file->name : NULL,     // url
+                                               "xz",                              // exec_name
+                                               is_remote ? SKIP_ARG : file->name, // local file name 
+                                               "--threads=8", "--decompress", "--keep", "--stdout", 
+                                               flag_quiet ? "--quiet" : SKIP_ARG, 
+                                               NULL);            
+            file->file = stream_from_stream_stdout (input_decompressor);
             break;
+
         case BCF:
         case BCF_GZ:
         case BCF_BGZ:
-            file->file = stream_create (global_max_memory_per_vb, 0, 0, NULL, "bcftools", "view", "-Ov", "--threads", "8", 
-                                        filename, NULL).from_stream_stdout;
+            stream_abort_if_cannot_run ("bcftools");
+
+            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+                                               is_remote ? file->name : NULL,     // url                                        
+                                               "bcftools",                        // exec_name 
+                                               "view", "-Ov", "--threads", "8", 
+                                               is_remote ? SKIP_ARG : file->name, // local file name 
+                                               NULL);
+            file->file = stream_from_stream_stdout (input_decompressor);
             break;
         
         default:
@@ -120,19 +175,16 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     }
     
     else if (expected_type == VCF_GENOZIP) 
-        file->file = fopen (file->name, mode);
-
-    else 
-        ABORT ("Error: invalid expected_type: %u", expected_type);
+        file->file = is_remote ? url_open (NULL, file->name) : fopen (file->name, mode);
+    
+    else ABORT ("Error: invalid expected_type: %u", expected_type);
 
     ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     if (mode == READ) {
 
-        file->disk_size = file_get_size (file->name);
-
         if (file->type == VCF)
-            file->vcf_data_size_single = file->vcf_data_size_concat = file->disk_size; 
+            file->vcf_data_size_single = file->disk_size; 
 
         // initialize read buffer indices
         file->last_read = file->next_read = READ_BUFFER_SIZE;
@@ -166,20 +218,18 @@ void file_close (File **file_p,
             int ret = gzclose_r((gzFile)file->file);
             ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file_printname (file));
         }
-        else if (file->type == VCF_BZ2) {
+        else if (file->mode == READ && file->type == VCF_BZ2) 
             BZ2_bzclose((BZFILE *)file->file);
-        }
-        else {
-            int ret = fclose((FILE *)file->file);
+        
+        else if (file->mode == READ && 
+                 (file->type == BCF || file->type == BCF_GZ || file->type == BCF_BGZ || file->type == VCF_XZ)) 
+            stream_close (&input_decompressor);
 
-            if (ret && !errno) { // this is a telltale sign of a memory overflow
-                buf_test_overflows(evb); // failing to close for no reason is a sign of memory issues
-                // if its not a buffer - maybe its file->file itself
-                fprintf (stderr, "Error: fclose() failed without an error, possible file->file pointer is corrupted\n");
-            }
+        else if (file->mode == WRITE && (file->type == VCF_GZ || file->type == VCF_BGZ)) 
+            stream_close (&output_compressor);
 
-            ASSERTW (!ret, "Warning: failed to close file %s: %s", file_printname (file), strerror(errno)); // vcf or genozip
-        } 
+        else 
+            FCLOSE (file->file, file_printname (file));
     }
 
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
@@ -212,9 +262,14 @@ void file_close (File **file_p,
 size_t file_write (File *file, const void *data, unsigned len)
 {
     size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file);
+
+    // if we're streaming our genounzip/genocat/genols output to another process and that process has 
+    // ended prematurely then exit quietly. in genozip we display an error because this means the resulting
+    // .genozip file will be corrupted
+    if (!file->name && command != ZIP && errno == EINVAL) exit(0);
+
     ASSERT (bytes_written, "Error: failed to write %u bytes to %s: %s", 
             len, file->name ? file->name : "(stdout)", strerror(errno));
-
     return bytes_written;
 }
 
@@ -354,5 +409,12 @@ void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const c
 
     if (add_string_terminator) buf->data[size] = 0;
 
-    fclose (file);
+    FCLOSE (file, filename);
+}
+
+// used when aborting due to an error. avoid the compressors outputting their own errors after our process is gone
+void file_kill_external_compressors (void)
+{
+    stream_close (&input_decompressor);
+    stream_close (&output_compressor);
 }

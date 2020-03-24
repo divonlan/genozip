@@ -41,14 +41,15 @@ static void zip_display_compression_ratio (Dispatcher dispatcher)
     double z_bytes   = (double)z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file; // in case of concat - we show the ratio of one file. the last file accounts for the genozip header...
     double vcf_bytes = z_file->vcf_data_size_single;
     double ratio     = vcf_bytes / z_bytes;
-    
-    if (vcf_file->type == VCF || vcf_file->type == STDIN)  // source file was plain VCF
+    double ratio2    = (double)vcf_file->disk_size / z_bytes; // compression vs .gz/.bz2 size
+
+    if (vcf_file->type == VCF || vcf_file->type == STDIN || ratio2 < 1)  // source file was plain VCF or ratio2 is low (nothing to brag about)
         fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
     
     else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
         fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
                     runtime, ratio, file_exts[vcf_file->type],
-                    (double)vcf_file->disk_size / z_bytes); // compression vs .gz/.bz2 size
+                    (double)vcf_file->disk_size / z_bytes); 
 }
 
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
@@ -537,13 +538,14 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     // output dictionaries to disk
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, NULL, false);  
-    
+   
     // compress all random access records into evb->z_data
     if (flag_show_index) random_access_show_index();
     
     BGEN_random_access(); // make ra_buf into big endian
 
     z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
+
     zfile_compress_section_data (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf);
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
@@ -638,8 +640,6 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
                 vcf_file->vcf_data_size_single = z_file->vcf_data_size_single = vcf_file->vcf_data_so_far;
 
-                z_file->vcf_data_size_concat += z_file->vcf_data_so_far; // we completed one VCF file - add to the count
-
                 dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far); // this accounting is missing genozip header (with the section list), and the random_access section
             }
         }
@@ -657,12 +657,12 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     zip_display_compression_ratio (dispatcher);
 
 finish:
-    z_file->disk_size = z_file->disk_so_far;
+    z_file->disk_size            = z_file->disk_so_far;
     z_file->num_lines_single     = 0;
     z_file->vcf_data_size_single = 0;
+    evb->z_data.len              = 0;
+    evb->z_next_header_i         = 0;
     memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));
 
-    vcf_file->vcf_data_size_concat = z_file->vcf_data_size_concat = vcf_file->vcf_data_so_far; // just in case its not set already
-    
     dispatcher_finish (&dispatcher, &last_variant_block_i);
 }

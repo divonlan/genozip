@@ -785,10 +785,8 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
 
     vcf_file->max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
 
-    if (first_vcf || !flag_concat) {
-        z_file->num_lines_concat     = vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
-        z_file->vcf_data_size_concat = vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
-    }
+    if (first_vcf || !flag_concat) 
+        z_file->num_lines_concat = vcf_file->num_lines_concat = BGEN64 (header->num_lines);
 
     *digest = flag_split ? header->md5_hash_single : header->md5_hash_concat;
         

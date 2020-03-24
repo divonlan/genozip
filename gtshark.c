@@ -80,12 +80,12 @@ static void gtshark_create_vcf_file (VariantBlock *vb, const Buffer *section_dat
         }
     }
 
-    fclose (file);
+    FCLOSE (file, gtshark_vcf_name);
 
     return;
 error:
     if (file) {
-        fclose (file);
+        FCLOSE (file, gtshark_vcf_name);
         file_remove (gtshark_vcf_name, true);
     }
     my_exit();
@@ -111,13 +111,13 @@ static void gtshark_check_pipe_for_errors (char *data, FILE *fp, uint32_t vb_i, 
 static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
                          const char *command, const char *filename_1, const char *filename_2) 
 {
-    Stream gtshark = stream_create (DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0,
-                                    "gtshark", command, filename_1, filename_2, NULL);
+    StreamP gtshark = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0,
+                                     "gtshark", command, filename_1, filename_2, NULL);
 
     // read pipe (up to 10000 characters)
     char stdout_data[PIPE_MAX_BYTES], stderr_data[PIPE_MAX_BYTES];
-    gtshark_check_pipe_for_errors (stdout_data, gtshark.from_stream_stdout, vb_i, sb_i, false);
-    gtshark_check_pipe_for_errors (stderr_data, gtshark.from_stream_stderr, vb_i, sb_i, true);
+    gtshark_check_pipe_for_errors (stdout_data, stream_from_stream_stdout (gtshark), vb_i, sb_i, false);
+    gtshark_check_pipe_for_errors (stderr_data, stream_from_stream_stderr (gtshark), vb_i, sb_i, true);
 
     // wait for gtshark to complete
     int exit_status = stream_wait_for_exit (gtshark);
@@ -200,7 +200,7 @@ static char *gtshark_write_db_file (uint32_t vb_i, uint16_t section_i, const cha
             "Error in uncompressing vb_i=%u: failed to write file %s - only %u out of %u bytes written: %s",
             vb_i, filename, (unsigned)bytes_written, buf->len, strerror (errno));
 
-    fclose (file);
+    FCLOSE (file, filename);
     return filename;
 }
 

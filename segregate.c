@@ -146,7 +146,7 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
 
     vb->vcf_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
     return node_index;
-}
+} 
 
 // returns true if this line has the same chrom as this VB, or if it is the first line
 static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned chrom_str_len, unsigned vcf_line_i)
@@ -719,7 +719,7 @@ static const char *seg_data_line (VariantBlock *vb, /* may be NULL if testing */
     unsigned gt_line_len=0;
 
     const char *next_field, *field_start;
-    unsigned field_len;
+    unsigned field_len=0;
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
@@ -746,7 +746,7 @@ static const char *seg_data_line (VariantBlock *vb, /* may be NULL if testing */
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vcf_line_i, &field_len, &separator, &has_13, "REF");
 
-    unsigned alt_len;
+    unsigned alt_len=0;
     next_field = seg_get_next_item (next_field, &len, false, true, false, vcf_line_i, &alt_len, &separator, &has_13, "ALT");
     seg_one_field (vb, field_start, field_len+alt_len+1, vcf_line_i, REFALT, NULL);
 
@@ -762,7 +762,7 @@ static const char *seg_data_line (VariantBlock *vb, /* may be NULL if testing */
 
     // INFO
     char *info_field_start = (char *)next_field; // we break the const bc seg_info_field might add a :#
-    unsigned info_field_len;
+    unsigned info_field_len=0;
     next_field = seg_get_next_item (info_field_start, &len, global_num_samples==0, global_num_samples>0, false, vcf_line_i, &info_field_len, &separator, &has_13, "INFO");
     // note: we delay seg_info_field() until the end of the line - we might be adding a Windows \r subfield
 

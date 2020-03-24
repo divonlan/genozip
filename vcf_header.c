@@ -166,10 +166,8 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 
     vcf_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
 
-    if (first_vcf || flag_split) {
-        z_file->num_lines_concat     = vcf_file->num_lines_concat     = BGEN64 (header->num_lines);
-        z_file->vcf_data_size_concat = vcf_file->vcf_data_size_concat = BGEN64 (header->vcf_data_size);
-    }
+    if (first_vcf || flag_split) 
+        z_file->num_lines_concat = vcf_file->num_lines_concat = BGEN64 (header->num_lines);
 
     if (flag_split) *digest = header->md5_hash_single; // override md5 from genozip header
         

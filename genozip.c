@@ -40,6 +40,7 @@
 #include "samples.h"
 #include "gtshark.h"
 #include "stream.h"
+#include "url.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -61,6 +62,13 @@ DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_dump_one_b250 = { 0 };  // argument of --dump-b250-one
 
 static char *threads_str  = NULL;
+
+void my_exit(void) 
+{
+    url_kill_curl();
+    file_kill_external_compressors(); 
+    exit(1);
+} 
 
 static int main_print (const char **text, unsigned num_lines,
                        const char *wrapped_line_prefix, 
@@ -163,7 +171,7 @@ static bool main_am_i_in_docker (void)
     FILE *fp = fopen ("/.dockerenv", "r");
     if (!fp) return false;
 
-    fclose (fp);
+    FCLOSE (fp, "/.dockerenv");
     return true;
 }
 
@@ -378,6 +386,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
+    z_file = file_open (z_filename, READ, VCF_GENOZIP); // open global z_file
     uint64_t vcf_data_size, num_lines;
     uint32_t num_samples;
     Md5Hash md5_hash_concat;
@@ -421,6 +430,13 @@ static void main_genounzip (const char *z_filename,
 
     // get input FILE
     ASSERT0 (z_filename, "Error: z_filename is NULL");
+
+    // we cannot work with a remote genozip file because the decompression process requires random access
+    ASSERT (!url_is_url (z_filename), 
+            "%s: genozip files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
+
+    ASSERT (!vcf_filename || !url_is_url (vcf_filename), 
+            "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, vcf_filename);
 
     unsigned fn_len = strlen (z_filename);
 
@@ -484,15 +500,15 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 {
     const char *password = crypt_get_password();
 
-    Stream test = stream_create (0, 0, 0, 0, exec_name, "-d", "-t", z_filename,
-                                 flag_quiet       ? "--quiet"       : SKIP_ARG,
-                                 password         ? "--password"    : SKIP_ARG,
-                                 password         ? password        : SKIP_ARG,
-                                 flag_show_memory ? "--show-memory" : SKIP_ARG,
-                                 flag_show_time   ? "--show-time"   : SKIP_ARG,
-                                 threads_str      ? "--threads"     : SKIP_ARG,
-                                 threads_str      ? threads_str     : SKIP_ARG,
-                                 NULL);
+    StreamP test = stream_create (0, 0, 0, 0, 0, 0, exec_name, "-d", "-t", z_filename,
+                                  flag_quiet       ? "--quiet"       : SKIP_ARG,
+                                  password         ? "--password"    : SKIP_ARG,
+                                  password         ? password        : SKIP_ARG,
+                                  flag_show_memory ? "--show-memory" : SKIP_ARG,
+                                  flag_show_time   ? "--show-time"   : SKIP_ARG,
+                                  threads_str      ? "--threads"     : SKIP_ARG,
+                                  threads_str      ? threads_str     : SKIP_ARG,
+                                  NULL);
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
     int exit_code = stream_wait_for_exit (test);
@@ -505,13 +521,16 @@ static void main_genozip (const char *vcf_filename,
                           bool is_first_file, bool is_last_file,
                           char *exec_name)
 {
+    ASSERT (!z_filename || !url_is_url (z_filename), 
+            "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
+
     // get input file
     if (vcf_filename) {
-        // skip this file if its size is 0
-        RETURNW (file_get_size (vcf_filename),, "Cannot compresss file %s because its size is 0 - skipping it", vcf_filename);
-    
         // open the file
         vcf_file = file_open (vcf_filename, READ, VCF);
+
+        // skip this file if its size is 0
+        RETURNW (vcf_file,, "Cannot compresss file %s because its size is 0 - skipping it", vcf_filename);
     }
     else {  // stdin
         vcf_file = file_fdopen (0, READ, STDIN, false);
@@ -526,12 +545,17 @@ static void main_genozip (const char *vcf_filename,
         if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
 
             if (!z_filename) {
-                unsigned fn_len = strlen (vcf_filename);
+                const char *basename = url_is_url (vcf_filename) ? file_basename (vcf_filename, false, "", 0,0) : NULL;
+                const char *local_vcf_filename = basename ? basename : vcf_filename;
+
+                unsigned fn_len = strlen (local_vcf_filename);
                 z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
-                // get name, e.g. xx.vcf.gz -> xx.vcf.genozip
-                sprintf (z_filename, "%.*s" GENOZIP_EXT, (int)(fn_len - (strlen (file_exts[vcf_file->type])-4)), vcf_filename); 
+                // get name, e.g. xx.bcf.gz -> xx.vcf.genozip
+                sprintf (z_filename, "%.*s" VCF_GENOZIP_, (int)(fn_len - strlen (file_exts[vcf_file->type])), local_vcf_filename); 
+
+                if (basename) FREE ((char*)basename);
             }
             z_file = file_open (z_filename, WRITE, VCF_GENOZIP);
         }
@@ -606,6 +630,13 @@ void verify_architecture()
     ASSERT0 (*(uint8_t*)&test_endianity==0x01, "Error: expected CPU to be Big Endian but it is not");
 #else
 #error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
+#endif
+
+// Verify that this Windows is 64 bit
+#ifdef _WIN32
+#ifndef _WIN64
+#error Compilation error - on Windows, genozip must be compiled as a 64 bit application
+#endif
 #endif
 }
 

@@ -327,34 +327,14 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
 
     if (flag_show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->variant_block_i);
 
-    if (dd->max_threads > 1 
-#if defined _WIN32 && ! defined _WIN64 // note: _WIN32 is defined for both Windows 32 & 64 bit
-        // note: in 32bit Windows, the first variant block is always done on the main thread, so we can measure
-        // memory consumption and reduce the number of compute threads and/or num_lines in subsequent vbs
-        && dd->next_vb_i > 1
-#endif
-        ) {
-
+    if (dd->max_threads > 1) {
         unsigned err = pthread_create(&th->thread_id, NULL, dispatcher_thread_entry, th);
         ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->variant_block_i, err);
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;
     }
-    else {     // single thread or (Windows 32bit and first VB)
-        func(dd->next_vb);            
-
-#if defined _WIN32 && ! defined _WIN64 // note: _WIN32 is defined for both Windows 32 & 64 bit
-        if (dd->max_threads > 1) {
-            // adjust max_threads and/or num_lines, now that we know how memory a vb consumes
-            unsigned vb_memory = buf_vb_memory_consumption (dd->next_vb);
-            dd->max_threads = MIN (dd->max_threads, MAX_32BIT_WINDOWS_MEMORY / vb_memory); // TO DO - play with num_lines to, not just compute threads
-#ifdef DEBUG
-            char str[30]; 
-            fprintf (stderr, "\nvb_memory=%s max_threads=%u\n", buf_display_size (vb_memory, str), dd->max_threads);
-#endif
-        }
-#endif
-    }
+    else func(dd->next_vb); // single thread
+                    
     dd->next_vb = NULL;
     dd->num_running_compute_threads++;
 }
