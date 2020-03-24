@@ -1,12 +1,15 @@
 
 Compress VCF (Variant Call Format) files
 
-Usage: genozip [options]... [files]...
+Usage: genozip [options]... [files or urls]...
 
 See also: genounzip genocat genols
 
 Supported input file types: .vcf .vcf.gz .vcf.bgz .vcf.bz2 .vcf.xz .bcf .bcf.gz .bcf.bgz
 Note: for .bcf files, bcftools needs to be installed, and for .xz files, xz needs to be installed
+
+Examples: genozip file1.vcf file2.vcf -o concat.vcf.genozip
+          genozip --optimize -password 12345 ftp://ftp.ncbi.nlm.nih.gov/file2.vcf.gz
 
 Actions - use at most one of these actions:
    -d --decompress   Same as running genounzip. For more details, run: genounzip --help
@@ -103,6 +106,10 @@ Uncompress VCF (Variant Call Format) files previously compressed with genozip
 Usage: genounzip [options]... [files]...
 
 See also: genozip genocat genols
+
+Examples: genounzip file1.vcf.genozip file2.vcf.genozip
+          genounzip file.vcf.genozip --output file.vcf.gz
+          genounzip concat.vcf.genozip --split
 
 Options:
    -c --stdout       Send output to standard output instead of a file
