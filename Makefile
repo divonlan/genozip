@@ -216,6 +216,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
 	@echo "CONDA: Using a browser:"
 	@echo "  (1) Go to https://github.com/conda-forge/genozip-feedstock/pulls"
 	@echo "  (2) Click 'Compare and pull request' then 'Create pull request' and wait 30 seconds for the test to start"
+	@echo "      Fallback: if you can't see 'Compare & pull', manually created a pull request 'into conda-forge:master from divonlan:genozip'"
 	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build"
 	@echo "  (4) Click on genozip and wait (~5 min) for the test to complete. Fix any issues."
 	@echo "  (5) Go back to the tab in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
@@ -242,10 +243,11 @@ windows/LICENSE.for-installer.txt: text_license.h
 	@echo Generating $@
 	@./genozip$(EXE) --license --force > $@
 
+WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
+                         windows/LICENSE.for-installer.txt windows/readme.txt
+
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-windows/genozip-installer.exe: windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe \
-                               LICENSE.commercial.txt LICENSE.non-commercial.txt windows/LICENSE.for-installer.txt \
-							   windows/readme.txt test-file.vcf
+windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt test-file.vcf
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
@@ -347,7 +349,7 @@ endif # Darwin
 
 clean:
 	@echo Cleaning up
-	@rm -f $(DEPS) $(OBJS) $(EXECUTABLES)
+	@rm -f $(DEPS) $(OBJS) $(EXECUTABLES) $(WINDOWS_INSTALLER_OBJS)
 
 clean-debug:
 	@echo Cleaning up debug
