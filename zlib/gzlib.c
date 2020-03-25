@@ -501,6 +501,23 @@ z_off64_t ZEXPORT gzoffset64(file)
     return offset;
 }
 
+/* Added by Divon Lan-- see zlib.h -- */
+z_off64_t ZEXPORT gzconsumed64(file)
+    gzFile file;
+{
+    gz_statep state;
+
+    /* get internal structure and check integrity */
+    if (file == NULL)
+        return -1;
+    state = (gz_statep)file;
+    if (state->mode != GZ_READ && state->mode != GZ_WRITE)
+        return -1;
+
+    return state->strm.total_ever_in - 
+           (z_off64_t)state->strm.avail_in /* don't count buffered input */;
+}
+
 /* -- see zlib.h -- */
 z_off_t ZEXPORT gzoffset(file)
     gzFile file;

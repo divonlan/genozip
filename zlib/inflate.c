@@ -123,7 +123,8 @@ z_streamp strm;
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
     state = (struct inflate_state FAR *)strm->state;
-    strm->total_in = strm->total_out = state->total = 0;
+    strm->total_in = 0; // note: we don't reset total_ever_in (Divon Lan)
+    strm->total_out = state->total = 0;
     strm->msg = Z_NULL;
     if (state->wrap)        /* to support ill-conceived Java test suite */
         strm->adler = state->wrap & 1;
@@ -1260,7 +1261,8 @@ int flush;
         }
     in -= strm->avail_in;
     out -= strm->avail_out;
-    strm->total_in += in;
+    strm->total_in += (z_off64_t)in;
+    strm->total_ever_in += (z_off64_t)in;
     strm->total_out += out;
     state->total += out;
     if ((state->wrap & 4) && out)
@@ -1401,7 +1403,8 @@ int ZEXPORT inflateSync(strm)
 z_streamp strm;
 {
     unsigned len;               /* number of bytes to look at or looked at */
-    unsigned long in, out;      /* temporary to save total_in and total_out */
+    unsigned long long in; // note: no need to save total_ever_in as inflateReset doesn't reset it (Divon Lan)
+    unsigned long out;      /* temporary to save total_in and total_out */
     unsigned char buf[4];       /* to restore bit buffer to byte string */
     struct inflate_state FAR *state;
 
@@ -1429,7 +1432,8 @@ z_streamp strm;
     len = syncsearch(&(state->have), strm->next_in, strm->avail_in);
     strm->avail_in -= len;
     strm->next_in += len;
-    strm->total_in += len;
+    strm->total_in += (z_off64_t)len;
+    strm->total_ever_in += (z_off64_t)len; // added by Divon
 
     /* return no joy or set up to restart inflate() on a new block */
     if (state->have != 4) return Z_DATA_ERROR;
