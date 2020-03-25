@@ -41,16 +41,16 @@ static uint32_t vcffile_read_block (char *data)
         ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", file_printname(vcf_file), strerror(errno));
 
         vcf_file->disk_so_far += (int64_t)bytes_read;
-//        vcf_file->type = VCF; // we only accept VCF from stdin or streamed pipe.
 
 #ifdef _WIN32
         // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
+        // these charactes are not in 7-bit ASCII, so highly unlikely to be present natrually in a VCF file
         if (vcf_file->type == STDIN && 
             vcf_file->disk_so_far == (int64_t)bytes_read &&  // start of file
             bytes_read >= 3  && 
-            (uint8_t)vcf_file->read_buffer[0] == 0xEF && 
-            (uint8_t)vcf_file->read_buffer[1] == 0xBB && 
-            (uint8_t)vcf_file->read_buffer[2] == 0xBF) {
+            (uint8_t)data[0] == 0xEF && 
+            (uint8_t)data[1] == 0xBB && 
+            (uint8_t)data[2] == 0xBF) {
 
             // Bomb the BOM
             bytes_read -= 3;
@@ -63,13 +63,13 @@ static uint32_t vcffile_read_block (char *data)
         bytes_read = gzfread (data, 1, READ_BUFFER_SIZE, (gzFile)vcf_file->file);
         
         if (bytes_read)
-            vcf_file->disk_so_far = gzoffset64 ((gzFile)vcf_file->file); // for compressed files, we update by block read
+            vcf_file->disk_so_far = gzconsumed64 ((gzFile)vcf_file->file); 
     }
     else if (vcf_file->type == VCF_BZ2) { 
         bytes_read = BZ2_bzread ((BZFILE *)vcf_file->file, data, READ_BUFFER_SIZE);
 
         if (bytes_read)
-            vcf_file->disk_so_far = BZ2_bzoffset ((BZFILE *)vcf_file->file); // for compressed files, we update by block read
+            vcf_file->disk_so_far = BZ2_consumed ((BZFILE *)vcf_file->file); 
     } 
     else {
         ABORT0 ("Invalid file type");
@@ -80,7 +80,8 @@ static uint32_t vcffile_read_block (char *data)
     return bytes_read;
 }
 
-// returns the number of lines read 
+
+// ZIP: returns the number of lines read 
 void vcffile_read_vcf_header (bool is_first_vcf) 
 {
     START_TIMER;
@@ -122,7 +123,7 @@ void vcffile_read_vcf_header (bool is_first_vcf)
                 buf_copy (evb, &vcf_file->vcf_unconsumed_data, &evb->vcf_data, 1, vcf_header_len,
                           bytes_read - i, "vcf_file->vcf_unconsumed_data", 0);
 
-                vcf_file->vcf_data_so_far += i; 
+                vcf_file->vcf_data_so_far_single += i; 
                 evb->vcf_data.len = vcf_header_len;
 
                 goto finish;
@@ -131,7 +132,7 @@ void vcffile_read_vcf_header (bool is_first_vcf)
         }
 
         evb->vcf_data.len += bytes_read;
-        vcf_file->vcf_data_so_far += bytes_read;
+        vcf_file->vcf_data_so_far_single += bytes_read;
     }
 
 finish:        
@@ -144,9 +145,12 @@ finish:
     COPY_TIMER (evb->profile.vcffile_read_vcf_header);
 }
 
+// ZIP
 void vcffile_read_variant_block (VariantBlock *vb) 
 {
     START_TIMER;
+
+    uint64_t pos_before = file_tell (vcf_file);
 
     buf_alloc (vb, &vb->vcf_data, global_max_memory_per_vb, 1, "vcf_data", vb->variant_block_i);    
 
@@ -192,12 +196,14 @@ void vcffile_read_variant_block (VariantBlock *vb)
         }
     }
 
-    vcf_file->vcf_data_so_far += vb->vcf_data.len;
+    vcf_file->vcf_data_so_far_single += vb->vcf_data.len;
     vb->vb_data_size = vb->vcf_data.len; // initial value. it may change if --optimize is used.
+    vb->vb_data_read_size = file_tell (vcf_file) - pos_before; // plain or gz/bz2 compressed bytes read
 
     COPY_TIMER (vb->profile.vcffile_read_variant_block);
 }
 
+// PIZ
 unsigned vcffile_write_to_disk (const Buffer *buf)
 {
     unsigned len = buf->len;
@@ -213,8 +219,8 @@ unsigned vcffile_write_to_disk (const Buffer *buf)
 
     if (flag_md5) md5_update (&vcf_file->md5_ctx_concat, buf->data, buf->len);
 
-    vcf_file->vcf_data_so_far += buf->len;
-    vcf_file->disk_so_far     += buf->len;
+    vcf_file->vcf_data_so_far_single += buf->len;
+    vcf_file->disk_so_far            += buf->len;
 
     return buf->len;
 }
@@ -240,4 +246,31 @@ void vcffile_write_one_variant_block (VariantBlock *vb)
             (int32_t)size_written_this_vb - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (vb->profile.write);
+}
+
+// ZIP only - estimate the size of the vcf data in this file. affects the hash table size and the progress indicator.
+void vcffile_estimate_vcf_data_size (VariantBlock *vb)
+{
+    if (!vcf_file->disk_size) return; // we're unable to estimate if the disk size is not known
+    
+    double ratio=1;
+
+    // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
+    if (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ || vcf_file->type == VCF_BZ2) 
+        ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size;
+
+    // for compressed files for which we don't have their size (eg streaming from an http server) - we use
+    // estimates based on our benchmarks for compression ratio of files with and without genotype data
+    else if (vcf_file->type == BCF || vcf_file->type == BCF_GZ || vcf_file->type == BCF_BGZ)
+        ratio = vb->has_genotype_data ? 8.5 : 55;
+
+    else if (vcf_file->type == VCF_XZ)
+        ratio = vb->has_genotype_data ? 12.7 : 171;
+
+    else if (vcf_file->type == VCF)
+        ratio = 1;
+
+    else ABORT ("Error in file_estimate_vcf_data_size: unspecified file_type=%u", vcf_file->type);
+
+    vcf_file->vcf_data_size_single = vcf_file->disk_size * ratio;
 }

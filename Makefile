@@ -15,7 +15,7 @@ LDFLAGS     += -lpthread -lm
 
 ifdef IS_CONDA 
 	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1
-	LDFLAGS += -lbz2 -lz  # conda - dynamic linking with bz2 and zlib
+	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -39,9 +39,10 @@ MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimiz
 
 CONDA_COMPATIBILITY_SRCS = compatability/visual_c_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
 
-EXT_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c \
-           zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c 
-                
+ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c   
+
+BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
+                           
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
@@ -77,10 +78,10 @@ endif
 
 ifndef IS_CONDA 
 # local - static link everything
-SRCS = $(MY_SRCS) $(EXT_SRCS)
+SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS)
 else 
-# conda - use packages for zlib and bzip2
-SRCS = $(MY_SRCS) 
+# conda - use packages for bzip2
+SRCS = $(MY_SRCS) $(ZLIB_SRCS)
 endif
 
 OBJS       := $(SRCS:.c=.o)
@@ -158,7 +159,7 @@ ifeq ($(OS),Windows_NT)
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderVCFHeader.genozip_version
-increment-version: $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+increment-version: $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@bash increment-version.sh
@@ -169,7 +170,7 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : increment-version $(MY_SRCS) $(EXT_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push 

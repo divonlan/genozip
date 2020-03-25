@@ -54,6 +54,8 @@ typedef struct {
 } DispatcherData;
 
 static TimeSpecType profiler_timer; // wallclock
+static bool ever_time_initialized = false;
+static TimeSpecType ever_time;
 
 void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i)
 {
@@ -93,14 +95,16 @@ static void dispatcher_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-const char *dispatcher_ellapsed_time (Dispatcher dispatcher)
+const char *dispatcher_ellapsed_time (Dispatcher dispatcher, bool ever)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
     
-    int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
+    TimeSpecType start = ever ? ever_time : dd->start_time;
+
+    int seconds_so_far = ((tb.tv_sec - start.tv_sec)*1000 + (tb.tv_nsec - start.tv_nsec) / 1000000) / 1000; 
 
     static char time_str[70];
     dispatcher_human_time (seconds_so_far, time_str);
@@ -112,14 +116,14 @@ static void dispatcher_show_start (DispatcherData *dd)
 {
     if (!dd->show_progress) return; 
 
-    const char *progress = (command == ZIP && vcf_file->type == STDIN) ? "Compressing\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
+    const char *progress = (command == ZIP && vcf_file->type == STDIN) ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
     
     fprintf (stderr, "%s%s %s: %s", dd->test_mode ? "testing " : "", global_cmd, dd->filename, progress); 
              
     dd->last_len = strlen (progress); // so dispatcher_show_progress knows how many characters to erase
 }
 
-static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far)
+static void dispatcher_show_progress (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     
@@ -130,45 +134,30 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
     
     int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
 
-    static double ratio_so_far = 1;
-
     uint64_t total=0, sofar=0;
     
-    // case: genozip of plain vcf files - we go by the amount of VCF content processed 
-    if (command == ZIP && file->type == VCF) { 
-        total = file->vcf_data_size_single;
-        sofar = vcf_data_written_so_far;
+    // case: genozip of plain vcf files (including if decompressed by an external compressor) 
+    // - we go by the amount of VCF content processed 
+    if (command == ZIP && vcf_file->disk_size && file_is_plain_vcf (vcf_file)) { 
+        total = vcf_file->vcf_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
+        sofar = z_file->vcf_data_so_far_single;
     } 
     
     // case: UNZIP: always ; ZIP: locally decompressed files - .vcf.gz .vcf.bgz .vcf.bz2 - 
     // we go by the physical disk size and how much has been consumed from it so far
     else if (command == UNZIP || 
-             (command == ZIP && (file->type == VCF_GZ || file->type == VCF_BGZ || file->type == VCF_BZ2))) {
-        total = file->disk_size; 
-        sofar = file->disk_so_far; 
-
-        // sofar can be -1LL bc it seems that gzoffset64 returns that for values over 2GB on Windows -
-        // as a work around, use the previous ratio as an estimate
-        if (sofar > 9000000000000000000ULL)
-            sofar = ratio_so_far * (double)vcf_data_written_so_far * 0.97; // underestimate by bit (97%) - better err on the side of under-estimation
-        else
-            ratio_so_far = (double)sofar / (double)vcf_data_written_so_far;
+             (command == ZIP && (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ || vcf_file->type == VCF_BZ2))) {
+        File *input_file  = (command == ZIP ? vcf_file : z_file);
+        total = input_file->disk_size; 
+        sofar = input_file->disk_so_far; 
     } 
-    
-    // case: files streamed - we estimate the total VCF content of the file =based on the disk size and the typical
-    // compression of the file format, and compare that to the VCF content processed
-    else if (command == ZIP && (file->type == VCF_XZ || file->type == BCF || file->type == BCF_GZ || file->type == BCF_BGZ)) {
-        // in this case we prefer to over-estimate the compression vs under-estimate it - so we delight the 
-        // user with finishing earlier than expected rather than being late
-        total = file->disk_size * file_estimated_compression_factor_vs_vcf[file->type] * 2; // *2 to over-estimate 
-        sofar = vcf_data_written_so_far; 
-    }
-    
-    // case: genozip with user redirecting input from a pipe - we have no idea how big the file is going to be
-    else if (command == ZIP && file->type == STDIN)
+        
+    // case: we have no idea what is the disk size of the VCF file - for example, because its STDIN, or because
+    // its coming from a URL that doesn't provide the size
+    else if (command == ZIP && !vcf_file->disk_size)
         return; // we can't show anything if we don't know the file size
 
-    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u file->type=%u", command, file->type);
+    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u vcf_file->type=%u", command, vcf_file->type);
 
     double percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
@@ -184,7 +173,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher, const File *file, l
 
     // case: we've reached 99% prematurely... we under-estimated the time
     if (!done && percent > 99 && (dd->last_seconds_so_far < seconds_so_far)) {
-        const char *progress = "Still working...";
+        const char *progress = "Finalizing...";
 
         // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
         fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
@@ -228,6 +217,11 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
     ASSERT0 (dd, "failed to calloc DispatcherData");
 
     clock_gettime(CLOCK_REALTIME, &dd->start_time); 
+
+    if (!ever_time_initialized) {
+        ever_time = dd->start_time;
+        ever_time_initialized = true;
+    }
 
     dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the variant_block_i will continue from one file to the next
     dd->max_threads   = max_threads;
@@ -391,7 +385,7 @@ VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
     return dd->next_vb;
 }
 
-void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long long vcf_data_written_so_far)
+void dispatcher_finalize_one_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -406,7 +400,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher, const File *file, long l
         vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
     }
 
-    dispatcher_show_progress (dispatcher, file, vcf_data_written_so_far);
+    dispatcher_show_progress (dispatcher);
 }                           
 
 void dispatcher_input_exhausted (Dispatcher dispatcher)

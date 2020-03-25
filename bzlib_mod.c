@@ -40,8 +40,12 @@ const char *BZ2_errstr (int err)
 }
 
 // this should go into bzlib.c
-unsigned long long BZ2_bzoffset (BZFILE* b)
+uint64_t BZ2_consumed (BZFILE* b)
 {
-   return  (((unsigned long long)((bzFile*)b)->strm.total_in_hi32) << 32) |
-            ((unsigned long long)((bzFile*)b)->strm.total_in_lo32);
+    bz_stream *strm = &((bzFile*)b)->strm;
+
+    uint64_t total_in = ((uint64_t)(strm->total_in_hi32) << 32) |
+                        ((uint64_t) strm->total_in_lo32);
+
+    return total_in - strm->avail_in; // don't include unconsumed data
 }

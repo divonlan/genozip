@@ -1097,7 +1097,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 dispatcher_input_exhausted (dispatcher);
 
                 if (header_only_file)
-                    dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far);
+                    dispatcher_finalize_one_vb (dispatcher);
             }
         }
 
@@ -1107,9 +1107,9 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     
             vcffile_write_one_variant_block (processed_vb);
 
-            z_file->vcf_data_so_far += processed_vb->vb_data_size; 
+            z_file->vcf_data_so_far_single += processed_vb->vb_data_size; 
 
-            dispatcher_finalize_one_vb (dispatcher, z_file, vcf_file->vcf_data_so_far);
+            dispatcher_finalize_one_vb (dispatcher);
         }
 
     } while (!dispatcher_is_done (dispatcher));
@@ -1139,7 +1139,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
     if (flag_split) file_close (&vcf_file, true); // close this component file
 
-    if (!flag_test) fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher));
+    if (!flag_test) fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher, false));
 
 finish:
 

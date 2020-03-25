@@ -185,7 +185,7 @@ static void main_show_file_metadata (void)
 #else
              "Individuals: %u   Variants: %"PRIu64"   INFO & FORMAT tags: %u\n", 
 #endif
-             global_num_samples, z_file->num_lines_concat, z_file->num_dict_ids-8);
+             global_num_samples, z_file->num_lines, z_file->num_dict_ids-8);
 }
 
 static void main_show_sections (void)
@@ -559,9 +559,6 @@ static void main_genozip (const char *vcf_filename,
             }
             z_file = file_open (z_filename, WRITE, VCF_GENOZIP);
         }
-
-        z_file->vcf_data_so_far                    = 0; // reset these as they relate to the VCF data of the VCF file currently being processed
-        z_file->vcf_data_size_single               = vcf_file->vcf_data_size_single; // 0 if vcf is .gz or a pipe or stdin
     }
     else if (flag_stdout) { // stdout
 #ifdef _WIN32
@@ -902,8 +899,8 @@ int main (int argc, char **argv)
 
     unsigned num_files = argc - optind;
 
-    ASSERT0 (num_files <= 1 || !flag_show_sections, "Error: --show-sections can only work on one file at time");
-    ASSERT0 (num_files <= 1 || !flag_show_content,  "Error: --show-content can only work on one file at time");
+    ASSERT (num_files <= 1 || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
+    ASSERT (num_files <= 1 || !flag_show_content,  "%s: --show-content can only work on one file at time", global_cmd);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

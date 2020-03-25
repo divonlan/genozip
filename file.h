@@ -31,10 +31,8 @@
 #define BCF_BGZ_     ".bcf.bgz"
 #define VCF_GENOZIP_ ".vcf" GENOZIP_EXT
 
-typedef enum      {UNKNOWN_EXT, VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  STDIN,   STDOUT} FileType;
+typedef enum      {UNKNOWN_FILE_TYPE, VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  STDIN,   STDOUT} FileType;
 #define FILE_EXTS {"Unknown",   VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, "stdin", "stdout" }
-#define FILE_ESTIMATED_COMPRESSION_FACTOR_VS_VCF \
-                  {0,           1,    8,       8,        15,       12,      8,    8,       8,        20,           1,       0}
 extern char *file_exts[];
 
 #define VCF_EXTENSIONS VCF_ " " VCF_GZ_ " " VCF_BGZ_ " " VCF_BZ2_ " " VCF_XZ_ " " BCF_ " " BCF_GZ_ " " BCF_BGZ_
@@ -44,6 +42,7 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 
 #define file_is_zip_read(file) ((file)->mode == READ && command == ZIP)
 
+// files that are read by ZIP as plain VCF - they might have been decompressed by an external decompressor
 #define file_is_plain_vcf(file) (((file)->type == VCF    || (file)->type == VCF_XZ  || (file)->type == BCF || \
                                  (file)->type == BCF_GZ || (file)->type == BCF_BGZ || (file)->type == STDIN))
 
@@ -51,19 +50,22 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 
 typedef struct file_ {
     void *file;
-    char *name;                       // allocated by file_open(), freed by file_close()
+    char *name;                        // allocated by file_open(), freed by file_close()
     FileMode mode;
     FileType type;
     
     // these relate to actual bytes on the disk
-    int64_t disk_size;                // 0 if not known (eg stdin)
-    int64_t disk_so_far;              // data read/write to/from "disk" (using fread/fwrite)
+    int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
+                                       // note: this is different from vcf_data_size_single as disk_size might be compressed (gz, bz2 etc)
+    int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite)
 
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
-    int64_t vcf_data_size_single;     // VCF: size of the VCF data (if known)
-                                      // GENOZIP: GENOZIP: size of original VCF data in the VCF file currently being processed
-    int64_t vcf_data_so_far;          // VCF: data sent to/from the caller (after coming off the read buffer and/or decompression)
-                                      // GENOZIP: VCF data so far of original VCF file currently being processed
+    int64_t vcf_data_size_single;      // vcf_file: size of the VCF data. ZIP: if its a plain VCF file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
+    int64_t vcf_data_so_far_single;    // vcf_file: data read (ZIP) or written (PIZ) to/from vcf file so far
+                                       // z_file: VCF data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
+    int64_t vcf_data_so_far_concat;    // z_file & ZIP only: VCF data represented in the GENOZIP data written so far for all VCFs
+    uint64_t num_lines;                // z_file: number of lines in all vcf files concatenated into this z_file
+                                       // vcf_file: number of lines in single vcf file
 
     // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)
     Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
@@ -77,8 +79,6 @@ typedef struct file_ {
 
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_vcf_file;     // the value of disk_size when starting to read this vcf file
-    uint64_t num_lines_concat;                // number of lines in concatenated vcf file
-    uint64_t num_lines_single;                // number of lines in single vcf file
     
     SectionHeaderVCFHeader vcf_header_first;  // store the first VCF header - we might need to update it at the very end;
     uint8_t vcf_header_enc_padding[AES_BLOCKLEN-1]; // just so we can overwrite vcf_header with encryption padding
@@ -117,7 +117,6 @@ typedef struct file_ {
 
 // globals
 extern File *z_file, *vcf_file; 
-extern const unsigned file_estimated_compression_factor_vs_vcf[];
 
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
@@ -141,7 +140,7 @@ extern void file_kill_external_compressors (void);
 #define FCLOSE(fp,name) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; }
  
 // a hacky addition to bzip2
-extern unsigned long long BZ2_bzoffset (void* b);
+extern unsigned long long BZ2_consumed (void* b);
 extern const char *BZ2_errstr (int err);
 
 // Windows compatibility stuff

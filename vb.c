@@ -57,7 +57,7 @@ void vb_release_vb (VariantBlock **vb_p)
     }
 
     vb->num_lines = vb->first_line = vb->variant_block_i = vb->vcf_data_next_offset = 0;
-    vb->vb_data_size = vb->ploidy = vb->num_haplotypes_per_line = 0;
+    vb->vb_data_size = vb->vb_data_read_size = vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = vb->ready_to_dispatch = vb->is_processed = false;
     vb->phase_type = PHASE_UNKNOWN;
     vb->z_next_header_i = 0;

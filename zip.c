@@ -34,22 +34,43 @@ void zip_set_global_samples_per_block (const char *num_samples_str)
     ASSERT (global_samples_per_block >= 1 && global_samples_per_block <= 65535, "Error: invalid argument of --sblock: %s. Expecting a number between 1 and 65535", num_samples_str);
 }
 
-static void zip_display_compression_ratio (Dispatcher dispatcher)
+static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_file)
 {
-    const char *runtime = dispatcher_ellapsed_time (dispatcher);
-
-    double z_bytes   = (double)z_file->disk_so_far - z_file->disk_at_beginning_of_this_vcf_file; // in case of concat - we show the ratio of one file. the last file accounts for the genozip header...
-    double vcf_bytes = z_file->vcf_data_size_single;
+    const char *runtime = dispatcher_ellapsed_time (dispatcher, false);
+    double z_bytes   = (double)z_file->disk_so_far;
+    double vcf_bytes = (double)z_file->vcf_data_so_far_concat;
     double ratio     = vcf_bytes / z_bytes;
-    double ratio2    = (double)vcf_file->disk_size / z_bytes; // compression vs .gz/.bz2 size
 
-    if (vcf_file->type == VCF || vcf_file->type == STDIN || ratio2 < 1)  // source file was plain VCF or ratio2 is low (nothing to brag about)
-        fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
+    if (flag_concat) { // in concat, we don't show the compression ratio for files except for the last one
+
+        static uint64_t vcf_file_disk_size_concat = 0;
+        static FileType source_file_type = UNKNOWN_FILE_TYPE;
+
+        if (!vcf_file_disk_size_concat) // first concat file
+            source_file_type = vcf_file->type;
+        else if (source_file_type != vcf_file->type) // heterogenous source file types
+            source_file_type = UNKNOWN_FILE_TYPE;
+
+        vcf_file_disk_size_concat += vcf_file->disk_size;
+
+        fprintf (stderr, "Done (%s)                                     \n", runtime);
+
+        if (is_last_file)
+            fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
+                        dispatcher_ellapsed_time (dispatcher, true), ratio, 
+                        source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[vcf_file->type],
+                        (double)vcf_file_disk_size_concat / z_bytes); // compression vs .gz/.bz2/.bcf/.xz... size
+    }
+    else {
+        double ratio2 = (double)vcf_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-    else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
-        fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
-                    runtime, ratio, file_exts[vcf_file->type],
-                    (double)vcf_file->disk_size / z_bytes); 
+        if (vcf_file->type == VCF || vcf_file->type == STDIN || ratio2 < 1)  // source file was plain VCF or ratio2 is low (nothing to brag about)
+            fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
+        
+        else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
+            fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
+                     runtime, ratio, file_exts[vcf_file->type], ratio2);
+    }
 }
 
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
@@ -408,8 +429,14 @@ static void zip_compress_one_vb (VariantBlock *vb)
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
     // beneficial to all vbs as they are likely to more-or-less have the same frequent entries
-    if (vb->variant_block_i == 1)
+    if (vb->variant_block_i == 1) {
         mtf_sort_dictionaries_vb_1(vb);
+
+        // for a VCF file that's compressed (and hence we don't know the size of VCF content a-priori) AND we know the
+        // compressed file size (eg a local gz/bz2 file or a compressed file on a ftp server) - we now estimate the 
+        // vcf_data_size_single that will be used for the global_hash and the progress indicator
+        vcffile_estimate_vcf_data_size (vb);
+    }
 
     // if block has haplotypes - handle them now
     if (vb->has_haplotype_data)
@@ -495,7 +522,7 @@ static void zip_compress_one_vb (VariantBlock *vb)
     vb->is_processed = true; 
 }
 
-static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf, File *vcf_file, bool is_z_data)
+static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf, bool update_vcf_file, bool is_z_data)
 {
     START_TIMER;
 
@@ -509,14 +536,15 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
     z_file->disk_so_far += (long long)data_buf->len;
     
     if (is_z_data) {
-        z_file->vcf_data_so_far  += (long long)vb->vb_data_size;
-        z_file->num_lines_single += (long long)vb->num_lines;
-        z_file->num_lines_concat += (long long)vb->num_lines;
+        if (update_vcf_file) vcf_file->num_lines += (long long)vb->num_lines; // lines in this VCF file
+        z_file->num_lines                        += (long long)vb->num_lines; // lines in all concatenated VCF files in this z_file
+        z_file->vcf_data_so_far_single           += (long long)vb->vb_data_size;
+        z_file->vcf_data_so_far_concat           += (long long)vb->vb_data_size;
     }
 
     // update section stats
     for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        if (vcf_file) vcf_file->section_bytes[sec_i]  += vb->vcf_section_bytes[sec_i];
+        if (update_vcf_file) vcf_file->section_bytes[sec_i]  += vb->vcf_section_bytes[sec_i];
         z_file->num_sections[sec_i]     += vb->z_num_sections[sec_i];
         z_file->section_bytes[sec_i]    += vb->z_section_bytes[sec_i];
         z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
@@ -537,7 +565,7 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
 {
     // output dictionaries to disk
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
-        zip_output_processed_vb (evb, &z_file->section_list_dict_buf, NULL, false);  
+        zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, false);  
    
     // compress all random access records into evb->z_data
     if (flag_show_index) random_access_show_index();
@@ -552,7 +580,7 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5);    
 
     // output to disk random access and genozip header sections to disk
-    zip_output_processed_vb (evb, NULL, NULL, true);  
+    zip_output_processed_vb (evb, NULL, false, true);  
 }
 
 // this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
@@ -609,9 +637,9 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->num_lines);
             vcf_line_i += processed_vb->num_lines;
 
-            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, vcf_file, true);
+            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, true);
 
-            dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far);
+            dispatcher_finalize_one_vb (dispatcher);
         }        
         
         // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - read one
@@ -631,16 +659,10 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
                 // this vb has no data
                 dispatcher_input_exhausted (dispatcher);
                 
-                // note: the field vcf_data_size_* in vcf_file are updated when the data is read from the vcf file, and these 
-                // fields in z_file are are updated below
-                ASSERT (!vcf_file->vcf_data_size_single || 
-                        vcf_file->vcf_data_size_single /* read from VCF file metadata */ == vcf_file->vcf_data_so_far, /* actually read */
-                        "Error: VCF file length inconsistency - read from VCF file metadata: %" PRIu64 " actually read: %" PRIu64 "",
-                        vcf_file->vcf_data_size_single, vcf_file->vcf_data_so_far);
+                // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
+                vcf_file->vcf_data_size_single = vcf_file->vcf_data_so_far_single; 
 
-                vcf_file->vcf_data_size_single = z_file->vcf_data_size_single = vcf_file->vcf_data_so_far;
-
-                dispatcher_finalize_one_vb (dispatcher, vcf_file, z_file->vcf_data_so_far); // this accounting is missing genozip header (with the section list), and the random_access section
+                dispatcher_finalize_one_vb (dispatcher); 
             }
         }
     } while (!dispatcher_is_done (dispatcher));
@@ -654,14 +676,13 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);
 
-    zip_display_compression_ratio (dispatcher);
+    zip_display_compression_ratio (dispatcher, is_last_file);
 
 finish:
-    z_file->disk_size            = z_file->disk_so_far;
-    z_file->num_lines_single     = 0;
-    z_file->vcf_data_size_single = 0;
-    evb->z_data.len              = 0;
-    evb->z_next_header_i         = 0;
+    z_file->disk_size              = z_file->disk_so_far;
+    z_file->vcf_data_so_far_single = 0;
+    evb->z_data.len                = 0;
+    evb->z_next_header_i           = 0;
     memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));
 
     dispatcher_finish (&dispatcher, &last_variant_block_i);

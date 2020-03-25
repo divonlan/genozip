@@ -23,11 +23,11 @@ extern bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final);
 extern VariantBlockP dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final);
 extern bool dispatcher_has_free_thread (Dispatcher dispatcher);
 extern VariantBlockP dispatcher_get_next_vb (Dispatcher dispatcher);
-extern void dispatcher_finalize_one_vb (Dispatcher dispatcher, ConstFileP file, long long vcf_data_written_so_far);
+extern void dispatcher_finalize_one_vb (Dispatcher dispatcher);
 extern void dispatcher_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
-extern const char *dispatcher_ellapsed_time (Dispatcher dispatcher);
+extern const char *dispatcher_ellapsed_time (Dispatcher dispatcher, bool ever);
 
 #endif

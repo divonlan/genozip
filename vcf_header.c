@@ -136,7 +136,7 @@ void vcf_header_trim_header_line (Buffer *vcf_header_buf)
     // no newline found - nothing to do
 }
 
-// returns offset of header within data, EOF if end of file
+// PIZ: returns offset of header within data, EOF if end of file
 bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
 {
     z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
@@ -159,7 +159,7 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
     if (flag_split) {
         ASSERT0 (!vcf_file, "Error: not expecting vcf_file to be open already in split mode");
         vcf_file = file_open (header->vcf_filename, WRITE, VCF);
-        z_file->vcf_data_size_single = BGEN64 (header->vcf_data_size);
+        vcf_file->vcf_data_size_single = BGEN64 (header->vcf_data_size);
     }
 
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
@@ -167,7 +167,7 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
     vcf_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
 
     if (first_vcf || flag_split) 
-        z_file->num_lines_concat = vcf_file->num_lines_concat = BGEN64 (header->num_lines);
+        z_file->num_lines = BGEN64 (header->num_lines);
 
     if (flag_split) *digest = header->md5_hash_single; // override md5 from genozip header
         

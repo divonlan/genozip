@@ -5,4 +5,3 @@ files is governed by the unmodified license of bzip2/libbzip2 included in this d
 
 The modifications are as follows:
 1) removal of files that are not needed by this project
-2) Addition of the function BZ2_bzoffset() in bzlib.c and bzlib.h

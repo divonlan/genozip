@@ -36,11 +36,9 @@ requirements:
     - bzip2
   host:
     - {{native}}gcc-libs         # [win]
-    - zlib
     - bzip2
   run:
     - {{native}}gcc-libs         # [win]
-    - zlib
     - bzip2
 
 test:
@@ -58,7 +56,7 @@ test:
     - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
     {% endfor %}
     - which genozip.exe  # [win]
-    - genozip --password abc --test test-file.vcf 2>&1  
+    - genozip --password abc --test --quiet test-file.vcf 2>&1  
 
 about:
   home: https://github.com/divonlan/genozip

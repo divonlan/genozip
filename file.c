@@ -26,8 +26,6 @@ File *vcf_file = NULL;
 static StreamP input_decompressor  = NULL; // bcftools or xz - only one at a time
 static StreamP output_compressor = NULL; // bgzip
 
-const unsigned file_estimated_compression_factor_vs_vcf[] = FILE_ESTIMATED_COMPRESSION_FACTOR_VS_VCF;
-
 // global pointers - so the can be compared eg "if (mode == READ)"
 const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
 const char *WRITE = "wb";
@@ -36,10 +34,10 @@ char *file_exts[] = FILE_EXTS;
 
 static FileType file_get_type (const char *filename)
 {
-    for (FileType ft=UNKNOWN_EXT+1; ft < STDIN; ft++)
+    for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < STDIN; ft++)
         if (file_has_ext (filename, file_exts[ft])) return ft;
 
-    return UNKNOWN_EXT;
+    return UNKNOWN_FILE_TYPE;
 }
 
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
@@ -365,6 +363,12 @@ bool file_seek (File *file, int64_t offset,
 
 uint64_t file_tell (File *file)
 {
+    if (command == ZIP && (file->type == VCF_GZ || file->type == VCF_BGZ))
+        return gzconsumed64 ((gzFile)vcf_file->file); 
+    
+    if (command == ZIP && file->type == VCF_BZ2)
+        return BZ2_consumed ((BZFILE *)vcf_file->file); 
+
 #ifdef __APPLE__
     return ftello ((FILE *)file->file);
 #else

@@ -353,9 +353,11 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
     vcf_header.h.data_uncompressed_len = BGEN32 (vcf_header_text->len);
     vcf_header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderVCFHeader));
     vcf_header.num_samples             = BGEN32 (global_num_samples);
-    vcf_header.vcf_data_size           = BGEN64 (vcf_file->vcf_data_size_single) /* 0 if gzipped - will be updated later. */; 
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
-    
+
+    if (vcf_file->type == VCF) // if its a plain VCF then we know the data size now. Otherwise we will update later
+        vcf_header.vcf_data_size       = BGEN64 (vcf_file->vcf_data_size_single);
+
     switch (vcf_file->type) {
         case STDIN   :
         case VCF     : vcf_header.compression_type = COMPRESSION_TYPE_NONE  ; break;
@@ -382,7 +384,8 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
     file_write (z_file, vcf_header_buf.data, vcf_header_buf.len);
 
     z_file->disk_so_far      += vcf_header_buf.len;   // length of GENOZIP data writen to disk
-    z_file->vcf_data_so_far  += vcf_header_text->len; // length of the original VCF header
+    z_file->vcf_data_so_far_single += vcf_header_text->len; // length of the original VCF header
+    z_file->vcf_data_so_far_concat += vcf_header_text->len;
 
     buf_free (&vcf_header_buf); 
 
@@ -900,9 +903,9 @@ void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_co
     header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type                    = BGEN16 (data_type);
     header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
-    header.uncompressed_data_size       = BGEN64 (z_file->vcf_data_so_far);
+    header.uncompressed_data_size       = BGEN64 (z_file->vcf_data_so_far_concat);
     header.num_samples                  = BGEN32 (global_num_samples);
-    header.num_items_concat             = BGEN64 (z_file->num_lines_concat);
+    header.num_items_concat             = BGEN64 (z_file->num_lines);
     header.num_sections                 = BGEN32 (num_sections); 
     header.num_vcf_components           = BGEN32 (z_file->num_vcf_components_so_far);
 
@@ -1004,8 +1007,8 @@ bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, 
 
     // update the header of the single (current) vcf. 
     SectionHeaderVCFHeader *curr_header = &z_file->vcf_header_single;
-    curr_header->vcf_data_size    = BGEN64 (z_file->vcf_data_size_single);
-    curr_header->num_lines        = BGEN64 (z_file->num_lines_single);
+    curr_header->vcf_data_size    = BGEN64 (vcf_file->vcf_data_size_single);
+    curr_header->num_lines        = BGEN64 (vcf_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
 
     md5_finalize (&z_file->md5_ctx_single, &curr_header->md5_hash_single);
