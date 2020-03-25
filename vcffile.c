@@ -260,8 +260,11 @@ void vcffile_estimate_vcf_data_size (VariantBlock *vb)
         ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size;
 
     // for compressed files for which we don't have their size (eg streaming from an http server) - we use
-    // estimates based on our benchmarks for compression ratio of files with and without genotype data
+    // estimates based on a benchmark compression ratio of files with and without genotype data
     else if (vcf_file->type == BCF || vcf_file->type == BCF_GZ || vcf_file->type == BCF_BGZ)
+        // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
+        // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
+        // the bcf is compressed as it normally is.
         ratio = vb->has_genotype_data ? 8.5 : 55;
 
     else if (vcf_file->type == VCF_XZ)

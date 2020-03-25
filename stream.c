@@ -290,21 +290,30 @@ void stream_close_pipes (Stream *stream)
     if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->from_stream_stderr");
 }
 
-void stream_close (Stream **stream)
+int stream_close (Stream **stream, StreamCloseMode close_mode)
 {
-    if (! *stream) return; // nothing to do
+    if (! *stream) return 0; // nothing to do
 
-    if ((*stream)->substream) stream_close (&(*stream)->substream);
-
-#ifdef WIN32
-    TerminateProcess ((*stream)->pid, 9); // ignore errors
-#else
-    kill ((*stream)->pid, 9); // ignore errors
-#endif
+    if ((*stream)->substream) stream_close (&(*stream)->substream, close_mode);
 
     stream_close_pipes (*stream);
+
+    if (close_mode == STREAM_KILL_PROCESS) 
+#ifdef WIN32
+        TerminateProcess ((*stream)->pid, 9); // ignore errors
+#else
+        kill ((*stream)->pid, 9); // ignore errors
+#endif
+    
+    int exit_code = 0; 
+    if (close_mode != STREAM_PROCESS_ALREADY_DEAD)
+        // Terminate process is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)
+        exit_code = stream_wait_for_exit (*stream);
+
     FREE (*stream);
     *stream = NULL;
+
+    return exit_code;
 }
 
 // returns exit status of child
@@ -346,5 +355,5 @@ void stream_abort_if_cannot_run (const char *exec_name)
 #endif
 
     // if we reach here, everything's good - the exec can run.
-    stream_close (&stream);
+    stream_close (&stream, STREAM_KILL_PROCESS);
 }

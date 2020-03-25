@@ -24,7 +24,7 @@ File *z_file   = NULL;
 File *vcf_file = NULL;
 
 static StreamP input_decompressor  = NULL; // bcftools or xz - only one at a time
-static StreamP output_compressor = NULL; // bgzip
+static StreamP output_compressor   = NULL; // bgzip
 
 // global pointers - so the can be compared eg "if (mode == READ)"
 const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
@@ -221,10 +221,10 @@ void file_close (File **file_p,
         
         else if (file->mode == READ && 
                  (file->type == BCF || file->type == BCF_GZ || file->type == BCF_BGZ || file->type == VCF_XZ)) 
-            stream_close (&input_decompressor);
+            stream_close (&input_decompressor, STREAM_WAIT_FOR_PROCESS);
 
         else if (file->mode == WRITE && (file->type == VCF_GZ || file->type == VCF_BGZ)) 
-            stream_close (&output_compressor);
+            stream_close (&output_compressor, STREAM_WAIT_FOR_PROCESS);
 
         else 
             FCLOSE (file->file, file_printname (file));
@@ -419,6 +419,6 @@ void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const c
 // used when aborting due to an error. avoid the compressors outputting their own errors after our process is gone
 void file_kill_external_compressors (void)
 {
-    stream_close (&input_decompressor);
-    stream_close (&output_compressor);
+    stream_close (&input_decompressor, STREAM_KILL_PROCESS);
+    stream_close (&output_compressor, STREAM_KILL_PROCESS);
 }

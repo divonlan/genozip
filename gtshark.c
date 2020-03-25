@@ -119,10 +119,7 @@ static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
     gtshark_check_pipe_for_errors (stdout_data, stream_from_stream_stdout (gtshark), vb_i, sb_i, false);
     gtshark_check_pipe_for_errors (stderr_data, stream_from_stream_stderr (gtshark), vb_i, sb_i, true);
 
-    // wait for gtshark to complete
-    int exit_status = stream_wait_for_exit (gtshark);
-
-    stream_close (&gtshark);
+    int exit_status = stream_close (&gtshark, STREAM_WAIT_FOR_PROCESS);  
 
 #ifndef _WIN32
     ASSERT (!WEXITSTATUS (exit_status), 

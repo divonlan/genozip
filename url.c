@@ -41,11 +41,7 @@ static int url_do_curl_head (const char *url,
     *stderr_len = fread (stderr_data, 1, CURL_RESPONSE_LEN-1, stream_from_stream_stderr (curl));
     stderr_data[*stderr_len] = '\0'; // terminate string
 
-    stream_close_pipes (curl);
-
-    int curl_exit_code = stream_wait_for_exit (curl);
-
-    stream_close (&curl);
+    int curl_exit_code = stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
 
     return curl_exit_code;
 }
@@ -132,5 +128,5 @@ void url_kill_curl (void)
 {
     if (!curl) return; // nothing to do
     
-    stream_close (&curl);
+    stream_close (&curl, STREAM_KILL_PROCESS);
 }
