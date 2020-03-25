@@ -92,3 +92,8 @@
 4.0.4
 - add support for compressing a file directly from a URL
 - remove support for 32-bit Windows (its been broken for a while)
+
+4.0.6
+- bug fixes
+
+Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

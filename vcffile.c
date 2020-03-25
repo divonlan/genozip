@@ -10,13 +10,13 @@
 #endif
 #define Z_LARGE64
 #include <errno.h>
-#include <zlib.h>
 #include <bzlib.h>
 
 #include "genozip.h"
 #include "vcffile.h"
 #include "vb.h"
 #include "file.h"
+#include "zlib/zlib.h"
 
 static void vcffile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_vcf_header)
 {
