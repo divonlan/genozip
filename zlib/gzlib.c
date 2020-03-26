@@ -85,6 +85,7 @@ local void gz_reset(state)
     gz_error(state, Z_OK, NULL);    /* clear error */
     state->x.pos = 0;               /* no uncompressed data yet */
     state->strm.avail_in = 0;       /* no input data yet */
+    state->strm.total_ever_in = 0;  /* no input data ever - added by Divon */
 }
 
 /* Open a gzip file either by name or file descriptor. */
