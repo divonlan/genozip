@@ -78,12 +78,12 @@ typedef struct file_ {
     uint32_t num_vcf_components;       // set from genozip header
 
     // Used for WRITING GENOZIP files
-    uint64_t disk_at_beginning_of_this_vcf_file;     // the value of disk_size when starting to read this vcf file
+    uint64_t disk_at_beginning_of_this_vcf_file;     // z_file: the value of disk_size when starting to read this vcf file
     
-    SectionHeaderVCFHeader vcf_header_first;  // store the first VCF header - we might need to update it at the very end;
-    uint8_t vcf_header_enc_padding[AES_BLOCKLEN-1]; // just so we can overwrite vcf_header with encryption padding
+    SectionHeaderVCFHeader vcf_header_first;         // store the first VCF header - we might need to update it at the very end;
+    uint8_t vcf_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite vcf_header with encryption padding
 
-    SectionHeaderVCFHeader vcf_header_single; // store the VCF header of single component in concat mode
+    SectionHeaderVCFHeader vcf_header_single;        // store the VCF header of single component in concat mode
     uint8_t vcf_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
