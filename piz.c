@@ -997,6 +997,8 @@ static void enforce_v1_limitations (bool is_first_vcf_component)
     ENFORCE(flag_show_gheader, "--show-gheader");
     ENFORCE(flag_show_index, "--show-index");
     ENFORCE(flag_show_headers, "--show-headers");
+    ENFORCE(flag_gt_only, "--flag_gt_only");
+    ENFORCE(flag_strip, "--flag_strip");
 }
 
 // returns true is successfully outputted a vcf file
