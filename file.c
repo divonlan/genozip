@@ -322,6 +322,8 @@ bool file_seek (File *file, int64_t offset,
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
                 bool soft_fail)
 {
+    ASSERT0 (file == z_file, "Error: file_seek only works for z_file");
+
     // check if we can just move the read buffers rather than seeking
     if (file->mode == READ && file->next_read != file->last_read && whence == SEEK_SET) {
 #ifdef __APPLE__
@@ -333,7 +335,7 @@ bool file_seek (File *file, int64_t offset,
         // case: move is within read buffer already in memory (ftello shows the disk location after read of the last buffer)
         // we just change the buffer pointers rather than discarding the buffer and re-reading
         if (move_by <= 0 && move_by >= -(int64_t)file->last_read) {
-            file->next_read = file->last_read + move_by;
+            file->next_read = file->last_read + move_by; // only z_file uses next/last_Read
             return true;
         }
     }
