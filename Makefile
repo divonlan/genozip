@@ -37,7 +37,7 @@ MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimiz
 	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
 		  regions.c samples.c optimize.c dict_id.c hash.c gtshark.c stream.c url.c
 
-CONDA_COMPATIBILITY_SRCS = compatability/visual_c_pthread.c compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/mac_gettime.c
+CONDA_COMPATIBILITY_SRCS = compatibility/visual_c_pthread.c compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/mac_gettime.c
 
 ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c   
 
@@ -51,13 +51,13 @@ CONDA_INCS = aes.h dispatcher.h gloptimize.h optimize.h profiler.h dict_id.h vcf
              base250.h endianness.h md5.h sections.h text_help.h vcf_header.h hash.h stream.h url.h \
              buffer.h file.h move_to_front.h segregate.h text_license.h version.h gtshark.h \
              crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h regions.h samples.h \
-             compatability/visual_c_getopt.h compatability/visual_c_stdbool.h compatability/visual_c_unistd.h \
-             compatability/visual_c_gettime.h compatability/visual_c_stdint.h compatability/visual_c_misc_funcs.h \
-             compatability/visual_c_pthread.h \
-             compatability/mac_gettime.h  
+             compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
+             compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \
+             compatibility/visual_c_pthread.h \
+             compatibility/mac_gettime.h  
 
 ifeq ($(CC),cl)
-	MY_SRCS += compatability/visual_c_gettime.c compatability/visual_c_misc_funcs.c compatability/visual_c_pthread.c
+	MY_SRCS += compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/visual_c_pthread.c
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -72,7 +72,7 @@ else
     endif
     ifeq ($(uname),Darwin)
 # Mac
-		MY_SRCS += compatability/mac_gettime.c
+		MY_SRCS += compatibility/mac_gettime.c
     endif
 endif
 
