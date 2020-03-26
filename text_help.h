@@ -84,6 +84,9 @@ static const char *help_genozip[] = {
 
 static const char *help_genozip_developer[] = {
     "Options useful mostly for developers of genozip:",
+    "",
+    "Usage: as flags for genozip, genounzip, genocat, genols (not all flags are suported on all tools)",
+    "",
     "   --show-time       Show what functions are consuming the most time",
     "",
     "   --show-memory     Show what buffers are consuming the most memory",
