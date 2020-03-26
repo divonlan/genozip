@@ -903,8 +903,10 @@ int main (int argc, char **argv)
 
     unsigned num_files = argc - optind;
 
-    ASSERT (num_files <= 1 || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
-    ASSERT (num_files <= 1 || !flag_show_content,  "%s: --show-content can only work on one file at time", global_cmd);
+    flag_concat = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
+
+    ASSERT (num_files <= 1 || flag_concat || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
+    ASSERT (num_files <= 1 || flag_concat || !flag_show_content,  "%s: --show-content can only work on one file at time", global_cmd);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
@@ -923,8 +925,6 @@ int main (int argc, char **argv)
 
     if (command == HELP) 
         return main_print_help (true);
-
-    flag_concat = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
