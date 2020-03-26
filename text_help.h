@@ -208,7 +208,7 @@ static const char *help_genocat[] = {
     "                     Note: Indels are considered part of a region if their start position is",
     "                     Note: Multiple -r arguments may be specified - this is equivalent to chaining their regions with a comma separator in a single argument",
     "",
-    "   -t --targets      Identical to --regions, provided for pipeline compatability",
+    "   -t --targets      Identical to --regions, provided for pipeline compatibility",
     "",
     "   -s --samples      [^]sample[,...]",
     "                     Shows a subset of samples (individuals). Examples:",
