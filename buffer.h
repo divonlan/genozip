@@ -37,6 +37,7 @@ typedef struct buffer_ {
 
 #define ENT(type, buf, index) ((type *)(&(buf)->data[(index) * sizeof(type)]))
 #define FIRSTENT(type, buf)   ((type *)( (buf)->data))
+#define ARRAY(type, buf)      ((type *)( (buf)->data)) // same as FIRSTENT
 #define LASTENT(type, buf)    ((type *)(&(buf)->data[((buf)->len-1) * sizeof(type)]))
 #define AFTERENT(type, buf)   ((type *)(&(buf)->data[((buf)->len  ) * sizeof(type)]))
 #define NEXTENT(type, buf)    ((type *)(&(buf)->data[((buf)->len++) * sizeof(type)]))
