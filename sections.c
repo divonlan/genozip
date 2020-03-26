@@ -53,12 +53,12 @@ void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
     }
 
     buf_alloc (alc_vb, buf, MAX (buf->len + 1, 50) * sizeof(SectionListEntry), 2, name, vb->variant_block_i);
-
-    SectionListEntry *ent = &((SectionListEntry *)buf->data)[buf->len++];
-    ent->section_type    = header->section_type;
-    ent->variant_block_i = BGEN32 (header->variant_block_i); // big endian in header - convert back to native
-    ent->dict_id         = dict_id;
-    ent->offset          = offset;  // this is a partial offset (within d) - we will correct it later
+    
+    SectionListEntry *ent = NEXTENT (SectionListEntry, buf);
+    ent->section_type     = header->section_type;
+    ent->variant_block_i  = BGEN32 (header->variant_block_i); // big endian in header - convert back to native
+    ent->dict_id          = dict_id;
+    ent->offset           = offset;  // this is a partial offset (within d) - we will correct it later
 }
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file sectinon list - just before 
@@ -69,8 +69,8 @@ void sections_list_concat (VariantBlock *vb, BufferP section_list_buf)
               (z_file->section_list_buf.len + section_list_buf->len) * sizeof(SectionListEntry), 2, 
               "z_file->section_list_buf", 0);
   
-    SectionListEntry *dst = &((SectionListEntry *)z_file->section_list_buf.data)[z_file->section_list_buf.len];
-    SectionListEntry *src = ((SectionListEntry *)section_list_buf->data);
+    SectionListEntry *dst = AFTERENT (SectionListEntry, &z_file->section_list_buf);
+    SectionListEntry *src = FIRSTENT (SectionListEntry, section_list_buf);
 
     // update the offset
     for (unsigned i=0; i < section_list_buf->len; i++)
@@ -86,7 +86,7 @@ void sections_list_concat (VariantBlock *vb, BufferP section_list_buf)
 // called by PIZ I/O thread: zfile_read_on_vb
 uint32_t sections_count_info_b250s (unsigned vb_i)
 {
-    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
+    SectionListEntry *sl = ARRAY (SectionListEntry, &z_file->section_list_buf);    
 
     // skip to the first SEC_INFO_SUBFIELD_B250 (if there is one...)
     while (z_file->sl_cursor < z_file->section_list_buf.len &&
@@ -110,7 +110,7 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
     if (skipped_vb) *skipped_vb = false;
 
     while (z_file->sl_cursor < z_file->section_list_buf.len) {
-       *sl_ent = &((SectionListEntry *)z_file->section_list_buf.data)[z_file->sl_cursor++];
+        *sl_ent = ENT (SectionListEntry, &z_file->section_list_buf, z_file->sl_cursor++);
  
         SectionType sec_type = (*sl_ent)->section_type;
         if (sec_type == SEC_VCF_HEADER) 
@@ -128,13 +128,13 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
 }
 
 // dictionary section iterator. returns true if another dictionary was found.
-bool sections_get_next_dictionary (SectionListEntry **sl_ent)
+bool sections_get_next_dictionary (SectionListEntry **sl_ent) // if *sl_ent==NULL - initialize cursor
 {
-    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
-
+    if (! *sl_ent) z_file->sl_dir_cursor = 0;
+    
     // find the next VB or VCF header section
     while (z_file->sl_dir_cursor < z_file->section_list_buf.len) {
-        *sl_ent = &sl[z_file->sl_dir_cursor++];
+        *sl_ent = ENT (SectionListEntry, &z_file->section_list_buf, z_file->sl_dir_cursor++);
         if (section_type_is_dictionary((*sl_ent)->section_type)) 
             return true;
     }
@@ -145,14 +145,13 @@ bool sections_get_next_dictionary (SectionListEntry **sl_ent)
 // called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
 bool sections_has_more_vcf_components()
 {
-    SectionListEntry *sl = ((SectionListEntry *)z_file->section_list_buf.data);
-
-    return z_file->sl_cursor==0 || sl[z_file->sl_cursor-1].section_type == SEC_VCF_HEADER;
+    return z_file->sl_cursor==0 || 
+           ENT (SectionListEntry, &z_file->section_list_buf, z_file->sl_cursor-1)->section_type == SEC_VCF_HEADER;
 }
 
 void BGEN_sections_list()
 {
-    SectionListEntry *ent = (SectionListEntry *)z_file->section_list_buf.data;
+    SectionListEntry *ent = ARRAY (SectionListEntry, &z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
         ent[i].variant_block_i = BGEN32 (ent[i].variant_block_i);
@@ -179,7 +178,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
 
     fprintf (stderr, "  sections:\n");
 
-    SectionListEntry *ents = (SectionListEntry *)z_file->section_list_buf.data;
+    SectionListEntry *ents = ARRAY (SectionListEntry, &z_file->section_list_buf);
 
     for (unsigned i=0; i < num_sections; i++) {
      
@@ -223,4 +222,16 @@ const char *encryption_name (unsigned encryption_type)
 {
     static const char *names[] = ENCRYPTION_TYPE_NAMES;
     return sections_type_name (encryption_type, names, sizeof(names)/sizeof(names[0]));
+}
+
+// called by PIZ I/O
+uint64_t sections_get_offset_first_section_of_type (SectionType st)
+{
+    SectionListEntry *sl = ARRAY (SectionListEntry, &z_file->section_list_buf);
+
+    for (unsigned i=0; i < z_file->section_list_buf.len; i++)
+        if (sl[i].section_type == st) return sl[i].offset;
+
+    ABORT ("Error in sections_get_offset_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
+    return 0; // never reaches here - squash compiler warning
 }

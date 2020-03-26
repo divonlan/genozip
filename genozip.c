@@ -578,8 +578,8 @@ static void main_genozip (const char *vcf_filename,
     const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
     zip_dispatcher (basename, max_threads, is_last_file);
 
-    if (flag_show_sections) main_show_sections();
-    if (flag_show_content)  main_show_content();
+    if (flag_show_sections && is_last_file) main_show_sections();
+    if (flag_show_content && is_last_file)  main_show_content();
 
     bool remove_vcf_file = z_file && flag_replace && vcf_filename;
 

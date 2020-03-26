@@ -295,6 +295,7 @@ extern uint32_t sections_count_info_b250s (unsigned vb_i);
 extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
 extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
 extern bool sections_has_more_vcf_components(void);
+extern uint64_t sections_get_offset_first_section_of_type (SectionType st);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

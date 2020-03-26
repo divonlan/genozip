@@ -17,5 +17,6 @@ extern void BGEN_random_access (void);
 extern unsigned random_access_sizeof_entry(void);
 extern void random_access_show_index(void);
 extern bool random_access_is_vb_included (uint32_t vb_i, BufferP region_ra_intersection_matrix);
+extern int32_t random_access_get_last_included_vb_i (void);
 
 #endif

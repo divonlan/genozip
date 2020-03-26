@@ -23,7 +23,9 @@ extern void zfile_compress_section_data (VariantBlockP vb, SectionType section_t
 extern void zfile_compress_vb_header (VariantBlockP vb);
 extern void zfile_update_compressed_vb_header (VariantBlockP vb, uint32_t vcf_first_line_i);
 
-extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */);
+typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
+extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom, bool read_format_and_gt_data);
+
 extern void zfile_compress_dictionary_data (VariantBlockP vb, MtfContextP ctx, 
                                             uint32_t num_words, const char *data, uint32_t num_chars);
 extern void zfile_compress_b250_data (VariantBlockP vb, MtfContextP ctx);

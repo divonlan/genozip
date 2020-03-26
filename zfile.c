@@ -684,22 +684,23 @@ int zfile_read_one_section (VariantBlock *vb,
     return header_offset;
 }
 
-void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */)
+void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom, bool read_format_and_gt_data)
 {
-    bool first=true;
-    SectionListEntry *sl_ent;
+    SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_dictionary() will reset cursor 
+
     while (sections_get_next_dictionary (&sl_ent)) {
 
         if (last_vb_i && sl_ent->variant_block_i > last_vb_i) break;
 
-        // upon encountering the first dictionary, move the cursor to the dictionaries, and reset the read buffers
-        if (first) {
-            file_seek (z_file, sl_ent->offset, SEEK_SET, false);
-            first = false;
-        }
+        SectionType st = sl_ent->section_type;
+        if (read_chrom == DICTREAD_CHROM_ONLY   && st != SEC_CHROM_DICT) continue;
+        if (read_chrom == DICTREAD_EXCEPT_CHROM && st == SEC_CHROM_DICT) continue;
+        if (!read_format_and_gt_data && (st == SEC_FORMAT_DICT || st == SEC_FRMT_SUBFIELD_DICT)) continue;
 
-        zfile_read_one_section (evb, sl_ent->variant_block_i,
-                                &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type);    
+        // move the cursor to the dictionary. file_seek is smart not to cause any overhead if no moving is needed
+        file_seek (z_file, sl_ent->offset, SEEK_SET, false);
+
+        zfile_read_one_section (evb, sl_ent->variant_block_i, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st);    
 
         // update dictionaries in z_file->mtf_ctx with dictionary data 
         mtf_integrate_dictionary_fragment (evb, evb->z_data.data);

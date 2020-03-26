@@ -69,6 +69,7 @@ void random_access_update_pos (VariantBlock *vb, int32_t this_pos)
 }
 
 // called by ZIP compute thread, while holding the z_file mutex: merge in the VB's ra_buf in the global z_file one
+// note: the order of the merge is not necessarily the sequential order of VBs
 void random_access_merge_in_vb (VariantBlock *vb)
 {
     pthread_mutex_lock (&ra_mutex);
@@ -129,6 +130,22 @@ bool random_access_is_vb_included (uint32_t vb_i,
     if (!vb_is_included) buf_free (region_ra_intersection_matrix);
 
     return vb_is_included; 
+}
+
+// PIZ I/O threads: get last vb_i that is included in the regions requested with --regions, or -1 if no vb includes regions.
+// used for reading dictionaries from a genozip file - there's no need to read dictionaries beyond this vb_i
+int32_t random_access_get_last_included_vb_i (void)
+{
+    int32_t last_vb_i = -1;
+    for (unsigned ra_i=0; ra_i < z_file->ra_buf.len; ra_i++) { // note that all entries of the same vb_i are together, but vb_i's are not necessarily in seqential order
+        
+        const RAEntry *ra = ENT (RAEntry, &z_file->ra_buf, ra_i);
+        if ((int32_t)ra->variant_block_i <= last_vb_i) continue; // we already decided to include this vb_i - no need to check further
+
+        if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos, NULL))
+            last_vb_i = (int32_t)ra->variant_block_i; 
+    }   
+    return last_vb_i;
 }
 
 // Called by PIZ I/O thread (piz_read_global_area) and ZIP I/O thread (zip_write_global_area)

@@ -192,16 +192,15 @@ void regions_make_chregs(void)
 {
     if (!flag_regions) return; // nothing to do
 
-    Region *regions = (Region *)regions_buf.data;
+    Region *regions = ARRAY (Region, &regions_buf);
     MtfContext *chrom_ctx = &z_file->mtf_ctx[CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
-    chregs = calloc (num_chroms, sizeof (Buffer));
+    chregs = calloc (num_chroms, sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
     
     for (int i=0; i < regions_buf.len; i++) {
 
         Region *reg = &regions[i];
-
         
         int32_t chrom_word_index = NIL; // All chromosomes, unless reg->chrom is defined
         if (reg->chrom) {
@@ -224,7 +223,7 @@ void regions_make_chregs(void)
         }
     }
 
-    buf_destroy (&regions_buf); // free the memory, we don't need it again
+    buf_destroy (&regions_buf); // free the memory, we won't need it again
 
     //regions_display("After regions_make_chregs");
 }
@@ -301,7 +300,7 @@ void regions_transform_negative_to_positive_complement()
 // the ra (=a range of a single chrome within a vb) (represented by the parameters of this funciton) - 
 // filling in a bytemap of the intersection, and returning true if there is any intersection at all
 bool regions_get_ra_intersection (uint32_t chrom_word_index, uint32_t min_pos, uint32_t max_pos,
-                                  char *intersection_array) // out
+                                  char *intersection_array) // optional out
 {
     if (!flag_regions) return true; // nothing to do
 
@@ -314,7 +313,7 @@ bool regions_get_ra_intersection (uint32_t chrom_word_index, uint32_t min_pos, u
         Chreg *chreg = ENT (Chreg, chregs_buf, chreg_i);
 
         if (chreg->start_pos <= max_pos && chreg->end_pos >= min_pos) { // regions are intersecting
-            intersection_array[chreg_i] = true;
+            if (intersection_array) intersection_array[chreg_i] = true;
             intersection_found = true;
         }
     }

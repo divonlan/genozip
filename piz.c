@@ -430,7 +430,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i, bo
     } // for sample block
     
     // change last terminator to a \n
-    next[-1] = '\n';
+    if (is_line_included) next[-1] = '\n';
 
     vb->line_gt_data.len = next - vb->line_gt_data.data;
 
@@ -944,6 +944,7 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
 }
 
+
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
 static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 {
@@ -952,17 +953,20 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 
     // if the user wants to see only the VCF header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
-        // read dictionaries (this also seeks to the start of the dictionaries)
-        zfile_read_all_dictionaries (0);
         
-        // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        regions_make_chregs();
+        if (flag_regions) {
+            zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY, false); // read all CHROM dictionaries - needed for regions_make_chregs()
 
-        // if the regions are negative, transform them to the positive complement instead
-        regions_transform_negative_to_positive_complement();
+            // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
+            regions_make_chregs();
+
+            // if the regions are negative, transform them to the positive complement instead
+            regions_transform_negative_to_positive_complement();
+        }
 
         // read random access, but only if we are going to need it
         if (flag_regions || flag_show_index) {
+            file_seek (z_file, sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS), SEEK_SET, false);
             zfile_read_one_section (evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
 
             zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
@@ -974,6 +978,15 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 
             buf_free (&evb->z_data);
         }
+
+        // get the last vb_i that included in the regions - returns -1 if no vb has the requested regions
+        int32_t last_vb_i = flag_regions ? random_access_get_last_included_vb_i() : 0;
+
+        // read dictionaries (this also seeks to the start of the dictionaries)
+        if (last_vb_i >= 0)
+            zfile_read_all_dictionaries (last_vb_i, 
+                                         flag_regions ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL, // read_chrom
+                                         !flag_gt_only && !flag_drop_genotypes);              // read_format_and_gt_data
     }
     
     file_seek (z_file, 0, SEEK_SET, false);
@@ -1020,7 +1033,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     // read genozip header
     Md5Hash original_file_digest;
 
-    // read genozip header and set the data type when reading the first vcf component of in case of --split, 
+    // read genozip header, dictionaries etc and set the data type when reading the first vcf component of in case of --split, 
     static int16_t data_type = EOF; 
     if (is_first_vcf_component) {
         data_type = piz_read_global_area (&original_file_digest);
@@ -1060,7 +1073,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 
                 bool skipped_vb;
                 static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
-                switch (sections_get_next_header_type(&sl_ent, &skipped_vb, &region_ra_intersection_matrix)) {
+                switch (sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix)) {
                     case SEC_VB_HEADER:  
 
                         // if we skipped VBs or we skipped the sample sections in the last vb, we need to seek forward 
