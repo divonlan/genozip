@@ -227,7 +227,7 @@ windows/%.exe: %.exe
 	@echo Copying $<
 	@cp -f $< $@ 
 
-windows/readme.txt: genozip$(EXE)
+windows/readme.txt: $(EXECUTABLES)
 	@echo Generating $@
 	@./genozip$(EXE)   --help  > $@
 	@printf '%.s-' {1..120}   >> $@
@@ -236,8 +236,6 @@ windows/readme.txt: genozip$(EXE)
 	@./genols$(EXE)    --help >> $@
 	@printf '%.s-' {1..120}   >> $@
 	@./genocat$(EXE)   --help >> $@
-	@git stage $@
-	@(git commit -m windows_files_for_version_$(version) windows/readme.txt $@ ; exit 0)
 
 windows/LICENSE.for-installer.txt: text_license.h
 	@echo Generating $@

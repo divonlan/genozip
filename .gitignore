@@ -21,6 +21,7 @@ data/*
 benchmark.txt
 notes.txt
 to do.txt
+windows/readme.txt
 junk*
 meta.yaml
 windows/LICENSE.for-installer.txt

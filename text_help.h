@@ -112,7 +112,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   --show-threads    Show thread dispatcher activity",
     "",
-    "   --debug-memory    Buffer allocations and destroyings",
+    "   --debug-memory    Buffer allocations and destructions",
 };
 
 static const char *help_genounzip[] = {

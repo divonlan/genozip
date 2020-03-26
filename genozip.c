@@ -82,7 +82,7 @@ static int main_print (const char **text, unsigned num_lines,
         // in Linux and Mac, we can get the actual terminal width
         struct winsize w;
         ioctl(0, TIOCGWINSZ, &w);
-        line_width = w.ws_col;
+        line_width = MAX (40, w.ws_col); // our wrapper cannot work with to small line widths 
 #endif
     }
 
@@ -93,10 +93,14 @@ static int main_print (const char **text, unsigned num_lines,
         // print line with line wraps
         bool wrapped = false;
         while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
-            int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); c>=0 && line[c] != ' '; c--); // find 
+            int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
+                        c>=0 && ((line[c] >= 'A' && line[c] <= 'Z') || 
+                                  (line[c] >= 'a' && line[c] <= 'z') ||
+                                  (line[c] >= '0' && line[c] <= '9')); // wrap lines at - and | too, so we can break very long regex strings like in genocat
+                        c--); // find 
             printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
-            line += c + 1; // skip space too
-            line_len -= c + 1;
+            line += c + (line[c]==' '); // skip space too
+            line_len -= c + (line[c]==' ');
             wrapped = true;
         }
         printf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
