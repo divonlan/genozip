@@ -319,7 +319,7 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
 // returns true if successful. depending on soft_fail, a failure will either emit an error 
 // (and exit) or a warning (and return).
 bool file_seek (File *file, int64_t offset, 
-                int whence, // SEEK_SET, SEEK_CUR or SEEK_END
+                int whence, 
                 bool soft_fail)
 {
     ASSERT0 (file == z_file, "Error: file_seek only works for z_file");

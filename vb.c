@@ -15,10 +15,14 @@ static VariantBlockPool *pool = NULL;
 // one VB outside of pool
 VariantBlock *evb = NULL;
 
-unsigned vb_num_samples_in_sb(const VariantBlock *vb, unsigned sb_i)
+unsigned vb_num_samples_in_sb (const VariantBlock *vb, unsigned sb_i)
 {
-    return sb_i < vb->num_sample_blocks-1 ? vb->num_samples_per_block 
-                                          : global_num_samples % vb->num_samples_per_block;
+    // case: last block has less than a full block of samples
+    if (sb_i == vb->num_sample_blocks-1 && global_num_samples % vb->num_samples_per_block)
+        return global_num_samples % vb->num_samples_per_block;
+
+    else
+        return vb->num_samples_per_block;
 } 
 
 unsigned vb_num_sections(VariantBlock *vb) 
@@ -80,6 +84,7 @@ void vb_release_vb (VariantBlock **vb_p)
 
     buf_free(&vb->sample_iterator);
     buf_free(&vb->genotype_one_section_data);
+    buf_free(&vb->is_sb_included);
     buf_free(&vb->genotype_section_lens_buf);
 
     buf_free (&vb->format_mapper_buf);

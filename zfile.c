@@ -20,6 +20,7 @@
 #include "version.h"
 #include "sections.h"
 #include "gtshark.h"
+#include "samples.h"
 
 #define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
 
@@ -247,8 +248,28 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
     fprintf (stderr, "\n");
 }
 
+static bool zfile_skip_section_by_flags (SectionType st)
+{
+    if (st == SEC_FORMAT_B250 || st == SEC_FORMAT_DICT || st == SEC_GENOTYPE_DATA || st == SEC_FRMT_SUBFIELD_DICT)
+        return flag_drop_genotypes || flag_gt_only || flag_strip;
+
+    if (st == SEC_ID_B250 || st == SEC_ID_DICT)
+        return flag_strip;
+
+    if (st == SEC_QUAL_B250 || st == SEC_QUAL_DICT)
+        return flag_strip;
+
+    if (st == SEC_FILTER_B250 || st == SEC_FILTER_DICT)
+        return flag_strip;
+
+    if (st == SEC_INFO_B250 || st == SEC_INFO_DICT || st == SEC_INFO_SUBFIELD_B250 || st == SEC_INFO_SUBFIELD_DICT)
+        return flag_strip;
+
+    return false; // don't skip this section
+}
+
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
-// when we get here, the header is already unencrypted zfile_read_one_section
+// when we get here, the header is already unencrypted zfile_`one_section
 void zfile_uncompress_section (VariantBlock *vb,
                                void *section_header_p,
                                Buffer *uncompressed_data,
@@ -256,6 +277,8 @@ void zfile_uncompress_section (VariantBlock *vb,
                                SectionType expected_section_type) 
 {
     START_TIMER;
+
+    if (zfile_skip_section_by_flags (expected_section_type)) return; // we skip some sections based on flags
 
     // for DB_DB and DB_GT are not compressed by us as they are already compressed by gtshark
     bool need_decompression = (expected_section_type != SEC_HT_GTSHARK_DB_DB && expected_section_type != SEC_HT_GTSHARK_DB_GT);
@@ -614,21 +637,30 @@ static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len, 
 
 // read section header - called from the I/O thread, but for a specific VB
 // returns offset of header within data, EOF if end of file
-int zfile_read_one_section (VariantBlock *vb, 
-                            uint32_t original_vb_i, // the variant_block_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
-                            Buffer *data, const char *buf_name, /* buffer to append */
-                            unsigned header_size, SectionType expected_sec_type)
+int zfile_read_section (VariantBlock *vb, 
+                        uint32_t original_vb_i, // the variant_block_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
+                        uint32_t sb_i,          // sample block number, NO_SB_I if this section type is not related to samples
+                        Buffer *data, const char *buf_name, // buffer to append 
+                        unsigned header_size, SectionType expected_sec_type,
+                        uint64_t offset)        // offset or SEEK_NONE
 {
-    // note: the first section is always read by zfile_read_one_section(). if it is a v1, or
+    if (zfile_skip_section_by_flags (expected_sec_type)) return 0; // skip if this section is not needed according to flags
+
+    if (sb_i != NO_SB_I && ! *ENT(bool, &vb->is_sb_included, sb_i)) return 0; // skip section if this sample block is excluded by --samples
+
+    // note: the first section is always read by zfile_read_section(). if it is a v1, or
     // if it is not readable (perhaps v1 encrypted) - we assume its a v1 VCF header
     // in v2+ the first section is always an unencrypted SectionHeaderGenozipHeader
-    ASSERT0 (z_file->genozip_version != 1, "Error: zfile_read_one_section cannot read v1 data");
+    ASSERT0 (z_file->genozip_version != 1, "Error: zfile_read_section cannot read v1 data");
 
     bool is_encrypted = (expected_sec_type != SEC_GENOZIP_HEADER) &&
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
     unsigned header_offset = data->len;
     buf_alloc (vb, data, header_offset + header_size, 2, buf_name, 1);
+    
+    // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
+    if (offset != SEEK_NONE) file_seek (z_file, offset, SEEK_SET, false);
 
     SectionHeader *header = zfile_read_from_disk (vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
 
@@ -672,7 +704,7 @@ int zfile_read_one_section (VariantBlock *vb,
             header_size, compressed_offset, st_name(header->section_type));
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
-    buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_one_section", 2);
+    buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_section", 2);
     header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
     // read section data
@@ -684,7 +716,7 @@ int zfile_read_one_section (VariantBlock *vb,
     return header_offset;
 }
 
-void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom, bool read_format_and_gt_data)
+void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom)
 {
     SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_dictionary() will reset cursor 
 
@@ -692,15 +724,13 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
         if (last_vb_i && sl_ent->variant_block_i > last_vb_i) break;
 
+        // cases where we can skip reading these dictionaries because we don't be using them
         SectionType st = sl_ent->section_type;
         if (read_chrom == DICTREAD_CHROM_ONLY   && st != SEC_CHROM_DICT) continue;
         if (read_chrom == DICTREAD_EXCEPT_CHROM && st == SEC_CHROM_DICT) continue;
-        if (!read_format_and_gt_data && (st == SEC_FORMAT_DICT || st == SEC_FRMT_SUBFIELD_DICT)) continue;
-
-        // move the cursor to the dictionary. file_seek is smart not to cause any overhead if no moving is needed
-        file_seek (z_file, sl_ent->offset, SEEK_SET, false);
-
-        zfile_read_one_section (evb, sl_ent->variant_block_i, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st);    
+        if (zfile_skip_section_by_flags (st)) continue;
+        
+        zfile_read_section (evb, sl_ent->variant_block_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st, sl_ent->offset);    
 
         // update dictionaries in z_file->mtf_ctx with dictionary data 
         mtf_integrate_dictionary_fragment (evb, evb->z_data.data);
@@ -738,8 +768,11 @@ void zfile_read_one_vb (VariantBlock *vb)
     //    4b. SEC_PHASE_DATA - phase data
     //    4c. SEC_HAPLOTYPE_DATA or SEC_HAPLOTYPE_GTSHARK - haplotype data
 
-    int vb_header_offset = zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data",
-                                                   sizeof(SectionHeaderVbHeader), SEC_VB_HEADER);
+    SectionListEntry *sl = NULL;
+
+    int vb_header_offset = zfile_read_section (vb, vb->variant_block_i, NO_SB_I, &vb->z_data, "z_data",
+                                               sizeof(SectionHeaderVbHeader), SEC_VB_HEADER, 
+                                               sections_vb_first (vb->variant_block_i, &sl));
 
     // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
     #define vb_header ((SectionHeaderVbHeader *)&vb->z_data.data[vb_header_offset])
@@ -759,56 +792,67 @@ void zfile_read_one_vb (VariantBlock *vb)
 
     // read the 8 fields (CHROM to FORMAT)    
     for (VcfFields f=CHROM; f <= FORMAT; f++) {
+                
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-        zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_CHROM_B250 + f*2);   
+        zfile_read_section (vb, vb->variant_block_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_CHROM_B250 + f*2, 
+                            sections_vb_next(&sl));   
     }
 
     // read the info subfield sections into memory (if any)
     vb->num_info_subfields = sections_count_info_b250s (vb->variant_block_i); // also used later in piz_uncompress_all_sections()
     for (unsigned sf_i=0; sf_i < vb->num_info_subfields; sf_i++) {
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-        zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_INFO_SUBFIELD_B250);    
+
+        zfile_read_section (vb, vb->variant_block_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_INFO_SUBFIELD_B250, 
+                            sections_vb_next (&sl));    
     }
 
-    if (flag_drop_genotypes) return; // if we have --drop-genotypes, no need to read the sample data
-    
     // read the sample data
-    uint32_t num_sample_blocks = BGEN32 (vb_header->num_sample_blocks);
+    uint32_t num_sample_blocks     = BGEN32 (vb_header->num_sample_blocks);
+    uint32_t num_samples_per_block = BGEN32 (vb_header->num_samples_per_block);
+
+    buf_alloc (vb, &vb->is_sb_included, num_sample_blocks * sizeof(bool), 1, "is_sb_included", vb->variant_block_i);
+
     for (unsigned sb_i=0; sb_i < num_sample_blocks; sb_i++) {
 
+        // calculate whether this block is included. zfile_read_section will skip reading and piz_uncompress_all_sections
+        // will skip uncompressing based on this value
+        *NEXTENT (bool, &vb->is_sb_included) = samples_is_sb_included (num_samples_per_block, sb_i);
+ 
         // make sure we have enough space for the section pointers
         buf_alloc (vb, &vb->z_section_headers, sizeof (unsigned) * (section_i + 3), 2, "z_section_headers", 2);
 
         if (vb_header->has_genotype_data) {
+
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GENOTYPE_DATA);
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GENOTYPE_DATA, sections_vb_next(&sl));
         }
 
         if (vb_header->phase_type == PHASE_MIXED_PHASED) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA);
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA, sections_vb_next(&sl));
         }
 
         if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA);    
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA, sections_vb_next(&sl));    
         }
 
         if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_LINE);    
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_LINE, sections_vb_next(&sl));    
 
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_HTI);    
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_HTI, sections_vb_next(&sl));    
 
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_ALLELE);    
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_ALLELE, sections_vb_next(&sl));    
 
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_DB);    
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_DB, sections_vb_next(&sl));    
 
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_one_section (vb, vb->variant_block_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_GT);    
+            zfile_read_section (vb, vb->variant_block_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_GT, sections_vb_next(&sl));    
         }
     }
     
@@ -835,11 +879,11 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     }
 
     // read genozip header
-    uint64_t genozip_header_offset = BGEN64 (footer.genozip_header_offset);
-    file_seek (z_file, genozip_header_offset, SEEK_SET, false);
 
     // note: for v1, we will use this function only for the very first VCF header (which will tell us this is v1)
-    ret = zfile_read_one_section (evb, 0, &evb->z_data, "genozip_header", sizeof(SectionHeaderGenozipHeader), SEC_GENOZIP_HEADER);
+    ret = zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "genozip_header", sizeof(SectionHeaderGenozipHeader), 
+                              SEC_GENOZIP_HEADER, BGEN64 (footer.genozip_header_offset));
+
     ASSERT0 (ret != EOF, "Error: unexpected EOF when reading genozip header");
     
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;

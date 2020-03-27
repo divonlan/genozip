@@ -330,6 +330,8 @@ static void piz_initialize_sample_iterators (VariantBlock *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
+        if (! *ENT(bool, &vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
+
         unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
         
         const uint8_t *next = (const uint8_t *)vb->genotype_sections_data[sb_i].data;
@@ -390,7 +392,7 @@ static void piz_get_genotype_data_line (VariantBlock *vb, unsigned vb_line_i, bo
              sample_i < first_sample + num_samples_in_sb; 
              sample_i++) {
 
-            if (flag_samples && !samples_am_i_included (sample_i)) continue;
+            if (!samples_am_i_included (sample_i)) continue;
 
             const char *snip = NULL; // will be set to a pointer into a dictionary
             
@@ -445,6 +447,8 @@ static void piz_get_phase_data_line (VariantBlock *vb, unsigned vb_line_i)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
+        if (! *ENT(bool, &vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
+
         unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
 
         memcpy (&vb->line_phase_data.data[sb_i * vb->num_samples_per_block],
@@ -460,27 +464,48 @@ static void piz_get_phase_data_line (VariantBlock *vb, unsigned vb_line_i)
 // of pointers, each pointer being a beginning of column data within the section array
 static const char **piz_get_ht_columns_data (VariantBlock *vb)
 {
-    buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 15), 1, "ht_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
+    buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 7), 1, "ht_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
 
-    const char **ht_columns_data = (const char **)vb->ht_columns_data.data;
+    // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
+    // note: in genozip v1 haplotype columns were permuted across the entire samples, as of v2 they are permuted
+    // only within their own sample block
+    const char **ht_columns_data = ARRAY (const char *, &vb->ht_columns_data); 
 
     const unsigned *permutatation_index = (const unsigned *)vb->haplotype_permutation_index.data;
-    unsigned max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
+    const unsigned max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
 
-    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
-        unsigned permuted_ht_i = permutatation_index[ht_i];
-        unsigned sb_i    = permuted_ht_i / max_ht_per_block; // get haplotype sample block per this ht is
-        unsigned row     = permuted_ht_i % max_ht_per_block; // get row transposed haplotype sample block. column=line_i
-        unsigned sb_ht_i = row * vb->num_lines;              // index within haplotype block 
-
-        ht_columns_data[ht_i] = &vb->haplotype_sections_data[sb_i].data[sb_ht_i];
-    }
-
-    // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 32bit and 64bit assignments)
+    // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     buf_alloc (vb, &vb->column_of_zeros, vcf_file->max_lines_per_vb, 1, "column_of_zeros", 0);
     buf_zero (&vb->column_of_zeros);
 
-    for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 15; ht_i++)
+    for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
+
+        bool is_sb_included = *ENT(bool, &vb->is_sb_included, sb_i);
+
+        for (unsigned ht_i = sb_i * max_ht_per_block; 
+             ht_i < MIN ((sb_i+1) * max_ht_per_block, vb->num_haplotypes_per_line); 
+             ht_i++) {
+
+            if (!is_sb_included) { // for sample blocks excluded by --samples, just have columns of 0 for the convenience of the permuting loop
+                ht_columns_data[ht_i] = vb->column_of_zeros.data;
+                continue;
+            }
+
+            unsigned permuted_ht_i = permutatation_index[ht_i];
+            //unsigned sb_i    = permuted_ht_i / max_ht_per_block; // get haplotype sample block per this ht is
+
+
+            unsigned row     = permuted_ht_i % max_ht_per_block; // get row transposed haplotype sample block. column=line_i
+            unsigned sb_ht_i = row * vb->num_lines;              // index within haplotype block 
+
+            ht_columns_data[ht_i] = &vb->haplotype_sections_data[sb_i].data[sb_ht_i];
+
+            ASSERT (ht_columns_data[ht_i], 
+                    "Error in piz_get_ht_columns_data: haplotype column is NULL for vb_i=%u sb_i=%u sb_ht_i=%u", vb->variant_block_i, sb_i, sb_ht_i);
+        }
+    }
+
+    for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 7; ht_i++)
         ht_columns_data[ht_i] = vb->column_of_zeros.data;
 
     return ht_columns_data;
@@ -491,34 +516,68 @@ static void piz_get_haplotype_data_line (VariantBlock *vb, unsigned vb_line_i, c
 {
     START_TIMER;
 
-    // this loop can consume up to 25-50% of the entire decompress compute time (tested with 1KGP data)
-    // note: we do memory assignment 64 bit at time (its about 10% faster than byte-by-byte)
+    const uint32_t max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
+
     uint64_t *next = (uint64_t *)vb->line_ht_data.data;
-    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i += 8) 
+
+    if (flag_samples) memset (vb->line_ht_data.data, 0, vb->num_haplotypes_per_line); // if we're not filling in all samples, initialize to 0;
+
+    uint32_t ht_i = 0;
+    for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
+
+        bool is_sb_included = *ENT(bool, &vb->is_sb_included, sb_i);
+        if (!is_sb_included) {
+            next += (max_ht_per_block & 0xfffffff8) / 8; // just if we can, but need to stay aligned to 8 bytes
+            continue;
+        }
+
+        // this loop can consume up to 25-50% of the entire decompress compute time (tested with 1KGP data)
+        // note: we do memory assignment 64 bit at time (its about 10% faster than byte-by-byte)
+        
+        // start from the nearest block 8 columns that includes our start column (might include some previous columns too)
+        // but if already done start from the next one that is not done
+        for (ht_i = MAX (ht_i, (sb_i * max_ht_per_block) & 0xfffffff8);
+             ht_i < MIN ((sb_i+1) * max_ht_per_block, vb->num_haplotypes_per_line); 
+             ht_i += 8) {
+
 #ifdef __LITTLE_ENDIAN__
-        *(next++) = ((uint64_t)(uint8_t)ht_columns_data[ht_i    ][vb_line_i]      ) |  // this is LITTLE ENDIAN order
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 1][vb_line_i] << 8 ) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 2][vb_line_i] << 16) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 3][vb_line_i] << 24) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 4][vb_line_i] << 32) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 5][vb_line_i] << 40) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 6][vb_line_i] << 48) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 7][vb_line_i] << 56) ;  // no worries if num_haplotypes_per_line is not a multiple of 4 - we have extra columns of zero
+            *(next++) = ((uint64_t)(uint8_t)ht_columns_data[ht_i    ][vb_line_i]      ) |  // this is LITTLE ENDIAN order
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 1][vb_line_i] << 8 ) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 2][vb_line_i] << 16) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 3][vb_line_i] << 24) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 4][vb_line_i] << 32) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 5][vb_line_i] << 40) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 6][vb_line_i] << 48) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 7][vb_line_i] << 56) ;  // no worries if num_haplotypes_per_line is not a multiple of 4 - we have extra columns of zero
 #else
-        *(next++) = ((uint64_t)(uint8_t)ht_columns_data[ht_i    ][vb_line_i] << 56) |  // this is BIG ENDIAN order
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 1][vb_line_i] << 48) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 2][vb_line_i] << 40) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 3][vb_line_i] << 32) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 4][vb_line_i] << 24) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 5][vb_line_i] << 16) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 6][vb_line_i] << 8 ) |
-                    ((uint64_t)(uint8_t)ht_columns_data[ht_i + 7][vb_line_i]      ) ;  
+            *(next++) = ((uint64_t)(uint8_t)ht_columns_data[ht_i    ][vb_line_i] << 56) |  // this is BIG ENDIAN order
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 1][vb_line_i] << 48) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 2][vb_line_i] << 40) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 3][vb_line_i] << 32) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 4][vb_line_i] << 24) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 5][vb_line_i] << 16) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 6][vb_line_i] << 8 ) |
+                        ((uint64_t)(uint8_t)ht_columns_data[ht_i + 7][vb_line_i]      ) ;  
 #endif
+        }
+    }
 
-    // check if this row has now haplotype data (no GT field) despite some other rows in the VB having data
+    // check if this row has no haplotype data (no GT field) despite some other rows in the VB having data
     PizDataLine *dl = &vb->data_lines.piz[vb_line_i];
-    dl->has_haplotype_data = vb->line_ht_data.data[0] != '-'; // either the entire line is '-' or there is no '-' in the line
-
+    
+    // check to see if this line has any sample with haplotype info (when not using --samples, this loop
+    // usually terminates in the first iteration - so not adding a lot of overhead)
+    dl->has_haplotype_data = false;
+    for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
+        // it can be '-' in three scenarios. 
+        // 1. '-' - line has no GT despite other lines in the VB having - seg_complete_missing_lines sets it all to '-'
+        // 2. 0   - initialized above ^ and not filled in due to --samples 
+        // 3. 0   - it comes from a column of zeros set in piz_get_ht_columns_data - due to --samples
+        if (vb->line_ht_data.data[ht_i] != '-' && vb->line_ht_data.data[ht_i] != 0) { 
+            dl->has_haplotype_data = true; // found one sample that has haplotype
+            break;
+        }
+    }
     COPY_TIMER(vb->profile.piz_get_haplotype_data_line);
 }
 
@@ -574,18 +633,19 @@ static void piz_merge_line(VariantBlock *vb, unsigned vb_line_i, bool has_13)
     // add samples
     for (unsigned sample_i=0; sample_i < global_num_samples; sample_i++) {
 
-        if (flag_samples && !samples_am_i_included (sample_i)) continue;
+        if (!samples_am_i_included (sample_i)) continue;
 
         // add haplotype data - ploidy haplotypes per sample 
         if (dl->has_haplotype_data) {
 
             PhaseType phase = (vb->phase_type == PHASE_MIXED_PHASED ? (PhaseType)vb->line_phase_data.data[sample_i]
                                                                     : vb->phase_type);
-            ASSERT (phase=='/' || phase=='|' || phase=='1' || phase=='*', "Error: invalid phase character '%c' line_i=%u sample_i=%u", phase, vb_line_i + vb->first_line, sample_i+1);
+            ASSERT (phase=='/' || phase=='|' || phase=='1' || phase=='*', 
+                    "Error: invalid phase character '%c' line_i=%u sample_i=%u", phase, vb_line_i + vb->first_line, sample_i+1);
 
             for (unsigned p=0; p < vb->ploidy ; p++) {
                 
-                unsigned char ht = vb->line_ht_data.data[sample_i * vb->ploidy + p];
+                uint8_t ht = vb->line_ht_data.data[sample_i * vb->ploidy + p];
                 if (ht == '.') // unknown
                     *(next++) = ht;
 
@@ -861,7 +921,15 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        unsigned num_samples_in_sb = (sb_i == vb->num_sample_blocks-1 ? global_num_samples % vb->num_samples_per_block : vb->num_samples_per_block);
+        // skip uncompressing this sample block if it is excluded by --samples
+        if (! *ENT(bool, &vb->is_sb_included, sb_i)) {
+            section_i += (vb->has_genotype_data ? 1 : 0) + 
+                         (vb->phase_type == PHASE_MIXED_PHASED) + 
+                         (vb->has_haplotype_data ? (header->is_gtshark ? 5 : 1) : 0); // just advance section_i
+            continue;
+        }
+
+        unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
 
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) {
@@ -876,7 +944,7 @@ static void piz_uncompress_all_sections (VariantBlock *vb)
             zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], &vb->phase_sections_data[sb_i], "phase_sections_data", SEC_PHASE_DATA);
             
             unsigned expected_size = vb->num_lines * num_samples_in_sb;
-            ASSERT (vb->phase_sections_data[sb_i].len==expected_size, 
+            ASSERT (vb->phase_sections_data[sb_i].len == expected_size, 
                     "Error: unexpected size of phase_sections_data[%u]: expecting %u but got %u", sb_i, expected_size, vb->phase_sections_data[sb_i].len)
         }
 
@@ -955,7 +1023,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
     if (!flag_header_only) {
         
         if (flag_regions) {
-            zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY, false); // read all CHROM dictionaries - needed for regions_make_chregs()
+            zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM dictionaries - needed for regions_make_chregs()
 
             // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
             regions_make_chregs();
@@ -966,8 +1034,9 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 
         // read random access, but only if we are going to need it
         if (flag_regions || flag_show_index) {
-            file_seek (z_file, sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS), SEEK_SET, false);
-            zfile_read_one_section (evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS);
+
+            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, 
+                                sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS));
 
             zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
 
@@ -984,9 +1053,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 
         // read dictionaries (this also seeks to the start of the dictionaries)
         if (last_vb_i >= 0)
-            zfile_read_all_dictionaries (last_vb_i, 
-                                         flag_regions ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL, // read_chrom
-                                         !flag_gt_only && !flag_drop_genotypes);              // read_format_and_gt_data
+            zfile_read_all_dictionaries (last_vb_i, flag_regions ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
     }
     
     file_seek (z_file, 0, SEEK_SET, false);
@@ -1001,7 +1068,7 @@ static void enforce_v1_limitations (bool is_first_vcf_component)
     ENFORCE(flag_test, "--test");
     ENFORCE(flag_split, "--split");
     ENFORCE(flag_regions, "--regions");
-    ENFORCE(flag_drop_genotypes, "--drop-genotypes");
+    ENFORCE(flag_samples, "--samples");
     ENFORCE(flag_show_b250, "--show-b250");
     ENFORCE(flag_show_dict, "--show-dict");
     ENFORCE(dict_id_show_one_b250.num, "--show-one-b250");
@@ -1010,6 +1077,7 @@ static void enforce_v1_limitations (bool is_first_vcf_component)
     ENFORCE(flag_show_gheader, "--show-gheader");
     ENFORCE(flag_show_index, "--show-index");
     ENFORCE(flag_show_headers, "--show-headers");
+    ENFORCE(flag_drop_genotypes, "--drop-genotypes");
     ENFORCE(flag_gt_only, "--flag_gt_only");
     ENFORCE(flag_strip, "--flag_strip");
 }

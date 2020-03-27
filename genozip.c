@@ -95,8 +95,8 @@ static int main_print (const char **text, unsigned num_lines,
         while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
             int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
                         c>=0 && ((line[c] >= 'A' && line[c] <= 'Z') || 
-                                  (line[c] >= 'a' && line[c] <= 'z') ||
-                                  (line[c] >= '0' && line[c] <= '9')); // wrap lines at - and | too, so we can break very long regex strings like in genocat
+                                 (line[c] >= 'a' && line[c] <= 'z') ||
+                                 (line[c] >= '0' && line[c] <= '9')); // wrap lines at - and | too, so we can break very long regex strings like in genocat
                         c--); // find 
             printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + (line[c]==' '); // skip space too
@@ -199,8 +199,8 @@ static void main_show_sections (void)
     char vsize[30], zsize[30], zentries_str[30];
 
     fprintf (stderr, "Sections stats:\n");
-    fprintf (stderr, "                           #Sec  #Entries             VCF     %%        GENOZIP     %%   Ratio\n");
-    const char *format = "%22s    %5u  %13s  %9s %5.1f      %9s %5.1f  %6.1f%s\n";
+    fprintf (stderr, "                           #Sec   #Entries                VCF     %%        GENOZIP     %%   Ratio\n");
+    const char *format = "%22s    %6u  %16s  %9s %5.1f      %9s %5.1f  %6.1f%s\n";
 
     // the order in which we want them displayed
     const SectionType secs[] = {
@@ -769,10 +769,10 @@ int main (int argc, char **argv)
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLqQt^Vzm@:Oo:p:B:S:9", // genozip
-            "czfhLqQt^V@:Oo:p:m",        // genounzip
-            "hLVp:qf",                   // genols
-            "hLV@:p:qQ1r:t:s:HGo:f"      // genocat
+            "cdfhlLqQt^Vzm@:Oo:p:B:S:9K", // genozip
+            "czfhLqQt^V@:Oo:p:m",         // genounzip
+            "hLVp:qf",                    // genols
+            "hLV@:p:qQ1r:t:s:HGo:f"       // genocat
         };
 
         int option_index = -1;
@@ -796,6 +796,7 @@ int main (int argc, char **argv)
             case 'q' : flag_quiet         = 1      ; break;
             case 'Q' : flag_noisy         = 1      ; break;
             case '9' : flag_optimize      = 1      ; break;
+            case 'K' : flag_gtshark       = 1      ; break;
             case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
                        // fall through for genocat -r
             case 'r' : flag_regions = true; regions_add (optarg); break;
@@ -879,8 +880,8 @@ int main (int argc, char **argv)
 
     // deal with final setting of flag_quiet that suppresses warnings 
     
-    // don't show progress when outputing to stdout (this includes default mode genocat)
-    if (command == UNZIP && flag_stdout) flag_quiet=true; 
+    // don't show progress or warning when outputing to the termial
+    if (flag_stdout && isatty(1)) flag_quiet=true; 
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||

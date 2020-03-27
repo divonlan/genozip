@@ -142,8 +142,8 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
     z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
     static Buffer vcf_header_section = EMPTY_BUFFER;
 
-    int header_offset = zfile_read_one_section (evb, 0, &vcf_header_section, "vcf_header_section", 
-                                                sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER);
+    int header_offset = zfile_read_section (evb, 0, NO_SB_I, &vcf_header_section, "vcf_header_section", 
+                                            sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER, SEEK_NONE);
     if (header_offset == EOF) {
         buf_free (&vcf_header_section);
         return false; // empty file (or in case of split mode - no more components) - not an error

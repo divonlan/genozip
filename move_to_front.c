@@ -220,6 +220,8 @@ uint32_t mtf_evaluate_snip_seg (VariantBlock *segging_vb, MtfContext *vb_ctx,
                                 const char *snip, uint32_t snip_len,
                                 MtfNode **node /* out */, bool *is_new /* out */)
 {
+    ASSERT0 (vb_ctx, "Error in mtf_evaluate_snip_seg: vb_ctx is NULL");
+
     segging_vb->z_section_entries[vb_ctx->b250_section_type]++; 
 
     if (!snip_len) 
@@ -564,15 +566,18 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
                                     DictIdType dict_id,
                                     SectionType dict_section_type)
 {
-    
-    // check if we have this dict_id already
-    unsigned did_i=0 ; for (; did_i < *num_dict_ids; did_i++) 
-        if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
+    int did_i = dict_id_get_field (dict_id); // will return the field if its a vardata dict, or -1 if not
 
-    MtfContext *ctx = &mtf_ctx[did_i];
+    // case: not a vardata dict - find the did_i if we have it already
+    if (did_i == -1) {
+        did_i=FORMAT+1 ; for (; did_i < *num_dict_ids; did_i++) 
+            if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
+    }
+
+    MtfContext *ctx = &mtf_ctx[did_i]; // existing or new
 
     // case: dict_id encountered for this first time - initialize a mtf_ctx
-    if (did_i == *num_dict_ids) {
+    if (!ctx->dict_id.num) {
 
         //fprintf (stderr,  ("Inserting new vb dict_id=%.8s in did_i=num_dict_ids=%u \n", dict_id_printable (dict_id).id, did_i);
         ASSERT (*num_dict_ids+1 < MAX_DICTS, 
@@ -586,7 +591,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
 
         // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields
         // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-        (*num_dict_ids)++; 
+        (*num_dict_ids) = MAX (FORMAT, did_i) + 1; 
 
         if (num_subfields) (*num_subfields)++;
     }
@@ -683,7 +688,7 @@ void mtf_overlay_dictionaries_to_vb (VariantBlock *vb)
         MtfContext *zf_ctx = &z_file->mtf_ctx[did_i];
         MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
 
-        if (!zf_ctx->dict_id.id[0]) break;
+        if (!zf_ctx->dict_id.num) continue;
 
         if (buf_is_allocated (&zf_ctx->dict) && buf_is_allocated (&zf_ctx->word_list)) { 
             

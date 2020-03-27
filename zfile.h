@@ -24,7 +24,7 @@ extern void zfile_compress_vb_header (VariantBlockP vb);
 extern void zfile_update_compressed_vb_header (VariantBlockP vb, uint32_t vcf_first_line_i);
 
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
-extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom, bool read_format_and_gt_data);
+extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);
 
 extern void zfile_compress_dictionary_data (VariantBlockP vb, MtfContextP ctx, 
                                             uint32_t num_words, const char *data, uint32_t num_chars);
@@ -35,10 +35,13 @@ extern void zfile_compress_haplotype_data_gtshark (VariantBlockP vb, ConstBuffer
 extern void zfile_read_one_vb (VariantBlockP vb);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
-#define MAYBE_V1 (-2) // zfile_read_one_section returns this if the first section cannot be read
-extern int zfile_read_one_section (VariantBlockP vb, uint32_t original_vb_i,
-                                   BufferP data /* buffer to append */, const char *buf_name,
-                                   unsigned header_size, SectionType expected_sec_type);
+#define MAYBE_V1 (-2) // zfile_read_section returns this if the first section cannot be read
+#define SEEK_NONE ((uint64_t)-1)
+#define NO_SB_I ((uint32_t)-1)
+extern int zfile_read_section (VariantBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */
+                               BufferP data /* buffer to append */, const char *buf_name,
+                               unsigned header_size, SectionType expected_sec_type,
+                               uint64_t offset); // offset or SEEK_NONE 
 
 extern void zfile_uncompress_section (VariantBlockP vb, void *section_header, 
                                       BufferP uncompressed_data, const char *uncompressed_data_buf_name,
@@ -51,7 +54,7 @@ extern bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_h
 
 // v1 compatability
 extern bool v1_zfile_read_one_vb (VariantBlockP vb);
-extern int v1_zfile_read_one_section (VariantBlockP vb, BufferP data, const char *buf_name, unsigned header_size, SectionType expected_sec_type, bool allow_eof);
+extern int v1_zfile_read_section (VariantBlockP vb, BufferP data, const char *buf_name, unsigned header_size, SectionType expected_sec_type, bool allow_eof);
 
 
 #endif

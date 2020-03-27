@@ -96,4 +96,9 @@
 4.0.6
 - bug fixes
 
+4.0.8 
+- improve performance for --samples --drop-genotypes --gt-only --strip and --regions - skip reading and decompressing
+  all unneeded sections (previously partially implemented, now complete)
+- bug fixes
+  
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

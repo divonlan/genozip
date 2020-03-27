@@ -142,6 +142,37 @@ bool sections_get_next_dictionary (SectionListEntry **sl_ent) // if *sl_ent==NUL
     return false; // no more dictionaries
 }
 
+// called by PIZ I/O : zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
+uint64_t sections_vb_first (uint32_t vb_i, SectionListEntry **sl_ent)
+{
+    unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
+        *sl_ent = ENT (SectionListEntry, &z_file->section_list_buf, i);
+        if ((*sl_ent)->variant_block_i == vb_i) break; // found!
+    }
+
+    ASSERT (i < z_file->section_list_buf.len, "Error in sections_get_next_vb_section: cannot find any section for vb_i=%u", vb_i);
+
+    return (*sl_ent)->offset;
+}
+
+// called by PIZ I/O : zfile_read_one_vb. Returns the offset of the next section with this vb_i
+uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */)
+{
+    ASSERT0 (*sl_ent, "Error in sections_vb_next: *sl_ent is NULL");
+
+    uint32_t vb_i = (*sl_ent)->variant_block_i;
+
+    // get next section - just verify that it belongs to this vb_i
+    ASSERT (1 + *sl_ent <= LASTENT (SectionListEntry, &z_file->section_list_buf), 
+            "Error in sections_get_next_vb_section: there are no more sections (called for vb_i=%u)", vb_i);
+
+    (*sl_ent)++;
+
+    ASSERT ((*sl_ent)->variant_block_i == vb_i, "Error in sections_get_next_vb_section: vb_i=%u has no more sections", vb_i);
+
+    return (*sl_ent)->offset;
+}
+
 // called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
 bool sections_has_more_vcf_components()
 {

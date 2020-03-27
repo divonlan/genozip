@@ -296,6 +296,8 @@ extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool
 extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
 extern bool sections_has_more_vcf_components(void);
 extern uint64_t sections_get_offset_first_section_of_type (SectionType st);
+extern uint64_t sections_vb_first (uint32_t vb_i, SectionListEntry **sl_ent);
+extern uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

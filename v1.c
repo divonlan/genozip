@@ -11,9 +11,9 @@
 
 #ifdef V1_ZFILE
 
-// note: the first section (i.e. the first VCF header) is always read by v1_zfile_read_one_section() (the current version)
+// note: the first section (i.e. the first VCF header) is always read by v1_zfile_read_section() (the current version)
 // if header.genozip_version is 1, then subsequent sections, including subsequent VCF headers, will be read by this function
-int v1_zfile_read_one_section (VariantBlock *vb,
+int v1_zfile_read_section (VariantBlock *vb,
                                Buffer *data, const char *buf_name, /* buffer to append */
                                unsigned header_size, SectionType expected_sec_type,
                                bool allow_eof)
@@ -131,7 +131,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
             "Error: genozip v1 file - invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
-    buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "v1_zfile_read_one_section", 2);
+    buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "v1_zfile_read_section", 2);
     header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
     // in case we're expecting SEC_VB_HEADER - read the rest of the header: 
@@ -176,7 +176,7 @@ int v1_zfile_read_one_section (VariantBlock *vb,
         }
         else {
             // since we're not in split mode, so we can skip this vcf header section - just return the next section instead
-            return v1_zfile_read_one_section (vb, data, buf_name, header_size, expected_sec_type, allow_eof);
+            return v1_zfile_read_section (vb, data, buf_name, header_size, expected_sec_type, allow_eof);
         }
     }
 
@@ -188,7 +188,7 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
 { 
     START_TIMER;
 
-    int vardata_header_offset = v1_zfile_read_one_section (vb, &vb->z_data, "z_data",
+    int vardata_header_offset = v1_zfile_read_section (vb, &vb->z_data, "z_data",
                                                         sizeof(v1_SectionHeaderVariantData), SEC_VB_HEADER, true);
     if (vardata_header_offset == EOF) {
 
@@ -200,7 +200,7 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
         return false; // end of file
     }
 
-    // note - copying values here z_data.data can get reallocated each call to v1_zfile_read_one_section
+    // note - copying values here z_data.data can get reallocated each call to v1_zfile_read_section
     v1_SectionHeaderVariantData *vardata_header = (v1_SectionHeaderVariantData *)&vb->z_data.data[vardata_header_offset];
     unsigned num_sample_blocks       = BGEN32 (vardata_header->num_sample_blocks);
     bool has_genotype_data           = vardata_header->has_genotype_data;
@@ -217,8 +217,8 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
         // read all sections into memory
         for (unsigned did_i=0; did_i < num_dictionary_sections; did_i++) {
 
-            unsigned start_i = vb->z_data.len; // vb->z_data.len is updated next, by v1_zfile_read_one_section()
-            v1_zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_FRMT_SUBFIELD_DICT, false);    
+            unsigned start_i = vb->z_data.len; // vb->z_data.len is updated next, by v1_zfile_read_section()
+            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_FRMT_SUBFIELD_DICT, false);    
 
             // update dictionaries in z_file->mtf_ctx with dictionary data from this VB
             mtf_integrate_dictionary_fragment (vb, &vb->z_data.data[start_i]);
@@ -236,6 +236,9 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
     
     ((unsigned *)vb->z_section_headers.data)[0] = vardata_header_offset; // variant data header is at index 0
 
+    // is_sb_included was introduced in version 4.0.x, we just set it "all included" for v1
+    buf_alloc (vb, &vb->is_sb_included, num_sample_blocks * sizeof(bool), 1, "is_sb_included", vb->variant_block_i);
+
     unsigned section_i=1;
 
     for (unsigned sb_i=0; sb_i < num_sample_blocks; sb_i++) {
@@ -245,18 +248,20 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
 
         if (has_genotype_data) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GENOTYPE_DATA, false);
+            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GENOTYPE_DATA, false);
         }
 
         if (phase_type == PHASE_MIXED_PHASED) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA, false);
+            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA, false);
         }
 
         if (num_haplotypes_per_line) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_one_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA, false);    
+            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA, false);    
         }
+
+        *ENT (bool, &vb->is_sb_included, sb_i) = true;
     }
     
     COPY_TIMER (vb->profile.zfile_read_one_vb);
@@ -712,7 +717,7 @@ void v1_piz_uncompress_all_sections (VariantBlock *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        unsigned num_samples_in_sb = (sb_i == vb->num_sample_blocks-1 ? global_num_samples % vb->num_samples_per_block : vb->num_samples_per_block);
+        unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
 
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) 
@@ -756,7 +761,7 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
         z_file->v1_next_vcf_header.len < sizeof(v1_SectionHeaderVCFHeader)) { // first VCF header, data moved here by zfile_read_genozip_header()
         
         int ret;
-        ret = v1_zfile_read_one_section (evb, &z_file->v1_next_vcf_header, "z_file->v1_next_vcf_header", 
+        ret = v1_zfile_read_section (evb, &z_file->v1_next_vcf_header, "z_file->v1_next_vcf_header", 
                                          sizeof(v1_SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
 
         if (ret == EOF) {

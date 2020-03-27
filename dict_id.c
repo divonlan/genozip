@@ -39,3 +39,12 @@ const char *dict_id_display_type (DictIdType dict_id)
     if (dict_id_is_vardata_field (dict_id)) return "FIELD";
     return "ERROR!n";
 }
+
+// returns field to which this dict_id belongs, if its a vardata dict_id, or -1 if not
+int dict_id_get_field (DictIdType dict_id)
+{
+    for (VcfFields f=CHROM; f <= FORMAT; f++)
+        if (dict_id.num == dict_id_vardata_fields[f]) return f;
+
+    return -1;
+}

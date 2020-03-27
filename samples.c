@@ -5,6 +5,7 @@
 
 #include "genozip.h"
 #include "buffer.h"
+#include "samples.h"
 
 // referring to sample strings from the --samples command line option
 static Buffer cmd_samples_buf = EMPTY_BUFFER; // an array of (char *)
@@ -12,8 +13,8 @@ static bool cmd_is_negative_samples = false;
 
 // referring to samples in the vcf file
 char *vcf_samples_is_included;                // a bytemap indicating for each sample if it is included
-char **vcf_sample_names;                      // an array of char * to null-terminated names of samples 
-char *vcf_sample_names_data;                  // vcf_sample_names point into here
+static char **vcf_sample_names;               // an array of char * to null-terminated names of samples 
+static char *vcf_sample_names_data;           // vcf_sample_names point into here
 
 void samples_add (const char *samples_str)
 {
@@ -44,9 +45,8 @@ void samples_add (const char *samples_str)
         if (is_duplicate) continue; // skip duplicates "genocat -s sample1,sample2,sample1"
 
         buf_alloc (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf", 0);
-        cmd_samples_buf.len++;
-        
-        *LASTENT (char *, &cmd_samples_buf) = one_sample;
+
+        *NEXTENT (char *, &cmd_samples_buf) = one_sample;
     }
 }
 
@@ -107,9 +107,23 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
     vcf_header_buf->data[vcf_header_buf->len-1] = '\n'; // change last separator from \t
 
     // warn about any --samples items that were not found in the vcf file (all the ones that still remain in the buffer)
-    for (unsigned s=0; s < cmd_samples_buf.len; s++)
-        ASSERTW (false, "Warning: requested sample %s is not found in the VCF file, ignoring it", *ENT(char *, &cmd_samples_buf, s));
+    for (unsigned s=0; s < cmd_samples_buf.len; s++) 
+        ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, &cmd_samples_buf, s));
 
-    //for (i=0; i<global_num_samples; i++) printf ("%u ", vcf_samples_is_included[i]); 
+    //for (i=0; i<global_num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }
 
+// PIZ only: calculates whether a sample block is included, based on --samples. this is called once per sample block
+// in zfile_read_one_vb to set vb->is_sb_included, and thereafter vb->is_sb_included is used
+bool samples_is_sb_included (uint32_t num_samples_per_block, uint32_t sb_i)
+{
+    if (!flag_samples) return true; // all sample blocks are included if --samples if not specified
+
+    for (uint32_t sample_i = sb_i * num_samples_per_block; 
+         sample_i < MIN ((sb_i+1) * num_samples_per_block, global_num_samples);
+         sample_i++)
+
+         if (samples_am_i_included(sample_i)) return true; // at least one sample is included - means the sample block is included
+
+    return false; // no sample in this sample block is included - means the whole sample block is excluded
+}

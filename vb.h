@@ -128,16 +128,17 @@ typedef struct variant_block_ {
     // section data - ready to compress
     Buffer haplotype_permutation_index;
     Buffer haplotype_permutation_index_squeezed; // used by piz to unsqueeze the index and zfile to compress it
-    Buffer optimized_gl_dict;  // GL dictionary data after extra optimization
+    Buffer optimized_gl_dict;         // GL dictionary data after extra optimization
 
     // these are Buffer arrays of size vb->num_sample_blocks allocated once when used for the first time and never freed,
     // unless a subsequent VCF file has more sample blocks, in which case they are first destroyed by vb_cleanup_memory().
     // Each buffer is a string of the data as written to the GENOZIP file
 
-    Buffer *haplotype_sections_data;  // ZIP & PIZ: this is the haplotype character for each haplotype in the transposed sample group
-    Buffer *phase_sections_data;      // ZIP & PIZ: this is the phase character for each genotype in the sample group
+    Buffer *haplotype_sections_data;  // ZIP & PIZ: this is the haplotype character for each haplotype in the transposed sample block
+    Buffer *phase_sections_data;      // ZIP & PIZ: this is the phase character for each genotype in the sample block
     Buffer *genotype_sections_data;   // PIZ only:  each entry is a sample block, scanned columns first, each cell containing num_subfields indices (in base250 - 1 to 5 bytes each) into the subfield dictionaries
-    Buffer genotype_one_section_data; // for zip we need only one section data
+    Buffer is_sb_included;            // PIZ only:  array of bool indicating for each sample block whether it is included, based on --samples 
+    Buffer genotype_one_section_data; // ZIP only:  for zip we need only one section data
     
     // file data 
     Buffer z_data;                    // all headers and section data as read from disk

@@ -286,7 +286,7 @@ static void seg_format_field (VariantBlock *vb, ZipDataLine *dl,
 
     // it is possible that the mapper is not set yet even though not new - if the node is from a previous VB and
     // we have not yet encountered in node in this VB
-    ((SubfieldMapper *)vb->format_mapper_buf.data)[node_index] = format_mapper;
+    *ENT (SubfieldMapper, &vb->format_mapper_buf, node_index) = format_mapper;
 }
 
 static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, char *info_str, unsigned info_len, 
@@ -599,7 +599,8 @@ static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
                               bool *has_13) // out (modified only if found \r)
 {
     uint32_t *next = (uint32_t *)(&vb->line_gt_data.data[vb->line_gt_data.len]);
-    SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[dl->format_mtf_i];
+    SubfieldMapper *format_mapper = ENT (SubfieldMapper, &vb->format_mapper_buf, dl->format_mtf_i);
+    
     int optimized_cell_gt_data_len = cell_gt_data_len;
 
     bool end_of_cell = !cell_gt_data_len;
