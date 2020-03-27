@@ -149,7 +149,6 @@ static const char *help_genounzip[] = {
     "",
     "   -m --md5          Show the MD5 hash of the decompressed VCF file. If the file was originally compressed with --md5, it also verifies that the MD5 of the original VCF file is identical to the MD5 of the decompressed VCF.",
     "                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. ",
-    "                     Note: if the VCF file has Windows-style \\r\\n line endings, the md5 will be that of the modified file with the \\r removed",
     "",
     "   -q --quiet        Don't show the progress indicator or warnings",    
     "",
