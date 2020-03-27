@@ -998,7 +998,7 @@ static void piz_uncompress_variant_block (VariantBlock *vb)
         piz_reconstruct_line_components (vb);
     }
 
-    // v1 compatability
+    // v1 compatibility
     else {
         void v1_piz_uncompress_all_sections (VariantBlockP vb); // forwwrd declaration - these are included at the end of this file
         v1_piz_uncompress_all_sections (vb);

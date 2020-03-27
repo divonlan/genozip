@@ -52,7 +52,7 @@ extern void zfile_uncompress_section (VariantBlockP vb, void *section_header,
 #endif
 extern bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
 
-// v1 compatability
+// v1 compatibility
 extern bool v1_zfile_read_one_vb (VariantBlockP vb);
 extern int v1_zfile_read_section (VariantBlockP vb, BufferP data, const char *buf_name, unsigned header_size, SectionType expected_sec_type, bool allow_eof);
 

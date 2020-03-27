@@ -20,7 +20,7 @@ extern void crypt_continue (VariantBlockP vb, uint8_t *data, unsigned data_len);
 extern void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len);
 extern unsigned crypt_max_padding_len(void);
 
-// genozip v1 compatability
+// genozip v1 compatibility
 extern void v1_crypt_do (VariantBlockP vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i); // used to generate an aes key unique to each block
 
 #endif

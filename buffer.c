@@ -14,7 +14,7 @@
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
-#include "compatability/visual_c_pthread.h"
+#include "compatibility/visual_c_pthread.h"
 #endif
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed

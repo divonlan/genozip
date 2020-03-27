@@ -6,7 +6,7 @@
 #ifndef _MSC_VER // Microsoft compiler
 #include <getopt.h>
 #else
-#include "compatability/visual_c_getopt.h"
+#include "compatibility/visual_c_getopt.h"
 #endif
 #include <fcntl.h>
 #include <dirent.h>

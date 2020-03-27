@@ -20,7 +20,7 @@ uint32_t global_max_memory_per_vb        = 0; // ZIP only: used for reading VCF 
 
 Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
 
-// global - this names go into the dictionary names on disk. to preserve backward compatability, they should not be changed.
+// global - this names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed.
 const char *vcf_field_names[] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
 
 // PIZ: called before reading each genozip file

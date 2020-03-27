@@ -9,7 +9,7 @@
 #ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
 #else
-#include "compatability/visual_c_stdint.h"
+#include "compatibility/visual_c_stdint.h"
 #endif
 #include "genozip.h"
 

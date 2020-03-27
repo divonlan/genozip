@@ -287,7 +287,7 @@ bool file_has_ext (const char *filename, const char *extension)
     return fn_len > ext_len && !strncmp (&filename[fn_len-ext_len], extension, ext_len);
 }
 
-// get basename of a filename - we write our own basename for Visual C and Windows compatability
+// get basename of a filename - we write our own basename for Visual C and Windows compatibility
 const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                            char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */)
 {

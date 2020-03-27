@@ -63,7 +63,7 @@ typedef struct {
 
     uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
     
-    Buffer v1_variant_data;  // backward compatability with genozip v1
+    Buffer v1_variant_data;  // backward compatibility with genozip v1
 } PizDataLine;
 
 // IMPORTANT: if changing fields in VariantBlock, also update vb_release_vb
@@ -201,7 +201,7 @@ typedef struct variant_block_ {
 #   define NUM_COMPRESS_BUFS 4                 // bzlib2 compress requires 4 and decompress requires 2
     Buffer compress_bufs[NUM_COMPRESS_BUFS];   // memory allocation for compressor so it doesn't do its own malloc/free
 
-    // backward compatability with genozip v1 
+    // backward compatibility with genozip v1 
     Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)
     Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by piz_reconstruct_line_components
     Buffer v1_subfields_len_buf;

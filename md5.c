@@ -10,8 +10,8 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #else
-#include "compatability/visual_c_stdint.h"
-#include "compatability/visual_c_stdbool.h"
+#include "compatibility/visual_c_stdint.h"
+#include "compatibility/visual_c_stdbool.h"
 #endif
 
 #include "genozip.h"

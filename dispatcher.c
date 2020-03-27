@@ -7,11 +7,11 @@
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
-#include "compatability/visual_c_pthread.h"
-#include "compatability/visual_c_gettime.h"
+#include "compatibility/visual_c_pthread.h"
+#include "compatibility/visual_c_gettime.h"
 #endif
 #if defined __APPLE__ 
-#include "compatability/mac_gettime.h"
+#include "compatibility/mac_gettime.h"
 #endif
 
 #include "genozip.h"

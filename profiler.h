@@ -9,9 +9,9 @@
 #include "genozip.h"
 #include <time.h>
 #if defined _MSC_VER // Microsoft compiler
-#include "compatability/visual_c_gettime.h"
+#include "compatibility/visual_c_gettime.h"
 #elif defined __APPLE__ 
-#include "compatability/mac_gettime.h"
+#include "compatibility/mac_gettime.h"
 #endif
 
 typedef struct {

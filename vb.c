@@ -130,7 +130,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->gtshark_exceptions_allele);
     buf_free(&vb->gtshark_vcf_data);
 
-    // backward compatability with genozip v1
+    // backward compatibility with genozip v1
     buf_free(&vb->v1_subfields_start_buf);        
     buf_free(&vb->v1_subfields_len_buf);
     buf_free(&vb->v1_num_subfields_buf);

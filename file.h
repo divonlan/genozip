@@ -11,9 +11,9 @@
 #include <stdbool.h>
 #include <pthread.h>
 #else
-#include "compatability/visual_c_stdint.h"
-#include "compatability/visual_c_stdbool.h"
-#include "compatability/visual_c_pthread.h"
+#include "compatibility/visual_c_stdint.h"
+#include "compatibility/visual_c_stdbool.h"
+#include "compatibility/visual_c_pthread.h"
 #endif
 
 #include "buffer.h"
