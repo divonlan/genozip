@@ -96,7 +96,7 @@
 4.0.6
 - bug fixes
 
-4.0.8 
+4.0.9
 - improve performance for --samples --drop-genotypes --gt-only --strip and --regions - skip reading and decompressing
   all unneeded sections (previously partially implemented, now complete)
 - bug fixes
