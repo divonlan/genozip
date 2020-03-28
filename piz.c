@@ -518,27 +518,26 @@ static void piz_get_haplotype_data_line (VariantBlock *vb, unsigned vb_line_i, c
 
     const uint32_t max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
 
-    uint64_t *next = (uint64_t *)vb->line_ht_data.data;
-
     if (flag_samples) memset (vb->line_ht_data.data, 0, vb->num_haplotypes_per_line); // if we're not filling in all samples, initialize to 0;
 
     uint32_t ht_i = 0;
     for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        bool is_sb_included = *ENT(bool, &vb->is_sb_included, sb_i);
-        if (!is_sb_included) {
-            next += (max_ht_per_block & 0xfffffff8) / 8; // just if we can, but need to stay aligned to 8 bytes
-            continue;
-        }
+        if (! *ENT(bool, &vb->is_sb_included, sb_i)) continue;
+
+        // start from the nearest block 8 columns that includes our start column (might include some previous columns too)
+        // but if already done (because it overlaps the previous SB that that SB was included) 
+        // start from the next one that is not done
+        ht_i = MAX (ht_i, (sb_i * max_ht_per_block) & 0xfffffff8);
+
+        uint32_t ht_i_after = MIN ((sb_i+1) * max_ht_per_block, vb->num_haplotypes_per_line);
+
+        uint64_t *next = (uint64_t *)&vb->line_ht_data.data[ht_i];
 
         // this loop can consume up to 25-50% of the entire decompress compute time (tested with 1KGP data)
         // note: we do memory assignment 64 bit at time (its about 10% faster than byte-by-byte)
         
-        // start from the nearest block 8 columns that includes our start column (might include some previous columns too)
-        // but if already done start from the next one that is not done
-        for (ht_i = MAX (ht_i, (sb_i * max_ht_per_block) & 0xfffffff8);
-             ht_i < MIN ((sb_i+1) * max_ht_per_block, vb->num_haplotypes_per_line); 
-             ht_i += 8) {
+        for (; ht_i < ht_i_after; ht_i += 8) {
 
 #ifdef __LITTLE_ENDIAN__
             *(next++) = ((uint64_t)(uint8_t)ht_columns_data[ht_i    ][vb_line_i]      ) |  // this is LITTLE ENDIAN order
@@ -1222,7 +1221,8 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
     if (flag_split) file_close (&vcf_file, true); // close this component file
 
-    if (!flag_test) fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher, false));
+    if (!flag_test && !flag_quiet) 
+        fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher, false));
 
 finish:
 
