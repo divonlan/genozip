@@ -81,16 +81,16 @@ typedef struct variant_block_ {
         
     uint32_t num_data_lines_allocated;
     union {
-        ZipDataLine *zip; // ZIP: if allocated, this array is of length num_data_lines_allocated. its size is determined by the number of the max variant block size
-        PizDataLine *piz; // PIZ: if allocated, this array is of length num_data_lines_allocated. its size is determined by the SectionHeaderVCFHeader.max_lines_per_vb
+        ZipDataLine *zip;      // ZIP: if allocated, this array is of length num_data_lines_allocated. its size is determined by the number of the max variant block size
+        PizDataLine *piz;      // PIZ: if allocated, this array is of length num_data_lines_allocated. its size is determined by the SectionHeaderVCFHeader.max_lines_per_vb
     } data_lines;
 
     uint32_t num_lines;        // number of lines in this variant block
-    uint32_t first_line;       // line number in VCF file (counting from 1), of this variant block
+    uint32_t first_line;       // PIZ only: line number in VCF file (counting from 1), of this variant block
 
     // tracking execution
-    int32_t vb_data_size;       // expected size of decompressed VCF. Might be different than original if --optimize is used.
-    uint32_t vb_data_read_size; // ZIP only: amount of data read in vcffile_read_block() (either plain VCF or gz or bz2) for this VB
+    int32_t vb_data_size;      // expected size of decompressed VCF. Might be different than original if --optimize is used.
+    uint32_t vb_data_read_size;// ZIP only: amount of data read in vcffile_read_block() (either plain VCF or gz or bz2) for this VB
 
     uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation
 

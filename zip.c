@@ -106,8 +106,8 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
         }
 
         if (show) {
-            if (one_up) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", vb->first_line + i)
-            else        bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", vb->first_line + i, n)
+            if (one_up) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
+            else        bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", i, n)
         }
 
         prev = n;
@@ -132,13 +132,13 @@ static unsigned zip_get_genotype_vb_start_len (VariantBlock *vb)
     // offsets into genotype data of individual lines
     buf_alloc (vb, &vb->gt_sb_line_starts_buf, 
                vb->num_lines * vb->num_sample_blocks * sizeof(uint32_t*), 
-               0, "gt_sb_line_starts_buf", vb->first_line);
+               0, "gt_sb_line_starts_buf", vb->variant_block_i);
     uint32_t **gt_sb_line_starts = (uint32_t**)vb->gt_sb_line_starts_buf.data; 
     
     // each entry is the length of a single line in a sample block
     buf_alloc (vb, &vb->gt_sb_line_lengths_buf, 
                vb->num_lines * vb->num_sample_blocks * sizeof(unsigned), 
-               0, "gt_sb_line_lengths_buf", vb->first_line);
+               0, "gt_sb_line_lengths_buf", vb->variant_block_i);
     unsigned *gt_sb_line_lengths = (unsigned *)vb->gt_sb_line_lengths_buf.data; 
     
     // calculate offsets and lengths of genotype data of each sample block
@@ -183,7 +183,7 @@ static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
 
         for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
 
-            if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i + vb->first_line);
+            if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i);
 
             ZipDataLine *dl = &vb->data_lines.zip[line_i];
 
@@ -250,7 +250,7 @@ static void zip_generate_phase_sections (VariantBlock *vb)
     
         // allocate memory for phase data for each sample block - one character per sample
         buf_alloc (vb, &vb->phase_sections_data[sb_i], vb->num_lines * num_samples_in_sb, 
-                   0, "phase_sections_data", vb->first_line);
+                   0, "phase_sections_data", vb->variant_block_i);
 
         // build sample block genetype data
         char *next = vb->phase_sections_data[sb_i].data;
@@ -336,7 +336,7 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
     
     // create a permutation index for the whole variant block, and permuted haplotypes for each sample block        
     buf_alloc (vb, &vb->haplotype_permutation_index, vb->num_haplotypes_per_line * sizeof(uint32_t), 
-               0, "haplotype_permutation_index", vb->first_line);
+               0, "haplotype_permutation_index", vb->variant_block_i);
 
     HaploTypeSortHelperIndex *helper_index = zip_construct_ht_permutation_helper_index (vb);
 
@@ -358,7 +358,7 @@ static void zip_generate_haplotype_sections (VariantBlock *vb)
 
         // allocate memory for haplotype data for each sample block - one character per haplotype
         buf_alloc (vb, &vb->haplotype_sections_data[sb_i], vb->num_lines * num_haplotypes_in_sample_block, 
-                   0, "haplotype_sections_data", vb->first_line);
+                   0, "haplotype_sections_data", vb->variant_block_i);
 
         // build sample block haplptype data - 
         // -- using the helper index to access the haplotypes in sorted order

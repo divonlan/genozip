@@ -434,7 +434,6 @@ void zfile_compress_vb_header (VariantBlock *vb)
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
     vb_header.h.variant_block_i       = BGEN32 (vb->variant_block_i);
     vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
-    vb_header.first_line              = BGEN32 (vb->first_line);
     vb_header.num_lines               = BGEN32 (vb->num_lines);
     vb_header.phase_type              = (char)vb->phase_type; 
     vb_header.has_genotype_data       = vb->has_genotype_data;
