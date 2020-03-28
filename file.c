@@ -40,6 +40,22 @@ static FileType file_get_type (const char *filename)
     return UNKNOWN_FILE_TYPE;
 }
 
+static void file_ask_user_to_confirm_overwrite (const char *filename)
+{
+    fprintf (stderr, "%s: output file %s already exists: in the future, you may use --force to overwrite\n", global_cmd, filename);
+    
+    if (!isatty(0) || !isatty(2)) my_exit(); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
+    
+    fprintf (stderr, "Do you wish to overwrite it now? (y or n) ");
+
+    char response = getc (stdin);
+    if (response != 'y' && response != 'Y') {
+        fprintf (stderr, "No worries, I'm stopping here - no damage done!\n");
+        my_exit();
+    }
+}
+        
+
 File *file_open (const char *filename, FileMode mode, FileType expected_type)
 {
     ASSERT0 (filename, "Error: filename is null");
@@ -71,8 +87,9 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     }
 
     ASSERT (mode != READ  || file_exists, "%s: cannot open %s for reading: %s", global_cmd, filename, error);
-    ASSERT (mode != WRITE || !file_exists || flag_force || (expected_type==VCF && flag_test), 
-            "%s: output file %s already exists: you may use --force to overwrite it", global_cmd, filename);
+
+    if (mode == WRITE && file_exists && !flag_force && !(expected_type==VCF && flag_test))
+        file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
     // copy filename 
     unsigned fn_size = strlen (filename) + 1; // inc. \0
