@@ -103,5 +103,9 @@
   
 4.0.10 
 - updated license
+- added --header-one to genocat
+- query user whether to overwrite an existing file
+- better error messages when running external tools
+- bug fixes
 
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)
