@@ -527,7 +527,7 @@ static void piz_get_haplotype_data_line (VariantBlock *vb, unsigned vb_line_i, c
 
         // start from the nearest block 8 columns that includes our start column (might include some previous columns too)
         // but if already done (because it overlaps the previous SB that that SB was included) 
-        // start from the next one that is not done
+        // start from the next one that is not done. last block of 8 columns might overlap the next vb
         ht_i = MAX (ht_i, (sb_i * max_ht_per_block) & 0xfffffff8);
 
         uint32_t ht_i_after = MIN ((sb_i+1) * max_ht_per_block, vb->num_haplotypes_per_line);
