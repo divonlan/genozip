@@ -93,10 +93,10 @@ EXECUTABLES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
 
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
 
-all: $(EXECUTABLES)
+all: $(EXECUTABLES) LICENSE.non-commercial.txt
 
 debug : CFLAGS  += -DDEBUG -g -O0
-debug : $(DEBUG_EXECUTABLES)
+debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
 
@@ -245,7 +245,7 @@ WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genoc
                          windows/LICENSE.for-installer.txt windows/readme.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt test-file.vcf
+windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
