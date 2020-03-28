@@ -42,9 +42,11 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 
 #define file_is_zip_read(file) ((file)->mode == READ && command == ZIP)
 
+#define file_is_via_ext_decompressor(file) ((file)->type == VCF_XZ || \
+                                            (file)->type == BCF || (file)->type == BCF_GZ  || (file)->type == BCF_BGZ)
+
 // files that are read by ZIP as plain VCF - they might have been decompressed by an external decompressor
-#define file_is_plain_vcf(file) (((file)->type == VCF    || (file)->type == VCF_XZ  || (file)->type == BCF || \
-                                 (file)->type == BCF_GZ || (file)->type == BCF_BGZ || (file)->type == STDIN))
+#define file_is_plain_vcf(file) (((file)->type == VCF || (file)->type == STDIN) || file_is_via_ext_decompressor(file))
 
 #define file_is_vcf(file) (file_is_plain_vcf(file) || (file)->type == VCF_GZ || (file)->type == VCF_BGZ || (file)->type == VCF_BZ2)
 
@@ -132,6 +134,7 @@ extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
 extern void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
+extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
 
 #define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))

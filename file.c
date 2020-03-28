@@ -134,9 +134,11 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
                     redirected_stdout_file = fopen (file->name, mode); // bgzip will redirect its output to this file
                     ASSERT (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
                 }
+                char reason[100];
+                sprintf (reason, "To output a %s file", file_exts[file->type]);
                 output_compressor = stream_create (0, 0, 0, global_max_memory_per_vb, 
                                                    redirected_stdout_file, // output is redirected unless flag_stdout
-                                                   0,
+                                                   0, reason,
                                                    "bgzip", 
                                                    "--stdout", // either to the terminal or redirected to output file
                                                    "--threads", threads_str,
@@ -155,35 +157,30 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
             break;
 
         case VCF_XZ:
-            stream_abort_if_cannot_run ("xz");
-
-            // TO DO (xz and bcftools) - we suck the stderr into a pipe but we never show it - perhaps
-            // in some cases we should?
-
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
-                                               is_remote ? file->name : NULL,     // url
-                                               "xz",                              // exec_name
-                                               is_remote ? SKIP_ARG : file->name, // local file name 
-                                               "--threads=8", "--decompress", "--keep", "--stdout", 
-                                               flag_quiet ? "--quiet" : SKIP_ARG, 
-                                               NULL);            
+                                                is_remote ? file->name : NULL,     // url
+                                                "To compress an .xz file", "xz",   // reason, exec_name
+                                                is_remote ? SKIP_ARG : file->name, // local file name 
+                                                "--threads=8", "--decompress", "--keep", "--stdout", 
+                                                flag_quiet ? "--quiet" : SKIP_ARG, 
+                                                NULL);            
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
 
         case BCF:
         case BCF_GZ:
-        case BCF_BGZ:
-            stream_abort_if_cannot_run ("bcftools");
-
+        case BCF_BGZ: {
+            char reason[100];
+            sprintf (reason, "To compress a %s file", file_exts[file->type]);
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
-                                               is_remote ? file->name : NULL,     // url                                        
-                                               "bcftools",                        // exec_name 
-                                               "view", "-Ov", "--threads", "8", 
-                                               is_remote ? SKIP_ARG : file->name, // local file name 
-                                               NULL);
+                                                is_remote ? file->name : NULL,     // url                                        
+                                                reason, "bcftools",                // reason, exec_name
+                                                "view", "-Ov", "--threads", "8", 
+                                                is_remote ? SKIP_ARG : file->name, // local file name 
+                                                NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
-        
+        }
         default:
             ABORT ("%s: unrecognized file type: %s", global_cmd, file->name);
         }
@@ -276,7 +273,7 @@ void file_close (File **file_p,
 
 size_t file_write (File *file, const void *data, unsigned len)
 {
-    size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file);
+    size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file); // use fwrite - let libc manage write buffers for us
 
     // if we're streaming our genounzip/genocat/genols output to another process and that process has 
     // ended prematurely then exit quietly. in genozip we display an error because this means the resulting
@@ -433,6 +430,21 @@ void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const c
     if (add_string_terminator) buf->data[size] = 0;
 
     FCLOSE (file, filename);
+}
+
+void file_assert_ext_decompressor (void)
+{
+    if (!stream_wait_for_exit (input_decompressor)) return; // just a normal EOF - all good!
+
+    // read error from stderr
+    #define INPUT_DECOMPRESSOR_RESPSONSE_LEN 4096
+    char error_str[INPUT_DECOMPRESSOR_RESPSONSE_LEN];
+
+    FILE *stderr_pipe = stream_from_stream_stderr (input_decompressor);
+    int bytes_read = fread (error_str, 1, INPUT_DECOMPRESSOR_RESPSONSE_LEN-1, stderr_pipe);
+    error_str[bytes_read] = 0; // string terminator
+
+    ABORT ("%s: failed to read file: %s", global_cmd, error_str);
 }
 
 // used when aborting due to an error. avoid the compressors outputting their own errors after our process is gone

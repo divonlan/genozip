@@ -515,7 +515,9 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 {
     const char *password = crypt_get_password();
 
-    StreamP test = stream_create (0, 0, 0, 0, 0, 0, exec_name, "-d", "-t", z_filename,
+    StreamP test = stream_create (0, 0, 0, 0, 0, 0, 
+                                  "To use the --test option",
+                                  exec_name, "-d", "-t", z_filename,
                                   flag_quiet       ? "--quiet"       : SKIP_ARG,
                                   password         ? "--password"    : SKIP_ARG,
                                   password         ? password        : SKIP_ARG,
@@ -891,7 +893,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
     ASSERT (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
 
-    if (flag_gtshark) stream_abort_if_cannot_run ("gtshark"); 
+    if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
 
     // deal with final setting of flag_quiet that suppresses warnings 
     

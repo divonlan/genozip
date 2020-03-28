@@ -112,6 +112,7 @@ static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
                          const char *command, const char *filename_1, const char *filename_2) 
 {
     StreamP gtshark = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0,
+                                     "To use the --gtshark option",
                                      "gtshark", command, filename_1, filename_2, NULL);
 
     // read pipe (up to 10000 characters)

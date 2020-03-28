@@ -33,6 +33,7 @@ static int url_do_curl_head (const char *url,
                              char *stderr_data, unsigned *stderr_len)
 {
     curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0,
+                          "To compress files from a URL",
                           "curl", "--head", url, NULL); // not silent - we want to collect errors
 
     *stdout_len = fread (stdout_data, 1, CURL_RESPONSE_LEN-1, stream_from_stream_stdout (curl));
@@ -119,7 +120,8 @@ FILE *url_open (StreamP parent_stream, const char *url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
-    curl = stream_create (parent_stream, global_max_memory_per_vb, 0, 0, 0, 0, "curl", "--silent", url, NULL);
+    curl = stream_create (parent_stream, global_max_memory_per_vb, 0, 0, 0, 0, 
+                          "To compress files from a URL", "curl", "--silent", url, NULL);
     return stream_from_stream_stdout (curl);
 }
 

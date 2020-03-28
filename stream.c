@@ -81,17 +81,15 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
 #endif // not Windows
 }
 
-static void stream_abort_cannot_exec (const char *exec_name)
+static void stream_abort_cannot_exec (const char *exec_name, const char *reason)
 {
     url_kill_curl();
 
-    fprintf (stderr, "\n%s failed because it could not execute %s.\n"
-                     "%s needs to be installed and in the execution path.\n"
-                     "%s is a separate software package that is not affiliated with genozip in any way.\n"
-                     "Please see 'genozip --help' for more details\n\n",
-             global_cmd, exec_name, exec_name, exec_name);  
+    fprintf (stderr, "%s: %s, %s needs to be installed and in the execution path.\n"
+                     "Note that %s is a separate software package that is not affiliated with genozip in any way.\n",
+             global_cmd, reason, exec_name, exec_name);  
 
-    exit (99);
+    exit (99); // special code - if we are a child existing, the parent will catch this error code
 }
 
 #ifdef _WIN32
@@ -103,7 +101,7 @@ static void stream_set_inheritability (int fd, bool is_inheritable)
 
 static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
                                  FILE *redirect_stdout_file, FILE *redirect_stdin_pipe, 
-                                 unsigned argc, char * const *argv)
+                                 unsigned argc, char * const *argv, const char *reason)
 {
     int cmd_line_len = 0;
     for (int i=0; i < argc; i++)
@@ -142,7 +140,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 
     bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
                                   NULL, NULL, &startup_info, &proc_info);
-    if (!success) stream_abort_cannot_exec (argv[0]);
+    if (!success) stream_abort_cannot_exec (argv[0], reason);
     
     CloseHandle (proc_info.hThread); // child process's main thread
 
@@ -157,7 +155,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 #else // not Windows
 static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
                                 FILE *redirect_stdout_file, FILE *redirect_stdin_pipe, 
-                                unsigned argc, char * const *argv)
+                                unsigned argc, char * const *argv, const char *reason)
 {
     pid_t child_pid = fork();
     if (child_pid) return child_pid; // parent returns
@@ -202,7 +200,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
 
     if (stream_stderr_to_genozip) dup2 (3, STDERR_FILENO); // get back the original stderr
 
-    stream_abort_cannot_exec (argv[0]);
+    stream_abort_cannot_exec (argv[0], reason);
     
     return 0; // squash compiler warning - never reach here
 }
@@ -210,7 +208,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
 #endif
 
 StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream_stdin,
-                       FILE *redirect_stdout_file, const char *input_url_name, 
+                       FILE *redirect_stdout_file, const char *input_url_name, const char *reason,
                        const char *exec_name, ...)
 {
     ASSERT0 (!from_stream_stdout || !redirect_stdout_file, "Error in stream_create: cannot redirect child output to both genozip and a file");
@@ -255,7 +253,8 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
                                      to_stream_stdin    ? genozip_to_stream_stdin  : NULL, 
                                      redirect_stdout_file,
                                      url_input_pipe,
-                                     argc, (char * const *)argv); 
+                                     argc, (char * const *)argv,
+                                     reason); 
 
     if (redirect_stdout_file) 
         FCLOSE (redirect_stdout_file, "redirect_stdout_file"); // the child has this file open, we don't need it
@@ -298,7 +297,7 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
 
     stream_close_pipes (*stream);
 
-    if (close_mode == STREAM_KILL_PROCESS) 
+    if ((*stream)->pid && close_mode == STREAM_KILL_PROCESS) 
 #ifdef WIN32
         TerminateProcess ((*stream)->pid, 9); // ignore errors
 #else
@@ -306,7 +305,7 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
 #endif
     
     int exit_code = 0; 
-    if (close_mode != STREAM_PROCESS_ALREADY_DEAD)
+    if ((*stream)->pid && close_mode != STREAM_PROCESS_ALREADY_DEAD)
         // Terminate process is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)
         exit_code = stream_wait_for_exit (*stream);
 
@@ -336,6 +335,7 @@ int stream_wait_for_exit (Stream *stream)
     if (WEXITSTATUS (exit_status) == 99) exit(1); // child process failed to exec and displayed error message, we can exit silently
 
 #endif
+    stream->pid = 0;
 
     return (int)exit_status;
 }
@@ -344,9 +344,9 @@ FILE *stream_from_stream_stdout (Stream *stream) { return stream->from_stream_st
 FILE *stream_from_stream_stderr (Stream *stream) { return stream->from_stream_stderr; }
 FILE *stream_to_stream_stdin    (Stream *stream) { return stream->to_stream_stdin;    }
 
-void stream_abort_if_cannot_run (const char *exec_name)
+void stream_abort_if_cannot_run (const char *exec_name, const char *reason)
 {
-    StreamP stream = stream_create (0, 1024, 1024, 0, 0, 0, exec_name, NULL); // will abort if cannot run
+    StreamP stream = stream_create (0, 1024, 1024, 0, 0, 0, reason, exec_name, NULL); // will abort if cannot run
 
 // in Windows, the main process fails to CreateProcess and exits. In Unix, it is the child process that 
 // fails to execv, and exits and code 99. The main process catches it in stream_wait_for_exit, and exits.
