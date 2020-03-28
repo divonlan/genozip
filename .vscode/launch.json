@@ -14,7 +14,7 @@
             //"program": "${workspaceFolder}/genols-debug.exe",
             //"program": "${workspaceFolder}/genozip.exe",
 
-            "args":["junk.vcf"],
+            "args":["junk.vcf.xz", "-f"],
             //"args":["test-file.vcf", "-fS1"]
             //"args": ["ftp://ftp.ncbi.nlm.nih.gov/1000genomes/ftp/release/20130502/ALL.chrY.phase3_integrated_v1b.20130502.genotypes.vcf.gz", "-f"],
             //"args": ["file:///c:/users/user/projects/genozip/x.bcf.gz", "-f"],
