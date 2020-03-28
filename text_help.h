@@ -13,13 +13,15 @@ static const char *help_genozip[] = {
     "",
     "Usage: genozip [options]... [files or urls]...",
     "",
-    "See also: genounzip genocat genols",
+    "One or more file names or URLs may be given, or if omitted, standard input is used instead",
     "",
     "Supported input file types: .vcf .vcf.gz .vcf.bgz .vcf.bz2 .vcf.xz .bcf .bcf.gz .bcf.bgz",
     "Note: for .bcf files, bcftools needs to be installed, and for .xz files, xz needs to be installed",
     "",
     "Examples: genozip file1.vcf file2.vcf -o concat.vcf.genozip",
     "          genozip --optimize -password 12345 ftp://ftp.ncbi.nlm.nih.gov/file2.vcf.gz",
+    "",
+    "See also: genounzip genocat genols",
     "",
     "Actions - use at most one of these actions:",
     "   -d --decompress   Same as running genounzip. For more details, run: genounzip --help",
@@ -77,12 +79,11 @@ static const char *help_genozip[] = {
     "                     Note: gtshark also needs to be installed for decompressing files that were compressed with this option. ",
     "                     Note: This option isn't supported on Windows",
     "",
-    "One or more file names may be given, or if omitted, standard input is used instead",
-    "",
-    "genozip is available for free for non-commercial use. Commercial use requires a commercial license",
+    "genozip is available for free for non-commercial use and some other limited use cases. See 'genozip -L for details'. Commercial use requires a commercial license",
 };
 
 static const char *help_genozip_developer[] = {
+    "",
     "Options useful mostly for developers of genozip:",
     "",
     "Usage: as flags for genozip, genounzip, genocat, genols (not all flags are suported on all tools)",
@@ -124,11 +125,13 @@ static const char *help_genounzip[] = {
     "",
     "Usage: genounzip [options]... [files]...",
     "",
-    "See also: genozip genocat genols",
+    "One or more file names must be given"
     "",
     "Examples: genounzip file1.vcf.genozip file2.vcf.genozip",
     "          genounzip file.vcf.genozip --output file.vcf.gz",
     "          genounzip concat.vcf.genozip --split",
+    "",
+    "See also: genozip genocat genols",
     "",
     "Options:",
     "   -c --stdout       Send output to standard output instead of a file",
@@ -166,8 +169,6 @@ static const char *help_genounzip[] = {
     "   -L --license      Show the license terms and conditions for this product",
     "",
     "   -V --version      Display version number",
-    "",
-    "One or more file names must be given"
 };
 
 static const char *help_genols[] = {
@@ -175,6 +176,8 @@ static const char *help_genols[] = {
     "View metadata of VCF (Variant Call Format) files previously compressed with genozip",
     "",
     "Usage: genols [options]... [files or directories]...",
+    "",
+    "One or more file or directory names may be given, or if omitted, genols runs on the current directory",
     "",
     "See also: genozip genounzip genocat",
     "",
@@ -186,8 +189,6 @@ static const char *help_genols[] = {
     "   -L --license      Show the license terms and conditions for this product",
     "",
     "   -V --version      Display version number",
-    "",
-    "One or more file or directory names may be given, or if omitted, genols runs on the current directory",
 };
 
 static const char *help_genocat[] = {
@@ -195,6 +196,8 @@ static const char *help_genocat[] = {
     "Print VCF (Variant Call Format) file(s) previously compressed with genozip",
     "",
     "Usage: genocat [options]... [files]...",
+    "",
+    "One or more file names must be given",
     "",
     "See also: genozip genounzip genols",
     "",
@@ -248,8 +251,6 @@ static const char *help_genocat[] = {
     "   -L --license      Show the license terms and conditions for this product",
     "",
     "   -V --version      Display version number",
-    "",
-    "One or more file names must be given",
 };
 
 static const char *help_footer[] = {

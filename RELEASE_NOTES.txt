@@ -101,4 +101,7 @@
   all unneeded sections (previously partially implemented, now complete)
 - bug fixes
   
+4.0.10 
+- updated license
+
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)
