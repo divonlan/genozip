@@ -419,6 +419,7 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
     memcpy (&z_file->vcf_header_single, &vcf_header, sizeof (vcf_header));
 }
 
+// ZIP compute thread - called from zip_compress_one_vb()
 void zfile_compress_vb_header (VariantBlock *vb)
 {
     uint32_t my_squeeze_len = squeeze_len (vb->num_haplotypes_per_line);
@@ -470,7 +471,8 @@ void zfile_compress_vb_header (VariantBlock *vb)
     vb->z_section_bytes[SEC_VB_HEADER]   -= my_squeeze_len;
 }
 
-// ZIP only: updating of the already compressed variant data section, after completion of all other sections
+// ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed
+// variant data section (compressed by the compute thread in zfile_compress_vb_header) just before writing it to disk
 // note: this updates the z_data in memory (not on disk)
 void zfile_update_compressed_vb_header (VariantBlock *vb, uint32_t vcf_first_line_i)
 {

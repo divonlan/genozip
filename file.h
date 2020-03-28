@@ -64,7 +64,7 @@ typedef struct file_ {
     int64_t vcf_data_so_far_single;    // vcf_file: data read (ZIP) or written (PIZ) to/from vcf file so far
                                        // z_file: VCF data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
     int64_t vcf_data_so_far_concat;    // z_file & ZIP only: VCF data represented in the GENOZIP data written so far for all VCFs
-    uint64_t num_lines;                // z_file: number of lines in all vcf files concatenated into this z_file
+    int64_t num_lines;                 // z_file: number of lines in all vcf files concatenated into this z_file
                                        // vcf_file: number of lines in single vcf file
 
     // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)

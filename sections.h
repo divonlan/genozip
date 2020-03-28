@@ -177,7 +177,7 @@ typedef struct {
  
 typedef struct {
     SectionHeader h;
-    uint32_t first_line;               // line (starting from 1) of this variant block in the VCF file
+    uint32_t first_line;               // line (starting from 1) of this variant block in the single VCF file
                                        // new in v2: if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next concatenated file
     uint32_t num_lines;                // number of variants in this block
     uint8_t phase_type;

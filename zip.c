@@ -533,13 +533,13 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
     file_write (z_file, data_buf->data, data_buf->len);
     COPY_TIMER (vb->profile.write);
 
-    z_file->disk_so_far += (long long)data_buf->len;
+    z_file->disk_so_far += (int64_t)data_buf->len;
     
     if (is_z_data) {
-        if (update_vcf_file) vcf_file->num_lines += (long long)vb->num_lines; // lines in this VCF file
-        z_file->num_lines                        += (long long)vb->num_lines; // lines in all concatenated VCF files in this z_file
-        z_file->vcf_data_so_far_single           += (long long)vb->vb_data_size;
-        z_file->vcf_data_so_far_concat           += (long long)vb->vb_data_size;
+        if (update_vcf_file) vcf_file->num_lines += (int64_t)vb->num_lines; // lines in this VCF file
+        z_file->num_lines                        += (int64_t)vb->num_lines; // lines in all concatenated VCF files in this z_file
+        z_file->vcf_data_so_far_single           += (int64_t)vb->vb_data_size;
+        z_file->vcf_data_so_far_concat           += (int64_t)vb->vb_data_size;
     }
 
     // update section stats
@@ -606,7 +606,6 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     if (!success) goto finish;
 
     mtf_initialize_mutex();
-    //mtf_initialize_mutex (last_variant_block_i+1);
 
     uint32_t max_lines_per_vb=0;
 
