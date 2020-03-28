@@ -227,6 +227,8 @@ static const char *help_genocat[] = {
     "",
     "   -H --no-header    Don't output the VCF header",
     "",
+    "   -1 --header-one   Don't output the VCF header, except for the last line (with the field and sample names)",
+    "",
     "      --header-only  Output only the VCF header",
     "",
     "      --GT-only      For samples, output only genotype (GT) data, dropping the other subfields",

@@ -51,7 +51,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
                 vcf_header_line_filename = filename;
             }
 
-            // subsequent files - if we're in concat mode just compare to make sure the header is the same
+            // ZIP only: subsequent files - if we're in concat mode just compare to make sure the header is the same
             else if (flag_concat && 
                      (vcf_header->len-i != global_vcf_header_line.len || memcmp (global_vcf_header_line.data, &vcf_header->data[i], global_vcf_header_line.len))) {
 
@@ -86,7 +86,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
     return false; // avoid complication warnings
 }
 
-// reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
+// ZIP: reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
 bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
 {    
     z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
@@ -120,7 +120,7 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
     return true; // everything's good
 }
 
-// genocat: remove trip the vcf header line, in case of --drop-genotypes
+// genocat: remove FORMAT and sample names from the vcf header line, in case of --drop-genotypes
 void vcf_header_trim_header_line (Buffer *vcf_header_buf)
 {
     static const char *standard = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO";
@@ -134,6 +134,17 @@ void vcf_header_trim_header_line (Buffer *vcf_header_buf)
             return;
         }
     // no newline found - nothing to do
+}
+
+// genocat: remove all lines but the last from the vcf header, in case of --header-one
+void vcf_header_keep_only_last_line (Buffer *vcf_header_buf)
+{
+    for (int i=vcf_header_buf->len-2; i >= 0; i--) // -2 - skip last newline
+        if (vcf_header_buf->data[i] == '\n') {
+            vcf_header_buf->len = vcf_header_buf->len - i - 1;
+            memcpy (vcf_header_buf->data, &vcf_header_buf->data[i+1], vcf_header_buf->len);
+            break;
+        }
 }
 
 // PIZ: returns offset of header within data, EOF if end of file
@@ -182,7 +193,9 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
         return false;
     }
 
-    if (flag_drop_genotypes) vcf_header_trim_header_line (&vcf_header_buf);
+    if (flag_drop_genotypes) vcf_header_trim_header_line (&vcf_header_buf); // drop FORMAT and sample names
+
+    if (flag_header_one) vcf_header_keep_only_last_line (&vcf_header_buf);  // drop lines except last (with field and samples name)
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
     if ((first_vcf || flag_split) && !flag_no_header)
