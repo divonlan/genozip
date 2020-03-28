@@ -67,6 +67,17 @@ void my_exit(void)
 {
     url_kill_curl();
     file_kill_external_compressors(); 
+
+    // if we're in ZIP - remove failed genozip file (but don't remove partial failed VCF file in PIZ - it might be still useful to the user)
+    if (command == ZIP && z_file && z_file->name) {
+        char *save_name = malloc (strlen (z_file->name)+1);
+        strcpy (save_name, z_file->name);
+
+        file_close (&z_file, false); // also frees file->name
+
+        file_remove (save_name, true);
+    }
+
     exit(1);
 } 
 
