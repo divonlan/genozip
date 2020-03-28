@@ -676,7 +676,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);
 
-    zip_display_compression_ratio (dispatcher, is_last_file);
+    if (!flag_quiet) zip_display_compression_ratio (dispatcher, is_last_file);
 
 finish:
     z_file->disk_size              = z_file->disk_so_far;
