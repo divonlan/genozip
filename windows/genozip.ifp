@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = genozip
-Program version = 4.0.8
+Program version = 4.0.10
 Windows 2000 = 1
 Windows XP = 1
 Windows Server 2003 = 1
@@ -97,9 +97,9 @@ C:\Users\USER\projects\genozip\test-file.vcf
 639 Byte
 vcf
 [Licence_Begin]
-11197
-{\rtf1\fbidis\ansi\ansicpg1252\deff0\deflang1033{\fonttbl{\f0\fnil\fcharset0 MS Shell Dlg;}}
-\viewkind4\uc1\pard\ltrpar\f0\fs15 This program, "genozip", and all documentation, are\par
+11183
+{\rtf1\ansi\ansicpg1252\deff0\deflang1033{\fonttbl{\f0\fnil\fcharset0 MS Shell Dlg;}}
+\viewkind4\uc1\pard\f0\fs15 This program, "genozip", and all documentation, are\par
 copyright (C) 2019-2020 Divon M Lan.  All rights reserved.\par
 \par
 This license covers NON-COMMERCIAL use only. For a\par
