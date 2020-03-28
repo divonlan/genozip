@@ -422,5 +422,5 @@ void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const c
 void file_kill_external_compressors (void)
 {
     stream_close (&input_decompressor, STREAM_KILL_PROCESS);
-    stream_close (&output_compressor, STREAM_KILL_PROCESS);
+    stream_close (&output_compressor,  STREAM_KILL_PROCESS);
 }

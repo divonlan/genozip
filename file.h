@@ -121,7 +121,7 @@ extern File *z_file, *vcf_file;
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
 extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
-extern void file_close (FileP *vcf_file_p, bool cleanup_memory /* optional */);
+extern void file_close (FileP *file_p, bool cleanup_memory /* optional */);
 extern size_t file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern uint64_t file_tell (File *file);
