@@ -108,4 +108,7 @@
 - better error messages when running external tools
 - bug fixes
 
+4.0.11
+- bug fixes
+
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

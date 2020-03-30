@@ -47,7 +47,6 @@ static const char *help_genozip[] = {
     "",
     "   -m --md5          Calculate the MD5 hash of the VCF file. When the resulting file is decompressed, this MD5 will be compared to the MD5 of the decompressed VCF.",
     "                     Note: for compressed files, e.g. myfile.vcf.gz, the MD5 calculated is that of the original, uncompressed file. ",
-    "                     In addition, if the VCF file has Windows-style \\r\\n line endings, the md5 will be that of the modified file with the \\r removed",
     "",
     "   -q --quiet        Don't show the progress indicator or warnings",    
     "",
@@ -77,7 +76,6 @@ static const char *help_genozip[] = {
     "   -K --gtshark      Use gtshark instead of the default bzlib as the final compression step for allele data (the GT subfield in the sample data). ",
     "                     Note: For this to work, gtshark needs to be installed - it is a separate software package that is not affliated with genozip in any way. It can be found here: https://github.com/refresh-bio/GTShark",
     "                     Note: gtshark also needs to be installed for decompressing files that were compressed with this option. ",
-    "                     Note: This option isn't supported on Windows",
     "",
     "genozip is available for free for non-commercial use and some other limited use cases. See 'genozip -L for details'. Commercial use requires a commercial license",
 };
