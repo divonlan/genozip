@@ -37,8 +37,10 @@ typedef struct stream_ {
     FILE *to_stream_stdin;
 #ifdef _WIN32
     HANDLE pid;
+    DWORD exit_status;
 #else
     pid_t pid;
+    int exit_status; // if the process already exited and we got its code, the code will be here and pid==0;
 #endif
 } Stream;
 
@@ -284,7 +286,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
 void stream_close_pipes (Stream *stream)
 {
     // fclose and fail silently (pipes might be gone already after we killed the counter part process?)
-    //if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout"); // BUG here: fclose fails in Windows, core-dumps in Linux
+    if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout"); // BUG here: fclose fails in Windows, core-dumps in Linux
     if (stream->from_stream_stderr) FCLOSE (stream->from_stream_stderr, "stream->from_stream_stderr");
     if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->from_stream_stderr");
 }
@@ -318,26 +320,26 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
 // returns exit status of child
 int stream_wait_for_exit (Stream *stream)
 {
+    if (!stream->pid) return stream->exit_status; // we've already waited for this process and already have the exit status;
+
 #ifdef _WIN32
     // wait for child, so that the terminal doesn't print the prompt until the child is done
     WaitForSingleObject (stream->pid, INFINITE);
     
-    DWORD exit_status = 0;
-    ASSERTW (GetExitCodeProcess (stream->pid, &exit_status), "Error: GetExitCodeProcess() failed: %s", stream_windows_error());
+    ASSERTW (GetExitCodeProcess (stream->pid, &stream->exit_status), "Warning: GetExitCodeProcess() failed: %s", stream_windows_error());
     CloseHandle (stream->pid);
 
 #else
-    int exit_status = 0;
-    waitpid (stream->pid, &exit_status, 0); 
+    waitpid (stream->pid, &stream->exit_status, 0); 
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 
     // fails to execv, and exits and code 99. The main process catches it here, and exits silently.
-    if (WEXITSTATUS (exit_status) == 99) exit(1); // child process failed to exec and displayed error message, we can exit silently
+    if (WEXITSTATUS (stream->exit_status) == 99) exit(1); // child process failed to exec and displayed error message, we can exit silently
 
 #endif
     stream->pid = 0;
 
-    return (int)exit_status;
+    return (int)stream->exit_status;
 }
 
 FILE *stream_from_stream_stdout (Stream *stream) { return stream->from_stream_stdout; }

@@ -42,8 +42,10 @@ static uint32_t vcffile_read_block (char *data)
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
         // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
-        if (!bytes_read && file_is_via_ext_decompressor (vcf_file))
+        if (!bytes_read && file_is_via_ext_decompressor (vcf_file)) {
             file_assert_ext_decompressor();
+            goto finish; // all is good - just a normal end-of-file
+        }
         
         vcf_file->disk_so_far += (int64_t)bytes_read;
 
@@ -80,6 +82,7 @@ static uint32_t vcffile_read_block (char *data)
         ABORT0 ("Invalid file type");
     }
     
+finish:
     COPY_TIMER (evb->profile.read);
 
     return bytes_read;

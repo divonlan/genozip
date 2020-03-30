@@ -140,7 +140,7 @@ extern void file_kill_external_compressors (void);
 #define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))
 
 #define CLOSE(fd,name)  { ASSERTW (!close (fd),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));}
-#define FCLOSE(fp,name) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; }
+#define FCLOSE(fp,name) { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } }
  
 // a hacky addition to bzip2
 extern unsigned long long BZ2_consumed (void* b);
