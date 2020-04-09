@@ -10,7 +10,7 @@
 
 //extern bool txtfile_get_line (VBlockP vb, unsigned line_i_in_file, bool skip_md5_vcf_header, BufferP line, const char *buf_name);
 
-extern void txtfile_read_vcf_header (bool is_first_vcf);
+extern void txtfile_read_header (bool is_first_txt, bool header_required, char first_char);
 extern void txtfile_read_variant_block (VBlockP vb);
 extern unsigned txtfile_write_to_disk (ConstBufferP buf);
 extern void txtfile_estimate_txt_data_size (VBlockP vb);

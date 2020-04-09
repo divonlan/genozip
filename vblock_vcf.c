@@ -8,8 +8,8 @@
 unsigned vb_vcf_num_samples_in_sb (const VBlockVCF *vb, unsigned sb_i)
 {
     // case: last block has less than a full block of samples
-    if (sb_i == vb->num_sample_blocks-1 && global_num_samples % vb->num_samples_per_block)
-        return global_num_samples % vb->num_samples_per_block;
+    if (sb_i == vb->num_sample_blocks-1 && global_vcf_num_samples % vb->num_samples_per_block)
+        return global_vcf_num_samples % vb->num_samples_per_block;
 
     else
         return vb->num_samples_per_block;

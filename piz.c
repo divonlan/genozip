@@ -7,7 +7,7 @@
 #include "profiler.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "vcf_header.h"
+#include "header.h"
 #include "vblock.h"
 #include "base250.h"
 #include "dispatcher.h"
@@ -43,10 +43,10 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
         // read random access, but only if we are going to need it
         if (flag_regions || flag_show_index) {
 
-            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, 
-                                sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS));
+            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_VCF_RANDOM_ACCESS, 
+                                sections_get_offset_first_section_of_type (SEC_VCF_RANDOM_ACCESS));
 
-            zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
+            zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_VCF_RANDOM_ACCESS);
 
             z_file->ra_buf.len /= random_access_sizeof_entry();
             BGEN_random_access();
@@ -115,7 +115,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         data_type = piz_read_global_area (&original_file_digest);
 
         if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
-            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_VCF_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
+            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
 
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5", file_printname (z_file));
@@ -126,8 +126,8 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_vcf_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 
     // read and write VCF header. in split mode this also opens txt_file
-    piz_successful = (data_type != MAYBE_V1) ? vcf_header_genozip_to_vcf (&original_file_digest)
-                                             : v1_vcf_header_genozip_to_vcf (&original_file_digest);
+    piz_successful = (data_type != MAYBE_V1) ? header_genozip_to_txt (&original_file_digest)
+                                             : v1_header_genozip_to_vcf (&original_file_digest);
     
     ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", file_printname (z_file));
     if (!piz_successful || flag_header_only) goto finish;
@@ -150,7 +150,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 bool skipped_vb;
                 static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
                 switch (sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix)) {
-                    case SEC_VBVCF_HEADER:  
+                    case SEC_VCF_VB_HEADER:  
 
                         // if we skipped VBs or we skipped the sample sections in the last vb, we need to seek forward 
                         if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); // 1 more VBs were skipped by sections_get_next_header_type() - we seek forward to this vb
@@ -169,9 +169,9 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                     case SEC_EOF: 
                         break; 
 
-                    case SEC_VCF_HEADER: // 2nd+ vcf header of a concatenated file
+                    case SEC_TXT_HEADER: // 2nd+ vcf header of a concatenated file
                         if (!flag_split) {
-                            vcf_header_genozip_to_vcf (NULL); // skip 2nd+ vcf header if concatenating
+                            header_genozip_to_txt (NULL); // skip 2nd+ vcf header if concatenating
                             continue;
                         }
                         break; // eof if splitting

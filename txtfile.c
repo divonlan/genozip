@@ -20,10 +20,10 @@
 #include "file.h"
 #include "zlib/zlib.h"
 
-static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_vcf_header)
+static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
 {
     if (flag_md5) {
-        if (flag_concat && !is_2ndplus_vcf_header)
+        if (flag_concat && !is_2ndplus_txt_header)
             md5_update (&z_file->md5_ctx_concat, data, len);
         
         md5_update (&z_file->md5_ctx_single, data, len);
@@ -90,14 +90,14 @@ finish:
     return bytes_read;
 }
 
-
 // ZIP: returns the number of lines read 
-void txtfile_read_vcf_header (bool is_first_vcf) 
+void txtfile_read_header (bool is_first_txt, bool header_required,
+                          char first_char)  // first character in every header line
 {
     START_TIMER;
 
     int32_t bytes_read;
-    char prev_char=0;
+    char prev_char='\n';
 
     // read data from the file until either 1. EOF is reached 2. end of vcf header is reached
     while (1) { 
@@ -110,28 +110,29 @@ void txtfile_read_vcf_header (bool is_first_vcf)
 
         if (!bytes_read) { // EOF
             ASSERT (!evb->txt_data.len || evb->txt_data.data[evb->txt_data.len-1] == '\n', 
-                    "Error: invalid VCF file %s while reading VCF header - expecting it to end with a newline", file_printname (txt_file));
+                    "Error: invalid %s header in %s - expecting it to end with a newline", dt_name (txt_file->data_type), file_printname (txt_file));
             goto finish;
         }
 
         const char *this_read = &evb->txt_data.data[evb->txt_data.len];
 
-        ASSERT (evb->txt_data.len || this_read[0] == '#',
-                "Error: %s is missing a VCF header - expecting first character in file to be #", file_printname (txt_file));
+        ASSERT (!header_required || evb->txt_data.len || this_read[0] == first_char,
+                "Error: %s is missing a %s header - expecting first character in file to be %c", 
+                file_printname (txt_file), dt_name (txt_file->data_type), first_char);
 
-        // case VB header: check stop condition - a line beginning with a non-#
+        // check stop condition - a line not beginning with a 'first_char'
         for (int i=0; i < bytes_read; i++) { // start from 1 back just in case it is a newline, and end 1 char before bc our test is 2 chars
             if (this_read[i] == '\n') 
                 evb->num_lines++;   
 
-            if (prev_char == '\n' && this_read[i] != '#') {  
+            if (prev_char == '\n' && this_read[i] != first_char) {  
 
                 uint32_t vcf_header_len = evb->txt_data.len + i;
                 evb->txt_data.len += bytes_read; // increase all the way - just for buf_copy
 
                 // the excess data is for the next vb to read 
-                buf_copy (evb, &txt_file->vcf_unconsumed_data, &evb->txt_data, 1, vcf_header_len,
-                          bytes_read - i, "txt_file->vcf_unconsumed_data", 0);
+                buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, vcf_header_len,
+                          bytes_read - i, "txt_file->unconsumed_txt", 0);
 
                 txt_file->txt_data_so_far_single += i; 
                 evb->txt_data.len = vcf_header_len;
@@ -146,13 +147,13 @@ void txtfile_read_vcf_header (bool is_first_vcf)
     }
 
 finish:        
-    // md5 header - with logic related to is_first_vcf
-    txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_vcf);
+    // md5 header - with logic related to is_first
+    txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt);
 
-    // md5 vcf_unconsumed_data - always
-    txtfile_update_md5 (txt_file->vcf_unconsumed_data.data, txt_file->vcf_unconsumed_data.len, false);
+    // md5 unconsumed_txt - always
+    txtfile_update_md5 (txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len, false);
 
-    COPY_TIMER (evb->profile.txtfile_read_vcf_header);
+    COPY_TIMER (evb->profile.txtfile_read_header);
 }
 
 // ZIP
@@ -165,9 +166,9 @@ void txtfile_read_variant_block (VBlock *vb)
     buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data", vb->vblock_i);    
 
     // start with using the unconsumed data from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
-    if (buf_is_allocated (&txt_file->vcf_unconsumed_data)) {
-        buf_copy (vb, &vb->txt_data, &txt_file->vcf_unconsumed_data, 0 ,0 ,0, "txt_data", vb->vblock_i);
-        buf_free (&txt_file->vcf_unconsumed_data);
+    if (buf_is_allocated (&txt_file->unconsumed_txt)) {
+        buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, 0 ,0 ,0, "txt_data", vb->vblock_i);
+        buf_free (&txt_file->unconsumed_txt);
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
@@ -197,8 +198,8 @@ void txtfile_read_variant_block (VBlock *vb)
             if (unconsumed_len) {
 
                 // the unconcusmed data is for the next vb to read 
-                buf_copy (evb, &txt_file->vcf_unconsumed_data, &vb->txt_data, 1, // evb, because dst buffer belongs to File
-                          vb->txt_data.len - unconsumed_len, unconsumed_len, "txt_file->vcf_unconsumed_data", vb->vblock_i);
+                buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 1, // evb, because dst buffer belongs to File
+                          vb->txt_data.len - unconsumed_len, unconsumed_len, "txt_file->unconsumed_txt", vb->vblock_i);
 
                 vb->txt_data.len -= unconsumed_len;
             }

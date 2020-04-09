@@ -11,7 +11,7 @@
 #include "file.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "vcf_header.h"
+#include "header.h"
 #include "seg_vcf.h"
 #include "vblock.h"
 #include "dispatcher.h"
@@ -330,7 +330,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     // initalize variant block data (everything else is initialzed to 0 via calloc)
     vb->phase_type = PHASE_UNKNOWN;  // phase type of this block
     vb->num_samples_per_block = global_samples_per_block;
-    vb->num_sample_blocks = ceil((float)global_num_samples / (float)vb->num_samples_per_block);
+    vb->num_sample_blocks = ceil((float)global_vcf_num_samples / (float)vb->num_samples_per_block);
 
     unsigned max_genotype_section_len=0; // length in subfields
 
@@ -377,7 +377,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     random_access_merge_in_vb (vb);
 
     // generate & write b250 data for all fields (CHROM to FORMAT)
-    for (VcfFields f=CHROM ; f <= FORMAT ; f++) {
+    for (VcfFields f=VCF_CHROM ; f <= VCF_FORMAT ; f++) {
         MtfContext *ctx = &vb->mtf_ctx[f];
         zip_generate_b250_section (vb_, ctx);
         zfile_compress_b250_data (vb_, ctx);
@@ -389,7 +389,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
                 
         MtfContext *ctx = &vb->mtf_ctx[did_i];
         
-        if (ctx->dict_section_type == SEC_INFO_SUBFIELD_DICT && ctx->mtf_i.len) {
+        if (ctx->dict_section_type == SEC_VCF_INFO_SF_DICT && ctx->mtf_i.len) {
             zip_generate_b250_section (vb_, ctx);
             zfile_compress_b250_data (vb_, ctx);
             num_info_subfields++;
@@ -409,17 +409,17 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
             // we compress each section at a time to save memory
             zip_vcf_generate_genotype_one_section (vb, sb_i); 
 
-            zfile_compress_section_data (vb_, SEC_GENOTYPE_DATA, &vb->genotype_one_section_data);
+            zfile_compress_section_data (vb_, SEC_VCF_GT_DATA, &vb->genotype_one_section_data);
 
             buf_free (&vb->genotype_one_section_data);
         }
 
         if (vb->phase_type == PHASE_MIXED_PHASED)
-            zfile_compress_section_data (vb_, SEC_PHASE_DATA, &vb->phase_sections_data[sb_i]);
+            zfile_compress_section_data (vb_, SEC_VCF_PHASE_DATA, &vb->phase_sections_data[sb_i]);
 
         if (vb->has_haplotype_data) {
             if (!flag_gtshark)
-                zfile_compress_section_data (vb_, SEC_HAPLOTYPE_DATA, &vb->haplotype_sections_data[sb_i]);
+                zfile_compress_section_data (vb_, SEC_VCF_HT_DATA , &vb->haplotype_sections_data[sb_i]);
             else 
                 zfile_vcf_compress_haplotype_data_gtshark (vb, &vb->haplotype_sections_data[sb_i], sb_i);
         }

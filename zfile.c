@@ -19,7 +19,7 @@
 #include "sections.h"
 #include "samples.h"
 #include "squeeze_vcf.h"
-#include "vcf_header.h"
+#include "header.h"
 #include "gtshark_vcf.h"
 
 #define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
@@ -197,9 +197,9 @@ static void zfile_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         // encrypt the header - we use vb_i and section_i to generate a different AES key for each section
         uint32_t vb_i  = BGEN32 (header->vblock_i);
 
-        // note: for SEC_VBVCF_HEADER we will encrypt at the end of calculating this VB when the index data is
+        // note: for SEC_VCF_VB_HEADER we will encrypt at the end of calculating this VB when the index data is
         // known, and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (header->section_type != SEC_VBVCF_HEADER || header->vblock_i == 0 /* terminator vb header */)
+        if (header->section_type != SEC_VCF_VB_HEADER || header->vblock_i == 0 /* terminator vb header */)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, header->section_type, true);
 
         // encrypt the data body 
@@ -230,7 +230,7 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 
     if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
 
-    if (flag_show_b250 && header->h.section_type == SEC_CHROM_B250)
+    if (flag_show_b250 && header->h.section_type == SEC_VCF_CHROM_B250)
         fprintf (stderr, "Base-250 data for VB %u (result of '--show-b250'):\n", BGEN32 (header->h.vblock_i));
         
     fprintf (stderr, "  %*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
@@ -250,19 +250,19 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 
 static bool zfile_skip_section_by_flags (SectionType st)
 {
-    if (st == SEC_FORMAT_B250 || st == SEC_FORMAT_DICT || st == SEC_GENOTYPE_DATA || st == SEC_FRMT_SUBFIELD_DICT)
+    if (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_VCF_GT_DATA || st == SEC_VCF_FRMT_SF_DICT)
         return flag_drop_genotypes || flag_gt_only || flag_strip;
 
-    if (st == SEC_ID_B250 || st == SEC_ID_DICT)
+    if (st == SEC_VCF_ID_B250 || st == SEC_VCF_ID_DICT)
         return flag_strip;
 
-    if (st == SEC_QUAL_B250 || st == SEC_QUAL_DICT)
+    if (st == SEC_VCF_QUAL_B250 || st == SEC_VCF_QUAL_DICT)
         return flag_strip;
 
-    if (st == SEC_FILTER_B250 || st == SEC_FILTER_DICT)
+    if (st == SEC_VCF_FILTER_B250 || st == SEC_VCF_FILTER_DICT)
         return flag_strip;
 
-    if (st == SEC_INFO_B250 || st == SEC_INFO_DICT || st == SEC_INFO_SUBFIELD_B250 || st == SEC_INFO_SUBFIELD_DICT)
+    if (st == SEC_VCF_INFO_B250 || st == SEC_VCF_INFO_DICT || st == SEC_VCF_INFO_SF_B250 || st == SEC_VCF_INFO_SF_DICT)
         return flag_strip;
 
     return false; // don't skip this section
@@ -295,7 +295,7 @@ void zfile_uncompress_section (VBlock *vb,
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
-    bool expecting_vb_i = !section_type_is_dictionary (expected_section_type) && expected_section_type != SEC_VCF_HEADER;
+    bool expecting_vb_i = !section_type_is_dictionary (expected_section_type) && expected_section_type != SEC_TXT_HEADER;
     ASSERT (vblock_i == vb->vblock_i || !expecting_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
              "Error: bad vblock_i: in file=%u in vb=%u", vblock_i, vb->vblock_i);
 
@@ -516,7 +516,7 @@ int zfile_read_section (VBlock *vb,
     SectionHeader *header = zfile_read_from_disk (vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
 
     // case: we're done! no more concatenated files
-    if (!header && expected_sec_type == SEC_VCF_HEADER) return EOF; 
+    if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
 
     ASSERT (header, "Error: Failed to read data from file %s while expecting section type %s: %s", 
             file_printname (z_file), st_name(expected_sec_type), strerror (errno));
@@ -577,8 +577,8 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
         // cases where we can skip reading these dictionaries because we don't be using them
         SectionType st = sl_ent->section_type;
-        if (read_chrom == DICTREAD_CHROM_ONLY   && st != SEC_CHROM_DICT) continue;
-        if (read_chrom == DICTREAD_EXCEPT_CHROM && st == SEC_CHROM_DICT) continue;
+        if (read_chrom == DICTREAD_CHROM_ONLY   && st != SEC_VCF_CHROM_DICT) continue;
+        if (read_chrom == DICTREAD_EXCEPT_CHROM && st == SEC_VCF_CHROM_DICT) continue;
         if (zfile_skip_section_by_flags (st)) continue;
         
         zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st, sl_ent->offset);    
@@ -654,7 +654,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
                 "Error: password is wrong for file %s", file_printname (z_file));
     }
 
-    global_num_samples        = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
+    global_vcf_num_samples        = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
     z_file->genozip_version    = header->genozip_version;
     z_file->num_vcf_components = BGEN32 (header->num_vcf_components);
     *digest                   = header->md5_hash_concat; 
@@ -692,15 +692,15 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     header.data_type                    = BGEN16 ((uint16_t)z_file->data_type);
     header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
     header.uncompressed_data_size       = BGEN64 (z_file->txt_data_so_far_concat);
-    header.num_samples                  = BGEN32 (global_num_samples);
+    header.num_samples                  = BGEN32 (global_vcf_num_samples);
     header.num_items_concat             = BGEN64 (z_file->num_lines);
     header.num_sections                 = BGEN32 (num_sections); 
-    header.num_vcf_components           = BGEN32 (z_file->num_vcf_components_so_far);
+    header.num_vcf_components           = BGEN32 (z_file->num_txt_components_so_far);
 
     if (flag_md5) {
         if (flag_concat) {
             md5_finalize (&z_file->md5_ctx_concat, &header.md5_hash_concat);
-            if (flag_md5 && z_file->num_vcf_components_so_far > 1) fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
+            if (flag_md5 && z_file->num_txt_components_so_far > 1) fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
         } 
         else 
             header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file
@@ -813,14 +813,14 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t vcf_first_line_i)
 // ZIP
 void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
 {
-    SectionHeaderVCFHeader vcf_header;
+    SectionHeaderTxtHeader vcf_header;
     memset (&vcf_header, 0, sizeof(vcf_header)); // safety
 
     vcf_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    vcf_header.h.section_type          = SEC_VCF_HEADER;
+    vcf_header.h.section_type          = SEC_TXT_HEADER;
     vcf_header.h.data_uncompressed_len = BGEN32 (vcf_header_text->len);
-    vcf_header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderVCFHeader));
-    vcf_header.num_samples             = BGEN32 (global_num_samples);
+    vcf_header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader));
+    vcf_header.num_samples             = BGEN32 (global_vcf_num_samples);
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
 
     if (txt_file->type == VCF) // if its a plain VCF then we know the data size now. Otherwise we will update later
@@ -838,7 +838,7 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
         default      : ABORT ("Error: invalid txt_file->type=%u", txt_file->type);
     }
 
-    file_basename (txt_file->name, false, "(stdin)", vcf_header.txt_filename, VCF_FILENAME_LEN);
+    file_basename (txt_file->name, false, "(stdin)", vcf_header.txt_filename, TXT_FILENAME_LEN);
     vcf_header.txt_filename[strlen(vcf_header.txt_filename)- (strlen(file_exts[txt_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
     
     static Buffer vcf_header_buf = EMPTY_BUFFER;
@@ -873,7 +873,7 @@ void zfile_vcf_compress_vb_header (VBlockVCF *vb)
     memset (&vb_header, 0, sizeof(SectionHeaderVbHeader)); // safety
     
     vb_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    vb_header.h.section_type          = SEC_VBVCF_HEADER;
+    vb_header.h.section_type          = SEC_VCF_VB_HEADER;
     vb_header.h.data_uncompressed_len = BGEN32 (my_squeeze_len);
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
     vb_header.h.vblock_i       = BGEN32 (vb->vblock_i);
@@ -881,7 +881,7 @@ void zfile_vcf_compress_vb_header (VBlockVCF *vb)
     vb_header.num_lines               = BGEN32 (vb->num_lines);
     vb_header.phase_type              = (char)vb->phase_type; 
     vb_header.has_genotype_data       = vb->has_genotype_data;
-    vb_header.num_samples             = BGEN32 (global_num_samples);
+    vb_header.num_samples             = BGEN32 (global_vcf_num_samples);
     vb_header.num_haplotypes_per_line = BGEN32 (vb->num_haplotypes_per_line);
     vb_header.num_samples_per_block   = BGEN32 (vb->num_samples_per_block);
     vb_header.num_sample_blocks       = BGEN32 (vb->num_sample_blocks);
@@ -910,8 +910,8 @@ void zfile_vcf_compress_vb_header (VBlockVCF *vb)
 
     // account for haplotype_index as part of the haplotype_data for compression statistics
     // even though we store it in the variant_data header
-    vb->z_section_bytes[SEC_HAPLOTYPE_DATA] += my_squeeze_len;
-    vb->z_section_bytes[SEC_VBVCF_HEADER]   -= my_squeeze_len;
+    vb->z_section_bytes[SEC_VCF_HT_DATA ] += my_squeeze_len;
+    vb->z_section_bytes[SEC_VCF_VB_HEADER]   -= my_squeeze_len;
 }
 
 void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCF *vb, const Buffer *haplotype_sections_data, unsigned sb_i)
@@ -943,18 +943,18 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
     // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
     // integrated into the global dictionaries.
     // Order of sections in a V2 VB:
-    // 1. SEC_VBVCF_HEADER - its data is the haplotype index
-    // 2. SEC_INFO_SUBFIELD_B250 - Fields 1-9 b250 data
-    // 3. SEC_INFO_SUBFIELD_B250 - All INFO subfield data
+    // 1. SEC_VCF_VB_HEADER - its data is the haplotype index
+    // 2. SEC_VCF_INFO_SF_B250 - Fields 1-9 b250 data
+    // 3. SEC_VCF_INFO_SF_B250 - All INFO subfield data
     // 4. All sample data: up 3 sections per sample block:
-    //    4a. SEC_GENOTYPE_DATA - genotype data
-    //    4b. SEC_PHASE_DATA - phase data
-    //    4c. SEC_HAPLOTYPE_DATA or SEC_HAPLOTYPE_GTSHARK - haplotype data
+    //    4a. SEC_VCF_GT_DATA - genotype data
+    //    4b. SEC_VCF_PHASE_DATA - phase data
+    //    4c. SEC_VCF_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
 
     SectionListEntry *sl = NULL;
 
     int vb_header_offset = zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data",
-                                               sizeof(SectionHeaderVbHeader), SEC_VBVCF_HEADER, 
+                                               sizeof(SectionHeaderVbHeader), SEC_VCF_VB_HEADER, 
                                                sections_vb_first (vb->vblock_i, &sl));
 
     // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
@@ -974,10 +974,10 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
     unsigned section_i=1;
 
     // read the 8 fields (CHROM to FORMAT)    
-    for (VcfFields f=CHROM; f <= FORMAT; f++) {
+    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
                 
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_CHROM_B250 + f*2, 
+        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_VCF_CHROM_B250 + f*2, 
                             sections_vb_next(&sl));   
     }
 
@@ -986,7 +986,7 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
     for (unsigned sf_i=0; sf_i < vb->num_info_subfields; sf_i++) {
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
 
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_INFO_SUBFIELD_B250, 
+        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_VCF_INFO_SF_B250, 
                             sections_vb_next (&sl));    
     }
 
@@ -1008,17 +1008,17 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
         if (vb_header->has_genotype_data) {
 
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GENOTYPE_DATA, sections_vb_next(&sl));
+            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_GT_DATA, sections_vb_next(&sl));
         }
 
         if (vb_header->phase_type == PHASE_MIXED_PHASED) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA, sections_vb_next(&sl));
+            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_PHASE_DATA, sections_vb_next(&sl));
         }
 
         if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA, sections_vb_next(&sl));    
+            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_HT_DATA , sections_vb_next(&sl));    
         }
 
         if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
@@ -1054,10 +1054,10 @@ bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, 
     // rewind to beginning of current (latest) vcf header - nothing to do if we can't
     if (!file_seek (z_file, pos_of_current_vcf_header, SEEK_SET, true)) return false;
 
-    unsigned len = crypt_padded_len (sizeof (SectionHeaderVCFHeader));
+    unsigned len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
 
     // update the header of the single (current) vcf. 
-    SectionHeaderVCFHeader *curr_header = &z_file->vcf_header_single;
+    SectionHeaderTxtHeader *curr_header = &z_file->vcf_header_single;
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
     curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);

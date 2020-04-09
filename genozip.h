@@ -69,7 +69,7 @@ typedef struct mtfnode_ *MtfNodeP;
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
 // global parameters - set before any thread is created, and never change
-extern uint32_t    global_num_samples, global_number_displayed_samples, global_max_memory_per_vb, global_max_threads;
+extern uint32_t    global_vcf_num_samples, global_vcf_num_displayed_samples, global_max_memory_per_vb, global_max_threads;
 extern const char *global_cmd;            // set once in main()
 extern ExeType exe_type;
 

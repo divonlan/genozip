@@ -88,15 +88,15 @@ uint32_t sections_count_info_b250s (unsigned vb_i)
 {
     SectionListEntry *sl = ARRAY (SectionListEntry, &z_file->section_list_buf);    
 
-    // skip to the first SEC_INFO_SUBFIELD_B250 (if there is one...)
+    // skip to the first SEC_VCF_INFO_SF_B250 (if there is one...)
     while (z_file->sl_cursor < z_file->section_list_buf.len &&
            sl[z_file->sl_cursor].vblock_i == vb_i &&
-           sl[z_file->sl_cursor].section_type != SEC_INFO_SUBFIELD_B250) 
+           sl[z_file->sl_cursor].section_type != SEC_VCF_INFO_SF_B250) 
         z_file->sl_cursor++;
 
-    // count the SEC_INFO_SUBFIELD_B250 sections
+    // count the SEC_VCF_INFO_SF_B250 sections
     uint32_t start = z_file->sl_cursor;
-    while (sl[z_file->sl_cursor].section_type == SEC_INFO_SUBFIELD_B250) z_file->sl_cursor++;
+    while (sl[z_file->sl_cursor].section_type == SEC_VCF_INFO_SF_B250) z_file->sl_cursor++;
 
     return z_file->sl_cursor - start;
 }
@@ -113,12 +113,12 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
         *sl_ent = ENT (SectionListEntry, &z_file->section_list_buf, z_file->sl_cursor++);
  
         SectionType sec_type = (*sl_ent)->section_type;
-        if (sec_type == SEC_VCF_HEADER) 
-            return SEC_VCF_HEADER;
+        if (sec_type == SEC_TXT_HEADER) 
+            return SEC_TXT_HEADER;
 
-        if (sec_type == SEC_VBVCF_HEADER) {
+        if (sec_type == SEC_VCF_VB_HEADER) {
             if (random_access_is_vb_included ((*sl_ent)->vblock_i, region_ra_intersection_matrix))
-                return SEC_VBVCF_HEADER;
+                return SEC_VCF_VB_HEADER;
             
             else if (skipped_vb) *skipped_vb = true;
         }
@@ -177,7 +177,7 @@ uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */)
 bool sections_has_more_vcf_components()
 {
     return z_file->sl_cursor==0 || 
-           ENT (SectionListEntry, &z_file->section_list_buf, z_file->sl_cursor-1)->section_type == SEC_VCF_HEADER;
+           ENT (SectionListEntry, &z_file->section_list_buf, z_file->sl_cursor-1)->section_type == SEC_TXT_HEADER;
 }
 
 void BGEN_sections_list()
@@ -245,7 +245,7 @@ const char *st_name(SectionType sec_type)
 
 const char *dt_name (unsigned data_type)
 {
-    static const char *names[] = DATATYPE_NAMES;
+    static const char *names[NUM_DATATYPES] = DATATYPE_NAMES;
     return sections_type_name (data_type, names, sizeof(names)/sizeof(names[0]));
 }
 

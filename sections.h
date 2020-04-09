@@ -22,74 +22,102 @@ typedef enum {
     SEC_EOF                = -1, // doesn't appear in the file - just a value to indicate there are no more sections
 
     // data sections - statring in v1
-    SEC_VCF_HEADER         = 0,  SEC_VBVCF_HEADER        = 1, 
-    SEC_FRMT_SUBFIELD_DICT = 2,  SEC_GENOTYPE_DATA       = 3, 
-    SEC_PHASE_DATA         = 4,  SEC_HAPLOTYPE_DATA      = 5,
+    SEC_TXT_HEADER         = 0,  SEC_VCF_VB_HEADER       = 1, 
+    SEC_VCF_FRMT_SF_DICT   = 2,  SEC_VCF_GT_DATA         = 3, 
+    SEC_VCF_PHASE_DATA     = 4,  SEC_VCF_HT_DATA         = 5,
 
     // data sections added in v2
-    SEC_GENOZIP_HEADER     = 6,   SEC_RANDOM_ACCESS      = 7,
+    SEC_GENOZIP_HEADER     = 6,   SEC_VCF_RANDOM_ACCESS  = 7,
 
-    SEC_CHROM_DICT         = 8,   SEC_CHROM_B250         = 9,
-    SEC_POS_DICT           = 10,  SEC_POS_B250           = 11,
-    SEC_ID_DICT            = 12,  SEC_ID_B250            = 13,  
-    SEC_REFALT_DICT        = 14,  SEC_REFALT_B250        = 15,  
-    SEC_QUAL_DICT          = 16,  SEC_QUAL_B250          = 17, 
-    SEC_FILTER_DICT        = 18,  SEC_FILTER_B250        = 19, 
-    SEC_INFO_DICT          = 20,  SEC_INFO_B250          = 21, 
-    SEC_FORMAT_DICT        = 22,  SEC_FORMAT_B250        = 23,
-    SEC_INFO_SUBFIELD_DICT = 24,  SEC_INFO_SUBFIELD_B250 = 25,
+    SEC_VCF_CHROM_DICT     = 8,   SEC_VCF_CHROM_B250     = 9,
+    SEC_VCF_POS_DICT       = 10,  SEC_VCF_POS_B250       = 11,
+    SEC_VCF_ID_DICT        = 12,  SEC_VCF_ID_B250        = 13,  
+    SEC_VCF_REFALT_DICT    = 14,  SEC_VCF_REFALT_B250    = 15,  
+    SEC_VCF_QUAL_DICT      = 16,  SEC_VCF_QUAL_B250      = 17, 
+    SEC_VCF_FILTER_DICT    = 18,  SEC_VCF_FILTER_B250    = 19, 
+    SEC_VCF_INFO_DICT      = 20,  SEC_VCF_INFO_B250      = 21, 
+    SEC_VCF_FORMAT_DICT    = 22,  SEC_VCF_FORMAT_B250    = 23,
+    SEC_VCF_INFO_SF_DICT   = 24,  SEC_VCF_INFO_SF_B250   = 25,
     
     // added gtshark support in file version 3
     SEC_HT_GTSHARK_DB_DB   = 26,  SEC_HT_GTSHARK_DB_GT   = 27,
     SEC_HT_GTSHARK_X_LINE  = 28,  SEC_HT_GTSHARK_X_HTI   = 29,
     SEC_HT_GTSHARK_X_ALLELE= 30,
 
-    // These sections are not real sections - they don't appear in the genozip file - just for stats. They can be changed if needed.
+    // added SAM support in file version 5
+    SEC_SAM_VB_HEADER      = 31,
+    SEC_SAM_SEQ_DATA       = 32,  SEC_SAM_QUAL_DATA      = 33,
+    SEC_SAM_QNAME_SF_DICT  = 34,  SEC_SAM_QNAME_SF_B250  = 35,
+    SEC_SAM_OPTNL_SF_DICT  = 36,  SEC_SAM_OPTNL_SF_B250  = 37,
+    SEC_SAM_FLAG_DICT      = 38,  SEC_SAM_FLAG_B250      = 39,
+    SEC_SAM_RNAME_NX_DICT  = 40,  SEC_SAM_RNAME_NX_B250  = 41, 
+    SEC_SAM_POS_DICT       = 42,  SEC_SAM_POS_B250       = 43, 
+    SEC_SAM_MAPQ_DICT      = 44,  SEC_SAM_MAPQ_B250      = 45, 
+    SEC_SAM_CIGAR_DICT     = 46,  SEC_SAM_CIGAR_B250     = 47, 
+    SEC_SAM_PNEXT_DICT     = 48,  SEC_SAM_PNEXT_B250     = 49, 
+    SEC_SAM_TLEN_DICT      = 50,  SEC_SAM_TLEN_B250      = 51, 
+    SEC_SAM_OPTIONAL_DICT  = 52,  SEC_SAM_OPTIONAL_B250  = 53, 
+
+    // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR, 
 } SectionType;
 
 // we put the names here in a #define so we can eyeball their identicality to SectionType
 #define SECTIONTYPE_NAMES { \
-    "SEC_VCF_HEADER"        ,  "SEC_VBVCF_HEADER",\
-    "SEC_FRMT_SUBFIELD_DICT",  "SEC_GENOTYPE_DATA",\
-    "SEC_PHASE_DATA"        ,  "SEC_HAPLOTYPE_DATA",\
+    "SEC_TXT_HEADER"        ,  "SEC_VCF_VB_HEADER"      ,\
+    "SEC_VCF_FRMT_SF_DICT"  ,  "SEC_VCF_GT_DATA"  ,\
+    "SEC_VCF_PHASE_DATA"    ,  "SEC_VCF_HT_DATA "       ,\
     \
-    "SEC_GENOZIP_HEADER"    ,  "SEC_RANDOM_ACCESS",\
+    "SEC_GENOZIP_HEADER"    ,  "SEC_VCF_RANDOM_ACCESS"  ,\
     \
-    "SEC_CHROM_DICT"        ,  "SEC_CHROM_B250",\
-    "SEC_POS_DICT"          ,  "SEC_POS_B250",\
-    "SEC_ID_DICT"           ,  "SEC_ID_B250",\
-    "SEC_REFALT_DICT"       ,  "SEC_REFALT_B250",\
-    "SEC_QUAL_DICT"         ,  "SEC_QUAL_B250",\
-    "SEC_FILTER_DICT"       ,  "SEC_FILTER_B250",\
-    "SEC_INFO_DICT"         ,  "SEC_INFO_B250",\
-    "SEC_FORMAT_DICT"       ,  "SEC_FORMAT_B250",\
-    "SEC_INFO_SUBFIELD_DICT",  "SEC_INFO_SUBFIELD_B250",\
+    "SEC_VCF_CHROM_DICT"    ,  "SEC_VCF_CHROM_B250"     ,\
+    "SEC_VCF_POS_DICT"      ,  "SEC_VCF_POS_B250"       ,\
+    "SEC_VCF_ID_DICT"       ,  "SEC_VCF_ID_B250"        ,\
+    "SEC_VCF_REFALT_DICT"   ,  "SEC_VCF_REFALT_B250"    ,\
+    "SEC_VCF_QUAL_DICT"     ,  "SEC_VCF_QUAL_B250"      ,\
+    "SEC_VCF_FILTER_DICT"   ,  "SEC_VCF_FILTER_B250"    ,\
+    "SEC_VCF_INFO_DICT"     ,  "SEC_VCF_INFO_B250"      ,\
+    "SEC_VCF_FORMAT_DICT"   ,  "SEC_VCF_FORMAT_B250"    ,\
+    "SEC_VCF_INFO_SF_DICT"  ,  "SEC_VCF_INFO_SF_B250"   ,\
     \
-    "SEC_HT_GTSHARK_DB_DB"  ,  "SEC_HT_GTSHARK_DB_GT",\
-    "SEC_HT_GTSHARK_X_LINE" ,  "SEC_HT_GTSHARK_X_HTI",\
+    "SEC_HT_GTSHARK_DB_DB"  ,  "SEC_HT_GTSHARK_DB_GT"   ,\
+    "SEC_HT_GTSHARK_X_LINE" ,  "SEC_HT_GTSHARK_X_HTI"   ,\
     "SEC_HT_GTSHARK_X_ALLELE", \
+    \
+    "SEC_SAM_HEADER"        ,  "SEC_SAM_VB_HEADER"      ,\
+    "SEC_SAM_SEQ_DATA"      ,  "SEC_SAM_QUAL_DATA"      ,\
+    "SEC_SAM_QNAME_SF_DICT" ,  "SEC_SAM_QNAME_SF_B250"  ,\
+    "SEC_SAM_OPTNL_SF_DICT" ,  "SEC_SAM_OPTNL_SF_B250"  ,\
+    "SEC_SAM_FLAG_DICT"     ,  "SEC_SAM_FLAG_B250"      ,\
+    "SEC_SAM_RNAME_NX_DICT" ,  "SEC_SAM_RNAME_NX_B250"  ,\
+    "SEC_SAM_POS_DICT"      ,  "SEC_SAM_POS_B250"       ,\
+    "SEC_SAM_MAPQ_DICT"     ,  "SEC_SAM_MAPQ_B250"      ,\
+    "SEC_SAM_CIGAR_DICT"    ,  "SEC_SAM_CIGAR_B250"     ,\
+    "SEC_SAM_PNEXT_DICT"    ,  "SEC_SAM_PNEXT_B250"     ,\
+    "SEC_SAM_TLEN_DICT"     ,  "SEC_SAM_TLEN_B250"      ,\
+    "SEC_SAM_OPTIONAL_DICT" ,  "SEC_SAM_OPTIONAL_B250"  ,\
     \
     "SEC_STATS_HT_SEPERATOR" \
 }
 
 #define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) // put this here and not in sections.h as its used in vb.h that is widely used
 
-#define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_FORMAT_DICT && (s) % 2 == SEC_CHROM_DICT % 2) ||       \
-                                        (s) == SEC_INFO_SUBFIELD_DICT || \
-                                        (s) == SEC_FRMT_SUBFIELD_DICT)
+#define section_type_is_dictionary(s) (((s) >= SEC_VCF_CHROM_DICT && (s) <= SEC_VCF_FORMAT_DICT && (s) % 2 == SEC_VCF_CHROM_DICT % 2) ||       \
+                                        (s) == SEC_VCF_INFO_SF_DICT || \
+                                        (s) == SEC_VCF_FRMT_SF_DICT)
 
-#define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_FORMAT_B250 && (s) % 2 == SEC_CHROM_B250 % 2) ||       \
-                                        (s) == SEC_INFO_SUBFIELD_B250)
+#define section_type_is_b250(s)       (((s) >= SEC_VCF_CHROM_B250 && (s) <= SEC_VCF_FORMAT_B250 && (s) % 2 == SEC_VCF_CHROM_B250 % 2) ||       \
+                                        (s) == SEC_VCF_INFO_SF_B250)
 
-#define section_type_is_vb(s)         (((s) >= SEC_CHROM_DICT && (s) <= SEC_INFO_SUBFIELD_B250) || \
-                                       ((s) >= SEC_VBVCF_HEADER && (s) <= SEC_HAPLOTYPE_DATA))
+#define section_type_is_vb(s)         (((s) >= SEC_VCF_CHROM_DICT && (s) <= SEC_VCF_INFO_SF_B250) || \
+                                       ((s) >= SEC_VCF_VB_HEADER && (s) <= SEC_VCF_HT_DATA ))
 
 // Section headers - big endian
 
 #define GENOZIP_MAGIC 0x27052012
 
 // data types genozip can compress
+#define NUM_DATATYPES 2
 typedef enum { DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
 #define DATATYPE_NAMES { "VCF", "SAM" } // index in array matches values in DataType
 
@@ -147,22 +175,23 @@ typedef struct {
 #define COMPRESSION_TYPE_BGZIP 3
 #define COMPRESSION_TYPE_XZ    4
 #define COMPRESSION_TYPE_BCF   5
+#define COMPRESSION_TYPE_BAM   6
 
 // The VCF header section appears once in the file (or multiple times in case of concatenation), and includes the VCF file header 
 typedef struct {
     SectionHeader h;
     uint64_t txt_data_size;    // number of bytes in the original VCF file. 
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
-    uint64_t num_lines;        // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
-    uint32_t num_samples;      // number of samples in the original VCF file
-    uint32_t max_lines_per_vb; // log2 of the upper bound on how many variants (data lines) a VB can have in this file
+    uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
+    uint32_t num_samples;      // VCF only: number of samples in the original VCF file
+    uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     uint8_t  compression_type; // compression type of original file, one of COMPRESSION_TYPE_*
-    Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
+    Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single txt file.
 
-#define VCF_FILENAME_LEN 256
-    char txt_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated. always a .vcf, even if the original was .vcf.gz or .vcf.bz2
+#define TXT_FILENAME_LEN 256
+    char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
 
-} SectionHeaderVCFHeader; 
+} SectionHeaderTxtHeader; 
 
 // The variant data section appears for each variant block
 
@@ -223,7 +252,7 @@ typedef struct {
     uint8_t unused[3];                 // padding
 } SectionListEntry;
 
-// the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
+// the data of SEC_VCF_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct {
     uint32_t vblock_i;             // the vb_i in which this range appears
@@ -238,8 +267,8 @@ typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
     uint32_t num_samples;    // number of samples in the original VCF file
-    uint64_t txt_data_size;  // number of bytes in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
-    uint64_t num_lines;      // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
+    uint64_t txt_data_size;  // number of bytes in the original VCF file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that VCF if not first
+    uint64_t num_lines;      // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that VCF if not first
     Md5Hash md5_hash_concat; // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
     Md5Hash md5_hash_single; // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
 

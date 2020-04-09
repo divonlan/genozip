@@ -5,7 +5,7 @@
 
 #include "genozip.h"
 #include "dict_id.h"
-#include "vcf_header.h"
+#include "header.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 uint64_t dict_id_vardata_fields[8] = {0,0,0,0,0,0,0,0},
@@ -16,7 +16,7 @@ uint64_t dict_id_vardata_fields[8] = {0,0,0,0,0,0,0,0},
 void dict_id_initialize(void) 
 {   // note: this uint64_t values will be different in big and little endian machines 
     // (it's ok, they never get stored in the file)
-    for (VcfFields f=CHROM; f <= FORMAT; f++)
+    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
         dict_id_vardata_fields[f] = dict_id_vardata_field (dict_id_make (vcf_field_names[f], strlen (vcf_field_names[f]))).num; 
     
     dict_id_FORMAT_PL   = dict_id_format_subfield (dict_id_make ("PL", 2)).num;
@@ -43,7 +43,7 @@ const char *dict_id_display_type (DictIdType dict_id)
 // returns field to which this dict_id belongs, if its a vardata dict_id, or -1 if not
 int dict_id_get_field (DictIdType dict_id)
 {
-    for (VcfFields f=CHROM; f <= FORMAT; f++)
+    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
         if (dict_id.num == dict_id_vardata_fields[f]) return f;
 
     return -1;

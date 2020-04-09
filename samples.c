@@ -55,7 +55,7 @@ static void samples_accept (Buffer *vcf_header_buf, const char *sample_str)
 {
     buf_add_string (evb, vcf_header_buf, sample_str);
     buf_add_string (evb, vcf_header_buf, "\t");
-    global_number_displayed_samples++;
+    global_vcf_num_displayed_samples++;
 }
 
 // processes the vcf header sample line according to the --samples option, removing samples that are not required
@@ -73,8 +73,8 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
             break;
         }
 
-    vcf_samples_is_included = malloc (global_num_samples);
-    memset (vcf_samples_is_included, cmd_is_negative_samples, global_num_samples); // 0 if not included unless list says so (positive) and vice versa
+    vcf_samples_is_included = malloc (global_vcf_num_samples);
+    memset (vcf_samples_is_included, cmd_is_negative_samples, global_vcf_num_samples); // 0 if not included unless list says so (positive) and vice versa
 
     unsigned vcf_names_start_index = i + 1 + strlen(standard);
     unsigned vcf_names_data_len = vcf_header_buf->len - vcf_names_start_index;
@@ -82,14 +82,14 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
     memcpy (vcf_sample_names_data, &vcf_header_buf->data[vcf_names_start_index], vcf_names_data_len);
     vcf_sample_names_data[vcf_names_data_len-1] = '\t'; // change last separator from \n to \t
 
-    vcf_sample_names = malloc (global_num_samples * sizeof (char *));
+    vcf_sample_names = malloc (global_vcf_num_samples * sizeof (char *));
 
     vcf_header_buf->len = vcf_names_start_index;
     char *next_token = vcf_sample_names_data;
     
     // go through the vcf file's samples and add those that are consistent with the --samples requested
-    global_number_displayed_samples = 0;
-    for (unsigned i=0; i < global_num_samples; i++) {
+    global_vcf_num_displayed_samples = 0;
+    for (unsigned i=0; i < global_vcf_num_samples; i++) {
         vcf_sample_names[i] = strtok_r (next_token, "\t", &next_token);
 
         for (unsigned s=0; s < cmd_samples_buf.len; s++)
@@ -110,7 +110,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
     for (unsigned s=0; s < cmd_samples_buf.len; s++) 
         ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, &cmd_samples_buf, s));
 
-    //for (i=0; i<global_num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
+    //for (i=0; i<global_vcf_num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }
 
 // PIZ only: calculates whether a sample block is included, based on --samples. this is called once per sample block
@@ -120,7 +120,7 @@ bool samples_is_sb_included (uint32_t num_samples_per_block, uint32_t sb_i)
     if (!flag_samples) return true; // all sample blocks are included if --samples if not specified
 
     for (uint32_t sample_i = sb_i * num_samples_per_block; 
-         sample_i < MIN ((sb_i+1) * num_samples_per_block, global_num_samples);
+         sample_i < MIN ((sb_i+1) * num_samples_per_block, global_vcf_num_samples);
          sample_i++)
 
          if (samples_am_i_included(sample_i)) return true; // at least one sample is included - means the sample block is included

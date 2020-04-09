@@ -135,9 +135,9 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     uint32_t word_index = z_file->genozip_version >= 2 ? base250_decode (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
                                                        : v1_base250_decode (&iterator->next_b250);
 
-    // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
+    // case: a subfield snip is missing - either the genotype data has less subfields than declared in VCF_FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
-        ASSERT (!ctx || ctx->b250_section_type == SEC_GENOTYPE_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %.*s (%s)",
+        ASSERT (!ctx || ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %.*s (%s)",
                 vcf_line, vb->vblock_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {
@@ -148,7 +148,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 
     // case: a subfield snip is empty, eg AB::CD
     else if (word_index == WORD_INDEX_EMPTY_SF) { 
-        ASSERT (ctx->b250_section_type == SEC_GENOTYPE_DATA, "Error while reconstrucing line %u: BASE250_EMPTY_SF unexpectedly found in b250 data of %.*s",
+        ASSERT (ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u: BASE250_EMPTY_SF unexpectedly found in b250 data of %.*s",
                 vcf_line, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id);
         if (snip) {
             *snip = ""; // pointer to static empty string
@@ -162,8 +162,8 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 
         ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s%s \"%.*s\" dictionary has only %u entries",
                 vcf_line, word_index, 
-                ctx->dict_section_type == SEC_INFO_SUBFIELD_DICT ? "INFO" : "",
-                ctx->dict_section_type == SEC_FRMT_SUBFIELD_DICT ? "FORMAT" : "",
+                ctx->dict_section_type == SEC_VCF_INFO_SF_DICT ? "INFO" : "",
+                ctx->dict_section_type == SEC_VCF_FRMT_SF_DICT ? "FORMAT" : "",
                 DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->word_list.len);
 
         //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
@@ -324,10 +324,10 @@ void mtf_clone_ctx (VBlock *vb)
 
     vb->num_dict_ids = z_num_dict_ids;
 
-    // initialize mappers for FORMAT and INFO
+    // initialize mappers for VCF_FORMAT and VCF_INFO
     if (vb->data_type == DATA_TYPE_VCF) {    
-        mtf_init_mapper (vb, FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
-        mtf_init_mapper (vb, INFO,   &((VBlockVCF *)vb)->iname_mapper_buf, "iname_mapper_buf");    
+        mtf_init_mapper (vb, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
+        mtf_init_mapper (vb, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf, "iname_mapper_buf");    
     }
 
     COPY_TIMER (vb->profile.mtf_clone_ctx)
@@ -522,20 +522,20 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
 
         ASSERT (section_type_is_dictionary(dict_sec_type), "Error: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
 
-        if (dict_sec_type != SEC_INFO_SUBFIELD_DICT && dict_sec_type != SEC_FRMT_SUBFIELD_DICT) 
+        if (dict_sec_type != SEC_VCF_INFO_SF_DICT && dict_sec_type != SEC_VCF_FRMT_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
     }
 
     // second, all the info subfield dictionaries
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++)         
         if (buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
-            merging_vb->mtf_ctx[did_i].dict_section_type == SEC_INFO_SUBFIELD_DICT) 
+            merging_vb->mtf_ctx[did_i].dict_section_type == SEC_VCF_INFO_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
 
     // third, all the genotype subfield dictionaries
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++)         
         if (buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
-            merging_vb->mtf_ctx[did_i].dict_section_type == SEC_FRMT_SUBFIELD_DICT) 
+            merging_vb->mtf_ctx[did_i].dict_section_type == SEC_VCF_FRMT_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
 
     // note: z_file->num_dict_ids might be larger than merging_vb->num_dict_ids at this point, for example:
@@ -572,7 +572,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
 
     // case: not a vardata dict - find the did_i if we have it already
     if (did_i == -1) {
-        did_i=FORMAT+1 ; for (; did_i < *num_dict_ids; did_i++) 
+        did_i=VCF_FORMAT+1 ; for (; did_i < *num_dict_ids; did_i++) 
             if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
     }
 
@@ -593,7 +593,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
 
         // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields
         // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-        (*num_dict_ids) = MAX (FORMAT, did_i) + 1; 
+        (*num_dict_ids) = MAX (VCF_FORMAT, did_i) + 1; 
 
         if (num_subfields) (*num_subfields)++;
     }
@@ -617,7 +617,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // compute threads might be using these dictionaries. This is ok, bc the dispatcher thread makes
     // sure we integrate dictionaries from vbs by order - so that running compute threads never
     // need to access the new parts of dictionaries. We also pre-allocate the dictionaries in
-    // vcf_header_genozip_to_vcf() so that they don't need to be realloced. dict.len may be accessed
+    // header_genozip_to_txt() so that they don't need to be realloced. dict.len may be accessed
     // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
 
@@ -651,7 +651,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     buf_alloc (evb, &zf_ctx->word_list, (zf_ctx->word_list.len + num_snips) * sizeof (MtfWord), 2, "z_file->mtf_ctx->word_list", header->h.section_type);
     buf_set_overlayable (&zf_ctx->word_list);
 
-    bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, vcf_field_names[REFALT], MIN (strlen(vcf_field_names[REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
+    bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, vcf_field_names[VCF_REFALT], MIN (strlen(vcf_field_names[VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
 
     char *start = fragment.data;
     for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
@@ -775,7 +775,7 @@ void mtf_update_stats (VBlock *vb)
         MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
     
         MtfContext *zf_ctx = mtf_get_zf_ctx (vb_ctx->dict_id);
-        if (!zf_ctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
+        if (!zf_ctx) continue; // this can happen if VCF_FORMAT subfield appears, but no line has data for it
 
         zf_ctx->mtf_i.len += vb_ctx->mtf_i.len; // thread safety: no issues, this only updated only by the I/O thread
     }

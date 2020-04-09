@@ -37,8 +37,8 @@ static void gtshark_create_vcf_file (VBlockVCF *vb, const Buffer *section_data, 
 
     // initialize allocation for exceptions
     buf_alloc (vb, &vb->gtshark_exceptions_line_i, MAX (vb->num_lines/100, 100) * sizeof(uint32_t), 1, "gtshark_exceptions_line_i", sb_i);
-    buf_alloc (vb, &vb->gtshark_exceptions_ht_i, MAX (vb->num_lines/100, 100) * (global_num_samples / 3) * sizeof(uint16_t), 1, "gtshark_exceptions_ht_i", sb_i);
-    buf_alloc (vb, &vb->gtshark_exceptions_allele, MAX (vb->num_lines/100, 100) * (global_num_samples / 3), 1, "gtshark_exceptions_allele", sb_i);
+    buf_alloc (vb, &vb->gtshark_exceptions_ht_i, MAX (vb->num_lines/100, 100) * (global_vcf_num_samples / 3) * sizeof(uint16_t), 1, "gtshark_exceptions_ht_i", sb_i);
+    buf_alloc (vb, &vb->gtshark_exceptions_allele, MAX (vb->num_lines/100, 100) * (global_vcf_num_samples / 3), 1, "gtshark_exceptions_allele", sb_i);
     
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 

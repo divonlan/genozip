@@ -1,0 +1,40 @@
+// ------------------------------------------------------------------
+//   header.h
+//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
+#ifndef HEADER_INCLUDED
+#define HEADER_INCLUDED
+
+#include "genozip.h"
+#include "md5.h"
+#include "sections.h"
+
+// VCF fields: CHROM up to the FORMAT field - excluding the samples. Note: we treat REF and ALT and the tab between them as a 
+// single field as they are correlated so compress better together
+#define NUM_VCF_B250S 8 
+typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT } VcfFields;
+extern const char *vcf_field_names[];
+
+// Note on SAM fields: 
+// - the QNAME field is broken into its :-separated components
+// - the RNAME and RNEXT field are stored together, with a tab between them, as they are highly correlated
+// - the POS field is stored as a delta from the previous line. This will work great in sorted files, but
+//   even in non sorted files there are often several related adjacent lines
+// - The PNEXT field is stored as a delta from the POS field
+// - OPTIONAL fields are stored as a template and then each subfield has its own dictionary.
+//   the template looks like eg: "CT:Z:NM:i:" for two subfields CT and NM
+#define NUM_SAM_B250S 8
+typedef enum { SAM_FLAG, SAM_RNAMERNEXT, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
+extern const char *sam_field_names[];
+
+extern void header_initialize(void);
+extern bool header_txt_to_genozip (uint32_t *vcf_line_i);
+extern bool header_genozip_to_txt (Md5Hash *digest);
+
+// v1 compatibility (VCF only)
+extern bool v1_header_genozip_to_vcf (Md5Hash *digest);
+extern bool v1_vcf_header_get_vcf_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,uint64_t *num_items_concat,
+                                          Md5Hash  *md5_hash_concat, char *created, unsigned created_len);
+
+#endif

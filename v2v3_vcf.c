@@ -28,7 +28,7 @@ static void v2v3_piz_vcf_map_iname_subfields (VBlockVCF *vb)
     // iname and can appear in other inames. The INFO field contains the iname, and values of the subfields.
     // iname _mapper maps these subfields. This function creates an iname_mapper for every unique iname.
 
-    const MtfContext *info_ctx = &vb->mtf_ctx[INFO];
+    const MtfContext *info_ctx = &vb->mtf_ctx[VCF_INFO];
     vb->iname_mapper_buf.len = info_ctx->word_list.len;
     buf_alloc (vb, &vb->iname_mapper_buf, sizeof (SubfieldMapper) * vb->iname_mapper_buf.len,
                1, "iname_mapper_buf", 0);

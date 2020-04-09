@@ -79,7 +79,7 @@ void random_access_merge_in_vb (VBlockVCF *vb)
     RAEntry *dst_ra = &((RAEntry *)z_file->ra_buf.data)[z_file->ra_buf.len];
     RAEntry *src_ra = ((RAEntry *)vb->ra_buf.data);
 
-    MtfContext *chrom_ctx = &vb->mtf_ctx[CHROM];
+    MtfContext *chrom_ctx = &vb->mtf_ctx[VCF_CHROM];
     ASSERT0 (chrom_ctx, "Error: cannot find chrom_ctx");
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {

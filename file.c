@@ -335,7 +335,7 @@ void file_close (File **file_p,
         }
 
         if (file_is_zip_read(file))
-            buf_destroy (&file->vcf_unconsumed_data);
+            buf_destroy (&file->unconsumed_txt);
 
         if (file->name) FREE (file->name);
         

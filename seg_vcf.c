@@ -8,7 +8,7 @@
 #include "seg_vcf.h"
 #include "vblock.h"
 #include "move_to_front.h"
-#include "vcf_header.h"
+#include "header.h"
 #include "endianness.h"
 #include "random_access_vcf.h"
 #include "optimize_vcf.h"
@@ -121,7 +121,7 @@ static void seg_allocate_per_line_memory (VBlockVCF *vb)
     }
 
     // allocate (or realloc) the mtf_i for CHROM->FORMAT fields which each have num_lines entries
-    for (VcfFields f=CHROM; f <= FORMAT; f++) 
+    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) 
         buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->num_lines * sizeof (uint32_t), 1, "mtf_ctx.mtf_i", f);
 }
 
@@ -144,7 +144,7 @@ static uint32_t seg_one_field (VBlockVCF *vb, const char *str, unsigned len, uns
     
     this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
 
-    vb->txt_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
+    vb->txt_section_bytes[SEC_VCF_CHROM_B250 + f*2] += len + 1;
     return node_index;
 } 
 
@@ -153,7 +153,7 @@ static void seg_chrom_field (VBlockVCF *vb, const char *chrom_str, unsigned chro
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vb_line_i, CHROM, NULL);
+    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vb_line_i, VCF_CHROM, NULL);
 
     random_access_update_chrom (vb, vb_line_i, chrom_node_index);
 }
@@ -197,9 +197,9 @@ static void seg_pos_field (VBlockVCF *vb, const char *pos_str, unsigned pos_len,
         len = 1;
     }
 
-    seg_one_field (vb, pos_delta_str, len, vb_line_i, POS, NULL);
+    seg_one_field (vb, pos_delta_str, len, vb_line_i, VCF_POS, NULL);
 
-    vb->txt_section_bytes[SEC_POS_B250] += pos_len - len; // re-do the calculation - seg_one_field doesn't do it good in our case
+    vb->txt_section_bytes[SEC_VCF_POS_B250] += pos_len - len; // re-do the calculation - seg_one_field doesn't do it good in our case
 
     vb->last_pos = this_pos;
 
@@ -235,7 +235,7 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLine *dl,
     SubfieldMapper format_mapper;
     memset (&format_mapper, 0, sizeof (format_mapper));
 
-    if (!global_num_samples) return; // if we're not expecting any samples, we ignore the FORMAT field
+    if (!global_vcf_num_samples) return; // if we're not expecting any samples, we ignore the FORMAT field
 
     ASSERT (field_len, "Error: missing FORMAT field in vb_line_i=%u", vb_line_i);
 
@@ -260,7 +260,7 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLine *dl,
             ASSERT (dict_id_is_format_subfield (subfield), 
                     "Error: string %.*s in the FORMAT field of vb_line_i=%u is not a legal subfield", DICT_ID_LEN, subfield.id, vb_line_i);
 
-            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields, subfield, SEC_FRMT_SUBFIELD_DICT);
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields, subfield, SEC_VCF_FRMT_SF_DICT);
             
             format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
         } 
@@ -268,10 +268,10 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLine *dl,
     }
 
     if (dl->has_genotype_data)
-        buf_alloc (vb, &vb->line_gt_data, format_mapper.num_subfields * global_num_samples * sizeof(uint32_t), 1, "line_gt_data", vb_line_i); 
+        buf_alloc (vb, &vb->line_gt_data, format_mapper.num_subfields * global_vcf_num_samples * sizeof(uint32_t), 1, "line_gt_data", vb_line_i); 
 
     bool is_new;
-    uint32_t node_index = seg_one_field (vb, field_start, field_len, vb_line_i, FORMAT, &is_new);
+    uint32_t node_index = seg_one_field (vb, field_start, field_len, vb_line_i, VCF_FORMAT, &is_new);
 
     dl->format_mtf_i = node_index;
 
@@ -342,7 +342,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLine *dl, char *info_str, unsi
             else if (c == ';') {
                 if (i==info_len) { // our artificial ; terminator
                     iname_len--; // remove ;
-                    vb->txt_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n)
+                    vb->txt_section_bytes[SEC_VCF_INFO_B250]++; // account for the separator (; or \t or \n)
                 }
                 else {
                     this_name = &info_str[i+1]; // skip the value-less name
@@ -363,7 +363,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLine *dl, char *info_str, unsi
                 DictIdType dict_id = dict_id_info_subfield (dict_id_make (this_name, this_name_len));
 
                 // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
-                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, dict_id, SEC_INFO_SUBFIELD_DICT);
+                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, dict_id, SEC_VCF_INFO_SF_DICT);
                 iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
 
                 // allocate memory if needed (check before calling buf_alloc - we're in a tight loop)
@@ -374,8 +374,8 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLine *dl, char *info_str, unsi
 
                 MtfNode *sf_node;
 
-                vb->txt_section_bytes[SEC_INFO_SUBFIELD_B250] += this_value_len; 
-                vb->txt_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n) 
+                vb->txt_section_bytes[SEC_VCF_INFO_SF_B250] += this_value_len; 
+                vb->txt_section_bytes[SEC_VCF_INFO_B250]++; // account for the separator (; or \t or \n) 
 
                 unsigned optimized_snip_len;
                 char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
@@ -402,12 +402,12 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLine *dl, char *info_str, unsi
     // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
     // 1. find it's mtf_i (and add to dictionary if a new name)
     // 2. place mtf_i in INFO section of this VB
-    uint32_t *info_field_mtf_i = (uint32_t *)vb->mtf_ctx[INFO].mtf_i.data;
-    MtfContext *info_ctx = &vb->mtf_ctx[INFO];
+    uint32_t *info_field_mtf_i = (uint32_t *)vb->mtf_ctx[VCF_INFO].mtf_i.data;
+    MtfContext *info_ctx = &vb->mtf_ctx[VCF_INFO];
     MtfNode *node;
     bool is_new;
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &node, &is_new);
-    info_field_mtf_i[vb->mtf_ctx[INFO].mtf_i.len++] = node_index;
+    info_field_mtf_i[vb->mtf_ctx[VCF_INFO].mtf_i.len++] = node_index;
 
     // if this is a totally new subfield (first time in this file) - make a new SubfieldMapper for it.
     if (is_new) {   
@@ -423,7 +423,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLine *dl, char *info_str, unsi
 
     dl->info_mtf_i = node_index;
 
-    vb->txt_section_bytes[SEC_INFO_B250] += iname_len; // this includes all the =
+    vb->txt_section_bytes[SEC_VCF_INFO_B250] += iname_len; // this includes all the =
 }
 
 static void seg_increase_ploidy_one_line (VBlockVCF *vb, char *line_ht_data, unsigned new_ploidy, unsigned num_samples)
@@ -453,13 +453,13 @@ static void seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned vb
 
         // abandon old allocation, and just re-allocate in the spillover area (not very memory-effecient, but this is hopefully a rare event)
         seg_store (vb, &dl->haplotype_data_spillover, &dl->haplotype_data_start, &dl->haplotype_data_len,
-                   NULL, global_num_samples * new_ploidy, NULL, false);
+                   NULL, global_vcf_num_samples * new_ploidy, NULL, false);
         char *new_haplotype_data = HAPLOTYPE_DATA (vb, dl);
         
         if (old_haplotype_data) memcpy (new_haplotype_data, old_haplotype_data, old_ht_data_len);
 
         if (dl->has_haplotype_data)  // row already has haplotype (i.e. we're not increasing ploidy from 0, and not current row)
-            seg_increase_ploidy_one_line (vb, new_haplotype_data, new_ploidy, global_num_samples);
+            seg_increase_ploidy_one_line (vb, new_haplotype_data, new_ploidy, global_vcf_num_samples);
     }
 
     // increase ploidy in all previous samples of this line (in the newly forming vb->line_ht_data, not dl)
@@ -477,8 +477,8 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLine *dl, const char *str,
         if (str[i] == '|' || str[i] == '/') ploidy++;
 
     if (is_vcf_string) {
-        vb->txt_section_bytes[SEC_PHASE_DATA]     += ploidy-1;
-        vb->txt_section_bytes[SEC_HAPLOTYPE_DATA] += ploidy;
+        vb->txt_section_bytes[SEC_VCF_PHASE_DATA]     += ploidy-1;
+        vb->txt_section_bytes[SEC_VCF_HT_DATA ] += ploidy;
     }
 
     ASSERT (ploidy <= MAX_PLOIDY, "Error: ploidy=%u exceeds the maximum of %u in vb_line_i=%u", ploidy, MAX_PLOIDY, vb_line_i);
@@ -493,7 +493,7 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLine *dl, const char *str,
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample)
     if (sample_i == 0) {
-        buf_alloc (vb, &vb->line_ht_data, vb->ploidy * global_num_samples, 1, "line_ht_data", vb_line_i);
+        buf_alloc (vb, &vb->line_ht_data, vb->ploidy * global_vcf_num_samples, 1, "line_ht_data", vb_line_i);
         dl->phase_type = (vb->ploidy==1 ? PHASE_HAPLO : PHASE_UNKNOWN);
     }
 
@@ -523,7 +523,7 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLine *dl, const char *str,
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
 
-            vb->txt_section_bytes[SEC_HAPLOTYPE_DATA]++;
+            vb->txt_section_bytes[SEC_VCF_HT_DATA ]++;
         }
 
         // get phase
@@ -547,7 +547,7 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLine *dl, const char *str,
                          (dl->phase_type == '/' && cell_phase_type == '|')) {
                     dl->phase_type = PHASE_MIXED_PHASED;
                 
-                    buf_alloc (vb, &vb->line_phase_data, global_num_samples, 1, "line_phase_data", vb_line_i);
+                    buf_alloc (vb, &vb->line_phase_data, global_vcf_num_samples, 1, "line_phase_data", vb_line_i);
 
                     // fill in the so-far uniform phase (which is different than the current one)
                     memset (vb->line_phase_data.data, (cell_phase_type == '|' ? '/' : '|'), sample_i);
@@ -637,7 +637,7 @@ static int seg_genotype_area (VBlockVCF *vb, ZipDataLine *dl,
 
     if (is_vcf_string)
         // size including : (if we have both ht and gt), but not including \t which goes into SEC_STATS_HT_SEPERATOR
-        vb->txt_section_bytes[SEC_GENOTYPE_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
+        vb->txt_section_bytes[SEC_VCF_GT_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
 
     return optimized_cell_gt_data_len;
 }
@@ -667,7 +667,7 @@ static inline const char *seg_get_next_item (const char *str, int *str_len, bool
             
     ASSERT (*str_len, "Error: missing %s field in vb_line_i=%u", item_name, vb_line_i);
 
-    ASSERT (str[i] != '\t' || strcmp (item_name, vcf_field_names[INFO]), 
+    ASSERT (str[i] != '\t' || strcmp (item_name, vcf_field_names[VCF_INFO]), 
            "Error: while segmenting %s in vb_line_i=%u: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name, vb_line_i);
 
@@ -684,9 +684,9 @@ static void seg_add_samples_missing_in_line (VBlockVCF *vb, ZipDataLine *dl, uns
                                              unsigned num_samples, unsigned vb_line_i)
 {
     ASSERTW (false, "Warning: the number of samples in vb_line_i=%u is %u, different than the VCF column header line which has %u samples",
-             vb_line_i, num_samples, global_num_samples);
+             vb_line_i, num_samples, global_vcf_num_samples);
 
-    for (; num_samples < global_num_samples; num_samples++) {
+    for (; num_samples < global_vcf_num_samples; num_samples++) {
 
         if (dl->has_haplotype_data) {
             // '*' (haplotype padding) with ploidy 1
@@ -737,7 +737,7 @@ static const char *seg_data_line (VBlockVCF *vb,   // may be NULL if testing
     // ID
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "ID");
-    seg_one_field (vb, field_start, field_len, vb_line_i, ID, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, VCF_ID, NULL);
 
     // REF + ALT
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
@@ -747,22 +747,22 @@ static const char *seg_data_line (VBlockVCF *vb,   // may be NULL if testing
 
     unsigned alt_len=0;
     next_field = seg_get_next_item (next_field, &len, false, true, false, vb_line_i, &alt_len, &separator, &has_13, "ALT");
-    seg_one_field (vb, field_start, field_len+alt_len+1, vb_line_i, REFALT, NULL);
+    seg_one_field (vb, field_start, field_len+alt_len+1, vb_line_i, VCF_REFALT, NULL);
 
     // QUAL
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "QUAL");
-    seg_one_field (vb, field_start, field_len, vb_line_i, QUAL, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, VCF_QUAL, NULL);
 
     // FILTER
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "FILTER");
-    seg_one_field (vb, field_start, field_len, vb_line_i, FILTER, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, VCF_FILTER, NULL);
 
     // INFO
     char *info_field_start = (char *)next_field; // we break the const bc seg_info_field might add a :#
     unsigned info_field_len=0;
-    next_field = seg_get_next_item (info_field_start, &len, global_num_samples==0, global_num_samples>0, false, vb_line_i, &info_field_len, &separator, &has_13, "INFO");
+    next_field = seg_get_next_item (info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, false, vb_line_i, &info_field_len, &separator, &has_13, "INFO");
     // note: we delay seg_info_field() until the end of the line - we might be adding a Windows \r subfield
 
     if (separator != '\n') {
@@ -811,23 +811,23 @@ static const char *seg_data_line (VBlockVCF *vb,   // may be NULL if testing
 
             vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR]++; // the \t or \n following a sample
 
-            ASSERT (sample_i < global_num_samples || separator == '\n',
-                    "Error: invalid VCF file - expecting a newline after the last sample (sample #%u) on line %u", global_num_samples, vb_line_i);
+            ASSERT (sample_i < global_vcf_num_samples || separator == '\n',
+                    "Error: invalid VCF file - expecting a newline after the last sample (sample #%u) on line %u", global_vcf_num_samples, vb_line_i);
         }
     }
 
     vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR] -= has_13; // the \r in case of Windows \r\n line ending (WHY IS THIS?)
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
-    if (sample_i < global_num_samples) 
+    if (sample_i < global_vcf_num_samples) 
         seg_add_samples_missing_in_line (vb, dl, &gt_line_len, sample_i, vb_line_i);
 
     // update lengths
     if (dl->has_haplotype_data) {
-        vb->line_ht_data.len = global_num_samples * vb->ploidy;
+        vb->line_ht_data.len = global_vcf_num_samples * vb->ploidy;
 
         if (dl->phase_type == PHASE_MIXED_PHASED) 
-            vb->line_phase_data.len = global_num_samples;
+            vb->line_phase_data.len = global_vcf_num_samples;
     } else 
         vb->line_ht_data.len = 0;
 
@@ -876,7 +876,7 @@ static void seg_update_vb_from_dl (VBlockVCF *vb, ZipDataLine *dl)
 // other line has them, and hence all lines in the vb must have them
 void seg_complete_missing_lines (VBlockVCF *vb, const char *next_field)
 {
-    vb->num_haplotypes_per_line = vb->ploidy * global_num_samples;
+    vb->num_haplotypes_per_line = vb->ploidy * global_vcf_num_samples;
     
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
@@ -895,29 +895,28 @@ void seg_complete_missing_lines (VBlockVCF *vb, const char *next_field)
 
         if (vb->has_genotype_data && !dl->has_genotype_data) {
             seg_store (vb, &dl->genotype_data_spillover, &dl->genotype_data_start, &dl->genotype_data_len, 
-                       NULL, global_num_samples * sizeof(uint32_t), next_field, true);
+                       NULL, global_vcf_num_samples * sizeof(uint32_t), next_field, true);
 
             uint32_t *genotype_data = (uint32_t *)GENOTYPE_DATA(vb, dl);
-            for (uint32_t i=0; i < global_num_samples; i++) 
+            for (uint32_t i=0; i < global_vcf_num_samples; i++) 
                 genotype_data[i] = WORD_INDEX_MISSING_SF;
         }
     }
 }
-
 
 // split each lines in this variant block to its components
 void seg_all_data_lines (VBlockVCF *vb)
 {
     START_TIMER;
 
-    vb->num_dict_ids = MAX (FORMAT+1, vb->num_dict_ids); // first 8 mtf_ctx are reserved for the VCF fields (up to FORMAT) (vb->num_dict_ids might be already higher due to previous VBs)
+    vb->num_dict_ids = MAX (VCF_FORMAT+1, vb->num_dict_ids); // first 8 mtf_ctx are reserved for the VCF fields (up to FORMAT) (vb->num_dict_ids might be already higher due to previous VBs)
 
     // Set ctx stuff for CHROM->FORMAT fields (note: mtf_i is allocated by seg_allocate_per_line_memory)
-    for (VcfFields f=CHROM; f <= FORMAT; f++) {
+    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
         strcpy ((char *)vb->mtf_ctx[f].dict_id.id, vcf_field_names[f]); // length of all is <= 7 so fits in id
         vb->mtf_ctx[f].dict_id = dict_id_vardata_field (vb->mtf_ctx[f].dict_id);
-        vb->mtf_ctx[f].b250_section_type = SEC_CHROM_B250 + f*2;
-        vb->mtf_ctx[f].dict_section_type = SEC_CHROM_DICT + f*2;
+        vb->mtf_ctx[f].b250_section_type = SEC_VCF_CHROM_B250 + f*2;
+        vb->mtf_ctx[f].dict_section_type = SEC_VCF_CHROM_DICT + f*2;
     }
 
     seg_allocate_per_line_memory (vb); // set vb->num_lines to an initial estimate

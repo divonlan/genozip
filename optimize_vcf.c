@@ -9,7 +9,7 @@
 #include <math.h>
 #include "optimize_vcf.h"
 #include "dict_id.h"
-#include "vcf_header.h"
+#include "header.h"
 
 // optimize numbers in the range (-99.5,99.5) to 2 significant digits
 static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_at /* 0 if no cap */,

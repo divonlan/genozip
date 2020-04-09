@@ -11,7 +11,7 @@
 #include "file.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "vcf_header.h"
+#include "header.h"
 #include "vblock.h"
 #include "dispatcher.h"
 #include "move_to_front.h"
@@ -29,28 +29,35 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 
     if (flag_concat) { // in concat, we don't show the compression ratio for files except for the last one
 
-        static uint64_t vcf_file_disk_size_concat = 0;
+        static uint64_t txt_file_disk_size_concat = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
-        if (!vcf_file_disk_size_concat) // first concat file
+        if (!txt_file_disk_size_concat) // first concat file
             source_file_type = txt_file->type;
         else if (source_file_type != txt_file->type) // heterogenous source file types
             source_file_type = UNKNOWN_FILE_TYPE;
 
-        vcf_file_disk_size_concat += txt_file->disk_size;
+        txt_file_disk_size_concat += txt_file->disk_size;
 
         fprintf (stderr, "Done (%s)                                     \n", runtime);
 
-        if (is_last_file)
-            fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
-                        dispatcher_ellapsed_time (dispatcher, true), ratio, 
-                        source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
-                        (double)vcf_file_disk_size_concat / z_bytes); // compression vs .gz/.bz2/.bcf/.xz... size
+        if (is_last_file) {
+            double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+
+            if (txt_file->type == VCF || txt_file->type == SAM || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+                fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f           \n", 
+                            dispatcher_ellapsed_time (dispatcher, true), ratio);
+            else
+                fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
+                            dispatcher_ellapsed_time (dispatcher, true), ratio, 
+                            source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
+                            ratio2); // compression vs .gz/.bz2/.bcf/.xz... size
+        }
     }
     else {
         double ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-        if (txt_file->type == VCF || ratio2 < 1)  // source file was plain VCF or ratio2 is low (nothing to brag about)
+        if (txt_file->type == VCF || txt_file->type == SAM || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
             fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
         
         else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
@@ -81,9 +88,9 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
         unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
         uint8_t *numerals     = node->word_index.encoded.numerals;
         
-        bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_GENOTYPE_DATA) && (i > 0);
+        bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_VCF_GT_DATA) && (i > 0);
 
-        if (one_up) // note: we can't do SEC_GENOTYPE_DATA bc we can't PIZ it as many GT data types are in the same section 
+        if (one_up) // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
             ((uint8_t *)ctx->b250.data)[ctx->b250.len++] = (uint8_t)BASE250_ONE_UP;
 
         else {
@@ -162,7 +169,7 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
 
         z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
 
-        zfile_compress_section_data (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf);
+        zfile_compress_section_data (evb, SEC_VCF_RANDOM_ACCESS, &z_file->ra_buf);
     }
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
@@ -191,7 +198,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t vcf_header_header_pos = z_file->disk_so_far;
-    bool success = vcf_header_vcf_to_genozip (&vcf_line_i);
+    bool success = header_txt_to_genozip (&vcf_line_i);
     if (!success) goto finish;
 
     mtf_initialize_mutex();

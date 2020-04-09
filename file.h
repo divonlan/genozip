@@ -98,7 +98,7 @@ typedef struct file_ {
     // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the txt_file structure for piz)
     Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
     Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single vcf component
-    uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderVCFHeader
+    uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 
     // Used for READING GENOZIP files
     Buffer v1_next_vcf_header;         // genozip v1 only: next VCF header - used when reading in --split mode
@@ -108,10 +108,10 @@ typedef struct file_ {
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_vcf_file;     // z_file: the value of disk_size when starting to read this vcf file
     
-    SectionHeaderVCFHeader vcf_header_first;         // store the first VCF header - we might need to update it at the very end;
+    SectionHeaderTxtHeader vcf_header_first;         // store the first VCF header - we might need to update it at the very end;
     uint8_t vcf_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite vcf_header with encryption padding
 
-    SectionHeaderVCFHeader vcf_header_single;        // store the VCF header of single component in concat mode
+    SectionHeaderTxtHeader vcf_header_single;        // store the VCF header of single component in concat mode
     uint8_t vcf_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
@@ -127,7 +127,7 @@ typedef struct file_ {
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
     Buffer section_list_dict_buf;      // ZIP: a subset of section_list_buf - dictionaries are added here by VBs as they are being constructed
     uint32_t sl_cursor, sl_dir_cursor; // PIZ: next index into section_list for searching for sections
-    uint32_t num_vcf_components_so_far;
+    uint32_t num_txt_components_so_far;
 
     // Information content stats - how many bytes and how many sections does this file have in each section type
     int64_t section_bytes[NUM_SEC_TYPES];   
@@ -136,7 +136,7 @@ typedef struct file_ {
 
 #   define READ_BUFFER_SIZE (1<<19)    // 512KB
     // Used for reading vcf files
-    Buffer vcf_unconsumed_data;         // excess data read from the vcf file - moved to the next VB
+    Buffer unconsumed_txt;         // excess data read from the vcf file - moved to the next VB
     
     // Used for reading genozip files
     uint32_t z_next_read, z_last_read;     // indices into read_buffer for z_file

@@ -33,7 +33,7 @@ else
 	CFLAGS += -O2
 endif
 
-MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c zip_vcf.c piz.c piz_vcf.c piz_sam.c \
+MY_SRCS = genozip.c base250.c move_to_front.c header.c zip.c zip_vcf.c piz.c piz_vcf.c piz_sam.c \
           gloptimize_vcf.c buffer.c random_access_vcf.c sections.c\
 	      txtfile.c squeeze_vcf.c zfile.c seg_vcf.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
 		  vblock.c vblock_vcf.c vblock_sam.c regions_vcf.c samples.c optimize_vcf.c dict_id.c hash.c gtshark_vcf.c stream.c url.c
@@ -49,7 +49,7 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h gloptimize_vcf.h optimize_vcf.h profiler.h dict_id.h txtfile.h zip.h v1_vcf.c v2v3_vcf.c \
-             base250.h endianness.h md5.h sections.h text_help.h vcf_header.h hash.h stream.h url.h \
+             base250.h endianness.h md5.h sections.h text_help.h header.h hash.h stream.h url.h \
              buffer.h file.h move_to_front.h seg_vcf.h text_license.h version.h gtshark_vcf.h \
              crypt.h genozip.h piz.h squeeze_vcf.h vblock.h zfile.h random_access_vcf.h regions_vcf.h samples.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
@@ -159,7 +159,7 @@ ifeq ($(OS),Windows_NT)
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
-# the genozip file header SectionHeaderVCFHeader.genozip_version
+# the genozip file header SectionHeaderTxtHeader.genozip_version
 increment-version: $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@$(SH_VERIFY_ALL_COMMITTED)

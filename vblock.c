@@ -145,5 +145,5 @@ void vb_cleanup_memory (void)
         else if (vb && vb->data_type == DATA_TYPE_SAM) vb_sam_cleanup_memory ((VBlockSAM *)vb);
     }
 
-    global_num_samples = 0;
+    global_vcf_num_samples = 0;
 }

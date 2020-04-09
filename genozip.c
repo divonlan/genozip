@@ -41,7 +41,7 @@
 #include "gtshark_vcf.h"
 #include "stream.h"
 #include "url.h"
-#include "vcf_header.h"
+#include "header.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -201,7 +201,7 @@ static void main_show_file_metadata (void)
 #else
              "Individuals: %u   Variants: %"PRIu64"   INFO & FORMAT tags: %u\n", 
 #endif
-             global_num_samples, z_file->num_lines, z_file->num_dict_ids-8);
+             global_vcf_num_samples, z_file->num_lines, z_file->num_dict_ids-8);
 }
 
 static void main_show_sections (void)
@@ -216,14 +216,14 @@ static void main_show_sections (void)
 
     // the order in which we want them displayed
     const SectionType secs[] = {
-        SEC_GENOZIP_HEADER, SEC_RANDOM_ACCESS,
-        SEC_VCF_HEADER, SEC_VBVCF_HEADER,
-        SEC_CHROM_B250, SEC_CHROM_DICT, SEC_POS_B250, SEC_POS_DICT, 
-        SEC_ID_B250, SEC_ID_DICT, SEC_REFALT_B250, SEC_REFALT_DICT, SEC_QUAL_B250, SEC_QUAL_DICT,
-        SEC_FILTER_B250, SEC_FILTER_DICT, SEC_INFO_B250, SEC_INFO_DICT,
-        SEC_INFO_SUBFIELD_B250, SEC_INFO_SUBFIELD_DICT, SEC_FORMAT_B250, SEC_FORMAT_DICT,
-        SEC_GENOTYPE_DATA, SEC_FRMT_SUBFIELD_DICT,
-        SEC_HAPLOTYPE_DATA, SEC_STATS_HT_SEPERATOR, SEC_PHASE_DATA
+        SEC_GENOZIP_HEADER, SEC_VCF_RANDOM_ACCESS,
+        SEC_TXT_HEADER, SEC_VCF_VB_HEADER,
+        SEC_VCF_CHROM_B250, SEC_VCF_CHROM_DICT, SEC_VCF_POS_B250, SEC_VCF_POS_DICT, 
+        SEC_VCF_ID_B250, SEC_VCF_ID_DICT, SEC_VCF_REFALT_B250, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_B250, SEC_VCF_QUAL_DICT,
+        SEC_VCF_FILTER_B250, SEC_VCF_FILTER_DICT, SEC_VCF_INFO_B250, SEC_VCF_INFO_DICT,
+        SEC_VCF_INFO_SF_B250, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_B250, SEC_VCF_FORMAT_DICT,
+        SEC_VCF_GT_DATA, SEC_VCF_FRMT_SF_DICT,
+        SEC_VCF_HT_DATA , SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA
     };
 
     static const char *categories[] = {
@@ -302,13 +302,13 @@ static void main_show_content (void)
 #define NUM_CATEGORIES 4
 
     int sections_per_category[NUM_CATEGORIES][30] = { 
-        { SEC_HAPLOTYPE_DATA, NIL },
-        { SEC_PHASE_DATA, SEC_GENOTYPE_DATA, SEC_FRMT_SUBFIELD_DICT, SEC_STATS_HT_SEPERATOR, NIL},
-        { SEC_VCF_HEADER, SEC_VBVCF_HEADER, SEC_CHROM_B250, SEC_POS_B250, SEC_ID_B250, SEC_REFALT_B250, 
-          SEC_QUAL_B250, SEC_FILTER_B250, SEC_INFO_B250, SEC_FORMAT_B250, SEC_INFO_SUBFIELD_B250, 
-          SEC_CHROM_DICT, SEC_POS_DICT, SEC_ID_DICT, SEC_REFALT_DICT, SEC_QUAL_DICT,
-          SEC_FILTER_DICT, SEC_INFO_DICT, SEC_INFO_SUBFIELD_DICT, SEC_FORMAT_DICT, NIL },
-        { SEC_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }
+        { SEC_VCF_HT_DATA , NIL },
+        { SEC_VCF_PHASE_DATA, SEC_VCF_GT_DATA, SEC_VCF_FRMT_SF_DICT, SEC_STATS_HT_SEPERATOR, NIL},
+        { SEC_TXT_HEADER, SEC_VCF_VB_HEADER, SEC_VCF_CHROM_B250, SEC_VCF_POS_B250, SEC_VCF_ID_B250, SEC_VCF_REFALT_B250, 
+          SEC_VCF_QUAL_B250, SEC_VCF_FILTER_B250, SEC_VCF_INFO_B250, SEC_VCF_FORMAT_B250, SEC_VCF_INFO_SF_B250, 
+          SEC_VCF_CHROM_DICT, SEC_VCF_POS_DICT, SEC_VCF_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
+          SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT, NIL },
+        { SEC_VCF_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }
     };
 
     for (unsigned i=0; i < NUM_CATEGORIES; i++) {
@@ -442,8 +442,8 @@ static void main_genounzip (const char *z_filename,
                             unsigned max_threads,
                             bool is_last_file)
 {
-    vcf_header_initialize();
-
+    header_initialize();
+    
     // get input FILE
     ASSERT0 (z_filename, "Error: z_filename is NULL");
 
@@ -481,7 +481,7 @@ static void main_genounzip (const char *z_filename,
         txt_file = file_open_redirect (WRITE, TXT_FILE, z_file->data_type); // STDOUT
     }
     else if (flag_split) {
-        // do nothing - the vcf component files will be opened by vcf_header_genozip_to_vcf()
+        // do nothing - the vcf component files will be opened by header_genozip_to_txt()
     }
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");

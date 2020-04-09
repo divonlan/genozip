@@ -7,7 +7,7 @@
 #include "regions_vcf.h"
 #include "buffer.h"
 #include "move_to_front.h"
-#include "vcf_header.h"
+#include "header.h"
 #include "vblock.h"
 #include "file.h"
 
@@ -193,7 +193,7 @@ void regions_make_chregs(void)
     if (!flag_regions) return; // nothing to do
 
     Region *regions = ARRAY (Region, &regions_buf);
-    MtfContext *chrom_ctx = &z_file->mtf_ctx[CHROM];
+    MtfContext *chrom_ctx = &z_file->mtf_ctx[VCF_CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
     chregs = calloc (num_chroms, sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom

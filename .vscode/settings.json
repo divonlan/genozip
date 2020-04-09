@@ -34,7 +34,7 @@
         "random_access_vcf.h": "c",
         "profiler.h": "c",
         "txtfile.h": "c",
-        "vcf_header.h": "c"
+        "header.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }
