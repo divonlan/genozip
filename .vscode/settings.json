@@ -10,7 +10,7 @@
         "cmath": "c",
         "visual_c_misc_funcs.h": "c",
         "crypt.h": "c",
-        "vb.h": "c",
+        "vcf_vb.h": "c",
         "endianness.h": "c",
         "zfile.h": "c",
         "typeinfo": "c",
@@ -21,7 +21,15 @@
         "string_view": "c",
         "initializer_list": "c",
         "utility": "c",
-        "stdarg.h": "c"
+        "stdarg.h": "c",
+        "chrono": "c",
+        "functional": "c",
+        "istream": "c",
+        "ostream": "c",
+        "ratio": "c",
+        "scoped_allocator": "c",
+        "tuple": "c",
+        "type_traits": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

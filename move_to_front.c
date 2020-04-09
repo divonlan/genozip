@@ -28,7 +28,7 @@ unzip:
 #include "sections.h"
 #include "gloptimize.h"
 #include "base250.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "move_to_front.h"
 #include "zfile.h"
 #include "endianness.h"

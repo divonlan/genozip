@@ -34,7 +34,7 @@ else
 endif
 
 MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c random_access.c sections.c\
-	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
+	      vcffile.c squeeze.c zfile.c vcf_seg.c profiler.c file.c vcf_vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
 		  regions.c samples.c optimize.c dict_id.c hash.c gtshark.c stream.c url.c
 
 CONDA_COMPATIBILITY_SRCS = compatibility/visual_c_pthread.c compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/mac_gettime.c
@@ -49,7 +49,7 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h gloptimize.h optimize.h profiler.h dict_id.h vcffile.h zip.h v1.c \
              base250.h endianness.h md5.h sections.h text_help.h vcf_header.h hash.h stream.h url.h \
-             buffer.h file.h move_to_front.h segregate.h text_license.h version.h gtshark.h \
+             buffer.h file.h move_to_front.h vcf_seg.h text_license.h version.h gtshark.h \
              crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h regions.h samples.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
              compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \

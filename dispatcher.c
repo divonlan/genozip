@@ -16,7 +16,7 @@
 
 #include "genozip.h"
 #include "dispatcher.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "file.h"
 #include "profiler.h"
 
@@ -116,7 +116,7 @@ static void dispatcher_show_start (DispatcherData *dd)
 {
     if (!dd->show_progress) return; 
 
-    const char *progress = (command == ZIP && vcf_file->type == STDIN) ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
+    const char *progress = (command == ZIP && txt_file->redirected) ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
     
     fprintf (stderr, "%s%s %s: %s", dd->test_mode ? "testing " : "", global_cmd, dd->filename, progress); 
              
@@ -138,26 +138,26 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     
     // case: genozip of plain vcf files (including if decompressed by an external compressor) 
     // - we go by the amount of VCF content processed 
-    if (command == ZIP && vcf_file->disk_size && file_is_plain_vcf (vcf_file)) { 
-        total = vcf_file->vcf_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
-        sofar = z_file->vcf_data_so_far_single;
+    if (command == ZIP && txt_file->disk_size && file_is_plain_txt (txt_file)) { 
+        total = txt_file->txt_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
+        sofar = z_file->txt_data_so_far_single;
     } 
     
     // case: UNZIP: always ; ZIP: locally decompressed files - .vcf.gz .vcf.bgz .vcf.bz2 - 
     // we go by the physical disk size and how much has been consumed from it so far
     else if (command == UNZIP || 
-             (command == ZIP && (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ || vcf_file->type == VCF_BZ2))) {
-        File *input_file  = (command == ZIP ? vcf_file : z_file);
+             (command == ZIP && (txt_file->type == VCF_GZ || txt_file->type == VCF_BGZ || txt_file->type == VCF_BZ2))) {
+        File *input_file  = (command == ZIP ? txt_file : z_file);
         total = input_file->disk_size; 
         sofar = input_file->disk_so_far; 
     } 
         
     // case: we have no idea what is the disk size of the VCF file - for example, because its STDIN, or because
     // its coming from a URL that doesn't provide the size
-    else if (command == ZIP && !vcf_file->disk_size)
+    else if (command == ZIP && !txt_file->disk_size)
         return; // we can't show anything if we don't know the file size
 
-    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u vcf_file->type=%u", command, vcf_file->type);
+    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u txt_file->type=%u", command, txt_file->type);
 
     double percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
@@ -256,7 +256,7 @@ void dispatcher_resume (Dispatcher dispatcher)
 
     dd->input_exhausted = false;
     dd->last_len        = 2;
-    dd->filename        = vcf_file->name;
+    dd->filename        = txt_file->name;
     
     dispatcher_show_start (dd);    
 }

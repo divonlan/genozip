@@ -6,7 +6,7 @@
 // vb stands for VariantBlock - i.e. one block of VARIANTS_PER_BLOCK data lines in the vcf file
 
 #include "genozip.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "move_to_front.h"
 
 // pool of VBs allocated based on number of threads
@@ -60,7 +60,7 @@ void vb_release_vb (VariantBlock **vb_p)
         if (vb->phase_sections_data)     buf_free(&vb->phase_sections_data[i]);
     }
 
-    vb->num_lines = vb->first_line = vb->variant_block_i = vb->vcf_data_next_offset = 0;
+    vb->num_lines = vb->first_line = vb->variant_block_i = vb->txt_data_next_offset = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = vb->ready_to_dispatch = vb->is_processed = false;
     vb->phase_type = PHASE_UNKNOWN;
@@ -101,7 +101,7 @@ void vb_release_vb (VariantBlock **vb_p)
     buf_free(&vb->helper_index_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->vcf_data);
-    buf_free(&vb->vcf_data_spillover);
+    buf_free(&vb->txt_data_spillover);
     buf_free(&vb->z_data);
     buf_free(&vb->z_section_headers);
     buf_free(&vb->ht_columns_data);

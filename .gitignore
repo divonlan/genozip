@@ -31,7 +31,9 @@ mac/Resources/*
 mac/scripts/*
 !.gitkeep
 .DS_Store
-*.vcf
+*.vcf*
+*.sam*
+*.bam
 !test-file.vcf
 !minimal.vcf
 !backward-compatibility-test/*.vcf

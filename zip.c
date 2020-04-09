@@ -6,14 +6,14 @@
 #include <math.h>
 #include "genozip.h"
 #include "profiler.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "buffer.h"
 #include "file.h"
 #include "zfile.h"
 #include "vcffile.h"
 #include "vcf_header.h"
-#include "segregate.h"
-#include "vb.h"
+#include "vcf_seg.h"
+#include "vcf_vb.h"
 #include "dispatcher.h"
 #include "move_to_front.h"
 #include "zip.h"
@@ -38,7 +38,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 {
     const char *runtime = dispatcher_ellapsed_time (dispatcher, false);
     double z_bytes   = (double)z_file->disk_so_far;
-    double vcf_bytes = (double)z_file->vcf_data_so_far_concat;
+    double vcf_bytes = (double)z_file->txt_data_so_far_concat;
     double ratio     = vcf_bytes / z_bytes;
 
     if (flag_concat) { // in concat, we don't show the compression ratio for files except for the last one
@@ -47,29 +47,29 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
         if (!vcf_file_disk_size_concat) // first concat file
-            source_file_type = vcf_file->type;
-        else if (source_file_type != vcf_file->type) // heterogenous source file types
+            source_file_type = txt_file->type;
+        else if (source_file_type != txt_file->type) // heterogenous source file types
             source_file_type = UNKNOWN_FILE_TYPE;
 
-        vcf_file_disk_size_concat += vcf_file->disk_size;
+        vcf_file_disk_size_concat += txt_file->disk_size;
 
         fprintf (stderr, "Done (%s)                                     \n", runtime);
 
         if (is_last_file)
             fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
                         dispatcher_ellapsed_time (dispatcher, true), ratio, 
-                        source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[vcf_file->type],
+                        source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
                         (double)vcf_file_disk_size_concat / z_bytes); // compression vs .gz/.bz2/.bcf/.xz... size
     }
     else {
-        double ratio2 = (double)vcf_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+        double ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-        if (vcf_file->type == VCF || vcf_file->type == STDIN || ratio2 < 1)  // source file was plain VCF or ratio2 is low (nothing to brag about)
+        if (txt_file->type == VCF || ratio2 < 1)  // source file was plain VCF or ratio2 is low (nothing to brag about)
             fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
         
         else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
             fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
-                     runtime, ratio, file_exts[vcf_file->type], ratio2);
+                     runtime, ratio, file_exts[txt_file->type], ratio2);
     }
 }
 
@@ -434,8 +434,8 @@ static void zip_compress_one_vb (VariantBlock *vb)
 
         // for a VCF file that's compressed (and hence we don't know the size of VCF content a-priori) AND we know the
         // compressed file size (eg a local gz/bz2 file or a compressed file on a ftp server) - we now estimate the 
-        // vcf_data_size_single that will be used for the global_hash and the progress indicator
-        vcffile_estimate_vcf_data_size (vb);
+        // txt_data_size_single that will be used for the global_hash and the progress indicator
+        vcffile_estimate_txt_data_size (vb);
     }
 
     // if block has haplotypes - handle them now
@@ -536,15 +536,15 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
     z_file->disk_so_far += (int64_t)data_buf->len;
     
     if (is_z_data) {
-        if (update_vcf_file) vcf_file->num_lines += (int64_t)vb->num_lines; // lines in this VCF file
+        if (update_vcf_file) txt_file->num_lines += (int64_t)vb->num_lines; // lines in this VCF file
         z_file->num_lines                        += (int64_t)vb->num_lines; // lines in all concatenated VCF files in this z_file
-        z_file->vcf_data_so_far_single           += (int64_t)vb->vb_data_size;
-        z_file->vcf_data_so_far_concat           += (int64_t)vb->vb_data_size;
+        z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
+        z_file->txt_data_so_far_concat           += (int64_t)vb->vb_data_size;
     }
 
     // update section stats
     for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        if (update_vcf_file) vcf_file->section_bytes[sec_i]  += vb->vcf_section_bytes[sec_i];
+        if (update_vcf_file) txt_file->section_bytes[sec_i]  += vb->vcf_section_bytes[sec_i];
         z_file->num_sections[sec_i]     += vb->z_num_sections[sec_i];
         z_file->section_bytes[sec_i]    += vb->z_section_bytes[sec_i];
         z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
@@ -659,7 +659,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
                 dispatcher_input_exhausted (dispatcher);
                 
                 // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
-                vcf_file->vcf_data_size_single = vcf_file->vcf_data_so_far_single; 
+                txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 
 
                 dispatcher_finalize_one_vb (dispatcher); 
             }
@@ -679,7 +679,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
 finish:
     z_file->disk_size              = z_file->disk_so_far;
-    z_file->vcf_data_so_far_single = 0;
+    z_file->txt_data_so_far_single = 0;
     evb->z_data.len                = 0;
     evb->z_next_header_i           = 0;
     memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));

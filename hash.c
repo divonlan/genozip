@@ -8,7 +8,7 @@
 #include "buffer.h"
 #include "move_to_front.h"
 #include "file.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "hash.h"
 #include "dict_id.h"
 
@@ -110,8 +110,8 @@ void hash_alloc_local (VariantBlock *segging_vb, MtfContext *vb_ctx)
 // is less likely to fit into the CPU memory caches
 void hash_alloc_global (VariantBlock *merging_vb, MtfContext *zf_ctx, const MtfContext *first_merging_vb_ctx)
 {
-    // note on vcf_data_size_single: if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
-    double estimated_num_vbs = MAX (1, (double)vcf_file->vcf_data_size_single / (double)merging_vb->vcf_data.len);
+    // note on txt_data_size_single: if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
+    double estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->vcf_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->num_lines;
 
     double n1 = first_merging_vb_ctx->mtf_len_at_half;

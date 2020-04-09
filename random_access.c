@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include "buffer.h"
 #include "random_access.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "file.h"
 #include "endianness.h"
 #include "regions.h"

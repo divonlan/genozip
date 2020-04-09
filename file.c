@@ -21,10 +21,12 @@
 
 // globals
 File *z_file   = NULL;
-File *vcf_file = NULL;
+File *txt_file = NULL;
 
-static StreamP input_decompressor  = NULL; // bcftools or xz - only one at a time
+static StreamP input_decompressor  = NULL; // bcftools or xz or samtools - only one at a time
 static StreamP output_compressor   = NULL; // bgzip
+
+static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --stdin command line option
 
 // global pointers - so the can be compared eg "if (mode == READ)"
 const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
@@ -32,9 +34,18 @@ const char *WRITE = "wb";
 
 char *file_exts[] = FILE_EXTS;
 
+void file_set_stdin_type (const char *type_str)
+{
+    for (stdin_type=UNKNOWN_FILE_TYPE+1; stdin_type < AFTER_LAST_FILE_TYPE; stdin_type++)
+        if (!strcmp (type_str, &file_exts[stdin_type][1])) break; // compare to file extension without the leading .
+
+    ASSERT (stdin_type==SAM || stdin_type==VCF, "%s: --stdin/-i option can only accept 'vcf' or 'sam'", global_cmd);
+}
+
+
 static FileType file_get_type (const char *filename)
 {
-    for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < STDIN; ft++)
+    for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < AFTER_LAST_FILE_TYPE; ft++)
         if (file_has_ext (filename, file_exts[ft])) return ft;
 
     return UNKNOWN_FILE_TYPE;
@@ -54,23 +65,159 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
         my_exit();
     }
 }
-        
 
-File *file_open (const char *filename, FileMode mode, FileType expected_type)
+// returns true if successful
+static bool file_open_txt (File *file)
+{
+    // for READ, set data_type
+    if (file->mode == READ) {
+        if      (file_is_vcf (file)) file->data_type = DATA_TYPE_VCF;
+        else if (file_is_sam (file)) file->data_type = DATA_TYPE_SAM;
+        else ABORT ("%s: input file must have one of the following extensions: " COMPRESSIBLE_EXTS, global_cmd);
+    }
+    else { // WRITE - data_type is already set by file_open
+        if (file->data_type == DATA_TYPE_VCF) 
+            ASSERT (file->type == VCF || file->type == VCF_GZ || file->type == VCF_BGZ, 
+                    "%s: output file must have a .vcf or .vcf.gz or .vcf.bgz extension", global_cmd); 
+
+        if (file->data_type == DATA_TYPE_SAM) 
+            ASSERT (file->type == SAM || file->type == BAM, 
+                    "%s: output file must have a .sam or .bam", global_cmd); 
+    }
+
+    switch (file->type) {
+    case VCF:
+        // don't actually open the file if we're just testing in genounzip
+        if (flag_test && file->mode == WRITE) return true;
+
+        file->file = file->is_remote ? url_open (NULL, file->name) : fopen (file->name, file->mode);
+        break;
+
+    case VCF_GZ:
+    case VCF_BGZ:
+        if (file->mode == READ) {
+            if (file->is_remote) { 
+                FILE *url_fp = url_open (NULL, file->name);
+                file->file = gzdopen (fileno(url_fp), file->mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+            }
+            else
+                file->file = gzopen64 (file->name, file->mode); // for local files we decompress ourselves
+        }
+        else {
+            char threads_str[20];
+            sprintf (threads_str, "%u", global_max_threads);
+
+            FILE *redirected_stdout_file = NULL;
+            if (!flag_stdout) {
+                redirected_stdout_file = fopen (file->name, file->mode); // bgzip will redirect its output to this file
+                ASSERT (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
+            }
+            char reason[100];
+            sprintf (reason, "To output a %s file", file_exts[file->type]);
+            output_compressor = stream_create (0, 0, 0, global_max_memory_per_vb, 
+                                                redirected_stdout_file, // output is redirected unless flag_stdout
+                                                0, reason,
+                                                "bgzip", 
+                                                "--stdout", // either to the terminal or redirected to output file
+                                                "--threads", threads_str,
+                                                NULL);
+            file->file = stream_to_stream_stdin (output_compressor);
+        }
+        break;
+
+    case VCF_BZ2:
+        if (file->is_remote) {            
+            FILE *url_fp = url_open (NULL, file->name);
+            file->file = BZ2_bzdopen (fileno(url_fp), file->mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+        }
+        else
+            file->file = BZ2_bzopen (file->name, file->mode);  // for local files we decompress ourselves   
+        break;
+
+    case VCF_XZ:
+        input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+                                            file->is_remote ? file->name : NULL,     // url
+                                            "To compress an .xz file", "xz",         // reason, exec_name
+                                            file->is_remote ? SKIP_ARG : file->name, // local file name 
+                                            "--threads=8", "--decompress", "--keep", "--stdout", 
+                                            flag_quiet ? "--quiet" : SKIP_ARG, 
+                                            NULL);            
+        file->file = stream_from_stream_stdout (input_decompressor);
+        break;
+
+    case BAM:
+    case BCF:
+    case BCF_GZ:
+    case BCF_BGZ: {
+        char reason[100];
+        sprintf (reason, "To compress a %s file", file_exts[file->type]);
+        input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+                                            file->is_remote ? file->name : NULL,         // url                                        
+                                            reason, 
+                                            file->type == BAM ? "samtools" : "bcftools", // exec_name
+                                            "view", "--threads", "8", 
+                                            file->type == BAM ? "-OSAM" : "-Ov",
+                                            file->is_remote ? SKIP_ARG : file->name,    // local file name 
+                                            NULL);
+        file->file = stream_from_stream_stdout (input_decompressor);
+        break;
+    }
+
+    default:
+        ABORT ("%s: unrecognized file type: %s", global_cmd, file->name);
+    }
+
+    if (file->mode == READ) 
+        file->txt_data_size_single = file->disk_size; 
+
+    return file->file != 0;
+}
+
+// returns true if successful
+static bool file_open_z (File *file)
+{
+    // for READ, set data_type
+    if (file->mode == READ) {
+        switch (file->type) {
+            case VCF_GENOZIP : file->data_type = DATA_TYPE_VCF; break;
+            case SAM_GENOZIP : file->data_type = DATA_TYPE_SAM; break; 
+            default          : ABORT ("%s: input file must have a " VCF_GENOZIP_ " or " SAM_GENOZIP_ " extension", global_cmd); 
+        }
+    }
+    else { // WRITE - data_type is already set by file_open
+        if (file->data_type == DATA_TYPE_VCF)
+            ASSERT (file->type == VCF_GENOZIP, "%s: output file must have a " VCF_GENOZIP_ " extension", global_cmd);
+       
+        if (file->data_type == DATA_TYPE_SAM)
+            ASSERT (file->type == SAM_GENOZIP, "%s: output file must have a " SAM_GENOZIP_ " extension", global_cmd);
+    }
+
+    file->file = file->is_remote ? url_open (NULL, file->name) 
+                                 : fopen (file->name, file->mode);
+
+    // initialize read buffer indices
+    if (file->mode == READ) 
+        file->z_last_read = file->z_next_read = READ_BUFFER_SIZE;
+
+    return file->file != 0;
+}
+
+File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */)
 {
     ASSERT0 (filename, "Error: filename is null");
 
-    File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
+    File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
-    bool is_remote = url_is_url (filename);
+    file->supertype = supertype;
+    file->is_remote = url_is_url (filename);
     bool file_exists;
 
     // is_remote is only possible in READ mode
-    ASSERT (mode != WRITE || !is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
+    ASSERT (mode != WRITE || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     const char *error = NULL;
-    if (is_remote) {
+    if (file->is_remote) {
         error = url_get_status (filename, &file_exists, &url_file_size); // accessing is expensive - get existance and size in one call
         if (url_file_size >= 0) file->disk_size = (uint64_t)url_file_size;
     }
@@ -81,14 +228,14 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
-    if (mode == READ && expected_type == VCF && file_exists && !file->disk_size && !url_file_size) {
+    if (mode == READ && supertype == TXT_FILE && file_exists && !file->disk_size && !url_file_size) {
         FREE (file);
         return NULL; 
     }
 
     ASSERT (mode != READ  || file_exists, "%s: cannot open %s for reading: %s", global_cmd, filename, error);
 
-    if (mode == WRITE && file_exists && !flag_force && !(expected_type==VCF && flag_test))
+    if (mode == WRITE && file_exists && !flag_force && !(supertype==TXT_FILE && flag_test))
         file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
     // copy filename 
@@ -99,122 +246,41 @@ File *file_open (const char *filename, FileMode mode, FileType expected_type)
     file->mode = mode;
     file->type = file_get_type (file->name);
 
-    // sanity check
-    if (file->mode == READ  && command == ZIP)   ASSERT (file_is_vcf (file), "%s: input file must have one of the following extensions: " VCF_EXTENSIONS, global_cmd);
-    if (file->mode == WRITE && command == ZIP)   ASSERT (file->type == VCF_GENOZIP, "%s: output file must have a " VCF_GENOZIP_ " extension", global_cmd);
-    if (file->mode == READ  && command == UNZIP) ASSERT (file->type == VCF_GENOZIP, "%s: input file must have a " VCF_GENOZIP_ " extension", global_cmd); 
-    if (file->mode == WRITE && command == UNZIP) ASSERT (file->type == VCF || file->type == VCF_GZ || file->type == VCF_BGZ, 
-                                                         "%s: output file must have a .vcf or .vcf.gz or .vcf.bgz extension", global_cmd); 
-    if (expected_type == VCF) {
+    if (file->mode == WRITE) 
+        file->data_type = data_type; // for READ, data_type is set by file_open_*
 
-        switch (file->type) {
-        case VCF:
-            // don't actually open the file if we're just testing in genounzip
-            if (flag_test && mode == WRITE) return file;
-
-            file->file = is_remote ? url_open (NULL, file->name) : fopen (file->name, mode);
-            break;
-
-        case VCF_GZ:
-        case VCF_BGZ:
-            if (mode == READ) {
-                if (is_remote) { 
-                    FILE *url_fp = url_open (NULL, file->name);
-                    file->file = gzdopen (fileno(url_fp), mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
-                }
-                else
-                    file->file = gzopen64 (file->name, mode); // for local files we decompress ourselves
-            }
-            else {
-                char threads_str[20];
-                sprintf (threads_str, "%u", global_max_threads);
-
-                FILE *redirected_stdout_file = NULL;
-                if (!flag_stdout) {
-                    redirected_stdout_file = fopen (file->name, mode); // bgzip will redirect its output to this file
-                    ASSERT (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
-                }
-                char reason[100];
-                sprintf (reason, "To output a %s file", file_exts[file->type]);
-                output_compressor = stream_create (0, 0, 0, global_max_memory_per_vb, 
-                                                   redirected_stdout_file, // output is redirected unless flag_stdout
-                                                   0, reason,
-                                                   "bgzip", 
-                                                   "--stdout", // either to the terminal or redirected to output file
-                                                   "--threads", threads_str,
-                                                   NULL);
-                file->file = stream_to_stream_stdin (output_compressor);
-            }
-            break;
-
-        case VCF_BZ2:
-            if (is_remote) {            
-                FILE *url_fp = url_open (NULL, file->name);
-                file->file = BZ2_bzdopen (fileno(url_fp), mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
-            }
-            else
-                file->file = BZ2_bzopen (file->name, mode);  // for local files we decompress ourselves   
-            break;
-
-        case VCF_XZ:
-            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                is_remote ? file->name : NULL,     // url
-                                                "To compress an .xz file", "xz",   // reason, exec_name
-                                                is_remote ? SKIP_ARG : file->name, // local file name 
-                                                "--threads=8", "--decompress", "--keep", "--stdout", 
-                                                flag_quiet ? "--quiet" : SKIP_ARG, 
-                                                NULL);            
-            file->file = stream_from_stream_stdout (input_decompressor);
-            break;
-
-        case BCF:
-        case BCF_GZ:
-        case BCF_BGZ: {
-            char reason[100];
-            sprintf (reason, "To compress a %s file", file_exts[file->type]);
-            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                is_remote ? file->name : NULL,     // url                                        
-                                                reason, "bcftools",                // reason, exec_name
-                                                "view", "-Ov", "--threads", "8", 
-                                                is_remote ? SKIP_ARG : file->name, // local file name 
-                                                NULL);
-            file->file = stream_from_stream_stdout (input_decompressor);
-            break;
-        }
-        default:
-            ABORT ("%s: unrecognized file type: %s", global_cmd, file->name);
-        }
+    bool success=false;
+    switch (supertype) {
+        case TXT_FILE: success = file_open_txt (file); break;
+        case Z_FILE:   success = file_open_z (file);   break;
+        default:       ABORT ("Error: invalid supertype: %u", supertype);
     }
-    
-    else if (expected_type == VCF_GENOZIP) 
-        file->file = is_remote ? url_open (NULL, file->name) : fopen (file->name, mode);
-    
-    else ABORT ("Error: invalid expected_type: %u", expected_type);
 
-    ASSERT (file->file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
-
-    if (mode == READ) {
-
-        if (file->type == VCF)
-            file->vcf_data_size_single = file->disk_size; 
-
-        // initialize read buffer indices
-        file->last_read = file->next_read = READ_BUFFER_SIZE;
-    }
+    ASSERT (success, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     return file;
 }
 
-File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex)
+File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type /* only used for WRITE */)
 {
-    File *file = (File *)calloc (1, sizeof(File) + (mode == READ ? READ_BUFFER_SIZE : 0));
+    ASSERT (mode==WRITE || stdin_type != UNKNOWN_FILE_TYPE, 
+            "%s: to redirect from standard input use the --stdin option eg '--stdin vcf'. See '%s --help' for more details", global_cmd, global_cmd);
 
-    file->file = fdopen (fd, mode==READ ? "rb" : "wb");
-    ASSERT (file->file, "%s: Failed to file descriptor %u: %s", global_cmd, fd, strerror (errno));
+    File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
-    file->type = type;
-    file->last_read = file->next_read = READ_BUFFER_SIZE;
+    file->file = (mode == READ) ? fdopen (STDIN_FILENO,  "rb")
+                                : fdopen (STDOUT_FILENO, "wb");
+    ASSERT (file->file, "%s: Failed to redirect %s: %s", global_cmd, (mode==READ ? "stdin" : "stdout"), strerror (errno));
 
+    file->supertype = supertype;
+    
+    file->data_type = (mode==READ) ? (stdin_type == VCF ? DATA_TYPE_VCF : DATA_TYPE_SAM)
+                                   : data_type;
+
+    file->type = (mode==READ) ? stdin_type 
+                              : (data_type == DATA_TYPE_VCF ? VCF : SAM);
+    file->redirected = true;
+    
     return file;
 }
 
@@ -248,7 +314,7 @@ void file_close (File **file_p,
     // it is faster to just let the process die
     if (cleanup_memory) {
             
-        if (file->type == VCF_GENOZIP) { // reading or writing a .vcf.genozip (no need to worry about STDIN or STDOUT - they are by definition a single file - so cleaned up when process exits)
+        if (file->supertype == Z_FILE && !file->redirected) { // reading or writing a .genozip. redirected files are by definition a single file - so cleaned up when process exits
             for (unsigned i=0; i < file->num_dict_ids; i++)
                 mtf_destroy_context (&file->mtf_ctx[i]);
 
@@ -339,7 +405,7 @@ bool file_seek (File *file, int64_t offset,
     ASSERT0 (file == z_file, "Error: file_seek only works for z_file");
 
     // check if we can just move the read buffers rather than seeking
-    if (file->mode == READ && file->next_read != file->last_read && whence == SEEK_SET) {
+    if (file->mode == READ && file->z_next_read != file->z_last_read && whence == SEEK_SET) {
 #ifdef __APPLE__
         int64_t move_by = offset - ftello ((FILE *)file->file);
 #else
@@ -348,8 +414,8 @@ bool file_seek (File *file, int64_t offset,
 
         // case: move is within read buffer already in memory (ftello shows the disk location after read of the last buffer)
         // we just change the buffer pointers rather than discarding the buffer and re-reading
-        if (move_by <= 0 && move_by >= -(int64_t)file->last_read) {
-            file->next_read = file->last_read + move_by; // only z_file uses next/last_Read
+        if (move_by <= 0 && move_by >= -(int64_t)file->z_last_read) {
+            file->z_next_read = file->z_last_read + move_by; // only z_file uses next/last_Read
             return true;
         }
     }
@@ -372,7 +438,7 @@ bool file_seek (File *file, int64_t offset,
     }
 
     // reset the read buffers
-    if (!ret) file->next_read = file->last_read = READ_BUFFER_SIZE;
+    if (!ret) file->z_next_read = file->z_last_read = READ_BUFFER_SIZE;
 
     return !ret;
 }
@@ -380,10 +446,10 @@ bool file_seek (File *file, int64_t offset,
 uint64_t file_tell (File *file)
 {
     if (command == ZIP && (file->type == VCF_GZ || file->type == VCF_BGZ))
-        return gzconsumed64 ((gzFile)vcf_file->file); 
+        return gzconsumed64 ((gzFile)txt_file->file); 
     
     if (command == ZIP && file->type == VCF_BZ2)
-        return BZ2_consumed ((BZFILE *)vcf_file->file); 
+        return BZ2_consumed ((BZFILE *)txt_file->file); 
 
 #ifdef __APPLE__
     return ftello ((FILE *)file->file);

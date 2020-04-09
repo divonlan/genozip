@@ -5,8 +5,8 @@
 
 #include "genozip.h"
 #include "profiler.h"
-#include "segregate.h"
-#include "vb.h"
+#include "vcf_seg.h"
+#include "vcf_vb.h"
 #include "move_to_front.h"
 #include "vcf_header.h"
 #include "endianness.h"
@@ -29,38 +29,38 @@ static void seg_set_hash_hints (VariantBlock *vb, uint32_t vb_line_i)
 
 // store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from vcf_data,
 // but in the part of vcf_data has been already consumed and no longer needed.
-// if there's not enough space in vcf_data, we allocate on vcf_data_spillover
+// if there's not enough space in vcf_data, we allocate on txt_data_spillover
 static void seg_store (VariantBlock *vb, 
                        bool *dst_is_spillover, uint32_t *dst_start, uint32_t *dst_len, // out
                        Buffer *src_buf, uint32_t size, // Either src_buf OR size must be given
-                       const char *limit_vcf_data, // if NULL always allocates in vcf_data_spillover
+                       const char *limit_vcf_data, // if NULL always allocates in txt_data_spillover
                        bool align32) // does start address need to be 32bit aligned to prevent aliasing issues
 {
     if (src_buf) size = src_buf->len;
 
     // align to 32bit (4 bytes) if needed
-    if (align32 && (vb->vcf_data_next_offset % 4))
-        vb->vcf_data_next_offset += 4 - (vb->vcf_data_next_offset % 4);
+    if (align32 && (vb->txt_data_next_offset % 4))
+        vb->txt_data_next_offset += 4 - (vb->txt_data_next_offset % 4);
 
-    if (limit_vcf_data && (vb->vcf_data.data + vb->vcf_data_next_offset + size < limit_vcf_data)) { // we have space in vcf_data - we can overlay
+    if (limit_vcf_data && (vb->vcf_data.data + vb->txt_data_next_offset + size < limit_vcf_data)) { // we have space in vcf_data - we can overlay
         *dst_is_spillover = false;
-        *dst_start        = vb->vcf_data_next_offset;
+        *dst_start        = vb->txt_data_next_offset;
         *dst_len          = size;
         if (src_buf) memcpy (&vb->vcf_data.data[*dst_start], src_buf->data, size);
 
-        vb->vcf_data_next_offset += size;
+        vb->txt_data_next_offset += size;
     }
 
     else {
         *dst_is_spillover = true;
-        *dst_start = vb->vcf_data_spillover.len;
+        *dst_start = vb->txt_data_spillover.len;
         *dst_len = size;
         
-        vb->vcf_data_spillover.len += size;
-        buf_alloc (vb, &vb->vcf_data_spillover, MAX (1000, vb->vcf_data_spillover.len), 1.5, 
-                   "vcf_data_spillover", vb->variant_block_i);
+        vb->txt_data_spillover.len += size;
+        buf_alloc (vb, &vb->txt_data_spillover, MAX (1000, vb->txt_data_spillover.len), 1.5, 
+                   "txt_data_spillover", vb->variant_block_i);
 
-        if (src_buf) memcpy (&vb->vcf_data_spillover.data[*dst_start], src_buf->data, size);
+        if (src_buf) memcpy (&vb->txt_data_spillover.data[*dst_start], src_buf->data, size);
     }
 
     if (src_buf) buf_free (src_buf);
@@ -836,7 +836,7 @@ static const char *seg_data_line (VariantBlock *vb,   // may be NULL if testing
     // now do the info field - possibly with the added \r for Windows 
     seg_info_field (vb, dl, info_field_start, info_field_len, has_13, vb_line_i);
 
-    // we don't need vcf_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate use vcf_data_spillover
+    // we don't need vcf_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate use txt_data_spillover
     if (dl->has_genotype_data) 
         seg_store (vb, &dl->genotype_data_spillover, &dl->genotype_data_start, &dl->genotype_data_len,
                    &vb->line_gt_data, 0, next_field, true);

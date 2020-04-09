@@ -34,7 +34,7 @@
 #include "crypt.h"
 #include "file.h"
 #include "dict_id.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "endianness.h"
 #include "regions.h"
 #include "samples.h"
@@ -193,7 +193,7 @@ static bool main_am_i_in_docker (void)
 static void main_show_file_metadata (void)
 {
     fprintf (stderr, "\n\n");
-    if (vcf_file->name) fprintf (stderr, "File name: %s\n", vcf_file->name);
+    if (txt_file->name) fprintf (stderr, "File name: %s\n", txt_file->name);
     fprintf (stderr, 
 #ifdef _MSC_VER
              "Individuals: %u   Variants: %I64u   Non-GT subfields: %u\n", 
@@ -241,7 +241,7 @@ static void main_show_sections (void)
     uint32_t total_sections=0;
 
     for (unsigned sec_i=0; sec_i < num_secs; sec_i++) {
-        int64_t vbytes    = vcf_file->section_bytes[secs[sec_i]];
+        int64_t vbytes    = txt_file->section_bytes[secs[sec_i]];
         int64_t zbytes    = z_file->section_bytes[secs[sec_i]];
         int64_t zentries  = z_file->section_entries[secs[sec_i]];
         int32_t zsections = z_file->num_sections[secs[sec_i]];
@@ -249,7 +249,7 @@ static void main_show_sections (void)
         char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_display_size(vbytes, vsize) : "       ";
         
         fprintf (stderr, format, categories[sec_i], zsections, buf_display_uint (zentries, zentries_str),
-                 vcf_size_str, 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
+                 vcf_size_str, 100.0 * (double)vbytes / (double)txt_file->txt_data_size_single,
                  buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
                  !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
@@ -261,7 +261,7 @@ static void main_show_sections (void)
     }
 
     fprintf (stderr, format, "TOTAL", total_sections, buf_display_uint (total_entries, zentries_str),
-             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
+             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)txt_file->txt_data_size_single,
              buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
 
@@ -280,8 +280,8 @@ static void main_show_sections (void)
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
              buf_display_uint (total_z, s1), buf_display_uint (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
 
-    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             buf_display_uint (total_vcf, s1), buf_display_uint (vcf_file->vcf_data_size_single, s2), (int32_t)(vcf_file->vcf_data_size_single - total_vcf));
+    ASSERTW (total_vcf == txt_file->txt_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%s but file size is %s (diff=%d)", 
+             buf_display_uint (total_vcf, s1), buf_display_uint (txt_file->txt_data_size_single, s2), (int32_t)(txt_file->txt_data_size_single - total_vcf));
 
 }
 
@@ -314,12 +314,12 @@ static void main_show_content (void)
 
         int64_t vbytes=0, zbytes=0;
         for (int *sec_i = sections_per_category[i]; *sec_i != NIL; sec_i++) {
-            vbytes += vcf_file->section_bytes[*sec_i];
+            vbytes += txt_file->section_bytes[*sec_i];
             zbytes += z_file->section_bytes[*sec_i];
         }
 
         fprintf (stderr, format, categories[i], 
-                 buf_display_size(vbytes, vsize), 100.0 * (double)vbytes / (double)vcf_file->vcf_data_size_single,
+                 buf_display_size(vbytes, vsize), 100.0 * (double)vbytes / (double)txt_file->txt_data_size_single,
                  buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
                  zbytes ? (double)vbytes / (double)zbytes : 0,
                  !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
@@ -329,15 +329,15 @@ static void main_show_content (void)
     }
 
     fprintf (stderr, format, "TOTAL", 
-             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)vcf_file->vcf_data_size_single,
+             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)txt_file->txt_data_size_single,
              buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_vcf / (double)total_z, "");
 
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);
 
-    ASSERTW (total_vcf == vcf_file->vcf_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
-             total_vcf, vcf_file->vcf_data_size_single, vcf_file->vcf_data_size_single - total_vcf);
+    ASSERTW (total_vcf == txt_file->txt_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
+             total_vcf, txt_file->txt_data_size_single, txt_file->txt_data_size_single - total_vcf);
 
 }
 
@@ -401,19 +401,19 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
-    z_file = file_open (z_filename, READ, VCF_GENOZIP); // open global z_file
-    uint64_t vcf_data_size, num_lines;
+    z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
+    uint64_t txt_data_size, num_lines;
     uint32_t num_samples;
     Md5Hash md5_hash_concat;
     char created[FILE_METADATA_LEN];
-    bool success = zfile_get_genozip_header (&vcf_data_size, &num_samples, &num_lines, 
+    bool success = zfile_get_genozip_header (&txt_data_size, &num_samples, &num_lines, 
                                              &md5_hash_concat, created, FILE_METADATA_LEN);
     if (!success) goto finish;
 
-    unsigned ratio = z_file->disk_size ? ((double)vcf_data_size / (double)z_file->disk_size) : 0;
+    unsigned ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
     
     buf_display_size (z_file->disk_size, c_str);
-    buf_display_size (vcf_data_size, u_str);
+    buf_display_size (txt_data_size, u_str);
     buf_display_uint (num_lines, s_str);
 
     bufprintf (evb, &str_buf, item_format, num_samples, s_str, 
@@ -424,7 +424,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
                z_filename, created);
             
     total_compressed_len   += z_file->disk_size;
-    total_uncompressed_len += vcf_data_size;
+    total_uncompressed_len += txt_data_size;
     
     files_listed++;
 
@@ -437,7 +437,7 @@ finish:
     }
 }
 static void main_genounzip (const char *z_filename,
-                            const char *vcf_filename, 
+                            const char *txt_filename, 
                             unsigned max_threads,
                             bool is_last_file)
 {
@@ -450,40 +450,40 @@ static void main_genounzip (const char *z_filename,
     ASSERT (!url_is_url (z_filename), 
             "%s: genozip files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
 
-    ASSERT (!vcf_filename || !url_is_url (vcf_filename), 
-            "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, vcf_filename);
+    ASSERT (!txt_filename || !url_is_url (txt_filename), 
+            "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, txt_filename);
 
     unsigned fn_len = strlen (z_filename);
 
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
-    if (!vcf_filename && (!flag_stdout || flag_bgzip) && !flag_split) {
-        vcf_filename = (char *)malloc(fn_len + 10);
-        ASSERT(vcf_filename, "Error: failed to malloc vcf_filename, len=%u", fn_len+10);
+    if (!txt_filename && (!flag_stdout || flag_bgzip) && !flag_split) {
+        txt_filename = (char *)malloc(fn_len + 10);
+        ASSERT(txt_filename, "Error: failed to malloc txt_filename, len=%u", fn_len+10);
 
         // .vcf.genozip -> .vcf or .vcf.gz
-        sprintf ((char *)vcf_filename, "%.*s%s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename,
+        sprintf ((char *)txt_filename, "%.*s%s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename,
                  flag_bgzip ? ".gz" : "");    
     }
 
-    z_file = file_open (z_filename, READ, VCF_GENOZIP);    
+    z_file = file_open (z_filename, READ, Z_FILE, 0);    
 
     // get output FILE 
-    if (vcf_filename) {
-        ASSERT0 (!vcf_file || flag_concat, "Error: vcf_file is open but not in concat mode");
+    if (txt_filename) {
+        ASSERT0 (!txt_file || flag_concat, "Error: txt_file is open but not in concat mode");
 
-        if (!vcf_file)  // in concat mode, for second file onwards, vcf_file is already open
-            vcf_file = file_open (vcf_filename, WRITE, VCF);
+        if (!txt_file)  // in concat mode, for second file onwards, txt_file is already open
+            txt_file = file_open (txt_filename, WRITE, TXT_FILE, z_file->data_type);
     }
     else if (flag_stdout) { // stdout
-        vcf_file = file_fdopen (1, WRITE, VCF, false); // STDOUT
+        txt_file = file_open_redirect (WRITE, TXT_FILE, z_file->data_type); // STDOUT
     }
     else if (flag_split) {
         // do nothing - the vcf component files will be opened by vcf_header_genozip_to_vcf()
     }
     else {
-        ABORT0 ("Error: unrecognized configuration for the vcf_file");
+        ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
     
     const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
@@ -500,13 +500,13 @@ static void main_genounzip (const char *z_filename,
         // don't close the concatenated file - it will close with the process exits
         // don't close in split mode - piz_dispatcher() opens and closes each component
         // don't close stdout - in concat mode, we might still need it for the next file
-        file_close (&vcf_file, false); 
+        file_close (&txt_file, false); 
 
     file_close (&z_file, false);
 
     FREE ((void *)basename);
 
-    if (flag_replace && vcf_filename && z_filename) file_remove (z_filename, true); 
+    if (flag_replace && txt_filename && z_filename) file_remove (z_filename, true); 
 }
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
@@ -517,7 +517,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 
                                   "To use the --test option",
-                                  exec_name, "-d", "-t", z_filename,
+                                  exec_name, "--decompress", "--test", z_filename,
                                   flag_quiet       ? "--quiet"       : SKIP_ARG,
                                   password         ? "--password"    : SKIP_ARG,
                                   password         ? password        : SKIP_ARG,
@@ -532,7 +532,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     ASSERTW (!exit_code, "genozip test exited with status %d\n", exit_code);
 }
 
-static void main_genozip (const char *vcf_filename, 
+static void main_genozip (const char *txt_filename, 
                           char *z_filename,
                           unsigned max_threads,
                           bool is_first_file, bool is_last_file,
@@ -542,15 +542,15 @@ static void main_genozip (const char *vcf_filename,
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
 
     // get input file
-    if (vcf_filename) {
+    if (txt_filename) {
         // open the file
-        vcf_file = file_open (vcf_filename, READ, VCF);
+        txt_file = file_open (txt_filename, READ, TXT_FILE, 0);
 
         // skip this file if its size is 0
-        RETURNW (vcf_file,, "Cannot compresss file %s because its size is 0 - skipping it", vcf_filename);
+        RETURNW (txt_file,, "Cannot compresss file %s because its size is 0 - skipping it", txt_filename);
     }
     else {  // stdin
-        vcf_file = file_fdopen (0, READ, STDIN, false);
+        txt_file = file_open_redirect (READ, TXT_FILE, UNKNOWN_FILE_TYPE);
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
  
@@ -562,19 +562,19 @@ static void main_genozip (const char *vcf_filename,
         if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
 
             if (!z_filename) {
-                const char *basename = url_is_url (vcf_filename) ? file_basename (vcf_filename, false, "", 0,0) : NULL;
-                const char *local_vcf_filename = basename ? basename : vcf_filename;
+                const char *basename = url_is_url (txt_filename) ? file_basename (txt_filename, false, "", 0,0) : NULL;
+                const char *local_vcf_filename = basename ? basename : txt_filename;
 
                 unsigned fn_len = strlen (local_vcf_filename);
                 z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
                 // get name, e.g. xx.bcf.gz -> xx.vcf.genozip
-                sprintf (z_filename, "%.*s" VCF_GENOZIP_, (int)(fn_len - strlen (file_exts[vcf_file->type])), local_vcf_filename); 
+                sprintf (z_filename, "%.*s" VCF_GENOZIP_, (int)(fn_len - strlen (file_exts[txt_file->type])), local_vcf_filename); 
 
                 if (basename) FREE ((char*)basename);
             }
-            z_file = file_open (z_filename, WRITE, VCF_GENOZIP);
+            z_file = file_open (z_filename, WRITE, Z_FILE, txt_file->data_type);
         }
     }
     else if (flag_stdout) { // stdout
@@ -584,24 +584,24 @@ static void main_genozip (const char *vcf_filename,
 #endif
         ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
-        z_file = file_fdopen (1, WRITE, STDOUT, false);
+        z_file = file_open_redirect (WRITE, Z_FILE, txt_file->data_type);
     } 
     else ABORT0 ("Error: No output channel");
     
-    const char *basename = file_basename (vcf_filename, false, "(stdin)", NULL, 0);
+    const char *basename = file_basename (txt_filename, false, "(stdin)", NULL, 0);
     zip_dispatcher (basename, max_threads, is_last_file);
 
     if (flag_show_sections && is_last_file) main_show_sections();
     if (flag_show_content && is_last_file)  main_show_content();
 
-    bool remove_vcf_file = z_file && flag_replace && vcf_filename;
+    bool remove_vcf_file = z_file && flag_replace && txt_filename;
 
-    file_close (&vcf_file, !is_last_file);
+    file_close (&txt_file, !is_last_file);
 
     if ((is_last_file || !flag_concat) && !flag_stdout && z_file) 
         file_close (&z_file, !is_last_file); 
 
-    if (remove_vcf_file) file_remove (vcf_filename, true); 
+    if (remove_vcf_file) file_remove (txt_filename, true); 
 
     FREE ((void *)basename);
 
@@ -719,11 +719,12 @@ int main (int argc, char **argv)
     // process command line options
     while (1) {
 
+        #define _i  {"stdin",         required_argument, 0, 'i'                }
         #define _c  {"stdout",        no_argument,       &flag_stdout,       1 }
         #define _d  {"decompress",    no_argument,       &command, UNZIP       }
         #define _f  {"force",         no_argument,       &flag_force,        1 }
         #define _h  {"help",          no_argument,       &command, HELP        }
-        #define _l  {"list",          required_argument, &command, LIST        }
+        #define _l  {"list",          no_argument,       &command, LIST        }
         #define _L1 {"license",       no_argument,       &command, LICENSE     } // US spelling
         #define _L2 {"licence",       no_argument,       &command, LICENSE     } // British spelling
         #define _q  {"quiet",         no_argument,       &flag_quiet,        1 }
@@ -775,18 +776,18 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
-        static Option genounzip_lo[]  = { _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,               _00 };
-        static Option genols_lo[]     = {         _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                                      _st, _sm,                                       _dm,               _00 };
-        static Option genocat_lo[]    = {         _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                    _st, _sm,                                       _dm,               _00 };
+        static Option genozip_lo[]    = { _i, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
+        static Option genounzip_lo[]  = {     _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,               _00 };
+        static Option genocat_lo[]    = {             _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                    _st, _sm,                                       _dm,               _00 };
+        static Option genols_lo[]     = {             _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                                      _st, _sm,                                       _dm,               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "cdfhlLqQt^Vzm@:Oo:p:B:S:9K", // genozip
-            "czfhLqQt^V@:Oo:p:m",         // genounzip
-            "hLVp:qf",                    // genols
-            "hLV@:p:qQ1r:t:s:H1Go:f"      // genocat
+            "icdfhlLqQt^Vzm@:Oo:p:B:S:9K", // genozip
+            "czfhLqQt^V@:Oo:p:m",          // genounzip
+            "hLVp:qf",                     // genols
+            "hLV@:p:qQ1r:t:s:H1Go:f"       // genocat
         };
 
         int option_index = -1;
@@ -803,6 +804,7 @@ int main (int argc, char **argv)
                 command=c; 
                 break;
 
+            case 'i' : file_set_stdin_type (optarg); break;
             case 'c' : flag_stdout        = 1      ; break;
             case 'z' : flag_bgzip         = 1      ; break;
             case 'f' : flag_force         = 1      ; break;

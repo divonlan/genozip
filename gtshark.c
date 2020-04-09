@@ -11,7 +11,7 @@
 #ifndef _WIN32
 #include <sys/wait.h>
 #endif
-#include "vb.h"
+#include "vcf_vb.h"
 #include "buffer.h"
 #include "file.h"
 #include "endianness.h"

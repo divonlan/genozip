@@ -7,7 +7,7 @@
 #include "sections.h"
 #include "buffer.h"
 #include "file.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "endianness.h"
 #include "random_access.h"
 

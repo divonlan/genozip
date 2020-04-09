@@ -90,8 +90,8 @@ typedef enum {
 #define GENOZIP_MAGIC 0x27052012
 
 // data types genozip can compress
-#define DATA_TYPE_VCF          0
-#define DATATYPE_NAMES { "VCF " }
+typedef enum { DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType;
+#define DATATYPE_NAMES { "VCF", "SAM" } // order matches DataType
 
 // encryption types
 #define ENCRYPTION_TYPE_NONE   0
@@ -151,7 +151,7 @@ typedef struct {
 // The VCF header section appears once in the file (or multiple times in case of concatenation), and includes the VCF file header 
 typedef struct {
     SectionHeader h;
-    uint64_t vcf_data_size;    // number of bytes in the original VCF file. 
+    uint64_t txt_data_size;    // number of bytes in the original VCF file. 
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;        // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
     uint32_t num_samples;      // number of samples in the original VCF file
@@ -160,7 +160,7 @@ typedef struct {
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
 
 #define VCF_FILENAME_LEN 256
-    char vcf_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated. always a .vcf, even if the original was .vcf.gz or .vcf.bz2
+    char txt_filename[VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated. always a .vcf, even if the original was .vcf.gz or .vcf.bz2
 
 } SectionHeaderVCFHeader; 
 
@@ -238,13 +238,13 @@ typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
     uint32_t num_samples;    // number of samples in the original VCF file
-    uint64_t vcf_data_size;  // number of bytes in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
+    uint64_t txt_data_size;  // number of bytes in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
     uint64_t num_lines;      // number of variants (data lines) in the original VCF file. Concat mode: entire file for first SectionHeaderVCFHeader, and only for that VCF if not first
     Md5Hash md5_hash_concat; // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
     Md5Hash md5_hash_single; // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single VCF file.
 
 #define v1_VCF_FILENAME_LEN 256
-    char vcf_filename[v1_VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated.
+    char txt_filename[v1_VCF_FILENAME_LEN];    // filename of this single component. without path, 0-terminated.
     
 #define v1_FILE_METADATA_LEN 72
     char created[v1_FILE_METADATA_LEN];    

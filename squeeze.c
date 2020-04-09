@@ -10,7 +10,7 @@
 #include "genozip.h"
 #include "profiler.h"
 #include "squeeze.h"
-#include "vb.h"
+#include "vcf_vb.h"
 
 unsigned squeeze_bits_per_entry (unsigned len)
 {

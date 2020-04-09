@@ -6,7 +6,7 @@
 #include "genozip.h"
 #include "aes.h"
 #include "crypt.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "md5.h"
 
 static char *password = NULL;
@@ -149,4 +149,4 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
 
 
 #define V1_CRYPT
-#include "v1.c"
+#include "vcf_v1.c"

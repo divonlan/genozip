@@ -8,7 +8,7 @@
 #include "buffer.h"
 #include "move_to_front.h"
 #include "vcf_header.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "file.h"
 
 // region as parsed from the --regions option

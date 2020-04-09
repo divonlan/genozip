@@ -14,7 +14,7 @@
 
 #include "genozip.h"
 #include "vcffile.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "file.h"
 #include "zlib/zlib.h"
 
@@ -35,25 +35,25 @@ static uint32_t vcffile_read_block (char *data)
 
     int32_t bytes_read=0;
 
-    if (file_is_plain_vcf (vcf_file)) {
+    if (file_is_plain_txt (txt_file)) {
         
-        bytes_read = read (fileno((FILE *)vcf_file->file), data, READ_BUFFER_SIZE); // -1 if error in libc
-        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", file_printname(vcf_file), strerror(errno));
+        bytes_read = read (fileno((FILE *)txt_file->file), data, READ_BUFFER_SIZE); // -1 if error in libc
+        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", file_printname(txt_file), strerror(errno));
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
         // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
-        if (!bytes_read && file_is_via_ext_decompressor (vcf_file)) {
+        if (!bytes_read && file_is_via_ext_decompressor (txt_file)) {
             file_assert_ext_decompressor();
             goto finish; // all is good - just a normal end-of-file
         }
         
-        vcf_file->disk_so_far += (int64_t)bytes_read;
+        txt_file->disk_so_far += (int64_t)bytes_read;
 
 #ifdef _WIN32
         // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
         // these charactes are not in 7-bit ASCII, so highly unlikely to be present natrually in a VCF file
-        if (vcf_file->type == STDIN && 
-            vcf_file->disk_so_far == (int64_t)bytes_read &&  // start of file
+        if (txt_file->redirected && 
+            txt_file->disk_so_far == (int64_t)bytes_read &&  // start of file
             bytes_read >= 3  && 
             (uint8_t)data[0] == 0xEF && 
             (uint8_t)data[1] == 0xBB && 
@@ -62,21 +62,21 @@ static uint32_t vcffile_read_block (char *data)
             // Bomb the BOM
             bytes_read -= 3;
             memcpy (data, data + 3, bytes_read);
-            vcf_file->disk_so_far -= 3;
+            txt_file->disk_so_far -= 3;
         }
 #endif
     }
-    else if (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ) { 
-        bytes_read = gzfread (data, 1, READ_BUFFER_SIZE, (gzFile)vcf_file->file);
+    else if (txt_file->type == VCF_GZ || txt_file->type == VCF_BGZ) { 
+        bytes_read = gzfread (data, 1, READ_BUFFER_SIZE, (gzFile)txt_file->file);
         
         if (bytes_read)
-            vcf_file->disk_so_far = gzconsumed64 ((gzFile)vcf_file->file); 
+            txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); 
     }
-    else if (vcf_file->type == VCF_BZ2) { 
-        bytes_read = BZ2_bzread ((BZFILE *)vcf_file->file, data, READ_BUFFER_SIZE);
+    else if (txt_file->type == VCF_BZ2) { 
+        bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, READ_BUFFER_SIZE);
 
         if (bytes_read)
-            vcf_file->disk_so_far = BZ2_consumed ((BZFILE *)vcf_file->file); 
+            txt_file->disk_so_far = BZ2_consumed ((BZFILE *)txt_file->file); 
     } 
     else {
         ABORT0 ("Invalid file type");
@@ -108,14 +108,14 @@ void vcffile_read_vcf_header (bool is_first_vcf)
 
         if (!bytes_read) { // EOF
             ASSERT (!evb->vcf_data.len || evb->vcf_data.data[evb->vcf_data.len-1] == '\n', 
-                    "Error: invalid VCF file %s while reading VCF header - expecting it to end with a newline", file_printname (vcf_file));
+                    "Error: invalid VCF file %s while reading VCF header - expecting it to end with a newline", file_printname (txt_file));
             goto finish;
         }
 
         const char *this_read = &evb->vcf_data.data[evb->vcf_data.len];
 
         ASSERT (evb->vcf_data.len || this_read[0] == '#',
-                "Error: %s is missing a VCF header - expecting first character in file to be #", file_printname (vcf_file));
+                "Error: %s is missing a VCF header - expecting first character in file to be #", file_printname (txt_file));
 
         // case VB header: check stop condition - a line beginning with a non-#
         for (int i=0; i < bytes_read; i++) { // start from 1 back just in case it is a newline, and end 1 char before bc our test is 2 chars
@@ -128,10 +128,10 @@ void vcffile_read_vcf_header (bool is_first_vcf)
                 evb->vcf_data.len += bytes_read; // increase all the way - just for buf_copy
 
                 // the excess data is for the next vb to read 
-                buf_copy (evb, &vcf_file->vcf_unconsumed_data, &evb->vcf_data, 1, vcf_header_len,
-                          bytes_read - i, "vcf_file->vcf_unconsumed_data", 0);
+                buf_copy (evb, &txt_file->vcf_unconsumed_data, &evb->vcf_data, 1, vcf_header_len,
+                          bytes_read - i, "txt_file->vcf_unconsumed_data", 0);
 
-                vcf_file->vcf_data_so_far_single += i; 
+                txt_file->txt_data_so_far_single += i; 
                 evb->vcf_data.len = vcf_header_len;
 
                 goto finish;
@@ -140,7 +140,7 @@ void vcffile_read_vcf_header (bool is_first_vcf)
         }
 
         evb->vcf_data.len += bytes_read;
-        vcf_file->vcf_data_so_far_single += bytes_read;
+        txt_file->txt_data_so_far_single += bytes_read;
     }
 
 finish:        
@@ -148,7 +148,7 @@ finish:
     vcffile_update_md5 (evb->vcf_data.data, evb->vcf_data.len, !is_first_vcf);
 
     // md5 vcf_unconsumed_data - always
-    vcffile_update_md5 (vcf_file->vcf_unconsumed_data.data, vcf_file->vcf_unconsumed_data.len, false);
+    vcffile_update_md5 (txt_file->vcf_unconsumed_data.data, txt_file->vcf_unconsumed_data.len, false);
 
     COPY_TIMER (evb->profile.vcffile_read_vcf_header);
 }
@@ -158,14 +158,14 @@ void vcffile_read_variant_block (VariantBlock *vb)
 {
     START_TIMER;
 
-    uint64_t pos_before = file_tell (vcf_file);
+    uint64_t pos_before = file_tell (txt_file);
 
     buf_alloc (vb, &vb->vcf_data, global_max_memory_per_vb, 1, "vcf_data", vb->variant_block_i);    
 
     // start with using the unconsumed data from the previous VB (note: copy & free and not move! so we can reuse vcf_data next vb)
-    if (buf_is_allocated (&vcf_file->vcf_unconsumed_data)) {
-        buf_copy (vb, &vb->vcf_data, &vcf_file->vcf_unconsumed_data, 0 ,0 ,0, "vcf_data", vb->variant_block_i);
-        buf_free (&vcf_file->vcf_unconsumed_data);
+    if (buf_is_allocated (&txt_file->vcf_unconsumed_data)) {
+        buf_copy (vb, &vb->vcf_data, &txt_file->vcf_unconsumed_data, 0 ,0 ,0, "vcf_data", vb->variant_block_i);
+        buf_free (&txt_file->vcf_unconsumed_data);
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
@@ -174,7 +174,7 @@ void vcffile_read_variant_block (VariantBlock *vb)
         uint32_t bytes_one_read = vcffile_read_block (&vb->vcf_data.data[vb->vcf_data.len]);
 
         if (!bytes_one_read) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
-            ASSERT (!vb->vcf_data.len || vb->vcf_data.data[vb->vcf_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", file_printname (vcf_file));
+            ASSERT (!vb->vcf_data.len || vb->vcf_data.data[vb->vcf_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", file_printname (txt_file));
             break;
         }
 
@@ -195,8 +195,8 @@ void vcffile_read_variant_block (VariantBlock *vb)
             if (unconsumed_len) {
 
                 // the unconcusmed data is for the next vb to read 
-                buf_copy (evb, &vcf_file->vcf_unconsumed_data, &vb->vcf_data, 1, // evb, because dst buffer belongs to File
-                          vb->vcf_data.len - unconsumed_len, unconsumed_len, "vcf_file->vcf_unconsumed_data", vb->variant_block_i);
+                buf_copy (evb, &txt_file->vcf_unconsumed_data, &vb->vcf_data, 1, // evb, because dst buffer belongs to File
+                          vb->vcf_data.len - unconsumed_len, unconsumed_len, "txt_file->vcf_unconsumed_data", vb->variant_block_i);
 
                 vb->vcf_data.len -= unconsumed_len;
             }
@@ -204,9 +204,9 @@ void vcffile_read_variant_block (VariantBlock *vb)
         }
     }
 
-    vcf_file->vcf_data_so_far_single += vb->vcf_data.len;
+    txt_file->txt_data_so_far_single += vb->vcf_data.len;
     vb->vb_data_size = vb->vcf_data.len; // initial value. it may change if --optimize is used.
-    vb->vb_data_read_size = file_tell (vcf_file) - pos_before; // plain or gz/bz2 compressed bytes read
+    vb->vb_data_read_size = file_tell (txt_file) - pos_before; // plain or gz/bz2 compressed bytes read
 
     COPY_TIMER (vb->profile.vcffile_read_variant_block);
 }
@@ -219,16 +219,16 @@ unsigned vcffile_write_to_disk (const Buffer *buf)
 
     if (!flag_test) {
         while (len) {
-            unsigned bytes_written = file_write (vcf_file, next, len);
+            unsigned bytes_written = file_write (txt_file, next, len);
             len  -= bytes_written;
             next += bytes_written;
         }
     }
 
-    if (flag_md5) md5_update (&vcf_file->md5_ctx_concat, buf->data, buf->len);
+    if (flag_md5) md5_update (&txt_file->md5_ctx_concat, buf->data, buf->len);
 
-    vcf_file->vcf_data_so_far_single += buf->len;
-    vcf_file->disk_so_far            += buf->len;
+    txt_file->txt_data_so_far_single += buf->len;
+    txt_file->disk_so_far            += buf->len;
 
     return buf->len;
 }
@@ -257,31 +257,31 @@ void vcffile_write_one_variant_block (VariantBlock *vb)
 }
 
 // ZIP only - estimate the size of the vcf data in this file. affects the hash table size and the progress indicator.
-void vcffile_estimate_vcf_data_size (VariantBlock *vb)
+void vcffile_estimate_txt_data_size (VariantBlock *vb)
 {
-    if (!vcf_file->disk_size) return; // we're unable to estimate if the disk size is not known
+    if (!txt_file->disk_size) return; // we're unable to estimate if the disk size is not known
     
     double ratio=1;
 
     // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
-    if (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ || vcf_file->type == VCF_BZ2) 
+    if (txt_file->type == VCF_GZ || txt_file->type == VCF_BGZ || txt_file->type == VCF_BZ2) 
         ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size;
 
     // for compressed files for which we don't have their size (eg streaming from an http server) - we use
     // estimates based on a benchmark compression ratio of files with and without genotype data
-    else if (vcf_file->type == BCF || vcf_file->type == BCF_GZ || vcf_file->type == BCF_BGZ)
+    else if (txt_file->type == BCF || txt_file->type == BCF_GZ || txt_file->type == BCF_BGZ)
         // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
         // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
         // the bcf is compressed as it normally is.
         ratio = vb->has_genotype_data ? 8.5 : 55;
 
-    else if (vcf_file->type == VCF_XZ)
+    else if (txt_file->type == VCF_XZ)
         ratio = vb->has_genotype_data ? 12.7 : 171;
 
-    else if (vcf_file->type == VCF)
+    else if (txt_file->type == VCF)
         ratio = 1;
 
-    else ABORT ("Error in file_estimate_vcf_data_size: unspecified file_type=%u", vcf_file->type);
+    else ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
 
-    vcf_file->vcf_data_size_single = vcf_file->disk_size * ratio;
+    txt_file->txt_data_size_single = txt_file->disk_size * ratio;
 }

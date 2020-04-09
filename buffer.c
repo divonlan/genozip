@@ -10,7 +10,7 @@
 #include "genozip.h"
 #include "profiler.h"
 #include "buffer.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else

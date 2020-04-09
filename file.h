@@ -21,6 +21,7 @@
 #include "move_to_front.h"
 #include "aes.h"
 
+// VCF file variations
 #define VCF_         ".vcf"
 #define VCF_GZ_      ".vcf.gz"
 #define VCF_BGZ_     ".vcf.bgz"
@@ -31,11 +32,27 @@
 #define BCF_BGZ_     ".bcf.bgz"
 #define VCF_GENOZIP_ ".vcf" GENOZIP_EXT
 
-typedef enum      {UNKNOWN_FILE_TYPE, VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  STDIN,   STDOUT} FileType;
-#define FILE_EXTS {"Unknown",   VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, "stdin", "stdout" }
+// SAM file variations
+#define SAM_         ".sam"
+#define BAM_         ".bam"
+#define SAM_GENOZIP_ ".sam" GENOZIP_EXT
+
+typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
+
+typedef enum      { UNKNOWN_FILE_TYPE, 
+                    VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  
+                    SAM,  BAM,  SAM_GENOZIP,
+                    AFTER_LAST_FILE_TYPE } FileType;
+
+#define FILE_EXTS {"Unknown",\
+                   VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
+                   SAM_, BAM_, SAM_GENOZIP_, \
+                   "stdin", "stdout" }
+
 extern char *file_exts[];
 
-#define VCF_EXTENSIONS VCF_ " " VCF_GZ_ " " VCF_BGZ_ " " VCF_BZ2_ " " VCF_XZ_ " " BCF_ " " BCF_GZ_ " " BCF_BGZ_
+#define COMPRESSIBLE_EXTS VCF_ " " VCF_GZ_ " " VCF_BGZ_ " " VCF_BZ2_ " " VCF_XZ_ " " BCF_ " " BCF_GZ_ " " BCF_BGZ_ " "\
+                          SAM_ " " BAM_
 
 typedef const char *FileMode;
 extern FileMode READ, WRITE; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
@@ -43,33 +60,42 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 #define file_is_zip_read(file) ((file)->mode == READ && command == ZIP)
 
 #define file_is_via_ext_decompressor(file) ((file)->type == VCF_XZ || \
-                                            (file)->type == BCF || (file)->type == BCF_GZ  || (file)->type == BCF_BGZ)
+                                            (file)->type == BCF || (file)->type == BCF_GZ  || (file)->type == BCF_BGZ || \
+                                            (file)->type == BAM)
 
-// files that are read by ZIP as plain VCF - they might have been decompressed by an external decompressor
-#define file_is_plain_vcf(file) (((file)->type == VCF || (file)->type == STDIN) || file_is_via_ext_decompressor(file))
+// files that are read by ZIP as plain (i.e. not compressed) TXT - they might have been decompressed by an external decompressor
+#define file_is_plain_txt(file) ((file)->type == VCF || (file)->type == SAM || file_is_via_ext_decompressor(file))
 
-#define file_is_vcf(file) (file_is_plain_vcf(file) || (file)->type == VCF_GZ || (file)->type == VCF_BGZ || (file)->type == VCF_BZ2)
+#define file_is_vcf(file) ((file)->type == VCF_GZ || (file)->type == VCF_BGZ || (file)->type == VCF_BZ2 || (file)->type == VCF_XZ || \
+                           (file)->type == VCF || (file)->type == BCF || (file)->type == BCF_GZ || (file)->type == BCF_BGZ)
+
+#define file_is_sam(file) ((file)->type == SAM || (file)->type == BAM)
 
 typedef struct file_ {
     void *file;
     char *name;                        // allocated by file_open(), freed by file_close()
     FileMode mode;
+    FileSupertype supertype;            
     FileType type;
+    bool is_remote;                    // true if file is downloaded from a url
+    bool redirected;                   // true if this file is redirected from stdin/stdout
+
+    DataType data_type;
     
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
-                                       // note: this is different from vcf_data_size_single as disk_size might be compressed (gz, bz2 etc)
+                                       // note: this is different from txt_data_size_single as disk_size might be compressed (gz, bz2 etc)
     int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite)
 
     // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
-    int64_t vcf_data_size_single;      // vcf_file: size of the VCF data. ZIP: if its a plain VCF file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
-    int64_t vcf_data_so_far_single;    // vcf_file: data read (ZIP) or written (PIZ) to/from vcf file so far
+    int64_t txt_data_size_single;      // txt_file: size of the VCF data. ZIP: if its a plain VCF file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
+    int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from vcf file so far
                                        // z_file: VCF data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t vcf_data_so_far_concat;    // z_file & ZIP only: VCF data represented in the GENOZIP data written so far for all VCFs
+    int64_t txt_data_so_far_concat;    // z_file & ZIP only: VCF data represented in the GENOZIP data written so far for all VCFs
     int64_t num_lines;                 // z_file: number of lines in all vcf files concatenated into this z_file
-                                       // vcf_file: number of lines in single vcf file
+                                       // txt_file: number of lines in single vcf file
 
-    // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the vcf_file structure for piz)
+    // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the txt_file structure for piz)
     Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
     Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single vcf component
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderVCFHeader
@@ -113,21 +139,22 @@ typedef struct file_ {
     Buffer vcf_unconsumed_data;         // excess data read from the vcf file - moved to the next VB
     
     // Used for reading genozip files
-    uint32_t next_read, last_read;     // indices into read_buffer
+    uint32_t z_next_read, z_last_read;     // indices into read_buffer for z_file
     char read_buffer[];                // only allocated for mode=READ files   
 } File;
 
 // globals
-extern File *z_file, *vcf_file; 
+extern File *z_file, *txt_file; 
 
 // methods
-extern File *file_open (const char *filename, FileMode mode, FileType expected_type);
-extern File *file_fdopen (int fd, FileMode mode, FileType type, bool initialize_mutex);
+extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
+extern File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type);
 extern void file_close (FileP *file_p, bool cleanup_memory /* optional */);
 extern size_t file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern uint64_t file_tell (File *file);
 extern uint64_t file_get_size (const char *filename);
+extern void file_set_stdin_type (const char *type_str);
 extern bool file_is_dir (const char *filename);
 extern void file_remove (const char *filename, bool fail_quietly);
 extern bool file_has_ext (const char *filename, const char *extension);

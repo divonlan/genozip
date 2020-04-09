@@ -13,7 +13,7 @@
 #include "squeeze.h"
 #include "vcf_header.h"
 #include "crypt.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "move_to_front.h"
 #include "file.h"
 #include "endianness.h"
@@ -378,11 +378,10 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
     vcf_header.num_samples             = BGEN32 (global_num_samples);
     vcf_header.num_lines               = NUM_LINES_UNKNOWN; 
 
-    if (vcf_file->type == VCF) // if its a plain VCF then we know the data size now. Otherwise we will update later
-        vcf_header.vcf_data_size       = BGEN64 (vcf_file->vcf_data_size_single);
+    if (txt_file->type == VCF) // if its a plain VCF then we know the data size now. Otherwise we will update later
+        vcf_header.txt_data_size       = BGEN64 (txt_file->txt_data_size_single);
 
-    switch (vcf_file->type) {
-        case STDIN   :
+    switch (txt_file->type) {
         case VCF     : vcf_header.compression_type = COMPRESSION_TYPE_NONE  ; break;
         case VCF_GZ  :
         case VCF_BGZ : vcf_header.compression_type = COMPRESSION_TYPE_GZIP  ; break;
@@ -391,11 +390,11 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
         case BCF     : 
         case BCF_GZ  : 
         case BCF_BGZ : vcf_header.compression_type = COMPRESSION_TYPE_BCF   ; break;
-        default      : ABORT ("Error: invalid vcf_file->type=%u", vcf_file->type);
+        default      : ABORT ("Error: invalid txt_file->type=%u", txt_file->type);
     }
 
-    file_basename (vcf_file->name, false, "(stdin)", vcf_header.vcf_filename, VCF_FILENAME_LEN);
-    vcf_header.vcf_filename[strlen(vcf_header.vcf_filename)- (strlen(file_exts[vcf_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
+    file_basename (txt_file->name, false, "(stdin)", vcf_header.txt_filename, VCF_FILENAME_LEN);
+    vcf_header.txt_filename[strlen(vcf_header.txt_filename)- (strlen(file_exts[txt_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
     
     static Buffer vcf_header_buf = EMPTY_BUFFER;
 
@@ -407,8 +406,8 @@ void zfile_write_vcf_header (Buffer *vcf_header_text, bool is_first_vcf)
     file_write (z_file, vcf_header_buf.data, vcf_header_buf.len);
 
     z_file->disk_so_far      += vcf_header_buf.len;   // length of GENOZIP data writen to disk
-    z_file->vcf_data_so_far_single += vcf_header_text->len; // length of the original VCF header
-    z_file->vcf_data_so_far_concat += vcf_header_text->len;
+    z_file->txt_data_so_far_single += vcf_header_text->len; // length of the original VCF header
+    z_file->txt_data_so_far_concat += vcf_header_text->len;
 
     buf_free (&vcf_header_buf); 
 
@@ -601,32 +600,32 @@ static void *zfile_read_from_disk (VariantBlock *vb, Buffer *buf, unsigned len, 
 
     while (len) {
 
-        if (z_file->next_read == z_file->last_read) { // nothing left in read_buffer - replenish it from disk
+        if (z_file->z_next_read == z_file->z_last_read) { // nothing left in read_buffer - replenish it from disk
 
-            if (z_file->last_read != READ_BUFFER_SIZE && !memcpyied) return NULL; // EOF reached last time, nothing more to read
+            if (z_file->z_last_read != READ_BUFFER_SIZE && !memcpyied) return NULL; // EOF reached last time, nothing more to read
 
-            if (z_file->last_read != READ_BUFFER_SIZE && memcpyied && fail_quietly_if_not_enough_data) return NULL; // partial read = quiet error as requested
+            if (z_file->z_last_read != READ_BUFFER_SIZE && memcpyied && fail_quietly_if_not_enough_data) return NULL; // partial read = quiet error as requested
             
-            ASSERT (z_file->last_read == READ_BUFFER_SIZE, 
+            ASSERT (z_file->z_last_read == READ_BUFFER_SIZE, 
                     "Error: end-of-file while reading %s, read %u bytes, but wanted to read %u bytes", 
                     file_printname (z_file), memcpyied, len_save);
 
-            z_file->last_read = fread (z_file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)z_file->file);
-            z_file->next_read = 0;
-            z_file->disk_so_far += z_file->last_read;
+            z_file->z_last_read = fread (z_file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)z_file->file);
+            z_file->z_next_read = 0;
+            z_file->disk_so_far += z_file->z_last_read;
 
-            ASSERT (z_file->last_read || !memcpyied, "Error: data requested could not be read bytes_so_far=%"PRIu64"", z_file->disk_so_far);
-            if (!z_file->last_read) {
+            ASSERT (z_file->z_last_read || !memcpyied, "Error: data requested could not be read bytes_so_far=%"PRIu64"", z_file->disk_so_far);
+            if (!z_file->z_last_read) {
                 COPY_TIMER (vb->profile.read);
                 return NULL; // file is exhausted - nothing read
             }
         }
 
-        unsigned memcpy_len = MIN (len, z_file->last_read - z_file->next_read);
+        unsigned memcpy_len = MIN (len, z_file->z_last_read - z_file->z_next_read);
 
-        buf_add (buf, z_file->read_buffer + z_file->next_read, memcpy_len);
+        buf_add (buf, z_file->read_buffer + z_file->z_next_read, memcpy_len);
         len             -= memcpy_len;
-        z_file->next_read += memcpy_len;
+        z_file->z_next_read += memcpy_len;
 
         memcpyied += memcpy_len;
     }
@@ -889,7 +888,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
-    int data_type = BGEN16 (header->data_type); 
+    DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT (data_type == DATA_TYPE_VCF, "Error: unrecognized data_type=%d", data_type);
 
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
@@ -926,7 +925,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     return data_type;
 }
 
-void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_component_md5)
+void zfile_compress_genozip_header (DataType data_type, const Md5Hash *single_component_md5)
 {
     SectionHeaderGenozipHeader header;
 
@@ -947,9 +946,9 @@ void zfile_compress_genozip_header (uint16_t data_type, const Md5Hash *single_co
     header.h.data_uncompressed_len      = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     // gtshark is the only difference between version 2 and 3. therefore without gtshark we can leave it at 2.
     header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;
-    header.data_type                    = BGEN16 (data_type);
+    header.data_type                    = BGEN16 ((uint16_t)data_type);
     header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
-    header.uncompressed_data_size       = BGEN64 (z_file->vcf_data_so_far_concat);
+    header.uncompressed_data_size       = BGEN64 (z_file->txt_data_so_far_concat);
     header.num_samples                  = BGEN32 (global_num_samples);
     header.num_items_concat             = BGEN64 (z_file->num_lines);
     header.num_sections                 = BGEN32 (num_sections); 
@@ -1053,8 +1052,8 @@ bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, 
 
     // update the header of the single (current) vcf. 
     SectionHeaderVCFHeader *curr_header = &z_file->vcf_header_single;
-    curr_header->vcf_data_size    = BGEN64 (vcf_file->vcf_data_size_single);
-    curr_header->num_lines        = BGEN64 (vcf_file->num_lines);
+    curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
+    curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
 
     md5_finalize (&z_file->md5_ctx_single, &curr_header->md5_hash_single);
@@ -1077,4 +1076,4 @@ bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, 
 }
 
 #define V1_ZFILE // select the zfile functions of v1.c
-#include "v1.c"
+#include "vcf_v1.c"

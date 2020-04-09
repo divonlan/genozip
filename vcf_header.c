@@ -7,7 +7,7 @@
 #include "zfile.h"
 #include "vcffile.h"
 #include "vcf_header.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "crypt.h"
 #include "version.h"
 #include "endianness.h"
@@ -100,7 +100,7 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
     // case - vcf header was found 
     if (evb->vcf_data.len) {
 
-        bool can_concatenate = vcf_header_set_globals(evb, vcf_file->name, &evb->vcf_data);
+        bool can_concatenate = vcf_header_set_globals(evb, txt_file->name, &evb->vcf_data);
         if (!can_concatenate) { 
             // this is the second+ file in a concatenation list, but its samples are incompatible
             buf_free (&evb->vcf_data);
@@ -109,7 +109,7 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
 
         if (z_file) zfile_write_vcf_header (&evb->vcf_data, is_first_vcf); // we write all headers in concat mode too, to support --split
 
-        vcf_file->section_bytes[SEC_VCF_HEADER] = evb->vcf_data.len;
+        txt_file->section_bytes[SEC_VCF_HEADER] = evb->vcf_data.len;
         z_file  ->section_bytes[SEC_VCF_HEADER] = evb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
         z_file  ->num_sections [SEC_VCF_HEADER]++;
         z_file  ->num_vcf_components_so_far++; // when compressing
@@ -168,14 +168,14 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
-        ASSERT0 (!vcf_file, "Error: not expecting vcf_file to be open already in split mode");
-        vcf_file = file_open (header->vcf_filename, WRITE, VCF);
-        vcf_file->vcf_data_size_single = BGEN64 (header->vcf_data_size);
+        ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode");
+        txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
+        txt_file->txt_data_size_single = BGEN64 (header->txt_data_size);
     }
 
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
 
-    vcf_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
+    txt_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
 
     if (first_vcf || flag_split) 
         z_file->num_lines = BGEN64 (header->num_lines);
@@ -210,4 +210,4 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 }
 
 #define V1_VCF_HEADER // select the vcf_header functions of v1.c
-#include "v1.c"
+#include "vcf_v1.c"

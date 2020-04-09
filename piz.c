@@ -8,8 +8,8 @@
 #include "zfile.h"
 #include "vcffile.h"
 #include "vcf_header.h"
-#include "segregate.h"
-#include "vb.h"
+#include "vcf_seg.h"
+#include "vcf_vb.h"
 #include "base250.h"
 #include "dispatcher.h"
 #include "move_to_front.h"
@@ -475,7 +475,7 @@ static const char **piz_get_ht_columns_data (VariantBlock *vb)
     const unsigned max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
-    buf_alloc (vb, &vb->column_of_zeros, vcf_file->max_lines_per_vb, 1, "column_of_zeros", 0);
+    buf_alloc (vb, &vb->column_of_zeros, txt_file->max_lines_per_vb, 1, "column_of_zeros", 0);
     buf_zero (&vb->column_of_zeros);
 
     for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -1116,7 +1116,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
     if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_vcf_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 
-    // read and write VCF header. in split mode this also opens vcf_file
+    // read and write VCF header. in split mode this also opens txt_file
     piz_successful = (data_type != MAYBE_V1) ? vcf_header_genozip_to_vcf (&original_file_digest)
                                              : v1_vcf_header_genozip_to_vcf (&original_file_digest);
     
@@ -1189,7 +1189,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     
             vcffile_write_one_variant_block (processed_vb);
 
-            z_file->vcf_data_so_far_single += processed_vb->vb_data_size; 
+            z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
 
             dispatcher_finalize_one_vb (dispatcher);
         }
@@ -1199,7 +1199,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     // verify file integrity, if the genounzip compress was run with --md5 or --test
     if (flag_md5) {
         Md5Hash decompressed_file_digest;
-        md5_finalize (&vcf_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
+        md5_finalize (&txt_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
         if (md5_is_zero (original_file_digest)) 
             fprintf (stderr, "MD5 = %s Note: unable to compare this to the original file as file was not originally compressed with --md5\n", md5_display (&decompressed_file_digest, false));
@@ -1216,10 +1216,10 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
             
         else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
                     "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
-                    vcf_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
+                    txt_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
     }
 
-    if (flag_split) file_close (&vcf_file, true); // close this component file
+    if (flag_split) file_close (&txt_file, true); // close this component file
 
     if (!flag_test && !flag_quiet) 
         fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher, false));
@@ -1236,6 +1236,6 @@ finish:
 }
 
 #define V1_PIZ // select the piz functions of v1.c
-#include "v1.c"
+#include "vcf_v1.c"
 
-#include "v2v3.c"
+#include "vcf_v2v3.c"

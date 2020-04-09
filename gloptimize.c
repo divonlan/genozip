@@ -19,7 +19,7 @@
 #include <math.h>
 #include "genozip.h"
 #include "profiler.h"
-#include "vb.h"
+#include "vcf_vb.h"
 #include "gloptimize.h"
 
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */

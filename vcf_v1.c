@@ -582,7 +582,7 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
     START_TIMER;
 
     if (!vb->data_lines.piz) 
-        vb->data_lines.piz = calloc (vcf_file->max_lines_per_vb, sizeof (PizDataLine));
+        vb->data_lines.piz = calloc (txt_file->max_lines_per_vb, sizeof (PizDataLine));
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED) 
@@ -781,14 +781,14 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
 
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
-        ASSERT0 (!vcf_file, "Error: not expecting vcf_file to be open already in split mode");
-        vcf_file = file_open (header->vcf_filename, WRITE, VCF);
+        ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode");
+        txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, DATA_TYPE_VCF);
     }
 
     extern Buffer global_vcf_header_line; // defined in vcf_header.c
     bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
 
-    vcf_file->max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
+    txt_file->max_lines_per_vb = 4096; // 4096 was the constant value in genozip version 1 - where header->max_lines_per_vb field is absent
 
     if (first_vcf || !flag_concat) 
         z_file->num_lines = BGEN64 (header->num_lines);
@@ -812,7 +812,7 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
     
     // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
     else if (flag_md5)
-        md5_update (&vcf_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
+        md5_update (&txt_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
 
     buf_free (&z_file->v1_next_vcf_header);
     buf_free (&vcf_header_buf);
@@ -846,7 +846,7 @@ bool v1_vcf_header_get_vcf_header (uint64_t *uncompressed_data_size,
                  false,
                  "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (z_file));
         
-        *uncompressed_data_size = BGEN64 (header.vcf_data_size);
+        *uncompressed_data_size = BGEN64 (header.txt_data_size);
         *num_samples            = BGEN32 (header.num_samples);
         *num_items_concat       = BGEN64 (header.num_lines);
         *md5_hash_concat        = header.md5_hash_concat;
