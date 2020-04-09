@@ -7,12 +7,12 @@
 #include "sections.h"
 #include "buffer.h"
 #include "file.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "endianness.h"
-#include "random_access.h"
+#include "random_access_vcf.h"
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
-void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
+void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {
     DictIdType dict_id = { 0 };
     bool is_dict = (section_type_is_dictionary (header->section_type));
@@ -32,8 +32,8 @@ void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
     uint64_t offset;
     Buffer *buf;
     char *name;
-    VariantBlockP alc_vb;
-    if (!vb->variant_block_i) {  // case 1 - vcf header, random access, genotype header
+    VBlockP alc_vb;
+    if (!vb->vblock_i) {  // case 1 - vcf header, random access, genotype header
         buf    = &z_file->section_list_buf;
         alc_vb = evb; // z_file buffer goes to evb
         name   = "z_file->section_list_buf";
@@ -52,18 +52,18 @@ void sections_add_to_list (VariantBlock *vb, const SectionHeader *header)
         offset = vb->z_data.len;
     }
 
-    buf_alloc (alc_vb, buf, MAX (buf->len + 1, 50) * sizeof(SectionListEntry), 2, name, vb->variant_block_i);
+    buf_alloc (alc_vb, buf, MAX (buf->len + 1, 50) * sizeof(SectionListEntry), 2, name, vb->vblock_i);
     
     SectionListEntry *ent = NEXTENT (SectionListEntry, buf);
     ent->section_type     = header->section_type;
-    ent->variant_block_i  = BGEN32 (header->variant_block_i); // big endian in header - convert back to native
+    ent->vblock_i  = BGEN32 (header->vblock_i); // big endian in header - convert back to native
     ent->dict_id          = dict_id;
     ent->offset           = offset;  // this is a partial offset (within d) - we will correct it later
 }
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file sectinon list - just before 
 // writing those sections to the disk. we use the current disk position to update the offset
-void sections_list_concat (VariantBlock *vb, BufferP section_list_buf)
+void sections_list_concat (VBlock *vb, BufferP section_list_buf)
 {
     buf_alloc (evb, &z_file->section_list_buf, 
               (z_file->section_list_buf.len + section_list_buf->len) * sizeof(SectionListEntry), 2, 
@@ -90,7 +90,7 @@ uint32_t sections_count_info_b250s (unsigned vb_i)
 
     // skip to the first SEC_INFO_SUBFIELD_B250 (if there is one...)
     while (z_file->sl_cursor < z_file->section_list_buf.len &&
-           sl[z_file->sl_cursor].variant_block_i == vb_i &&
+           sl[z_file->sl_cursor].vblock_i == vb_i &&
            sl[z_file->sl_cursor].section_type != SEC_INFO_SUBFIELD_B250) 
         z_file->sl_cursor++;
 
@@ -116,9 +116,9 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
         if (sec_type == SEC_VCF_HEADER) 
             return SEC_VCF_HEADER;
 
-        if (sec_type == SEC_VB_HEADER) {
-            if (random_access_is_vb_included ((*sl_ent)->variant_block_i, region_ra_intersection_matrix))
-                return SEC_VB_HEADER;
+        if (sec_type == SEC_VBVCF_HEADER) {
+            if (random_access_is_vb_included ((*sl_ent)->vblock_i, region_ra_intersection_matrix))
+                return SEC_VBVCF_HEADER;
             
             else if (skipped_vb) *skipped_vb = true;
         }
@@ -142,12 +142,12 @@ bool sections_get_next_dictionary (SectionListEntry **sl_ent) // if *sl_ent==NUL
     return false; // no more dictionaries
 }
 
-// called by PIZ I/O : zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
+// called by PIZ I/O : zfile_vcf_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
 uint64_t sections_vb_first (uint32_t vb_i, SectionListEntry **sl_ent)
 {
     unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
         *sl_ent = ENT (SectionListEntry, &z_file->section_list_buf, i);
-        if ((*sl_ent)->variant_block_i == vb_i) break; // found!
+        if ((*sl_ent)->vblock_i == vb_i) break; // found!
     }
 
     ASSERT (i < z_file->section_list_buf.len, "Error in sections_get_next_vb_section: cannot find any section for vb_i=%u", vb_i);
@@ -155,12 +155,12 @@ uint64_t sections_vb_first (uint32_t vb_i, SectionListEntry **sl_ent)
     return (*sl_ent)->offset;
 }
 
-// called by PIZ I/O : zfile_read_one_vb. Returns the offset of the next section with this vb_i
+// called by PIZ I/O : zfile_vcf_read_one_vb. Returns the offset of the next section with this vb_i
 uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */)
 {
     ASSERT0 (*sl_ent, "Error in sections_vb_next: *sl_ent is NULL");
 
-    uint32_t vb_i = (*sl_ent)->variant_block_i;
+    uint32_t vb_i = (*sl_ent)->vblock_i;
 
     // get next section - just verify that it belongs to this vb_i
     ASSERT (1 + *sl_ent <= LASTENT (SectionListEntry, &z_file->section_list_buf), 
@@ -168,7 +168,7 @@ uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */)
 
     (*sl_ent)++;
 
-    ASSERT ((*sl_ent)->variant_block_i == vb_i, "Error in sections_get_next_vb_section: vb_i=%u has no more sections", vb_i);
+    ASSERT ((*sl_ent)->vblock_i == vb_i, "Error in sections_get_next_vb_section: vb_i=%u has no more sections", vb_i);
 
     return (*sl_ent)->offset;
 }
@@ -185,7 +185,7 @@ void BGEN_sections_list()
     SectionListEntry *ent = ARRAY (SectionListEntry, &z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
-        ent[i].variant_block_i = BGEN32 (ent[i].variant_block_i);
+        ent[i].vblock_i = BGEN32 (ent[i].vblock_i);
         ent[i].offset          = BGEN64 (ent[i].offset);
     }
 }
@@ -219,7 +219,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
         fprintf (stderr, "    %3u. %-24.24s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 
                  -DICT_ID_LEN, DICT_ID_LEN, ents[i].dict_id.num ? dict_id_printable (ents[i].dict_id).id : ents[i].dict_id.id, 
-                 ents[i].variant_block_i, this_offset, next_offset - this_offset);
+                 ents[i].vblock_i, this_offset, next_offset - this_offset);
     }
 }
 

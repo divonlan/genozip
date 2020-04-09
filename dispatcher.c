@@ -16,22 +16,22 @@
 
 #include "genozip.h"
 #include "dispatcher.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "file.h"
 #include "profiler.h"
 
 typedef struct {
     pthread_t thread_id;
-    VariantBlock *vb;
-    void (*func)(VariantBlock *);
+    VBlock *vb;
+    void (*func)(VBlock *);
 } Thread;
 
 typedef struct {
     unsigned max_vb_id_so_far; 
     Buffer compute_threads_buf;
     Thread *compute_threads;
-    VariantBlock *next_vb; // next vb to be dispatched
-    VariantBlock *processed_vb; // last vb for which caller got the processing results
+    VBlock *next_vb; // next vb to be dispatched
+    VBlock *processed_vb; // last vb for which caller got the processing results
 
     bool input_exhausted;
 
@@ -223,7 +223,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
         ever_time_initialized = true;
     }
 
-    dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the variant_block_i will continue from one file to the next
+    dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the vblock_i will continue from one file to the next
     dd->max_threads   = max_threads;
     dd->test_mode     = test_mode;
     dd->is_last_file  = is_last_file;
@@ -281,7 +281,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
     if (!flag_concat && !dd->is_last_file) vb_cleanup_memory(); 
 
-    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing variant_block_i count between subsequent concatented files
+    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent concatented files
 
     free (dd);
 
@@ -297,7 +297,7 @@ static void *dispatcher_thread_entry (void *thread_)
     return NULL;
 }
 
-VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
+VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -311,7 +311,7 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
     return dd->next_vb;
 }
 
-void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
+void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlock *))
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     Thread *th = &dd->compute_threads[dd->next_thread_to_dispatched];
@@ -319,11 +319,11 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
     th->vb = dd->next_vb;
     th->func = func;
 
-    if (flag_show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->vblock_i);
 
     if (dd->max_threads > 1) {
         unsigned err = pthread_create(&th->thread_id, NULL, dispatcher_thread_entry, th);
-        ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->variant_block_i, err);
+        ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->vblock_i, err);
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;
     }
@@ -348,7 +348,7 @@ bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final)
     return my_is_final || (th->vb && th->vb->is_processed);
 }
 
-VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
+VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -356,13 +356,13 @@ VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 
-    if (flag_show_threads) dispatcher_show_time ("Wait for thread", dd->next_thread_to_be_joined, th->vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Wait for thread", dd->next_thread_to_be_joined, th->vb->vblock_i);
 
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
         pthread_join(th->thread_id, NULL);
 
-    if (flag_show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->vblock_i);
 
     dd->processed_vb = th->vb;
     
@@ -379,7 +379,7 @@ bool dispatcher_has_free_thread (Dispatcher dispatcher)
     return dd->num_running_compute_threads < MAX(1, dd->max_threads);
 }
 
-VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
+VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->next_vb;

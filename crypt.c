@@ -6,7 +6,7 @@
 #include "genozip.h"
 #include "aes.h"
 #include "crypt.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "md5.h"
 
 static char *password = NULL;
@@ -71,7 +71,7 @@ unsigned crypt_max_padding_len()
 // 256 bit AES is a concatenation of 2 MD5 hashes of the password - each one of length 128 bit
 // each hash is a hash of the password concatenated with a constant string
 // we add data_len to the hash to give it a near-uniqueness for each section
-static void crypt_generate_aes_key (VariantBlock *vb,                
+static void crypt_generate_aes_key (VBlock *vb,                
                                     uint32_t vb_i, SectionType sec_type, bool is_header, // used to generate an aes key unique to each block
                                     uint8_t *aes_key /* out */)
 {
@@ -111,7 +111,7 @@ static void crypt_generate_aes_key (VariantBlock *vb,
 }
 
 // we generate a different key for each block by salting the password with vb_i, sec_type and is_header
-void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, 
+void crypt_do (VBlock *vb, uint8_t *data, unsigned data_len, 
                uint32_t vb_i, SectionType sec_type, bool is_header)  // used to generate an aes key unique to each block
 {
     // generate an AES key just for this one section - combining the pasword with vb_i and sec_i
@@ -128,7 +128,7 @@ void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len,
     //fprintf (stderr, "AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
 }
 
-void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len)
+void crypt_continue (VBlock *vb, uint8_t *data, unsigned data_len)
 {
     //fprintf (stderr, "continue: data_len=%u\n", data_len);
     aes_xcrypt_buffer (vb, data, data_len);
@@ -149,4 +149,4 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
 
 
 #define V1_CRYPT
-#include "vcf_v1.c"
+#include "v1_vcf.c"

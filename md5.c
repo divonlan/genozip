@@ -18,7 +18,7 @@
 #include "md5.h"
 #include "endianness.h"
 #include "profiler.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
 #define G( x, y, z )            ( (y) ^ ((z) & ((x) ^ (y))) )

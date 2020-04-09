@@ -43,4 +43,4 @@ uint32_t base250_decode (const uint8_t **str)
 }
 
 #define V1_BASE250
-#include "vcf_v1.c"
+#include "v1_vcf.c"

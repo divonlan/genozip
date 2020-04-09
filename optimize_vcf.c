@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include "optimize.h"
+#include "optimize_vcf.h"
 #include "dict_id.h"
 #include "vcf_header.h"
 

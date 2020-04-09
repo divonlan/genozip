@@ -11,4 +11,7 @@
 // returns true is successfully outputted a vcf file
 extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool is_first_vcf_component, bool is_last_file);
 
+extern void piz_vcf_uncompress_variant_block (VBlockP vb);
+extern void piz_sam_uncompress_variant_block (VBlockP vb);
+
 #endif

@@ -21,7 +21,7 @@
 
 // for each unique type of INFO fields (each one containing multiple names), create a unique mapping
 // info field node index (i.e. in b250) -> list of names, lengths and the context of the subfields
-static void v2v3_piz_map_iname_subfields (VariantBlock *vb)
+static void v2v3_piz_vcf_map_iname_subfields (VBlockVCF *vb)
 {
     // terminology: we call a list of INFO subfield names, an "iname". An iname looks something like
     // this: "I1=I2=I3=". Each iname consists of info subfields. These fields are not unique to this
@@ -62,13 +62,13 @@ static void v2v3_piz_map_iname_subfields (VariantBlock *vb)
             }
             dict_id = dict_id_info_subfield (dict_id);
 
-            iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (vb, dict_id); // it will be NIL if this is an INFO name without values            
+            iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, dict_id); // it will be NIL if this is an INFO name without values            
             iname_mapper->num_subfields++;
         }
     }
 }
 
-static inline void v2v3_piz_reconstruct_info (VariantBlock *vb, const SubfieldMapper *iname_mapper, const char *snip,
+static inline void v2v3_piz_vcf_reconstruct_info (VBlockVCF *vb, const SubfieldMapper *iname_mapper, const char *snip,
                                               const char **info_sf_value_snip, uint32_t *info_sf_value_snip_len, bool dummy)
 {
     for (unsigned sf_i=0; sf_i < iname_mapper->num_subfields ; sf_i++) {

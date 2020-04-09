@@ -5,7 +5,7 @@
 
 #include "genozip.h"
 #include "zip.h"
-#include "gtshark.h"
+#include "gtshark_vcf.h"
 
 static const char *help_genozip[] = {
     "",

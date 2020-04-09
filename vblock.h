@@ -1,10 +1,10 @@
 // ------------------------------------------------------------------
-//   vb.h
+//   vblock.h
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#ifndef VB_INCLUDED
-#define VB_INCLUDED
+#ifndef VBLOCK_INCLUDED
+#define VBLOCK_INCLUDED
 
 #include "genozip.h"
 #include "buffer.h"
@@ -12,12 +12,6 @@
 #include "aes.h"
 #include "move_to_front.h"
 #include "vcf_header.h"
-
-typedef enum { PHASE_UNKNOWN      = '-',
-               PHASE_HAPLO        = '1',
-               PHASE_PHASED       = '|',
-               PHASE_NOT_PHASED   = '/',
-               PHASE_MIXED_PHASED = '+'    } PhaseType;
 
 // PIZ only: can appear in did_i of an INFO subfield mapping, indicating that this INFO has an added
 // ":#" indicating that the original VCF line had a Windows-style \r\n ending
@@ -30,15 +24,102 @@ typedef struct {
 
 #define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->mtf_ctx[(mapper)->did_i[(sf)]] : NULL)
 
+#define NUM_COMPRESS_BUFS 4   // bzlib2 compress requires 4 and decompress requires 2
+
+// IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
+#define VBLOCK_COMMON_FIELDS \
+    uint32_t vblock_i;         /* number of variant block within VCF file */\
+    int id;                    /* id of vb within the vb pool (-1 is the external vb) */\
+    DataType data_type;        /* type of this VB */\
+    \
+    /* memory management  */\
+    Buffer buffer_list;        /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the I/O thread or its compute thread) */\
+    \
+    bool ready_to_dispatch;    /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
+    bool is_processed;         /* thread completed processing this VB - it is ready for outputting */\
+    bool in_use;               /* this vb is in use */\
+    \
+    uint32_t num_lines;        /* number of lines in this variant block */\
+    uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
+    \
+    /* tracking execution */\
+    int32_t vb_data_size;      /* expected size of decompressed VCF. Might be different than original if --optimize is used. */\
+    uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
+    \
+    uint32_t max_gt_line_len;  /* length of longest gt line in this vb after segregation */\
+    \
+    ProfilerRec profile; \
+    \
+    /* crypto stuff */\
+    Buffer spiced_pw;  /* used by crypt_generate_aes_key() */\
+    uint8_t aes_round_key[240];/* for 256 bit aes */\
+    uint8_t aes_iv[AES_BLOCKLEN]; \
+    int bi; \
+    \
+    /* file data */\
+    Buffer z_data;                    /* all headers and section data as read from disk */\
+    \
+    Buffer txt_data;                  /* ZIP only: txt_data as read from disk - either the VCF header (in evb) or the VB data lines */\
+    uint32_t txt_data_next_offset;    /* we re-use txt_data memory to overlay stuff in segregate */\
+    Buffer txt_data_spillover;        /* when re-using txt_data, if it is too small, we spill over to this buffer */\
+    \
+    int16_t z_next_header_i;          /* next header of this VB to be encrypted or decrypted */\
+    \
+    Buffer z_section_headers;         /* PIZ only: an array of unsigned offsets of section headers within z_data */\
+    \
+    Buffer compressed;                /* used by various zfile functions */\
+    \
+    /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
+    uint32_t num_dict_ids;            /* total number of dictionaries of all types */\
+    MtfContext mtf_ctx[MAX_DICTS];    \
+    \
+    /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
+    int32_t txt_section_bytes[NUM_SEC_TYPES];  /* how many bytes did each section have in the original vcf file - should add up to the file size */\
+    int32_t z_section_bytes[NUM_SEC_TYPES];    /* how many bytes does each section type have (including headers) in the genozip file - should add up to the file size */\
+    int32_t z_num_sections[NUM_SEC_TYPES];     /* how many sections where written to .genozip of this type */\
+    int32_t z_section_entries[NUM_SEC_TYPES];  /* how many entries (dictionary or base250) where written to .genozip of this type */\
+    Buffer show_headers_buf;                   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
+    Buffer show_b250_buf;                      /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
+    Buffer section_list_buf;                   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
+    \
+    Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */
+
+typedef struct vblock_ {
+    VBLOCK_COMMON_FIELDS
+} VBlock;
+
+extern void vb_cleanup_memory(void);
+extern VBlock *vb_get_vb (unsigned vblock_i);
+extern void vb_external_vb_initialize(void);
+extern void vb_release_vb (VBlock **vb_p);
+
+typedef struct {
+    unsigned num_vbs; // length of array of pointers to VBlock
+    unsigned num_allocated_vbs; // number of VBlocks allocated ( <= num_vbs )
+    VBlock *vb[]; // variable length
+} VBlockPool;
+extern void vb_create_pool (unsigned num_vbs);
+extern VBlockPool *vb_get_pool(void);
+
+//-------------------------------
+// VCF stuff
+//-------------------------------
+
+typedef enum { PHASE_UNKNOWN      = '-',
+               PHASE_HAPLO        = '1',
+               PHASE_PHASED       = '|',
+               PHASE_NOT_PHASED   = '/',
+               PHASE_MIXED_PHASED = '+'    } PhaseType;
+
 #define GENOTYPE_DATA(vb,dl)  ((dl)->genotype_data_spillover  ? &(vb)->txt_data_spillover.data[(dl)->genotype_data_start] \
-                                                              : &(vb)->vcf_data.data[(dl)->genotype_data_start])
+                                                              : &(vb)->txt_data.data[(dl)->genotype_data_start])
 #define HAPLOTYPE_DATA(vb,dl) ((dl)->haplotype_data_spillover ? &(vb)->txt_data_spillover.data[(dl)->haplotype_data_start] \
-                                                              : &(vb)->vcf_data.data[(dl)->haplotype_data_start])
+                                                              : &(vb)->txt_data.data[(dl)->haplotype_data_start])
 #define PHASE_DATA(vb,dl)     ((dl)->phase_data_spillover     ? &(vb)->txt_data_spillover.data[(dl)->phase_data_start] \
-                                                              : &(vb)->vcf_data.data[(dl)->phase_data_start])
+                                                              : &(vb)->txt_data.data[(dl)->phase_data_start])
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-    // the following 3 are indeces, lens into vcf_data or txt_data_spillover. 
+    // the following 3 are indeces, lens into txt_data or txt_data_spillover. 
     bool genotype_data_spillover, haplotype_data_spillover, phase_data_spillover;
     uint32_t genotype_data_start, haplotype_data_start, phase_data_start;
     uint32_t genotype_data_len, haplotype_data_len, phase_data_len;
@@ -66,35 +147,16 @@ typedef struct {
     Buffer v1_variant_data;  // backward compatibility with genozip v1
 } PizDataLine;
 
-// IMPORTANT: if changing fields in VariantBlock, also update vb_release_vb
-typedef struct variant_block_ {
+// IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
+typedef struct vblock_vcf_ {
 
-    uint32_t variant_block_i;  // number of variant block within VCF file
-    int id;                    // id of vb within the vb pool (-1 is the external vb)
+    VBLOCK_COMMON_FIELDS
 
-    // memory management
-    Buffer buffer_list;        // a buffer containing an array of pointers to all buffers allocated for this VB (either by the I/O thread or its compute thread)
-
-    bool ready_to_dispatch;    // line data is read, and dispatcher can dispatch this VB to a compute thread
-    bool is_processed;         // thread completed processing this VB - it is ready for outputting
-    bool in_use;               // this vb is in use
-        
     uint32_t num_data_lines_allocated;
     union {
         ZipDataLine *zip;      // ZIP: if allocated, this array is of length num_data_lines_allocated. its size is determined by the number of the max variant block size
         PizDataLine *piz;      // PIZ: if allocated, this array is of length num_data_lines_allocated. its size is determined by the SectionHeaderVCFHeader.max_lines_per_vb
     } data_lines;
-
-    uint32_t num_lines;        // number of lines in this variant block
-    uint32_t first_line;       // PIZ only: line number in VCF file (counting from 1), of this variant block
-
-    // tracking execution
-    int32_t vb_data_size;      // expected size of decompressed VCF. Might be different than original if --optimize is used.
-    uint32_t vb_data_read_size;// ZIP only: amount of data read in vcffile_read_block() (either plain VCF or gz or bz2) for this VB
-
-    uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation
-
-    ProfilerRec profile;
 
     // charactaristics of the data
     uint16_t ploidy;
@@ -119,12 +181,6 @@ typedef struct variant_block_ {
     Buffer line_ht_data;       // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
 
-    // crypto stuff
-    Buffer spiced_pw;  // used by crypt_generate_aes_key()
-    uint8_t aes_round_key[240];// for 256 bit aes
-    uint8_t aes_iv[AES_BLOCKLEN];
-    int bi;
-
     // section data - ready to compress
     Buffer haplotype_permutation_index;
     Buffer haplotype_permutation_index_squeezed; // used by piz to unsqueeze the index and zfile to compress it
@@ -140,24 +196,11 @@ typedef struct variant_block_ {
     Buffer is_sb_included;            // PIZ only:  array of bool indicating for each sample block whether it is included, based on --samples 
     Buffer genotype_one_section_data; // ZIP only:  for zip we need only one section data
     
-    // file data 
-    Buffer z_data;                    // all headers and section data as read from disk
-    
-    Buffer vcf_data;                  // ZIP only: vcf_data as read from disk - either the VCF header (in evb) or the VB data lines
-    uint32_t txt_data_next_offset;    // we re-use vcf_data memory to overlay stuff in segregate
-    Buffer txt_data_spillover;        // when re-using vcf_data, if it is too small, we spill over to this buffer
-
-    int16_t z_next_header_i;          // next header of this VB to be encrypted or decrypted
-
-    Buffer z_section_headers;         // PIZ only: an array of unsigned offsets of section headers within z_data
-
-    Buffer gt_sb_line_starts_buf,     // used by zip_get_genotype_vb_start_len 
+    Buffer gt_sb_line_starts_buf,     // used by zip_vcf_get_genotype_vb_start_len 
            gt_sb_line_lengths_buf,
            genotype_section_lens_buf; 
 
     Buffer helper_index_buf;          // used by zip_do_haplotypes
-
-    Buffer compressed;                // used by various zfile functions
  
     Buffer ht_columns_data;           // used by piz_get_ht_permutation_lookups
 
@@ -165,19 +208,15 @@ typedef struct variant_block_ {
      
     Buffer format_info_buf;           // used by piz, contains a FormatInfo entry for each unique FORMAT snip in a vb 
 
-    Buffer column_of_zeros;           // used by piz_get_ht_columns_data
+    Buffer column_of_zeros;           // used by piz_vcf_get_ht_columns_data
 
-    // dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field
-    uint32_t num_dict_ids;            // total number of dictionaries of all types
-    uint32_t num_format_subfields;    // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
-
+    // dictionaries stuff 
     uint32_t num_info_subfields;      // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                       // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
-    MtfContext mtf_ctx[MAX_DICTS];    
-
     Buffer iname_mapper_buf;           // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[INFO].mtf
-    Buffer format_mapper_buf;          // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[FORMAT].mtf
-    
+    uint32_t num_format_subfields;    // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
+    Buffer format_mapper_buf;          // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[FORMAT].mtf   
+
     // stuff related to compressing haplotype data with gtshark
     Buffer gtshark_db_db_data;         // ZIP & PIZ
     Buffer gtshark_db_gt_data;         // ZIP & PIZ
@@ -189,37 +228,30 @@ typedef struct variant_block_ {
     // regions & filters
     Buffer region_ra_intersection_matrix;      // a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region
     
-    // Information content stats - how many bytes does this section have more than the corresponding part of the vcf file    
-    int32_t vcf_section_bytes[NUM_SEC_TYPES];  // how many bytes did each section have in the original vcf file - should add up to the file size
-    int32_t z_section_bytes[NUM_SEC_TYPES];    // how many bytes does each section type have (including headers) in the genozip file - should add up to the file size
-    int32_t z_num_sections[NUM_SEC_TYPES];     // how many sections where written to .genozip of this type
-    int32_t z_section_entries[NUM_SEC_TYPES];  // how many entries (dictionary or base250) where written to .genozip of this type
-    Buffer show_headers_buf;                   // ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk
-    Buffer show_b250_buf;                      // ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing
-    Buffer section_list_buf;                   // ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs.
-
-#   define NUM_COMPRESS_BUFS 4                 // bzlib2 compress requires 4 and decompress requires 2
-    Buffer compress_bufs[NUM_COMPRESS_BUFS];   // memory allocation for compressor so it doesn't do its own malloc/free
-
     // backward compatibility with genozip v1 
     Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)
-    Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by piz_reconstruct_line_components
+    Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by piz_vcf_reconstruct_line_components
     Buffer v1_subfields_len_buf;
     Buffer v1_num_subfields_buf;
-} VariantBlock;
+} VBlockVCF;
 
-extern void vb_cleanup_memory(void);
-extern VariantBlock *vb_get_vb (unsigned variant_block_i);
-extern void vb_external_vb_initialize(void);
-extern unsigned vb_num_samples_in_sb (const VariantBlock *vb, unsigned sb_i);
-extern unsigned vb_num_sections(VariantBlock *vb);
-extern void vb_release_vb (VariantBlock **vb_p);
+extern unsigned vb_vcf_num_samples_in_sb (const VBlockVCF *vb, unsigned sb_i);
+extern unsigned vb_vcf_num_sections (VBlockVCF *vb);
+extern void vb_vcf_release_vb (VBlockVCF *vb); 
+extern void vb_vcf_cleanup_memory (VBlockVCF *vb);
 
-typedef struct {
-    unsigned num_vbs;
-    VariantBlock vb[]; // variable length
-} VariantBlockPool;
-extern void vb_create_pool (unsigned num_vbs);
-extern VariantBlockPool *vb_get_pool(void);
+//-------------------------------
+// SAM stuff
+//-------------------------------
+
+// IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
+typedef struct vblock_sam_ {
+
+    VBLOCK_COMMON_FIELDS
+
+} VBlockSAM;
+
+extern void vb_sam_release_vb (VBlockSAM *vb_p); 
+extern void vb_sam_cleanup_memory (VBlockSAM *vb);
 
 #endif

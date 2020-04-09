@@ -34,7 +34,7 @@
 
 #define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if MAX_PLOIDY > 65535
-#error "MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeader.ploidy and VariantBlock.ploidy are uint16_t"
+#error "MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeader.ploidy and VBlockVCF.ploidy are uint16_t"
 #endif
 
 #define MAX_SUBFIELDS      63   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file.
@@ -53,8 +53,12 @@
 // ----------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity)
 // ----------------------------------------------------------------------------------------------
-typedef struct variant_block_ *VariantBlockP;
-typedef const struct variant_block_ *ConstVariantBlockP;
+typedef struct vblock_ *VBlockP;
+typedef const struct vblock_ *ConstVBlockP;
+typedef struct vblock_vcf_ *VBlockVCFP;
+typedef const struct vblock_vcf_ *ConstVBlockVCFP;
+typedef struct vblock_sam_ *VBlockSAMP;
+typedef const struct vblock_sam_ *ConstVBlockSAMP;
 typedef struct file_ *FileP;
 typedef const struct file_ *ConstFileP;
 typedef struct buffer_ *BufferP;
@@ -86,7 +90,7 @@ extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_
            flag_header_one;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
-extern VariantBlockP evb;
+extern VBlockP evb;
 
 // macros
 #ifndef MIN

@@ -1,8 +1,8 @@
 // ------------------------------------------------------------------
-//   gtshark.c
+//   gtshark_vcf.c
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
-#include "gtshark.h"
+#include "gtshark_vcf.h"
 
 #include <errno.h>
 #include <sys/types.h>
@@ -11,13 +11,13 @@
 #ifndef _WIN32
 #include <sys/wait.h>
 #endif
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "buffer.h"
 #include "file.h"
 #include "endianness.h"
 #include "stream.h"
 
-static void gtshark_create_vcf_file (VariantBlock *vb, const Buffer *section_data, unsigned sb_i,
+static void gtshark_create_vcf_file (VBlockVCF *vb, const Buffer *section_data, unsigned sb_i,
                                      const char *gtshark_vcf_name)
 {
     FILE *file = fopen (gtshark_vcf_name, "wb");
@@ -28,7 +28,7 @@ static void gtshark_create_vcf_file (VariantBlock *vb, const Buffer *section_dat
     fprintf (file, "##FORMAT=<ID=GT>\n");
     fprintf (file, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
 
-    unsigned num_haplotypes = vb->ploidy * vb_num_samples_in_sb (vb, sb_i); 
+    unsigned num_haplotypes = vb->ploidy * vb_vcf_num_samples_in_sb (vb, sb_i); 
     for (unsigned i=0; i < num_haplotypes; i++)
         fprintf (file, "\t%u", i+1);
     fprintf (file, "\n");
@@ -140,7 +140,7 @@ static bool gtshark_run (uint32_t vb_i, unsigned sb_i,
 }
 
 // ZIP
-static void gtshark_run_compress (VariantBlock *vb, unsigned sb_i,
+static void gtshark_run_compress (VBlockVCF *vb, unsigned sb_i,
                                   const char *gtshark_vcf_name, const char *gtshark_db_name,
                                   const char *gtshark_db_db_name, const char *gtshark_db_gt_name)
 {
@@ -148,11 +148,11 @@ static void gtshark_run_compress (VariantBlock *vb, unsigned sb_i,
     file_remove (gtshark_db_db_name, true);
     file_remove (gtshark_db_gt_name, true);
 
-    gtshark_run (vb->variant_block_i, sb_i, "compress-db", gtshark_vcf_name, gtshark_db_name);
+    gtshark_run (vb->vblock_i, sb_i, "compress-db", gtshark_vcf_name, gtshark_db_name);
 
     // read both gtshark output files
-    file_get_file (vb, gtshark_db_db_name, &vb->gtshark_db_db_data, "gtshark_db_db_data", vb->variant_block_i, false);
-    file_get_file (vb, gtshark_db_gt_name, &vb->gtshark_db_gt_data, "gtshark_db_gt_data", vb->variant_block_i, false);
+    file_get_file ((VBlockP)vb, gtshark_db_db_name, &vb->gtshark_db_db_data, "gtshark_db_db_data", vb->vblock_i, false);
+    file_get_file ((VBlockP)vb, gtshark_db_gt_name, &vb->gtshark_db_gt_data, "gtshark_db_gt_data", vb->vblock_i, false);
     
     file_remove (gtshark_vcf_name, false);
     file_remove (gtshark_db_db_name, false);
@@ -160,19 +160,19 @@ static void gtshark_run_compress (VariantBlock *vb, unsigned sb_i,
 }
 
 // ZIP
-void gtshark_compress_haplotype_data (VariantBlock *vb, const Buffer *section_data, unsigned sb_i)
+void gtshark_compress_haplotype_data (VBlockVCF *vb, const Buffer *section_data, unsigned sb_i)
 {
     char *gtshark_vcf_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_vcf_name, "%s.%u.%u.db.vcf", file_printname (z_file), vb->variant_block_i, sb_i);
+    sprintf (gtshark_vcf_name, "%s.%u.%u.db.vcf", file_printname (z_file), vb->vblock_i, sb_i);
 
     char *gtshark_db_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_db_name, "%s.%u.%u.db", file_printname (z_file), vb->variant_block_i, sb_i);
+    sprintf (gtshark_db_name, "%s.%u.%u.db", file_printname (z_file), vb->vblock_i, sb_i);
 
     char *gtshark_db_db_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_db_db_name, "%s.%u.%u.db_db", file_printname (z_file), vb->variant_block_i, sb_i);
+    sprintf (gtshark_db_db_name, "%s.%u.%u.db_db", file_printname (z_file), vb->vblock_i, sb_i);
 
     char *gtshark_db_gt_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_db_gt_name, "%s.%u.%u.db_gt", file_printname (z_file), vb->variant_block_i, sb_i);
+    sprintf (gtshark_db_gt_name, "%s.%u.%u.db_gt", file_printname (z_file), vb->vblock_i, sb_i);
 
     gtshark_create_vcf_file (vb, section_data, sb_i, gtshark_vcf_name);
 
@@ -203,20 +203,20 @@ static char *gtshark_write_db_file (uint32_t vb_i, uint16_t section_i, const cha
 }
 
 // PIZ
-static void gtshark_run_decompress (VariantBlock *vb, unsigned sb_i)
+static void gtshark_run_decompress (VBlockVCF *vb, unsigned sb_i)
 {
     char *gtshark_db_name = malloc (strlen (file_printname (z_file)) + 50);
-    sprintf (gtshark_db_name, "%s.%u.%u.db", file_printname (z_file), vb->variant_block_i, sb_i);
+    sprintf (gtshark_db_name, "%s.%u.%u.db", file_printname (z_file), vb->vblock_i, sb_i);
 
     char *gtshark_vcf_name = malloc (strlen (file_printname (z_file)) + 50);
-    sprintf (gtshark_vcf_name, "%s.%u.%u.vcf", file_printname (z_file), vb->variant_block_i, sb_i);
+    sprintf (gtshark_vcf_name, "%s.%u.%u.vcf", file_printname (z_file), vb->vblock_i, sb_i);
 
     // remove in case of leftovers from previous run
     file_remove (gtshark_vcf_name, true);
 
-    gtshark_run (vb->variant_block_i, sb_i, "decompress-db", gtshark_db_name, gtshark_vcf_name);
+    gtshark_run (vb->vblock_i, sb_i, "decompress-db", gtshark_db_name, gtshark_vcf_name);
 
-    file_get_file (vb, gtshark_vcf_name, &vb->gtshark_vcf_data, "gtshark_vcf_data", vb->variant_block_i, true);
+    file_get_file ((VBlockP)vb, gtshark_vcf_name, &vb->gtshark_vcf_data, "gtshark_vcf_data", vb->vblock_i, true);
 
     file_remove (gtshark_vcf_name, false);
 
@@ -225,10 +225,10 @@ static void gtshark_run_decompress (VariantBlock *vb, unsigned sb_i)
 }    
 
 // PIZ: convert the vcf generated by gtshark when decompressing the db, into our haplotype_data
-static void gtshark_generate_haplotype_data (VariantBlock *vb, unsigned sb_i)
+static void gtshark_generate_haplotype_data (VBlockVCF *vb, unsigned sb_i)
 {
     uint32_t num_lines = vb->num_lines;
-    unsigned num_hts = vb->ploidy * vb_num_samples_in_sb (vb, sb_i);
+    unsigned num_hts = vb->ploidy * vb_vcf_num_samples_in_sb (vb, sb_i);
 
     buf_alloc (vb, &vb->haplotype_sections_data[sb_i], num_lines * num_hts, 1, "haplotype_sections_data", sb_i);
     vb->haplotype_sections_data[sb_i].len = num_lines * num_hts;
@@ -237,7 +237,7 @@ static void gtshark_generate_haplotype_data (VariantBlock *vb, unsigned sb_i)
 
     // look for the start of our data - a newline followed by the chrom
     const char *substr = strstr (vb->gtshark_vcf_data.data, "\n" GTSHARK_CHROM_ID);
-    ASSERT (substr, "Error: cannot locate start of data within gtshark-produced vcf data for vb_i=%u", vb->variant_block_i);
+    ASSERT (substr, "Error: cannot locate start of data within gtshark-produced vcf data for vb_i=%u", vb->vblock_i);
 
     // build the transposed matrix from the vcf data - this will include alleles 0, 1 or 2 with higher
     // alleles showing as 0
@@ -267,21 +267,21 @@ static void gtshark_generate_haplotype_data (VariantBlock *vb, unsigned sb_i)
 
         uint32_t vb_line_i = BGEN32 (exceptions_line_i_data[ex_line_i]);
         ASSERT (vb_line_i < num_lines, "Error processing exceptions for vb_i=%u: vb_line_i=%u is out of range (num_lines=%u)", 
-                vb->variant_block_i, vb_line_i, num_lines);
+                vb->vblock_i, vb_line_i, num_lines);
 
         uint16_t last_ht_i = 0;
         
         for (unsigned ex_ht_i=0 ; !ex_ht_i || *next_ht_i_delta; ex_ht_i++) { // the list of ht_i's for this line is terminated with a 0
 
-            ASSERT (next_ht_i_delta < after_ht_i_delta, "Error processing exceptions for vb_i=%u: next_ht_i_delta is out of range", vb->variant_block_i);
-            ASSERT (next_allele < after_allele, "Error processing exceptions for vb_i=%u: next_allele is out of range", vb->variant_block_i);
+            ASSERT (next_ht_i_delta < after_ht_i_delta, "Error processing exceptions for vb_i=%u: next_ht_i_delta is out of range", vb->vblock_i);
+            ASSERT (next_allele < after_allele, "Error processing exceptions for vb_i=%u: next_allele is out of range", vb->vblock_i);
 
             uint16_t delta = BGEN16 (*(next_ht_i_delta++));
             uint16_t ht_i = last_ht_i + delta; // decode delta encoding
             ASSERT (ht_i < num_hts, "Error processing exceptions for vb_i=%u: ht_i=%u is out of range (num_hts=%u)", 
-                    vb->variant_block_i, ht_i, num_hts);
+                    vb->vblock_i, ht_i, num_hts);
 
-            ASSERT (*next_allele <= '0' + MAX_ALLELE_VALUE, "Error processing exceptions for vb_i=%u: allele is out of range (ascii(%u))", vb->variant_block_i, (unsigned)*next_allele);
+            ASSERT (*next_allele <= '0' + MAX_ALLELE_VALUE, "Error processing exceptions for vb_i=%u: allele is out of range (ascii(%u))", vb->vblock_i, (unsigned)*next_allele);
             haplotype_data[ht_i * num_lines + vb_line_i] = *(next_allele++);
             last_ht_i = ht_i;
         }
@@ -293,14 +293,14 @@ static void gtshark_generate_haplotype_data (VariantBlock *vb, unsigned sb_i)
     buf_free (&vb->gtshark_vcf_data);
 }
 
-void gtshark_uncompress_haplotype_data (VariantBlock *vb, unsigned sb_i)
+void gtshark_uncompress_haplotype_data (VBlockVCF *vb, unsigned sb_i)
 {
 //printf ("line_i_len=%u ht_i_len=%u allele_len=%u db_db_len=%u db_gt_len=%u %%-exceptions: %u\n", 
 //exceptions_line_i_len, exceptions_ht_i_len, exceptions_allele_len, db_db_data_len, db_gt_data_len,
 //(100*(exceptions_line_i_len+exceptions_ht_i_len+exceptions_allele_len) / compressed_len));
-    char *filename_db_db = gtshark_write_db_file (vb->variant_block_i, sb_i, "db_db", &vb->gtshark_db_db_data);
+    char *filename_db_db = gtshark_write_db_file (vb->vblock_i, sb_i, "db_db", &vb->gtshark_db_db_data);
     
-    char *filename_db_gt = gtshark_write_db_file (vb->variant_block_i, sb_i, "db_gt", &vb->gtshark_db_gt_data);
+    char *filename_db_gt = gtshark_write_db_file (vb->vblock_i, sb_i, "db_gt", &vb->gtshark_db_gt_data);
 
     gtshark_run_decompress (vb, sb_i);                            
 

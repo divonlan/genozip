@@ -10,7 +10,7 @@
 #include "genozip.h"
 #include "profiler.h"
 #include "buffer.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
@@ -103,7 +103,7 @@ char *buf_display (const Buffer *buf)
 static inline void buf_reset (Buffer *buf)
 {
     uint32_t save_vb_i = buf->vb_i;
-    VariantBlockP save_allocating_vb = buf->allocating_vb;
+    VBlockP save_allocating_vb = buf->allocating_vb;
     memset (buf, 0, sizeof (Buffer)); // make this buffer UNALLOCATED
 
     buf->vb_i = save_vb_i; // vb_i and allocating_vb survive frees
@@ -129,12 +129,12 @@ static inline bool buf_has_underflowed (const Buffer *buf)
 // not thread-safe, used in emergency 
 static void buf_find_underflow_culprit (const char *memory)
 {
-    VariantBlockPool *vb_pool = vb_get_pool();
+    VBlockPool *vb_pool = vb_get_pool();
     char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN], s3[POINTER_STR_LEN];
     
     bool found=false;
     for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
-        VariantBlock *vb = (vb_i == -1) ? evb : &vb_pool->vb[vb_i]; 
+        VBlock *vb = (vb_i == -1) ? evb : vb_pool->vb[vb_i]; 
 
         const Buffer *buf_list = &vb->buffer_list;
         for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
@@ -146,7 +146,7 @@ static void buf_find_underflow_culprit (const char *memory)
                     char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                     fprintf (stderr,
                             "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
-                            vb ? vb->id : -999, vb->variant_block_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(after_buf-1,s3), buf->name, buf->param,
+                            vb ? vb->id : -999, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(after_buf-1,s3), buf->name, buf->param,
                             buf->func, buf->code_line, buf->vb_i, buf_i, 
                             of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                     found = true;
@@ -157,25 +157,25 @@ static void buf_find_underflow_culprit (const char *memory)
     if (!found) fprintf (stderr, "Cannot find a Buffer which has overflowed, and located just before the underflowed buffer\n\n");
 }
 
-static bool buf_test_overflows_do (const VariantBlock *vb, bool primary);
-static void buf_test_overflows_all_other_vb(const VariantBlock *caller_vb)
+static bool buf_test_overflows_do (const VBlock *vb, bool primary);
+static void buf_test_overflows_all_other_vb(const VBlock *caller_vb)
 {
     // IMPORTANT: this function is not thread safe as it checks OTHER thread's memories which
     // may be dealloced as it checking them causing weird errors.
     // That's why the "return" is here. It can be removed when debugging specific cases.
     return; 
 
-    VariantBlockPool *vb_pool = vb_get_pool();
+    VBlockPool *vb_pool = vb_get_pool();
 
     fprintf (stderr, "Testing all other VBs:\n");
     for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
-        VariantBlock *vb = (vb_i == -1) ? evb : &vb_pool->vb[vb_i]; 
+        VBlock *vb = (vb_i == -1) ? evb : vb_pool->vb[vb_i]; 
         if (vb == caller_vb) continue; // skip caller's VB
         buf_test_overflows_do (vb, false);
     }
 }
 
-static bool buf_test_overflows_do (const VariantBlock *vb, bool primary)
+static bool buf_test_overflows_do (const VBlock *vb, bool primary)
 {
     if (!vb) return false;
 
@@ -191,33 +191,33 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool primary)
         char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN], s3[POINTER_STR_LEN];
         if (buf->memory) {
 
-            if (buf->data && buf->vb_i != vb->variant_block_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
+            if (buf->data && buf->vb_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
                         fprintf (stderr, "%sMemory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u\n",
-                        nl[primary], vb ? vb->id : -999, buf->vb_i, vb->variant_block_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
+                        nl[primary], vb ? vb->id : -999, buf->vb_i, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb_i, buf_i);
                 corruption = true;
             }
             if (buf->type < BUF_UNALLOCATED || buf->type > BUF_OVERLAY) {
                 fprintf (stderr, "%sMemory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", 
-                         nl[primary], vb ? vb->id : -999, vb->variant_block_i, buf_display_pointer (buf, s1), buf_i);
+                         nl[primary], vb ? vb->id : -999, vb->vblock_i, buf_display_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (!buf->name) {
                 fprintf (stderr, "%sMemory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", 
-                         nl[primary], vb ? vb->id : -999, vb->variant_block_i, buf_display_pointer (buf, s1), buf_i);
+                         nl[primary], vb ? vb->id : -999, vb->vblock_i, buf_display_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
                 fprintf (stderr, 
                         buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
                          "%sMemory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%s memory=%s func=%s:%u : Corrupt Buffer structure - expecting data+8 == memory. name=%s:%u buf->data=%s\n", 
-                         nl[primary], vb ? vb->id : -999, vb->variant_block_i,  buf->vb_i, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->func, buf->code_line, buf->name, buf->param, buf_display_pointer(buf->data,s3));
+                         nl[primary], vb ? vb->id : -999, vb->vblock_i,  buf->vb_i, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->func, buf->code_line, buf->name, buf->param, buf_display_pointer(buf->data,s3));
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, 
                         "%sMemory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], vb ? vb->id : -999, vb->variant_block_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
+                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb_i, buf_i, 
                         buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
 
@@ -232,7 +232,7 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool primary)
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
                         "%sMemory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], vb ? vb->id : -999, vb->variant_block_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
+                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb_i, buf_i, 
                         of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                 
@@ -249,7 +249,7 @@ static bool buf_test_overflows_do (const VariantBlock *vb, bool primary)
     return corruption;
 }
 
-void buf_test_overflows (const VariantBlock *vb)
+void buf_test_overflows (const VBlock *vb)
 {
     buf_test_overflows_do (vb, true);
 }
@@ -276,12 +276,12 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     else
         fprintf (stderr, "\n-------------------------------------------------------------------------------------\n");
 
-    VariantBlockPool *vb_pool = vb_get_pool ();
+    VBlockPool *vb_pool = vb_get_pool ();
 
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
+    for (int vb_i=-1; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
 
         Buffer *buf_list = (vb_i == -1) ? &evb->buffer_list
-                                        : &vb_pool->vb[vb_i].buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
+                                        : &vb_pool->vb[vb_i]->buffer_list; // a pointer to a buffer, which contains an array of pointers to buffers of a single vb/non-vb
 
         if (!buf_list->len) continue; // no buffers allocated yet for this VB
 
@@ -322,11 +322,13 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     stats[num_stats].buffers = 0;
     num_stats++;
 
-    for (int vb_i=0; vb_i < (int)vb_pool->num_vbs; vb_i++) 
-        if (vb_pool->vb[vb_i].num_data_lines_allocated) {
-            stats[num_stats-1].bytes += vb_pool->vb[vb_i].num_data_lines_allocated * (command==ZIP ? sizeof (ZipDataLine) : sizeof (PizDataLine));
+    for (int vb_i=0; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
+        VBlockVCF *vb_vcf = (VBlockVCF *)vb_pool->vb[vb_i];
+        if (vb_vcf && vb_vcf->data_type == DATA_TYPE_VCF && vb_vcf->num_data_lines_allocated) {
+            stats[num_stats-1].bytes += vb_vcf->num_data_lines_allocated * (command==ZIP ? sizeof (ZipDataLine) : sizeof (PizDataLine));
             stats[num_stats-1].buffers += 1;
         }
+    }
 
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);
@@ -336,7 +338,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
 
     char str[30];
     buf_display_size (total_bytes, str);
-    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_vbs);
+    fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_allocated_vbs);
     fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++) {
@@ -344,8 +346,8 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
         fprintf (stderr, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
     }
 }
-
-int64_t buf_vb_memory_consumption (const VariantBlock *vb)
+/*
+int64_t buf_vb_memory_consumption (const VBlock *vb)
 {
     const Buffer *buf_list   = &vb->buffer_list;
 
@@ -371,8 +373,8 @@ int64_t buf_vb_memory_consumption (const VariantBlock *vb)
 
     return vb_memory;
 }
-
-void buf_add_to_buffer_list (VariantBlock *vb, Buffer *buf)
+*/
+void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 {
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
@@ -387,7 +389,7 @@ void buf_add_to_buffer_list (VariantBlock *vb, Buffer *buf)
     }
 }
 
-static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old_size, 
+static void buf_init (VBlock *vb, Buffer *buf, unsigned size, unsigned old_size, 
                       const char *func, unsigned code_line, const char *name, unsigned param)
 {
     if (!buf->memory) {
@@ -404,7 +406,7 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
     buf->overlayable = false;
     
     buf->allocating_vb = vb;
-    buf->vb_i          = vb->variant_block_i;
+    buf->vb_i          = vb->vblock_i;
     buf->func          = func;
     buf->code_line     = code_line;
 
@@ -422,7 +424,7 @@ static void buf_init (VariantBlock *vb, Buffer *buf, unsigned size, unsigned old
 // allocates or enlarges buffer
 // if it needs to enlarge a buffer fully overlaid by an overlay buffer - it abandons its memory (leaving it to
 // the overlaid buffer) and allocates new memory
-unsigned buf_alloc_do (VariantBlock *vb,
+unsigned buf_alloc_do (VBlock *vb,
                        Buffer *buf, 
                        uint32_t requested_size,
                        double grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
@@ -516,7 +518,7 @@ finish:
 }
 
 // an overlay buffer is a buffer using some of the memory of another buffer - it doesn't have its own memory
-void buf_overlay_do (VariantBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line,
+void buf_overlay_do (VBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line,
                      const char *name, uint32_t param)
 {
     // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
@@ -534,7 +536,7 @@ void buf_overlay_do (VariantBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf
     overlaid_buf->type        = BUF_OVERLAY;
     overlaid_buf->memory      = 0;
     overlaid_buf->overlayable = false;
-    overlaid_buf->vb_i        = vb->variant_block_i;
+    overlaid_buf->vb_i        = vb->vblock_i;
     overlaid_buf->name        = name;
     overlaid_buf->param       = param;
 
@@ -614,7 +616,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 } 
 
 // remove from buffer_list of this vb
-void buf_remove_from_buffer_list (VariantBlock *vb, Buffer *buf)
+void buf_remove_from_buffer_list (VBlock *vb, Buffer *buf)
 {
     ASSERT0 (vb, "Error in buf_remove_from_buffer_list: vb is NULL");
 
@@ -655,7 +657,7 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
     memset (buf, 0, sizeof (Buffer)); // reset to factory defaults
 }
 
-void buf_copy_do (VariantBlock *vb, Buffer *dst, const Buffer *src, 
+void buf_copy_do (VBlock *vb, Buffer *dst, const Buffer *src, 
                   unsigned bytes_per_entry, // how many bytes are counted by a unit of .len
                   unsigned src_start_entry, unsigned max_entries,  // if 0 copies the entire buffer 
                   const char *func, unsigned code_line,
@@ -678,13 +680,13 @@ void buf_copy_do (VariantBlock *vb, Buffer *dst, const Buffer *src,
 }   
 
 // moves all the data from one buffer to another, leaving the source buffer unallocated
-void buf_move (VariantBlock *dst_vb, Buffer *dst, VariantBlock *src_vb, Buffer *src)
+void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 {
     ASSERT (dst->type == BUF_UNALLOCATED, "Error: attempt to move to an already-allocated src: name=%s:%u dst: name=%s:%u",
             src->name, src->param, dst->name, dst->param);
 
     memcpy (dst, src, sizeof(Buffer));    
-    dst->vb_i = dst_vb->variant_block_i;
+    dst->vb_i = dst_vb->vblock_i;
     dst->allocating_vb = dst_vb;
 
     buf_reset (src);
@@ -693,7 +695,7 @@ void buf_move (VariantBlock *dst_vb, Buffer *dst, VariantBlock *src_vb, Buffer *
     buf_remove_from_buffer_list (src_vb, src); // reason: since src has no memory, the next alloc of this buf will result in a new entry to the buf_list. if we don't remove it, we will have a duplicate entry.
 }
 
-void buf_add_string (VariantBlock *vb, Buffer *buf, const char *str) 
+void buf_add_string (VBlock *vb, Buffer *buf, const char *str) 
 { 
     unsigned len = strlen (str); 
     buf_alloc (vb, buf, MAX (1000, buf->len + len + 1), 2, "string_buf", 0);

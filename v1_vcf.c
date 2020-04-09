@@ -13,10 +13,10 @@
 
 // note: the first section (i.e. the first VCF header) is always read by v1_zfile_read_section() (the current version)
 // if header.genozip_version is 1, then subsequent sections, including subsequent VCF headers, will be read by this function
-int v1_zfile_read_section (VariantBlock *vb,
-                               Buffer *data, const char *buf_name, /* buffer to append */
-                               unsigned header_size, SectionType expected_sec_type,
-                               bool allow_eof)
+int v1_zfile_read_section (VBlock *vb,
+                           Buffer *data, const char *buf_name, /* buffer to append */
+                           unsigned header_size, SectionType expected_sec_type,
+                           bool allow_eof)
 {
     bool is_encrypted = crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
@@ -40,7 +40,7 @@ int v1_zfile_read_section (VariantBlock *vb,
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
                 "Error: genozip v1 file - password provided, but file %s is not encrypted", file_printname (z_file));
 
-        v1_crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i); // negative section_i for a header
+        v1_crypt_do (vb, (uint8_t*)header, header_size, vb->vblock_i, --vb->z_next_header_i); // negative section_i for a header
     }
     bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
     if (!is_magical && !is_encrypted && expected_sec_type == SEC_VCF_HEADER) {
@@ -56,7 +56,7 @@ int v1_zfile_read_section (VariantBlock *vb,
             ASSERT0 (header_extra_bytes, "Error: genozip v1 file - Failed to read header padding");
         }
 
-        v1_crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, --vb->z_next_header_i);
+        v1_crypt_do (vb, (uint8_t*)header, header_size, vb->vblock_i, --vb->z_next_header_i);
         is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
     }
 
@@ -68,10 +68,10 @@ int v1_zfile_read_section (VariantBlock *vb,
     bool new_vcf_component = false;
     unsigned new_header_size=0;
 
-    if (!is_magical && is_encrypted && expected_sec_type == SEC_VB_HEADER) {
+    if (!is_magical && is_encrypted && expected_sec_type == SEC_VBVCF_HEADER) {
     
         // reverse failed decryption
-        v1_crypt_do (vb, (uint8_t*)header, header_size, vb->variant_block_i, vb->z_next_header_i);
+        v1_crypt_do (vb, (uint8_t*)header, header_size, vb->vblock_i, vb->z_next_header_i);
 
         new_header_size = sizeof (SectionHeaderVCFHeader);
         unsigned padding;
@@ -117,7 +117,7 @@ int v1_zfile_read_section (VariantBlock *vb,
     bool found_a_vcf_header = header->section_type == SEC_VCF_HEADER;
     
     // check that we received the section type we expect, 
-    ASSERT (header->section_type == expected_sec_type || (found_a_vcf_header && expected_sec_type == SEC_VB_HEADER),
+    ASSERT (header->section_type == expected_sec_type || (found_a_vcf_header && expected_sec_type == SEC_VBVCF_HEADER),
             "Error: genozip v1 file - unexpected section type: expecting %s, found %s", st_name(expected_sec_type), st_name(header->section_type));
 
     unsigned expected_header_size = new_vcf_component ? new_header_size : header_size;
@@ -127,17 +127,17 @@ int v1_zfile_read_section (VariantBlock *vb,
     ASSERT (!(header->section_type == SEC_VCF_HEADER && compressed_offset == sizeof(SectionHeaderVCFHeader)), 
             "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (z_file));
 
-    ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VB_HEADER, // for variant data, we also have the permutation index
+    ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VBVCF_HEADER, // for variant data, we also have the permutation index
             "Error: genozip v1 file - invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
     buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "v1_zfile_read_section", 2);
     header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
-    // in case we're expecting SEC_VB_HEADER - read the rest of the header: 
-    // if we found SEC_VB_HEADER, we need to read haplotype index, and if we found a SEC_VCF_HEADER of a concatenated
+    // in case we're expecting SEC_VBVCF_HEADER - read the rest of the header: 
+    // if we found SEC_VBVCF_HEADER, we need to read haplotype index, and if we found a SEC_VCF_HEADER of a concatenated
     // file componented - we need to read the read of the header as it is bigger than Variant Data header that was read
-    if (expected_sec_type == SEC_VB_HEADER && !new_vcf_component) {
+    if (expected_sec_type == SEC_VBVCF_HEADER && !new_vcf_component) {
 
         int bytes_left_over = compressed_offset - header_size;
         ASSERT (bytes_left_over >= 0, "Error: genozip v1 file - expected bytes_left_over=%d to be >=0", bytes_left_over)
@@ -164,7 +164,7 @@ int v1_zfile_read_section (VariantBlock *vb,
                 "Error: genozip v1 file - failed to read section data, section_type=%s", st_name(header->section_type));
     }
 
-    // deal with a VCF header that was encountered while expecting a SEC_VB_HEADER (i.e. 2nd+ component of a concatenated file)
+    // deal with a VCF header that was encountered while expecting a SEC_VBVCF_HEADER (i.e. 2nd+ component of a concatenated file)
     if (new_vcf_component) {
 
         if (flag_split) {
@@ -184,12 +184,12 @@ int v1_zfile_read_section (VariantBlock *vb,
 }
 
 
-bool v1_zfile_read_one_vb (VariantBlock *vb)
+bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
 { 
     START_TIMER;
 
-    int vardata_header_offset = v1_zfile_read_section (vb, &vb->z_data, "z_data",
-                                                        sizeof(v1_SectionHeaderVariantData), SEC_VB_HEADER, true);
+    int vardata_header_offset = v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data",
+                                                       sizeof(v1_SectionHeaderVariantData), SEC_VBVCF_HEADER, true);
     if (vardata_header_offset == EOF) {
 
         // update size - in case they were not known (pipe, gzip etc)
@@ -218,17 +218,17 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
         for (unsigned did_i=0; did_i < num_dictionary_sections; did_i++) {
 
             unsigned start_i = vb->z_data.len; // vb->z_data.len is updated next, by v1_zfile_read_section()
-            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_FRMT_SUBFIELD_DICT, false);    
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_FRMT_SUBFIELD_DICT, false);    
 
             // update dictionaries in z_file->mtf_ctx with dictionary data from this VB
-            mtf_integrate_dictionary_fragment (vb, &vb->z_data.data[start_i]);
+            mtf_integrate_dictionary_fragment ((VBlockP)vb, &vb->z_data.data[start_i]);
         }
 
         vb->z_data.len = start_dictionary_sections; // shrink z_data back
     }
 
     // overlay all available dictionaries (not just those that have fragments in this variant block) to the vb
-    mtf_overlay_dictionaries_to_vb (vb);
+    mtf_overlay_dictionaries_to_vb ((VBlockP)vb);
 
     // read the other sections
 
@@ -237,7 +237,7 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
     ((unsigned *)vb->z_section_headers.data)[0] = vardata_header_offset; // variant data header is at index 0
 
     // is_sb_included was introduced in version 4.0.x, we just set it "all included" for v1
-    buf_alloc (vb, &vb->is_sb_included, num_sample_blocks * sizeof(bool), 1, "is_sb_included", vb->variant_block_i);
+    buf_alloc (vb, &vb->is_sb_included, num_sample_blocks * sizeof(bool), 1, "is_sb_included", vb->vblock_i);
 
     unsigned section_i=1;
 
@@ -248,17 +248,17 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
 
         if (has_genotype_data) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GENOTYPE_DATA, false);
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GENOTYPE_DATA, false);
         }
 
         if (phase_type == PHASE_MIXED_PHASED) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA, false);
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_PHASE_DATA, false);
         }
 
         if (num_haplotypes_per_line) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_section (vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA, false);    
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HAPLOTYPE_DATA, false);    
         }
 
         *ENT (bool, &vb->is_sb_included, sb_i) = true;
@@ -276,7 +276,7 @@ bool v1_zfile_read_one_vb (VariantBlock *vb)
 #define V1_SAMPLES_PER_BLOCK 4096
 
 // decode the delta-encoded value of the POS field
-static inline void v1_piz_decode_pos (VariantBlock *vb, const char *str,
+static inline void v1_piz_vcf_decode_pos (VBlockVCF *vb, const char *str,
                                       char *pos_str, const char **delta_pos_start, unsigned *delta_pos_len, int *add_len /* out */)
 {
     START_TIMER;
@@ -315,10 +315,10 @@ static inline void v1_piz_decode_pos (VariantBlock *vb, const char *str,
     *delta_pos_len = s - str;
     *add_len = len - *delta_pos_len;
 
-    COPY_TIMER(vb->profile.piz_decode_pos);
+    COPY_TIMER(vb->profile.piz_vcf_decode_pos);
 }
 
-static void v1_piz_get_line_get_num_subfields (VariantBlock *vb, unsigned line_i, // line in vcf file
+static void v1_piz_get_line_get_num_subfields (VBlockVCF *vb, unsigned line_i, // line in vcf file
                                                const char **line, unsigned *remaining_len,
                                                const char **subfields_start, unsigned *subfields_len, int *num_subfields)
 {    
@@ -365,10 +365,10 @@ static void v1_piz_get_line_get_num_subfields (VariantBlock *vb, unsigned line_i
 cleanup:
     *remaining_len = after - *line;
 
-    COPY_TIMER (vb->profile.piz_get_format_info)
+    COPY_TIMER (vb->profile.piz_vcf_get_format_info)
 }
 
-static void v1_piz_get_variant_data_line (VariantBlock *vb, 
+static void v1_piz_vcf_get_variant_data_line (VBlockVCF *vb, 
                                           unsigned line_i, // line in vcf file
                                           unsigned *length_remaining, // for safety
                                           const char **line_start) // out
@@ -393,7 +393,7 @@ static void v1_piz_get_variant_data_line (VariantBlock *vb,
 
             // if we're at the POS field, decode the delta encoding
             if (column == 2)  
-                v1_piz_decode_pos (vb, next+1, pos_str, &delta_pos_start, &delta_pos_len, &add_len);
+                v1_piz_vcf_decode_pos (vb, next+1, pos_str, &delta_pos_start, &delta_pos_len, &add_len);
         }
 
         else if (*next == '\n') {
@@ -424,11 +424,11 @@ static void v1_piz_get_variant_data_line (VariantBlock *vb,
     ABORT0 ("Error: corrupt genozip file - at end of variant_data buffer, and no newline was found");
 
 cleanup:
-    COPY_TIMER(vb->profile.piz_get_variant_data_line);
+    COPY_TIMER(vb->profile.piz_vcf_get_variant_data_line);
     return;
 }
 
-static void v1_piz_get_line_subfields (VariantBlock *vb, unsigned line_i, // line in vcf file
+static void v1_piz_get_line_subfields (VBlockVCF *vb, unsigned line_i, // line in vcf file
                                        const char *subfields_start, unsigned subfields_len,
                                        int *line_subfields) // out
 {
@@ -466,7 +466,7 @@ static void v1_piz_get_line_subfields (VariantBlock *vb, unsigned line_i, // lin
 
 // convert genotype data from sample block format of indices in base-250 to line format
 // of tab-separated genotypes
-static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, int *line_subfields)
+static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, int *line_subfields)
 {
     START_TIMER;
 
@@ -476,7 +476,7 @@ static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, in
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
         unsigned first_sample = sb_i*V1_SAMPLES_PER_BLOCK;
-        unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
+        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
 
         for (unsigned sample_i=first_sample; 
              sample_i < first_sample + num_samples_in_sb; 
@@ -501,7 +501,7 @@ static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, in
                         if (snip) *(next++) = ':'; // this works for empty "" snip too
 
                         unsigned snip_len;
-                        mtf_get_next_snip (vb, &vb->mtf_ctx[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case sample_iterator[sample_i] will be a control character
+                        mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case sample_iterator[sample_i] will be a control character
                                         &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + line_i);
 
                         if (snip && snip_len) { // it can be a valid empty subfield if snip="" and snip_len=0
@@ -520,8 +520,8 @@ static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, in
 
             // safety
             ASSERT (next <= vb->line_gt_data.data + vb->line_gt_data.size, 
-                    "Error: line_gt_data buffer overflow. variant_block_i=%u vcf_line=%u sb_i=%u sample_i=%u",
-                    vb->variant_block_i, line_i + vb->first_line, sb_i, sample_i);
+                    "Error: line_gt_data buffer overflow. vblock_i=%u vcf_line=%u sb_i=%u sample_i=%u",
+                    vb->vblock_i, line_i + vb->first_line, sb_i, sample_i);
         }
     }
 
@@ -532,10 +532,10 @@ static void v1_piz_get_genotype_data_line (VariantBlock *vb, unsigned line_i, in
 
     vb->data_lines.piz[line_i].has_genotype_data = vb->line_gt_data.len > global_num_samples; // not all just \t
 
-    COPY_TIMER(vb->profile.piz_get_genotype_data_line);
+    COPY_TIMER(vb->profile.piz_vcf_get_genotype_data_line);
 }
 
-static void v1_piz_initialize_next_gt_in_sample (VariantBlock *vb, int *num_subfields)
+static void v1_piz_initialize_next_gt_in_sample (VBlockVCF *vb, int *num_subfields)
 {
     START_TIMER;
     
@@ -544,7 +544,7 @@ static void v1_piz_initialize_next_gt_in_sample (VariantBlock *vb, int *num_subf
     
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
+        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
         
         const uint8_t *next = (const uint8_t *)vb->genotype_sections_data[sb_i].data;
         const uint8_t *after = next + vb->genotype_sections_data[sb_i].len;
@@ -565,19 +565,19 @@ static void v1_piz_initialize_next_gt_in_sample (VariantBlock *vb, int *num_subf
         }
 
         // sanity checks to see we read the correct amount of genotypes
-        ASSERT (sample_i == sample_after, "Error: expected to find %u genotypes in sb_i=%u of variant_block_i=%u, but found only %u",
-                vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i, vb->num_lines * (sample_i - sb_i * V1_SAMPLES_PER_BLOCK));
+        ASSERT (sample_i == sample_after, "Error: expected to find %u genotypes in sb_i=%u of vblock_i=%u, but found only %u",
+                vb->num_lines * num_samples_in_sb, sb_i, vb->vblock_i, vb->num_lines * (sample_i - sb_i * V1_SAMPLES_PER_BLOCK));
 
-        ASSERT (next == after, "Error: expected to find %u genotypes in sb_i=%u of variant_block_i=%u, but found more. ",
-                vb->num_lines * num_samples_in_sb, sb_i, vb->variant_block_i);
+        ASSERT (next == after, "Error: expected to find %u genotypes in sb_i=%u of vblock_i=%u, but found more. ",
+                vb->num_lines * num_samples_in_sb, sb_i, vb->vblock_i);
     }
 
-    COPY_TIMER (vb->profile.piz_initialize_sample_iterators)
+    COPY_TIMER (vb->profile.piz_vcf_initialize_sample_iterators)
 }
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block
-void v1_piz_reconstruct_line_components (VariantBlock *vb)
+void v1_piz_vcf_reconstruct_line_components (VBlockVCF *vb)
 {
     START_TIMER;
 
@@ -595,7 +595,7 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
         //  memory - realloc for exact size, add 7 because depermuting_loop works on a word (32/64 bit) boundary
         buf_alloc (vb, &vb->line_ht_data, vb->num_haplotypes_per_line + 7, 1, "line_ht_data", 0);
 
-        ht_columns_data = piz_get_ht_columns_data (vb);
+        ht_columns_data = piz_vcf_get_ht_columns_data (vb);
     }
 
     // traverse the variant data first, only processing the FORMAT field - populate
@@ -630,14 +630,14 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
         buf_alloc (vb, &vb->line_gt_data, vb->max_gt_line_len, 1, "line_gt_data", 0);
     }
 
-    // initialize again - for piz_get_variant_data_line
+    // initialize again - for piz_vcf_get_variant_data_line
     variant_data_next_line = vb->v1_variant_data_section_data.data;
     variant_data_length_remaining = vb->v1_variant_data_section_data.len;
 
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
 
         // de-permute variant data into vb->line_variant_data
-        v1_piz_get_variant_data_line (vb, vb->first_line + line_i, &variant_data_length_remaining, &variant_data_next_line);
+        v1_piz_vcf_get_variant_data_line (vb, vb->first_line + line_i, &variant_data_length_remaining, &variant_data_next_line);
 
         // reset len for next line - no need to realloc as we have realloced what is needed already
         vb->line_ht_data.len = vb->line_gt_data.len = vb->line_phase_data.len = 0;
@@ -648,27 +648,27 @@ void v1_piz_reconstruct_line_components (VariantBlock *vb)
             v1_piz_get_line_subfields (vb, vb->first_line + line_i,
                                        subfields_start[line_i], subfields_len[line_i], line_subfields);
 
-            v1_piz_get_genotype_data_line (vb, line_i, line_subfields);
+            v1_piz_vcf_get_genotype_data_line (vb, line_i, line_subfields);
         }
         if (vb->phase_type == PHASE_MIXED_PHASED) 
-            piz_get_phase_data_line (vb, line_i);
+            piz_vcf_get_phase_data_line (vb, line_i);
 
         if (vb->has_haplotype_data) 
-            piz_get_haplotype_data_line (vb, line_i, ht_columns_data);
+            piz_vcf_get_haplotype_data_line (vb, line_i, ht_columns_data);
 
-        piz_merge_line (vb, line_i, false);
+        piz_vcf_merge_line (vb, line_i, false);
     }
 
-    COPY_TIMER(vb->profile.piz_reconstruct_line_components);
+    COPY_TIMER(vb->profile.piz_vcf_reconstruct_line_components);
 }
 
-void v1_piz_uncompress_all_sections (VariantBlock *vb)
+void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 {
     unsigned *section_index = (unsigned *)vb->z_section_headers.data;
 
     // get the variant data - newline-seperated lines, each containing the first 8 (if no FORMAT field) or 9 fields (if FORMAT exists)
-    zfile_uncompress_section (vb, vb->z_data.data + section_index[0], 
-                              &vb->v1_variant_data_section_data, "v1_variant_data_section_data", SEC_VB_HEADER);
+    zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[0], 
+                              &vb->v1_variant_data_section_data, "v1_variant_data_section_data", SEC_VBVCF_HEADER);
     
     v1_SectionHeaderVariantData *vardata_header = (v1_SectionHeaderVariantData *)(vb->z_data.data + section_index[0]);
     vb->first_line              = BGEN32 (vardata_header->first_line);
@@ -681,13 +681,13 @@ void v1_piz_uncompress_all_sections (VariantBlock *vb)
     vb->num_samples_per_block   = BGEN32 (vardata_header->num_samples_per_block);
     vb->ploidy                  = BGEN16 (vardata_header->ploidy);
     vb->num_dict_ids            = BGEN16 (vardata_header->num_dict_ids);
-    // num_dictionary_sections is read in zfile_read_one_vb()
+    // num_dictionary_sections is read in zfile_vcf_read_one_vb()
     vb->max_gt_line_len         = BGEN32 (vardata_header->max_gt_line_len);
     vb->vb_data_size            = BGEN32 (vardata_header->vb_data_size);
     
     ASSERT (global_num_samples == BGEN32 (vardata_header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_num_samples, BGEN32 (vardata_header->num_samples));
 
-    // we allocate memory for the Buffer arrays only once the first time this VariantBlock
+    // we allocate memory for the Buffer arrays only once the first time this VBlockVCF
     // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
     // BUG: this won't work if we're doing mutiple unrelated VCF on the command line
     if (vb->has_genotype_data && !vb->genotype_sections_data) 
@@ -717,17 +717,17 @@ void v1_piz_uncompress_all_sections (VariantBlock *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
+        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
 
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) 
-            zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], 
+            zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], 
                                       &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_GENOTYPE_DATA);
         
         // next, comes phase data
         if (vb->phase_type == PHASE_MIXED_PHASED) {
             
-            zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], 
+            zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], 
                                       &vb->phase_sections_data[sb_i], "phase_sections_data", SEC_PHASE_DATA);
             
             unsigned expected_size = vb->num_lines * num_samples_in_sb;
@@ -738,7 +738,7 @@ void v1_piz_uncompress_all_sections (VariantBlock *vb)
         // finally, comes haplotype data
         if (vb->has_haplotype_data) {
             
-            zfile_uncompress_section (vb, vb->z_data.data + section_index[section_i++], 
+            zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], 
                                       &vb->haplotype_sections_data[sb_i], "haplotype_sections_data", SEC_HAPLOTYPE_DATA);
             
             unsigned expected_size = vb->num_lines * num_samples_in_sb * vb->ploidy;
@@ -762,7 +762,7 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
         
         int ret;
         ret = v1_zfile_read_section (evb, &z_file->v1_next_vcf_header, "z_file->v1_next_vcf_header", 
-                                         sizeof(v1_SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
+                                     sizeof(v1_SectionHeaderVCFHeader), SEC_VCF_HEADER, true);
 
         if (ret == EOF) {
             buf_free (&z_file->v1_next_vcf_header);
@@ -799,7 +799,7 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
     static Buffer vcf_header_buf = EMPTY_BUFFER;
     zfile_uncompress_section (evb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
 
-    bool can_concatenate = vcf_header_set_globals (evb, z_file->name, &vcf_header_buf);
+    bool can_concatenate = vcf_header_set_globals (z_file->name, &vcf_header_buf);
     if (!can_concatenate) {
         buf_free (&z_file->v1_next_vcf_header);
         buf_free (&vcf_header_buf);
@@ -808,9 +808,9 @@ bool v1_vcf_header_genozip_to_vcf (Md5Hash *digest)
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
     if ((first_vcf || !flag_split) && !flag_no_header)
-        vcffile_write_to_disk (&vcf_header_buf);
+        txtfile_write_to_disk (&vcf_header_buf);
     
-    // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by vcffile_write_to_disk())
+    // if we didn't write the header (bc 2nd+ file in concat mode) - just account for it in MD5 (this is normally done by txtfile_write_to_disk())
     else if (flag_md5)
         md5_update (&txt_file->md5_ctx_concat, vcf_header_buf.data, vcf_header_buf.len);
 
@@ -903,7 +903,7 @@ uint32_t v1_base250_decode (const uint8_t **str)
 // 256 bit AES is a concatenation of 2 MD5 hashes of the password - each one of length 128 bit
 // each hash is a hash of the password concatenated with a constant string
 // we add data_len to the hash to give it a near-uniqueness for each section
-static void v1_crypt_generate_aes_key (VariantBlock *vb,                
+static void v1_crypt_generate_aes_key (VBlock *vb,                
                                        uint32_t vb_i, int16_t sec_i, // used to generate an aes key unique to each block
                                        uint8_t *aes_key /* out */)
 {
@@ -944,7 +944,7 @@ static void v1_crypt_generate_aes_key (VariantBlock *vb,
 // the VCF header section: vb_i=0 (for all components) and sec_i=0 (i.e: 0 for the body, (-1 - 0)=-1 for header)
 // the Variant Data section: vb_i={global consecutive number starting at 1}, sec_i=0 (body=0, header=-1)
 // Other sections: vb_i same as Variant Data, sec_i consecutive running starting at 1 
-void v1_crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i) // used to generate an aes key unique to each block
+void v1_crypt_do (VBlock *vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i) // used to generate an aes key unique to each block
 {
     // generate an AES key just for this one section - combining the pasword with vb_i and sec_i
     uint8_t aes_key[AES_KEYLEN]; 

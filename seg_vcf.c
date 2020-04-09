@@ -5,17 +5,17 @@
 
 #include "genozip.h"
 #include "profiler.h"
-#include "vcf_seg.h"
-#include "vcf_vb.h"
+#include "seg_vcf.h"
+#include "vblock.h"
 #include "move_to_front.h"
 #include "vcf_header.h"
 #include "endianness.h"
-#include "random_access.h"
-#include "optimize.h"
+#include "random_access_vcf.h"
+#include "optimize_vcf.h"
 
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
-static void seg_set_hash_hints (VariantBlock *vb, uint32_t vb_line_i)
+static void seg_set_hash_hints (VBlockVCF *vb, uint32_t vb_line_i)
 {
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
 
@@ -27,13 +27,13 @@ static void seg_set_hash_hints (VariantBlock *vb, uint32_t vb_line_i)
     }
 }
 
-// store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from vcf_data,
-// but in the part of vcf_data has been already consumed and no longer needed.
-// if there's not enough space in vcf_data, we allocate on txt_data_spillover
-static void seg_store (VariantBlock *vb, 
+// store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from txt_data,
+// but in the part of txt_data has been already consumed and no longer needed.
+// if there's not enough space in txt_data, we allocate on txt_data_spillover
+static void seg_store (VBlockVCF *vb, 
                        bool *dst_is_spillover, uint32_t *dst_start, uint32_t *dst_len, // out
                        Buffer *src_buf, uint32_t size, // Either src_buf OR size must be given
-                       const char *limit_vcf_data, // if NULL always allocates in txt_data_spillover
+                       const char *limit_txt_data, // if NULL always allocates in txt_data_spillover
                        bool align32) // does start address need to be 32bit aligned to prevent aliasing issues
 {
     if (src_buf) size = src_buf->len;
@@ -42,11 +42,11 @@ static void seg_store (VariantBlock *vb,
     if (align32 && (vb->txt_data_next_offset % 4))
         vb->txt_data_next_offset += 4 - (vb->txt_data_next_offset % 4);
 
-    if (limit_vcf_data && (vb->vcf_data.data + vb->txt_data_next_offset + size < limit_vcf_data)) { // we have space in vcf_data - we can overlay
+    if (limit_txt_data && (vb->txt_data.data + vb->txt_data_next_offset + size < limit_txt_data)) { // we have space in txt_data - we can overlay
         *dst_is_spillover = false;
         *dst_start        = vb->txt_data_next_offset;
         *dst_len          = size;
-        if (src_buf) memcpy (&vb->vcf_data.data[*dst_start], src_buf->data, size);
+        if (src_buf) memcpy (&vb->txt_data.data[*dst_start], src_buf->data, size);
 
         vb->txt_data_next_offset += size;
     }
@@ -58,7 +58,7 @@ static void seg_store (VariantBlock *vb,
         
         vb->txt_data_spillover.len += size;
         buf_alloc (vb, &vb->txt_data_spillover, MAX (1000, vb->txt_data_spillover.len), 1.5, 
-                   "txt_data_spillover", vb->variant_block_i);
+                   "txt_data_spillover", vb->vblock_i);
 
         if (src_buf) memcpy (&vb->txt_data_spillover.data[*dst_start], src_buf->data, size);
     }
@@ -66,33 +66,33 @@ static void seg_store (VariantBlock *vb,
     if (src_buf) buf_free (src_buf);
 }
 
-static void seg_realloc_datalines (VariantBlock *vb, uint32_t new_num_data_lines)
+static void seg_realloc_datalines (VBlockVCF *vb, uint32_t new_num_data_lines)
 {
     vb->data_lines.zip = REALLOC (vb->data_lines.zip, new_num_data_lines * sizeof (ZipDataLine));
     memset (&vb->data_lines.zip[vb->num_data_lines_allocated], 0, (new_num_data_lines - vb->num_data_lines_allocated) * sizeof(ZipDataLine));
     vb->num_data_lines_allocated = new_num_data_lines;
 }
 
-static void seg_allocate_per_line_memory (VariantBlock *vb)
+static void seg_allocate_per_line_memory (VBlockVCF *vb)
 {
     ASSERT (!!vb->data_lines.zip == !!vb->num_data_lines_allocated, 
-            "Error: expecting vb->data_lines to be nonzero iff vb->num_data_lines_allocated is nonzero. vb_i=%u", vb->variant_block_i);
+            "Error: expecting vb->data_lines to be nonzero iff vb->num_data_lines_allocated is nonzero. vb_i=%u", vb->vblock_i);
 
     ASSERT (vb->num_data_lines_allocated >= vb->num_lines, 
-            "Error: expecting vb->num_data_lines_allocated >= vb->num_lines. vb_i=%u", vb->variant_block_i);
+            "Error: expecting vb->num_data_lines_allocated >= vb->num_lines. vb_i=%u", vb->vblock_i);
 
     // first line in this vb.id - we calculate an estimated number of lines
     if (!vb->num_lines) { 
         // get first line length
-        uint32_t len=0; for (; len < vb->vcf_data.len && vb->vcf_data.data[len] != '\n'; len++) {};
+        uint32_t len=0; for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
 
-        ASSERT (len < vb->vcf_data.len, "Error: cannot from a newline in the entire vb. vb_i=%u", vb->variant_block_i);
+        ASSERT (len < vb->txt_data.len, "Error: cannot from a newline in the entire vb. vb_i=%u", vb->vblock_i);
 
         // set initial number of lines based on an estimate. it might grow during segmentation if it turns out the
         // estimate is too low, and will be set to its actual real value at the end of segmentation
         
-        uint32_t lower_end_estimate  = MAX (100, (uint32_t)((double)vb->vcf_data.len / (double)len));
-        uint32_t higher_end_estimate = MAX (100, (uint32_t)(((double)vb->vcf_data.len / (double)len) * 1.2));
+        uint32_t lower_end_estimate  = MAX (100, (uint32_t)((double)vb->txt_data.len / (double)len));
+        uint32_t higher_end_estimate = MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
 
         // if we have enough according to the lower end of the estimate, go for it
         if (vb->num_data_lines_allocated >= lower_end_estimate) 
@@ -126,17 +126,17 @@ static void seg_allocate_per_line_memory (VariantBlock *vb)
 }
 
 // returns the node index
-static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, unsigned vb_line_i, VcfFields f, 
+static uint32_t seg_one_field (VBlockVCF *vb, const char *str, unsigned len, unsigned vb_line_i, VcfFields f, 
                                bool *is_new) // optional out
 {
     uint32_t *this_field_section = (uint32_t *)vb->mtf_ctx[f].mtf_i.data;
     ASSERT (vb->mtf_ctx[f].mtf_i.len * sizeof(uint32_t) < vb->mtf_ctx[f].mtf_i.size,
             "Error: mtf_i overflow vb_i=%u f=%u len*sizeof(uint32_t)=%u size=%u - no room for another one", 
-            vb->variant_block_i, f, vb->mtf_ctx[f].mtf_i.len * (unsigned)sizeof(uint32_t), vb->mtf_ctx[f].mtf_i.size);
+            vb->vblock_i, f, vb->mtf_ctx[f].mtf_i.len * (unsigned)sizeof(uint32_t), vb->mtf_ctx[f].mtf_i.size);
 
     MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
-    uint32_t node_index = mtf_evaluate_snip_seg (vb, ctx, str, len, &node, is_new);
+    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, &node, is_new);
 
     ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len, "Error in seg_one_field: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
@@ -144,12 +144,12 @@ static uint32_t seg_one_field (VariantBlock *vb, const char *str, unsigned len, 
     
     this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
 
-    vb->vcf_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
+    vb->txt_section_bytes[SEC_CHROM_B250 + f*2] += len + 1;
     return node_index;
 } 
 
 // returns true if this line has the same chrom as this VB, or if it is the first line
-static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned chrom_str_len, unsigned vb_line_i)
+static void seg_chrom_field (VBlockVCF *vb, const char *chrom_str, unsigned chrom_str_len, unsigned vb_line_i)
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
@@ -158,7 +158,7 @@ static void seg_chrom_field (VariantBlock *vb, const char *chrom_str, unsigned c
     random_access_update_chrom (vb, vb_line_i, chrom_node_index);
 }
 
-static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_len, unsigned vb_line_i)
+static void seg_pos_field (VBlockVCF *vb, const char *pos_str, unsigned pos_len, unsigned vb_line_i)
 {
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
@@ -199,7 +199,7 @@ static void seg_pos_field (VariantBlock *vb, const char *pos_str, unsigned pos_l
 
     seg_one_field (vb, pos_delta_str, len, vb_line_i, POS, NULL);
 
-    vb->vcf_section_bytes[SEC_POS_B250] += pos_len - len; // re-do the calculation - seg_one_field doesn't do it good in our case
+    vb->txt_section_bytes[SEC_POS_B250] += pos_len - len; // re-do the calculation - seg_one_field doesn't do it good in our case
 
     vb->last_pos = this_pos;
 
@@ -226,7 +226,7 @@ DictIdType seg_get_format_subfield (const char **str, uint32_t *len, // remainin
     return subfield; // never reach here, just to avoid a compiler warning
 }
 
-static void seg_format_field (VariantBlock *vb, ZipDataLine *dl, 
+static void seg_format_field (VBlockVCF *vb, ZipDataLine *dl, 
                               const char *field_start, int field_len, 
                               unsigned vb_line_i)
 {
@@ -289,7 +289,7 @@ static void seg_format_field (VariantBlock *vb, ZipDataLine *dl,
     *ENT (SubfieldMapper, &vb->format_mapper_buf, node_index) = format_mapper;
 }
 
-static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, char *info_str, unsigned info_len, 
+static void seg_info_field (VBlockVCF *vb, ZipDataLine *dl, char *info_str, unsigned info_len, 
                             bool has_13, // this VCF file line ends with a Windows-style \r\n
                             unsigned vb_line_i)
 {
@@ -342,7 +342,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, char *info_str, u
             else if (c == ';') {
                 if (i==info_len) { // our artificial ; terminator
                     iname_len--; // remove ;
-                    vb->vcf_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n)
+                    vb->txt_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n)
                 }
                 else {
                     this_name = &info_str[i+1]; // skip the value-less name
@@ -374,8 +374,8 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, char *info_str, u
 
                 MtfNode *sf_node;
 
-                vb->vcf_section_bytes[SEC_INFO_SUBFIELD_B250] += this_value_len; 
-                vb->vcf_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n) 
+                vb->txt_section_bytes[SEC_INFO_SUBFIELD_B250] += this_value_len; 
+                vb->txt_section_bytes[SEC_INFO_B250]++; // account for the separator (; or \t or \n) 
 
                 unsigned optimized_snip_len;
                 char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
@@ -387,7 +387,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, char *info_str, u
                     this_value_len = optimized_snip_len;
                 }
                 ((uint32_t *)mtf_i_buf->data)[mtf_i_buf->len++] = 
-                    mtf_evaluate_snip_seg (vb, ctx, this_value, this_value_len, &sf_node, NULL);
+                    mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, &sf_node, NULL);
 
                 reading_name = true;  // end of value - move to the next time
                 this_name = &info_str[i+1]; // move to next field in info string
@@ -406,7 +406,7 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, char *info_str, u
     MtfContext *info_ctx = &vb->mtf_ctx[INFO];
     MtfNode *node;
     bool is_new;
-    uint32_t node_index = mtf_evaluate_snip_seg (vb, info_ctx, iname, iname_len, &node, &is_new);
+    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &node, &is_new);
     info_field_mtf_i[vb->mtf_ctx[INFO].mtf_i.len++] = node_index;
 
     // if this is a totally new subfield (first time in this file) - make a new SubfieldMapper for it.
@@ -423,10 +423,10 @@ static void seg_info_field (VariantBlock *vb, ZipDataLine *dl, char *info_str, u
 
     dl->info_mtf_i = node_index;
 
-    vb->vcf_section_bytes[SEC_INFO_B250] += iname_len; // this includes all the =
+    vb->txt_section_bytes[SEC_INFO_B250] += iname_len; // this includes all the =
 }
 
-static void seg_increase_ploidy_one_line (VariantBlock *vb, char *line_ht_data, unsigned new_ploidy, unsigned num_samples)
+static void seg_increase_ploidy_one_line (VBlockVCF *vb, char *line_ht_data, unsigned new_ploidy, unsigned num_samples)
 {
     // copy the haplotypes backwards (to avoid overlap), padding with '*'
     for (int sam_i = num_samples-1; sam_i >= 0; sam_i--) {
@@ -442,7 +442,7 @@ static void seg_increase_ploidy_one_line (VariantBlock *vb, char *line_ht_data, 
 }
 
 // increase ploidy of the previous lines, if higher ploidy was encountered
-static void seg_increase_ploidy (VariantBlock *vb, unsigned new_ploidy, unsigned vb_line_i, unsigned sample_i)
+static void seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned vb_line_i, unsigned sample_i)
 {
     // increase ploidy of all previous lines.
     for (unsigned i=0; i < vb_line_i; i++) {
@@ -468,7 +468,7 @@ static void seg_increase_ploidy (VariantBlock *vb, unsigned new_ploidy, unsigned
     vb->ploidy = new_ploidy;
 }
 
-static void seg_haplotype_area (VariantBlock *vb, ZipDataLine *dl, const char *str, unsigned len, unsigned vb_line_i, unsigned sample_i,
+static void seg_haplotype_area (VBlockVCF *vb, ZipDataLine *dl, const char *str, unsigned len, unsigned vb_line_i, unsigned sample_i,
                                 bool is_vcf_string)
 {
     // check ploidy
@@ -477,8 +477,8 @@ static void seg_haplotype_area (VariantBlock *vb, ZipDataLine *dl, const char *s
         if (str[i] == '|' || str[i] == '/') ploidy++;
 
     if (is_vcf_string) {
-        vb->vcf_section_bytes[SEC_PHASE_DATA]     += ploidy-1;
-        vb->vcf_section_bytes[SEC_HAPLOTYPE_DATA] += ploidy;
+        vb->txt_section_bytes[SEC_PHASE_DATA]     += ploidy-1;
+        vb->txt_section_bytes[SEC_HAPLOTYPE_DATA] += ploidy;
     }
 
     ASSERT (ploidy <= MAX_PLOIDY, "Error: ploidy=%u exceeds the maximum of %u in vb_line_i=%u", ploidy, MAX_PLOIDY, vb_line_i);
@@ -523,7 +523,7 @@ static void seg_haplotype_area (VariantBlock *vb, ZipDataLine *dl, const char *s
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
 
-            vb->vcf_section_bytes[SEC_HAPLOTYPE_DATA]++;
+            vb->txt_section_bytes[SEC_HAPLOTYPE_DATA]++;
         }
 
         // get phase
@@ -589,7 +589,7 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
         return s - snip;
 }
 
-static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl, 
+static int seg_genotype_area (VBlockVCF *vb, ZipDataLine *dl, 
                               const char *cell_gt_data, 
                               unsigned cell_gt_data_len,  // not including the \t or \n 
                               unsigned vb_line_i,
@@ -617,12 +617,12 @@ static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
             (ctx->dict_id.num == dict_id_FORMAT_PL || ctx->dict_id.num == dict_id_FORMAT_GL || ctx->dict_id.num == dict_id_FORMAT_GP) && 
             optimize_format (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
 
-            node_index = mtf_evaluate_snip_seg (vb, ctx, optimized_snip, optimized_snip_len, &node, NULL);
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, optimized_snip, optimized_snip_len, &node, NULL);
             vb->vb_data_size -= (int)len - (int)optimized_snip_len;
             optimized_cell_gt_data_len -= (int)len - (int)optimized_snip_len;
         }
         else 
-            node_index = mtf_evaluate_snip_seg (vb, ctx, cell_gt_data, len, &node, NULL);
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, cell_gt_data, len, &node, NULL);
 
         *(next++) = node_index;
 
@@ -637,7 +637,7 @@ static int seg_genotype_area (VariantBlock *vb, ZipDataLine *dl,
 
     if (is_vcf_string)
         // size including : (if we have both ht and gt), but not including \t which goes into SEC_STATS_HT_SEPERATOR
-        vb->vcf_section_bytes[SEC_GENOTYPE_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
+        vb->txt_section_bytes[SEC_GENOTYPE_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
 
     return optimized_cell_gt_data_len;
 }
@@ -680,7 +680,7 @@ static inline const char *seg_get_next_item (const char *str, int *str_len, bool
 }
 
 // in some real-world files I encountered have too-short lines due to human errors. we pad them
-static void seg_add_samples_missing_in_line (VariantBlock *vb, ZipDataLine *dl, unsigned *gt_line_len, 
+static void seg_add_samples_missing_in_line (VBlockVCF *vb, ZipDataLine *dl, unsigned *gt_line_len, 
                                              unsigned num_samples, unsigned vb_line_i)
 {
     ASSERTW (false, "Warning: the number of samples in vb_line_i=%u is %u, different than the VCF column header line which has %u samples",
@@ -707,9 +707,9 @@ static void seg_add_samples_missing_in_line (VariantBlock *vb, ZipDataLine *dl, 
    3. haplotype data (the GT subfield) - a string of eg 1 or 0 (no whitespace) - ordered by the permutation order
    4. phase data - only if MIXED phase - a string of | and / - one per sample
 */
-static const char *seg_data_line (VariantBlock *vb,   // may be NULL if testing 
+static const char *seg_data_line (VBlockVCF *vb,   // may be NULL if testing 
                                   ZipDataLine *dl, 
-                                  const char *field_start_line,     // index in vb->vcf_data where this line starts
+                                  const char *field_start_line,     // index in vb->txt_data where this line starts
                                   uint32_t vb_line_i) // line within this vb (starting from 0)
 {
     dl->phase_type = PHASE_UNKNOWN;
@@ -722,7 +722,7 @@ static const char *seg_data_line (VariantBlock *vb,   // may be NULL if testing
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
-    int32_t len = &vb->vcf_data.data[vb->vcf_data.len] - field_start_line;
+    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
     // CHROM
     field_start = field_start_line;
@@ -809,14 +809,14 @@ static const char *seg_data_line (VariantBlock *vb,   // may be NULL if testing
 
             sample_i++;
 
-            vb->vcf_section_bytes[SEC_STATS_HT_SEPERATOR]++; // the \t or \n following a sample
+            vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR]++; // the \t or \n following a sample
 
             ASSERT (sample_i < global_num_samples || separator == '\n',
                     "Error: invalid VCF file - expecting a newline after the last sample (sample #%u) on line %u", global_num_samples, vb_line_i);
         }
     }
 
-    vb->vcf_section_bytes[SEC_STATS_HT_SEPERATOR] -= has_13; // the \r in case of Windows \r\n line ending (WHY IS THIS?)
+    vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR] -= has_13; // the \r in case of Windows \r\n line ending (WHY IS THIS?)
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
     if (sample_i < global_num_samples) 
@@ -836,7 +836,7 @@ static const char *seg_data_line (VariantBlock *vb,   // may be NULL if testing
     // now do the info field - possibly with the added \r for Windows 
     seg_info_field (vb, dl, info_field_start, info_field_len, has_13, vb_line_i);
 
-    // we don't need vcf_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate use txt_data_spillover
+    // we don't need txt_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate use txt_data_spillover
     if (dl->has_genotype_data) 
         seg_store (vb, &dl->genotype_data_spillover, &dl->genotype_data_start, &dl->genotype_data_len,
                    &vb->line_gt_data, 0, next_field, true);
@@ -855,7 +855,7 @@ static const char *seg_data_line (VariantBlock *vb,   // may be NULL if testing
     return next_field;
 }
 
-static void seg_update_vb_from_dl (VariantBlock *vb, ZipDataLine *dl)
+static void seg_update_vb_from_dl (VBlockVCF *vb, ZipDataLine *dl)
 {
     // update block data
     vb->has_genotype_data = vb->has_genotype_data || dl->has_genotype_data;
@@ -874,7 +874,7 @@ static void seg_update_vb_from_dl (VariantBlock *vb, ZipDataLine *dl)
 
 // complete haplotype and genotypes of lines that don't have them, if we found out that some
 // other line has them, and hence all lines in the vb must have them
-void seg_complete_missing_lines (VariantBlock *vb, const char *next_field)
+void seg_complete_missing_lines (VBlockVCF *vb, const char *next_field)
 {
     vb->num_haplotypes_per_line = vb->ploidy * global_num_samples;
     
@@ -906,7 +906,7 @@ void seg_complete_missing_lines (VariantBlock *vb, const char *next_field)
 
 
 // split each lines in this variant block to its components
-void seg_all_data_lines (VariantBlock *vb)
+void seg_all_data_lines (VBlockVCF *vb)
 {
     START_TIMER;
 
@@ -922,11 +922,11 @@ void seg_all_data_lines (VariantBlock *vb)
 
     seg_allocate_per_line_memory (vb); // set vb->num_lines to an initial estimate
 
-    const char *field_start = vb->vcf_data.data;
+    const char *field_start = vb->txt_data.data;
     bool hash_hints_set = false;
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
-        if (field_start - vb->vcf_data.data == vb->vcf_data.len) { // we're done
+        if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
             vb->num_lines = vb_line_i; // update to actual number of lines
             break;
         }
@@ -939,12 +939,12 @@ void seg_all_data_lines (VariantBlock *vb)
         seg_update_vb_from_dl (vb, dl);
 
         // if our estimate number of lines was too small, increase it
-        if (vb_line_i == vb->num_lines-1 && field_start - vb->vcf_data.data != vb->vcf_data.len) 
+        if (vb_line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
             seg_allocate_per_line_memory (vb); // increase number of lines as evidently we need more
 
         // if there is no global_hash yet, and we've past half of the data,
         // collect stats to help mtf_merge create one when we merge
-        if (!hash_hints_set && (field_start - vb->vcf_data.data) > vb->vcf_data.len / 2) {
+        if (!hash_hints_set && (field_start - vb->txt_data.data) > vb->txt_data.len / 2) {
             seg_set_hash_hints (vb, vb_line_i);
             hash_hints_set = true;
         }

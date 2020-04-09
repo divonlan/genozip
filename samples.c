@@ -114,7 +114,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
 }
 
 // PIZ only: calculates whether a sample block is included, based on --samples. this is called once per sample block
-// in zfile_read_one_vb to set vb->is_sb_included, and thereafter vb->is_sb_included is used
+// in zfile_vcf_read_one_vb to set vb->is_sb_included, and thereafter vb->is_sb_included is used
 bool samples_is_sb_included (uint32_t num_samples_per_block, uint32_t sb_i)
 {
     if (!flag_samples) return true; // all sample blocks are included if --samples if not specified

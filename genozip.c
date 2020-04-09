@@ -27,20 +27,21 @@
 #include "text_license.h"
 #include "text_help.h"
 #include "version.h" // automatically incremented by the make when we create a new distribution
-#include "vcffile.h"
+#include "txtfile.h"
 #include "zfile.h"
 #include "zip.h"
 #include "piz.h"
 #include "crypt.h"
 #include "file.h"
 #include "dict_id.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "endianness.h"
-#include "regions.h"
+#include "regions_vcf.h"
 #include "samples.h"
-#include "gtshark.h"
+#include "gtshark_vcf.h"
 #include "stream.h"
 #include "url.h"
+#include "vcf_header.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -216,7 +217,7 @@ static void main_show_sections (void)
     // the order in which we want them displayed
     const SectionType secs[] = {
         SEC_GENOZIP_HEADER, SEC_RANDOM_ACCESS,
-        SEC_VCF_HEADER, SEC_VB_HEADER,
+        SEC_VCF_HEADER, SEC_VBVCF_HEADER,
         SEC_CHROM_B250, SEC_CHROM_DICT, SEC_POS_B250, SEC_POS_DICT, 
         SEC_ID_B250, SEC_ID_DICT, SEC_REFALT_B250, SEC_REFALT_DICT, SEC_QUAL_B250, SEC_QUAL_DICT,
         SEC_FILTER_B250, SEC_FILTER_DICT, SEC_INFO_B250, SEC_INFO_DICT,
@@ -303,7 +304,7 @@ static void main_show_content (void)
     int sections_per_category[NUM_CATEGORIES][30] = { 
         { SEC_HAPLOTYPE_DATA, NIL },
         { SEC_PHASE_DATA, SEC_GENOTYPE_DATA, SEC_FRMT_SUBFIELD_DICT, SEC_STATS_HT_SEPERATOR, NIL},
-        { SEC_VCF_HEADER, SEC_VB_HEADER, SEC_CHROM_B250, SEC_POS_B250, SEC_ID_B250, SEC_REFALT_B250, 
+        { SEC_VCF_HEADER, SEC_VBVCF_HEADER, SEC_CHROM_B250, SEC_POS_B250, SEC_ID_B250, SEC_REFALT_B250, 
           SEC_QUAL_B250, SEC_FILTER_B250, SEC_INFO_B250, SEC_FORMAT_B250, SEC_INFO_SUBFIELD_B250, 
           SEC_CHROM_DICT, SEC_POS_DICT, SEC_ID_DICT, SEC_REFALT_DICT, SEC_QUAL_DICT,
           SEC_FILTER_DICT, SEC_INFO_DICT, SEC_INFO_SUBFIELD_DICT, SEC_FORMAT_DICT, NIL },
@@ -830,7 +831,7 @@ int main (int argc, char **argv)
             case 'B' : genozip_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
                        break;
-            case 'S' : zip_set_global_samples_per_block (optarg); 
+            case 'S' : zip_vcf_set_global_samples_per_block (optarg); 
                        flag_sblock = true;
                        break;
             case 'p' : crypt_set_password (optarg) ; break;
@@ -915,7 +916,7 @@ int main (int argc, char **argv)
 
     // default values, if not overridden by the user
     if (!flag_vblock) genozip_set_global_max_memory_per_vb (VCF_DATA_PER_VB); 
-    if (!flag_sblock) zip_set_global_samples_per_block     (SAMPLES_PER_BLOCK); 
+    if (!flag_sblock) zip_vcf_set_global_samples_per_block     (SAMPLES_PER_BLOCK); 
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split

@@ -5,9 +5,9 @@
 
 #include "genozip.h"
 #include "zfile.h"
-#include "vcffile.h"
+#include "txtfile.h"
 #include "vcf_header.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "crypt.h"
 #include "version.h"
 #include "endianness.h"
@@ -31,7 +31,7 @@ void vcf_header_initialize()
     buf_free (&global_vcf_header_line);
 }
 
-static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffer *vcf_header)
+static bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken
 
@@ -47,7 +47,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
         
             // if first vcf file - copy the header to the global
             if (!buf_is_allocated (&global_vcf_header_line)) {
-                buf_copy (vb, &global_vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "global_vcf_header_line", 0);
+                buf_copy (evb, &global_vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "global_vcf_header_line", 0);
                 vcf_header_line_filename = filename;
             }
 
@@ -93,29 +93,29 @@ bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
 
     bool is_first_vcf = !buf_is_allocated (&global_vcf_header_line); 
 
-    vcffile_read_vcf_header (is_first_vcf); // reads into evb->vcf_data and evb->num_lines
+    txtfile_read_vcf_header (is_first_vcf); // reads into evb->txt_data and evb->num_lines
     
     *vcf_line_i += evb->num_lines;
 
     // case - vcf header was found 
-    if (evb->vcf_data.len) {
+    if (evb->txt_data.len) {
 
-        bool can_concatenate = vcf_header_set_globals(evb, txt_file->name, &evb->vcf_data);
+        bool can_concatenate = vcf_header_set_globals(txt_file->name, &evb->txt_data);
         if (!can_concatenate) { 
             // this is the second+ file in a concatenation list, but its samples are incompatible
-            buf_free (&evb->vcf_data);
+            buf_free (&evb->txt_data);
             return false;
         }
 
-        if (z_file) zfile_write_vcf_header (&evb->vcf_data, is_first_vcf); // we write all headers in concat mode too, to support --split
+        if (z_file) zfile_write_vcf_header (&evb->txt_data, is_first_vcf); // we write all headers in concat mode too, to support --split
 
-        txt_file->section_bytes[SEC_VCF_HEADER] = evb->vcf_data.len;
+        txt_file->section_bytes[SEC_VCF_HEADER] = evb->txt_data.len;
         z_file  ->section_bytes[SEC_VCF_HEADER] = evb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
         z_file  ->num_sections [SEC_VCF_HEADER]++;
         z_file  ->num_vcf_components_so_far++; // when compressing
     }
 
-    buf_free (&evb->vcf_data);
+    buf_free (&evb->txt_data);
     
     return true; // everything's good
 }
@@ -186,7 +186,7 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
     static Buffer vcf_header_buf = EMPTY_BUFFER;
     zfile_uncompress_section (evb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
 
-    bool can_concatenate = vcf_header_set_globals (evb, z_file->name, &vcf_header_buf);
+    bool can_concatenate = vcf_header_set_globals (z_file->name, &vcf_header_buf);
     if (!can_concatenate) {
         buf_free (&vcf_header_section);
         buf_free (&vcf_header_buf);
@@ -199,7 +199,7 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
     if ((first_vcf || flag_split) && !flag_no_header)
-        vcffile_write_to_disk (&vcf_header_buf);
+        txtfile_write_to_disk (&vcf_header_buf);
     
     buf_free (&vcf_header_section);
     buf_free (&vcf_header_buf);
@@ -210,4 +210,4 @@ bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped t
 }
 
 #define V1_VCF_HEADER // select the vcf_header functions of v1.c
-#include "vcf_v1.c"
+#include "v1_vcf.c"

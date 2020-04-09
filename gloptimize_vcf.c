@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   gl-optimize.c
+//   gl-optimize_vcf.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
@@ -19,8 +19,8 @@
 #include <math.h>
 #include "genozip.h"
 #include "profiler.h"
-#include "vcf_vb.h"
-#include "gloptimize.h"
+#include "vblock.h"
+#include "gloptimize_vcf.h"
 
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */
 
@@ -173,11 +173,11 @@ cleanup:
     return;
 }
 
-const char *gl_optimize_dictionary (VariantBlock *vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words)
+const char *gl_optimize_dictionary (VBlockVCF *vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words)
 {
     START_TIMER;
 
-    buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0, "optimized_gl_dict", vb->variant_block_i);
+    buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0, "optimized_gl_dict", vb->vblock_i);
 
     for (unsigned i=0; i < num_words; i++) {
         unsigned char_index = nodes[i].char_index - dict_start_char;

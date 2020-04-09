@@ -36,8 +36,9 @@ char *file_exts[] = FILE_EXTS;
 
 void file_set_stdin_type (const char *type_str)
 {
-    for (stdin_type=UNKNOWN_FILE_TYPE+1; stdin_type < AFTER_LAST_FILE_TYPE; stdin_type++)
-        if (!strcmp (type_str, &file_exts[stdin_type][1])) break; // compare to file extension without the leading .
+    if (type_str)
+        for (stdin_type=UNKNOWN_FILE_TYPE+1; stdin_type < AFTER_LAST_FILE_TYPE; stdin_type++)
+            if (!strcmp (type_str, &file_exts[stdin_type][1])) break; // compare to file extension without the leading .
 
     ASSERT (stdin_type==SAM || stdin_type==VCF, "%s: --stdin/-i option can only accept 'vcf' or 'sam'", global_cmd);
 }
@@ -59,8 +60,13 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
     
     fprintf (stderr, "Do you wish to overwrite it now? (y or n) ");
 
-    char response = getc (stdin);
-    if (response != 'y' && response != 'Y') {
+    // read all chars available on stdin, so that if we're processing multiple files - and we ask this question
+    // for a subsequent file later - we don't get left overs of this response
+    char read_buf[1000];
+    read_buf[0] = 0;
+    read (STDIN_FILENO, read_buf, 1000);
+
+    if (read_buf[0] != 'y' && read_buf[0] != 'Y') {
         fprintf (stderr, "No worries, I'm stopping here - no damage done!\n");
         my_exit();
     }
@@ -478,7 +484,7 @@ bool file_is_dir (const char *filename)
     return S_ISDIR (st.st_mode);
 }
 
-void file_get_file (VariantBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param,
+void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param,
                     bool add_string_terminator)
 {
     uint64_t size = file_get_size (filename);

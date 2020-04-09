@@ -8,7 +8,7 @@
 #include "buffer.h"
 #include "move_to_front.h"
 #include "file.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "hash.h"
 #include "dict_id.h"
 
@@ -58,7 +58,7 @@ static void hash_populate_from_mtf (MtfContext *zf_ctx)
 // allocation algorithm:
 // 1. If we got info on the size of this dict with the previous merged vb - use that size
 // 2. If not - use either num_lines for the size, or the smallest size for dicts that are typically small
-void hash_alloc_local (VariantBlock *segging_vb, MtfContext *vb_ctx)
+void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 {
     // if known from previously merged vb - use those values
     if (vb_ctx->num_new_entries_prev_merged_vb)
@@ -96,7 +96,7 @@ void hash_alloc_local (VariantBlock *segging_vb, MtfContext *vb_ctx)
                "mtf_ctx->local_hash", vb_ctx->did_i);
     vb_ctx->local_hash.len = vb_ctx->local_hash_prime;
     memset (vb_ctx->local_hash.data, 0xff, vb_ctx->local_hash_prime * sizeof (LocalHashEnt)); // initialize core table
-//printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->variant_block_i, dict_id_printable (vb_ctx->dict_id).id, vb_ctx->local_hash_prime); 
+//printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->vblock_i, dict_id_printable (vb_ctx->dict_id).id, vb_ctx->local_hash_prime); 
 }
 
 // ZIP merge: allocating the global cache for a dictionary, when merging the first VB that encountered it
@@ -108,10 +108,10 @@ void hash_alloc_local (VariantBlock *segging_vb, MtfContext *vb_ctx)
 // goes up (because of the need to traverse linked lists) during the bottleneck time. Coversely, if the hash
 // table size is too big, it both consumes a lot memory, as well as slows down the search time as the dictionary
 // is less likely to fit into the CPU memory caches
-void hash_alloc_global (VariantBlock *merging_vb, MtfContext *zf_ctx, const MtfContext *first_merging_vb_ctx)
+void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext *first_merging_vb_ctx)
 {
     // note on txt_data_size_single: if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
-    double estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->vcf_data.len);
+    double estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->num_lines;
 
     double n1 = first_merging_vb_ctx->mtf_len_at_half;
@@ -267,7 +267,7 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
 // 1. if its in the global hash table, with merge_num lower or equal to ours - i.e. added by an earler thread - we take it 
 // 2. if its in the local hash table - i.e. added by us (this vb) earlier - we take it
 // 3. if not found - we add it to the local hash table
-int32_t hash_get_entry_for_seg (VariantBlock *segging_vb, MtfContext *vb_ctx,
+int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
                                 const char *snip, unsigned snip_len, 
                                 int32_t new_mtf_i_if_no_old_one,
                                 MtfNode **node)        // out - node if node is found, NULL if not

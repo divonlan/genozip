@@ -1,15 +1,15 @@
 // ------------------------------------------------------------------
-//   random_access.h
+//   random_access_vcf.h
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <pthread.h>
 #include "buffer.h"
-#include "random_access.h"
-#include "vcf_vb.h"
+#include "random_access_vcf.h"
+#include "vblock.h"
 #include "file.h"
 #include "endianness.h"
-#include "regions.h"
+#include "regions_vcf.h"
 
 static pthread_mutex_t ra_mutex;
 static bool ra_mutex_initialized = false;
@@ -26,10 +26,10 @@ void random_access_initialize(void)
 
 // ZIP only: called from seg_chrom_field when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
-void random_access_update_chrom (VariantBlock *vb, uint32_t vb_line_i, int32_t chrom_node_index)
+void random_access_update_chrom (VBlockVCF *vb, uint32_t vb_line_i, int32_t chrom_node_index)
 {
     ASSERT (chrom_node_index >= 0, "Error in random_access_update_chrom: chrom_node_index=%d in vb_i=%u", 
-            chrom_node_index, vb->variant_block_i);
+            chrom_node_index, vb->vblock_i);
 
     if (vb->curr_ra_ent && vb->curr_ra_ent->chrom_index == chrom_node_index) return; // all good - current chrom continues
 
@@ -43,18 +43,18 @@ void random_access_update_chrom (VariantBlock *vb, uint32_t vb_line_i, int32_t c
         }
 
     // this is a new chrom - we need a new entry
-    buf_alloc (vb, &vb->ra_buf, sizeof (RAEntry) * (vb->ra_buf.len + 1), 2, "ra_buf", vb->variant_block_i);
+    buf_alloc (vb, &vb->ra_buf, sizeof (RAEntry) * (vb->ra_buf.len + 1), 2, "ra_buf", vb->vblock_i);
 
     vb->curr_ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len++];
     memset (vb->curr_ra_ent, 0, sizeof(RAEntry));
 
     vb->curr_ra_ent->chrom_index     = chrom_node_index;
-    vb->curr_ra_ent->variant_block_i = vb->variant_block_i;
+    vb->curr_ra_ent->vblock_i = vb->vblock_i;
     vb->curr_ra_ent_is_initialized   = false; // we will finish the initialization or POS on the first call to random_access_update_pos
 }
 
 // ZIP only: called from seg_pos_field - update the pos in the existing chrom entry
-void random_access_update_pos (VariantBlock *vb, int32_t this_pos)
+void random_access_update_pos (VBlockVCF *vb, int32_t this_pos)
 {
     RAEntry *ra_ent = &((RAEntry *)vb->ra_buf.data)[vb->ra_buf.len-1];
 
@@ -70,7 +70,7 @@ void random_access_update_pos (VariantBlock *vb, int32_t this_pos)
 
 // called by ZIP compute thread, while holding the z_file mutex: merge in the VB's ra_buf in the global z_file one
 // note: the order of the merge is not necessarily the sequential order of VBs
-void random_access_merge_in_vb (VariantBlock *vb)
+void random_access_merge_in_vb (VBlockVCF *vb)
 {
     pthread_mutex_lock (&ra_mutex);
 
@@ -85,7 +85,7 @@ void random_access_merge_in_vb (VariantBlock *vb)
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
         MtfNode *chrom_node = mtf_node (chrom_ctx, src_ra[i].chrom_index, NULL, NULL);
 
-        dst_ra[i].variant_block_i = vb->variant_block_i;
+        dst_ra[i].vblock_i = vb->vblock_i;
         dst_ra[i].chrom_index     = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
         dst_ra[i].min_pos         = src_ra[i].min_pos;
         dst_ra[i].max_pos         = src_ra[i].max_pos;
@@ -119,7 +119,7 @@ bool random_access_is_vb_included (uint32_t vb_i,
 
     bool vb_is_included=false;
     for (unsigned ra_i=0; 
-         ra_i < z_file->ra_buf.len && next_ra->variant_block_i == vb_i;
+         ra_i < z_file->ra_buf.len && next_ra->vblock_i == vb_i;
          ra_i++, next_ra++) {
 
         if (regions_get_ra_intersection (next_ra->chrom_index, next_ra->min_pos, next_ra->max_pos,
@@ -140,10 +140,10 @@ int32_t random_access_get_last_included_vb_i (void)
     for (unsigned ra_i=0; ra_i < z_file->ra_buf.len; ra_i++) { // note that all entries of the same vb_i are together, but vb_i's are not necessarily in seqential order
         
         const RAEntry *ra = ENT (RAEntry, &z_file->ra_buf, ra_i);
-        if ((int32_t)ra->variant_block_i <= last_vb_i) continue; // we already decided to include this vb_i - no need to check further
+        if ((int32_t)ra->vblock_i <= last_vb_i) continue; // we already decided to include this vb_i - no need to check further
 
         if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos, NULL))
-            last_vb_i = (int32_t)ra->variant_block_i; 
+            last_vb_i = (int32_t)ra->vblock_i; 
     }   
     return last_vb_i;
 }
@@ -154,7 +154,7 @@ void BGEN_random_access()
     RAEntry *ra = (RAEntry *)z_file->ra_buf.data;
 
     for (unsigned i=0; i < z_file->ra_buf.len; i++) {
-        ra[i].variant_block_i = BGEN32 (ra[i].variant_block_i);
+        ra[i].vblock_i = BGEN32 (ra[i].vblock_i);
         ra[i].chrom_index     = BGEN32 (ra[i].chrom_index);
         ra[i].min_pos         = BGEN32 (ra[i].min_pos);
         ra[i].max_pos         = BGEN32 (ra[i].max_pos);
@@ -177,7 +177,7 @@ void random_access_show_index ()
         RAEntry ra_ent = ((RAEntry *)ra_buf->data)[i]; // make a copy in case we need to BGEN
         
         fprintf (stderr, "vb_i=%u chrom_node_index=%u min_pos=%u max_pos=%u\n",
-                 ra_ent.variant_block_i, ra_ent.chrom_index, ra_ent.min_pos, ra_ent.max_pos);
+                 ra_ent.vblock_i, ra_ent.chrom_index, ra_ent.min_pos, ra_ent.max_pos);
     }
 }
 

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   optimize.h
+//   optimize_vcf.h
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 

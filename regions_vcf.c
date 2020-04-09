@@ -4,11 +4,11 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "regions.h"
+#include "regions_vcf.h"
 #include "buffer.h"
 #include "move_to_front.h"
 #include "vcf_header.h"
-#include "vcf_vb.h"
+#include "vblock.h"
 #include "file.h"
 
 // region as parsed from the --regions option

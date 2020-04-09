@@ -10,7 +10,7 @@
         "cmath": "c",
         "visual_c_misc_funcs.h": "c",
         "crypt.h": "c",
-        "vcf_vb.h": "c",
+        "vblock.h": "c",
         "endianness.h": "c",
         "zfile.h": "c",
         "typeinfo": "c",
@@ -29,7 +29,12 @@
         "ratio": "c",
         "scoped_allocator": "c",
         "tuple": "c",
-        "type_traits": "c"
+        "type_traits": "c",
+        "move_to_front.h": "c",
+        "random_access_vcf.h": "c",
+        "profiler.h": "c",
+        "txtfile.h": "c",
+        "vcf_header.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

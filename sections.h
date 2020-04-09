@@ -22,7 +22,7 @@ typedef enum {
     SEC_EOF                = -1, // doesn't appear in the file - just a value to indicate there are no more sections
 
     // data sections - statring in v1
-    SEC_VCF_HEADER         = 0,  SEC_VB_HEADER           = 1, 
+    SEC_VCF_HEADER         = 0,  SEC_VBVCF_HEADER        = 1, 
     SEC_FRMT_SUBFIELD_DICT = 2,  SEC_GENOTYPE_DATA       = 3, 
     SEC_PHASE_DATA         = 4,  SEC_HAPLOTYPE_DATA      = 5,
 
@@ -50,7 +50,7 @@ typedef enum {
 
 // we put the names here in a #define so we can eyeball their identicality to SectionType
 #define SECTIONTYPE_NAMES { \
-    "SEC_VCF_HEADER"        ,  "SEC_VB_HEADER",\
+    "SEC_VCF_HEADER"        ,  "SEC_VBVCF_HEADER",\
     "SEC_FRMT_SUBFIELD_DICT",  "SEC_GENOTYPE_DATA",\
     "SEC_PHASE_DATA"        ,  "SEC_HAPLOTYPE_DATA",\
     \
@@ -83,15 +83,15 @@ typedef enum {
                                         (s) == SEC_INFO_SUBFIELD_B250)
 
 #define section_type_is_vb(s)         (((s) >= SEC_CHROM_DICT && (s) <= SEC_INFO_SUBFIELD_B250) || \
-                                       ((s) >= SEC_VB_HEADER && (s) <= SEC_HAPLOTYPE_DATA))
+                                       ((s) >= SEC_VBVCF_HEADER && (s) <= SEC_HAPLOTYPE_DATA))
 
 // Section headers - big endian
 
 #define GENOZIP_MAGIC 0x27052012
 
 // data types genozip can compress
-typedef enum { DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType;
-#define DATATYPE_NAMES { "VCF", "SAM" } // order matches DataType
+typedef enum { DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
+#define DATATYPE_NAMES { "VCF", "SAM" } // index in array matches values in DataType
 
 // encryption types
 #define ENCRYPTION_TYPE_NONE   0
@@ -110,7 +110,7 @@ typedef struct {
     uint32_t data_encrypted_len;    // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t data_compressed_len;
     uint32_t data_uncompressed_len;
-    uint32_t variant_block_i;       // VB with in file starting from 1 ; 0 for VCF Header
+    uint32_t vblock_i;       // VB with in file starting from 1 ; 0 for VCF Header
     uint16_t section_i;             // section within VB - 0 for Variant Data
     uint8_t  section_type;          
     uint8_t  unused;
@@ -218,7 +218,7 @@ typedef struct {
 typedef struct {
     uint64_t offset;                   // offset of this section in the file
     DictIdType dict_id;                // used if this section is a DICT or a B250 section
-    uint32_t variant_block_i;
+    uint32_t vblock_i;
     uint8_t section_type;
     uint8_t unused[3];                 // padding
 } SectionListEntry;
@@ -226,7 +226,7 @@ typedef struct {
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct {
-    uint32_t variant_block_i;             // the vb_i in which this range appears
+    uint32_t vblock_i;             // the vb_i in which this range appears
     uint32_t chrom_index;                 // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
     uint32_t min_pos, max_pos;            // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
@@ -287,8 +287,8 @@ typedef struct {
 #pragma pack(pop)
 
 // zip stuff
-extern void sections_add_to_list (VariantBlockP vb, const SectionHeader *header);
-extern void sections_list_concat (VariantBlockP vb, BufferP section_list_buf);
+extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
+extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
 extern uint32_t sections_count_info_b250s (unsigned vb_i);

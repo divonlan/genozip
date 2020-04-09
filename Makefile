@@ -33,9 +33,10 @@ else
 	CFLAGS += -O2
 endif
 
-MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c random_access.c sections.c\
-	      vcffile.c squeeze.c zfile.c vcf_seg.c profiler.c file.c vcf_vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
-		  regions.c samples.c optimize.c dict_id.c hash.c gtshark.c stream.c url.c
+MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c zip_vcf.c piz.c piz_vcf.c piz_sam.c \
+          gloptimize_vcf.c buffer.c random_access_vcf.c sections.c\
+	      txtfile.c squeeze_vcf.c zfile.c seg_vcf.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
+		  vblock.c vblock_vcf.c vblock_sam.c regions_vcf.c samples.c optimize_vcf.c dict_id.c hash.c gtshark_vcf.c stream.c url.c
 
 CONDA_COMPATIBILITY_SRCS = compatibility/visual_c_pthread.c compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/mac_gettime.c
 
@@ -47,10 +48,10 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = aes.h dispatcher.h gloptimize.h optimize.h profiler.h dict_id.h vcffile.h zip.h v1.c \
+CONDA_INCS = aes.h dispatcher.h gloptimize_vcf.h optimize_vcf.h profiler.h dict_id.h txtfile.h zip.h v1_vcf.c v2v3_vcf.c \
              base250.h endianness.h md5.h sections.h text_help.h vcf_header.h hash.h stream.h url.h \
-             buffer.h file.h move_to_front.h vcf_seg.h text_license.h version.h gtshark.h \
-             crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h regions.h samples.h \
+             buffer.h file.h move_to_front.h seg_vcf.h text_license.h version.h gtshark_vcf.h \
+             crypt.h genozip.h piz.h squeeze_vcf.h vblock.h zfile.h random_access_vcf.h regions_vcf.h samples.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
              compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \
              compatibility/visual_c_pthread.h \

@@ -32,7 +32,7 @@ typedef struct {
     uint32_t snip_len;
 } MtfWord;
 
-// used by variant_block_i=1 to collect frequency statistics
+// used by vblock_i=1 to collect frequency statistics
 typedef struct {
     int32_t mtf_i;             // index into MtfContext.mtf
     int32_t count;             // number of times this snip has been encoutered so far
@@ -95,26 +95,26 @@ typedef struct mtfcontext_ {
 
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
-extern uint32_t mtf_evaluate_snip_seg (VariantBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
-extern uint32_t mtf_get_next_snip (VariantBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
+extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
+extern uint32_t mtf_get_next_snip (VBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
 extern int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned snip_len);
-extern void mtf_clone_ctx (VariantBlockP vb);
+extern void mtf_clone_ctx (VBlockP vb);
 extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
-extern void mtf_merge_in_vb_ctx (VariantBlockP vb);
+extern void mtf_merge_in_vb_ctx (VBlockP vb);
 extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, unsigned *num_subfields, DictIdType dict_id, SectionType dict_section_type);
-extern uint8_t mtf_get_existing_did_i_by_dict_id (VariantBlockP vb, DictIdType dict_id);
-extern void mtf_integrate_dictionary_fragment (VariantBlockP vb, char *data);
-extern void mtf_overlay_dictionaries_to_vb (VariantBlockP vb);
-extern void mtf_sort_dictionaries_vb_1(VariantBlockP vb);
-extern void mtf_zero_all_sorters (VariantBlockP vb);
+extern uint8_t mtf_get_existing_did_i_by_dict_id (VBlockP vb, DictIdType dict_id);
+extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
+extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);
+extern void mtf_sort_dictionaries_vb_1(VBlockP vb);
+extern void mtf_zero_all_sorters (VBlockP vb);
 
 extern void mtf_initialize_mutex (void);
-extern void mtf_update_stats (VariantBlockP vb);
+extern void mtf_update_stats (VBlockP vb);
 extern void mtf_free_context (MtfContext *ctx);
 extern void mtf_destroy_context (MtfContext *ctx);
 
-extern void mtf_vb_1_lock (VariantBlockP vb);
+extern void mtf_vb_1_lock (VBlockP vb);
 
 #define mtf_get_word(ctx, word_index) (&((MtfWord*)(ctx)->word_list.data)[(word_index)])
 

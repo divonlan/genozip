@@ -9,8 +9,8 @@
 #include <math.h>
 #include "genozip.h"
 #include "profiler.h"
-#include "squeeze.h"
-#include "vcf_vb.h"
+#include "squeeze_vcf.h"
+#include "vblock.h"
 
 unsigned squeeze_bits_per_entry (unsigned len)
 {
@@ -23,7 +23,7 @@ unsigned squeeze_len(unsigned int len)
     return ceil(((float)(squeeze_bits_per_entry(len) * len)) / 8.0); 
 }
 
-void squeeze (VariantBlock *vb,
+void squeeze (VBlockVCF *vb,
               uint8_t *squeezed, // memory should be pre-allocated by caller
               uint16_t *squeezed_checksum,
               const unsigned *normal, 
@@ -113,7 +113,7 @@ static unsigned unsqueeze_get_number(const uint8_t *squeezed, unsigned start_bit
     return number;
 }
 
-void unsqueeze (VariantBlock *vb,
+void unsqueeze (VBlockVCF *vb,
                 unsigned *normal, // memory should be pre-allocated by caller
                 const uint8_t *squeezed, 
                 uint16_t squeezed_checksum,
@@ -128,7 +128,7 @@ void unsqueeze (VariantBlock *vb,
         return;
     }    
     
-    ASSERT (squeezed, "Error: squeezed is NULL in variant_block_i=%u", vb->variant_block_i);
+    ASSERT (squeezed, "Error: squeezed is NULL in vblock_i=%u", vb->vblock_i);
 
     unsigned squeezed_len = squeeze_len (normal_len);
 
@@ -171,7 +171,7 @@ void squeeze_unit_test()
 
     uint16_t checksum;
 
-    VariantBlock vb;
+    VBlockVCF vb;
     vb.num_haplotypes_per_line = sizeof (unsqueezed) / sizeof (unsqueezed[0]);
     squeeze(&vb, squeezed, &checksum, normal, 32);
 
