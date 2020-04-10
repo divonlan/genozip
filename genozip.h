@@ -68,6 +68,11 @@ typedef struct mtfnode_ *MtfNodeP;
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
+// data types genozip can compress
+#define NUM_DATATYPES 2
+typedef enum { DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
+#define DATATYPE_NAMES { "VCF", "SAM" } // index in array matches values in DataType
+
 // global parameters - set before any thread is created, and never change
 extern uint32_t    global_vcf_num_samples, global_vcf_num_displayed_samples, global_max_memory_per_vb, global_max_threads;
 extern const char *global_cmd;            // set once in main()

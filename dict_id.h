@@ -29,13 +29,23 @@ static inline DictIdType dict_id_make(const char *str, unsigned str_len) { DictI
 
 // 2 MSb of first byte determine dictionary type
 
-#define dict_id_is_format_subfield(dict_id) ((dict_id.id[0] >> 6) == 1)
-#define dict_id_is_info_subfield(dict_id)   ((dict_id.id[0] >> 6) == 3)
-#define dict_id_is_vardata_field(dict_id)   ((dict_id.id[0] >> 6) == 0)
+// VCF field types
+#define dict_id_is_vcf_field(dict_id)     ((dict_id.id[0] >> 6) == 0)
+#define dict_id_is_vcf_info_sf(dict_id)   ((dict_id.id[0] >> 6) == 3)
+#define dict_id_is_vcf_format_sf(dict_id) ((dict_id.id[0] >> 6) == 1)
 
-static inline DictIdType dict_id_format_subfield(DictIdType dict_id) {                                       return dict_id; } // no change - keep Msb 01
-static inline DictIdType dict_id_info_subfield(DictIdType dict_id)   { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
-static inline DictIdType dict_id_vardata_field(DictIdType dict_id)   { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
+static inline DictIdType dict_id_vcf_field(    DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
+static inline DictIdType dict_id_vcf_info_sf(  DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
+static inline DictIdType dict_id_vcf_format_sf(DictIdType dict_id) {                                       return dict_id; } // no change - keep Msb 01
+
+// SAM field types - overload the VCF dict id types
+#define dict_id_is_sam_field    dict_id_is_vcf_field
+#define dict_id_is_sam_qname_sf dict_id_is_vcf_info_sf
+#define dict_id_is_sam_optnl_sf dict_id_is_vcf_format_sf
+
+#define dict_id_sam_field    dict_id_vcf_field
+#define dict_id_sam_qname_sf dict_id_vcf_info_sf
+#define dict_id_sam_optnl_sf dict_id_vcf_format_sf
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 
@@ -44,12 +54,12 @@ extern int dict_id_get_field (DictIdType dict_id);
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
 
-extern uint64_t dict_id_vardata_fields[], 
-                dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, 
-                dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD,
+extern uint64_t dict_id_vcf_fields[], dict_id_sam_fields[], 
+                dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, // some VCF FORMAT subfields
+                dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
                 dict_id_INFO_13;
 
-extern void dict_id_initialize(void);
+extern void dict_id_initialize (DataType data_type);
 
 extern const char *dict_id_display_type (DictIdType dict_id);
 

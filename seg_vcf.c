@@ -257,7 +257,7 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLine *dl,
 
             DictIdType subfield = seg_get_format_subfield (&str, (unsigned *)&len, vb_line_i);
 
-            ASSERT (dict_id_is_format_subfield (subfield), 
+            ASSERT (dict_id_is_vcf_format_sf (subfield), 
                     "Error: string %.*s in the FORMAT field of vb_line_i=%u is not a legal subfield", DICT_ID_LEN, subfield.id, vb_line_i);
 
             MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields, subfield, SEC_VCF_FRMT_SF_DICT);
@@ -360,7 +360,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLine *dl, char *info_str, unsi
                         "Error: INFO field in vb_line_i=%u, subfield %.*s, does not contain a value", vb_line_i, this_name_len, this_name);
 
                 // find (or create) an MTF context (= a dictionary) for this name
-                DictIdType dict_id = dict_id_info_subfield (dict_id_make (this_name, this_name_len));
+                DictIdType dict_id = dict_id_vcf_info_sf (dict_id_make (this_name, this_name_len));
 
                 // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
                 MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, dict_id, SEC_VCF_INFO_SF_DICT);
@@ -914,7 +914,7 @@ void seg_all_data_lines (VBlockVCF *vb)
     // Set ctx stuff for CHROM->FORMAT fields (note: mtf_i is allocated by seg_allocate_per_line_memory)
     for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
         strcpy ((char *)vb->mtf_ctx[f].dict_id.id, vcf_field_names[f]); // length of all is <= 7 so fits in id
-        vb->mtf_ctx[f].dict_id = dict_id_vardata_field (vb->mtf_ctx[f].dict_id);
+        vb->mtf_ctx[f].dict_id = dict_id_vcf_field (vb->mtf_ctx[f].dict_id);
         vb->mtf_ctx[f].b250_section_type = SEC_VCF_CHROM_B250 + f*2;
         vb->mtf_ctx[f].dict_section_type = SEC_VCF_CHROM_DICT + f*2;
     }

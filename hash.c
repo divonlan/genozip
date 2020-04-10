@@ -66,11 +66,11 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         vb_ctx->local_hash_prime = hash_next_size_up (vb_ctx->num_new_entries_prev_merged_vb * 3);
 
     // if typically small - use minimal hash table
-    else if (vb_ctx->dict_id.num == dict_id_vardata_fields[VCF_CHROM]  ||
-             vb_ctx->dict_id.num == dict_id_vardata_fields[VCF_FORMAT] ||
-             vb_ctx->dict_id.num == dict_id_vardata_fields[VCF_INFO]   ||
-             vb_ctx->dict_id.num == dict_id_vardata_fields[VCF_REFALT] ||
-             vb_ctx->dict_id.num == dict_id_vardata_fields[VCF_FILTER] ||
+    else if (vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_CHROM]  ||
+             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FORMAT] ||
+             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_INFO]   ||
+             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_REFALT] ||
+             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FILTER] ||
              vb_ctx->dict_id.num == dict_id_INFO_AC ||
              vb_ctx->dict_id.num == dict_id_INFO_AF ||
              vb_ctx->dict_id.num == dict_id_INFO_AN ||

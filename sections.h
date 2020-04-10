@@ -116,11 +116,6 @@ typedef enum {
 
 #define GENOZIP_MAGIC 0x27052012
 
-// data types genozip can compress
-#define NUM_DATATYPES 2
-typedef enum { DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
-#define DATATYPE_NAMES { "VCF", "SAM" } // index in array matches values in DataType
-
 // encryption types
 #define ENCRYPTION_TYPE_NONE   0
 #define ENCRYPTION_TYPE_AES256 1

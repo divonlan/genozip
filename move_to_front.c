@@ -568,11 +568,11 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
                                     DictIdType dict_id,
                                     SectionType dict_section_type)
 {
-    int did_i = dict_id_get_field (dict_id); // will return the field if its a vardata dict, or -1 if not
+    int did_i = dict_id_get_field (dict_id); // will return the field if its a main field dict (even if the dictinary doesn't exit yet), or -1 if not
 
-    // case: not a vardata dict - find the did_i if we have it already
-    if (did_i == -1) {
-        did_i=VCF_FORMAT+1 ; for (; did_i < *num_dict_ids; did_i++) 
+    // case: not a main field dict - find the did_i if we have it already
+    if (did_i < 0) { // did_i is minus the next field
+        did_i=-did_i ; for (; did_i < *num_dict_ids; did_i++) 
             if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
     }
 
@@ -705,7 +705,7 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 
             // count dictionaries of genotype data subfields
             // note: this is needed only for V1 files...
-            if (vb->data_type == DATA_TYPE_VCF && dict_id_is_format_subfield (vb_ctx->dict_id)) {
+            if (vb->data_type == DATA_TYPE_VCF && dict_id_is_vcf_format_sf (vb_ctx->dict_id)) {
 
                 ASSERT (++((VBlockVCFP)vb)->num_format_subfields <= MAX_SUBFIELDS, 
                         "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 

@@ -178,7 +178,7 @@ static void piz_vcf_map_iname_subfields (VBlockVCF *vb)
                     dict_id.id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
                 i++, j++;
             }
-            dict_id = dict_id_info_subfield (dict_id);
+            dict_id = dict_id_vcf_info_sf (dict_id);
 
             // case - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
             if (dict_id.num == dict_id_INFO_13) {

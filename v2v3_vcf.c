@@ -60,7 +60,7 @@ static void v2v3_piz_vcf_map_iname_subfields (VBlockVCF *vb)
                     dict_id.id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
                 i++, j++;
             }
-            dict_id = dict_id_info_subfield (dict_id);
+            dict_id = dict_id_vcf_info_sf (dict_id);
 
             iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, dict_id); // it will be NIL if this is an INFO name without values            
             iname_mapper->num_subfields++;
