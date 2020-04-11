@@ -194,11 +194,11 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
     dict_id_initialize (z_file->data_type);
 
-    unsigned vcf_line_i = 1; // the next line to be read (first line = 1)
+    unsigned txt_line_i = 1; // the next line to be read (first line = 1)
     
     // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
-    off64_t vcf_header_header_pos = z_file->disk_so_far;
-    bool success = header_txt_to_genozip (&vcf_line_i);
+    off64_t txt_header_header_pos = z_file->disk_so_far;
+    bool success = header_txt_to_genozip (&txt_line_i);
     if (!success) goto finish;
 
     mtf_initialize_mutex();
@@ -216,9 +216,11 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
         bool has_free_thread = dispatcher_has_free_thread (dispatcher);
 
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
-        if (has_vb_ready_to_compute && has_free_thread) 
-            dispatcher_compute (dispatcher, zip_vcf_compress_one_vb);
-
+        if (has_vb_ready_to_compute && has_free_thread) {
+            DispatcherFuncType compress_funcs[NUM_DATATYPES] = { zip_vcf_compress_one_vb, zip_sam_compress_one_vb };
+            dispatcher_compute (dispatcher, compress_funcs[z_file->data_type]);
+        }
+        
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
@@ -227,10 +229,10 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
             if (!processed_vb) continue; // no running compute threads 
 
             // update z_data in memory (its not written to disk yet)
-            zfile_update_compressed_vb_header (processed_vb, vcf_line_i);
+            zfile_update_compressed_vb_header (processed_vb, txt_line_i);
 
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->num_lines);
-            vcf_line_i += processed_vb->num_lines;
+            txt_line_i += processed_vb->num_lines;
 
             zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, true);
 
@@ -242,11 +244,11 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
             next_vb = dispatcher_generate_next_vb (dispatcher, 0);
 
-            if (flag_show_threads) dispatcher_show_time ("Read VCF data", -1, next_vb->vblock_i);
+            if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);
             
             txtfile_read_variant_block (next_vb);
 
-            if (flag_show_threads) dispatcher_show_time ("Read VCF data done", -1, next_vb->vblock_i);
+            if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
 
             if (next_vb->txt_data.len)  // we found some data 
                 next_vb->ready_to_dispatch = true;
@@ -265,8 +267,8 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     // go back and update some fields in the vcf header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5;
-    if (z_file && z_file->type == VCF_GENOZIP && vcf_header_header_pos >= 0) 
-        success = zfile_update_vcf_header_section_header (vcf_header_header_pos, max_lines_per_vb, &single_component_md5);
+    if (z_file && !z_file->redirected && txt_header_header_pos >= 0) 
+        success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);

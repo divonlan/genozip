@@ -135,7 +135,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     uint32_t word_index = z_file->genozip_version >= 2 ? base250_decode (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
                                                        : v1_base250_decode (&iterator->next_b250);
 
-    // case: a subfield snip is missing - either the genotype data has less subfields than declared in VCF_FORMAT, or not provided at all for some (or all) samples.
+    // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
         ASSERT (!ctx || ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %.*s (%s)",
                 vcf_line, vb->vblock_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
@@ -324,7 +324,7 @@ void mtf_clone_ctx (VBlock *vb)
 
     vb->num_dict_ids = z_num_dict_ids;
 
-    // initialize mappers for VCF_FORMAT and VCF_INFO
+    // For VCF: initialize mappers for VCF_FORMAT and VCF_INFO
     if (vb->data_type == DATA_TYPE_VCF) {    
         mtf_init_mapper (vb, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
         mtf_init_mapper (vb, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf, "iname_mapper_buf");    
@@ -564,7 +564,7 @@ uint8_t mtf_get_existing_did_i_by_dict_id (VBlock *vb, DictIdType dict_id)
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
 MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */, 
                                     unsigned *num_dict_ids, 
-                                    unsigned *num_subfields, // variable to increment if a new context is added
+                                    uint8_t *num_subfields, // variable to increment if a new context is added
                                     DictIdType dict_id,
                                     SectionType dict_section_type)
 {
@@ -593,7 +593,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
 
         // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields
         // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-        (*num_dict_ids) = MAX (VCF_FORMAT, did_i) + 1; 
+        (*num_dict_ids) = MAX (datatype_last_field[z_file->data_type], did_i) + 1; 
 
         if (num_subfields) (*num_subfields)++;
     }
@@ -709,7 +709,7 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 
                 ASSERT (++((VBlockVCFP)vb)->num_format_subfields <= MAX_SUBFIELDS, 
                         "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 
-                        file_printname (z_file), MAX_SUBFIELDS, vb->vblock_i);
+                        z_name, MAX_SUBFIELDS, vb->vblock_i);
             }
         }
     }
@@ -775,7 +775,7 @@ void mtf_update_stats (VBlock *vb)
         MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
     
         MtfContext *zf_ctx = mtf_get_zf_ctx (vb_ctx->dict_id);
-        if (!zf_ctx) continue; // this can happen if VCF_FORMAT subfield appears, but no line has data for it
+        if (!zf_ctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
         zf_ctx->mtf_i.len += vb_ctx->mtf_i.len; // thread safety: no issues, this only updated only by the I/O thread
     }

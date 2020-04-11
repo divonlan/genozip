@@ -71,7 +71,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 
 static void enforce_v1_limitations (bool is_first_vcf_component)
 {
-    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s compressed with genozip version 1", (lflag), file_printname (z_file));
+    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s compressed with genozip version 1", (lflag), z_name);
     
     ENFORCE(flag_test, "--test");
     ENFORCE(flag_split, "--split");
@@ -115,10 +115,10 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         data_type = piz_read_global_area (&original_file_digest);
 
         if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
-            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find VCF Header data in %s", file_printname (z_file));
+            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find VCF Header data in %s", z_name);
 
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
-                "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5", file_printname (z_file));
+                "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5", z_name);
     }
 
     if (data_type == EOF) goto finish;
@@ -129,7 +129,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     piz_successful = (data_type != MAYBE_V1) ? header_genozip_to_txt (&original_file_digest)
                                              : v1_header_genozip_to_vcf (&original_file_digest);
     
-    ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", file_printname (z_file));
+    ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", z_name);
     if (!piz_successful || flag_header_only) goto finish;
 
     if (flag_split) 

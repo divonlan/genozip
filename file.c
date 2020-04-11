@@ -93,6 +93,7 @@ static bool file_open_txt (File *file)
 
     switch (file->type) {
     case VCF:
+    case SAM:
         // don't actually open the file if we're just testing in genounzip
         if (flag_test && file->mode == WRITE) return true;
 

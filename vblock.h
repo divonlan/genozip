@@ -18,7 +18,7 @@
 #define DID_I_HAS_13 254 
 #define DID_I_NONE   255
 typedef struct {
-    uint8_t num_subfields; // (uint8_t)NIL if this mapper is not defined
+    uint8_t num_subfields;        // (uint8_t)NIL if this mapper is not defined
     uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]
 } SubfieldMapper;
 
@@ -39,14 +39,14 @@ typedef struct {
     bool is_processed;         /* thread completed processing this VB - it is ready for outputting */\
     bool in_use;               /* this vb is in use */\
     \
+    void *data_lines;          /* if allocated, this array is of length num_lines_alloced of type dependent on data_type and on whether it is Zip or Piz. */\
     uint32_t num_lines;        /* number of lines in this variant block */\
+    uint32_t num_lines_alloced;/* number of lines allocated in this variant block >= num_lines */\
     uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
     \
     /* tracking execution */\
     int32_t vb_data_size;      /* expected size of decompressed VCF. Might be different than original if --optimize is used. */\
     uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
-    \
-    uint32_t max_gt_line_len;  /* length of longest gt line in this vb after segregation */\
     \
     ProfilerRec profile; \
     \
@@ -133,7 +133,7 @@ typedef struct {
 
     uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
     uint32_t info_mtf_i;     // the mtf_i into mtx_ctx[VCF_INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
-} ZipDataLine;
+} ZipDataLineVCF;
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
@@ -145,18 +145,12 @@ typedef struct {
     uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
     
     Buffer v1_variant_data;  // backward compatibility with genozip v1
-} PizDataLine;
+} PizDataLineVCF;
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 typedef struct vblock_vcf_ {
 
     VBLOCK_COMMON_FIELDS
-
-    uint32_t num_data_lines_allocated;
-    union {
-        ZipDataLine *zip;      // ZIP: if allocated, this array is of length num_data_lines_allocated. its size is determined by the number of the max variant block size
-        PizDataLine *piz;      // PIZ: if allocated, this array is of length num_data_lines_allocated. its size is determined by the SectionHeaderTxtHeader.max_lines_per_vb
-    } data_lines;
 
     // charactaristics of the data
     uint16_t ploidy;
@@ -168,10 +162,10 @@ typedef struct vblock_vcf_ {
     bool has_haplotype_data;   // ditto for haplotype data
     PhaseType phase_type;      // phase type of this variant block
     
-    // random access, chrom and pos
+    // random access, chrom, pos
     Buffer ra_buf;             // ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_VCF_RANDOM_ACCESS section at the end of the genozip file        
-    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes
     RAEntry *curr_ra_ent;      // these two are used by random_access_update_chrom/random_access_update_pos to sync between them
+    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes
     bool curr_ra_ent_is_initialized; 
 
     // working memory for segregate - we segregate a line components into these buffers, and when done
@@ -180,6 +174,7 @@ typedef struct vblock_vcf_ {
     Buffer line_gt_data;       // \t separated genotype data for the line. last one has \t too. no \0. exists if any variant in the variant blck has FORMAT other that "GT"
     Buffer line_ht_data;       // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
+    uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation 
 
     // section data - ready to compress
     Buffer haplotype_permutation_index;
@@ -211,19 +206,19 @@ typedef struct vblock_vcf_ {
     Buffer column_of_zeros;           // used by piz_vcf_get_ht_columns_data
 
     // dictionaries stuff 
-    uint32_t num_info_subfields;      // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
+    uint8_t num_info_subfields;       // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                       // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
-    Buffer iname_mapper_buf;           // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
-    uint32_t num_format_subfields;    // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
-    Buffer format_mapper_buf;          // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_FORMAT].mtf   
+    Buffer iname_mapper_buf;          // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
+    uint8_t num_format_subfields;     // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
+    Buffer format_mapper_buf;         // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_FORMAT].mtf   
 
     // stuff related to compressing haplotype data with gtshark
-    Buffer gtshark_db_db_data;         // ZIP & PIZ
-    Buffer gtshark_db_gt_data;         // ZIP & PIZ
-    Buffer gtshark_exceptions_line_i;  // ZIP & PIZ: uint32_t list of vb_line_i that have any allele >= '3'
-    Buffer gtshark_exceptions_ht_i;    // ZIP & PIZ: delta-encoded (within the line) list of ht_i. For each exception line, there's the list of its ht_i's followed by a 0.
-    Buffer gtshark_exceptions_allele;  // ZIP & PIZ: each index (including terminating 0) corresponding to the index in exception_ht_i_offset
-    Buffer gtshark_vcf_data;           // PIZ only
+    Buffer gtshark_db_db_data;        // ZIP & PIZ
+    Buffer gtshark_db_gt_data;        // ZIP & PIZ
+    Buffer gtshark_exceptions_line_i; // ZIP & PIZ: uint32_t list of vb_line_i that have any allele >= '3'
+    Buffer gtshark_exceptions_ht_i;   // ZIP & PIZ: delta-encoded (within the line) list of ht_i. For each exception line, there's the list of its ht_i's followed by a 0.
+    Buffer gtshark_exceptions_allele; // ZIP & PIZ: each index (including terminating 0) corresponding to the index in exception_ht_i_offset
+    Buffer gtshark_vcf_data;          // PIZ only
 
     // regions & filters
     Buffer region_ra_intersection_matrix;      // a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region
@@ -244,10 +239,29 @@ extern void vb_vcf_cleanup_memory (VBlockVCF *vb);
 // SAM stuff
 //-------------------------------
 
-// IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
+// IMPORTANT: if changing fields in DataLine, also update vb_release_vb
+typedef struct {
+    // the following 2 are indeces, lens into txt_data 
+    uint32_t seq_data_start, qual_data_start;
+    uint32_t seq_len;        // same length for seq_data_start and qual_data_start, per SAM specification
+
+    uint32_t qname_mtf_i;    // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    uint32_t optional_mtf_i; // the mtf_i into mtx_ctx[SAM_OPTIONAL].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
+} ZipDataLineSAM;
+
+// IMPORTANT: if changing fields in DataLine, also update vb_sam_release_vb
+typedef struct {
+   
+} PizDataLineSAM;
+
+// IMPORTANT: if changing fields in VBlockSAM, also update vb_sam_release_vb
 typedef struct vblock_sam_ {
 
     VBLOCK_COMMON_FIELDS
+
+    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding
+
+    SubfieldMapper qname_mapper;
 
 } VBlockSAM;
 

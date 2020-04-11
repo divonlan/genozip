@@ -12,6 +12,7 @@
 #include "compatibility/visual_c_stdint.h"
 #endif
 #include "genozip.h"
+#include "header.h"
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
@@ -24,26 +25,22 @@ typedef union {
 #pragma pack(pop)
 
 static inline DictIdType dict_id_make(const char *str, unsigned str_len) { DictIdType dict_id = {0}; memcpy (dict_id.id, str, MIN (str_len, DICT_ID_LEN)); return dict_id;}
+static inline DictIdType dict_id_field(    DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
 
 #define dict_id_is(dict_id, str) (dict_id_make(str, strlen(str)).num == dict_id_printable (dict_id).num)
-
-// 2 MSb of first byte determine dictionary type
+#define dict_id_is_field(dict_id)         ((dict_id.id[0] >> 6) == 0) // 2 MSb of first byte determine dictionary type
 
 // VCF field types
-#define dict_id_is_vcf_field(dict_id)     ((dict_id.id[0] >> 6) == 0)
 #define dict_id_is_vcf_info_sf(dict_id)   ((dict_id.id[0] >> 6) == 3)
 #define dict_id_is_vcf_format_sf(dict_id) ((dict_id.id[0] >> 6) == 1)
 
-static inline DictIdType dict_id_vcf_field(    DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
 static inline DictIdType dict_id_vcf_info_sf(  DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
 static inline DictIdType dict_id_vcf_format_sf(DictIdType dict_id) {                                       return dict_id; } // no change - keep Msb 01
 
 // SAM field types - overload the VCF dict id types
-#define dict_id_is_sam_field    dict_id_is_vcf_field
 #define dict_id_is_sam_qname_sf dict_id_is_vcf_info_sf
 #define dict_id_is_sam_optnl_sf dict_id_is_vcf_format_sf
 
-#define dict_id_sam_field    dict_id_vcf_field
 #define dict_id_sam_qname_sf dict_id_vcf_info_sf
 #define dict_id_sam_optnl_sf dict_id_vcf_format_sf
 

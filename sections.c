@@ -84,7 +84,7 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
 }
 
 // called by PIZ I/O thread: zfile_read_on_vb
-uint32_t sections_count_info_b250s (unsigned vb_i)
+uint8_t sections_count_info_b250s (unsigned vb_i)
 {
     SectionListEntry *sl = ARRAY (SectionListEntry, &z_file->section_list_buf);    
 
@@ -98,7 +98,7 @@ uint32_t sections_count_info_b250s (unsigned vb_i)
     uint32_t start = z_file->sl_cursor;
     while (sl[z_file->sl_cursor].section_type == SEC_VCF_INFO_SF_B250) z_file->sl_cursor++;
 
-    return z_file->sl_cursor - start;
+    return (uint8_t)(z_file->sl_cursor - start);
 }
 
 // called by PIZ I/O to know if next up is a VB Header or VCF Header or EOF
@@ -236,7 +236,7 @@ static const char *sections_type_name (unsigned item, const char **names, unsign
 
 const char *st_name(SectionType sec_type)
 {
-    static const char *names[] = SECTIONTYPE_NAMES;
+    static const char *names[NUM_SEC_TYPES] = SECTIONTYPE_NAMES;
     
     if (sec_type == SEC_EOF) return "SEC_EOF";
     
@@ -251,7 +251,7 @@ const char *dt_name (unsigned data_type)
 
 const char *encryption_name (unsigned encryption_type)
 {
-    static const char *names[] = ENCRYPTION_TYPE_NAMES;
+    static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
     return sections_type_name (encryption_type, names, sizeof(names)/sizeof(names[0]));
 }
 

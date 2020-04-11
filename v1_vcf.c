@@ -38,7 +38,7 @@ int v1_zfile_read_section (VBlock *vb,
     // decrypt header
     if (is_encrypted) {
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
-                "Error: genozip v1 file - password provided, but file %s is not encrypted", file_printname (z_file));
+                "Error: genozip v1 file - password provided, but file %s is not encrypted", z_name);
 
         v1_crypt_do (vb, (uint8_t*)header, header_size, vb->vblock_i, --vb->z_next_header_i); // negative section_i for a header
     }
@@ -61,7 +61,7 @@ int v1_zfile_read_section (VBlock *vb,
     }
 
     if (!is_magical && is_encrypted && expected_sec_type == SEC_TXT_HEADER) {
-        ABORT ("Error: genozip v1 file - password is wrong for file %s", file_printname (z_file)); // mostly likely its because of a wrong password
+        ABORT ("Error: genozip v1 file - password is wrong for file %s", z_name); // mostly likely its because of a wrong password
     }
 
     // case: encryption failed because this is actually a SEC_TXT_HEADER of a new vcf component of a concatenated file
@@ -99,7 +99,7 @@ int v1_zfile_read_section (VBlock *vb,
         }
     } 
 
-    ASSERT (is_magical, "Error: genozip v1 file - corrupt data (magic is wrong) when reading file %s", file_printname (z_file));
+    ASSERT (is_magical, "Error: genozip v1 file - corrupt data (magic is wrong) when reading file %s", z_name);
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: genozip v1 file - header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
@@ -125,7 +125,7 @@ int v1_zfile_read_section (VBlock *vb,
     // case: this is actually not a v1 file, but it got truncated so the v2 reader didn't find the genozip header section
     // and referred it to v1
     ASSERT (!(header->section_type == SEC_TXT_HEADER && compressed_offset == sizeof(SectionHeaderTxtHeader)), 
-            "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (z_file));
+            "Error: failed to read file %s - it appears to be truncated or corrupted", z_name);
 
     ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VCF_VB_HEADER, // for variant data, we also have the permutation index
             "Error: genozip v1 file - invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
@@ -493,7 +493,7 @@ static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
                 sample_iterator[sample_i].next_b250++; // skip
             }
             else {
-                for (unsigned sf_i=0; sf_i < vb->num_format_subfields; sf_i++) {
+                for (uint8_t sf_i=0; sf_i < vb->num_format_subfields; sf_i++) {
 
                     if (line_subfields[sf_i] != NIL) {  // this line has this subfield (according to its FORMAT field)
 
@@ -530,7 +530,7 @@ static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
 
     vb->line_gt_data.len = next - vb->line_gt_data.data;
 
-    vb->data_lines.piz[line_i].has_genotype_data = vb->line_gt_data.len > global_vcf_num_samples; // not all just \t
+    DATA_LINE(vb, line_i)->has_genotype_data = vb->line_gt_data.len > global_vcf_num_samples; // not all just \t
 
     COPY_TIMER(vb->profile.piz_vcf_get_genotype_data_line);
 }
@@ -581,8 +581,8 @@ void v1_piz_vcf_reconstruct_line_components (VBlockVCF *vb)
 {
     START_TIMER;
 
-    if (!vb->data_lines.piz) 
-        vb->data_lines.piz = calloc (txt_file->max_lines_per_vb, sizeof (PizDataLine));
+    if (!vb->data_lines) 
+        vb->data_lines = calloc (txt_file->max_lines_per_vb, sizeof (PizDataLineVCF));
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED) 
@@ -844,7 +844,7 @@ bool v1_vcf_header_get_vcf_header (uint64_t *uncompressed_data_size,
         // this is actually just a bad v2+ file
         RETURNW (!(header.h.section_type == SEC_TXT_HEADER && BGEN32 (header.h.compressed_offset) == sizeof(SectionHeaderTxtHeader)), 
                  false,
-                 "Error: failed to read file %s - it appears to be truncated or corrupted", file_printname (z_file));
+                 "Error: failed to read file %s - it appears to be truncated or corrupted", z_name);
         
         *uncompressed_data_size = BGEN64 (header.txt_data_size);
         *num_samples            = BGEN32 (header.num_samples);

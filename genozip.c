@@ -49,6 +49,7 @@ ExeType exe_type;
 int command = -1;  // must be static or global to initialize list_options 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
+uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading VCF data
 
 // the flags - representing command line options - available globally
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0,
@@ -571,7 +572,9 @@ static void main_genozip (const char *txt_filename,
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
                 // get name, e.g. xx.bcf.gz -> xx.vcf.genozip
-                sprintf (z_filename, "%.*s" VCF_GENOZIP_, (int)(fn_len - strlen (file_exts[txt_file->type])), local_vcf_filename); 
+                static const char *genozip_ext_by_datatype[NUM_DATATYPES] = { VCF_GENOZIP_, SAM_GENOZIP_ };
+                sprintf (z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_vcf_filename,
+                         genozip_ext_by_datatype[txt_file->data_type]); 
 
                 if (basename) FREE ((char*)basename);
             }

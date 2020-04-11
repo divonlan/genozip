@@ -6,6 +6,7 @@
 #include "genozip.h"
 #include "buffer.h"
 #include "samples.h"
+#include "header.h"
 
 // referring to sample strings from the --samples command line option
 static Buffer cmd_samples_buf = EMPTY_BUFFER; // an array of (char *)

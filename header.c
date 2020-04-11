@@ -14,14 +14,14 @@
 #include "file.h"
 #include "samples.h"
 
-uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading VCF data
-
 static bool is_first_txt = true; 
 
 // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed.
 // (names are not longer than 8=DICT_ID_LEN as the code assumes it)
-const char *vcf_field_names[] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
-const char *sam_field_names[] = { "QNAME", "FLAG", "RNAME+NX", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" };
+const char *vcf_field_names[NUM_VCF_B250S] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
+const char *sam_field_names[NUM_SAM_B250S] = { "QNAME", "FLAG", "RNAME+NX", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" };
+
+const unsigned datatype_last_field[NUM_DATATYPES] = { VCF_FORMAT, SAM_OPTIONAL };
 
 // -----------
 // VCF stuff
@@ -154,7 +154,7 @@ bool header_txt_to_genozip (uint32_t *vcf_line_i)
             return false;
         }
 
-        if (z_file) zfile_write_vcf_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
+        if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
 
         txt_file->section_bytes[SEC_TXT_HEADER] = evb->txt_data.len;
         z_file  ->section_bytes[SEC_TXT_HEADER] = evb->z_section_bytes[SEC_TXT_HEADER]; // comes from zfile_compress

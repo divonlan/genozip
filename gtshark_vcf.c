@@ -163,16 +163,16 @@ static void gtshark_run_compress (VBlockVCF *vb, unsigned sb_i,
 void gtshark_compress_haplotype_data (VBlockVCF *vb, const Buffer *section_data, unsigned sb_i)
 {
     char *gtshark_vcf_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_vcf_name, "%s.%u.%u.db.vcf", file_printname (z_file), vb->vblock_i, sb_i);
+    sprintf (gtshark_vcf_name, "%s.%u.%u.db.vcf", z_name, vb->vblock_i, sb_i);
 
     char *gtshark_db_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_db_name, "%s.%u.%u.db", file_printname (z_file), vb->vblock_i, sb_i);
+    sprintf (gtshark_db_name, "%s.%u.%u.db", z_name, vb->vblock_i, sb_i);
 
     char *gtshark_db_db_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_db_db_name, "%s.%u.%u.db_db", file_printname (z_file), vb->vblock_i, sb_i);
+    sprintf (gtshark_db_db_name, "%s.%u.%u.db_db", z_name, vb->vblock_i, sb_i);
 
     char *gtshark_db_gt_name = malloc (strlen (z_file->name) + 20);
-    sprintf (gtshark_db_gt_name, "%s.%u.%u.db_gt", file_printname (z_file), vb->vblock_i, sb_i);
+    sprintf (gtshark_db_gt_name, "%s.%u.%u.db_gt", z_name, vb->vblock_i, sb_i);
 
     gtshark_create_vcf_file (vb, section_data, sb_i, gtshark_vcf_name);
 
@@ -188,8 +188,8 @@ void gtshark_compress_haplotype_data (VBlockVCF *vb, const Buffer *section_data,
 static char *gtshark_write_db_file (uint32_t vb_i, uint16_t section_i, const char *file_ext, 
                                     const Buffer *buf)
 {
-    char *filename = malloc (strlen (file_printname (z_file)) + 50);
-    sprintf (filename, "%s.%u.%u.%s", file_printname (z_file), vb_i, section_i, file_ext);
+    char *filename = malloc (strlen (z_name) + 50);
+    sprintf (filename, "%s.%u.%u.%s", z_name, vb_i, section_i, file_ext);
 
     FILE *file = fopen (filename, "wb");
 
@@ -205,11 +205,11 @@ static char *gtshark_write_db_file (uint32_t vb_i, uint16_t section_i, const cha
 // PIZ
 static void gtshark_run_decompress (VBlockVCF *vb, unsigned sb_i)
 {
-    char *gtshark_db_name = malloc (strlen (file_printname (z_file)) + 50);
-    sprintf (gtshark_db_name, "%s.%u.%u.db", file_printname (z_file), vb->vblock_i, sb_i);
+    char *gtshark_db_name = malloc (strlen (z_name) + 50);
+    sprintf (gtshark_db_name, "%s.%u.%u.db", z_name, vb->vblock_i, sb_i);
 
-    char *gtshark_vcf_name = malloc (strlen (file_printname (z_file)) + 50);
-    sprintf (gtshark_vcf_name, "%s.%u.%u.vcf", file_printname (z_file), vb->vblock_i, sb_i);
+    char *gtshark_vcf_name = malloc (strlen (z_name) + 50);
+    sprintf (gtshark_vcf_name, "%s.%u.%u.vcf", z_name, vb->vblock_i, sb_i);
 
     // remove in case of leftovers from previous run
     file_remove (gtshark_vcf_name, true);

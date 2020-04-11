@@ -25,12 +25,12 @@ unsigned vb_vcf_num_sections(VBlockVCF *vb)
 void vb_vcf_release_vb (VBlockVCF *vb) 
 {
     // note: vb->data_line is not freed but rather used by subsequent vbs
-    if (command == ZIP && vb->data_lines.zip)
-        memset (vb->data_lines.zip, 0, sizeof(ZipDataLine) * vb->num_data_lines_allocated);
+    if (command == ZIP && vb->data_lines)
+        memset (vb->data_lines, 0, sizeof(ZipDataLineVCF) * vb->num_lines_alloced);
 
-    else if (command != ZIP && vb->data_lines.piz) {
-        for (unsigned i=0; i < vb->num_data_lines_allocated; i++) {
-            PizDataLine *dl = &vb->data_lines.piz[i];
+    else if (command != ZIP && vb->data_lines) {
+        for (unsigned i=0; i < vb->num_lines_alloced; i++) {
+            PizDataLineVCF *dl = &((PizDataLineVCF *)vb->data_lines)[i];
             
             dl->has_haplotype_data = dl->has_genotype_data = 0;
             dl->format_mtf_i = 0;
@@ -49,7 +49,7 @@ void vb_vcf_release_vb (VBlockVCF *vb)
     vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = false;
     vb->phase_type = PHASE_UNKNOWN;
-    vb->last_pos = 0;
+    vb->max_gt_line_len = vb->last_pos = 0;
     vb->curr_ra_ent = NULL; 
     vb->curr_ra_ent_is_initialized = false;
 

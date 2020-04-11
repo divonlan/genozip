@@ -8,7 +8,7 @@
 #include "zfile.h"
 #include "txtfile.h"
 #include "header.h"
-#include "seg_vcf.h"
+#include "seg.h"
 #include "vblock.h"
 #include "base250.h"
 #include "dispatcher.h"
@@ -23,6 +23,8 @@
 #include "samples.h"
 #include "gtshark_vcf.h"
 #include "dict_id.h"
+
+#define DATA_LINE(vb,i) (&((PizDataLineVCF *)((vb)->data_lines))[(i)])
 
 typedef struct {
     unsigned num_subfields;         // number of subfields this FORMAT has
@@ -128,7 +130,7 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
 
     // now, get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) 
-        vb->data_lines.piz[line_i].format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
+        DATA_LINE (vb, line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
 
     // reset format_ctx reader iterator fields, as we are going to traverse FORMAT again when reconstructing the lines
     mtf_init_iterator (format_ctx);
@@ -349,7 +351,7 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
             // (gt data is stored transposed - i.e. column by column)
             for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
                 
-                FormatInfo *line_format_info = &format_num_subfields[vb->data_lines.piz[line_i].format_mtf_i];
+                FormatInfo *line_format_info = &format_num_subfields[DATA_LINE (vb, line_i)->format_mtf_i];
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
@@ -375,7 +377,7 @@ static void piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, b
 {
     START_TIMER;
 
-    PizDataLine *dl = &vb->data_lines.piz[vb_line_i];
+    PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
 
     SnipIterator *sample_iterator = (SnipIterator *)vb->sample_iterator.data; // for convenience
 
@@ -562,14 +564,14 @@ static void piz_vcf_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, 
     }
 
     // check if this row has no haplotype data (no GT field) despite some other rows in the VB having data
-    PizDataLine *dl = &vb->data_lines.piz[vb_line_i];
+    PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
     
     // check to see if this line has any sample with haplotype info (when not using --samples, this loop
     // usually terminates in the first iteration - so not adding a lot of overhead)
     dl->has_haplotype_data = false;
     for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
         // it can be '-' in three scenarios. 
-        // 1. '-' - line has no GT despite other lines in the VB having - seg_complete_missing_lines sets it all to '-'
+        // 1. '-' - line has no GT despite other lines in the VB having - seg_vcf_complete_missing_lines sets it all to '-'
         // 2. 0   - initialized above ^ and not filled in due to --samples 
         // 3. 0   - it comes from a column of zeros set in piz_vcf_get_ht_columns_data - due to --samples
         if (vb->line_ht_data.data[ht_i] != '-' && vb->line_ht_data.data[ht_i] != 0) { 
@@ -585,7 +587,7 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
 {
     START_TIMER;
 
-    PizDataLine *dl = &vb->data_lines.piz[vb_line_i]; 
+    PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
 
     // calculate the line length & allocate it
     unsigned ht_digits_len  = dl->has_haplotype_data ? vb->num_haplotypes_per_line : 0; 
@@ -715,17 +717,17 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
 
 static void piz_vcf_realloc_datalines (VBlockVCF *vb, uint32_t new_num_data_lines)
 {
-    // we need to remove the Buffers within the PizDataLine from the buffer list, and re-add them with their new address
-    for (uint32_t i=0; i < vb->num_data_lines_allocated ; i++) 
-        buf_remove_from_buffer_list ((VBlockP)vb, &vb->data_lines.piz[i].line);
+    // we need to remove the Buffers within the PizDataLineVCF from the buffer list, and re-add them with their new address
+    for (uint32_t i=0; i < vb->num_lines_alloced ; i++) 
+        buf_remove_from_buffer_list ((VBlockP)vb, &DATA_LINE(vb, i)->line);
 
-    vb->data_lines.piz = REALLOC (vb->data_lines.piz, new_num_data_lines * sizeof (PizDataLine));
-    memset (&vb->data_lines.piz[vb->num_data_lines_allocated], 0, (new_num_data_lines - vb->num_data_lines_allocated) * sizeof(PizDataLine));
+    vb->data_lines = REALLOC (vb->data_lines, new_num_data_lines * sizeof (PizDataLineVCF));
+    memset (DATA_LINE (vb, vb->num_lines_alloced), 0, (new_num_data_lines - vb->num_lines_alloced) * sizeof(PizDataLineVCF));
 
-    for (uint32_t i=0; i < vb->num_data_lines_allocated ; i++) // only those that *might* have been allocated need to be added now, if we allocate any additional, they will be added by buf_alloc
-        buf_add_to_buffer_list ((VBlockP)vb, &vb->data_lines.piz[i].line);
+    for (uint32_t i=0; i < vb->num_lines_alloced ; i++) // only those that *might* have been allocated need to be added now, if we allocate any additional, they will be added by buf_alloc
+        buf_add_to_buffer_list ((VBlockP)vb, &DATA_LINE(vb, i)->line);
 
-    vb->num_data_lines_allocated = new_num_data_lines;
+    vb->num_lines_alloced = new_num_data_lines;
 }
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
@@ -734,16 +736,16 @@ static void piz_vcf_reconstruct_line_components (VBlockVCF *vb)
 {
     START_TIMER;
 
-    ASSERT (!!vb->data_lines.piz == !!vb->num_data_lines_allocated, 
-            "Error: expecting vb->data_lines to be nonzero iff vb->num_data_lines_allocated is nonzero. vb_i=%u", vb->vblock_i);
+    ASSERT (!!vb->data_lines == !!vb->num_lines_alloced, 
+            "Error: expecting vb->data_lines to be nonzero iff vb->num_lines_alloced is nonzero. vb_i=%u", vb->vblock_i);
 
-    if (!vb->data_lines.piz) {
-        vb->num_data_lines_allocated = vb->num_lines * 1.2; // larger than num_lines so that future VBs are less likely to need to realloc
-        vb->data_lines.piz = calloc (vb->num_data_lines_allocated, sizeof (PizDataLine));
+    if (!vb->data_lines) {
+        vb->num_lines_alloced = vb->num_lines * 1.2; // larger than num_lines so that future VBs are less likely to need to realloc
+        vb->data_lines = calloc (vb->num_lines_alloced, sizeof (PizDataLineVCF));
     }
     
-    else if (vb->num_data_lines_allocated < vb->num_lines) 
-        piz_vcf_realloc_datalines (vb, vb->num_lines * 1.2); // uses and updates vb->num_data_lines_allocated      
+    else if (vb->num_lines_alloced < vb->num_lines) 
+        piz_vcf_realloc_datalines (vb, vb->num_lines * 1.2); // uses and updates vb->num_lines_alloced      
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 
@@ -804,7 +806,7 @@ static void piz_vcf_reconstruct_line_components (VBlockVCF *vb)
             }
         }
         else if (is_line_included)
-            buf_copy (vb, &vb->data_lines.piz[vb_line_i].line, &vb->line_variant_data, 0, 0, 0, 
+            buf_copy (vb, &DATA_LINE (vb, vb_line_i)->line, &vb->line_variant_data, 0, 0, 0, 
                       "dl->line", vb->first_line + vb_line_i);
             
         // reset len for next line - no need to alloc as all the lines are the same size?
@@ -830,7 +832,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
     unsigned *section_index = (unsigned *)vb->z_section_headers.data;
 
-    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
+    SectionHeaderVbHeaderVCF *header = (SectionHeaderVbHeaderVCF *)(vb->z_data.data + section_index[0]);
     vb->first_line              = BGEN32 (header->first_line);
     vb->num_lines               = BGEN32 (header->num_lines);
     vb->phase_type              = (PhaseType)header->phase_type;
@@ -890,7 +892,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", SEC_VCF_CHROM_B250 + f*2);
     }
 
-    for (unsigned sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
+    for (uint8_t sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
         
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
 

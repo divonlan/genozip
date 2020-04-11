@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zip_vcf.c
-//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <math.h>
@@ -12,7 +12,7 @@
 #include "zfile.h"
 #include "txtfile.h"
 #include "header.h"
-#include "seg_vcf.h"
+#include "seg.h"
 #include "vblock.h"
 #include "dispatcher.h"
 #include "move_to_front.h"
@@ -20,6 +20,8 @@
 #include "base250.h"
 #include "endianness.h"
 #include "random_access_vcf.h"
+
+#define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])
 
 static uint32_t global_samples_per_block = 0; 
 
@@ -56,8 +58,8 @@ static unsigned zip_vcf_get_genotype_vb_start_len (VBlockVCF *vb)
     // calculate offsets and lengths of genotype data of each sample block
     for (uint32_t line_i=0; line_i < vb->num_lines; line_i++) {
 
-        uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, &vb->data_lines.zip[line_i]);        
-        unsigned format_mtf_i = vb->data_lines.zip[line_i].format_mtf_i;
+        uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, DATA_LINE (vb, line_i));        
+        unsigned format_mtf_i = DATA_LINE (vb, line_i)->format_mtf_i;
         SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[format_mtf_i];
         
         for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -97,7 +99,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
 
             if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i);
 
-            ZipDataLine *dl = &vb->data_lines.zip[line_i];
+            ZipDataLineVCF *dl = DATA_LINE (vb, line_i);
 
             SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[dl->format_mtf_i];
 
@@ -110,7 +112,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
             int num_subfields = format_mapper->num_subfields;
             ASSERT (num_subfields >= 0, "Error: format_mapper->num_subfields=%d", format_mapper->num_subfields);
 
-            // if this VB has subfields in some line, but not in this line, then we have filled it in seg_complete_missing_lines(), 
+            // if this VB has subfields in some line, but not in this line, then we have filled it in seg_vcf_complete_missing_lines(), 
             // therefore we have 1 fake subfield
             if (vb->num_format_subfields > 0 && num_subfields==0) num_subfields = 1;
 
@@ -169,7 +171,7 @@ static void zip_vcf_generate_phase_sections (VBlockVCF *vb)
         
         for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
             
-            ZipDataLine *dl = &vb->data_lines.zip[line_i];
+            ZipDataLineVCF *dl = DATA_LINE (vb, line_i);
             if (dl->phase_type == PHASE_MIXED_PHASED) 
                 memcpy (next, &PHASE_DATA(vb,dl)[sb_i * num_samples_in_sb], num_samples_in_sb);
             else
@@ -224,7 +226,7 @@ static HaploTypeSortHelperIndex *zip_vcf_construct_ht_permutation_helper_index (
             //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
             //char one_ht = vb->data_lines.zip[line_i].haplotype_data.data[ht_i];
             
-            char *haplotype_data = HAPLOTYPE_DATA (vb, &vb->data_lines.zip[line_i]);
+            char *haplotype_data = HAPLOTYPE_DATA (vb, DATA_LINE (vb, line_i));
             char one_ht = haplotype_data[ht_i];
             if (one_ht >= '1')
                 helper_index[ht_i].num_alt_alleles++;
@@ -254,7 +256,7 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
 
     // set dl->haplotype_ptr for all lines (for effeciency in the time loop below)
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) 
-        vb->data_lines.zip[line_i].haplotype_ptr = HAPLOTYPE_DATA (vb, &vb->data_lines.zip[line_i]);
+        DATA_LINE (vb, line_i)->haplotype_ptr = HAPLOTYPE_DATA (vb, DATA_LINE (vb, line_i));
 
     // now build per-sample-block haplotype array, picking haplotypes by the order of the helper index array
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -283,9 +285,9 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
             for (unsigned ht_i=0; ht_i < num_haplotypes_in_sample_block; ht_i++) {
                 
                 unsigned haplotype_data_char_i = helper_index[helper_index_sb_i + ht_i].index_in_original_line;
-                const char **ht_data_ptr = &vb->data_lines.zip[0].haplotype_ptr; // this pointer moves sizeof(ZipDataLine) bytes each iteration - i.e. to the exact same field in the next line
+                const char **ht_data_ptr = &DATA_LINE (vb, 0)->haplotype_ptr; // this pointer moves sizeof(ZipDataLineVCF) bytes each iteration - i.e. to the exact same field in the next line
 
-                for (unsigned line_i=0; line_i < vb->num_lines; line_i++, ht_data_ptr += sizeof(ZipDataLine)/sizeof(char*)) 
+                for (unsigned line_i=0; line_i < vb->num_lines; line_i++, ht_data_ptr += sizeof(ZipDataLineVCF)/sizeof(char*)) 
                     *(next++) = (*ht_data_ptr)[haplotype_data_char_i];
             }
             COPY_TIMER (vb->profile.sample_haplotype_data);
@@ -337,8 +339,13 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     // clone global dictionaries while granted exclusive access to the global dictionaries
     mtf_clone_ctx (vb_);
 
-    // split each lines in this variant block to its components
-    seg_all_data_lines (vb);
+    // split each line in this variant block to its components
+
+    seg_all_data_lines (vb_, seg_vcf_data_line, sizeof (ZipDataLineVCF), 
+                        VCF_CHROM, VCF_FORMAT, vcf_field_names, SEC_VCF_CHROM_DICT);
+    
+    if (vb->has_haplotype_data)
+        seg_vcf_complete_missing_lines (vb);
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
@@ -384,7 +391,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     }
 
     // generate & write b250 data for all INFO subfields
-    uint32_t num_info_subfields=0;
+    uint8_t num_info_subfields=0;
     for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
                 
         MtfContext *ctx = &vb->mtf_ctx[did_i];
@@ -425,11 +432,11 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
         }
     }
 
-    COPY_TIMER (vb->profile.compute);
-
     // tell dispatcher this thread is done and can be joined. 
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
     // this this operation needn't be atomic, but it likely is anyway
     vb->is_processed = true; 
+
+    COPY_TIMER (vb->profile.compute);
 }
 

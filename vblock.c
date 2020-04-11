@@ -30,7 +30,7 @@ void vb_release_vb (VBlock **vb_p)
     vb->ready_to_dispatch = vb->is_processed = false;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = 0;
-
+    
     memset(vb->txt_section_bytes, 0, sizeof(vb->txt_section_bytes));
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
     memset(vb->z_num_sections, 0, sizeof(vb->z_num_sections));
@@ -61,7 +61,7 @@ void vb_release_vb (VBlock **vb_p)
     else if (vb->data_type == DATA_TYPE_SAM) vb_sam_release_vb ((VBlockSAM*)vb);
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
-    // vb->num_data_lines_allocated
+    // vb->num_lines_alloced
     // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used/
     //                   we have logic in vb_get_vb() to update its vb_i
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change

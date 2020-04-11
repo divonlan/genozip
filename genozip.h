@@ -34,10 +34,10 @@
 
 #define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if MAX_PLOIDY > 65535
-#error "MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeader.ploidy and VBlockVCF.ploidy are uint16_t"
+#error "MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeaderVCF.ploidy and VBlockVCF.ploidy are uint16_t"
 #endif
 
-#define MAX_SUBFIELDS      63   // maximum number of FORMAT subfield types (except for GT) and INFO subfield types that is supported in one GENOZIP file.
+#define MAX_SUBFIELDS      63   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME and SAM_OPTIONAL subfield types that is supported in one GENOZIP file.
 
 #define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined). 
 #if MAX_DICTS > 253 // 254 and 255 are used for special purpose
@@ -68,13 +68,8 @@ typedef struct mtfnode_ *MtfNodeP;
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
-// data types genozip can compress
-#define NUM_DATATYPES 2
-typedef enum { DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
-#define DATATYPE_NAMES { "VCF", "SAM" } // index in array matches values in DataType
-
 // global parameters - set before any thread is created, and never change
-extern uint32_t    global_vcf_num_samples, global_vcf_num_displayed_samples, global_max_memory_per_vb, global_max_threads;
+extern uint32_t global_max_threads, global_max_memory_per_vb;
 extern const char *global_cmd;            // set once in main()
 extern ExeType exe_type;
 

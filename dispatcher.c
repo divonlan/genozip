@@ -311,7 +311,7 @@ VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
     return dd->next_vb;
 }
 
-void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlock *))
+void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     Thread *th = &dd->compute_threads[dd->next_thread_to_dispatched];

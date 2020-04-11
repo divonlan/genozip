@@ -40,7 +40,7 @@ static uint32_t txtfile_read_block (char *data)
     if (file_is_plain_txt (txt_file)) {
         
         bytes_read = read (fileno((FILE *)txt_file->file), data, READ_BUFFER_SIZE); // -1 if error in libc
-        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", file_printname(txt_file), strerror(errno));
+        ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
         // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
@@ -110,7 +110,7 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
 
         if (!bytes_read) { // EOF
             ASSERT (!evb->txt_data.len || evb->txt_data.data[evb->txt_data.len-1] == '\n', 
-                    "Error: invalid %s header in %s - expecting it to end with a newline", dt_name (txt_file->data_type), file_printname (txt_file));
+                    "Error: invalid %s header in %s - expecting it to end with a newline", dt_name (txt_file->data_type), txt_name);
             goto finish;
         }
 
@@ -118,7 +118,7 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
 
         ASSERT (!header_required || evb->txt_data.len || this_read[0] == first_char,
                 "Error: %s is missing a %s header - expecting first character in file to be %c", 
-                file_printname (txt_file), dt_name (txt_file->data_type), first_char);
+                txt_name, dt_name (txt_file->data_type), first_char);
 
         // check stop condition - a line not beginning with a 'first_char'
         for (int i=0; i < bytes_read; i++) { // start from 1 back just in case it is a newline, and end 1 char before bc our test is 2 chars
@@ -177,7 +177,7 @@ void txtfile_read_variant_block (VBlock *vb)
         uint32_t bytes_one_read = txtfile_read_block (&vb->txt_data.data[vb->txt_data.len]);
 
         if (!bytes_one_read) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
-            ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", file_printname (txt_file));
+            ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", txt_name);
             break;
         }
 
@@ -243,7 +243,7 @@ void txtfile_write_one_vblock_vcf (VBlockVCF *vb)
     unsigned size_written_this_vb = 0;
 
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-        Buffer *line = &vb->data_lines.piz[line_i].line;
+        Buffer *line = &((PizDataLineVCF *)vb->data_lines)[line_i].line;
 
         if (line->len) // if this line is not filtered out
             size_written_this_vb += txtfile_write_to_disk (line);

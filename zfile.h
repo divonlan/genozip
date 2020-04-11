@@ -11,12 +11,21 @@
 #include "dict_id.h"
 #include "md5.h"
 
+typedef enum { COMPRESS_BZLIB=0,/* default - for backward compatability */
+               COMPRESS_LZMA=1, COMPRESS_NONE=2 } ZfileCompressionAlg;
+
+typedef void ZfileGetLineCallback (VBlockP vb, uint32_t vb_line_i, char **line_data, uint32_t *line_data_len);
+
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (const Md5Hash *single_component_md5);
 extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,
                                       uint64_t *num_items_concat, Md5Hash *md5_hash_concat, char *created, unsigned created_len);
 
-extern void zfile_compress_section_data (VBlockP vb, SectionType section_type, BufferP section_data);
+extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
+                                             BufferP section_data, ZfileGetLineCallback callback, uint32_t total_len, 
+                                             ZfileCompressionAlg comp_alg);
+#define zfile_compress_section_data(vb, section_type, section_data) \
+    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, COMPRESS_BZLIB)
 
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);
@@ -47,23 +56,23 @@ extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_li
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
 
-extern void zfile_write_vcf_header (BufferP vcf_header_text, bool is_first_vcf);
-extern bool zfile_update_vcf_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
+extern void zfile_write_txt_header (BufferP vcf_header_text, bool is_first_vcf);
+extern bool zfile_update_txt_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
 extern void zfile_vcf_compress_vb_header (VBlockVCFP vb);
 extern void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCFP vb, ConstBufferP haplotype_sections_data, unsigned sb_i);
 extern void zfile_vcf_read_one_vb (VBlockVCFP vb);
 
+// -----------------------------
+// v1 compatibility (VCF only)
+// -----------------------------
 
+extern bool v1_zfile_vcf_read_one_vb (VBlockVCFP vb);
+extern int v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name, unsigned header_size, SectionType expected_sec_type, bool allow_eof);
 
 // -----------------------------
 // SAM stuff
 // -----------------------------
 
-// -----------------------------
-// v1 compatibility
-// -----------------------------
-extern bool v1_zfile_vcf_read_one_vb (VBlockVCFP vb);
-extern int v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name, unsigned header_size, SectionType expected_sec_type, bool allow_eof);
-
+extern void zfile_sam_compress_vb_header (VBlockSAMP vb);
 
 #endif

@@ -60,36 +60,44 @@ static void hash_populate_from_mtf (MtfContext *zf_ctx)
 // 2. If not - use either num_lines for the size, or the smallest size for dicts that are typically small
 void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 {
+    vb_ctx->local_hash_prime = 0; // initialize
+
     // if known from previously merged vb - use those values
     if (vb_ctx->num_new_entries_prev_merged_vb)
         // 3X the expected number of entries to reduce spill-over
         vb_ctx->local_hash_prime = hash_next_size_up (vb_ctx->num_new_entries_prev_merged_vb * 3);
 
-    // if typically small - use minimal hash table
-    else if (vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_CHROM]  ||
-             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FORMAT] ||
-             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_INFO]   ||
-             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_REFALT] ||
-             vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FILTER] ||
-             vb_ctx->dict_id.num == dict_id_INFO_AC ||
-             vb_ctx->dict_id.num == dict_id_INFO_AF ||
-             vb_ctx->dict_id.num == dict_id_INFO_AN ||
-             vb_ctx->dict_id.num == dict_id_INFO_DP)
-             
-        vb_ctx->local_hash_prime = hash_next_size_up(1);
+    else if (z_file->data_type == DATA_TYPE_VCF) {
 
-    // typically big - use large hash table
-    else if (vb_ctx->dict_id.num == dict_id_INFO_VQSLOD ||
-             vb_ctx->dict_id.num == dict_id_FORMAT_GL ||
-             vb_ctx->dict_id.num == dict_id_FORMAT_PL)
+        // if typically small - use minimal hash table
+        if (vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_CHROM]  ||
+            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FORMAT] ||
+            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_INFO]   ||
+            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_REFALT] ||
+            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FILTER] ||
+            vb_ctx->dict_id.num == dict_id_INFO_AC ||
+            vb_ctx->dict_id.num == dict_id_INFO_AF ||
+            vb_ctx->dict_id.num == dict_id_INFO_AN ||
+            vb_ctx->dict_id.num == dict_id_INFO_DP)
+            
+            vb_ctx->local_hash_prime = hash_next_size_up(1);
 
-        vb_ctx->local_hash_prime = hash_next_size_up(segging_vb->num_lines);
+        // typically big - use large hash table
+        else 
+        if (vb_ctx->dict_id.num == dict_id_INFO_VQSLOD ||
+            vb_ctx->dict_id.num == dict_id_FORMAT_GL   ||
+            vb_ctx->dict_id.num == dict_id_FORMAT_PL)
 
-    // if could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)
-    else 
+            vb_ctx->local_hash_prime = hash_next_size_up(segging_vb->num_lines);
+    }
+
+    else if (z_file->data_type == DATA_TYPE_SAM) {
+    }
+
+    // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)
+    if (!vb_ctx->local_hash_prime) 
         vb_ctx->local_hash_prime = hash_next_size_up(segging_vb->num_lines / 10);
 
-             
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
     buf_alloc (segging_vb, &vb_ctx->local_hash, (vb_ctx->local_hash_prime * 1.2) * sizeof (LocalHashEnt) /* room for expansion */, 1, 

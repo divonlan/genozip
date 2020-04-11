@@ -324,8 +324,8 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
 
     for (int vb_i=0; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
         VBlockVCF *vb_vcf = (VBlockVCF *)vb_pool->vb[vb_i];
-        if (vb_vcf && vb_vcf->data_type == DATA_TYPE_VCF && vb_vcf->num_data_lines_allocated) {
-            stats[num_stats-1].bytes += vb_vcf->num_data_lines_allocated * (command==ZIP ? sizeof (ZipDataLine) : sizeof (PizDataLine));
+        if (vb_vcf && vb_vcf->data_type == DATA_TYPE_VCF && vb_vcf->num_lines_alloced) {
+            stats[num_stats-1].bytes += vb_vcf->num_lines_alloced * (command==ZIP ? sizeof (ZipDataLineVCF) : sizeof (PizDataLineVCF));
             stats[num_stats-1].buffers += 1;
         }
     }
@@ -354,8 +354,8 @@ int64_t buf_vb_memory_consumption (const VBlock *vb)
     // memory of the structure itself
     int64_t vb_memory = sizeof (*vb);
 
-    // small BUG: This doesn't work - at the time it is called, num_data_lines_allocated is still 0
-    vb_memory += vb->num_data_lines_allocated * (command == ZIP ? sizeof (ZipDataLine) : sizeof (PizDataLine));
+    // small BUG: This doesn't work - at the time it is called, num_lines_alloced is still 0
+    vb_memory += vb->num_lines_alloced * (command == ZIP ? sizeof (ZipDataLineVCF) : sizeof (PizDataLineVCF));
 
     // memory allocated outside of Buffer (direct calloc)
     if (vb->haplotype_sections_data) vb_memory += vb->num_sample_blocks * sizeof (Buffer);

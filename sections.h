@@ -49,14 +49,15 @@ typedef enum {
     SEC_SAM_SEQ_DATA       = 32,  SEC_SAM_QUAL_DATA      = 33,
     SEC_SAM_QNAME_SF_DICT  = 34,  SEC_SAM_QNAME_SF_B250  = 35,
     SEC_SAM_OPTNL_SF_DICT  = 36,  SEC_SAM_OPTNL_SF_B250  = 37,
-    SEC_SAM_FLAG_DICT      = 38,  SEC_SAM_FLAG_B250      = 39,
-    SEC_SAM_RNAME_NX_DICT  = 40,  SEC_SAM_RNAME_NX_B250  = 41, 
-    SEC_SAM_POS_DICT       = 42,  SEC_SAM_POS_B250       = 43, 
-    SEC_SAM_MAPQ_DICT      = 44,  SEC_SAM_MAPQ_B250      = 45, 
-    SEC_SAM_CIGAR_DICT     = 46,  SEC_SAM_CIGAR_B250     = 47, 
-    SEC_SAM_PNEXT_DICT     = 48,  SEC_SAM_PNEXT_B250     = 49, 
-    SEC_SAM_TLEN_DICT      = 50,  SEC_SAM_TLEN_B250      = 51, 
-    SEC_SAM_OPTIONAL_DICT  = 52,  SEC_SAM_OPTIONAL_B250  = 53, 
+    SEC_SAM_QNAME_DICT     = 38,  SEC_SAM_QNAME_B250     = 39,
+    SEC_SAM_FLAG_DICT      = 40,  SEC_SAM_FLAG_B250      = 41,
+    SEC_SAM_RNAME_NX_DICT  = 42,  SEC_SAM_RNAME_NX_B250  = 43, 
+    SEC_SAM_POS_DICT       = 44,  SEC_SAM_POS_B250       = 45, 
+    SEC_SAM_MAPQ_DICT      = 46,  SEC_SAM_MAPQ_B250      = 47, 
+    SEC_SAM_CIGAR_DICT     = 48,  SEC_SAM_CIGAR_B250     = 49, 
+    SEC_SAM_PNEXT_DICT     = 50,  SEC_SAM_PNEXT_B250     = 51, 
+    SEC_SAM_TLEN_DICT      = 52,  SEC_SAM_TLEN_B250      = 53, 
+    SEC_SAM_OPTIONAL_DICT  = 54,  SEC_SAM_OPTIONAL_B250  = 55, 
 
     // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR, 
@@ -84,10 +85,11 @@ typedef enum {
     "SEC_HT_GTSHARK_X_LINE" ,  "SEC_HT_GTSHARK_X_HTI"   ,\
     "SEC_HT_GTSHARK_X_ALLELE", \
     \
-    "SEC_SAM_HEADER"        ,  "SEC_SAM_VB_HEADER"      ,\
+    "SEC_SAM_VB_HEADER"     ,\
     "SEC_SAM_SEQ_DATA"      ,  "SEC_SAM_QUAL_DATA"      ,\
     "SEC_SAM_QNAME_SF_DICT" ,  "SEC_SAM_QNAME_SF_B250"  ,\
     "SEC_SAM_OPTNL_SF_DICT" ,  "SEC_SAM_OPTNL_SF_B250"  ,\
+    "SEC_SAM_QNAME_DICT"    ,  "SEC_SAM_QNAME_B250"     ,\
     "SEC_SAM_FLAG_DICT"     ,  "SEC_SAM_FLAG_B250"      ,\
     "SEC_SAM_RNAME_NX_DICT" ,  "SEC_SAM_RNAME_NX_B250"  ,\
     "SEC_SAM_POS_DICT"      ,  "SEC_SAM_POS_B250"       ,\
@@ -104,22 +106,22 @@ typedef enum {
 
 #define section_type_is_dictionary(s) (((s) >= SEC_VCF_CHROM_DICT && (s) <= SEC_VCF_FORMAT_DICT && (s) % 2 == SEC_VCF_CHROM_DICT % 2) ||       \
                                         (s) == SEC_VCF_INFO_SF_DICT || \
-                                        (s) == SEC_VCF_FRMT_SF_DICT)
+                                        (s) == SEC_VCF_FRMT_SF_DICT || \
+                                        ((s) >= SEC_SAM_QNAME_SF_DICT && (s) <= SEC_SAM_OPTIONAL_DICT && (s) % 2 == SEC_SAM_QNAME_SF_DICT % 2))
 
 #define section_type_is_b250(s)       (((s) >= SEC_VCF_CHROM_B250 && (s) <= SEC_VCF_FORMAT_B250 && (s) % 2 == SEC_VCF_CHROM_B250 % 2) ||       \
-                                        (s) == SEC_VCF_INFO_SF_B250)
-
-#define section_type_is_vb(s)         (((s) >= SEC_VCF_CHROM_DICT && (s) <= SEC_VCF_INFO_SF_B250) || \
-                                       ((s) >= SEC_VCF_VB_HEADER && (s) <= SEC_VCF_HT_DATA ))
+                                        (s) == SEC_VCF_INFO_SF_B250 || \
+                                       ((s) >= SEC_SAM_QNAME_SF_B250 && (s) <= SEC_SAM_OPTIONAL_B250 && (s) % 2 == SEC_SAM_QNAME_SF_B250 % 2))
 
 // Section headers - big endian
 
 #define GENOZIP_MAGIC 0x27052012
 
 // encryption types
+#define NUM_ENCRYPTION_TYPES   2
 #define ENCRYPTION_TYPE_NONE   0
 #define ENCRYPTION_TYPE_AES256 1
-#define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit"}
+#define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit" }
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
@@ -129,14 +131,15 @@ typedef enum {
 
 typedef struct {
     uint32_t magic; 
-    uint32_t compressed_offset;     // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
-    uint32_t data_encrypted_len;    // = data_compressed_len + padding if encrypted, 0 if not
+    uint32_t compressed_offset;      // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
+    uint32_t data_encrypted_len;     // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t data_compressed_len;
     uint32_t data_uncompressed_len;
-    uint32_t vblock_i;       // VB with in file starting from 1 ; 0 for VCF Header
-    uint16_t section_i;             // section within VB - 0 for Variant Data
+    uint32_t vblock_i;               // VB with in file starting from 1 ; 0 for Txt Header
+    uint16_t section_i;              // section within VB - 0 for Variant Data
     uint8_t  section_type;          
-    uint8_t  unused;
+    uint8_t  data_compression_alg : 3; // introduced in genozip v5 (before that it was unused)
+    uint8_t  unused               : 5;
 } SectionHeader; 
 
 typedef struct {
@@ -188,17 +191,33 @@ typedef struct {
 
 } SectionHeaderTxtHeader; 
 
-// The variant data section appears for each variant block
+typedef struct {
+    SectionHeader h;                   // in v1, the section_type was SEC_DICTIONARY, in v2 is is the specific SEC_*_DICT
+    uint32_t num_snips;                // number of items in dictionary
+    DictIdType dict_id;           
+} SectionHeaderDictionary; 
 
-// Note: the reason we index the haplotypes across all samples rather than for each sample group, despite more bits in haplotype_index entry
-// is that the better global sorting results in overall smaller file. 
-// 
-// Tested with the first 1024 variant block of chr22 of 1000-genomes (5096 haplotypes):
-//   - Sorting all haplotypes together:                                        62.8KB Index 13bit x 5096 = 8.3K Total: 71.1K <--- better sort together despite bigger index
-//   - Sorting each 1024 haplotypes (5 sample groups) and sorting separately - 68.1KB Index 10bit x 5096 = 6.4K Total: 74.5K
-//
-// Note: this doesn't affect retrieval time of a specific sample, because the sample block is just looked up via the index
- 
+// b250 data encoded according to a dictionary
+typedef struct {
+    SectionHeader h;
+    uint32_t num_b250_items;           // number of items in b250 items
+    DictIdType dict_id;           
+} SectionHeaderBase250;         
+
+// the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
+typedef struct {
+    uint64_t offset;                   // offset of this section in the file
+    DictIdType dict_id;                // used if this section is a DICT or a B250 section
+    uint32_t vblock_i;
+    uint8_t section_type;
+    uint8_t unused[3];                 // padding
+} SectionListEntry;
+
+//----------------------------------------
+// VCF Sections
+//----------------------------------------
+
+// The is the first section in every VCF VBlock
 typedef struct {
     SectionHeader h;
     uint32_t first_line;               // line (starting from 1) of this variant block in the single VCF file
@@ -223,40 +242,18 @@ typedef struct {
     uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
     uint16_t unused3;                  // new in v2: padding / ffu
-} SectionHeaderVbHeader; 
-
-typedef struct {
-    SectionHeader h;                   // in v1, the section_type was SEC_DICTIONARY, in v2 is is the specific SEC_*_DICT
-    uint32_t num_snips;                // number of items in dictionary
-    DictIdType dict_id;           
-} SectionHeaderDictionary; 
-
-// b250 data encoded according to a dictionary
-typedef struct {
-    SectionHeader h;
-    uint32_t num_b250_items;           // number of items in b250 items
-    DictIdType dict_id;           
-} SectionHeaderBase250;         
-
-// the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
-typedef struct {
-    uint64_t offset;                   // offset of this section in the file
-    DictIdType dict_id;                // used if this section is a DICT or a B250 section
-    uint32_t vblock_i;
-    uint8_t section_type;
-    uint8_t unused[3];                 // padding
-} SectionListEntry;
+} SectionHeaderVbHeaderVCF; 
 
 // the data of SEC_VCF_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct {
-    uint32_t vblock_i;             // the vb_i in which this range appears
-    uint32_t chrom_index;                 // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
-    uint32_t min_pos, max_pos;            // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
+    uint32_t vblock_i;                 // the vb_i in which this range appears
+    uint32_t chrom_index;              // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
+    uint32_t min_pos, max_pos;         // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
 // ------------------------------------------------------------------------------------------------------
-// GENOZIP_FILE_FORMAT_VERSION==1 historical version - we support uncomrpessing old version files
+// GENOZIP_FILE_FORMAT_VERSION==1 historical version (VCF only) - we support uncomrpessing old version files
 
 typedef struct {
     SectionHeader h;
@@ -305,8 +302,23 @@ typedef struct {
     uint8_t haplotype_index[];         // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
 } v1_SectionHeaderVariantData; 
 
-// ------------------------------------------------------------------------------------------------------
+//----------------------------------------
+// SAM Sections
+//----------------------------------------
 
+// The is the first section in every SAM VBlock - introduced in file version 5
+typedef struct {
+    SectionHeader h;
+    uint32_t first_line;               // line (starting from 1) of this variant block in the single VCF file
+                                       // new in v2: if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next concatenated file
+    uint32_t num_lines;                // number of variants in this block
+    
+    // features of the data
+    uint32_t vb_data_size;             // size of variant block as it appears in the source file
+    uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
+
+    uint64_t ffu;                      // for future use
+} SectionHeaderVbHeaderSAM; 
 
 #pragma pack(pop)
 
@@ -315,7 +327,7 @@ extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
-extern uint32_t sections_count_info_b250s (unsigned vb_i);
+extern uint8_t sections_count_info_b250s (unsigned vb_i);
 extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
 extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
 extern bool sections_has_more_vcf_components(void);
