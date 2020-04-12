@@ -229,9 +229,9 @@ static bool piz_vcf_get_variant_data_line (VBlockVCF *vb, unsigned vb_line_i,
 {
     START_TIMER;
 
-    uint32_t word_index[NUM_VCF_B250S];
-    const char *snip[NUM_VCF_B250S]; // snip (pointer into dictionary) and snip_len of each field in this line
-    uint32_t snip_len[NUM_VCF_B250S];
+    uint32_t word_index[NUM_VCF_FIELDS];
+    const char *snip[NUM_VCF_FIELDS]; // snip (pointer into dictionary) and snip_len of each field in this line
+    uint32_t snip_len[NUM_VCF_FIELDS];
     memset (snip_len, 0, sizeof(snip_len));
     memset (snip, 0, sizeof(snip));
 
@@ -332,7 +332,7 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        if (! *ENT(bool, &vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
+        if (! *ENT(bool, vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
 
         unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
         
@@ -449,7 +449,7 @@ static void piz_vcf_get_phase_data_line (VBlockVCF *vb, unsigned vb_line_i)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        if (! *ENT(bool, &vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
+        if (! *ENT(bool, vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
 
         unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
 
@@ -471,7 +471,7 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: in genozip v1 haplotype columns were permuted across the entire samples, as of v2 they are permuted
     // only within their own sample block
-    const char **ht_columns_data = ARRAY (const char *, &vb->ht_columns_data); 
+    const char **ht_columns_data = ARRAY (const char *, vb->ht_columns_data); 
 
     const unsigned *permutatation_index = (const unsigned *)vb->haplotype_permutation_index.data;
     const unsigned max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
@@ -482,7 +482,7 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
 
     for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        bool is_sb_included = *ENT(bool, &vb->is_sb_included, sb_i);
+        bool is_sb_included = *ENT(bool, vb->is_sb_included, sb_i);
 
         for (unsigned ht_i = sb_i * max_ht_per_block; 
              ht_i < MIN ((sb_i+1) * max_ht_per_block, vb->num_haplotypes_per_line); 
@@ -525,7 +525,7 @@ static void piz_vcf_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, 
     uint32_t ht_i = 0;
     for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        if (! *ENT(bool, &vb->is_sb_included, sb_i)) continue;
+        if (! *ENT(bool, vb->is_sb_included, sb_i)) continue;
 
         // start from the nearest block 8 columns that includes our start column (might include some previous columns too)
         // but if already done (because it overlaps the previous SB that that SB was included) 
@@ -923,7 +923,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
         // skip uncompressing this sample block if it is excluded by --samples
-        if (! *ENT(bool, &vb->is_sb_included, sb_i)) {
+        if (! *ENT(bool, vb->is_sb_included, sb_i)) {
             section_i += (vb->has_genotype_data ? 1 : 0) + 
                          (vb->phase_type == PHASE_MIXED_PHASED) + 
                          (vb->has_haplotype_data ? (header->is_gtshark ? 5 : 1) : 0); // just advance section_i

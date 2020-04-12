@@ -82,7 +82,7 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
-        MtfNode *node = mtf_node (ctx, ((const uint32_t *)ctx->mtf_i.data)[i], NULL, NULL);
+        MtfNode *node = mtf_node (ctx, *ENT(uint32_t, ctx->mtf_i, i), NULL, NULL);
 
         uint32_t n            = node->word_index.n;
         unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
@@ -91,10 +91,10 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
         bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_VCF_GT_DATA) && (i > 0);
 
         if (one_up) // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
-            ((uint8_t *)ctx->b250.data)[ctx->b250.len++] = (uint8_t)BASE250_ONE_UP;
+            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
 
         else {
-            memcpy (&ctx->b250.data[ctx->b250.len], numerals, num_numerals);
+            memcpy (AFTERENT (char, ctx->b250), numerals, num_numerals);
             ctx->b250.len += num_numerals;
         }
 

@@ -10,13 +10,13 @@
 // globals externed in dict_id.h and initialized in dict_id_initialize
 
 // VCF stuff
-uint64_t dict_id_vcf_fields[8] = {0,0,0,0,0,0,0,0},
+uint64_t dict_id_vcf_fields[NUM_VCF_FIELDS] = {0,0,0,0,0,0,0,0},
          dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, 
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_13=0;
 
 // SAM stuff
-uint64_t dict_id_sam_fields[8] = {0,0,0,0,0,0,0,0};
+uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0,0};
 
 static DataType last_data_type = DATA_TYPE_NONE;
 

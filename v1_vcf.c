@@ -261,7 +261,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
             v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_HT_DATA , false);    
         }
 
-        *ENT (bool, &vb->is_sb_included, sb_i) = true;
+        *ENT (bool, vb->is_sb_included, sb_i) = true;
     }
     
     COPY_TIMER (vb->profile.zfile_read_one_vb);

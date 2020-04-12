@@ -192,7 +192,7 @@ void regions_make_chregs(void)
 {
     if (!flag_regions) return; // nothing to do
 
-    Region *regions = ARRAY (Region, &regions_buf);
+    Region *regions = ARRAY (Region, regions_buf);
     MtfContext *chrom_ctx = &z_file->mtf_ctx[VCF_CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
@@ -217,7 +217,7 @@ void regions_make_chregs(void)
             
             buf_alloc (evb, &chregs[chr_i], (++chregs[chr_i].len) * sizeof (Chreg), 2, "chregs", chr_i);
             
-            Chreg *chreg = LASTENT (Chreg, &chregs[chr_i]);
+            Chreg *chreg = LASTENT (Chreg, chregs[chr_i]);
             chreg->start_pos = reg->start_pos;
             chreg->end_pos   = reg->end_pos;
         }
@@ -240,7 +240,7 @@ void regions_transform_negative_to_positive_complement()
     // initialize regions for each chr - to be the whole chr
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) {
         buf_alloc (evb, &chregs[chr_i], sizeof (Chreg), 1, "chregs", chr_i);
-        Chreg *chreg = ENT (Chreg, &chregs[chr_i], 0);
+        Chreg *chreg = ENT (Chreg, chregs[chr_i], 0);
         chreg->start_pos   = 0;
         chreg->end_pos     = 0xffffffff;
         chregs[chr_i].len  = 1;
@@ -248,16 +248,16 @@ void regions_transform_negative_to_positive_complement()
         // process each negative regions - substract from positive chreg 
         for (unsigned negreg_i=0; negreg_i < neg_chregs[chr_i].len; negreg_i++) {
 
-            Chreg *neg_chreg = ENT (Chreg, &neg_chregs[chr_i], negreg_i);
+            Chreg *neg_chreg = ENT (Chreg, neg_chregs[chr_i], negreg_i);
             
             // for each positive region that overlaps the negative region - fix it to remove the negative region
             for (unsigned posreg_i=0; posreg_i < chregs[chr_i].len; posreg_i++) {
 
-                Chreg *pos_chreg = ENT (Chreg, &chregs[chr_i], posreg_i);
+                Chreg *pos_chreg = ENT (Chreg, chregs[chr_i], posreg_i);
 
                 // case: nagative completely eliminates the positive region
                 if (neg_chreg->start_pos <= pos_chreg->start_pos && neg_chreg->end_pos >= pos_chreg->end_pos) {
-                    memcpy (pos_chreg, ENT (Chreg, &chregs[chr_i], posreg_i+1), (chregs[chr_i].len - posreg_i -1) * sizeof (Chreg));
+                    memcpy (pos_chreg, ENT (Chreg, chregs[chr_i], posreg_i+1), (chregs[chr_i].len - posreg_i -1) * sizeof (Chreg));
                     chregs[chr_i].len--;
                 }
 
@@ -274,8 +274,8 @@ void regions_transform_negative_to_positive_complement()
                     chregs[chr_i].len++;
                     buf_alloc (evb, &chregs[chr_i], chregs[chr_i].len * sizeof (Chreg), 2, "chregs", chr_i);
 
-                    Chreg *new_pos_chreg = LASTENT (Chreg, &chregs[chr_i]);
-                    Chreg *pos_chreg = ENT (Chreg, &chregs[chr_i], posreg_i); // update after realloc
+                    Chreg *new_pos_chreg = LASTENT (Chreg, chregs[chr_i]);
+                    Chreg *pos_chreg = ENT (Chreg, chregs[chr_i], posreg_i); // update after realloc
 
                     new_pos_chreg->start_pos = neg_chreg->end_pos + 1;
                     new_pos_chreg->end_pos   = pos_chreg->end_pos;
@@ -310,7 +310,7 @@ bool regions_get_ra_intersection (uint32_t chrom_word_index, uint32_t min_pos, u
     bool intersection_found = false;
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
 
-        Chreg *chreg = ENT (Chreg, chregs_buf, chreg_i);
+        Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
 
         if (chreg->start_pos <= max_pos && chreg->end_pos >= min_pos) { // regions are intersecting
             if (intersection_array) intersection_array[chreg_i] = true;
@@ -327,7 +327,7 @@ bool regions_is_site_included (uint32_t chrom_word_index, uint32_t pos)
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
-        Chreg *chreg = ENT (Chreg, chregs_buf, chreg_i);
+        Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
         if (pos >= chreg->start_pos && pos <= chreg->end_pos) return true;
     }
     return false;
@@ -364,7 +364,7 @@ void regions_display(const char *title)
 
         for (unsigned chr_i = 0; chr_i < num_chroms; chr_i++)
             for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len; chreg_i++) {
-                Chreg *chreg = ENT (Chreg, &chregs[chr_i], chreg_i);
+                Chreg *chreg = ENT (Chreg, chregs[chr_i], chreg_i);
                 fprintf (stderr, "chrom_word_index=%d start=%u end=%u\n", chr_i, chreg->start_pos, chreg->end_pos); 
             }
     }

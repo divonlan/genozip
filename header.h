@@ -20,21 +20,20 @@ extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;
 
 // VCF fields: CHROM up to the FORMAT field - excluding the samples. Note: we treat REF and ALT and the tab between them as a 
 // single field as they are correlated so compress better together
-#define NUM_VCF_B250S 8 
+#define NUM_VCF_FIELDS 8 
 typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT } VcfFields;
-extern const char *vcf_field_names[NUM_VCF_B250S];
+extern const char *vcf_field_names[NUM_VCF_FIELDS];
 
 // Note on SAM fields: 
 // - the QNAME field is broken into its :-separated components
-// - the RNAME and RNEXT field are stored together, with a tab between them, as they are highly correlated
 // - the POS field is stored as a delta from the previous line. This will work great in sorted files, but
 //   even in non sorted files there are often several related adjacent lines
 // - The PNEXT field is stored as a delta from the POS field
 // - OPTIONAL fields are stored as a template and then each subfield has its own dictionary.
 //   the template looks like eg: "CT:Z:NM:i:" for two subfields CT and NM
-#define NUM_SAM_B250S 9
-typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAMENX, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
-extern const char *sam_field_names[NUM_SAM_B250S];
+#define NUM_SAM_FIELDS 10
+typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
+extern const char *sam_field_names[NUM_SAM_FIELDS];
 
 extern void header_initialize(void);
 extern bool header_txt_to_genozip (uint32_t *vcf_line_i);

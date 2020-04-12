@@ -48,7 +48,7 @@ static uint32_t hash_next_size_up (uint64_t size)
 static void hash_populate_from_mtf (MtfContext *zf_ctx)
 {
     for (uint32_t i=0; i < zf_ctx->mtf.len; i++) {
-        MtfNode *node = ENT (MtfNode, &zf_ctx->mtf, i);
+        MtfNode *node = ENT (MtfNode, zf_ctx->mtf, i);
         const char *snip = &zf_ctx->dict.data[node->char_index];
         hash_get_entry_for_merge (zf_ctx, snip, node->snip_len, i, NULL /* the snip is not in the hash for sure */); 
     }
@@ -222,7 +222,7 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
                 g_hashent->next, zf_ctx->global_hash.len);
 
         hashent_i = g_hashent->next;
-        g_hashent = ENT(GlobalHashEnt, &zf_ctx->global_hash, hashent_i);
+        g_hashent = ENT(GlobalHashEnt, zf_ctx->global_hash, hashent_i);
 
         // case: snip is not in core hash table and also no other snip occupies the slot (mtf_i==NIL happens only in the core table)
         if (g_hashent->mtf_i == NIL) { // unoccupied space in core hash table
@@ -253,13 +253,13 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
     buf_alloc (evb, &zf_ctx->global_hash, sizeof (GlobalHashEnt) * (1 + zf_ctx->global_hash.len), 2, 
                "z_file->mtf_ctx->global_hash", zf_ctx->did_i);
 
-    g_hashent = ENT (GlobalHashEnt, &zf_ctx->global_hash, hashent_i); // might have changed after realloc
+    g_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, hashent_i); // might have changed after realloc
 
     // thread safetey:  VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
     // and accessing it. We make sure to first prepare the new entry including the merge_num which will prohibit old
     // VBs from using it, before we atomically set the "next"
     uint32_t next = zf_ctx->global_hash.len++;
-    GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, &zf_ctx->global_hash, next);
+    GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, next);
     new_hashent->merge_num = zf_ctx->merge_num; // stamp our merge_num as the ones that set the mtf_i
     new_hashent->mtf_i     = new_mtf_i_if_no_old_one;
     new_hashent->next      = NO_NEXT;
@@ -299,7 +299,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         if (next == NO_NEXT || /* case 1 */ next >= vb_ctx->global_hash.len) // case 4
             break;
 
-        g_hashent = ENT(GlobalHashEnt, &vb_ctx->global_hash, next);
+        g_hashent = ENT(GlobalHashEnt, vb_ctx->global_hash, next);
 
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
         uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_RELAXED);
@@ -330,7 +330,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         ASSERT (l_hashent->next < vb_ctx->local_hash.len, 
                 "Error: l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, vb_ctx->local_hash.len);
         l_hashent_i = l_hashent->next;
-        l_hashent = ENT (LocalHashEnt, &vb_ctx->local_hash, l_hashent_i);
+        l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);
 
         // case: snip is not in hash table and also no other snip occupies the slot (mtf_i==NIL happens only in the core table)
         if (l_hashent->mtf_i == NIL) { // unoccupied space in core hash table
@@ -355,10 +355,10 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     buf_alloc (segging_vb, &vb_ctx->local_hash, sizeof (LocalHashEnt) * (1 + vb_ctx->local_hash.len), // realloc if needed
                 1.5, "mtf_ctx->local_hash", vb_ctx->did_i);
 
-    l_hashent = ENT (LocalHashEnt, &vb_ctx->local_hash, l_hashent_i);  // might have changed after realloc
+    l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);  // might have changed after realloc
     l_hashent->next = vb_ctx->local_hash.len++;
 
-    LocalHashEnt *new_l_hashent = ENT (LocalHashEnt, &vb_ctx->local_hash, l_hashent->next);
+    LocalHashEnt *new_l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent->next);
     new_l_hashent->next = NO_NEXT;
     new_l_hashent->mtf_i = new_mtf_i_if_no_old_one;
 

@@ -139,7 +139,7 @@ int32_t random_access_get_last_included_vb_i (void)
     int32_t last_vb_i = -1;
     for (unsigned ra_i=0; ra_i < z_file->ra_buf.len; ra_i++) { // note that all entries of the same vb_i are together, but vb_i's are not necessarily in seqential order
         
-        const RAEntry *ra = ENT (RAEntry, &z_file->ra_buf, ra_i);
+        const RAEntry *ra = ENT (RAEntry, z_file->ra_buf, ra_i);
         if ((int32_t)ra->vblock_i <= last_vb_i) continue; // we already decided to include this vb_i - no need to check further
 
         if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos, NULL))

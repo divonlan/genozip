@@ -177,7 +177,7 @@ void txtfile_read_variant_block (VBlock *vb)
         uint32_t bytes_one_read = txtfile_read_block (&vb->txt_data.data[vb->txt_data.len]);
 
         if (!bytes_one_read) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
-            ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid VCF file %s - expecting it to end with a newline", txt_name);
+            ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid input file %s - expecting it to end with a newline", txt_name);
             break;
         }
 

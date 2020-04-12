@@ -93,8 +93,8 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
 
     bool is_ol = mtf_i < ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
 
-    MtfNode *node = is_ol ? &((MtfNode *)ctx->ol_mtf.data)[mtf_i] 
-                          : &((MtfNode *)ctx->mtf.data)[mtf_i - ctx->ol_mtf.len];
+    MtfNode *node = is_ol ? ENT (MtfNode, ctx->ol_mtf, mtf_i)
+                          : ENT (MtfNode, ctx->mtf, mtf_i - ctx->ol_mtf.len);
 
     if (snip_in_dict) {
         const Buffer *dict = is_ol ? &ctx->ol_dict : &ctx->dict;
@@ -225,7 +225,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     segging_vb->z_section_entries[vb_ctx->b250_section_type]++; 
 
     if (!snip_len) 
-        return (!snip || *snip != ':') ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
+        return (!snip || (z_file->data_type == DATA_TYPE_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
 
     uint32_t new_mtf_i_if_no_old_one = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
@@ -234,7 +234,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     if (existing_mtf_i != NIL) {
 
         if (segging_vb->vblock_i == 1) 
-            ENT (SorterEnt, &vb_ctx->sorter, existing_mtf_i)->count++;
+            ENT (SorterEnt, vb_ctx->sorter, existing_mtf_i)->count++;
 
         if (is_new) *is_new = false;
         return existing_mtf_i; // snip found - we're done
@@ -263,7 +263,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         buf_alloc (segging_vb, &vb_ctx->sorter, sizeof (SorterEnt) * (vb_ctx->mtf.size / sizeof(MtfNode)), 1, "mtf_ctx->sorter", 0);
         if (vb_ctx->sorter.size > prev_size) memset (&vb_ctx->sorter.data[prev_size], 0, vb_ctx->sorter.size - prev_size);
 
-        SorterEnt *sorter_ent = ENT (SorterEnt, &vb_ctx->sorter, new_mtf_i_if_no_old_one);
+        SorterEnt *sorter_ent = ENT (SorterEnt, vb_ctx->sorter, new_mtf_i_if_no_old_one);
         sorter_ent->mtf_i = new_mtf_i_if_no_old_one;
         sorter_ent->count = 1;
     }

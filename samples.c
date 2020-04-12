@@ -39,7 +39,7 @@ void samples_add (const char *samples_str)
 
         bool is_duplicate = false;
         for (unsigned s=0; s < cmd_samples_buf.len; s++)
-            if (!strcmp (one_sample, *ENT (char *, &cmd_samples_buf, s))) {
+            if (!strcmp (one_sample, *ENT (char *, cmd_samples_buf, s))) {
                 is_duplicate = true;
                 break;
             }
@@ -47,7 +47,7 @@ void samples_add (const char *samples_str)
 
         buf_alloc (evb, &cmd_samples_buf, MAX (cmd_samples_buf.len + 1, 100) * sizeof (char*), 2, "cmd_samples_buf", 0);
 
-        *NEXTENT (char *, &cmd_samples_buf) = one_sample;
+        NEXTENT (char *, cmd_samples_buf) = one_sample;
     }
 }
 
@@ -94,12 +94,12 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
         vcf_sample_names[i] = strtok_r (next_token, "\t", &next_token);
 
         for (unsigned s=0; s < cmd_samples_buf.len; s++)
-            if (!strcmp (vcf_sample_names[i], *ENT(char *, &cmd_samples_buf, s))) { // found
+            if (!strcmp (vcf_sample_names[i], *ENT(char *, cmd_samples_buf, s))) { // found
                 vcf_samples_is_included[i] = !cmd_is_negative_samples;
                 if (!cmd_is_negative_samples) samples_accept (vcf_header_buf, vcf_sample_names[i]);
 
                 // remove this sample from the --samples list as we've found it already
-                memcpy (ENT(char *, &cmd_samples_buf, s), ENT(char *, &cmd_samples_buf, s+1), (cmd_samples_buf.len-s-1) * sizeof (char *));
+                memcpy (ENT(char *, cmd_samples_buf, s), ENT(char *, cmd_samples_buf, s+1), (cmd_samples_buf.len-s-1) * sizeof (char *));
                 cmd_samples_buf.len--;
             }
             else if (cmd_is_negative_samples) samples_accept (vcf_header_buf, vcf_sample_names[i]);
@@ -109,7 +109,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
 
     // warn about any --samples items that were not found in the vcf file (all the ones that still remain in the buffer)
     for (unsigned s=0; s < cmd_samples_buf.len; s++) 
-        ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, &cmd_samples_buf, s));
+        ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, cmd_samples_buf, s));
 
     //for (i=0; i<global_vcf_num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }

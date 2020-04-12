@@ -4,12 +4,10 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "profiler.h"
 #include "seg.h"
 #include "vblock.h"
 #include "move_to_front.h"
 #include "header.h"
-#include "endianness.h"
 #include "random_access_vcf.h"
 #include "optimize_vcf.h"
 
@@ -111,7 +109,7 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
 
     // it is possible that the mapper is not set yet even though not new - if the node is from a previous VB and
     // we have not yet encountered in node in this VB
-    *ENT (SubfieldMapper, &vb->format_mapper_buf, node_index) = format_mapper;
+    *ENT (SubfieldMapper, vb->format_mapper_buf, node_index) = format_mapper;
 }
 
 static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, unsigned info_len, 
@@ -211,7 +209,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, u
                     this_value_len = optimized_snip_len;
                 }
 
-                *NEXTENT (uint32_t, mtf_i_buf) = 
+                NEXTENT (uint32_t, *mtf_i_buf) = 
                     mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, &sf_node, NULL);
 
                 reading_name = true;  // end of value - move to the next time
@@ -422,7 +420,7 @@ static int seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
                               bool *has_13) // out (modified only if found \r)
 {
     uint32_t *next = (uint32_t *)(&vb->line_gt_data.data[vb->line_gt_data.len]);
-    SubfieldMapper *format_mapper = ENT (SubfieldMapper, &vb->format_mapper_buf, dl->format_mtf_i);
+    SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, dl->format_mtf_i);
     
     int optimized_cell_gt_data_len = cell_gt_data_len;
 
@@ -698,56 +696,3 @@ void seg_vcf_complete_missing_lines (VBlockVCF *vb)
         }
     }
 }
-/*
-// split each lines in this variant block to its components
-void seg_vcf_all_data_lines (VBlockVCF *vb)
-{
-    START_TIMER;
-
-    vb->num_dict_ids = MAX (VCF_FORMAT+1, vb->num_dict_ids); // first 8 mtf_ctx are reserved for the VCF fields (up to FORMAT) (vb->num_dict_ids might be already higher due to previous VBs)
-
-    // Set ctx stuff for CHROM->FORMAT fields (note: mtf_i is allocated by seg_allocate_per_line_memory)
-    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
-        strcpy ((char *)vb->mtf_ctx[f].dict_id.id, vcf_field_names[f]); // length of all is <= 7 so fits in id
-        vb->mtf_ctx[f].dict_id = dict_id_field (vb->mtf_ctx[f].dict_id);
-        vb->mtf_ctx[f].b250_section_type = SEC_VCF_CHROM_B250 + f*2;
-        vb->mtf_ctx[f].dict_section_type = SEC_VCF_CHROM_DICT + f*2;
-    }
-
-    seg_allocate_per_line_memory (vb); // set vb->num_lines to an initial estimate
-
-    const char *field_start = vb->txt_data.data;
-    bool hash_hints_set = false;
-    for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
-
-        if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
-            vb->num_lines = vb_line_i; // update to actual number of lines
-            break;
-        }
-
-        //fprintf (stderr, "vb_line_i=%u\n", vb_line_i);
-        ZipDataLineVCF *dl = &vb->data_lines.zip[vb_line_i];
-
-        field_start = seg_data_line (vb, dl, field_start, vb_line_i);
-
-        seg_vcf_update_vb_from_dl (vb, dl);
-
-        // if our estimate number of lines was too small, increase it
-        if (vb_line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
-            seg_allocate_per_line_memory (vb); // increase number of lines as evidently we need more
-
-        // if there is no global_hash yet, and we've past half of the data,
-        // collect stats to help mtf_merge create one when we merge
-        if (!hash_hints_set && (field_start - vb->txt_data.data) > vb->txt_data.len / 2) {
-            seg_set_hash_hints (vb, vb_line_i);
-            hash_hints_set = true;
-        }
-    }
-
-    //if (vb->has_genotype_data || vb->has_haplotype_data)
-    if (vb->has_haplotype_data)
-        seg_vcf_complete_missing_lines (vb);
-
-    COPY_TIMER(vb->profile.seg_all_data_lines);
-}
-*/

@@ -195,14 +195,32 @@ static bool main_am_i_in_docker (void)
 static void main_show_file_metadata (void)
 {
     fprintf (stderr, "\n\n");
-    if (txt_file->name) fprintf (stderr, "File name: %s\n", txt_file->name);
-    fprintf (stderr, 
-#ifdef _MSC_VER
-             "Individuals: %u   Variants: %I64u   Non-GT subfields: %u\n", 
-#else
-             "Individuals: %u   Variants: %"PRIu64"   INFO & FORMAT tags: %u\n", 
-#endif
-             global_vcf_num_samples, z_file->num_lines, z_file->num_dict_ids-8);
+    if (txt_file->name) fprintf (stderr, "%s file name: %s\n", dt_name (z_file->data_type), txt_file->name);
+    
+    switch (z_file->data_type) {
+    case DATA_TYPE_VCF:
+        fprintf (stderr, 
+                #ifdef _MSC_VER
+                "Individuals: %u   Variants: %I64u   Dictionaries: %u\n", 
+                #else
+                "Individuals: %u   Variants: %"PRIu64"   Dictionaries: %u\n", 
+                #endif
+                global_vcf_num_samples, z_file->num_lines, z_file->num_dict_ids);
+        break;
+
+    case DATA_TYPE_SAM:
+        fprintf (stderr, 
+                #ifdef _MSC_VER
+                "Alignment lines: %I64u   Dictionaries: %u\n", 
+                #else
+                "Alignment lines: %"PRIu64"   Dictionaries: %u\n", 
+                #endif
+                z_file->num_lines, z_file->num_dict_ids);
+        break;
+
+    default:
+        ABORT ("Error in main_show_file_metadata: invalid data_type=%d", z_file->data_type);
+    }
 }
 
 static void main_show_sections (void)
@@ -212,19 +230,28 @@ static void main_show_sections (void)
     char vsize[30], zsize[30], zentries_str[30];
 
     fprintf (stderr, "Sections stats:\n");
-    fprintf (stderr, "                           #Sec   #Entries                VCF     %%        GENOZIP     %%   Ratio\n");
+    fprintf (stderr, "                           #Sec   #Entries                %-3s     %%        GENOZIP     %%   Ratio\n",
+             dt_name (z_file->data_type));
     const char *format = "%22s    %6u  %16s  %9s %5.1f      %9s %5.1f  %6.1f%s\n";
 
     // the order in which we want them displayed
     const SectionType secs[] = {
-        SEC_GENOZIP_HEADER, SEC_VCF_RANDOM_ACCESS,
-        SEC_TXT_HEADER, SEC_VCF_VB_HEADER,
-        SEC_VCF_CHROM_B250, SEC_VCF_CHROM_DICT, SEC_VCF_POS_B250, SEC_VCF_POS_DICT, 
-        SEC_VCF_ID_B250, SEC_VCF_ID_DICT, SEC_VCF_REFALT_B250, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_B250, SEC_VCF_QUAL_DICT,
-        SEC_VCF_FILTER_B250, SEC_VCF_FILTER_DICT, SEC_VCF_INFO_B250, SEC_VCF_INFO_DICT,
-        SEC_VCF_INFO_SF_B250, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_B250, SEC_VCF_FORMAT_DICT,
-        SEC_VCF_GT_DATA, SEC_VCF_FRMT_SF_DICT,
-        SEC_VCF_HT_DATA , SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA
+        SEC_GENOZIP_HEADER,    SEC_VCF_RANDOM_ACCESS,  SEC_TXT_HEADER,        SEC_VCF_VB_HEADER,
+        SEC_VCF_CHROM_B250,    SEC_VCF_CHROM_DICT,     SEC_VCF_POS_B250,      SEC_VCF_POS_DICT, 
+        SEC_VCF_ID_B250,       SEC_VCF_ID_DICT,        SEC_VCF_REFALT_B250,   SEC_VCF_REFALT_DICT, 
+        SEC_VCF_QUAL_B250,     SEC_VCF_QUAL_DICT,      SEC_VCF_FILTER_B250,   SEC_VCF_FILTER_DICT, 
+        SEC_VCF_INFO_B250,     SEC_VCF_INFO_DICT,      SEC_VCF_INFO_SF_B250,  SEC_VCF_INFO_SF_DICT, 
+        SEC_VCF_FORMAT_B250,   SEC_VCF_FORMAT_DICT,    SEC_VCF_GT_DATA,       SEC_VCF_FRMT_SF_DICT,
+        SEC_VCF_HT_DATA,       SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
+
+        SEC_SAM_VB_HEADER,
+        SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
+        SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
+        SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
+        SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     SEC_SAM_RNEXT_B250,    SEC_SAM_RNEXT_DICT, 
+        SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
+        SEC_SAM_SEQ_DATA,      SEC_SAM_QUAL_DATA,
+        SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT
     };
 
     static const char *categories[] = {
@@ -232,40 +259,49 @@ static void main_show_sections (void)
         "CHROM b250", "CHROM dict", "POS b250", "POS dict", "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
         "QUAL b250", "QUAL dict", "FILTER b250", "FILTER dict",
         "INFO names b250", "INFO names dict", "INFO values b250", "INFO values dict", 
-        "FORMAT b250", "FORMAT dict", "Tags b250", "Tags dict",
-        "Haplotype data", "HT separator char", "Phasing char"
+        "FORMAT b250", "FORMAT dict", "FORMAT subfields b250", "FORMAT subfields dict",
+        "Haplotype data", "HT separator char", "Phasing char",
+
+        "Line block metadata",
+        "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", "FLAG b250", "FLAG dict", 
+        "RNAME b250", "RNAME dict", "POS b250", "POS dict", "MAPQ b250", "MAPQ dict", "CIGAR b250", "CIGAR dict", 
+        "RNEXT b250", "RNEXT dict", "PNEXT b250", "PNEXT dict", "TLEN b250", "TLEN dict", 
+        "SEQ data", "QUAL data",
+        "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict"
     };
 
     unsigned num_secs = sizeof(secs)/sizeof(secs[0]);
     ASSERT0 (sizeof(categories)/sizeof(categories[0]) == num_secs, "Error: categories and secs are not the same length");
 
-    int64_t total_vcf=0, total_z=0, total_entries=0;
+    int64_t total_txt=0, total_z=0, total_entries=0;
     uint32_t total_sections=0;
 
     for (unsigned sec_i=0; sec_i < num_secs; sec_i++) {
-        int64_t vbytes    = txt_file->section_bytes[secs[sec_i]];
+        int64_t tbytes    = txt_file->section_bytes[secs[sec_i]];
         int64_t zbytes    = z_file->section_bytes[secs[sec_i]];
         int64_t zentries  = z_file->section_entries[secs[sec_i]];
         int32_t zsections = z_file->num_sections[secs[sec_i]];
 
-        char *vcf_size_str = (vbytes || section_type_is_dictionary (sec_i)) ? buf_display_size(vbytes, vsize) : "       ";
+        if (!tbytes && !zbytes) continue;
+
+        char *vcf_size_str = (tbytes || section_type_is_dictionary (sec_i)) ? buf_display_size(tbytes, vsize) : "       ";
         
         fprintf (stderr, format, categories[sec_i], zsections, buf_display_uint (zentries, zentries_str),
-                 vcf_size_str, 100.0 * (double)vbytes / (double)txt_file->txt_data_size_single,
+                 vcf_size_str, 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
                  buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
-                 zbytes ? (double)vbytes / (double)zbytes : 0,
-                 !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
+                 zbytes ? (double)tbytes / (double)zbytes : 0,
+                 !zbytes ? (tbytes ? "\b\b\bInf" : "\b\b\b---") : "");
 
         total_sections += zsections;
         total_entries  += zentries;
-        total_vcf      += vbytes;
+        total_txt      += tbytes;
         total_z        += zbytes;
     }
 
     fprintf (stderr, format, "TOTAL", total_sections, buf_display_uint (total_entries, zentries_str),
-             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)txt_file->txt_data_size_single,
+             buf_display_size(total_txt, vsize), 100.0 * (double)total_txt / (double)txt_file->txt_data_size_single,
              buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
-             (double)total_vcf / (double)total_z, "");
+             (double)total_txt / (double)total_z, "");
 
     fprintf (stderr, "\nDictionaries:\n");
     fprintf (stderr, "Name     Type         #Words        #Uniq         Hash    uncomp_dict_size\n");
@@ -282,8 +318,9 @@ static void main_show_sections (void)
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
              buf_display_uint (total_z, s1), buf_display_uint (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
 
-    ASSERTW (total_vcf == txt_file->txt_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             buf_display_uint (total_vcf, s1), buf_display_uint (txt_file->txt_data_size_single, s2), (int32_t)(txt_file->txt_data_size_single - total_vcf));
+    ASSERTW (total_txt == txt_file->txt_data_size_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
+             dt_name (z_file->data_type), buf_display_uint (total_txt, s1), buf_display_uint (txt_file->txt_data_size_single, s2), 
+             (int32_t)(txt_file->txt_data_size_single - total_txt));
 
 }
 
@@ -292,54 +329,72 @@ static void main_show_content (void)
     main_show_file_metadata();
 
     char vsize[30], zsize[30];
-    int64_t total_vcf=0, total_z=0;
+    int64_t total_txt=0, total_z=0;
 
     fprintf (stderr, "Compression stats:\n");
     fprintf (stderr, "                              VCF     %%       GENOZIP     %%  Ratio\n");
     const char *format = "%22s   %8s %5.1f      %8s %5.1f  %5.1f%s\n";
 
-    const char *categories[] = {"Haplotype data", "Other sample data", "Header and columns 1-9", "Index"};
+    const char *categories[] = {"Haplotype data", "Other sample data", 
+                                "SEQ data", "QUAL data",
+                                "Header & other fields", "Index" };
 
-#define NUM_CATEGORIES 4
+#define NUM_CATEGORIES 6
 
-    int sections_per_category[NUM_CATEGORIES][30] = { 
+    int sections_per_category[NUM_CATEGORIES][100] = { 
         { SEC_VCF_HT_DATA , NIL },
         { SEC_VCF_PHASE_DATA, SEC_VCF_GT_DATA, SEC_VCF_FRMT_SF_DICT, SEC_STATS_HT_SEPERATOR, NIL},
-        { SEC_TXT_HEADER, SEC_VCF_VB_HEADER, SEC_VCF_CHROM_B250, SEC_VCF_POS_B250, SEC_VCF_ID_B250, SEC_VCF_REFALT_B250, 
+        { SEC_SAM_SEQ_DATA, NIL },
+        { SEC_SAM_QUAL_DATA, NIL },
+        { SEC_TXT_HEADER, 
+          SEC_VCF_VB_HEADER, SEC_VCF_CHROM_B250, SEC_VCF_POS_B250, SEC_VCF_ID_B250, SEC_VCF_REFALT_B250, 
+          
           SEC_VCF_QUAL_B250, SEC_VCF_FILTER_B250, SEC_VCF_INFO_B250, SEC_VCF_FORMAT_B250, SEC_VCF_INFO_SF_B250, 
           SEC_VCF_CHROM_DICT, SEC_VCF_POS_DICT, SEC_VCF_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
-          SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT, NIL },
+          SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,           
+          
+          SEC_SAM_VB_HEADER,
+          SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
+          SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
+          SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
+          SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     SEC_SAM_RNEXT_B250,    SEC_SAM_RNEXT_DICT, 
+          SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
+          SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
+          
+          NIL },
         { SEC_VCF_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }
     };
 
     for (unsigned i=0; i < NUM_CATEGORIES; i++) {
 
-        int64_t vbytes=0, zbytes=0;
+        int64_t tbytes=0, zbytes=0;
         for (int *sec_i = sections_per_category[i]; *sec_i != NIL; sec_i++) {
-            vbytes += txt_file->section_bytes[*sec_i];
+            tbytes += txt_file->section_bytes[*sec_i];
             zbytes += z_file->section_bytes[*sec_i];
         }
 
-        fprintf (stderr, format, categories[i], 
-                 buf_display_size(vbytes, vsize), 100.0 * (double)vbytes / (double)txt_file->txt_data_size_single,
-                 buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
-                 zbytes ? (double)vbytes / (double)zbytes : 0,
-                 !zbytes ? (vbytes ? "\b\b\bInf" : "\b\b\b---") : "");
+        if (!tbytes && !zbytes) continue;
 
-        total_vcf      += vbytes;
+        fprintf (stderr, format, categories[i], 
+                 buf_display_size(tbytes, vsize), 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
+                 buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
+                 zbytes ? (double)tbytes / (double)zbytes : 0,
+                 !zbytes ? (tbytes ? "\b\b\bInf" : "\b\b\b---") : "");
+
+        total_txt      += tbytes;
         total_z        += zbytes;
     }
 
     fprintf (stderr, format, "TOTAL", 
-             buf_display_size(total_vcf, vsize), 100.0 * (double)total_vcf / (double)txt_file->txt_data_size_single,
+             buf_display_size(total_txt, vsize), 100.0 * (double)total_txt / (double)txt_file->txt_data_size_single,
              buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
-             (double)total_vcf / (double)total_z, "");
+             (double)total_txt / (double)total_z, "");
 
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);
 
-    ASSERTW (total_vcf == txt_file->txt_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
-             total_vcf, txt_file->txt_data_size_single, txt_file->txt_data_size_single - total_vcf);
+    ASSERTW (total_txt == txt_file->txt_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
+             total_txt, txt_file->txt_data_size_single, txt_file->txt_data_size_single - total_txt);
 
 }
 

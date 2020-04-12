@@ -4,7 +4,6 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "profiler.h"
 #include "seg.h"
 #include "vblock.h"
 #include "move_to_front.h"
@@ -62,7 +61,7 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
             buf_alloc (vb, &sf_ctx->mtf_i, MIN (vb->num_lines, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
                        1.5, "mtf_ctx->mtf_i", SEC_SAM_QNAME_SF_DICT);
 
-            *NEXTENT (uint32_t, &sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
+            NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
 
             // finalize this subfield and get ready for reading the next one
             if (i < qname_len) {
@@ -75,14 +74,21 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
         else snip_len++;
     }
 
+    // if template is empty, make it "*"
+    if (sf_i==1) template[0] = '*';
+
     // add template to the QNAME dictionary (note: template may be of length zero if qname has no / or :)
     MtfContext *qname_ctx = &vb->mtf_ctx[SAM_QNAME];
-    *NEXTENT (uint32_t, &qname_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, qname_ctx, template, sf_i-1, &node, NULL);
+    NEXTENT (uint32_t, qname_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, qname_ctx, template, MAX (1, sf_i-1), &node, NULL);
+
+    // byte counts for --show-sections 
+    vb->txt_section_bytes[SEC_SAM_QNAME_B250]    += sf_i; // sf_i has 1 for each separator including the terminating \t
+    vb->txt_section_bytes[SEC_SAM_QNAME_SF_B250] += qname_len - (sf_i-1); // the entire field except for the / and : separators
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
-static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
+static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned field_len, char separator, unsigned vb_line_i)
 {
     ASSERT (field_len >= 6 && field[2] == ':' && field[4] == ':', "Error in %s: invalid optional field format: %.*s",
             txt_name, field_len, field);
@@ -96,28 +102,11 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
     buf_alloc (vb, &ctx->mtf_i, MIN (vb->num_lines, ctx->mtf_i.len + 1) * sizeof (uint32_t),
                 1.5, "mtf_ctx->mtf_i", SEC_SAM_OPTNL_SF_DICT);
 
-    *NEXTENT (uint32_t, &ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, &field[5], field_len-5, &node, NULL);
+    NEXTENT (uint32_t, ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, &field[5], field_len-5, &node, NULL);
+
+    // account for the subfield value and \t, but not \n which is already accounted for in SEC_SAM_OPTIONAL_B250
+    vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250] += (field_len-5) + (separator == '\t'); 
 }
-
-static void seg_sam_rname_rnext_fields (VBlockSAM *vb, 
-                                        const char *rname, unsigned rname_len, 
-                                        const char *rnext, unsigned rnext_len,
-                                        unsigned vb_line_i)
-{
-#   define MAX_RNAME_NX 1000
-    char rname_nx[MAX_RNAME_NX];
-    unsigned rname_nx_len = rname_len + rnext_len + 1; // +1 for the \t
-    
-    ASSERT (rname_nx_len <= MAX_RNAME_NX, 
-            "Error in %s: the length of RNAME and RNEXT fields, combined, cannot exceed %u characters. RNAME=%.*s RNEXT=%*.s",
-            txt_name, MAX_RNAME_NX-1, rname_len, rname, rnext_len, rnext);
-
-    memcpy (rname_nx, rname, rname_len);
-    rname_nx[rname_len] = '\t';
-    memcpy (&rname_nx[rname_len+1], rnext, rnext_len);
-
-    seg_sam_one_field (vb, rname_nx, rname_nx_len, vb_line_i, SAM_RNAMENX, NULL);
-}   
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string
 uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len)
@@ -158,6 +147,43 @@ uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len)
     return seq_len;
 }
 
+static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned seq_len, unsigned qual_len, unsigned vb_line_i)
+{
+    const char *seq  = &vb->txt_data.data[dl->seq_data_start];
+    const char *qual = &vb->txt_data.data[dl->qual_data_start];
+
+    bool seq_is_available  = seq_len  != 1 || *seq  != '*';
+    bool qual_is_available = qual_len != 1 || *qual != '*';
+
+    // handle the case where CIGAR is "*" and we get the dl->seq_len directly from SEQ or QUAL
+    if (!dl->seq_len) { // CIGAR is not available
+        ASSERT (!seq_is_available || !qual_is_available || seq_len==qual_len, 
+                "Bad line in %s: SEQ length is %u, QUAL length is %u, unexpectedly differ. SEQ=%.*s QUAL=%.*s", 
+                txt_name, seq_len, qual_len, seq_len, seq, qual_len, qual);    
+
+        dl->seq_len = MAX (seq_len, qual_len); // one or both might be not available and hence =1
+    
+        char new_cigar[20];
+        sprintf (new_cigar, "%u*", dl->seq_len); // eg "151*". if both SEQ and QUAL are unavailable it will be "1*"
+        unsigned new_cigar_len = strlen (new_cigar);
+
+        seg_sam_one_field (vb, new_cigar, new_cigar_len, vb_line_i, SAM_CIGAR, NULL); 
+        vb->txt_section_bytes[SEC_SAM_CIGAR_B250] -= (new_cigar_len-1); // adjust - actual SAM length was only one (seg_sam_one_field added new_cigar_len)
+    } 
+    else { // CIGAR is available - just check the seq and qual lengths
+        ASSERT (!seq_is_available || seq_len == dl->seq_len, 
+                "Bad line in %s: according to CIGAR, expecting SEQ length to be %u but it is %u. SEQ=%.*s", 
+                txt_name, dl->seq_len, seq_len, seq_len, seq);
+
+        ASSERT (!qual_is_available || qual_len == dl->seq_len, 
+                "Bad line in %s: according to CIGAR, expecting QUAL length to be %u but it is %u. QUAL=%.*s", 
+                txt_name, dl->seq_len, qual_len, qual_len, qual);    
+    }
+
+    // byte counts for --show-sections 
+    vb->txt_section_bytes[SEC_SAM_SEQ_DATA]  += seq_len  + 1; // +1 for terminating \t
+    vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += qual_len + 1; 
+}
 
 /* split the data line into sections - 
    1. variant data - each of 9 fields (CHROM to FORMAT) is a section
@@ -173,7 +199,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
 
     const char *next_field, *field_start;
-    unsigned field_len=0;
+    unsigned field_len=0, seq_len=0, qual_len=0;
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
@@ -189,10 +215,10 @@ const char *seg_sam_data_line (VBlock *vb_,
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "FLAG");
     seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_FLAG, NULL);
 
-    // RNAME - wait to store together with RNEXT, because they are highly correlated
-    const char *rname_field_start = next_field;
-    unsigned rname_field_len;
-    next_field = seg_get_next_item (rname_field_start, &len, false, true, false, vb_line_i, &rname_field_len, &separator, &has_13, "RNAME");
+    // RNAME
+    field_start = next_field;
+    next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNAME");
+    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
 
     // POS - delta encode
     field_start = next_field;
@@ -204,47 +230,38 @@ const char *seg_sam_data_line (VBlock *vb_,
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "MAPQ");
     seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_MAPQ, NULL);
 
-    // CIGAR - if CIGAR is "*" and we wait to get the length from SEQ
+    // CIGAR - if CIGAR is "*" and we wait to get the length from SEQ or QUAL
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "CIGAR");
     dl->seq_len = seg_sam_seq_len_from_cigar (field_start, field_len);
     if (dl->seq_len) seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_CIGAR, NULL); // not "*" - all good!
 
-    // RNEXT - store together with RNAME as they are highly correlated
+    // RNEXT
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNEXT");
-    seg_sam_rname_rnext_fields (vb, rname_field_start, rname_field_len, field_start, field_len, vb_line_i);
+    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNEXT, NULL);
 
-    // PNEXT - encode as delta from POS
+    // PNEXT - encode as delta from POS (except if its unavailable - encode as "*")
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "PNEXT");
-    seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i);
+    if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable" per SAM specification
+        seg_sam_one_field (vb, "*", 1, vb_line_i, SAM_PNEXT, NULL); 
+    else
+        seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i);
 
     // TLEN
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "TLEN");
     seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_TLEN, NULL);
 
-    // SEQ
+    // SEQ & QUAL
     dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (next_field, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "SEQ");
-    
-    // handle the case where CIGAR is "*" and we get the seq_len directly from SEQ
-    char new_cigar[20];
-    if (!dl->seq_len) { // CIGAR is "*"
-        sprintf (new_cigar, "%u*", field_len); // eg "151*"
-        seg_sam_one_field (vb, new_cigar, strlen (new_cigar), vb_line_i, SAM_CIGAR, NULL); 
-        dl->seq_len = field_len;
-    }
+    next_field = seg_get_next_item (next_field, &len, false, true, false, vb_line_i, &seq_len, &separator, &has_13, "SEQ");
 
-    ASSERT (field_len == dl->seq_len, "Bad line in %s: according to CIGAR, expecting SEQ length to be %u but it is %u",
-            txt_name, dl->seq_len, field_len);
-
-    // QUAL
     dl->qual_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (next_field, &len, true, true, false, vb_line_i, &field_len, &separator, &has_13, "QUAL");
-    ASSERT (field_len == dl->seq_len, "Bad line in %s: according to CIGAR, expecting QUAL length to be %u but it is %u",
-            txt_name, dl->seq_len, field_len);
+    next_field = seg_get_next_item (next_field, &len, true, true, false, vb_line_i, &qual_len, &separator, &has_13, "QUAL");
+
+    seg_sam_seq_qual_fields (vb, dl, seq_len, qual_len, vb_line_i);
 
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
     char oname[MAX_SUBFIELDS * 5 + 1]; // each name is 5 characters per SAM specification, eg "MC:Z:" ; +1 for # in case of \r
@@ -252,20 +269,23 @@ const char *seg_sam_data_line (VBlock *vb_,
 
     for (oname_len=0; oname_len < MAX_SUBFIELDS*5 && separator != '\n'; oname_len += 5) {
         field_start = next_field;
-        next_field = seg_get_next_item (field_start, &len, true, true, false, vb_line_i, &field_len, &separator, &has_13, "SEQ");
-        seg_sam_optional_field (vb, field_start, field_len, vb_line_i);
+        next_field = seg_get_next_item (field_start, &len, true, true, false, vb_line_i, &field_len, &separator, &has_13, "OPTIONAL-subfield");
+        seg_sam_optional_field (vb, field_start, field_len, separator, vb_line_i);
         memcpy (&oname[oname_len], field_start, 5);
     }
     ASSERT (separator=='\n', "Error in %s: too many optional fields, limit is %u", txt_name, MAX_SUBFIELDS);
 
     // treat a Windows style \r (as part of a \r\n line termination) as part of the oname - add a # to represent it
-    if (has_13) {
-        oname[oname_len++] = '#';
-        vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR]--; // the \r in case of Windows \r\n line ending (WHY IS THIS?)
-    }
+    if (has_13) oname[oname_len++] = '#';
 
-    // we record the oname, even if its an empty string 
+    // if oname is empty, we make it "*" (and adjust size accounting)
+    if (!oname_len) oname[oname_len++] = '*';
+
     seg_sam_one_field (vb, oname, oname_len, vb_line_i, SAM_OPTIONAL, NULL);
+
+    // if we have no real OPTIONAL, seg_sam_one_field adds +1 for the character (correct for '#' as it stands for \r, but incorrect for '*') and +1 for the wrongly presumsed \t
+    if (oname_len == 1) 
+        vb->txt_section_bytes[SEC_SAM_OPTIONAL_B250] -= (1 + (oname[0]=='*'));  
 
     return next_field;
 }

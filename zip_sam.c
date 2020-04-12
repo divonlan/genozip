@@ -32,7 +32,7 @@ static void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
 {
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
     uint32_t start_index = dl->seq_data_start;
-    *line_data = ENT (char, &vb->txt_data, start_index);
+    *line_data = ENT (char, vb->txt_data, start_index);
     *line_data_len   = dl->seq_len;
 }   
 
@@ -41,7 +41,7 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 {
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
     uint32_t start_index = dl->qual_data_start;
-    *line_data = ENT (char, &vb->txt_data, start_index);
+    *line_data = ENT (char, vb->txt_data, start_index);
     *line_data_len   = dl->seq_len;
 }   
 

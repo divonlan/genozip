@@ -131,7 +131,9 @@ static int zfile_compress_bzlib (VBlock *vb, Buffer *z_data,
             callback (vb, line_i, &strm.next_in, &strm.avail_in);
 
             if (line_i < vb->num_lines - 1) { // not last line
+//printf("BEFORE: line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out);                
                 compress_ret = BZ2_bzCompress (&strm, BZ_RUN);
+//printf("AFTER:  line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out); // DEBUG
                 if (!strm.avail_out && ok_is_ok) return BZ_FINISH_OK; // out of space in z_data
 
                 ASSERT (compress_ret == BZ_RUN_OK, "Error: BZ2_bzCompress failed: %s", BZ2_errstr(compress_ret));
@@ -579,7 +581,7 @@ int zfile_read_section (VBlock *vb,
 {
     if (zfile_skip_section_by_flags (expected_sec_type)) return 0; // skip if this section is not needed according to flags
 
-    if (sb_i != NO_SB_I && ! *ENT(bool, &((VBlockVCFP)vb)->is_sb_included, sb_i)) return 0; // skip section if this sample block is excluded by --samples
+    if (sb_i != NO_SB_I && ! *ENT(bool, ((VBlockVCFP)vb)->is_sb_included, sb_i)) return 0; // skip section if this sample block is excluded by --samples
 
     // note: the first section is always read by zfile_read_section(). if it is a v1, or
     // if it is not readable (perhaps v1 encrypted) - we assume its a v1 VCF header
@@ -1131,7 +1133,7 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
 
         // calculate whether this block is included. zfile_read_section will skip reading and piz_uncompress_all_sections
         // will skip uncompressing based on this value
-        *NEXTENT (bool, &vb->is_sb_included) = samples_is_sb_included (num_samples_per_block, sb_i);
+        NEXTENT (bool, vb->is_sb_included) = samples_is_sb_included (num_samples_per_block, sb_i);
  
         // make sure we have enough space for the section pointers
         buf_alloc (vb, &vb->z_section_headers, sizeof (unsigned) * (section_i + 3), 2, "z_section_headers", 2);
