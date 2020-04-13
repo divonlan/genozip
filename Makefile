@@ -57,7 +57,11 @@ CONDA_INCS = aes.h dispatcher.h gloptimize_vcf.h optimize_vcf.h profiler.h dict_
              compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
              compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \
              compatibility/visual_c_pthread.h \
-             compatibility/mac_gettime.h  
+             compatibility/mac_gettime.h  \
+			 zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
+			 zlib/zlib.h zlib/zutil.h \
+			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
+			 lzma/Precomp.h lzma/Threads.h
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/visual_c_pthread.c

@@ -175,7 +175,7 @@ bool comp_compress_bzlib (VBlock *vb,
 
 void *lzma_alloc (ISzAllocPtr p, size_t size)
 {
-  // fprintf(stderr, "\nAlloc %10u bytes; count = %10d", (unsigned)size, g_allocCount);
+  fprintf(stderr, "\nAlloc %10u bytes", (unsigned)size);
   return malloc (size);
 }
 
@@ -218,9 +218,9 @@ bool comp_compress_lzma (VBlock *vb,
     // for documentation on these parameters, see lzma/LzmaLib.h
     CLzmaEncProps props;
     LzmaEncProps_Init (&props);
-    props.level = 9;
+    props.level = 7; // level 7 consumes up to 350MB. level 9 can be up to 540MB and is only 0.05% smaller file in file tested
     props.fb    = 273;
-    
+
     CLzmaEncHandle lzma_handle = LzmaEnc_Create (&memfuncs);
     ASSERT0 (lzma_handle, "Error: LzmaEnc_Create failed");
 

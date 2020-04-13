@@ -24,7 +24,7 @@ typedef struct {
 
 #define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->mtf_ctx[(mapper)->did_i[(sf)]] : NULL)
 
-#define NUM_COMPRESS_BUFS 4   // bzlib2 compress requires 4 and decompress requires 2
+#define NUM_COMPRESS_BUFS 6   // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 6 and decompress 1
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 #define VBLOCK_COMMON_FIELDS \

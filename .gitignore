@@ -48,3 +48,4 @@ mac/.from_remote_timestamp
 mac/*.pkg
 analyze hgdp_wgs.20190516.full.chr1.vcf and gtshark/*
 fastq/*
+lzma/unused
