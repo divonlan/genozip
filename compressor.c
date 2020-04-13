@@ -218,8 +218,9 @@ bool comp_compress_lzma (VBlock *vb,
     // for documentation on these parameters, see lzma/LzmaLib.h
     CLzmaEncProps props;
     LzmaEncProps_Init (&props);
-    //props.level      = 9;
-
+    props.level = 9;
+    props.fb    = 273;
+    
     CLzmaEncHandle lzma_handle = LzmaEnc_Create (&memfuncs);
     ASSERT0 (lzma_handle, "Error: LzmaEnc_Create failed");
 
