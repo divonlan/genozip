@@ -157,7 +157,7 @@ bool header_txt_to_genozip (uint32_t *vcf_line_i)
         if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
 
         txt_file->section_bytes[SEC_TXT_HEADER] = evb->txt_data.len;
-        z_file  ->section_bytes[SEC_TXT_HEADER] = evb->z_section_bytes[SEC_TXT_HEADER]; // comes from zfile_compress
+        z_file  ->section_bytes[SEC_TXT_HEADER] = evb->z_section_bytes[SEC_TXT_HEADER]; // comes from comp_compress
         z_file  ->num_sections [SEC_TXT_HEADER]++;
         z_file  ->num_txt_components_so_far++; // when compressing
     }

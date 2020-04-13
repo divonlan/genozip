@@ -65,6 +65,7 @@ typedef struct buffer_ *BufferP;
 typedef const struct buffer_ *ConstBufferP;
 typedef struct mtfcontext_ *MtfContextP;
 typedef struct mtfnode_ *MtfNodeP;
+typedef struct section_header_ *SectionHeaderP;
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 

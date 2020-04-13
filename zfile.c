@@ -6,7 +6,6 @@
 #include <errno.h>
 #include <time.h>
 #include <math.h>
-#include <bzlib.h>
 #include "genozip.h"
 #include "profiler.h"
 #include "zfile.h"
@@ -21,51 +20,11 @@
 #include "squeeze_vcf.h"
 #include "header.h"
 #include "gtshark_vcf.h"
-
-#define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
-
-static Buffer compress_bufs[NUM_COMPRESS_BUFS] = {EMPTY_BUFFER, EMPTY_BUFFER, EMPTY_BUFFER, EMPTY_BUFFER}; // used by I/O thread when compressing out of context of a VB (i.e. VCF header)
+#include "compressor.h"
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
-// memory management for bzlib - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
-// every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
-static void *zfile_bzalloc (void *vb_, int items, int size)
-{
-    VBlock *vb = (VBlock *)vb_;
-    Buffer *bufs = vb ? vb->compress_bufs : compress_bufs;
-
-    Buffer *use_buf = NULL;
-    
-    // search for a free buffer - preferring one of the size requested 
-   for (unsigned i=0; i < NUM_COMPRESS_BUFS ; i++) {
-        if (!buf_is_allocated (&bufs[i])) {
-            use_buf = &bufs[i];
-            if (use_buf->size == (unsigned)(items * size)) break;
-        }
-    }
-    ASSERT0 (use_buf, "Error: zfile_bzalloc could not find a free buffer");
-
-    buf_alloc (vb, use_buf, items * size, 1, "compress_bufs", 0);
-
-    return use_buf->data;
-}
-
-static void zfile_bzfree (void *vb_, void *addr)
-{
-    VBlock *vb = (VBlock *)vb_;
-    Buffer *bufs = vb ? vb->compress_bufs : compress_bufs;
-
-    unsigned i; for (i=0; i < NUM_COMPRESS_BUFS ; i++) 
-        if (bufs[i].data == addr) {
-            buf_free (&bufs[i]);
-            break;
-        }
-
-    ASSERT0 (i < NUM_COMPRESS_BUFS, "Error: zfile_bzfree failed to find buffer to free");
-}
-
-static void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
+void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
 {
     DictIdType dict_id = {0};
 
@@ -88,189 +47,6 @@ static void zfile_show_header (const SectionHeader *header, VBlock *vb /* option
     }
     else 
         fprintf (stderr, "%s", str);
-}
-
-static int zfile_compress_bzlib (VBlock *vb, Buffer *z_data, 
-                                 const char *src_data,          // option 1 - compress contiguous data
-                                 ZfileGetLineCallback callback, // option 2 - compress data one line at a time
-                                 unsigned compressed_offset, unsigned data_uncompressed_len, 
-                                 unsigned *data_compressed_len /* in/out */, bool ok_is_ok)
-{
-    // good manual: http://linux.math.tifr.res.in/manuals/html/manual_3.html
-
-    START_TIMER;
-
-    bz_stream strm;
-    memset (&strm, 0, sizeof (strm)); // safety
-
-    strm.bzalloc = zfile_bzalloc;
-    strm.bzfree  = zfile_bzfree;
-    strm.opaque  = vb; // just passed to malloc/free
-
-    int init_ret = BZ2_bzCompressInit (&strm, BZLIB_BLOCKSIZE100K, 0, 30);
-    ASSERT (init_ret == BZ_OK, "Error: BZ2_bzCompressInit failed: %s", BZ2_errstr(init_ret));
-
-    strm.next_out  = &z_data->data[z_data->len + compressed_offset];
-    strm.avail_out = *data_compressed_len;
-    int compress_ret=0; // initialize to squash compiler warning
-
-    // option 1 - compress contiguous data
-    if (src_data) {
-        strm.next_in   = (char*)src_data;
-        strm.avail_in  = data_uncompressed_len;
-
-        compress_ret = BZ2_bzCompress (&strm, BZ_FINISH);
-        ASSERT ((ok_is_ok && compress_ret == BZ_FINISH_OK) || compress_ret == BZ_STREAM_END, "Error: BZ2_bzCompress failed: %s", BZ2_errstr(compress_ret));
-    }
-    else if (callback) {
-
-        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-
-            ASSERT (!strm.avail_in, "Error in zfile_compress_bzlib: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
-
-            callback (vb, line_i, &strm.next_in, &strm.avail_in);
-
-            if (line_i < vb->num_lines - 1) { // not last line
-//printf("BEFORE: line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out);                
-                compress_ret = BZ2_bzCompress (&strm, BZ_RUN);
-//printf("AFTER:  line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out); // DEBUG
-                if (!strm.avail_out && ok_is_ok) return BZ_FINISH_OK; // out of space in z_data
-
-                ASSERT (compress_ret == BZ_RUN_OK, "Error: BZ2_bzCompress failed: %s", BZ2_errstr(compress_ret));
-            }
-            else { // last line
-                compress_ret = BZ2_bzCompress (&strm, BZ_FINISH);
-                ASSERT ((ok_is_ok && compress_ret == BZ_FINISH_OK) || compress_ret == BZ_STREAM_END, "Error: BZ2_bzCompress failed: %s", BZ2_errstr(compress_ret));
-            }
-        }
-    }
-    else 
-        ABORT0 ("Error in zfile_compress_bzlib: neither src_data nor callback is provided");
-    
-    int end_ret = BZ2_bzCompressEnd (&strm);
-    ASSERT (end_ret == BZ_OK, "Error: BZ2_bzCompressEnd failed: %s", BZ2_errstr (end_ret));
-
-    *data_compressed_len -= strm.avail_out;
-
-    if (vb) COPY_TIMER(vb->profile.compressor);
-
-    return compress_ret;
-}
-
-// compresses data - either a conitguous block or one line at a time. If both are NULL that there is no data to compress.
-static void zfile_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
-                            SectionHeader *header, 
-                            const char *src_data,          // option 1 - compress contiguous data
-                            ZfileGetLineCallback callback) // option 2 - compress data one line at a time
-{ 
-    unsigned compressed_offset     = BGEN32 (header->compressed_offset);
-    unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
-    unsigned data_compressed_len   = 0;
-    unsigned data_encrypted_len=0, data_padding=0, header_padding=0;
-
-    bool is_encrypted = false;
-    unsigned encryption_padding_reserve = 0;
-
-    if (header->section_type != SEC_GENOZIP_HEADER) { // genozip header is never encrypted
-        is_encrypted = crypt_get_encrypted_len (&compressed_offset, &header_padding); // set to 0 if no encryption
-        encryption_padding_reserve = crypt_max_padding_len(); // padding for the body
-    }
-
-    // if there's no data to compress, set compression to NONE
-    if (!data_uncompressed_len) header->data_compression_alg = COMPRESS_NONE;
-    
-    // allocate what we think will be enough memory. usually this realloc does nothing, as the
-    // memory we pre-allocate for z_data is sufficient
-    if (header->data_compression_alg != COMPRESS_NONE)
-        buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + MAX (data_uncompressed_len / 2, 500) + encryption_padding_reserve, // usually compression is a lot better than 2X so this should be enough
-                   1.5, z_data->name, z_data->param); // name and param need to be set in advance
-    else 
-        buf_alloc (vb, z_data, z_data->len + compressed_offset + data_uncompressed_len, 1.5, z_data->name, z_data->param);
-
-    // compress the data, if we have it...
-    if (data_uncompressed_len) {
-     
-        switch (header->data_compression_alg) {
-
-            case COMPRESS_BZLIB:
-            
-                data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the realloc, because z_data is pre-allocated
-
-                int ret = zfile_compress_bzlib (vb, z_data, src_data, callback, compressed_offset, data_uncompressed_len, &data_compressed_len, true);
-
-                // if output buffer is too small, increase it, and try again
-                if (ret == BZ_FINISH_OK) {
-                    buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + data_uncompressed_len + 50 /* > BZ_N_OVERSHOOT */, 1,
-                            z_data->name ? z_data->name : "z_data", z_data->param);
-                    data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
-
-                    zfile_compress_bzlib (vb, z_data, src_data, callback, compressed_offset, data_uncompressed_len, &data_compressed_len, false);
-                }
-                break;
-
-            case COMPRESS_LZMA:
-
-                break;
-
-            case COMPRESS_NONE:
-                data_compressed_len = data_uncompressed_len;
-                memcpy (&z_data->data[z_data->len + compressed_offset], src_data, data_uncompressed_len);
-                break;
-
-            default:
-                ABORT ("Error in zfile_compress: unrecognized data_compression_alg=%d", header->data_compression_alg);
-        }
-        
-        // get encryption related lengths
-        if (is_encrypted) {
-            data_encrypted_len = data_compressed_len;
-            crypt_get_encrypted_len (&data_encrypted_len, &data_padding); // both are set to 0 if no encryption
-        }
-    }
-
-    // finalize & copy header
-    header->compressed_offset   = BGEN32 (compressed_offset);  // updated value to include header padding
-    header->data_compressed_len = BGEN32 (data_compressed_len);   
-    header->data_encrypted_len  = BGEN32 (data_encrypted_len); 
-    memcpy (&z_data->data[z_data->len], header, compressed_offset);
-
-    // encrypt if needed - header & body separately
-    unsigned total_z_len;
-    if (is_encrypted) {
-        // create good padding (just padding with 0 exposes a cryptographic volnurability)
-        crypt_pad ((uint8_t*)&z_data->data[z_data->len], compressed_offset, header_padding);
-        
-        if (data_uncompressed_len) 
-            crypt_pad ((uint8_t*)&z_data->data[z_data->len + compressed_offset], data_encrypted_len, data_padding);
-
-        // encrypt the header - we use vb_i and section_i to generate a different AES key for each section
-        uint32_t vb_i  = BGEN32 (header->vblock_i);
-
-        // note: for SEC_VCF_VB_HEADER we will encrypt at the end of calculating this VB when the index data is
-        // known, and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (header->section_type != SEC_VCF_VB_HEADER || header->vblock_i == 0 /* terminator vb header */)
-            crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, header->section_type, true);
-
-        // encrypt the data body 
-        if (data_uncompressed_len) 
-            crypt_do (vb, (uint8_t*)&z_data->data[z_data->len + compressed_offset], data_encrypted_len, vb_i, header->section_type, false);
-        
-        total_z_len = compressed_offset + data_encrypted_len;
-    }
-    else
-        total_z_len = compressed_offset + data_compressed_len;
-
-    // add section to the list - except for genozip header which we already added in zfile_compress_genozip_header()
-    if (header->section_type != SEC_GENOZIP_HEADER)
-        sections_add_to_list (vb, header);
-
-    z_data->len += total_z_len;
-
-    // do calculations for --show-content and --show-sections options
-    vb->z_section_bytes[header->section_type] += total_z_len;
-    vb->z_num_sections [header->section_type] ++;
-    
-    if (flag_show_headers) zfile_show_header (header, vb->vblock_i ? vb : NULL); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 
 static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
@@ -348,11 +124,15 @@ void zfile_uncompress_section (VBlock *vb,
     uint32_t data_uncompressed_len = BGEN32 (section_header->data_uncompressed_len);
     uint32_t vblock_i              = BGEN32 (section_header->vblock_i);
     uint16_t section_i             = BGEN16 (section_header->section_i);
-    ZfileCompressionAlg comp_alg   = (ZfileCompressionAlg)section_header->data_compression_alg;
+    CompressorAlg comp_alg         = (CompressorAlg)section_header->data_compression_alg;
 
-    // in version <= 4 everything was compressed with bzlib (comp_alg=0), except these two that were none
-    if (z_file->genozip_version < 5 && (expected_section_type == SEC_HT_GTSHARK_DB_DB || expected_section_type == SEC_HT_GTSHARK_DB_GT))
-        comp_alg = COMPRESS_NONE;
+    // prior to version 5, the algorithm was hard coded
+    if (z_file->genozip_version < 5) {
+        if (expected_section_type == SEC_HT_GTSHARK_DB_DB || expected_section_type == SEC_HT_GTSHARK_DB_GT)
+            comp_alg = COMPRESS_NONE;
+        else
+            comp_alg = COMPRESS_BZLIB;
+    }
 
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
@@ -372,41 +152,9 @@ void zfile_uncompress_section (VBlock *vb,
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
         buf_alloc (vb, uncompressed_data, data_uncompressed_len + 1, 1.1, uncompressed_data_buf_name, 0); // +1 for \0
-            
         uncompressed_data->len = data_uncompressed_len;
 
-        switch (comp_alg) {
-
-            case COMPRESS_BZLIB: {
-                bz_stream strm;
-                strm.bzalloc = zfile_bzalloc;
-                strm.bzfree  = zfile_bzfree;
-                strm.opaque  = vb; // just passed to malloc/free
-
-                int ret = BZ2_bzDecompressInit (&strm, 0, 0);
-                ASSERT0 (ret == BZ_OK, "Error: BZ2_bzDecompressInit failed");
-
-                strm.next_in   = (char*)section_header + compressed_offset;
-                strm.next_out  = uncompressed_data->data;
-                strm.avail_in  = data_compressed_len;
-                strm.avail_out = uncompressed_data->len;
-
-                ret = BZ2_bzDecompress (&strm);
-                ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
-
-                BZ2_bzDecompressEnd (&strm);
-                break;
-            }
-            case COMPRESS_LZMA:
-                break;
-        
-            case COMPRESS_NONE:
-                memcpy (uncompressed_data->data, (char*)section_header + compressed_offset, data_compressed_len);
-                break;
-
-            default:
-                ABORT ("Error in %s: invalid compression algorithm %u", z_name, comp_alg);
-        }
+        comp_uncompress (vb, comp_alg, (char*)section_header + compressed_offset, data_compressed_len, uncompressed_data);
     }
 
     if (flag_show_b250 && section_type_is_b250 (expected_section_type)) 
@@ -438,6 +186,7 @@ static void zfile_get_metadata(char *metadata)
     ASSERT0 (strlen (metadata) < FILE_METADATA_LEN, "Error: metadata too long");
 }
 
+// ZIP: called by compute threads, while holding the compress_dictionary_data_mutex
 void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx, 
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
@@ -468,8 +217,8 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
         fprintf (stderr, "%.*s\t", num_chars, data);
 
-    z_file->dict_data.name = "z_file->dict_data"; // zfile_compress requires that it is set in advance
-    zfile_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
+    z_file->dict_data.name = "z_file->dict_data"; // comp_compress requires that it is set in advance
+    comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
 
     COPY_TIMER (vb->profile.zfile_compress_dictionary_data)    
 //printf ("End compress dict vb_i=%u did_i=%u\n", vb->vblock_i, ctx->did_i);
@@ -490,7 +239,7 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx)
     header.dict_id                 = ctx->dict_id;
     header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
             
-    zfile_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
+    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
 // compress section - two options for input data - 
@@ -498,8 +247,8 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx)
 // 2. line by line data - by providing a callback + total_len
 void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type, 
                                       Buffer *section_data,          // option 1 - compress contiguous data
-                                      ZfileGetLineCallback callback, uint32_t total_len, // option 2 - compress data one line at a time
-                                      ZfileCompressionAlg comp_alg)
+                                      CompGetLineCallback callback, uint32_t total_len, // option 2 - compress data one line at a time
+                                      CompressorAlg comp_alg)
 {
     SectionHeader header;
     memset (&header, 0, sizeof(header)); // safety
@@ -512,9 +261,9 @@ void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type,
     header.vblock_i              = BGEN32 (vb->vblock_i);
     header.section_i             = BGEN16 (vb->z_next_header_i++);
     
-    vb->z_data.name  = "z_data"; // zfile_compress requires that these are pre-set
+    vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
     vb->z_data.param = vb->vblock_i;
-    zfile_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
+    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
                     section_data ? section_data->data : NULL, 
                     callback);
 }
@@ -760,7 +509,7 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     memset (&header, 0, sizeof(SectionHeaderGenozipHeader)); // safety
     header.h.section_type = SEC_GENOZIP_HEADER;
 
-    // "manually" add the genozip section to the section list - normally it is added in zfile_compress()
+    // "manually" add the genozip section to the section list - normally it is added in comp_compress()
     // but in this case the genozip section containing the list will already be ready...
     sections_add_to_list (evb, &header.h);
 
@@ -801,14 +550,14 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
 
     Buffer *z_data = &evb->z_data;
 
-    uint64_t genozip_header_offset = z_file->disk_so_far + z_data->len; // capture before zfile_compress that increases len
+    uint64_t genozip_header_offset = z_file->disk_so_far + z_data->len; // capture before comp_compress that increases len
 
     BGEN_sections_list();
 
     // compress section into z_data - to be eventually written to disk by the I/O thread
     z_file->section_list_buf.len *= sizeof (SectionListEntry); // change to counting bytes
-    evb->z_data.name  = "z_data"; // zfile_compress requires that these are pre-set
-    zfile_compress (evb, z_data, true, &header.h, z_file->section_list_buf.data, NULL);
+    evb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
+    comp_compress (evb, z_data, true, &header.h, z_file->section_list_buf.data, NULL);
 
     // add a footer to this section - this footer appears AFTER the genozip header data, 
     // facilitating reading the genozip header in reverse from the end of the file
@@ -934,10 +683,10 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
 
-    buf_alloc ((VBlock*)evb, &txt_header_buf, txt_header_text->len / 3, // generous guess of compressed size
+    buf_alloc (evb, &txt_header_buf, txt_header_text->len / 3, // generous guess of compressed size
                1, "txt_header_buf", 0); 
 
-    zfile_compress ((VBlock*)evb, &txt_header_buf, true, (SectionHeader*)&header, txt_header_text->data, NULL);
+    comp_compress (evb, &txt_header_buf, true, (SectionHeader*)&header, txt_header_text->data, NULL);
 
     file_write (z_file, txt_header_buf.data, txt_header_buf.len);
 
@@ -1036,9 +785,9 @@ void zfile_vcf_compress_vb_header (VBlockVCF *vb)
     }
     
     // compress section into z_data - to be eventually written to disk by the I/O thread
-    vb->z_data.name = "z_data"; // this is the first allocation of z_data - zfile_compress requires that it is pre-named
+    vb->z_data.name = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
     vb->z_data.param = vb->vblock_i;
-    zfile_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, 
+    comp_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, 
                     my_squeeze_len ? vb->haplotype_permutation_index_squeezed.data : NULL, NULL);
 
     // account for haplotype_index as part of the haplotype_data for compression statistics
@@ -1202,8 +951,8 @@ void zfile_sam_compress_vb_header (VBlockSAM *vb)
     vb_header.vb_data_size            = BGEN32 (vb->vb_data_size);
     
     // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.
-    vb->z_data.name = "z_data"; // this is the first allocation of z_data - zfile_compress requires that it is pre-named
+    vb->z_data.name = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
     vb->z_data.param = vb->vblock_i;
-    zfile_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, NULL, NULL);
+    comp_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, NULL, NULL);
 }
 

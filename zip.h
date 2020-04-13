@@ -14,7 +14,9 @@ extern void zip_vcf_set_global_samples_per_block (const char *num_samples_str);
 
 extern void zip_generate_b250_section (VBlockP vb, MtfContextP ctx);
 
+extern void zip_vcf_initialize (void);
 extern void zip_vcf_compress_one_vb (VBlockP vb_);
+
 extern void zip_sam_compress_one_vb (VBlockP vb_);
 
 #endif

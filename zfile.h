@@ -10,11 +10,7 @@
 #include "sections.h"
 #include "dict_id.h"
 #include "md5.h"
-
-typedef enum { COMPRESS_BZLIB=0,/* default - for backward compatability */
-               COMPRESS_LZMA=1, COMPRESS_NONE=2 } ZfileCompressionAlg;
-
-typedef void ZfileGetLineCallback (VBlockP vb, uint32_t vb_line_i, char **line_data, uint32_t *line_data_len);
+#include "compressor.h"
 
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (const Md5Hash *single_component_md5);
@@ -22,10 +18,10 @@ extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t
                                       uint64_t *num_items_concat, Md5Hash *md5_hash_concat, char *created, unsigned created_len);
 
 extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
-                                             BufferP section_data, ZfileGetLineCallback callback, uint32_t total_len, 
-                                             ZfileCompressionAlg comp_alg);
+                                             BufferP section_data, CompGetLineCallback callback, uint32_t total_len, 
+                                             CompressorAlg comp_alg);
 #define zfile_compress_section_data(vb, section_type, section_data) \
-    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, COMPRESS_BZLIB)
+    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, COMPRESS_LZMA)
 
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);
@@ -48,6 +44,8 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
                                       SectionType expected_section_type);
 
 extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
+
+extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */);
 
 // -----------------------------
 // VCF stuff

@@ -202,6 +202,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     if (!success) goto finish;
 
     mtf_initialize_mutex();
+    if (z_file->data_type == DATA_TYPE_VCF) zip_vcf_initialize();
 
     uint32_t max_lines_per_vb=0;
 

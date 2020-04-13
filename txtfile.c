@@ -18,6 +18,7 @@
 #include "vblock.h"
 #include "vblock.h"
 #include "file.h"
+#include "compressor.h"
 #include "zlib/zlib.h"
 
 static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)

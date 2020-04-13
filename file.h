@@ -171,10 +171,6 @@ extern void file_kill_external_compressors (void);
 #define CLOSE(fd,name)  { ASSERTW (!close (fd),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));}
 #define FCLOSE(fp,name) { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } }
  
-// a hacky addition to bzip2
-extern unsigned long long BZ2_consumed (void* b);
-extern const char *BZ2_errstr (int err);
-
 // Windows compatibility stuff
 #ifdef _WIN32
 #define stat64  _stat64

@@ -34,8 +34,8 @@ else
 endif
 
 MY_SRCS = genozip.c base250.c move_to_front.c header.c zip.c zip_vcf.c zip_sam.c piz.c piz_vcf.c piz_sam.c \
-          gloptimize_vcf.c buffer.c random_access_vcf.c sections.c\
-	      txtfile.c squeeze_vcf.c zfile.c seg.c seg_vcf.c seg_sam.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
+          gloptimize_vcf.c buffer.c random_access_vcf.c sections.c compressor.c \
+	      txtfile.c squeeze_vcf.c zfile.c seg.c seg_vcf.c seg_sam.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
 		  vblock.c vblock_vcf.c vblock_sam.c regions_vcf.c samples.c optimize_vcf.c dict_id.c hash.c gtshark_vcf.c stream.c url.c
 
 CONDA_COMPATIBILITY_SRCS = compatibility/visual_c_pthread.c compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/mac_gettime.c
@@ -43,14 +43,16 @@ CONDA_COMPATIBILITY_SRCS = compatibility/visual_c_pthread.c compatibility/visual
 ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c   
 
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
-                           
+
+LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFindMt.c lzma/LzFind.c lzma/Threads.c
+
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h gloptimize_vcf.h optimize_vcf.h profiler.h dict_id.h txtfile.h zip.h v1_vcf.c v2v3_vcf.c \
              base250.h endianness.h md5.h sections.h text_help.h header.h hash.h stream.h url.h \
-             buffer.h file.h move_to_front.h seg.h text_license.h version.h gtshark_vcf.h \
+             buffer.h file.h move_to_front.h seg.h text_license.h version.h gtshark_vcf.h compressor.h \
              crypt.h genozip.h piz.h squeeze_vcf.h vblock.h zfile.h random_access_vcf.h regions_vcf.h samples.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
              compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \
@@ -79,7 +81,7 @@ endif
 
 ifndef IS_CONDA 
 # local - static link everything
-SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS)
+SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS)
 else 
 # conda - use packages for bzip2
 SRCS = $(MY_SRCS) $(ZLIB_SRCS)
@@ -160,7 +162,7 @@ ifeq ($(OS),Windows_NT)
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderTxtHeader.genozip_version
-increment-version: $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+increment-version: $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@bash increment-version.sh
@@ -171,7 +173,7 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push 

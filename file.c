@@ -18,6 +18,7 @@
 #include "file.h"
 #include "stream.h"
 #include "url.h"
+#include "compressor.h"
 
 // globals
 File *z_file   = NULL;

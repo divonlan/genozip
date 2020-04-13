@@ -11,6 +11,7 @@
 #include "header.h"
 #include "zip.h"
 #include "seg.h"
+#include "txtfile.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
 
@@ -111,8 +112,7 @@ void zip_sam_compress_one_vb (VBlockP vb_)
 
     // generate & compress the SEQ & QUAL data
     uint32_t num_bases = zip_sam_get_num_bases (vb); 
-    //zfile_compress_section_data_alg (vb_, SEC_SAM_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  num_bases, COMPRESS_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_SAM_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  num_bases, COMPRESS_BZLIB);
+    zfile_compress_section_data_alg (vb_, SEC_SAM_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  num_bases, COMPRESS_LZMA);
     zfile_compress_section_data_alg (vb_, SEC_SAM_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, num_bases, COMPRESS_BZLIB);
 
     // tell dispatcher this thread is done and can be joined. 

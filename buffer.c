@@ -25,12 +25,14 @@
 static const unsigned overhead_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
 static pthread_mutex_t overlay_mutex; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
+static pthread_mutex_t evb_buf_mutex; // used to thread-protect the buf_list of evb
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
 void buf_initialize()
 {
     pthread_mutex_init (&overlay_mutex, NULL);
+    pthread_mutex_init (&evb_buf_mutex, NULL);
 
     vb_external_vb_initialize();
 }
@@ -376,6 +378,12 @@ int64_t buf_vb_memory_consumption (const VBlock *vb)
 */
 void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 {
+    // we protect the evb buffer_list, because evb buffers might be allocated by other threads, for
+    // example z_file->dict_data, is a allocated by comp_compress which is called by ZIP compute threads
+    // (the compute threads hold a mutex when they do this - but the I/O thread might still allocated = modify
+    // the buffer_list concurrently). alloc_do modifies the VB's buffer_list and also
+    //if (vb == evb) pthread_mutex_lock (&evb_buf_mutex);
+
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
 
@@ -387,6 +395,8 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
         char s[POINTER_STR_LEN];
         fprintf (stderr, "Init: %s:%u: size=%u buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, vb->buffer_list.len-1);
     }
+    
+    //if (vb == evb) pthread_mutex_unlock (&evb_buf_mutex);
 }
 
 static void buf_init (VBlock *vb, Buffer *buf, unsigned size, unsigned old_size, 
@@ -513,7 +523,7 @@ unsigned buf_alloc_do (VBlock *vb,
     }
 
 finish:
-    if (vb) COPY_TIMER (vb->profile.buf_alloc);
+    if (vb != evb) COPY_TIMER (vb->profile.buf_alloc); // this is not thread-safe for evb, see comment in buf_add_to_buffer_list
     return buf->size;
 }
 
@@ -618,6 +628,8 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
 // remove from buffer_list of this vb
 void buf_remove_from_buffer_list (VBlock *vb, Buffer *buf)
 {
+    //if (vb == evb) pthread_mutex_lock (&evb_buf_mutex);
+
     ASSERT0 (vb, "Error in buf_remove_from_buffer_list: vb is NULL");
 
     unsigned i=0; for (; i < vb->buffer_list.len; i++) 
@@ -630,6 +642,8 @@ void buf_remove_from_buffer_list (VBlock *vb, Buffer *buf)
             }
             break;
         }
+
+    //if (vb == evb) pthread_mutex_unlock (&evb_buf_mutex);
 
     // note: it is possible that the buffer is not found in the list if it is never allocated. that's fine.
 }

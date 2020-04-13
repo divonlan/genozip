@@ -131,7 +131,7 @@ typedef enum {
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
-typedef struct {
+typedef struct section_header_ {
     uint32_t magic; 
     uint32_t compressed_offset;      // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
     uint32_t data_encrypted_len;     // = data_compressed_len + padding if encrypted, 0 if not
@@ -140,7 +140,7 @@ typedef struct {
     uint32_t vblock_i;               // VB with in file starting from 1 ; 0 for Txt Header
     uint16_t section_i;              // section within VB - 0 for Variant Data
     uint8_t  section_type;          
-    uint8_t  data_compression_alg : 3; // introduced in genozip v5 (before that it was unused)
+    uint8_t  data_compression_alg : 3; // introduced in genozip v5 (before that it this field was unused)
     uint8_t  unused               : 5;
 } SectionHeader; 
 
