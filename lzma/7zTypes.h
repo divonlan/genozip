@@ -172,6 +172,13 @@ struct ISeqInStream
   SRes (*Read)(const ISeqInStream *p, void *buf, size_t *size);
     /* if (input(*size) != 0 && output(*size) == 0) means end_of_stream.
        (output(*size) < input(*size)) is allowed */
+
+  void *vb;                    // added by Divon
+  unsigned line_i;             // added by Divon: current partially-consumed line, or next line if no partially consumed line
+  unsigned avail_in;           // added by Divon: total bytes remaining
+  char *next_in;               // added by Divon: if there is a line partially-consumed, this is the next byte
+  unsigned avail_in_line; // added by Divon: if there is a line partially-consumed (0 if not)
+  void (*callback)(); // added by Divon
 };
 #define ISeqInStream_Read(p, buf, size) (p)->Read(p, buf, size)
 
@@ -187,7 +194,10 @@ struct ISeqOutStream
   size_t (*Write)(const ISeqOutStream *p, const void *buf, size_t size);
     /* Returns: result - the number of actually written bytes.
        (result < size) means error */
+  char *next_out;                     // added by Divon: next compressed data goes here
+  unsigned avail_out;                 // added by Divon: remaining space
 };
+
 #define ISeqOutStream_Write(p, buf, size) (p)->Write(p, buf, size)
 
 typedef enum
@@ -294,6 +304,7 @@ struct ISzAlloc
 {
   void *(*Alloc)(ISzAllocPtr p, size_t size);
   void (*Free)(ISzAllocPtr p, void *address); /* address can be 0 */
+  void *vb; // added by Divon 
 };
 
 #define ISzAlloc_Alloc(p, size) (p)->Alloc(p, size)

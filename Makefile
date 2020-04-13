@@ -14,7 +14,7 @@ endif
 LDFLAGS     += -lpthread -lm
 
 ifdef IS_CONDA 
-	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1
+	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
 
 	ifeq ($(OS),Windows_NT)
@@ -196,13 +196,6 @@ conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 		grep -v "^#" \
 		> $@
 
-junk:
-	(tmpl=`cat conda/meta.template.yaml` ; desc=`sed "s/<.\{1,3\}>//g" README.md | grep -v "<!" | sed 's/^/    /'` ; echo $${tmpl/__README_MD__/$$desc} > junk) 
-	#	sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
-	#	sed s/__VERSION__/$(version)/g | \
-	#	grep -v "^#" \
-	#	> $@
-
 #CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
 CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
@@ -358,7 +351,11 @@ clean:
 
 clean-debug:
 	@echo Cleaning up debug
-	@rm -f $(DEPS) $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) 
+	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) 
+
+clean-optimized:
+	@echo Cleaning up optimized
+	@rm -f $(OBJS) $(EXECUTABLES) 
 
 .PHONY: clean clean-debug clean-all git-pull macos mac/.remote_mac_timestamp
 
