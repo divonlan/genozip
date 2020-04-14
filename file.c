@@ -437,7 +437,7 @@ bool file_seek (File *file, int64_t offset,
     if (soft_fail) {
         if (!flag_stdout) {
             ASSERTW (!ret, errno == EINVAL ? "Error while reading file %s: it is too small%s" 
-                                        : "Warning: fseeko failed on file %s: %s", 
+                                           : "Warning: fseeko failed on file %s: %s", 
                     file_printname (file),  errno == EINVAL ? "" : strerror (errno));
         }
     } 
