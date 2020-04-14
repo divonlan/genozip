@@ -36,7 +36,7 @@ endif
 MY_SRCS = genozip.c base250.c move_to_front.c header.c zip.c zip_vcf.c zip_sam.c piz.c piz_vcf.c piz_sam.c \
           gloptimize_vcf.c buffer.c random_access_vcf.c sections.c compressor.c \
 	      txtfile.c squeeze_vcf.c zfile.c seg.c seg_vcf.c seg_sam.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
-		  vblock.c vblock_vcf.c vblock_sam.c regions_vcf.c samples.c optimize_vcf.c dict_id.c hash.c gtshark_vcf.c stream.c url.c
+		  vblock.c regions_vcf.c samples.c optimize_vcf.c dict_id.c hash.c gtshark_vcf.c stream.c url.c
 
 CONDA_COMPATIBILITY_SRCS = compatibility/visual_c_pthread.c compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/mac_gettime.c
 
@@ -44,7 +44,7 @@ ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil
 
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
 
-LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFindMt.c lzma/LzFind.c lzma/Threads.c
+LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
@@ -71,7 +71,9 @@ ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
 	LDFLAGS += -static -static-libgcc
+	LZMA_SRCS += lzma/Threads.c lzma/LzFindMt.c
 else
+	CFLAGS += -D_7ZIP_ST
     uname := $(shell uname -s)
     ifeq ($(uname),Linux)
 # Linux
@@ -345,10 +347,6 @@ mac/.from_remote_timestamp: mac/genozip_installer.pkg
 
 endif # Darwin
 
-clean:
-	@echo Cleaning up
-	@rm -f $(DEPS) $(OBJS) $(EXECUTABLES) $(WINDOWS_INSTALLER_OBJS)
-
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) 
@@ -357,5 +355,9 @@ clean-optimized:
 	@echo Cleaning up optimized
 	@rm -f $(OBJS) $(EXECUTABLES) 
 
-.PHONY: clean clean-debug clean-all git-pull macos mac/.remote_mac_timestamp
+clean: clean-debug clean-optimized
+	@echo Cleaning up
+	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS)
+
+.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp
 

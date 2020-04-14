@@ -71,6 +71,7 @@ extern int v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name
 // SAM stuff
 // -----------------------------
 
+extern void zfile_sam_read_one_vb (VBlockSAMP vb);
 extern void zfile_sam_compress_vb_header (VBlockSAMP vb);
 
 #endif

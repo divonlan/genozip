@@ -8,10 +8,11 @@
 
 #include "genozip.h"
 
-// returns true is successfully outputted a vcf file
 extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool is_first_vcf_component, bool is_last_file);
 
-extern void piz_vcf_uncompress_variant_block (VBlockP vb);
-extern void piz_sam_uncompress_variant_block (VBlockP vb);
+extern int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, char *pos_str, unsigned *pos_len);
+
+extern void piz_vcf_uncompress_one_vb (VBlockP vb);
+extern void piz_sam_uncompress_one_vb (VBlockP vb);
 
 #endif

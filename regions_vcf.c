@@ -192,7 +192,7 @@ void regions_make_chregs(void)
 {
     if (!flag_regions) return; // nothing to do
 
-    Region *regions = ARRAY (Region, regions_buf);
+    ARRAY (Region, regions, regions_buf);
     MtfContext *chrom_ctx = &z_file->mtf_ctx[VCF_CHROM];
 
     num_chroms = chrom_ctx->word_list.len;

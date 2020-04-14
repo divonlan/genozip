@@ -144,23 +144,22 @@ bool header_txt_to_genozip (uint32_t *vcf_line_i)
     *vcf_line_i += evb->num_lines;
 
     // case - vcf header was found 
-    if (evb->txt_data.len) {
-
-        bool can_concatenate = (txt_file->data_type == DATA_TYPE_VCF) ? header_vcf_set_globals(txt_file->name, &evb->txt_data)
-                                                                      : true;
-        if (!can_concatenate) { 
-            // this is the second+ file in a concatenation list, but its samples are incompatible
-            buf_free (&evb->txt_data);
-            return false;
-        }
-
-        if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
-
-        txt_file->section_bytes[SEC_TXT_HEADER] = evb->txt_data.len;
-        z_file  ->section_bytes[SEC_TXT_HEADER] = evb->z_section_bytes[SEC_TXT_HEADER]; // comes from comp_compress
-        z_file  ->num_sections [SEC_TXT_HEADER]++;
-        z_file  ->num_txt_components_so_far++; // when compressing
+    bool can_concatenate = (txt_file->data_type == DATA_TYPE_VCF) ? header_vcf_set_globals(txt_file->name, &evb->txt_data)
+                                                                    : true;
+    if (!can_concatenate) { 
+        // this is the second+ file in a concatenation list, but its samples are incompatible
+        buf_free (&evb->txt_data);
+        return false;
     }
+
+    // we always write the txt_header section, even if we don't actually have a header, because the section
+    // header contains the data about the file
+    if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
+
+    txt_file->section_bytes[SEC_TXT_HEADER] = evb->txt_data.len;
+    z_file  ->section_bytes[SEC_TXT_HEADER] = evb->z_section_bytes[SEC_TXT_HEADER]; // comes from comp_compress
+    z_file  ->num_sections [SEC_TXT_HEADER]++;
+    z_file  ->num_txt_components_so_far++; // when compressing
 
     buf_free (&evb->txt_data);
     

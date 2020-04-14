@@ -24,7 +24,7 @@ extern void comp_uncompress (VBlockP vb, CompressorAlg alg,
                              BufferP uncompressed_data);
 
 // a hacky addition to bzip2
-extern unsigned long long BZ2_consumed (void* b);
+extern uint64_t BZ2_consumed (void *bz_file);
 
 typedef bool CompressorFunc (VBlockP vb, 
                              const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data

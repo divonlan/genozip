@@ -83,20 +83,20 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
     buf_free (section_list_buf);
 }
 
-// called by PIZ I/O thread: zfile_read_on_vb
-uint8_t sections_count_info_b250s (unsigned vb_i)
+// called by PIZ I/O thread: zfile_read_one_vb
+uint8_t sections_count_sec_type (unsigned vb_i, SectionType sec)
 {
-    SectionListEntry *sl = ARRAY (SectionListEntry, z_file->section_list_buf);    
+    ARRAY (SectionListEntry, sl, z_file->section_list_buf);    
 
-    // skip to the first SEC_VCF_INFO_SF_B250 (if there is one...)
+    // skip to the first sec (if there is one...)
     while (z_file->sl_cursor < z_file->section_list_buf.len &&
            sl[z_file->sl_cursor].vblock_i == vb_i &&
-           sl[z_file->sl_cursor].section_type != SEC_VCF_INFO_SF_B250) 
+           sl[z_file->sl_cursor].section_type != sec) 
         z_file->sl_cursor++;
 
-    // count the SEC_VCF_INFO_SF_B250 sections
+    // count the sec sections
     uint32_t start = z_file->sl_cursor;
-    while (sl[z_file->sl_cursor].section_type == SEC_VCF_INFO_SF_B250) z_file->sl_cursor++;
+    while (sl[z_file->sl_cursor].section_type == sec) z_file->sl_cursor++;
 
     return (uint8_t)(z_file->sl_cursor - start);
 }
@@ -106,15 +106,15 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
                                            bool *skipped_vb,   // out (VB only) - true if this vb should be skipped
                                            Buffer *region_ra_intersection_matrix) // out (VB only) - a bytemap - rows are ra's of this VB, columns are regions, a cell is 1 if there's an intersection
 {
-    // find the next VB or VCF header section
+    // find the next VB or TXT header section
     if (skipped_vb) *skipped_vb = false;
 
     while (z_file->sl_cursor < z_file->section_list_buf.len) {
         *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_cursor++);
  
         SectionType sec_type = (*sl_ent)->section_type;
-        if (sec_type == SEC_TXT_HEADER) 
-            return SEC_TXT_HEADER;
+        if (sec_type == SEC_TXT_HEADER || sec_type == SEC_SAM_VB_HEADER) 
+            return sec_type;
 
         if (sec_type == SEC_VCF_VB_HEADER) {
             if (random_access_is_vb_included ((*sl_ent)->vblock_i, region_ra_intersection_matrix))
@@ -182,7 +182,7 @@ bool sections_has_more_vcf_components()
 
 void BGEN_sections_list()
 {
-    SectionListEntry *ent = ARRAY (SectionListEntry, z_file->section_list_buf);
+    ARRAY (SectionListEntry, ent, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
         ent[i].vblock_i = BGEN32 (ent[i].vblock_i);
@@ -209,7 +209,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
 
     fprintf (stderr, "  sections:\n");
 
-    SectionListEntry *ents = ARRAY (SectionListEntry, z_file->section_list_buf);
+    ARRAY (SectionListEntry, ents, z_file->section_list_buf);
 
     for (unsigned i=0; i < num_sections; i++) {
      
@@ -258,7 +258,7 @@ const char *encryption_name (unsigned encryption_type)
 // called by PIZ I/O
 uint64_t sections_get_offset_first_section_of_type (SectionType st)
 {
-    SectionListEntry *sl = ARRAY (SectionListEntry, z_file->section_list_buf);
+    ARRAY (SectionListEntry, sl, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++)
         if (sl[i].section_type == st) return sl[i].offset;

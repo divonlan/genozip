@@ -447,7 +447,7 @@ unsigned buf_alloc_do (VBlock *vb,
 
     // sanity checks
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "Error: cannot buf_alloc an overlayed buffer. name=%s", buf->name ? buf->name : "");
-    ASSERT0 (vb, "Error: null vb");
+    ASSERT0 (vb, "Error in buf_alloc_do: null vb");
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) {

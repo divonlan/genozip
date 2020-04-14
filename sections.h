@@ -329,7 +329,7 @@ extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
-extern uint8_t sections_count_info_b250s (unsigned vb_i);
+extern uint8_t sections_count_sec_type (unsigned vb_i, SectionType sec);
 extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
 extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
 extern bool sections_has_more_vcf_components(void);

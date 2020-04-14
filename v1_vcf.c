@@ -279,8 +279,6 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
 static inline void v1_piz_vcf_decode_pos (VBlockVCF *vb, const char *str,
                                       char *pos_str, const char **delta_pos_start, unsigned *delta_pos_len, int *add_len /* out */)
 {
-    START_TIMER;
-
     *delta_pos_start = str;
 
     int32_t delta=0;
@@ -314,8 +312,6 @@ static inline void v1_piz_vcf_decode_pos (VBlockVCF *vb, const char *str,
 
     *delta_pos_len = s - str;
     *add_len = len - *delta_pos_len;
-
-    COPY_TIMER(vb->profile.piz_vcf_decode_pos);
 }
 
 static void v1_piz_get_line_get_num_subfields (VBlockVCF *vb, unsigned line_i, // line in vcf file
@@ -577,7 +573,7 @@ static void v1_piz_initialize_next_gt_in_sample (VBlockVCF *vb, int *num_subfiel
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block
-void v1_piz_vcf_reconstruct_line_components (VBlockVCF *vb)
+void v1_piz_vcf_reconstruct_vb (VBlockVCF *vb)
 {
     START_TIMER;
 
@@ -659,7 +655,7 @@ void v1_piz_vcf_reconstruct_line_components (VBlockVCF *vb)
         piz_vcf_merge_line (vb, line_i, false);
     }
 
-    COPY_TIMER(vb->profile.piz_vcf_reconstruct_line_components);
+    COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
 void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)

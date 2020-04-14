@@ -45,15 +45,17 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
             
             // process the subfield that just ended
             MtfContext *sf_ctx;
+
             if (vb->qname_mapper.num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
                 sf_dict_id.id[5] = sf_i / 10 + '0';
                 sf_dict_id.id[6] = sf_i % 10 + '0';
 
-                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->qname_mapper.num_subfields,
-                                              sf_dict_id, SEC_SAM_QNAME_SF_DICT);
+                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, sf_dict_id, SEC_SAM_QNAME_SF_DICT);
                 vb->qname_mapper.did_i[sf_i] = sf_ctx->did_i;
+                vb->qname_mapper.num_subfields++;
             }
-            else sf_ctx = MAPPER_CTX (&vb->qname_mapper, sf_i);
+            else 
+                sf_ctx = MAPPER_CTX (&vb->qname_mapper, sf_i);
 
             ASSERT0 (sf_ctx, "Error in seg_sam_qname_field: sf_ctx is NULL");
 
@@ -109,9 +111,11 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
 }
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string
+// A CIGAR looks something like: "109S19M23S", See: https://samtools.github.io/hts-specs/SAMv1.pdf 
 uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len)
 {
-    // if the CIGAR is '*', we get the length from SEQ and store it as eg "151*"
+    // ZIP case: if the CIGAR is "*", we later get the length from SEQ and store it as eg "151*". 
+    // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*"
     if (cigar_len == 1 && cigar[0] == '*') return 0;
 
     unsigned seq_len=0, n=0;
@@ -121,14 +125,14 @@ uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len)
         if (c >= '0' && c <= '9') 
             n = n*10 + (c - '0');
         
-        else if (c=='M' || c=='I' || c=='S' || c=='=' || c=='X') {
+        else if (c=='M' || c=='I' || c=='S' || c=='=' || c=='X' || c=='*') { // these "consume" sequences
             ASSERT (n, "Error: Invalid CIGAR in %s: operation %c not preceded by a number. CIGAR=%.*s", 
                     txt_name, c, cigar_len, cigar);
             seq_len += n;
             n = 0;
         }
 
-        else if (c=='D' || c=='N' || c=='H' || c=='P') {
+        else if (c=='D' || c=='N' || c=='H' || c=='P') { // these don't consume sequence
             ASSERT (n, "Error: Invalid CIGAR in %s: operation %c not preceded by a number. CIGAR=%.*s", 
                     txt_name, c, cigar_len, cigar);
             n = 0;
@@ -261,7 +265,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     dl->qual_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (next_field, &len, true, true, false, vb_line_i, &qual_len, &separator, &has_13, "QUAL");
 
-    seg_sam_seq_qual_fields (vb, dl, seq_len, qual_len, vb_line_i);
+    seg_sam_seq_qual_fields (vb, dl, seq_len, qual_len, vb_line_i); // also updates cigar if it is "*"
 
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
     char oname[MAX_SUBFIELDS * 5 + 1]; // each name is 5 characters per SAM specification, eg "MC:Z:" ; +1 for # in case of \r

@@ -247,7 +247,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
 
             if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);
             
-            txtfile_read_variant_block (next_vb);
+            txtfile_read_vblock (next_vb);
 
             if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
 

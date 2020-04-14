@@ -32,7 +32,7 @@ static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_
 }
 
 // peformms a single I/O read operation - returns number of bytes read 
-static uint32_t txtfile_read_block (char *data)
+static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
 {
     START_TIMER;
 
@@ -40,7 +40,7 @@ static uint32_t txtfile_read_block (char *data)
 
     if (file_is_plain_txt (txt_file)) {
         
-        bytes_read = read (fileno((FILE *)txt_file->file), data, READ_BUFFER_SIZE); // -1 if error in libc
+        bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
         ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
@@ -70,13 +70,13 @@ static uint32_t txtfile_read_block (char *data)
 #endif
     }
     else if (txt_file->type == VCF_GZ || txt_file->type == VCF_BGZ) { 
-        bytes_read = gzfread (data, 1, READ_BUFFER_SIZE, (gzFile)txt_file->file);
+        bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
         
         if (bytes_read)
             txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); 
     }
     else if (txt_file->type == VCF_BZ2) { 
-        bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, READ_BUFFER_SIZE);
+        bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, max_bytes);
 
         if (bytes_read)
             txt_file->disk_so_far = BZ2_consumed ((BZFILE *)txt_file->file); 
@@ -107,7 +107,7 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
         if (!evb->txt_data.data || evb->txt_data.size - evb->txt_data.len < READ_BUFFER_SIZE) 
             buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE, 1.2, "txt_data", 0);    
 
-        bytes_read = txtfile_read_block (&evb->txt_data.data[evb->txt_data.len]);
+        bytes_read = txtfile_read_block (&evb->txt_data.data[evb->txt_data.len], READ_BUFFER_SIZE);
 
         if (!bytes_read) { // EOF
             ASSERT (!evb->txt_data.len || evb->txt_data.data[evb->txt_data.len-1] == '\n', 
@@ -158,7 +158,7 @@ finish:
 }
 
 // ZIP
-void txtfile_read_variant_block (VBlock *vb) 
+void txtfile_read_vblock (VBlock *vb) 
 {
     START_TIMER;
 
@@ -173,9 +173,10 @@ void txtfile_read_variant_block (VBlock *vb)
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
-    while (vb->txt_data.len <= global_max_memory_per_vb - READ_BUFFER_SIZE) {  // make sure there's at least READ_BUFFER_SIZE space available
+    while (vb->txt_data.len < global_max_memory_per_vb) {  // make sure there's at least READ_BUFFER_SIZE space available
 
-        uint32_t bytes_one_read = txtfile_read_block (&vb->txt_data.data[vb->txt_data.len]);
+        uint32_t bytes_one_read = txtfile_read_block (&vb->txt_data.data[vb->txt_data.len], 
+                                                      MIN (READ_BUFFER_SIZE, global_max_memory_per_vb - vb->txt_data.len));
 
         if (!bytes_one_read) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
             ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid input file %s - expecting it to end with a newline", txt_name);
@@ -212,7 +213,7 @@ void txtfile_read_variant_block (VBlock *vb)
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
     vb->vb_data_read_size = file_tell (txt_file) - pos_before; // plain or gz/bz2 compressed bytes read
 
-    COPY_TIMER (vb->profile.txtfile_read_variant_block);
+    COPY_TIMER (vb->profile.txtfile_read_vblock);
 }
 
 // PIZ
@@ -263,6 +264,15 @@ void txtfile_write_one_vblock_vcf (VBlockVCF *vb)
 void txtfile_write_one_vblock_sam (VBlockSAMP vb)
 {
     START_TIMER;
+
+    txtfile_write_to_disk (&vb->txt_data);
+
+    char s1[20], s2[20];
+    ASSERTW (vb->txt_data.len == vb->vb_data_size || exe_type == EXE_GENOCAT, 
+            "Warning: Alignment line block %u (num_lines=%u) had %s bytes in the original SAM file but %s bytes in the reconstructed file (diff=%d)", 
+            vb->vblock_i, vb->num_lines, 
+            buf_display_uint (vb->vb_data_size, s1), buf_display_uint (vb->txt_data.len, s2), 
+            (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (vb->profile.write);
 }

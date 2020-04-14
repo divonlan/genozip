@@ -225,15 +225,13 @@ typedef struct vblock_vcf_ {
     
     // backward compatibility with genozip v1 
     Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)
-    Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by piz_vcf_reconstruct_line_components
+    Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by piz_vcf_reconstruct_vb
     Buffer v1_subfields_len_buf;
     Buffer v1_num_subfields_buf;
 } VBlockVCF;
 
 extern unsigned vb_vcf_num_samples_in_sb (const VBlockVCF *vb, unsigned sb_i);
 extern unsigned vb_vcf_num_sections (VBlockVCF *vb);
-extern void vb_vcf_release_vb (VBlockVCF *vb); 
-extern void vb_vcf_cleanup_memory (VBlockVCF *vb);
 
 //-------------------------------
 // SAM stuff
@@ -249,23 +247,20 @@ typedef struct {
     uint32_t optional_mtf_i; // the mtf_i into mtx_ctx[SAM_OPTIONAL].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
 } ZipDataLineSAM;
 
-// IMPORTANT: if changing fields in DataLine, also update vb_sam_release_vb
-typedef struct {
-   
-} PizDataLineSAM;
-
 // IMPORTANT: if changing fields in VBlockSAM, also update vb_sam_release_vb
 typedef struct vblock_sam_ {
 
     VBLOCK_COMMON_FIELDS
 
-    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding
+    int32_t last_pos;               // ZIP: value of POS field of the previous line, to do delta encoding
 
-    SubfieldMapper qname_mapper;
+    SubfieldMapper qname_mapper;    // ZIP & PIZ
 
+    // PIZ-only stuff
+    int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
+    Buffer optional_mapper_buf;     // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
+    Buffer seq_data, qual_data;     // PIZ only
+    uint32_t next_seq, next_qual; // PIZ only: indeces into seq_data, qual_data
 } VBlockSAM;
-
-extern void vb_sam_release_vb (VBlockSAM *vb_p); 
-extern void vb_sam_cleanup_memory (VBlockSAM *vb);
 
 #endif

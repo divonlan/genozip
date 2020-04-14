@@ -31,53 +31,6 @@ typedef struct {
     MtfContext *ctx[MAX_SUBFIELDS]; // pointer to the ctx of each format subfield
 } FormatInfo;
 
-// decode the delta-encoded value of the POS field
-static inline void piz_vcf_decode_pos (VBlockVCF *vb, const char *delta_snip, unsigned delta_snip_len,
-                                   char *pos_str, unsigned *pos_len) // out
-{
-    START_TIMER;
-
-    int32_t delta=0;
-
-    // we parse the string ourselves - this is hugely faster than sscanf.
-    unsigned negative = *delta_snip == '-'; // 1 or 0
-
-    const char *s; for (s=(delta_snip + negative); *s != '\t' ; s++)
-        delta = delta*10 + (*s - '0');
-
-    if (negative) delta = -delta;
-
-    vb->last_pos += delta;
-    
-    ASSERT (vb->last_pos >= 0, "Error: vb->last_pos=%d is negative", vb->last_pos);
-
-    // create number string without calling slow sprintf
-
-    // create reverse string
-    char reverse_pos_str[50];
-    uint32_t n = vb->last_pos;
-
-    unsigned len=0; 
-    if (n) {
-        while (n) {
-            reverse_pos_str[len++] = '0' + (n % 10);
-            n /= 10;
-        }
-
-        // reverse it
-        for (unsigned i=0; i < len; i++) pos_str[i] = reverse_pos_str[len-i-1];
-        pos_str[len] = '\0';
-
-        *pos_len = len;
-    }
-    else {  // n=0. 
-        pos_str[0] = '0';
-        pos_str[1] = '\0';
-        *pos_len = 1;
-    }
-    COPY_TIMER(vb->profile.piz_vcf_decode_pos);
-}
-
 
 // 1. populates vb->format_info_buf with info about each unique format type in this vb (FormatInfo structure)
 // 2. for each line, populates vb->data_lines[line_i].format_mtf_i - an index into vb->format_info_buf
@@ -90,13 +43,13 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
     // get number of subfields for each FORMAT item in dictionary, by traversing the FORMAT dectionary mtf array
 
     buf_alloc (vb, &vb->format_info_buf, sizeof(FormatInfo) * format_ctx->word_list.len, 1.5, "format_info_buf", 0);
-    FormatInfo *format_num_subfields = (FormatInfo *)vb->format_info_buf.data;
+    ARRAY (FormatInfo, format_num_subfields, vb->format_info_buf);
 
-    const MtfWord *snip_list = (const MtfWord *)format_ctx->word_list.data;
+    ARRAY (const MtfWord, snip_list, format_ctx->word_list);
 
     for (unsigned format_i=0; format_i < format_ctx->word_list.len; format_i++)
     {
-        const char *format_snip = &format_ctx->dict.data[snip_list[format_i].char_index];
+        const char *format_snip = ENT (const char, format_ctx->dict, snip_list[format_i].char_index);
         uint32_t format_snip_len = snip_list[format_i].snip_len;
         
         // count colons in FORMAT snip
@@ -258,7 +211,7 @@ static bool piz_vcf_get_variant_data_line (VBlockVCF *vb, unsigned vb_line_i,
 
             // reconstruct pos from delta
             if (f == VCF_POS) {
-                piz_vcf_decode_pos (vb, snip[VCF_POS], snip_len[VCF_POS], pos_str, &snip_len[VCF_POS]); 
+                vb->last_pos = piz_decode_pos (vb->last_pos, snip[VCF_POS], snip_len[VCF_POS], pos_str, &snip_len[VCF_POS]); 
                 snip[VCF_POS] = pos_str;
 
                 // in case of --regions - check if this line is needed at all (based on CHROM and POS)
@@ -471,9 +424,9 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: in genozip v1 haplotype columns were permuted across the entire samples, as of v2 they are permuted
     // only within their own sample block
-    const char **ht_columns_data = ARRAY (const char *, vb->ht_columns_data); 
-
-    const unsigned *permutatation_index = (const unsigned *)vb->haplotype_permutation_index.data;
+    ARRAY (const char *, ht_columns_data, vb->ht_columns_data); 
+    ARRAY (const unsigned, permutatation_index, vb->haplotype_permutation_index);
+    
     const unsigned max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
@@ -732,7 +685,7 @@ static void piz_vcf_realloc_datalines (VBlockVCF *vb, uint32_t new_num_data_line
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block
-static void piz_vcf_reconstruct_line_components (VBlockVCF *vb)
+static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
 {
     START_TIMER;
 
@@ -814,7 +767,7 @@ static void piz_vcf_reconstruct_line_components (VBlockVCF *vb)
         buf_free (&vb->line_variant_data);
     }
 
-    COPY_TIMER(vb->profile.piz_vcf_reconstruct_line_components);
+    COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
 static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
@@ -823,12 +776,13 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     // Compute thread, with the exception of dictionaries that are processed by the I/O thread
     // Order of sections in a V2 VB:
     // 1. SEC_VCF_VB_HEADER - its data is the haplotype index
-    // 2. (the dictionaries were here in the file orecn disk, but they are omitted from vb->z_data)
-    // 3. SEC_VCF_INFO_SF_B250 - All INFO subfield data
-    // 4. All sample data: up 3 sections per sample block:
-    //    4a. SEC_VCF_GT_DATA - genotype data
-    //    4b. SEC_VCF_PHASE_DATA - phase data
-    //    4c. SEC_VCF_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
+    // 2. (the dictionaries were here in the file, but they are omitted from vb->z_data)
+    // 3. b250 of CHROM to FORMAT fields
+    // 4. SEC_VCF_INFO_SF_B250 - All INFO subfield data
+    // 5. All sample data: multiple sections per sample block:
+    //    5a. SEC_VCF_GT_DATA - genotype data
+    //    5b. SEC_VCF_PHASE_DATA - phase data
+    //    5c. SEC_VCF_HT_DATA (1 section) or SEC_HAPLOTYPE_GTSHARK (5 sections) - haplotype data
 
     unsigned *section_index = (unsigned *)vb->z_section_headers.data;
 
@@ -987,7 +941,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
 // this is the compute thread entry point. It receives all data of a variant block and processes it
 // in memory to the uncompressed format. This thread then terminates the I/O thread writes the output.
-void piz_vcf_uncompress_variant_block (VBlock *vb_)
+void piz_vcf_uncompress_one_vb (VBlock *vb_)
 {
     START_TIMER;
 
@@ -998,7 +952,7 @@ void piz_vcf_uncompress_variant_block (VBlock *vb_)
 
         // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
         // genotype_data and phase_data for each row of the variant block
-        piz_vcf_reconstruct_line_components (vb);
+        piz_vcf_reconstruct_vb (vb);
     }
 
     // v1 c
@@ -1006,8 +960,8 @@ void piz_vcf_uncompress_variant_block (VBlock *vb_)
         void v1_piz_vcf_uncompress_all_sections (VBlockVCFP vb); // forwwrd declaration - these are included at the end of this file
         v1_piz_vcf_uncompress_all_sections (vb);
 
-        void v1_piz_vcf_reconstruct_line_components (VBlockVCFP vb);
-        v1_piz_vcf_reconstruct_line_components (vb);
+        void v1_piz_vcf_reconstruct_vb (VBlockVCFP vb);
+        v1_piz_vcf_reconstruct_vb (vb);
     }
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway

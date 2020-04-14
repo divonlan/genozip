@@ -241,7 +241,6 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     }
     
     // this snip isn't in the hash table - its a new snip
-
     ASSERT (vb_ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %.*s", DICT_ID_LEN, dict_id_printable (vb_ctx->dict_id).id);
 
     segging_vb->z_section_entries[vb_ctx->dict_section_type]++; 

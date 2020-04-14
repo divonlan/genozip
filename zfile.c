@@ -465,7 +465,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
-    ASSERT (data_type == DATA_TYPE_VCF, "Error: unrecognized data_type=%d", data_type);
+    ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
 
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
             "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
@@ -683,10 +683,12 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
     
     static Buffer txt_header_buf = EMPTY_BUFFER;
 
-    buf_alloc (evb, &txt_header_buf, txt_header_text->len / 3, // generous guess of compressed size
-               1, "txt_header_buf", 0); 
+    buf_alloc (evb, &txt_header_buf, sizeof (SectionHeaderTxtHeader) + txt_header_text->len / 3, // generous guess of compressed size
+            1, "txt_header_buf", 0); 
 
-    comp_compress (evb, &txt_header_buf, true, (SectionHeader*)&header, txt_header_text->data, NULL);
+    comp_compress (evb, &txt_header_buf, true, (SectionHeader*)&header, 
+                   txt_header_text->len ? txt_header_text->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)
+                   NULL);
 
     file_write (z_file, txt_header_buf.data, txt_header_buf.len);
 
@@ -864,7 +866,7 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
     }
 
     // read the info subfield sections into memory (if any)
-    vb->num_info_subfields = sections_count_info_b250s (vb->vblock_i); // also used later in piz_uncompress_all_sections()
+    vb->num_info_subfields = sections_count_sec_type (vb->vblock_i, SEC_VCF_INFO_SF_B250); // also used later in piz_uncompress_all_sections()
     for (uint8_t sf_i=0; sf_i < vb->num_info_subfields; sf_i++) {
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
 
@@ -956,3 +958,76 @@ void zfile_sam_compress_vb_header (VBlockSAM *vb)
     comp_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, NULL, NULL);
 }
 
+void zfile_sam_read_one_vb (VBlockSAM *vb)
+{ 
+    START_TIMER;
+
+    // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
+    // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
+    // integrated into the global dictionaries.
+    // Order of sections in a V2 VB:
+    // 1. SEC_VCF_VB_HEADER - its data is the haplotype index
+    // 2. SEC_VCF_INFO_SF_B250 - Fields 1-9 b250 data
+    // 3. SEC_VCF_INFO_SF_B250 - All INFO subfield data
+    // 4. All sample data: up 3 sections per sample block:
+    //    4a. SEC_VCF_GT_DATA - genotype data
+    //    4b. SEC_VCF_PHASE_DATA - phase data
+    //    4c. SEC_VCF_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
+
+    SectionListEntry *sl = NULL;
+
+    int vb_header_offset = zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data",
+                                               sizeof(SectionHeaderVbHeaderSAM), SEC_SAM_VB_HEADER, 
+                                               sections_vb_first (vb->vblock_i, &sl));
+
+    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+
+    // overlay all dictionaries (not just those that have fragments in this vblock) to the vb
+    mtf_overlay_dictionaries_to_vb ((VBlockP)vb);
+
+    // read the the data sections (fields, QNAME and OPTIONAL subfields, SEQ and QUAL data)
+
+    // room for section headers (we have at most MAX_DICTS + 3 as all sections are b250 except for VB header, SEQ and QUAL)
+    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS + 3)  * sizeof(char*), 0, "z_section_headers", 1);
+    
+    *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; // vb header is at index 0
+
+    unsigned section_i=1;
+
+    // read the fields
+    for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++) {
+        
+        *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
+        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
+                            SEC_SAM_QNAME_B250 + f*2, sections_vb_next(&sl));   
+    }
+
+    // read the QNAME subfields sections into memory (if any)
+    vb->qname_mapper.num_subfields = sections_count_sec_type (vb->vblock_i, SEC_SAM_QNAME_SF_B250); 
+    for (uint8_t sf_i=0; sf_i < vb->qname_mapper.num_subfields; sf_i++) {
+        *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
+
+        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
+                            SEC_SAM_QNAME_SF_B250, sections_vb_next (&sl));    
+    }
+
+    // read the OPTIONAL subfields sections into memory (if any)
+    vb->num_optional_subfield_b250s = sections_count_sec_type (vb->vblock_i, SEC_SAM_OPTNL_SF_B250);
+    for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s; sf_i++) {
+        *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
+
+        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
+                            SEC_SAM_OPTNL_SF_B250, sections_vb_next (&sl));    
+    }
+
+    // read the SEQ and QUAL data
+    *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
+    zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
+                        SEC_SAM_SEQ_DATA, sections_vb_next (&sl));    
+
+    *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
+    zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
+                        SEC_SAM_QUAL_DATA, sections_vb_next (&sl));    
+
+    COPY_TIMER (vb->profile.zfile_read_one_vb);
+}

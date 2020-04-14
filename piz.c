@@ -21,6 +21,52 @@
 #include "samples.h"
 #include "dict_id.h"
 
+// Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
+int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len,
+                        char *pos_str, unsigned *pos_len) // out
+{
+    int32_t delta=0;
+
+    // we parse the string ourselves - this is hugely faster than sscanf.
+    unsigned negative = *delta_snip == '-'; // 1 or 0
+
+    const char *s; for (s=(delta_snip + negative); *s != '\t' ; s++)
+        delta = delta*10 + (*s - '0');
+
+    if (negative) delta = -delta;
+
+    last_pos += delta;
+    
+    ASSERT (last_pos >= 0, "Error: last_pos=%d is negative", last_pos);
+
+    // create number string without calling slow sprintf
+
+    // create reverse string
+    char reverse_pos_str[50];
+    uint32_t n = last_pos;
+
+    unsigned len=0; 
+    if (n) {
+        while (n) {
+            reverse_pos_str[len++] = '0' + (n % 10);
+            n /= 10;
+        }
+
+        // reverse it
+        for (unsigned i=0; i < len; i++) pos_str[i] = reverse_pos_str[len-i-1];
+        pos_str[len] = '\0';
+
+        *pos_len = len;
+    }
+    else {  // n=0. 
+        pos_str[0] = '0';
+        pos_str[1] = '\0';
+        *pos_len = 1;
+    }
+
+    return last_pos;
+}
+
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
 static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 {
@@ -66,7 +112,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
     
     file_seek (z_file, 0, SEEK_SET, false);
 
-    return DATA_TYPE_VCF;
+    return data_type;
 }
 
 static void enforce_v1_limitations (bool is_first_vcf_component)
@@ -114,8 +160,8 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (is_first_vcf_component) {
         data_type = piz_read_global_area (&original_file_digest);
 
-        if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first vcf header
-            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find VCF Header data in %s", z_name);
+        if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first txt header
+            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
 
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5", z_name);
@@ -150,7 +196,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 bool skipped_vb;
                 static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
                 switch (sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix)) {
-                    case SEC_VCF_VB_HEADER:  
+                    case SEC_VCF_VB_HEADER: {
 
                         // if we skipped VBs or we skipped the sample sections in the last vb, we need to seek forward 
                         if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); // 1 more VBs were skipped by sections_get_next_header_type() - we seek forward to this vb
@@ -165,7 +211,13 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                         zfile_vcf_read_one_vb (next_vb); 
                         compute = true;
                         break;
-
+                    }
+                    case SEC_SAM_VB_HEADER: {
+                        VBlockSAM *next_vb = (VBlockSAM *)dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
+                        zfile_sam_read_one_vb (next_vb); 
+                        compute = true;
+                        break;
+                    }
                     case SEC_EOF: 
                         break; 
 
@@ -180,8 +232,12 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 }
             }
             else compute = v1_zfile_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
+            
             if (compute) {
-                dispatcher_compute (dispatcher, piz_vcf_uncompress_variant_block);
+                static DispatcherFuncType uncompress_funcs[NUM_DATATYPES] =  
+                    { piz_vcf_uncompress_one_vb, piz_sam_uncompress_one_vb };
+
+                dispatcher_compute (dispatcher, uncompress_funcs[z_file->data_type]);
                 header_only_file = false;                
             }
             else { // eof
@@ -221,15 +277,17 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
             if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
 
-            if (flag_md5) fprintf (stderr, "MD5 = %s verified as identical to the original VCF\n", md5_display (&decompressed_file_digest, false));
+            if (flag_md5) fprintf (stderr, "MD5 = %s verified as identical to the original %s\n", 
+                                   md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type));
         }
         else if (flag_test) 
             fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
                     md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
             
         else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
-                    "File integrity error: MD5 of decompressed file %s is %s, but the original VCF file's was %s", 
-                    txt_file->name, md5_display (&decompressed_file_digest, false), md5_display (&original_file_digest, false));
+                    "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
+                    txt_file->name, md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type), 
+                    md5_display (&original_file_digest, false));
     }
 
     if (flag_split) file_close (&txt_file, true); // close this component file

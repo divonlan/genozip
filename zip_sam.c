@@ -98,17 +98,18 @@ void zip_sam_compress_one_vb (VBlockP vb_)
         }
     }
 
-    // generate & write b250 data for all QNAME and OPTIONAL subfields
-    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
-                
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
-        
-        if (ctx->mtf_i.len && 
-            (ctx->dict_section_type == SEC_SAM_QNAME_SF_DICT || ctx->dict_section_type == SEC_SAM_OPTNL_SF_DICT)) {
-            zip_generate_b250_section (vb_, ctx);
-            zfile_compress_b250_data (vb_, ctx);
+    // generate & write b250 data for all QNAME (first) and OPTIONAL (after) subfields
+    for (SectionType sec=SEC_SAM_QNAME_SF_DICT; sec <= SEC_SAM_OPTNL_SF_DICT; sec += SEC_SAM_OPTNL_SF_DICT - SEC_SAM_QNAME_SF_DICT)
+
+        for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
+                    
+            MtfContext *ctx = &vb->mtf_ctx[did_i];
+            
+            if (ctx->mtf_i.len && ctx->dict_section_type == sec) {
+                zip_generate_b250_section (vb_, ctx);
+                zfile_compress_b250_data (vb_, ctx);
+            }
         }
-    }
 
     // generate & compress the SEQ & QUAL data
     uint32_t num_bases = zip_sam_get_num_bases (vb); 

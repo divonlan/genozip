@@ -45,7 +45,7 @@
         },
         {
             "type": "shell",
-            "label": "make clean",
+            "label": "make clean (including dependencies and Windows installer intermediates)",
             "command": "make.exe",
             "args": [
                 "clean"
@@ -70,6 +70,27 @@
             "command": "make.exe",
             "args": [
                 "clean-debug"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "make clean-optimized",
+            "command": "make.exe",
+            "args": [
+                "clean-optimized"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

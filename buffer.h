@@ -35,9 +35,10 @@ typedef struct buffer_ {
 
 #define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL,NULL,0,NULL,0}
 
+#define ARRAY(type, name, buf) type *name = ((type *)((buf).data)) 
+
 #define ENT(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
 #define FIRSTENT(type, buf)   ((type *)( (buf).data))
-#define ARRAY(type, buf)      ((type *)( (buf).data)) // same as FIRSTENT
 #define LASTENT(type, buf)    ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
 #define AFTERENT(type, buf)   ((type *)(&(buf).data[((buf).len  ) * sizeof(type)]))
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[((buf).len++) * sizeof(type)]))

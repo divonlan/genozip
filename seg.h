@@ -47,4 +47,6 @@ extern void seg_vcf_complete_missing_lines (VBlockVCFP vb);
 // ---------
 extern SegDataLineFuncType seg_sam_data_line;
 
+extern uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
+
 #endif

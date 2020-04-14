@@ -19,7 +19,7 @@ typedef struct {
         piz_vcf_get_haplotype_data_line, piz_vcf_get_format_info,
         piz_vcf_initialize_sample_iterators, piz_get_line_subfields, piz_vcf_merge_line, 
         piz_vcf_get_phase_data_line, piz_vcf_get_genotype_data_line, zfile_uncompress_section,
-        piz_vcf_reconstruct_line_components, squeeze, piz_vcf_decode_pos, buf_alloc, txtfile_read_header, txtfile_read_variant_block,
+        piz_reconstruct_vb, squeeze, buf_alloc, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, zip_vcf_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
         zip_generate_genotype_sections, zip_vcf_generate_phase_sections, zip_generate_variant_data_section,
         mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx_one_dict_id, gl_optimize_dictionary,

@@ -105,7 +105,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as INFO tags - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers.",
     "",
-    "   --show-one-b250   <field-name>. Show the values for this field - may be one of the fields 1-9 (CHROM to FORMAT) or an INFO tag",
+    "   --show-one-b250   <field-name>. Show the values for this field or subfield - can be a field like CHROM, RNAME or a subfield like MX",
     "",
     "   --dump-one-b250   <field-name>. Dump the binary content of this field, exactly as they appear in the genozip format, to stdout - may be one of the fields 1-9 (CHROM to FORMAT) or an INFO tag",
     "",
