@@ -16,7 +16,11 @@ uint64_t dict_id_vcf_fields[NUM_VCF_FIELDS] = {0,0,0,0,0,0,0,0},
          dict_id_INFO_13=0;
 
 // SAM stuff
-uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0,0};
+uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0,0},
+         dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
+         dict_id_OPTION_H1=0, dict_id_OPTION_H2=0, dict_id_OPTION_MQ=0, dict_id_OPTION_NH=0, dict_id_OPTION_NM=0, dict_id_OPTION_PG=0, 
+         dict_id_OPTION_PQ=0, dict_id_OPTION_PU=0, dict_id_OPTION_RG=0, dict_id_OPTION_SM=0, dict_id_OPTION_TC=0, dict_id_OPTION_UQ=0,
+         dict_id_OPTION_CC=0, dict_id_OPTION_CG=0, dict_id_OPTION_MC=0;
 
 static DataType last_data_type = DATA_TYPE_NONE;
 
@@ -45,6 +49,29 @@ void dict_id_initialize (DataType data_type)
     case DATA_TYPE_SAM:
         for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++)
             dict_id_sam_fields[f] = dict_id_field (dict_id_make (sam_field_names[f], strlen (sam_field_names[f]))).num; 
+
+        dict_id_OPTION_AM    = dict_id_vcf_info_sf   (dict_id_make ("AM", 2)).num;
+        dict_id_OPTION_AS    = dict_id_vcf_info_sf   (dict_id_make ("AS", 2)).num;
+        dict_id_OPTION_CM    = dict_id_vcf_info_sf   (dict_id_make ("CM", 2)).num;
+        dict_id_OPTION_LB    = dict_id_vcf_info_sf   (dict_id_make ("LB", 2)).num;
+        dict_id_OPTION_FI    = dict_id_vcf_info_sf   (dict_id_make ("FI", 2)).num;
+        dict_id_OPTION_H0    = dict_id_vcf_info_sf   (dict_id_make ("H0", 2)).num;
+        dict_id_OPTION_H1    = dict_id_vcf_info_sf   (dict_id_make ("H1", 2)).num;
+        dict_id_OPTION_H2    = dict_id_vcf_info_sf   (dict_id_make ("H2", 2)).num;
+        dict_id_OPTION_MQ    = dict_id_vcf_info_sf   (dict_id_make ("MQ", 2)).num;
+        dict_id_OPTION_NH    = dict_id_vcf_info_sf   (dict_id_make ("NH", 2)).num;
+        dict_id_OPTION_NM    = dict_id_vcf_info_sf   (dict_id_make ("NM", 2)).num;
+        dict_id_OPTION_PG    = dict_id_vcf_info_sf   (dict_id_make ("PG", 2)).num;
+        dict_id_OPTION_PQ    = dict_id_vcf_info_sf   (dict_id_make ("PQ", 2)).num;
+        dict_id_OPTION_PU    = dict_id_vcf_info_sf   (dict_id_make ("PU", 2)).num;
+        dict_id_OPTION_RG    = dict_id_vcf_info_sf   (dict_id_make ("RG", 2)).num;
+        dict_id_OPTION_SM    = dict_id_vcf_info_sf   (dict_id_make ("SM", 2)).num;
+        dict_id_OPTION_TC    = dict_id_vcf_info_sf   (dict_id_make ("TC", 2)).num;
+        dict_id_OPTION_UQ    = dict_id_vcf_info_sf   (dict_id_make ("UQ", 2)).num;
+        dict_id_OPTION_CC    = dict_id_vcf_info_sf   (dict_id_make ("CC", 2)).num;
+        dict_id_OPTION_CG    = dict_id_vcf_info_sf   (dict_id_make ("CG", 2)).num;
+        dict_id_OPTION_MC    = dict_id_vcf_info_sf   (dict_id_make ("MC", 2)).num;
+
         break;
 
     default:

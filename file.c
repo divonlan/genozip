@@ -44,6 +44,10 @@ void file_set_stdin_type (const char *type_str)
     ASSERT (stdin_type==SAM || stdin_type==VCF, "%s: --stdin/-i option can only accept 'vcf' or 'sam'", global_cmd);
 }
 
+FileType file_get_stdin_type (void)
+{
+    return stdin_type;
+}
 
 static FileType file_get_type (const char *filename)
 {
@@ -59,7 +63,7 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
     
     if (!isatty(0) || !isatty(2)) my_exit(); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
     
-    fprintf (stderr, "Do you wish to overwrite it now? (y or n) ");
+    fprintf (stderr, "Do you wish to overwrite it now? (y or [n]) ");
 
     // read all chars available on stdin, so that if we're processing multiple files - and we ask this question
     // for a subsequent file later - we don't get left overs of this response

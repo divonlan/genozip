@@ -304,12 +304,12 @@ static void main_show_sections (void)
              (double)total_txt / (double)total_z, "");
 
     fprintf (stderr, "\nDictionaries:\n");
-    fprintf (stderr, "Name     Type         #Words        #Uniq         Hash    uncomp_dict_size\n");
+    fprintf (stderr, "did_i Name     Type         #Words        #Uniq         Hash    uncomp_dict_size\n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
         const MtfContext *ctx = &z_file->mtf_ctx[i];
     
         char s1[20], s2[20], s3[20];
-        fprintf (stderr, "%*.*s %-6.6s %12s %12s %12s %9s\n", -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
+        fprintf (stderr, "%-2u    %*.*s %-6.6s %12s %12s %12s %9s\n", i, -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
                  dict_id_display_type (ctx->dict_id), buf_display_uint (ctx->mtf_i.len, s1), buf_display_uint (ctx->mtf.len, s2), 
                  buf_display_uint (ctx->global_hash_prime, s3), buf_display_size(ctx->dict.len, vsize));
     }
@@ -640,7 +640,7 @@ static void main_genozip (const char *txt_filename,
     else if (flag_stdout) { // stdout
 #ifdef _WIN32
         // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows", global_cmd);
+        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows, use --output instead", global_cmd);
 #endif
         ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
@@ -844,7 +844,7 @@ int main (int argc, char **argv)
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "icdfhlLqQt^Vzm@:Oo:p:B:S:9K", // genozip
+            "i:cdfhlLqQt^Vzm@:Oo:p:B:S:9K", // genozip
             "czfhLqQt^V@:Oo:p:m",          // genounzip
             "hLVp:qf",                     // genols
             "hLV@:p:qQ1r:t:s:H1Go:f"       // genocat

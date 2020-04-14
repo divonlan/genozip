@@ -92,6 +92,47 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
     }
 
     else if (z_file->data_type == DATA_TYPE_SAM) {
+        // typically small - use minimal hash table ~ 500
+        if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_FLAG]      ||
+            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_MAPQ]      ||
+            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_QNAME]     ||
+            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_OPTIONAL]  ||
+            vb_ctx->dict_id.num == dict_id_OPTION_AM ||
+            vb_ctx->dict_id.num == dict_id_OPTION_AS ||
+            vb_ctx->dict_id.num == dict_id_OPTION_CM ||
+            vb_ctx->dict_id.num == dict_id_OPTION_LB ||
+            vb_ctx->dict_id.num == dict_id_OPTION_FI ||
+            vb_ctx->dict_id.num == dict_id_OPTION_H0 ||
+            vb_ctx->dict_id.num == dict_id_OPTION_H1 ||
+            vb_ctx->dict_id.num == dict_id_OPTION_H2 ||
+            vb_ctx->dict_id.num == dict_id_OPTION_MQ ||
+            vb_ctx->dict_id.num == dict_id_OPTION_NH ||
+            vb_ctx->dict_id.num == dict_id_OPTION_NM ||
+            vb_ctx->dict_id.num == dict_id_OPTION_PG ||
+            vb_ctx->dict_id.num == dict_id_OPTION_PQ ||
+            vb_ctx->dict_id.num == dict_id_OPTION_PU ||
+            vb_ctx->dict_id.num == dict_id_OPTION_RG ||
+            vb_ctx->dict_id.num == dict_id_OPTION_SM ||
+            vb_ctx->dict_id.num == dict_id_OPTION_TC ||
+            vb_ctx->dict_id.num == dict_id_OPTION_UQ)
+            
+            vb_ctx->local_hash_prime = hash_next_size_up(500);
+
+        // typically smallish - use hash table ~ 2000
+        else 
+        if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_RNAME]  ||
+            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_RNEXT]  ||
+            vb_ctx->dict_id.num == dict_id_OPTION_CC)
+
+            vb_ctx->local_hash_prime = hash_next_size_up(2000);
+
+        // typically medium - use hash table ~ 50000
+        else 
+        if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_CIGAR]  ||
+            vb_ctx->dict_id.num == dict_id_OPTION_CG ||
+            vb_ctx->dict_id.num == dict_id_OPTION_MC)
+
+            vb_ctx->local_hash_prime = hash_next_size_up(50000);
     }
 
     // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)
@@ -127,6 +168,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
 
     static struct { uint64_t vbs, factor; } growth_plan[] =
     { 
+        { 0, 1 },
         { 1, 2 },
         { 5, 4 },
         { 9, 8 },
@@ -147,6 +189,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
 
     double estimated_entries=0;
     double n_ratio = n2 ? n1/n2 : 0;
+    unsigned max_growth_plan=0;
 
     if (n2 == 0) 
         estimated_entries = zf_ctx->mtf.len;
@@ -155,12 +198,13 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
         estimated_entries = estimated_num_lines * ((n1+n2 )/ merging_vb->num_lines) * 0.75;
     
     else {
-        unsigned max_growth_plan;
-        if      (n_ratio > 2.5) max_growth_plan = 1;
+        if      (n_ratio > 2.5) max_growth_plan = 2;
         else if (n_ratio > 2.1) max_growth_plan = 3;
-        else if (n_ratio > 1.8) max_growth_plan = 2;
-        else if (n_ratio > 1.5) max_growth_plan = 4;
-        else                    max_growth_plan = sizeof(growth_plan) / sizeof(growth_plan[0])-1;
+        else if (n_ratio > 1.8) max_growth_plan = 4;
+        else if (n_ratio > 1.5) max_growth_plan = 5;
+        else if (n_ratio > 1.2) max_growth_plan = 6;
+        else if (n_ratio > 1.1) max_growth_plan = 7;
+        else                    max_growth_plan = sizeof(growth_plan) / sizeof(growth_plan[0]);
         
         for (int i=max_growth_plan; i >= 0 ; i--)
             if (estimated_num_vbs > growth_plan[i].vbs) {
@@ -172,13 +216,9 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     if (!estimated_entries) estimated_entries = 100000000000; // very very big
 
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
-    // printf ("dict=%.8s n1=%u n2=%u n1/n2=%2.2lf vbs=%u num_lines=%u zf_ctx->mtf.len=%u entries=%u hashsize=%u\n", dict_id_printable(zf_ctx->dict_id).id, (unsigned)n1, (unsigned)n2,  n2 ? n1/n2 : 777, (unsigned)estimated_num_vbs, (unsigned)estimated_num_lines, zf_ctx->mtf.len, (unsigned)estimated_entries, zf_ctx->global_hash_prime); 
+    //printf ("dict=%.8s n1=%2.2lf n2=%2.2lf n1/n2=%2.2lf max_growth_plan=%u vbs=%u num_lines=%u zf_ctx->mtf.len=%u entries=%2.2lf hashsize=%u\n", 
+    //        dict_id_printable(zf_ctx->dict_id).id, n1, n2, n_ratio, max_growth_plan, (unsigned)estimated_num_vbs, (unsigned)estimated_num_lines, zf_ctx->mtf.len, estimated_entries, zf_ctx->global_hash_prime); 
 
-    // we allocate 5X total_so_far to leave the hash table a bit less crowded - less spill over
-    // (this is the global table - only 1 copy of it shared by all threads (unless there are reallocs) -
-    // so we can be a bit more generous with space). reallocs are also less likely with larger spaces
-    // (less entries spill over), so it might even not add up that much more memory.
-    //zf_ctx->global_hash_prime = hash_next_size_up ((uint32_t)MAX(method_1_total, method_2_total) * 5);
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->mtf_ctx->global_hash", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->global_hash);

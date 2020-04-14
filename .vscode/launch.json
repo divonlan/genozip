@@ -13,9 +13,11 @@
             //"program": "${workspaceFolder}/genounzip-debug.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             //"program": "${workspaceFolder}/genozip.exe",
+            
+            "args":["-i", "sam"],
 
-            "args":["test-file.vcf.genozip", "-dt"],
-            //"args":["test-file.vcf", "-fS1"]
+            //"args":["transfly.100K.sam", "-fm", "--show-sec"],
+            //"args":["transfly.100K.sam.genozip", "-dt"]
             //"args": ["ftp://ftp.ncbi.nlm.nih.gov/1000genomes/ftp/release/20130502/ALL.chrY.phase3_integrated_v1b.20130502.genotypes.vcf.gz", "-f"],
             //"args": ["file:///c:/users/user/projects/genozip/x.bcf.gz", "-f"],
 

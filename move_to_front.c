@@ -37,6 +37,8 @@ unzip:
 
 #define INITIAL_NUM_NODES 10000
 
+#define CTX_GROWTH 1.75
+
 static pthread_mutex_t wait_for_vb_1_mutex;
 static pthread_mutex_t compress_dictionary_data_mutex;
 
@@ -66,11 +68,15 @@ void mtf_vb_1_lock (VBlockP vb)
 // the dictionary will be written to GENOZIP and used to reconstruct the MTF during decompression
 static inline uint32_t mtf_insert_to_dict (VBlock *vb_of_dict, MtfContext *ctx, bool is_zf_ctx, const char *snip, uint32_t snip_len)
 {
-    buf_alloc (vb_of_dict, &ctx->dict, MAX ((ctx->dict.len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 2, 
-               is_zf_ctx ? "z_file->mtf_ctx->dict" : "mtf_ctx->dict", ctx->did_i);
+    buf_alloc (vb_of_dict, &ctx->dict, MAX ((ctx->dict.len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 
+               CTX_GROWTH, is_zf_ctx ? "z_file->mtf_ctx->dict" : "mtf_ctx->dict", ctx->did_i);
     
     if (is_zf_ctx) buf_set_overlayable (&ctx->dict); // during merge
     
+    ASSERT (ctx->dict.len + snip_len < 0xffffffff, 
+             "Error in mtf_insert_to_dict: dictionary %*.s is full - it has %u characters already (maximum allowed %u). While attempting to add the snip \"%*.s\" by vb_i=%u",
+             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->dict.len, 0xffffffff-1, snip_len, snip, vb_of_dict->vblock_i);
+
     unsigned char_index = ctx->dict.len;
     char *dict_p = &ctx->dict.data[char_index];
 
@@ -199,9 +205,11 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
 
     zf_ctx->mtf.len++; // we have a new dictionary item - this snip
 
-    ASSERT (zf_ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %.*s", DICT_ID_LEN, dict_id_printable (zf_ctx->dict_id).id);
+    ASSERT (zf_ctx->mtf.len < 0x7fffffff, 
+            "Error: too many words in directory %.*s, max allowed number of words is is %u", DICT_ID_LEN, 
+            dict_id_printable (zf_ctx->dict_id).id, 0x7fffffff);
 
-    buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, zf_ctx->mtf.len), 2, 
+    buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, zf_ctx->mtf.len), CTX_GROWTH, 
                "z_file->mtf_ctx->mtf", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->mtf);
 
@@ -245,7 +253,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
 
     segging_vb->z_section_entries[vb_ctx->dict_section_type]++; 
 
-    buf_alloc (segging_vb, &vb_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, 1+vb_ctx->mtf.len), 2, 
+    buf_alloc (segging_vb, &vb_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, 1+vb_ctx->mtf.len), CTX_GROWTH, 
                "mtf_ctx->mtf", vb_ctx->did_i);
 
     vb_ctx->mtf.len++; // new hash entry or extend linked list
@@ -639,7 +647,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
     unsigned dict_old_len = zf_ctx->dict.len;
-    buf_alloc (evb, &zf_ctx->dict, zf_ctx->dict.len + fragment.len, 2, "z_file->mtf_ctx->dict", header->h.section_type);
+    buf_alloc (evb, &zf_ctx->dict, zf_ctx->dict.len + fragment.len, CTX_GROWTH, "z_file->mtf_ctx->dict", header->h.section_type);
     buf_set_overlayable (&zf_ctx->dict);
 
     memcpy (&zf_ctx->dict.data[zf_ctx->dict.len], fragment.data, fragment.len);
@@ -647,7 +655,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
 
     // extend word list memory - and calculate the new words. If there is no room - old memory is abandoned 
     // (so that VBs that are overlaying it continue to work uninterrupted) and a new memory is allocated
-    buf_alloc (evb, &zf_ctx->word_list, (zf_ctx->word_list.len + num_snips) * sizeof (MtfWord), 2, "z_file->mtf_ctx->word_list", header->h.section_type);
+    buf_alloc (evb, &zf_ctx->word_list, (zf_ctx->word_list.len + num_snips) * sizeof (MtfWord), CTX_GROWTH, "z_file->mtf_ctx->word_list", header->h.section_type);
     buf_set_overlayable (&zf_ctx->word_list);
 
     bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, vcf_field_names[VCF_REFALT], MIN (strlen(vcf_field_names[VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator

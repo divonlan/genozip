@@ -155,6 +155,7 @@ extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail); 
 extern uint64_t file_tell (File *file);
 extern uint64_t file_get_size (const char *filename);
 extern void file_set_stdin_type (const char *type_str);
+extern FileType file_get_stdin_type (void);
 extern bool file_is_dir (const char *filename);
 extern void file_remove (const char *filename, bool fail_quietly);
 extern bool file_has_ext (const char *filename, const char *extension);

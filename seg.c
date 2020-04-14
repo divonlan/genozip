@@ -57,7 +57,7 @@ uint32_t seg_one_field (VBlock *vb, const char *str, unsigned len, unsigned vb_l
 {
     uint32_t *this_field_section = (uint32_t *)vb->mtf_ctx[f].mtf_i.data;
     ASSERT (vb->mtf_ctx[f].mtf_i.len * sizeof(uint32_t) < vb->mtf_ctx[f].mtf_i.size,
-            "Error: mtf_i overflow vb_i=%u f=%u len*sizeof(uint32_t)=%u size=%u - no room for another one", 
+            "Error: mtf_i overflow vb_i=%u f=%u len*sizeof(uint32_t)=%u size=%"PRIu64" - no room for another one", 
             vb->vblock_i, f, vb->mtf_ctx[f].mtf_i.len * (unsigned)sizeof(uint32_t), vb->mtf_ctx[f].mtf_i.size);
 
     MtfContext *ctx = &vb->mtf_ctx[f];

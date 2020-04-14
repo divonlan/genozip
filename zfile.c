@@ -217,7 +217,8 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
         fprintf (stderr, "%.*s\t", num_chars, data);
 
-    z_file->dict_data.name = "z_file->dict_data"; // comp_compress requires that it is set in advance
+    z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
+    z_file->dict_data.param = ctx->did_i;
     comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
 
     COPY_TIMER (vb->profile.zfile_compress_dictionary_data)    

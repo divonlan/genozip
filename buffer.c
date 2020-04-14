@@ -97,7 +97,7 @@ char *buf_display (const Buffer *buf)
     static char str[200]; // NOT thread-safe
 
     char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN];
-    sprintf (str, "Buffer %s (%u): size=%u len=%u data=%s memory=%s",
+    sprintf (str, "Buffer %s (%u): size=%"PRIu64" len=%u data=%s memory=%s",
              buf->name, buf->param, buf->size, buf->len, buf_display_pointer(buf->data, s1), buf_display_pointer(buf->memory,s2));
     return str;    
 }
@@ -114,16 +114,16 @@ static inline void buf_reset (Buffer *buf)
 
 static inline bool buf_has_overflowed (const Buffer *buf)
 {
-    ASSERT (buf->memory != (char *)0x777, "Error in buf_has_overflowed: malloc didn't assign, very weird! buf=%s:%u func=%s:%u size=%u",
-                buf->name, buf->param, buf->func, buf->code_line, buf->size);
+    ASSERT (buf->memory != (char *)0x777, "Error in buf_has_overflowed: malloc didn't assign, very weird! buf=%s:%u func=%s:%u size=%"PRIu64,
+            buf->name, buf->param, buf->func, buf->code_line, buf->size);
 
     return *((uint64_t*)(buf->memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP;
 }
 
 static inline bool buf_has_underflowed (const Buffer *buf)
 {
-    ASSERT (buf->memory != (char *)0x777, "Error in buf_has_underflowed: malloc didn't assign, very weird! buf=%s:%u func=%s:%u size=%u",
-                buf->name, buf->param, buf->func, buf->code_line, buf->size);
+    ASSERT (buf->memory != (char *)0x777, "Error in buf_has_underflowed: malloc didn't assign, very weird! buf=%s:%u func=%s:%u size=%"PRIu64,
+            buf->name, buf->param, buf->func, buf->code_line, buf->size);
 
     return *(uint64_t*)buf->memory != UNDERFLOW_TRAP;
 }
@@ -393,20 +393,20 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 
     if (flag_debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
         char s[POINTER_STR_LEN];
-        fprintf (stderr, "Init: %s:%u: size=%u buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, vb->buffer_list.len-1);
+        fprintf (stderr, "Init: %s:%u: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, vb->buffer_list.len-1);
     }
     
     //if (vb == evb) pthread_mutex_unlock (&evb_buf_mutex);
 }
 
-static void buf_init (VBlock *vb, Buffer *buf, unsigned size, unsigned old_size, 
-                      const char *func, unsigned code_line, const char *name, unsigned param)
+static void buf_init (VBlock *vb, Buffer *buf, uint64_t size, uint64_t old_size, 
+                      const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
     if (!buf->memory) {
 #ifdef DEBUG
         buf_display_memory_usage (true, 0, 0);
 #endif 
-        ABORT ("Error: Out of memroy. %sDetails: failed to allocate %u bytes name=%s:%u in %s:%u", 
+        ABORT ("Error: Out of memroy. %sDetails: failed to allocate %"PRIu64" bytes name=%s:%u in %s:%u", 
                (command==ZIP ? "Try running with a lower variant block size using --vblock. " : ""), 
                 size + overhead_size, name, param, func, code_line);
     }
@@ -434,12 +434,12 @@ static void buf_init (VBlock *vb, Buffer *buf, unsigned size, unsigned old_size,
 // allocates or enlarges buffer
 // if it needs to enlarge a buffer fully overlaid by an overlay buffer - it abandons its memory (leaving it to
 // the overlaid buffer) and allocates new memory
-unsigned buf_alloc_do (VBlock *vb,
+uint64_t buf_alloc_do (VBlock *vb,
                        Buffer *buf, 
-                       uint32_t requested_size,
+                       uint64_t requested_size,
                        double grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
-                       const char *func, unsigned code_line,
-                       const char *name, unsigned param)      
+                       const char *func, uint32_t code_line,
+                       const char *name, uint32_t param)      
 {
     START_TIMER;
 
@@ -459,14 +459,15 @@ unsigned buf_alloc_do (VBlock *vb,
     grow_at_least_factor = MAX (1.00000001, grow_at_least_factor); 
 
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
-    uint32_t new_size = (uint32_t)(requested_size * grow_at_least_factor + 7) & 0xfffffff8UL; 
+    uint64_t new_size = (uint64_t)(requested_size * grow_at_least_factor + 7) & 0xfffffffffffffff8ULL; // aligned to 8 bytes
 
-    ASSERT (new_size >= requested_size, "Error: allocated too little memory: requested=%u, allocated=%u", requested_size, new_size); // floating point paranoia
+    ASSERT (new_size >= requested_size, "Error: allocated too little memory for %s:%u: requested=%"PRIu64", allocated=%"PRIu64". Caller: %s:%u vb_i=%u", 
+            name, param, requested_size, new_size, func, code_line, vb->vblock_i); // floating point paranoia
 
     // case 2: buffer was allocated already in the past - allocate new memory and copy over the data
     if (buf->memory) {
 
-        unsigned old_size = buf->size;
+        uint64_t old_size = buf->size;
 
         // special handling if we have an overlaying buffer
         if (buf->overlayable) {
@@ -513,7 +514,7 @@ unsigned buf_alloc_do (VBlock *vb,
     else {
         buf->memory = (char *)0x777; // catch a very weird situation that happens sometimes when memory overflows, where the next statement doesn't assign
         buf->memory = (char *)malloc (new_size + overhead_size);
-        ASSERT (buf->memory != (char *)0x777, "Error: malloc didn't assign, very weird! buf=%s:%u func=%s:%u new_size=%u",
+        ASSERT (buf->memory != (char *)0x777, "Error: malloc didn't assign, very weird! buf=%s:%u func=%s:%u new_size=%"PRIu64,
                  buf->name, buf->param, buf->func, buf->code_line, new_size);
 
         buf->type   = BUF_REGULAR;
@@ -521,6 +522,9 @@ unsigned buf_alloc_do (VBlock *vb,
         buf_init (vb, buf, new_size, 0, func, code_line, name, param);
         buf_add_to_buffer_list(vb, buf);
     }
+
+    ASSERTW (new_size < 0x80000000ULL, "FYI: allocated > 2GB of memory buffer for %s:%u: requested=%"PRIu64", allocated=%"PRIu64". Caller: %s:%u vb_i=%u", 
+            name, param, requested_size, new_size, func, code_line, vb->vblock_i);
 
 finish:
     if (vb != evb) COPY_TIMER (vb->profile.buf_alloc); // this is not thread-safe for evb, see comment in buf_add_to_buffer_list
@@ -672,8 +676,8 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
 }
 
 void buf_copy_do (VBlock *vb, Buffer *dst, const Buffer *src, 
-                  unsigned bytes_per_entry, // how many bytes are counted by a unit of .len
-                  unsigned src_start_entry, unsigned max_entries,  // if 0 copies the entire buffer 
+                  uint32_t bytes_per_entry, // how many bytes are counted by a unit of .len
+                  uint32_t src_start_entry, uint32_t max_entries,  // if 0 copies the entire buffer 
                   const char *func, unsigned code_line,
                   const char *name, unsigned param)
 {
@@ -682,7 +686,7 @@ void buf_copy_do (VBlock *vb, Buffer *dst, const Buffer *src,
     ASSERT (!max_entries || src_start_entry < src->len, 
             "Error buf_copy of name=%s:%u: src_start_entry=%u is larger than src->len=%u", src->name, src->param, src_start_entry, src->len);
 
-    unsigned num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
+    uint32_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
     buf_alloc_do (vb, dst, num_entries * bytes_per_entry, 1, func, code_line,
@@ -719,7 +723,7 @@ void buf_add_string (VBlock *vb, Buffer *buf, const char *str)
 
 void buf_print (Buffer *buf, bool add_newline)
 {
-    for (unsigned i=0; i < buf->len; i++) 
+    for (uint64_t i=0; i < buf->len; i++) 
         putchar (buf->data[i]);  // safer than printf %.*s ?
 
     if (add_newline) putchar ('\n');

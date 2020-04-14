@@ -61,7 +61,7 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
 
             // allocate memory if needed
             buf_alloc (vb, &sf_ctx->mtf_i, MIN (vb->num_lines, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                       1.5, "mtf_ctx->mtf_i", SEC_SAM_QNAME_SF_DICT);
+                       1.5, "mtf_ctx->mtf_i", sf_ctx->did_i);
 
             NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
 
@@ -102,7 +102,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
 
     // allocate memory if needed
     buf_alloc (vb, &ctx->mtf_i, MIN (vb->num_lines, ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                1.5, "mtf_ctx->mtf_i", SEC_SAM_OPTNL_SF_DICT);
+                1.5, "mtf_ctx->mtf_i", ctx->did_i);
 
     NEXTENT (uint32_t, ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, &field[5], field_len-5, &node, NULL);
 

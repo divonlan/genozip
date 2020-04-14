@@ -21,7 +21,7 @@ typedef struct buffer_ {
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     const char *name; // name of allocator - used for memory debugging & statistics
     uint32_t param;   // parameter provided by allocator - used for memory debugging & statistics
-    uint32_t size;    // number of bytes allocated to memory
+    uint64_t size;    // number of bytes allocated to memory
     uint32_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
     char *data;       // ==memory+8 if buffer is allocated or NULL if not
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
@@ -30,7 +30,7 @@ typedef struct buffer_ {
     VBlockP allocating_vb;
     uint32_t vb_i;    // the vblock_i that allocated this buffer
     const char *func; // the allocating function
-    unsigned code_line;
+    uint32_t code_line;
 } Buffer;
 
 #define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL,NULL,0,NULL,0}
@@ -47,12 +47,12 @@ extern void buf_initialize(void);
 
 #define buf_is_allocated(buf_p) ((buf_p)->data != NULL && ((buf_p)->type == BUF_REGULAR || (buf_p)->type == BUF_OVERLAY))
 
-extern unsigned buf_alloc_do (VBlockP vb,
+extern uint64_t buf_alloc_do (VBlockP vb,
                               Buffer *buf, 
-                              uint32_t requested_size, 
+                              uint64_t requested_size, 
                               double grow_at_least_factor, // grow more than new_size   
-                              const char *func, unsigned code_line,
-                              const char *name, unsigned param); // for debugging
+                              const char *func, uint32_t code_line,
+                              const char *name, uint32_t param); // for debugging
 
 // efficient wrapper
 #define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) \
@@ -76,10 +76,10 @@ extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
 
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
 
-extern void buf_copy_do (VBlockP vb, Buffer *dst, const Buffer *src, unsigned bytes_per_entry,
-                         unsigned src_start_entry, unsigned max_entries, // if 0 copies the entire buffer
-                         const char *func, unsigned code_line,
-                         const char *name, unsigned param);
+extern void buf_copy_do (VBlockP vb, Buffer *dst, const Buffer *src, uint32_t bytes_per_entry,
+                         uint32_t src_start_entry, uint32_t max_entries, // if 0 copies the entire buffer
+                         const char *func, uint32_t code_line,
+                         const char *name, uint32_t param);
 #define buf_copy(vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name,param) \
   buf_copy_do ((VBlockP)(vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(name),(param))
 
