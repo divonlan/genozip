@@ -240,10 +240,10 @@ const char *seg_sam_data_line (VBlock *vb_,
     dl->seq_len = seg_sam_seq_len_from_cigar (field_start, field_len);
     if (dl->seq_len) seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_CIGAR, NULL); // not "*" - all good!
 
-    // RNEXT
+    // RNEXT - add to RNAME dictionary
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNEXT");
-    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNEXT, NULL);
+    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
 
     // PNEXT - encode as delta from POS (except if its unavailable - encode as "*")
     field_start = next_field;

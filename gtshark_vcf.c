@@ -33,7 +33,8 @@ static void gtshark_create_vcf_file (VBlockVCF *vb, const Buffer *section_data, 
         fprintf (file, "\t%u", i+1);
     fprintf (file, "\n");
 
-    ASSERTGOTO (section_data->len == num_haplotypes * vb->num_lines, "Error: unexpected section_data->len=%u", section_data->len);
+    ASSERTGOTO (section_data->len == num_haplotypes * vb->num_lines, 
+                "Error: unexpected section_data->len=%u", (uint32_t)section_data->len);
 
     // initialize allocation for exceptions
     buf_alloc (vb, &vb->gtshark_exceptions_line_i, MAX (vb->num_lines/100, 100) * sizeof(uint32_t), 1, "gtshark_exceptions_line_i", sb_i);
@@ -88,7 +89,7 @@ error:
         FCLOSE (file, gtshark_vcf_name);
         file_remove (gtshark_vcf_name, true);
     }
-    my_exit();
+    exit_on_error();
 }
 
 #define PIPE_MAX_BYTES 32768
@@ -196,7 +197,7 @@ static char *gtshark_write_db_file (uint32_t vb_i, uint16_t section_i, const cha
     size_t bytes_written = fwrite (buf->data, 1, buf->len, file);
     ASSERT (bytes_written == buf->len, 
             "Error in uncompressing vb_i=%u: failed to write file %s - only %u out of %u bytes written: %s",
-            vb_i, filename, (unsigned)bytes_written, buf->len, strerror (errno));
+            vb_i, filename, (unsigned)bytes_written, (uint32_t)buf->len, strerror (errno));
 
     FCLOSE (file, filename);
     return filename;

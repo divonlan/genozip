@@ -97,7 +97,7 @@ char *buf_display (const Buffer *buf)
     static char str[200]; // NOT thread-safe
 
     char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN];
-    sprintf (str, "Buffer %s (%u): size=%"PRIu64" len=%u data=%s memory=%s",
+    sprintf (str, "Buffer %s (%u): size=%"PRIu64" len=%"PRIu64" data=%s memory=%s",
              buf->name, buf->param, buf->size, buf->len, buf_display_pointer(buf->data, s1), buf_display_pointer(buf->memory,s2));
     return str;    
 }
@@ -159,6 +159,7 @@ static void buf_find_underflow_culprit (const char *memory)
     if (!found) fprintf (stderr, "Cannot find a Buffer which has overflowed, and located just before the underflowed buffer\n\n");
 }
 
+// this function cannot contain ASSERT or ABORT as exit_on_error calls it
 static bool buf_test_overflows_do (const VBlock *vb, bool primary);
 static void buf_test_overflows_all_other_vb(const VBlock *caller_vb)
 {
@@ -177,6 +178,7 @@ static void buf_test_overflows_all_other_vb(const VBlock *caller_vb)
     }
 }
 
+// this function cannot contain ASSERT or ABORT as exit_on_error calls it
 static bool buf_test_overflows_do (const VBlock *vb, bool primary)
 {
     if (!vb) return false;
@@ -251,9 +253,16 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary)
     return corruption;
 }
 
+// this function cannot contain ASSERT or ABORT as exit_on_error calls it
 void buf_test_overflows (const VBlock *vb)
 {
     buf_test_overflows_do (vb, true);
+}
+
+// this function cannot contain ASSERT or ABORT as exit_on_error calls it
+void buf_test_overflows_all_vbs (void)
+{
+    buf_test_overflows_all_other_vb (NULL);
 }
 
 typedef struct {
@@ -393,7 +402,8 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 
     if (flag_debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
         char s[POINTER_STR_LEN];
-        fprintf (stderr, "Init: %s:%u: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, vb->buffer_list.len-1);
+        fprintf (stderr, "Init: %s:%u: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
+                 buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, (uint32_t)vb->buffer_list.len-1);
     }
     
     //if (vb == evb) pthread_mutex_unlock (&evb_buf_mutex);
@@ -523,8 +533,9 @@ uint64_t buf_alloc_do (VBlock *vb,
         buf_add_to_buffer_list(vb, buf);
     }
 
-    ASSERTW (new_size < 0x80000000ULL, "FYI: allocated > 2GB of memory buffer for %s:%u: requested=%"PRIu64", allocated=%"PRIu64". Caller: %s:%u vb_i=%u", 
-            name, param, requested_size, new_size, func, code_line, vb->vblock_i);
+    char size_str[20];
+    ASSERTW (new_size < 0x80000000ULL, "FYI: allocated > 2GB of memory buffer for %s:%u: allocated=%s. Caller: %s:%u vb_i=%u", 
+            name, param, buf_display_size (new_size, size_str), func, code_line, vb->vblock_i);
 
 finish:
     if (vb != evb) COPY_TIMER (vb->profile.buf_alloc); // this is not thread-safe for evb, see comment in buf_add_to_buffer_list
@@ -676,17 +687,17 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
 }
 
 void buf_copy_do (VBlock *vb, Buffer *dst, const Buffer *src, 
-                  uint32_t bytes_per_entry, // how many bytes are counted by a unit of .len
-                  uint32_t src_start_entry, uint32_t max_entries,  // if 0 copies the entire buffer 
+                  uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
+                  uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
                   const char *func, unsigned code_line,
                   const char *name, unsigned param)
 {
     ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
     
     ASSERT (!max_entries || src_start_entry < src->len, 
-            "Error buf_copy of name=%s:%u: src_start_entry=%u is larger than src->len=%u", src->name, src->param, src_start_entry, src->len);
+            "Error buf_copy of name=%s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, src->name, src->param, src_start_entry, src->len);
 
-    uint32_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
+    uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
     buf_alloc_do (vb, dst, num_entries * bytes_per_entry, 1, func, code_line,

@@ -55,7 +55,6 @@ typedef enum {
     SEC_SAM_POS_DICT       = 44,  SEC_SAM_POS_B250       = 45, 
     SEC_SAM_MAPQ_DICT      = 46,  SEC_SAM_MAPQ_B250      = 47, 
     SEC_SAM_CIGAR_DICT     = 48,  SEC_SAM_CIGAR_B250     = 49, 
-    SEC_SAM_RNEXT_DICT     = 50,  SEC_SAM_RNEXT_B250     = 51, 
     SEC_SAM_PNEXT_DICT     = 52,  SEC_SAM_PNEXT_B250     = 53, 
     SEC_SAM_TLEN_DICT      = 54,  SEC_SAM_TLEN_B250      = 55, 
     SEC_SAM_OPTIONAL_DICT  = 56,  SEC_SAM_OPTIONAL_B250  = 57, 
@@ -96,7 +95,6 @@ typedef enum {
     "SEC_SAM_POS_DICT"      ,  "SEC_SAM_POS_B250"       ,\
     "SEC_SAM_MAPQ_DICT"     ,  "SEC_SAM_MAPQ_B250"      ,\
     "SEC_SAM_CIGAR_DICT"    ,  "SEC_SAM_CIGAR_B250"     ,\
-    "SEC_SAM_RNEXT_DICT"    ,  "SEC_SAM_RNEXT_B250"     ,\
     "SEC_SAM_PNEXT_DICT"    ,  "SEC_SAM_PNEXT_B250"     ,\
     "SEC_SAM_TLEN_DICT"     ,  "SEC_SAM_TLEN_B250"      ,\
     "SEC_SAM_OPTIONAL_DICT" ,  "SEC_SAM_OPTIONAL_B250"  ,\

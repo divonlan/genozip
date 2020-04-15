@@ -728,7 +728,8 @@ void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
             
             unsigned expected_size = vb->num_lines * num_samples_in_sb;
             ASSERT (vb->phase_sections_data[sb_i].len==expected_size, 
-                    "Error: unexpected size of phase_sections_data[%u]: expecting %u but got %u", sb_i, expected_size, vb->phase_sections_data[sb_i].len)
+                    "Error: unexpected size of phase_sections_data[%u]: expecting %u but got %u", 
+                    sb_i, expected_size, (uint32_t)vb->phase_sections_data[sb_i].len)
         }
 
         // finally, comes haplotype data
@@ -739,7 +740,8 @@ void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
             
             unsigned expected_size = vb->num_lines * num_samples_in_sb * vb->ploidy;
             ASSERT (vb->haplotype_sections_data[sb_i].len == expected_size, 
-                    "Error: unexpected size of haplotype_sections_data[%u]: expecting %u but got %u", sb_i, expected_size, vb->haplotype_sections_data[sb_i].len)
+                    "Error: unexpected size of haplotype_sections_data[%u]: expecting %u but got %u", 
+                    sb_i, expected_size, (uint32_t)vb->haplotype_sections_data[sb_i].len)
         }
     }
 }

@@ -110,8 +110,8 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "piz_sam_reconstruct_vb", vb->vblock_i);
 
-    uint32_t cigar_seq_len=0, snip_len;
-    const char *snip;
+    uint32_t cigar_seq_len=0, snip_len, rname_snip_len;
+    const char *snip, *rname_snip;
     char pos_str[50], pnext_str[50];
 
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
@@ -133,8 +133,15 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
                 snip = pos_str;
                 break;
 
-            // reconstruct pnext from delta vs. pos, unless its "*" which means the original was "0"
+            // rnext & pnext
             case SAM_PNEXT:
+
+                // rnext - get from RNAME dictionary
+                mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[SAM_RNAME], NULL, &rname_snip, &rname_snip_len, vb->first_line + vb_line_i);                
+                buf_add (&vb->txt_data, rname_snip, rname_snip_len);
+                buf_add (&vb->txt_data, "\t", 1);
+
+                // pnext - reconstruct from delta vs. pos, unless its "*" which means the original was "0"
                 if (snip[0] == '*' && snip_len == 1)
                     snip = "0";
                 else {
@@ -163,7 +170,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
                 piz_sam_reconstruct_optional_fields (vb, snip, snip_len, word_index, vb->first_line + vb_line_i);
                 break;
 
-            default: break; // FLAG, RNAME, MAPQ, RNEXT, TLEN
+            default: break; // FLAG, RNAME, MAPQ, TLEN
             }
             
             if (f != SAM_QNAME && f != SAM_OPTIONAL)

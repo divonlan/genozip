@@ -73,10 +73,6 @@ static inline uint32_t mtf_insert_to_dict (VBlock *vb_of_dict, MtfContext *ctx, 
     
     if (is_zf_ctx) buf_set_overlayable (&ctx->dict); // during merge
     
-    ASSERT (ctx->dict.len + snip_len < 0xffffffff, 
-             "Error in mtf_insert_to_dict: dictionary %*.s is full - it has %u characters already (maximum allowed %u). While attempting to add the snip \"%*.s\" by vb_i=%u",
-             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->dict.len, 0xffffffff-1, snip_len, snip, vb_of_dict->vblock_i);
-
     unsigned char_index = ctx->dict.len;
     char *dict_p = &ctx->dict.data[char_index];
 
@@ -93,9 +89,10 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
                       const char *func, uint32_t code_line)
 {
     ASSERT0 (ctx->dict_id.num, "Error: this ctx is not initialized");
+    
     ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
-            mtf_i, ctx->mtf.len, ctx->ol_mtf.len, func, code_line);
+            mtf_i, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len, func, code_line);
 
     bool is_ol = mtf_i < ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
 
@@ -170,7 +167,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
                 vcf_line, word_index, 
                 ctx->dict_section_type == SEC_VCF_INFO_SF_DICT ? "INFO" : "",
                 ctx->dict_section_type == SEC_VCF_FRMT_SF_DICT ? "FORMAT" : "",
-                DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, ctx->word_list.len);
+                DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, (uint32_t)ctx->word_list.len);
 
         //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
         MtfWord *dict_word = mtf_get_word (ctx, word_index);
@@ -195,6 +192,7 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
 {
     // attempt to get the node from the hash table
     uint32_t new_mtf_i_if_no_old_one = zf_ctx->mtf.len;
+
     int32_t existing_mtf_i = hash_get_entry_for_merge (zf_ctx, snip, snip_len, new_mtf_i_if_no_old_one, node);
     if (existing_mtf_i != NIL) {
         *is_new = false;
@@ -205,9 +203,9 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
 
     zf_ctx->mtf.len++; // we have a new dictionary item - this snip
 
-    ASSERT (zf_ctx->mtf.len < 0x7fffffff, 
+    ASSERT (zf_ctx->mtf.len < MAX_WORDS_IN_CTX, 
             "Error: too many words in directory %.*s, max allowed number of words is is %u", DICT_ID_LEN, 
-            dict_id_printable (zf_ctx->dict_id).id, 0x7fffffff);
+            dict_id_printable (zf_ctx->dict_id).id, MAX_WORDS_IN_CTX);
 
     buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, zf_ctx->mtf.len), CTX_GROWTH, 
                "z_file->mtf_ctx->mtf", zf_ctx->did_i);
@@ -237,6 +235,10 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
 
     uint32_t new_mtf_i_if_no_old_one = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
+    ASSERT (new_mtf_i_if_no_old_one <= MAX_WORDS_IN_CTX, 
+            "Error: ctx of %.*s is full (max allowed words=%u): ol_mtf.len=%u mtf.len=%u",
+            DICT_ID_LEN, dict_id_printable(vb_ctx->dict_id).id, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
+
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     int32_t existing_mtf_i = hash_get_entry_for_seg (segging_vb, vb_ctx,snip, snip_len, new_mtf_i_if_no_old_one, node);
     if (existing_mtf_i != NIL) {
@@ -454,7 +456,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
             ASSERT (zf_node->word_index.n < zf_ctx->mtf.len, // sanity check
                     "Error: word_index=%u out of bound - mtf.len=%u, in dictionary %.*s", 
-                    zf_node->word_index.n, zf_ctx->mtf.len, DICT_ID_LEN, dict_id_printable (zf_ctx->dict_id).id);
+                    (uint32_t)zf_node->word_index.n, (uint32_t)zf_ctx->mtf.len, DICT_ID_LEN, dict_id_printable (zf_ctx->dict_id).id);
         }
     }
     else {
@@ -470,7 +472,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
                                                              &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len,
                                                              &zf_node, &is_new);
 
-            ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%d out of range - len=%i", zf_node_index, vb_ctx->mtf.len);
+            ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vb_ctx->mtf.len);
 
             // set word_index to be indexing the global dict - to be used by zip_vcf_generate_genotype_one_section() and zip_generate_b250_section()
             if (is_new)

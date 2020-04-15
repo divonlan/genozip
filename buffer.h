@@ -22,7 +22,7 @@ typedef struct buffer_ {
     const char *name; // name of allocator - used for memory debugging & statistics
     uint32_t param;   // parameter provided by allocator - used for memory debugging & statistics
     uint64_t size;    // number of bytes allocated to memory
-    uint32_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
+    uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
     char *data;       // ==memory+8 if buffer is allocated or NULL if not
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 
@@ -76,8 +76,8 @@ extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
 
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
 
-extern void buf_copy_do (VBlockP vb, Buffer *dst, const Buffer *src, uint32_t bytes_per_entry,
-                         uint32_t src_start_entry, uint32_t max_entries, // if 0 copies the entire buffer
+extern void buf_copy_do (VBlockP vb, Buffer *dst, const Buffer *src, uint64_t bytes_per_entry,
+                         uint64_t src_start_entry, uint64_t max_entries, // if 0 copies the entire buffer
                          const char *func, uint32_t code_line,
                          const char *name, uint32_t param);
 #define buf_copy(vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name,param) \
@@ -92,6 +92,7 @@ extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
 extern void buf_print (Buffer *buf, bool add_newline);
 
 extern void buf_test_overflows(ConstVBlockP vb);
+extern void buf_test_overflows_all_vbs (void);
 
 //extern int64_t buf_vb_memory_consumption (ConstVBlockP vb);
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);

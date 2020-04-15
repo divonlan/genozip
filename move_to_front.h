@@ -14,6 +14,8 @@
 #include "base250.h"
 #include "sections.h"
 
+#define MAX_WORDS_IN_CTX 0x7fffffff // limit on mtf.len, word_list.len - partly because hash uses signed int32_t
+
 // fake mtf index values that go into genotype_data after segregation if subfields are missing
 #define WORD_INDEX_MAX_INDEX  0xfffffffcUL // the number just smaller than all the special values below
 #define WORD_INDEX_ONE_UP     0xfffffffdUL // the value is the one more than the previous value

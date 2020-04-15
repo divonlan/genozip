@@ -55,20 +55,17 @@ void seg_store (VBlock *vb,
 uint32_t seg_one_field (VBlock *vb, const char *str, unsigned len, unsigned vb_line_i, int f, SectionType sec_b250,
                         bool *is_new) // optional out
 {
-    uint32_t *this_field_section = (uint32_t *)vb->mtf_ctx[f].mtf_i.data;
-    ASSERT (vb->mtf_ctx[f].mtf_i.len * sizeof(uint32_t) < vb->mtf_ctx[f].mtf_i.size,
-            "Error: mtf_i overflow vb_i=%u f=%u len*sizeof(uint32_t)=%u size=%"PRIu64" - no room for another one", 
-            vb->vblock_i, f, vb->mtf_ctx[f].mtf_i.len * (unsigned)sizeof(uint32_t), vb->mtf_ctx[f].mtf_i.size);
-
+    buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, (vb->mtf_ctx[f].mtf_i.len + 1) * sizeof (uint32_t), 2, "mtf_ctx->mtf_i", f);
+    
     MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, &node, is_new);
 
     ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len, "Error in seg_one_field: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
-            node_index, ctx->mtf.len, ctx->ol_mtf.len);
+            node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
-    this_field_section[vb->mtf_ctx[f].mtf_i.len++] = node_index;
+    NEXTENT (uint32_t, vb->mtf_ctx[f].mtf_i) = node_index;
 
     vb->txt_section_bytes[sec_b250] += len + 1;
     return node_index;

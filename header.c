@@ -19,7 +19,7 @@ static bool is_first_txt = true;
 // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed.
 // (names are not longer than 8=DICT_ID_LEN as the code assumes it)
 const char *vcf_field_names[NUM_VCF_FIELDS] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
-const char *sam_field_names[NUM_SAM_FIELDS] = { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL" };
+const char *sam_field_names[NUM_SAM_FIELDS] = { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" };
 
 const unsigned datatype_last_field[NUM_DATATYPES] = { VCF_FORMAT, SAM_OPTIONAL };
 
@@ -61,8 +61,8 @@ static bool header_vcf_set_globals(const char *filename, Buffer *vcf_header)
                                  "%.*s"
                                  "=======================================\n", 
                          global_cmd, filename, vcf_header_line_filename,
-                         vcf_header_line_filename, global_vcf_header_line.len, global_vcf_header_line.data,
-                         filename, vcf_header->len-i, &vcf_header->data[i]);
+                         vcf_header_line_filename, (uint32_t)global_vcf_header_line.len, global_vcf_header_line.data,
+                         filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
                 return false;
             }
 

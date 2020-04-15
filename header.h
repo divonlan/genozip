@@ -32,7 +32,7 @@ extern const char *vcf_field_names[NUM_VCF_FIELDS];
 // - OPTIONAL fields are stored as a template and then each subfield has its own dictionary.
 //   the template looks like eg: "CT:Z:NM:i:" for two subfields CT and NM
 #define NUM_SAM_FIELDS 10
-typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
+typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
 extern const char *sam_field_names[NUM_SAM_FIELDS];
 
 extern void header_initialize(void);

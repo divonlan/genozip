@@ -427,13 +427,15 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         for (uint32_t did_i=0; did_i < z_file->num_dict_ids; did_i++) {
             MtfContext *ctx = &z_file->mtf_ctx[did_i];
 
+#define MAX_PRINTABLE_DICT_LEN 100000
+
             if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num) 
-                fprintf (stderr, "%.*s\t", ctx->dict.len, ctx->dict.data);
+                fprintf (stderr, "%.*s\t", (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
             
             if (flag_show_dict)
                 fprintf (stderr, "%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
                         dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
-                                        did_i, ctx->word_list.len, ctx->dict.len, ctx->dict.data);
+                                           did_i, (uint32_t)ctx->word_list.len, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
         }
 }
 

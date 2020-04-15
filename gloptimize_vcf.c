@@ -173,7 +173,7 @@ cleanup:
     return;
 }
 
-const char *gl_optimize_dictionary (VBlockVCF *vb, Buffer *dict, MtfNode *nodes, unsigned dict_start_char, unsigned num_words)
+const char *gl_optimize_dictionary (VBlockVCF *vb, Buffer *dict, MtfNode *nodes, uint64_t dict_start_char, unsigned num_words)
 {
     START_TIMER;
 

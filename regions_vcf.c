@@ -350,7 +350,7 @@ void regions_display(const char *title)
 
     if (buf_is_allocated (&regions_buf)) {
 
-        fprintf (stderr, "Showing %u %s regions:\n", regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
+        fprintf (stderr, "Showing %u %s regions:\n", (uint32_t)regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
 
         for (unsigned reg_i = 0; reg_i < regions_buf.len; reg_i++) {
             Region *reg = &((Region *)regions_buf.data)[reg_i];

@@ -222,7 +222,8 @@ static bool piz_vcf_get_variant_data_line (VBlockVCF *vb, unsigned vb_line_i,
             // add the INFO subfield values
             else if (f == VCF_INFO) {
                 ASSERT (word_index[VCF_INFO] >= 0 && word_index[VCF_INFO] < vb->iname_mapper_buf.len, 
-                        "Error: iname_mapper word_index out of range: word_index=%d, vb->iname_mapper_buf.len=%u", word_index[VCF_INFO], vb->iname_mapper_buf.len);
+                        "Error: iname_mapper word_index out of range: word_index=%d, vb->iname_mapper_buf.len=%u", 
+                        word_index[VCF_INFO], (uint32_t)vb->iname_mapper_buf.len);
 
                 iname_mapper = &((SubfieldMapper *)vb->iname_mapper_buf.data)[word_index[VCF_INFO]];
                 for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
@@ -661,7 +662,7 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
     
     // sanity check (the actual can be smaller in a line with missing samples)
     ASSERT (next - dl->line.data <= dl->line.len, "Error: unexpected line size in line_i=%u: calculated=%u, actual=%u", 
-            vb->first_line + vb_line_i, dl->line.len, (unsigned)(next - dl->line.data));
+            vb->first_line + vb_line_i, (uint32_t)dl->line.len, (unsigned)(next - dl->line.data));
 
     dl->line.len = next - dl->line.data; // update line len to actual, which will be smaller in case of missing samples
 
@@ -900,7 +901,8 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
             
             unsigned expected_size = vb->num_lines * num_samples_in_sb;
             ASSERT (vb->phase_sections_data[sb_i].len == expected_size, 
-                    "Error: unexpected size of phase_sections_data[%u]: expecting %u but got %u", sb_i, expected_size, vb->phase_sections_data[sb_i].len)
+                    "Error: unexpected size of phase_sections_data[%u]: expecting %u but got %u", 
+                    sb_i, expected_size, (uint32_t)vb->phase_sections_data[sb_i].len)
         }
 
         // finally, comes haplotype data
@@ -934,7 +936,8 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
             unsigned expected_size = vb->num_lines * num_samples_in_sb * vb->ploidy;
             ASSERT (vb->haplotype_sections_data[sb_i].len == expected_size, 
-                    "Error: unexpected size of haplotype_sections_data[%u]: expecting %u but got %u", sb_i, expected_size, vb->haplotype_sections_data[sb_i].len)
+                    "Error: unexpected size of haplotype_sections_data[%u]: expecting %u but got %u", 
+                    sb_i, expected_size, (uint32_t)vb->haplotype_sections_data[sb_i].len)
         }
     }
 }

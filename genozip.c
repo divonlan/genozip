@@ -65,8 +65,10 @@ DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
 
 static char *threads_str  = NULL;
 
-void my_exit(void) 
+void exit_on_error(void) 
 {
+    buf_test_overflows_all_vbs();
+    
     url_kill_curl();
     file_kill_external_compressors(); 
 
@@ -248,7 +250,7 @@ static void main_show_sections (void)
         SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
         SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
         SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
-        SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     SEC_SAM_RNEXT_B250,    SEC_SAM_RNEXT_DICT, 
+        SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     
         SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
         SEC_SAM_SEQ_DATA,      SEC_SAM_QUAL_DATA,
         SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT
@@ -265,7 +267,7 @@ static void main_show_sections (void)
         "Line block metadata",
         "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", "FLAG b250", "FLAG dict", 
         "RNAME b250", "RNAME dict", "POS b250", "POS dict", "MAPQ b250", "MAPQ dict", "CIGAR b250", "CIGAR dict", 
-        "RNEXT b250", "RNEXT dict", "PNEXT b250", "PNEXT dict", "TLEN b250", "TLEN dict", 
+        "PNEXT b250", "PNEXT dict", "TLEN b250", "TLEN dict", 
         "SEQ data", "QUAL data",
         "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict"
     };
@@ -357,7 +359,7 @@ static void main_show_content (void)
           SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
           SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
           SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
-          SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     SEC_SAM_RNEXT_B250,    SEC_SAM_RNEXT_DICT, 
+          SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,    
           SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
           SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
           

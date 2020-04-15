@@ -61,7 +61,7 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
 {
     fprintf (stderr, "%s: output file %s already exists: in the future, you may use --force to overwrite\n", global_cmd, filename);
     
-    if (!isatty(0) || !isatty(2)) my_exit(); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
+    if (!isatty(0) || !isatty(2)) exit_on_error(); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
     
     fprintf (stderr, "Do you wish to overwrite it now? (y or [n]) ");
 
@@ -73,7 +73,7 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
 
     if (read_buf[0] != 'y' && read_buf[0] != 'Y') {
         fprintf (stderr, "No worries, I'm stopping here - no damage done!\n");
-        my_exit();
+        exit(0);
     }
 }
 
@@ -167,9 +167,11 @@ static bool file_open_txt (File *file)
                                             file->is_remote ? file->name : NULL,         // url                                        
                                             reason, 
                                             file->type == BAM ? "samtools" : "bcftools", // exec_name
-                                            "view", "--threads", "8", 
+                                            "view", 
+                                            "--threads", "8", 
                                             file->type == BAM ? "-OSAM" : "-Ov",
                                             file->is_remote ? SKIP_ARG : file->name,    // local file name 
+                                            file->type == BAM ? "-h" : NULL, // include header in SAM output
                                             NULL);
         file->file = stream_from_stream_stdout (input_decompressor);
         break;

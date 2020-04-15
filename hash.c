@@ -121,7 +121,6 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         // typically smallish - use hash table ~ 2000
         else 
         if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_RNAME]  ||
-            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_RNEXT]  ||
             vb_ctx->dict_id.num == dict_id_OPTION_CC)
 
             vb_ctx->local_hash_prime = hash_next_size_up(2000);
@@ -258,7 +257,7 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
 
     while (g_hashent->next != NO_NEXT) {
 
-        ASSERT (g_hashent->next < zf_ctx->global_hash.len, "Error in hash_get_entry_for_merge: g_hashent->next=%d out of range, hash.len=%u",  
+        ASSERT (g_hashent->next < zf_ctx->global_hash.len, "Error in hash_get_entry_for_merge: g_hashent->next=%d out of range, hash.len=%"PRIu64,  
                 g_hashent->next, zf_ctx->global_hash.len);
 
         hashent_i = g_hashent->next;
@@ -368,7 +367,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     while (l_hashent->next != NO_NEXT) {
 
         ASSERT (l_hashent->next < vb_ctx->local_hash.len, 
-                "Error: l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, vb_ctx->local_hash.len);
+                "Error: l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, (uint32_t)vb_ctx->local_hash.len);
         l_hashent_i = l_hashent->next;
         l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);
 

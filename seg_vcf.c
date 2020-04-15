@@ -101,7 +101,7 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
     // if this is a new format - add mapper
     if (is_new) {
         ASSERT (node_index == vb->format_mapper_buf.len, 
-                "Error: node_index=%u different than vb->format_mapper_buf.len=%u", node_index, vb->format_mapper_buf.len);
+                "Error: node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
         vb->format_mapper_buf.len++;
         buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (SubfieldMapper), 2, "format_mapper_buf", 0);
@@ -234,7 +234,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, u
 
     // if this is a totally new subfield (first time in this file) - make a new SubfieldMapper for it.
     if (is_new) {   
-        ASSERT (node_index == vb->iname_mapper_buf.len, "Error: node_index=%u different than vb->iname_mapper_buf.len=%u", node_index, vb->iname_mapper_buf.len);
+        ASSERT (node_index == vb->iname_mapper_buf.len, "Error: node_index=%u different than vb->iname_mapper_buf.len=%u", node_index, (uint32_t)vb->iname_mapper_buf.len);
     
         vb->iname_mapper_buf.len++;
         buf_alloc (vb, &vb->iname_mapper_buf, MAX (100, vb->iname_mapper_buf.len) * sizeof (SubfieldMapper), 1.5, "iname_mapper_buf", 0);

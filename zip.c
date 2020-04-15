@@ -107,7 +107,7 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
     }
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
-        fprintf (stderr, "%.*s", vb->show_b250_buf.len, vb->show_b250_buf.data);
+        fprintf (stderr, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
 
