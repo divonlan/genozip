@@ -56,15 +56,15 @@ static void gtshark_create_vcf_file (VBlockVCF *vb, const Buffer *section_data, 
             // we put this allele in the exception list and change it to '0' for gtshark.
             if (c < '0' || c > '2') {
                 if (!num_exceptions_in_line) { // first exception for this line 
-                    buf_alloc_more (vb, &vb->gtshark_exceptions_line_i, 1, uint32_t, 2);
+                    buf_alloc_more (vb, &vb->gtshark_exceptions_line_i, 1, 1, uint32_t, 2);
                     NEXTENT (uint32_t, vb->gtshark_exceptions_line_i) = BGEN32 (vb_line_i);
                 }
 
-                buf_alloc_more (vb, &vb->gtshark_exceptions_ht_i, 2, uint16_t, 2); // room for terminator too
+                buf_alloc_more (vb, &vb->gtshark_exceptions_ht_i, 2, 2, uint16_t, 2); // room for terminator too
                 NEXTENT (uint16_t, vb->gtshark_exceptions_ht_i) = BGEN16 (ht_i - last_exception_ht_i); // delta encoding
                 last_exception_ht_i = ht_i;
                 
-                buf_alloc_more (vb, &vb->gtshark_exceptions_allele, 2, char, 2);   // room for terminator too
+                buf_alloc_more (vb, &vb->gtshark_exceptions_allele, 2, 2, char, 2);   // room for terminator too
                 NEXTENT (char, vb->gtshark_exceptions_allele) = c;
 
                 num_exceptions_in_line++; 

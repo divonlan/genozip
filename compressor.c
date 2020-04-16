@@ -163,25 +163,38 @@ bool comp_compress_bzlib (VBlock *vb,
 
             ASSERT (!strm.avail_in, "Error in comp_compress_bzlib: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
 
-            callback (vb, line_i, &strm.next_in, &strm.avail_in);
+            char *next_in_2;
+            uint32_t avail_in_2;
+            callback (vb, line_i, &strm.next_in, &strm.avail_in, &next_in_2, &avail_in_2);
 
-            if (line_i < vb->num_lines - 1) { // not last line
+            bool final = (line_i == vb->num_lines - 1) && !avail_in_2;
+
 //printf("BEFORE: line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out);                
-                ret = BZ2_bzCompress (&strm, BZ_RUN);
+            ret = BZ2_bzCompress (&strm, final ? BZ_FINISH : BZ_RUN);
 //printf("AFTER:  line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out); // DEBUG
-                if (soft_fail && !strm.avail_out /* ret == BZ_FINISH_OK */) {
+            if (soft_fail && ret == BZ_FINISH_OK) { // TO DO - what is the condition for out of output space in BZ_RUN?
+                success = false; // data_compressed_len too small
+                break;
+            }
+            else ASSERT (ret == (final ? BZ_STREAM_END : BZ_RUN_OK), 
+                         "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
+
+            // now the second part, if there is one
+            if (avail_in_2) {
+                final = (line_i == vb->num_lines - 1);
+
+                strm.next_in  = next_in_2;
+                strm.avail_in = avail_in_2;
+
+//printf("BEFORE: line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out);                
+                ret = BZ2_bzCompress (&strm, final ? BZ_FINISH : BZ_RUN);
+//printf("AFTER:  line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out); // DEBUG
+                if (soft_fail && ret == BZ_FINISH_OK) { // TO DO - what is the condition for out of output space in BZ_RUN?
                     success = false; // data_compressed_len too small
                     break;
                 }
-                else 
-                    ASSERT (ret == BZ_RUN_OK, "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
-            }
-            else { // last line
-                ret = BZ2_bzCompress (&strm, BZ_FINISH);
-                if (soft_fail && ret == BZ_FINISH_OK)
-                    success = false; // data_compressed_len too small
-                else 
-                    ASSERT (ret == BZ_STREAM_END, "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
+                else ASSERT (ret == (final ? BZ_STREAM_END : BZ_RUN_OK), 
+                             "Error: BZ2_bzCompress failed: %s", BZ2_errstr (ret));
             }
         }
     }
@@ -233,18 +246,30 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
     }
 
     // get next line if we have no data
-    if (!instream->avail_in_line) 
-       instream->callback (instream->vb, instream->line_i, &instream->next_in, &instream->avail_in_line);
+    if (!instream->avail_in_1 && !instream->avail_in_2) 
+       instream->callback (instream->vb, instream->line_i, 
+                           &instream->next_in_1, &instream->avail_in_1,
+                           &instream->next_in_2, &instream->avail_in_2);
 
-    uint32_t bytes_served = MIN (instream->avail_in_line, *size);
-    memcpy (buf, instream->next_in, bytes_served);
+    uint32_t bytes_served_1 = MIN (instream->avail_in_1, *size);
+    if (bytes_served_1) {
+        memcpy (buf, instream->next_in_1, bytes_served_1);
+        instream->next_in_1  += bytes_served_1;
+        instream->avail_in_1 -= bytes_served_1;
+    }
 
-    *size = bytes_served;
-    instream->next_in            += bytes_served;
-    instream->avail_in           -= bytes_served;
-    instream->avail_in_line -= bytes_served;
+    uint32_t bytes_served_2 = MIN (instream->avail_in_2, *size - bytes_served_1);
+    if (bytes_served_2) {    
+        memcpy (buf + bytes_served_1, instream->next_in_2, bytes_served_2);
+        instream->next_in_2  += bytes_served_2;
+        instream->avail_in_2 -= bytes_served_2;
+    }
+
+    *size = bytes_served_1 + bytes_served_2;
+    instream->avail_in -= bytes_served_1 + bytes_served_2;
     
-    if (instream->avail_in_line == 0) instream->line_i++;
+    if (!instream->avail_in_1 && !instream->avail_in_2) 
+        instream->line_i++;
 
     return SZ_OK;
 }
@@ -309,8 +334,10 @@ bool comp_compress_lzma (VBlock *vb,
                                     .vb            = vb,
                                     .line_i        = 0,
                                     .avail_in      = uncompressed_len,
-                                    .next_in       = NULL,
-                                    .avail_in_line = 0,
+                                    .next_in_1     = NULL,
+                                    .avail_in_1    = 0,
+                                    .next_in_2     = NULL,
+                                    .avail_in_2    = 0,
                                     .callback      = callback };
                                   
         ISeqOutStream outstream = { .Write        = comp_lzma_data_out_callback,
@@ -499,16 +526,16 @@ void comp_uncompress (VBlock *vb, CompressorAlg alg,
     case COMPRESS_LZMA: {
         ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
         ELzmaStatus status;
-        uint64_t uncompressed_len64 = (uint64_t)uncompressed->len;
+        //uint64_t uncompressed_len64 = uncompressed->len;
         uint64_t compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
         
-        SRes ret = LzmaDecode ((uint8_t *)uncompressed->data, &uncompressed_len64, 
+        SRes ret = LzmaDecode ((uint8_t *)uncompressed->data, &uncompressed->len, 
                                (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
                                (uint8_t *)compressed, LZMA_PROPS_SIZE, 
                                LZMA_FINISH_END, &status, &alloc_stuff);
 
         ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
-                "Error: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status));
+                "Error: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
 
         break;
     }

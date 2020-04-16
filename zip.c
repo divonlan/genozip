@@ -82,28 +82,45 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
-        MtfNode *node = mtf_node (ctx, *ENT(uint32_t, ctx->mtf_i, i), NULL, NULL);
 
-        uint32_t n            = node->word_index.n;
-        unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
-        uint8_t *numerals     = node->word_index.encoded.numerals;
+        uint32_t node_index = *ENT(uint32_t, ctx->mtf_i, i);
+
+        if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
+
+            MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
+
+            uint32_t n            = node->word_index.n;
+            unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
+            uint8_t *numerals     = node->word_index.encoded.numerals;
+            
+            bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_VCF_GT_DATA) && (i > 0);
+
+            if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
+                NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
+                if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
+            }
+
+            else {
+                memcpy (AFTERENT (char, ctx->b250), numerals, num_numerals);
+                ctx->b250.len += num_numerals;
+                if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", i, n)
+            }
+            prev = n;
+        }
+
+        else if (node_index == WORD_INDEX_MISSING_SF) {
+            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_MISSING_SF;
+            prev = node_index;
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", i)
+        }
         
-        bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_VCF_GT_DATA) && (i > 0);
-
-        if (one_up) // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
-            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
-
-        else {
-            memcpy (AFTERENT (char, ctx->b250), numerals, num_numerals);
-            ctx->b250.len += num_numerals;
+        else if (node_index == WORD_INDEX_EMPTY_SF) {
+            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_EMPTY_SF;
+            prev = node_index;
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", i)
         }
 
-        if (show) {
-            if (one_up) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
-            else        bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", i, n)
-        }
-
-        prev = n;
+        else ABORT ("Error in zip_generate_b250_section: invalid node_index=%u", node_index);        
     }
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")

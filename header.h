@@ -26,13 +26,12 @@ extern const char *vcf_field_names[NUM_VCF_FIELDS];
 
 // Note on SAM fields: 
 // - the QNAME field is broken into its :-separated components
-// - the POS field is stored as a delta from the previous line. This will work great in sorted files, but
-//   even in non sorted files there are often several related adjacent lines
-// - The PNEXT field is stored as a delta from the POS field
+// - the POS and PNEXT are stored in vb->pos_data and compressed with lzma
+// - RNEXT is stored in the RNAME dictionary
 // - OPTIONAL fields are stored as a template and then each subfield has its own dictionary.
 //   the template looks like eg: "CT:Z:NM:i:" for two subfields CT and NM
-#define NUM_SAM_FIELDS 10
-typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
+#define NUM_SAM_FIELDS 7
+typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_MAPQ, SAM_CIGAR, SAM_TLEN, SAM_OPTIONAL } SamFields;
 extern const char *sam_field_names[NUM_SAM_FIELDS];
 
 extern void header_initialize(void);

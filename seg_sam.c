@@ -60,13 +60,13 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
             ASSERT0 (sf_ctx, "Error in seg_sam_qname_field: sf_ctx is NULL");
 
             // allocate memory if needed
-            buf_alloc (vb, &sf_ctx->mtf_i, MIN (vb->num_lines, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                       1.5, "mtf_ctx->mtf_i", sf_ctx->did_i);
+            buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->num_lines, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
+                       CTX_GROWTH, "mtf_ctx->mtf_i", sf_ctx->did_i);
 
             NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
 
             // finalize this subfield and get ready for reading the next one
-            if (i < qname_len) {
+            if (i < qname_len) {    
                 template[sf_i] = qname[i];
                 snip = &qname[i+1];
                 snip_len = 0;
@@ -88,26 +88,184 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
     vb->txt_section_bytes[SEC_SAM_QNAME_SF_B250] += qname_len - (sf_i-1); // the entire field except for the / and : separators
 }
 
+// returns length of string ending with separator, or -1 if separator was not found
+static inline int seg_sam_get_next_subitem (const char *str, int str_len, char separator)
+{
+    for (int i=0; i < str_len; i++) {
+        if (str[i] == separator) return i;
+        if (str[i] == ',' || str[i] == ';') return -1; // wrong separator encountered
+    }
+    return -1;
+}
+
+#define DO_SSF(ssf,sep) \
+        ssf = &field[i]; \
+        ssf##_len = seg_sam_get_next_subitem (&field[i], field_len-i, sep); \
+        if (ssf##_len == -1) goto error; /* bad format */ \
+        i += ssf##_len + 1; /* skip snip and separator */        
+
+#define DEC_SSF(ssf) const char *ssf; \
+                     int ssf##_len;
+
+static unsigned seg_sam_sa_or_oa_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
+{
+    // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
+    // Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
+    // See: https://samtools.github.io/hts-specs/SAMtags.pdf
+    DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(strand); DEC_SSF(cigar); DEC_SSF(mapq); DEC_SSF(nm); 
+    int repeats = 0;
+
+    for (unsigned i=0; i < field_len; repeats++) {
+        DO_SSF (rname,  ','); 
+        DO_SSF (pos,    ','); 
+        DO_SSF (strand, ','); 
+        DO_SSF (cigar,  ','); 
+        DO_SSF (mapq,   ','); 
+        DO_SSF (nm,     ';'); 
+
+        // sanity checks before adding to any dictionary
+        if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
+
+        // pos - add to the pos data together with all other pos data (POS, PNEXT etc).
+        buf_alloc_more (vb, &vb->pos_data, pos_len+1, vb->num_lines, char, 2);
+        buf_add (&vb->pos_data, pos, pos_len); 
+        buf_add (&vb->pos_data, "\t", 1); 
+        vb->txt_section_bytes[SEC_SAM_POS_DATA] += pos_len + 1; 
+
+        // nm : we store in the same dictionary as the Optional subfield NM
+        seg_one_subfield ((VBlockP)vb, nm, nm_len, vb_line_i, (DictIdType)dict_id_OPTION_NM, 
+                          SEC_SAM_OPTNL_SF_B250, nm_len+1);
+
+        // strand : we store in in the STRAND dictionary (used by SA, OA, XA)
+        seg_one_subfield ((VBlockP)vb, strand, 1, vb_line_i, (DictIdType)dict_id_OPTION_STRAND, 
+                          SEC_SAM_OPTNL_SF_B250, 2);
+
+        // rname, cigar and mapq: we store in the same dictionary as the primary fields
+        seg_sam_one_field (vb, rname, rname_len, vb_line_i, SAM_RNAME, NULL);
+        seg_sam_one_field (vb, cigar, cigar_len, vb_line_i, SAM_CIGAR, NULL);
+        seg_sam_one_field (vb, mapq,  mapq_len, vb_line_i, SAM_MAPQ, NULL);
+    }
+
+    return repeats;
+
+error:
+    // if the error occurred on on the first repeat - this file probably has a different
+    // format - we return 0 and the subfield will be stored as a normal subfield
+    // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
+    ASSERT (!repeats, "Invalid format in repeat #%u of field SA or OA, vb_i=%u vb_line_i=%u. data: %.*s",
+            repeats+1, vb->vblock_i, vb_line_i, field_len, field);
+    return 0;
+}
+
+static unsigned seg_sam_xa_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
+{
+    // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
+    // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
+    // See: http://bio-bwa.sourceforge.net/bwa.shtml
+    DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(cigar); DEC_SSF(nm); 
+    int repeats = 0;
+
+    for (unsigned i=0; i < field_len; repeats++) {
+        DO_SSF (rname,  ','); 
+        DO_SSF (pos,    ','); 
+        DO_SSF (cigar,  ','); 
+        DO_SSF (nm,     ';'); 
+
+        // sanity checks before adding to any dictionary
+        if (pos_len < 2 || (pos[0] != '+' && pos[0] != '-')) goto error; // invalid format - expecting pos to begin with the strand
+
+        // pos - add to the pos data together with all other pos data (POS, PNEXT etc),
+        // strand - add to separate STRAND dictionary, to not adversely affect compression of POS.
+        // there is no advantage to storing the strand together with pos as they are not correlated.
+        buf_alloc_more (vb, &vb->pos_data, pos_len, 0, char, 2);
+        buf_add (&vb->pos_data, pos+1, pos_len-1); 
+        buf_add (&vb->pos_data, "\t", 1); 
+        vb->txt_section_bytes[SEC_SAM_POS_DATA] += pos_len; // one less for the strand, one more for the \t 
+
+        // strand
+        seg_one_subfield ((VBlockP)vb, pos, 1, vb_line_i, (DictIdType)dict_id_OPTION_STRAND, 
+                          SEC_SAM_OPTNL_SF_B250, 1);
+
+        // nm : we store in the same dictionary as the Optional subfield NM
+        seg_one_subfield ((VBlockP)vb, nm, nm_len, vb_line_i, (DictIdType)dict_id_OPTION_NM, 
+                          SEC_SAM_OPTNL_SF_B250, nm_len+1);
+
+        // rname and cigar: we store in the same dictionary as the primary fields
+        seg_sam_one_field (vb, rname, rname_len, vb_line_i, SAM_RNAME, NULL);
+        seg_sam_one_field (vb, cigar, cigar_len, vb_line_i, SAM_CIGAR, NULL);
+    }
+
+    return repeats;
+
+error:
+    // if the error occurred on on the first repeat - this file probably has a different
+    // format - we return 0 and the subfield will be stored as a normal subfield
+    // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
+    ASSERT (!repeats, "Invalid format in repeat #%u of field XA (0-based), vb_i=%u vb_line_i=%u. data: %.*s",
+            repeats, vb->vblock_i, vb_line_i, field_len, field);
+    return 0;
+}
+
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
-static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned field_len, char separator, unsigned vb_line_i)
+static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned field_len, 
+                                    char separator, unsigned vb_line_i)
 {
     ASSERT (field_len >= 6 && field[2] == ':' && field[4] == ':', "Error in %s: invalid optional field format: %.*s",
             txt_name, field_len, field);
 
     DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (field, 2));
 
-    MtfNode *node;
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT);
+    // handle special subfields
+    unsigned repeats = 0; // some fields have "repeats" - multiple instances of the same format of data separated by a ;
+    if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA)
+        repeats = seg_sam_sa_or_oa_field (vb, &field[5], field_len-5, vb_line_i);
 
-    // allocate memory if needed
-    buf_alloc (vb, &ctx->mtf_i, MIN (vb->num_lines, ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                1.5, "mtf_ctx->mtf_i", ctx->did_i);
+    else if (dict_id.num == dict_id_OPTION_XA && field[3] == 'Z') 
+        repeats = seg_sam_xa_field (vb, &field[5], field_len-5, vb_line_i);
 
-    NEXTENT (uint32_t, ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, &field[5], field_len-5, &node, NULL);
+    if (!repeats) { // non-repeating fields
 
-    // account for the subfield value and \t, but not \n which is already accounted for in SEC_SAM_OPTIONAL_B250
-    vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250] += (field_len-5) + (separator == '\t'); 
+        // fields containing CIGAR format data
+        if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
+            seg_sam_one_field (vb, &field[5], field_len-5, vb_line_i, SAM_CIGAR, NULL);
+
+        // E2 - SEQ data (note: E2 doesn't have a dictionary)
+        else if (dict_id.num == dict_id_OPTION_E2) { 
+            ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
+            ASSERT (field_len-5 == dl->seq_len, 
+                    "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
+                    file_printname (txt_file), dl->seq_len, field_len-5, field_len-5, &field[5]);
+
+            dl->e2_data_start = &field[5] - vb->txt_data.data;
+        }
+        // U2 - QUAL data (note: U2 doesn't have a dictionary)
+        else if (dict_id.num == dict_id_OPTION_U2) {
+            ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
+            ASSERT (field_len-5 == dl->seq_len, 
+                    "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
+                    file_printname (txt_file), dl->seq_len, field_len-5, field_len-5, &field[5]);
+
+            dl->u2_data_start = &field[5] - vb->txt_data.data;
+        }
+        // All other subfields - have their own dictionary
+        else        
+            seg_one_subfield ((VBlock *)vb, &field[5], field_len-5, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
+                             (field_len-5) + 1); // +1 for \t
+
+        if (separator == '\n') 
+            vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250]--; // \n is already accounted for in SEC_SAM_OPTIONAL_B250
+    }
+
+    // special subfield - in the normal field, store just the number of repeats.
+    // the data itself was stored in the subsubfields in seg_sam_*_field
+    else {
+        char repeats_str[20];
+        sprintf (repeats_str, "%c%u", -1, repeats); // (char)-1 to indicate repeats (invalid char per SAM specification, so it cannot appear organically)
+        unsigned repeats_len = strlen (repeats_str); 
+        seg_one_subfield ((VBlock *)vb, repeats_str, repeats_len, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
+                          repeats_len + (separator == '\t')); // account for  \t, but not \n which is already accounted for in SEC_SAM_OPTIONAL_B250
+    }
 }
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string
@@ -224,10 +382,12 @@ const char *seg_sam_data_line (VBlock *vb_,
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNAME");
     seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
 
-    // POS - delta encode
+    // POS - add to vb->pos_data (not a dictionary)
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i);
+    buf_alloc_more (vb, &vb->pos_data, field_len+1, vb->num_lines*(field_len+3), char, 2);
+    buf_add (&vb->pos_data, field_start, field_len+1); // including the \t
+    vb->txt_section_bytes[SEC_SAM_POS_DATA] += field_len+1;
 
     // MAPQ
     field_start = next_field;
@@ -245,13 +405,12 @@ const char *seg_sam_data_line (VBlock *vb_,
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNEXT");
     seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
 
-    // PNEXT - encode as delta from POS (except if its unavailable - encode as "*")
+    // PNEXT - add to vb->pos_data (not a dictionary)
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "PNEXT");
-    if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable" per SAM specification
-        seg_sam_one_field (vb, "*", 1, vb_line_i, SAM_PNEXT, NULL); 
-    else
-        seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i);
+    buf_alloc_more (vb, &vb->pos_data, field_len+1, vb->num_lines, char, 2);
+    buf_add (&vb->pos_data, field_start, field_len+1); // including the \t
+    vb->txt_section_bytes[SEC_SAM_POS_DATA] += field_len+1;
 
     // TLEN
     field_start = next_field;

@@ -15,36 +15,39 @@
 
 #define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
 
-// get total number of bases in this VB
-static uint32_t zip_sam_get_num_bases (VBlockSAM *vb)
+// get lengths of sequence data (SEQ+E2) and quality data (QUAL+U2)
+static void zip_sam_get_seq_qual_len (VBlockSAM *vb, uint32_t *seq_len, uint32_t *qual_len)
 {
-    // calculate length
-    uint32_t num_bases=0;
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
         ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
-        num_bases += dl->seq_len; // length of SEQ and QUAL - they must be the same per SAM file specification
+        *seq_len  += dl->seq_len * (1 + !!dl->e2_data_start); // length SEQ and E2 - they must be the same per SAM file specification
+        *qual_len += dl->seq_len * (1 + !!dl->u2_data_start); // length QUAL and U2 - they must be the same per SAM file specification        
     }
-
-    return num_bases;
 }
 
+// callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
 static void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
-                                              char **line_data, uint32_t *line_data_len) // out
+                                              char **line_seq_data, uint32_t *line_seq_len,  // out 
+                                              char **line_e2_data,  uint32_t *line_e2_len)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
-    uint32_t start_index = dl->seq_data_start;
-    *line_data = ENT (char, vb->txt_data, start_index);
-    *line_data_len   = dl->seq_len;
+    *line_seq_data = ENT (char, vb->txt_data, dl->seq_data_start);
+    *line_seq_len  = dl->seq_len;
+    *line_e2_data  = dl->e2_data_start ? ENT (char, vb->txt_data, dl->e2_data_start) : NULL;
+    *line_e2_len   = dl->e2_data_start ? dl->seq_len : 0;
 }   
 
+// callback function for compress to get data of one line (called by comp_compress_bzlib)
 static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i, 
-                                               char **line_data, uint32_t *line_data_len) // out
+                                               char **line_qual_data, uint32_t *line_qual_len, // out
+                                               char **line_u2_data,   uint32_t *line_u2_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
-    uint32_t start_index = dl->qual_data_start;
-    *line_data = ENT (char, vb->txt_data, start_index);
-    *line_data_len   = dl->seq_len;
-}   
+    *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
+    *line_qual_len  = dl->seq_len;
+    *line_u2_data   = dl->u2_data_start ? ENT (char, vb->txt_data, dl->u2_data_start) : NULL;
+    *line_u2_len    = dl->u2_data_start ? dl->seq_len : 0;
+}
 
 // this function receives all lines of a variant block and processes them
 // in memory to the compressed format. This thread then terminates the I/O thread writes the output.
@@ -66,6 +69,9 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     mtf_clone_ctx (vb_);
 
     // split each line in this variant block to its components
+    
+    vb->pos_data.name = "POS"; vb->pos_data.param = vb->vblock_i; // initialize for seg
+    
     seg_all_data_lines (vb_, seg_sam_data_line, sizeof (ZipDataLineSAM),
                         SAM_QNAME, SAM_OPTIONAL, sam_field_names, SEC_SAM_QNAME_DICT);
 
@@ -111,10 +117,14 @@ void zip_sam_compress_one_vb (VBlockP vb_)
             }
         }
 
+    // generate & compress the POS data
+    zfile_compress_section_data_alg (vb_, SEC_SAM_POS_DATA, &vb->pos_data, NULL, 0, COMPRESS_LZMA);
+
     // generate & compress the SEQ & QUAL data
-    uint32_t num_bases = zip_sam_get_num_bases (vb); 
-    zfile_compress_section_data_alg (vb_, SEC_SAM_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  num_bases, COMPRESS_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_SAM_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, num_bases, COMPRESS_BZLIB);
+    uint32_t seq_len=0, qual_len=0;
+    zip_sam_get_seq_qual_len (vb, &seq_len, &qual_len);
+    zfile_compress_section_data_alg (vb_, SEC_SAM_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  seq_len,  COMPRESS_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_SAM_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, qual_len, COMPRESS_BZLIB);
 
     // tell dispatcher this thread is done and can be joined. 
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true

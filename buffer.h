@@ -35,7 +35,7 @@ typedef struct buffer_ {
 
 #define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL,NULL,0,NULL,0}
 
-#define ARRAY(type, name, buf) type *name = ((type *)((buf).data)) 
+#define ARRAY(element_type, name, buf) element_type *name = ((element_type *)((buf).data)) 
 
 #define ENT(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
 #define FIRSTENT(type, buf)   ((type *)( (buf).data))
@@ -59,8 +59,8 @@ extern uint64_t buf_alloc_do (VBlockP vb,
   ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (requested_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
                                                     : (buf)->size) 
 
-#define buf_alloc_more(vb, buf, more, type, grow_at_least_factor) \
-  buf_alloc ((vb), (buf), ((buf)->len+(more))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
+#define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor) \
+  buf_alloc ((vb), (buf), MAX(at_least, ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
 
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 

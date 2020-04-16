@@ -95,6 +95,9 @@ typedef struct mtfcontext_ {
 
 } MtfContext;
 
+// factor in which we grow buffers in CTX upon realloc
+#define CTX_GROWTH 1.75
+
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
 extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);

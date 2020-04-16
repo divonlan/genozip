@@ -97,6 +97,8 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->dict_id.num == dict_id_sam_fields[SAM_MAPQ]      ||
             vb_ctx->dict_id.num == dict_id_sam_fields[SAM_QNAME]     ||
             vb_ctx->dict_id.num == dict_id_sam_fields[SAM_OPTIONAL]  ||
+
+            // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
             vb_ctx->dict_id.num == dict_id_OPTION_AM ||
             vb_ctx->dict_id.num == dict_id_OPTION_AS ||
             vb_ctx->dict_id.num == dict_id_OPTION_CM ||
@@ -108,13 +110,28 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->dict_id.num == dict_id_OPTION_MQ ||
             vb_ctx->dict_id.num == dict_id_OPTION_NH ||
             vb_ctx->dict_id.num == dict_id_OPTION_NM ||
+            vb_ctx->dict_id.num == dict_id_OPTION_OC ||
             vb_ctx->dict_id.num == dict_id_OPTION_PG ||
             vb_ctx->dict_id.num == dict_id_OPTION_PQ ||
             vb_ctx->dict_id.num == dict_id_OPTION_PU ||
             vb_ctx->dict_id.num == dict_id_OPTION_RG ||
+            vb_ctx->dict_id.num == dict_id_OPTION_SA ||
             vb_ctx->dict_id.num == dict_id_OPTION_SM ||
             vb_ctx->dict_id.num == dict_id_OPTION_TC ||
-            vb_ctx->dict_id.num == dict_id_OPTION_UQ)
+            vb_ctx->dict_id.num == dict_id_OPTION_UQ ||
+            
+            // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
+            vb_ctx->dict_id.num == dict_id_OPTION_X0 ||
+            vb_ctx->dict_id.num == dict_id_OPTION_X1 ||
+            vb_ctx->dict_id.num == dict_id_OPTION_XA ||
+            vb_ctx->dict_id.num == dict_id_OPTION_XN ||
+            vb_ctx->dict_id.num == dict_id_OPTION_XM ||
+            vb_ctx->dict_id.num == dict_id_OPTION_XO ||
+            vb_ctx->dict_id.num == dict_id_OPTION_XG ||
+            vb_ctx->dict_id.num == dict_id_OPTION_XS ||
+            vb_ctx->dict_id.num == dict_id_OPTION_XE ||
+            
+            vb_ctx->dict_id.num == dict_id_OPTION_STRAND)
             
             vb_ctx->local_hash_prime = hash_next_size_up(500);
 
@@ -187,17 +204,18 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     };
 
     double estimated_entries=0;
-    double n_ratio = n2 ? n1/n2 : 0;
-    unsigned max_growth_plan=0;
+    double n_ratio = n2 ? n1/n2 : 0;    unsigned max_growth_plan=0;
 
     if (n2 == 0) 
         estimated_entries = zf_ctx->mtf.len;
+
+    // To do - take into account optional fields partial appearance (e.g. if a field appears 1% of the time...)
 
     else if (n_ratio > 0.8 && n_ratio < 1.2)  // looks like almost linear growth
         estimated_entries = estimated_num_lines * ((n1+n2 )/ merging_vb->num_lines) * 0.75;
     
     else {
-        if      (n_ratio > 2.5) max_growth_plan = 2;
+        if      (n_ratio > 2.5 || !n1) max_growth_plan = 2;
         else if (n_ratio > 2.1) max_growth_plan = 3;
         else if (n_ratio > 1.8) max_growth_plan = 4;
         else if (n_ratio > 1.5) max_growth_plan = 5;
@@ -216,7 +234,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
 
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
     //printf ("dict=%.8s n1=%2.2lf n2=%2.2lf n1/n2=%2.2lf max_growth_plan=%u vbs=%u num_lines=%u zf_ctx->mtf.len=%u entries=%2.2lf hashsize=%u\n", 
-    //        dict_id_printable(zf_ctx->dict_id).id, n1, n2, n_ratio, max_growth_plan, (unsigned)estimated_num_vbs, (unsigned)estimated_num_lines, zf_ctx->mtf.len, estimated_entries, zf_ctx->global_hash_prime); 
+    //        dict_id_printable(zf_ctx->dict_id).id, n1, n2, n_ratio, max_growth_plan, (unsigned)estimated_num_vbs, (unsigned)estimated_num_lines, (uint32_t)zf_ctx->mtf.len, estimated_entries, zf_ctx->global_hash_prime); 
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->mtf_ctx->global_hash", zf_ctx->did_i);

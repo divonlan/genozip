@@ -192,7 +192,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, u
                 // allocate memory if needed
                 Buffer *mtf_i_buf = &ctx->mtf_i;
                 buf_alloc (vb, mtf_i_buf, MIN (vb->num_lines, mtf_i_buf->len + 1) * sizeof (uint32_t),
-                           1.5, "mtf_ctx->mtf_i", ctx->dict_section_type);
+                           CTX_GROWTH, "mtf_ctx->mtf_i", ctx->dict_section_type);
 
                 MtfNode *sf_node;
 

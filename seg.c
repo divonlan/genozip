@@ -52,6 +52,31 @@ void seg_store (VBlock *vb,
 }
 
 // returns the node index
+uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, unsigned vb_line_i,
+                           DictIdType dict_id, SectionType sec_b250, int accounts_for_chars)
+{
+    MtfNode *node;
+    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, dict_id, sec_b250 - 1);
+
+    // allocate memory if needed
+    buf_alloc (vb, &ctx->mtf_i, MAX (vb->num_lines, ctx->mtf_i.len + 1) * sizeof (uint32_t),
+               CTX_GROWTH, "mtf_ctx->mtf_i", ctx->did_i);
+
+    uint32_t node_index = mtf_evaluate_snip_seg (vb, ctx, str, len, &node, NULL);
+
+    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
+            "Error in seg_one_subfield: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
+            DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
+            node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
+
+    NEXTENT (uint32_t, ctx->mtf_i) = node_index;
+
+    vb->txt_section_bytes[sec_b250] += accounts_for_chars; 
+
+    return node_index;
+}
+
+// returns the node index
 uint32_t seg_one_field (VBlock *vb, const char *str, unsigned len, unsigned vb_line_i, int f, SectionType sec_b250,
                         bool *is_new) // optional out
 {

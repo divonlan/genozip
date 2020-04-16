@@ -27,7 +27,7 @@
 #define GENOZIP_EXT ".genozip"
 
 // default max amount of VCF data in each variant block. this is user-configurable with --vblock
-#define VCF_DATA_PER_VB   "128" // MB
+#define TXT_DATA_PER_VB   "128" // MB
 
 // default max number of samples in each sample block within a variant block. user configurable with --sblock
 #define SAMPLES_PER_BLOCK "4096" 

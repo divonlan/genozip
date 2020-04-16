@@ -54,20 +54,20 @@ static unsigned zip_vcf_get_genotype_vb_start_len (VBlockVCF *vb)
     buf_alloc (vb, &vb->gt_sb_line_starts_buf, 
                vb->num_lines * vb->num_sample_blocks * sizeof(uint32_t*), 
                0, "gt_sb_line_starts_buf", vb->vblock_i);
-    uint32_t **gt_sb_line_starts = (uint32_t**)vb->gt_sb_line_starts_buf.data; 
+    ARRAY (uint32_t *, gt_sb_line_starts, vb->gt_sb_line_starts_buf);
     
     // each entry is the length of a single line in a sample block
     buf_alloc (vb, &vb->gt_sb_line_lengths_buf, 
                vb->num_lines * vb->num_sample_blocks * sizeof(unsigned), 
                0, "gt_sb_line_lengths_buf", vb->vblock_i);
-    unsigned *gt_sb_line_lengths = (unsigned *)vb->gt_sb_line_lengths_buf.data; 
+    ARRAY (unsigned, gt_sb_line_lengths, vb->gt_sb_line_lengths_buf);
     
     // calculate offsets and lengths of genotype data of each sample block
     for (uint32_t line_i=0; line_i < vb->num_lines; line_i++) {
 
         uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, DATA_LINE (vb, line_i));        
         unsigned format_mtf_i = DATA_LINE (vb, line_i)->format_mtf_i;
-        SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[format_mtf_i];
+        SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, format_mtf_i);
         
         for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
@@ -92,26 +92,26 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
     START_TIMER;
 
     // build sample block genetype data
-    uint8_t *dst_next = (uint8_t *)vb->genotype_one_section_data.data;
+    ARRAY (uint8_t, dst_next, vb->genotype_one_section_data);
     
     // move the GT items from the line data to the permuted data - with each 
     // sample block of gt data containing the data in TRANSPOSED order - i.e. first
     // the gt data for all the variants for sample 1, then all of samples 2 etc.
-    unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
-    for (unsigned sample_i=0; sample_i < num_samples_in_sb; sample_i++) {
+    uint32_t num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
+    for (uint32_t sample_i=0; sample_i < num_samples_in_sb; sample_i++) {
 
         if (flag_show_gt_nodes) fprintf (stderr, "sample=%u (vb_i=%u sb_i=%u):\n", sb_i * global_samples_per_block + sample_i + 1, vb->vblock_i, sb_i);
 
-        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->num_lines; line_i++) {
 
             if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i);
 
             ZipDataLineVCF *dl = DATA_LINE (vb, line_i);
 
-            SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[dl->format_mtf_i];
+            SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, dl->format_mtf_i);
 
-            unsigned **sb_lines = (uint32_t**)vb->gt_sb_line_starts_buf.data;
-            unsigned *this_line = sb_lines[SBL(line_i, sb_i)];
+            ARRAY (uint32_t *, sb_lines, vb->gt_sb_line_starts_buf);
+            uint32_t *this_line = sb_lines[SBL(line_i, sb_i)];
             
             // lookup word indices in the global dictionary for all the subfields
             const uint8_t *dst_start = dst_next;
@@ -220,7 +220,7 @@ static HaploTypeSortHelperIndex *zip_vcf_construct_ht_permutation_helper_index (
     buf_alloc (vb, &vb->helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0,
                "helper_index_buf", vb->vblock_i);
     buf_zero (&vb->helper_index_buf);
-    HaploTypeSortHelperIndex *helper_index = (HaploTypeSortHelperIndex *)vb->helper_index_buf.data;
+    ARRAY (HaploTypeSortHelperIndex, helper_index, vb->helper_index_buf);
 
     // build index array 
     for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
@@ -311,7 +311,7 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
     qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_original_index_comparator);
 
     // construct file index
-    unsigned *hp_index = (unsigned *)vb->haplotype_permutation_index.data;
+    ARRAY (unsigned, hp_index, vb->haplotype_permutation_index);
     for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
         hp_index[ht_i] = helper_index[ht_i].index_in_sorted_line;
 

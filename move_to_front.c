@@ -37,8 +37,6 @@ unzip:
 
 #define INITIAL_NUM_NODES 10000
 
-#define CTX_GROWTH 1.75
-
 static pthread_mutex_t wait_for_vb_1_mutex;
 static pthread_mutex_t compress_dictionary_data_mutex;
 
@@ -90,7 +88,7 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
 {
     ASSERT0 (ctx->dict_id.num, "Error: this ctx is not initialized");
     
-    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
+    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
             mtf_i, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len, func, code_line);
 
@@ -101,7 +99,7 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
 
     if (snip_in_dict) {
         const Buffer *dict = is_ol ? &ctx->ol_dict : &ctx->dict;
-        ASSERT0 (buf_is_allocated (dict), "Error: dict not allocated");
+        ASSERT0 (buf_is_allocated (dict), "Error in mtf_node_do: dict not allocated");
 
         *snip_in_dict = &dict->data[node->char_index];
     }
@@ -128,7 +126,7 @@ int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned s
 uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx, 
                             SnipIterator *override_iterator,   // if NULL, taken from ctx
                             const char **snip, uint32_t *snip_len, // optional out
-                            uint32_t vcf_line) 
+                            uint32_t txt_line) 
 {
     SnipIterator *iterator = override_iterator ? override_iterator : &ctx->iterator;
     
@@ -141,7 +139,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
         ASSERT (!ctx || ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %.*s (%s)",
-                vcf_line, vb->vblock_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
+                txt_line, vb->vblock_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
@@ -149,10 +147,8 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
         }
     }
 
-    // case: a subfield snip is empty, eg AB::CD
+    // case: a subfield snip is empty, eg "AB::CD" (VCF GT Data) or "OA:Z:chr13,52863337,-,56S25M70S,0,;" (SAM OA optional field)
     else if (word_index == WORD_INDEX_EMPTY_SF) { 
-        ASSERT (ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u: BASE250_EMPTY_SF unexpectedly found in b250 data of %.*s",
-                vcf_line, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id);
         if (snip) {
             *snip = ""; // pointer to static empty string
             *snip_len = 0;
@@ -163,10 +159,8 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
         if (word_index == WORD_INDEX_ONE_UP) 
             word_index = ctx->iterator.prev_word_index + 1;
 
-        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s%s \"%.*s\" dictionary has only %u entries",
-                vcf_line, word_index, 
-                ctx->dict_section_type == SEC_VCF_INFO_SF_DICT ? "INFO" : "",
-                ctx->dict_section_type == SEC_VCF_FRMT_SF_DICT ? "FORMAT" : "",
+        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s \"%.*s\" dictionary has only %u entries",
+                txt_line, word_index, st_name (ctx->dict_section_type),
                 DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, (uint32_t)ctx->word_list.len);
 
         //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];

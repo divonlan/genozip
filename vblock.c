@@ -275,8 +275,8 @@ static void vb_vcf_cleanup_memory (VBlockVCF *vb)
 
 static void vb_sam_release_vb (VBlockSAM *vb)
 {
-    vb->last_pos = 0;
-    vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = 0;
+    vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = vb->next_pos = 0;
+    vb->nm_did_i = vb->strand_did_i = 0;
 
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     
@@ -284,6 +284,7 @@ static void vb_sam_release_vb (VBlockSAM *vb)
     if (command == ZIP && vb->data_lines)
         memset (vb->data_lines, 0, sizeof(ZipDataLineSAM) * vb->num_lines_alloced);
 
+    buf_free (&vb->pos_data);
     buf_free (&vb->optional_mapper_buf);
     buf_free (&vb->seq_data);
     buf_free (&vb->qual_data);

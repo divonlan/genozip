@@ -27,6 +27,9 @@ extern void seg_store (VBlockP vb,
                        const char *limit_txt_data, // we cannot store in txt starting here. if NULL always allocates in txt_data_spillover
                        bool align32); // does start address need to be 32bit aligned to prevent aliasing issues
 
+extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len, unsigned vb_line_i,
+                                  DictIdType dict_id, SectionType sec_b250, int accounts_for_chars);
+
 extern uint32_t seg_one_field (VBlockP vb, const char *str, unsigned len, unsigned vb_line_i, int f, 
                                SectionType sec_b250, bool *is_new);
 

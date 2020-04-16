@@ -269,7 +269,7 @@ void txtfile_write_one_vblock_sam (VBlockSAMP vb)
 
     char s1[20], s2[20];
     ASSERTW (vb->txt_data.len == vb->vb_data_size || exe_type == EXE_GENOCAT, 
-            "Warning: Alignment line block %u (num_lines=%u) had %s bytes in the original SAM file but %s bytes in the reconstructed file (diff=%d)", 
+            "Warning: vblock %u (num_lines=%u) had %s bytes in the original SAM file but %s bytes in the reconstructed file (diff=%d)", 
             vb->vblock_i, vb->num_lines, 
             buf_display_uint (vb->vb_data_size, s1), buf_display_uint (vb->txt_data.len, s2), 
             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);

@@ -45,19 +45,18 @@ typedef enum {
     SEC_HT_GTSHARK_X_ALLELE= 30,
 
     // added SAM support in file version 5
-    SEC_SAM_VB_HEADER      = 31,
-    SEC_SAM_SEQ_DATA       = 32,  SEC_SAM_QUAL_DATA      = 33,
-    SEC_SAM_QNAME_SF_DICT  = 34,  SEC_SAM_QNAME_SF_B250  = 35,
-    SEC_SAM_OPTNL_SF_DICT  = 36,  SEC_SAM_OPTNL_SF_B250  = 37,
-    SEC_SAM_QNAME_DICT     = 38,  SEC_SAM_QNAME_B250     = 39,
-    SEC_SAM_FLAG_DICT      = 40,  SEC_SAM_FLAG_B250      = 41,
-    SEC_SAM_RNAME_DICT     = 42,  SEC_SAM_RNAME_B250     = 43, 
-    SEC_SAM_POS_DICT       = 44,  SEC_SAM_POS_B250       = 45, 
-    SEC_SAM_MAPQ_DICT      = 46,  SEC_SAM_MAPQ_B250      = 47, 
-    SEC_SAM_CIGAR_DICT     = 48,  SEC_SAM_CIGAR_B250     = 49, 
-    SEC_SAM_PNEXT_DICT     = 52,  SEC_SAM_PNEXT_B250     = 53, 
-    SEC_SAM_TLEN_DICT      = 54,  SEC_SAM_TLEN_B250      = 55, 
-    SEC_SAM_OPTIONAL_DICT  = 56,  SEC_SAM_OPTIONAL_B250  = 57, 
+    SEC_SAM_VB_HEADER      = 31,  SEC_SAM_POS_DATA       = 32,
+    SEC_SAM_SEQ_DATA       = 33,  SEC_SAM_QUAL_DATA      = 34,
+    SEC_SAM_QNAME_SF_DICT  = 35,  SEC_SAM_QNAME_SF_B250  = 36,
+    SEC_SAM_OPTNL_SF_DICT  = 37,  SEC_SAM_OPTNL_SF_B250  = 38,
+    SEC_SAM_QNAME_DICT     = 39,  SEC_SAM_QNAME_B250     = 40,
+    SEC_SAM_FLAG_DICT      = 41,  SEC_SAM_FLAG_B250      = 42,
+    SEC_SAM_RNAME_DICT     = 43,  SEC_SAM_RNAME_B250     = 44, 
+    SEC_SAM_MAPQ_DICT      = 45,  SEC_SAM_MAPQ_B250      = 46, 
+    SEC_SAM_CIGAR_DICT     = 47,  SEC_SAM_CIGAR_B250     = 48, 
+    SEC_SAM_PNEXT_DICT     = 49,  SEC_SAM_PNEXT_B250     = 50, 
+    SEC_SAM_TLEN_DICT      = 51,  SEC_SAM_TLEN_B250      = 52, 
+    SEC_SAM_OPTIONAL_DICT  = 53,  SEC_SAM_OPTIONAL_B250  = 54, 
 
     // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR, 
@@ -85,14 +84,13 @@ typedef enum {
     "SEC_HT_GTSHARK_X_LINE" ,  "SEC_HT_GTSHARK_X_HTI"   ,\
     "SEC_HT_GTSHARK_X_ALLELE", \
     \
-    "SEC_SAM_VB_HEADER"     ,\
+    "SEC_SAM_VB_HEADER"     ,  "SEC_SAM_POS_DATA"       ,\
     "SEC_SAM_SEQ_DATA"      ,  "SEC_SAM_QUAL_DATA"      ,\
     "SEC_SAM_QNAME_SF_DICT" ,  "SEC_SAM_QNAME_SF_B250"  ,\
     "SEC_SAM_OPTNL_SF_DICT" ,  "SEC_SAM_OPTNL_SF_B250"  ,\
     "SEC_SAM_QNAME_DICT"    ,  "SEC_SAM_QNAME_B250"     ,\
     "SEC_SAM_FLAG_DICT"     ,  "SEC_SAM_FLAG_B250"      ,\
     "SEC_SAM_RNAME_DICT"    ,  "SEC_SAM_RNAME_B250"     ,\
-    "SEC_SAM_POS_DICT"      ,  "SEC_SAM_POS_B250"       ,\
     "SEC_SAM_MAPQ_DICT"     ,  "SEC_SAM_MAPQ_B250"      ,\
     "SEC_SAM_CIGAR_DICT"    ,  "SEC_SAM_CIGAR_B250"     ,\
     "SEC_SAM_PNEXT_DICT"    ,  "SEC_SAM_PNEXT_B250"     ,\

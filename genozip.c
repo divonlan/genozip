@@ -68,7 +68,7 @@ static char *threads_str  = NULL;
 void exit_on_error(void) 
 {
     buf_test_overflows_all_vbs();
-    
+
     url_kill_curl();
     file_kill_external_compressors(); 
 
@@ -199,25 +199,16 @@ static void main_show_file_metadata (void)
     fprintf (stderr, "\n\n");
     if (txt_file->name) fprintf (stderr, "%s file name: %s\n", dt_name (z_file->data_type), txt_file->name);
     
+    char ls[30];
     switch (z_file->data_type) {
     case DATA_TYPE_VCF:
-        fprintf (stderr, 
-                #ifdef _MSC_VER
-                "Individuals: %u   Variants: %I64u   Dictionaries: %u\n", 
-                #else
-                "Individuals: %u   Variants: %"PRIu64"   Dictionaries: %u\n", 
-                #endif
-                global_vcf_num_samples, z_file->num_lines, z_file->num_dict_ids);
+        fprintf (stderr, "Individuals: %u   Variants: %s   Dictionaries: %u\n", 
+                global_vcf_num_samples, buf_display_uint (z_file->num_lines, ls), z_file->num_dict_ids);
         break;
 
     case DATA_TYPE_SAM:
-        fprintf (stderr, 
-                #ifdef _MSC_VER
-                "Alignment lines: %I64u   Dictionaries: %u\n", 
-                #else
-                "Alignment lines: %"PRIu64"   Dictionaries: %u\n", 
-                #endif
-                z_file->num_lines, z_file->num_dict_ids);
+        fprintf (stderr, "Alignment lines: %s   Dictionaries: %u\n", 
+                 buf_display_uint (z_file->num_lines, ls), z_file->num_dict_ids);
         break;
 
     default:
@@ -249,31 +240,33 @@ static void main_show_sections (void)
         SEC_SAM_VB_HEADER,
         SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
         SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
-        SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
-        SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     
-        SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
-        SEC_SAM_SEQ_DATA,      SEC_SAM_QUAL_DATA,
+        SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     
+        SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      
+        SEC_SAM_POS_DATA,      SEC_SAM_SEQ_DATA,       SEC_SAM_QUAL_DATA,      
         SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT
     };
 
     static const char *categories[] = {
-        "Genozip header", "Random access index", "VCF header", "Variant block metadata", 
-        "CHROM b250", "CHROM dict", "POS b250", "POS dict", "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
+        "Genozip header", "Random access index", "Source file header", "Variant block metadata", 
+        "CHROM b250", "CHROM dict", "POS b250", "POS dict", 
+        "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
         "QUAL b250", "QUAL dict", "FILTER b250", "FILTER dict",
         "INFO names b250", "INFO names dict", "INFO values b250", "INFO values dict", 
         "FORMAT b250", "FORMAT dict", "FORMAT subfields b250", "FORMAT subfields dict",
         "Haplotype data", "HT separator char", "Phasing char",
 
         "Line block metadata",
-        "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", "FLAG b250", "FLAG dict", 
-        "RNAME b250", "RNAME dict", "POS b250", "POS dict", "MAPQ b250", "MAPQ dict", "CIGAR b250", "CIGAR dict", 
-        "PNEXT b250", "PNEXT dict", "TLEN b250", "TLEN dict", 
-        "SEQ data", "QUAL data",
+        "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
+        "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
+        "MAPQ b250", "MAPQ dict", "CIGAR b250", "CIGAR dict", 
+        "TLEN b250", "TLEN dict",
+        "POS data", "SEQ data", "QUAL data", 
         "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict"
     };
 
-    unsigned num_secs = sizeof(secs)/sizeof(secs[0]);
-    ASSERT0 (sizeof(categories)/sizeof(categories[0]) == num_secs, "Error: categories and secs are not the same length");
+    unsigned num_secs       = sizeof(secs)/sizeof(secs[0]);
+    unsigned num_categories = sizeof(categories)/sizeof(categories[0]);
+    ASSERT (num_categories == num_secs, "Error: num_categories=%u but num_secs=%u, expecting them to be equal", num_categories, num_secs);
 
     int64_t total_txt=0, total_z=0, total_entries=0;
     uint32_t total_sections=0;
@@ -355,12 +348,12 @@ static void main_show_content (void)
           SEC_VCF_CHROM_DICT, SEC_VCF_POS_DICT, SEC_VCF_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
           SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,           
           
-          SEC_SAM_VB_HEADER,
+          SEC_SAM_VB_HEADER,     SEC_SAM_POS_DATA,
           SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
           SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
-          SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
+          SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
           SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,    
-          SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
+          SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
           SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
           
           NIL },
@@ -846,10 +839,10 @@ int main (int argc, char **argv)
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "i:cdfhlLqQt^Vzm@:Oo:p:B:S:9K", // genozip
-            "czfhLqQt^V@:Oo:p:m",          // genounzip
-            "hLVp:qf",                     // genols
-            "hLV@:p:qQ1r:t:s:H1Go:f"       // genocat
+            "i:cdfhlLqQt^Vzm@:Oo:p:B:S:9KW", // genozip
+            "czfhLqQt^V@:Oo:p:m",            // genounzip
+            "hLVp:qf",                       // genols
+            "hLV@:p:qQ1r:t:s:H1Go:f"         // genocat
         };
 
         int option_index = -1;
@@ -874,6 +867,7 @@ int main (int argc, char **argv)
             case 'q' : flag_quiet         = 1      ; break;
             case 'Q' : flag_noisy         = 1      ; break;
             case '9' : flag_optimize      = 1      ; break;
+            case 'W' : flag_show_sections = 1      ; break;
             case 'K' : flag_gtshark       = 1      ; break;
             case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
                        // fall through for genocat -r
@@ -976,7 +970,7 @@ int main (int argc, char **argv)
     if (flag_test) flag_md5=true; // test requires md5
 
     // default values, if not overridden by the user
-    if (!flag_vblock) genozip_set_global_max_memory_per_vb (VCF_DATA_PER_VB); 
+    if (!flag_vblock) genozip_set_global_max_memory_per_vb (TXT_DATA_PER_VB); 
     if (!flag_sblock) zip_vcf_set_global_samples_per_block     (SAMPLES_PER_BLOCK); 
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they

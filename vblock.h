@@ -239,8 +239,8 @@ extern unsigned vb_vcf_num_sections (VBlockVCF *vb);
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-    // the following 2 are indeces, lens into txt_data 
-    uint32_t seq_data_start, qual_data_start;
+    // the following 4 are indeces, lens into txt_data 
+    uint32_t seq_data_start, qual_data_start, e2_data_start, u2_data_start;
     uint32_t seq_len;        // same length for seq_data_start and qual_data_start, per SAM specification
 
     uint32_t qname_mtf_i;    // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
@@ -252,15 +252,17 @@ typedef struct vblock_sam_ {
 
     VBLOCK_COMMON_FIELDS
 
-    int32_t last_pos;               // ZIP: value of POS field of the previous line, to do delta encoding
+    SubfieldMapper qname_mapper;         // ZIP & PIZ
 
-    SubfieldMapper qname_mapper;    // ZIP & PIZ
+    Buffer pos_data;                     // ZIP & PIZ: all POS data - POS, PNEXT as well as POS data in SA, OA and XA
 
     // PIZ-only stuff
     int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
-    Buffer optional_mapper_buf;     // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
-    Buffer seq_data, qual_data;     // PIZ only
-    uint32_t next_seq, next_qual; // PIZ only: indeces into seq_data, qual_data
+    Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
+    Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
+    Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
+    uint32_t next_pos, next_seq, next_qual; // PIZ only: indeces into pos_data, seq_data, qual_data
+    uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
 
 #endif

@@ -55,10 +55,19 @@ extern uint64_t dict_id_vcf_fields[], dict_id_sam_fields[],
                 dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, // some VCF FORMAT subfields
                 dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
                 dict_id_INFO_13,
-                dict_id_OPTION_AM, dict_id_OPTION_AS, dict_id_OPTION_CM, dict_id_OPTION_LB, dict_id_OPTION_FI, dict_id_OPTION_H0,
-                dict_id_OPTION_H1, dict_id_OPTION_H2, dict_id_OPTION_MQ, dict_id_OPTION_NH, dict_id_OPTION_NM, dict_id_OPTION_PG, 
-                dict_id_OPTION_PQ, dict_id_OPTION_PU, dict_id_OPTION_RG, dict_id_OPTION_SM, dict_id_OPTION_TC, dict_id_OPTION_UQ,
-                dict_id_OPTION_CC, dict_id_OPTION_CG, dict_id_OPTION_MC;
+
+                // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
+                dict_id_OPTION_AM, dict_id_OPTION_AS, dict_id_OPTION_CM, dict_id_OPTION_E2, dict_id_OPTION_LB, dict_id_OPTION_FI, 
+                dict_id_OPTION_H0, dict_id_OPTION_H1, dict_id_OPTION_H2, dict_id_OPTION_MQ, dict_id_OPTION_NH, dict_id_OPTION_NM, 
+                dict_id_OPTION_OA, dict_id_OPTION_OC, dict_id_OPTION_PG, dict_id_OPTION_PQ, dict_id_OPTION_PU, dict_id_OPTION_RG, 
+                dict_id_OPTION_SA, dict_id_OPTION_SM, dict_id_OPTION_TC, dict_id_OPTION_U2, dict_id_OPTION_UQ, dict_id_OPTION_CC, 
+                dict_id_OPTION_CG, dict_id_OPTION_MC,
+    
+                // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
+                dict_id_OPTION_X0, dict_id_OPTION_X1, dict_id_OPTION_XA, dict_id_OPTION_XN, dict_id_OPTION_XM, dict_id_OPTION_XO,
+                dict_id_OPTION_XG, dict_id_OPTION_XS, dict_id_OPTION_XE,
+
+                dict_id_OPTION_STRAND;
 
 extern void dict_id_initialize (DataType data_type);
 

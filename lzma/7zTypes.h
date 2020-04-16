@@ -173,12 +173,17 @@ struct ISeqInStream
     /* if (input(*size) != 0 && output(*size) == 0) means end_of_stream.
        (output(*size) < input(*size)) is allowed */
 
-  void *vb;                    // added by Divon
-  unsigned line_i;             // added by Divon: current partially-consumed line, or next line if no partially consumed line
-  unsigned avail_in;           // added by Divon: total bytes remaining
-  char *next_in;               // added by Divon: if there is a line partially-consumed, this is the next byte
-  unsigned avail_in_line; // added by Divon: if there is a line partially-consumed (0 if not)
-  void (*callback)(); // added by Divon
+  // all the remaining fields (except for Read) were added by Divon
+  void *vb;                    
+  unsigned line_i;        // current partially-consumed line, or next line if no partially consumed line
+  unsigned avail_in;      // total bytes remaining
+  
+  // we refer to two line segments (eg SEQ and E2 or QUAL and U2)
+  char *next_in_1;        // if there is a line partially-consumed, this is the next byte
+  char *next_in_2;        // if there is a line partially-consumed, and next_in==NULL, this is the next byte
+  unsigned avail_in_1;    // if there is a line partially-consumed (0 if not)
+  unsigned avail_in_2;    // if there is a line partially-consumed (0 if not)
+  void (*callback)();     // callback to fetch more data
 };
 #define ISeqInStream_Read(p, buf, size) (p)->Read(p, buf, size)
 

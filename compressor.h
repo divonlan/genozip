@@ -12,7 +12,9 @@
 typedef enum { COMPRESS_UNKNOWN=-1, // value used internally, never written to disk
                COMPRESS_NONE=0, COMPRESS_BZLIB=1, COMPRESS_LZMA=2 } CompressorAlg; // goes into SectionHeader.data_compression_alg
 
-typedef void CompGetLineCallback (VBlockP vb, uint32_t vb_line_i, char **line_data, uint32_t *line_data_len);
+typedef void CompGetLineCallback (VBlockP vb, uint32_t vb_line_i, 
+                                  char **line_data_1, uint32_t *line_data_len_1,
+                                  char **line_data_2, uint32_t *line_data_len_2);
 
 extern void comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
                            SectionHeaderP header, 

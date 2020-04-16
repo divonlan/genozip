@@ -265,8 +265,8 @@ void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type,
     vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
     vb->z_data.param = vb->vblock_i;
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
-                    section_data ? section_data->data : NULL, 
-                    callback);
+                   section_data ? section_data->data : NULL, 
+                   callback);
 }
 
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
@@ -1023,7 +1023,11 @@ void zfile_sam_read_one_vb (VBlockSAM *vb)
                             SEC_SAM_OPTNL_SF_B250, sections_vb_next (&sl));    
     }
 
-    // read the SEQ and QUAL data
+    // read the POS, SEQ and QUAL data
+    *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
+    zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
+                        SEC_SAM_POS_DATA, sections_vb_next (&sl));    
+
     *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
     zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
                         SEC_SAM_SEQ_DATA, sections_vb_next (&sl));    
