@@ -537,7 +537,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // POS
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, VCF_POS, SEC_VCF_POS_B250, field_start, field_len, vb_line_i);
+    vb->last_pos = seg_pos_field (vb_, vb->last_pos, VCF_POS, SEC_VCF_POS_B250, field_start, field_len, vb_line_i, "POS");
     random_access_update_pos (vb, vb->last_pos);
 
     // ID

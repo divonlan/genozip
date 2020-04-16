@@ -255,7 +255,9 @@ typedef struct vblock_sam_ {
     SubfieldMapper qname_mapper;         // ZIP & PIZ
 
     uint32_t last_pos;                   // ZIP & PIZ: POS of previous line
-    uint32_t last_rname_node_index;      // ZIP & PIZ: RNAME node index of previous line
+    uint32_t last_rname_node_index;      // ZIP: RNAME node index of previous line
+
+    unsigned mc_did_i;                   // ZIP: did_i of mc (small letters) optional field
 
     Buffer random_pos_data;              // POS data - data from : 
                                          // 1. POS if RNAME differs from prev line RNAME

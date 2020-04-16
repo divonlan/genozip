@@ -533,9 +533,9 @@ uint64_t buf_alloc_do (VBlock *vb,
         buf_add_to_buffer_list(vb, buf);
     }
 
-    char size_str[20];
-    ASSERTW (new_size < 0x80000000ULL, "FYI: allocated > 2GB of memory buffer for %s:%u: allocated=%s. Caller: %s:%u vb_i=%u", 
-            name, param, buf_display_size (new_size, size_str), func, code_line, vb->vblock_i);
+//    char size_str[20];
+//    ASSERTW (new_size < 0x80000000ULL, "FYI: allocated > 2GB of memory buffer for %s:%u: allocated=%s. Caller: %s:%u vb_i=%u", 
+//             name, param, buf_display_size (new_size, size_str), func, code_line, vb->vblock_i);
 
 finish:
     if (vb != evb) COPY_TIMER (vb->profile.buf_alloc); // this is not thread-safe for evb, see comment in buf_add_to_buffer_list

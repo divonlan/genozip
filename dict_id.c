@@ -24,6 +24,7 @@ uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
          dict_id_OPTION_UQ=0, dict_id_OPTION_CC=0, dict_id_OPTION_CG=0, dict_id_OPTION_MC=0,
          dict_id_OPTION_X0=0, dict_id_OPTION_X1=0, dict_id_OPTION_XA=0, dict_id_OPTION_XN=0, dict_id_OPTION_XM=0, dict_id_OPTION_XO=0,
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
+         dict_id_OPTION_mc=0,
          dict_id_OPTION_STRAND=0;
           
 static DataType last_data_type = DATA_TYPE_NONE;
@@ -90,6 +91,8 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_XG = dict_id_sam_optnl_sf (dict_id_make ("XG", 2)).num; 
         dict_id_OPTION_XS = dict_id_sam_optnl_sf (dict_id_make ("XS", 2)).num; 
         dict_id_OPTION_XE = dict_id_sam_optnl_sf (dict_id_make ("XE", 2)).num;
+
+        dict_id_OPTION_mc = dict_id_sam_optnl_sf (dict_id_make ("mc", 2)).num;
 
         dict_id_OPTION_STRAND = dict_id_sam_optnl_sf (dict_id_make ("STRAND", 6)).num;
 

@@ -33,9 +33,9 @@ extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len, uns
 extern uint32_t seg_one_field (VBlockP vb, const char *str, unsigned len, unsigned vb_line_i, int f, 
                                SectionType sec_b250, bool *is_new);
 
-extern int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i);
+extern int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i, const char *field_name);
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int pos_field, SectionType sec_pos_b250,
-                              const char *pos_str, unsigned pos_len, unsigned vb_line_i);
+                              const char *pos_str, unsigned pos_len, unsigned vb_line_i, const char *field_name);
                                
 
 // ---------

@@ -136,24 +136,26 @@ const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
 // reads a tab-terminated POS string
-int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i)
+int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i, const char *field_name)
 {
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
-    const char *s; for (s=pos_str; *s != '\t'; s++) {
-        ASSERT (*s >= '0' && *s <= '9', "Error: POS field in vb_line_i=%u must be an integer number between 0 and %u", vb_line_i, MAX_POS);
+    const char *s; for (s=pos_str; *s != '\t' && *s != '\n' && *s != '\r'; s++) {
+        ASSERT (*s >= '0' && *s <= '9', "Error: '%s' field in vb_line_i=%u must be an integer number between 0 and %u, seeing: %.*s", 
+                field_name, vb_line_i, MAX_POS, (int)(s-pos_str+1), pos_str);
+
         this_pos_64 = this_pos_64 * 10 + (*s - '0');
     }
     ASSERT (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, 
-            "Error: Invalid POS in vb_line_i=%u - value should be between 0 and %u, but found %"PRIu64, vb_line_i, MAX_POS, this_pos_64);
+            "Error: Invalid '%s' field in vb_line_i=%u - value should be between 0 and %u, but found %"PRIu64, field_name, vb_line_i, MAX_POS, this_pos_64);
     
     return (int32_t)this_pos_64;
 }
 
-int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int pos_field, SectionType sec_pos_b250,
-                       const char *pos_str, unsigned pos_len, unsigned vb_line_i)
+int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int did_i, SectionType sec_pos_b250,
+                       const char *pos_str, unsigned pos_len, unsigned vb_line_i, const char *field_name)
 {
-    int32_t this_pos = seg_pos_snip_to_int (pos_str, vb_line_i);
+    int32_t this_pos = seg_pos_snip_to_int (pos_str, vb_line_i, field_name);
 
     int32_t pos_delta = this_pos - last_pos;
     
@@ -180,7 +182,7 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int pos_field, SectionType 
         len = 1;
     }
 
-    seg_one_field (vb, pos_delta_str, len, vb_line_i, pos_field, sec_pos_b250, NULL);
+    seg_one_field (vb, pos_delta_str, len, vb_line_i, did_i, sec_pos_b250, NULL);
 
     vb->txt_section_bytes[sec_pos_b250] += pos_len - len; // re-do the calculation - seg_vcf_one_field doesn't do it good in our case
 

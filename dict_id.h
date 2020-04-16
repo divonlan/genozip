@@ -67,6 +67,9 @@ extern uint64_t dict_id_vcf_fields[], dict_id_sam_fields[],
                 dict_id_OPTION_X0, dict_id_OPTION_X1, dict_id_OPTION_XA, dict_id_OPTION_XN, dict_id_OPTION_XM, dict_id_OPTION_XO,
                 dict_id_OPTION_XG, dict_id_OPTION_XS, dict_id_OPTION_XE,
 
+                // biobambam tags 
+                dict_id_OPTION_mc,
+
                 dict_id_OPTION_STRAND;
 
 extern void dict_id_initialize (DataType data_type);

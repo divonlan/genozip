@@ -18,6 +18,8 @@ void seg_sam_initialize (VBlockSAM *vb)
 
     vb->last_pos = 0;
     vb->last_rname_node_index = (uint32_t)-1;
+
+    vb->mc_did_i = DID_I_NONE;
 }
 
 static inline uint32_t seg_sam_one_field (VBlockSAM *vb, const char *str, unsigned len, unsigned vb_line_i, SamFields f, 
@@ -133,7 +135,7 @@ static unsigned seg_sam_sa_or_oa_field (VBlockSAM *vb, const char *field, unsign
         // sanity checks before adding to any dictionary
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
 
-        // pos - add to the pos data together with all other pos data (POS, PNEXT etc).
+        // pos - add to the random pos data together with all other random pos data (originating from POS, PNEXT etc).
         buf_alloc_more (vb, &vb->random_pos_data, pos_len+1, vb->num_lines, char, 2);
         buf_add (&vb->random_pos_data, pos, pos_len); 
         buf_add (&vb->random_pos_data, "\t", 1); 
@@ -226,19 +228,36 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
 
     DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (field, 2));
 
-    // handle special subfields
-    unsigned repeats = 0; // some fields have "repeats" - multiple instances of the same format of data separated by a ;
+    // some fields have "repeats" - multiple instances of the same format of data separated by a ;
+    unsigned repeats = 0; 
     if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA)
         repeats = seg_sam_sa_or_oa_field (vb, &field[5], field_len-5, vb_line_i);
 
     else if (dict_id.num == dict_id_OPTION_XA && field[3] == 'Z') 
         repeats = seg_sam_xa_field (vb, &field[5], field_len-5, vb_line_i);
 
-    if (!repeats) { // non-repeating fields
+    // special subfield - in the subfield, store just the (char)-1 + the number of repeats.
+    // the data itself was already stored in the subsubfields in seg_sam_*_field
+    if (repeats) {
+        char repeats_str[20];
+        sprintf (repeats_str, "%c%u", -1, repeats); // (char)-1 to indicate repeats (invalid char per SAM specification, so it cannot appear organically)
+        seg_one_subfield ((VBlock *)vb, repeats_str, strlen (repeats_str), vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250, 1 /* \t */); 
+    }
+
+    else { // non-repeating fields
 
         // fields containing CIGAR format data
         if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
             seg_sam_one_field (vb, &field[5], field_len-5, vb_line_i, SAM_CIGAR, NULL);
+
+        // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
+        // we encode as a delta.
+        else if (dict_id.num == dict_id_OPTION_mc && field[3] == 'i') {
+            if (vb->mc_did_i == DID_I_NONE)
+                vb->mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
+
+            seg_pos_field ((VBlockP)vb, vb->last_pos, vb->mc_did_i, SEC_SAM_OPTNL_SF_B250, &field[5], field_len-5, vb_line_i, "mc");
+        }
 
         // E2 - SEQ data (note: E2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_E2) { 
@@ -264,20 +283,10 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
         else        
             seg_one_subfield ((VBlock *)vb, &field[5], field_len-5, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
                              (field_len-5) + 1); // +1 for \t
-
-        //if (separator == '\n') 
-        //    vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250]--; // \n is already accounted for in SEC_SAM_OPTIONAL_B250
     }
 
-    // special subfield - in the normal field, store just the number of repeats.
-    // the data itself was stored in the subsubfields in seg_sam_*_field
-    else {
-        char repeats_str[20];
-        sprintf (repeats_str, "%c%u", -1, repeats); // (char)-1 to indicate repeats (invalid char per SAM specification, so it cannot appear organically)
-        unsigned repeats_len = strlen (repeats_str); 
-        seg_one_subfield ((VBlock *)vb, repeats_str, repeats_len, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
-                          repeats_len + (separator == '\t')); // account for  \t, but not \n which is already accounted for in SEC_SAM_OPTIONAL_B250
-    }
+    if (separator == '\n') 
+        vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250]--; // \n is already accounted for in SEC_SAM_OPTIONAL_B250
 }
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string
@@ -404,10 +413,10 @@ const char *seg_sam_data_line (VBlock *vb_,
         buf_alloc_more (vb, &vb->random_pos_data, field_len+1, 0, char, 2);
         buf_add (&vb->random_pos_data, field_start, field_len+1); // including the \t
         vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += field_len+1;
-        vb->last_pos = seg_pos_snip_to_int (field_start, vb_line_i);
+        vb->last_pos = seg_pos_snip_to_int (field_start, vb_line_i, "POS");
     }
     else // same rname - do a delta
-        vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i);
+        vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i, "POS");
 
     vb->last_rname_node_index = rname_node_index;
 
@@ -441,7 +450,7 @@ const char *seg_sam_data_line (VBlock *vb_,
         if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable"
             seg_sam_one_field (vb, "*", 1, vb_line_i, SAM_PNEXT, NULL); 
         else
-            seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i);
+            seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i, "PNEXT");
     }
 
     else { // RNAME and RNEXT differ - store in random_pos

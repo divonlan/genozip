@@ -97,10 +97,8 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     // generate & write b250 data for all fields (FLAG to OPTIONAL)
     for (SamFields f=SAM_QNAME ; f <= SAM_OPTIONAL ; f++) {
         MtfContext *ctx = &vb->mtf_ctx[f];
-        if (ctx->mtf_i.len) {
-            zip_generate_b250_section (vb_, ctx);
-            zfile_compress_b250_data (vb_, ctx);
-        }
+        zip_generate_b250_section (vb_, ctx);
+        zfile_compress_b250_data (vb_, ctx);
     }
 
     // generate & write b250 data for all QNAME (first) and OPTIONAL (after) subfields

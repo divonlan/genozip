@@ -16,6 +16,12 @@
 #include "header.h"
 #include "move_to_front.h"
 
+#   define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[(did_i)], NULL, &snip, &snip_len, sam_line_i); 
+#   define RECONSTRUCT_FROM_DICT(f) \
+        LOAD_SNIP(f) \
+        buf_add (&vb->txt_data, snip, snip_len); \
+        buf_add (&vb->txt_data, "\t", 1);
+
 static void piz_sam_reconstruct_pos (VBlockSAM *vb, uint32_t sam_line_i, char separator)
 {
     unsigned i=vb->next_random_pos; for (; i < vb->random_pos_data.len && vb->random_pos_data.data[i] != '\t'; i++);
@@ -158,6 +164,13 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
             mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[SAM_CIGAR], NULL, &snip, &snip_len, sam_line_i);
             buf_add (&vb->txt_data, snip, snip_len);
         }
+
+        else if (dict_id.num == dict_id_OPTION_mc && oname[sf_i*5 + 3] == 'i') {
+            LOAD_SNIP (ctx->did_i);
+            char mc_str[30];
+            piz_decode_pos (vb->last_pos, snip, snip_len, mc_str, &snip_len); 
+            buf_add (&vb->txt_data, mc_str, snip_len);
+        }
         
         // SA, XA and OA have subsubfields IF snip starts with ascii 255
         else if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA ||
@@ -191,13 +204,6 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
 
 static void piz_sam_reconstruct_vb (VBlockSAM *vb)
 {
-#   define LOAD_SNIP(f) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[f], NULL, &snip, &snip_len, vb->first_line + vb_line_i); 
-#   define RECONSTRUCT_FROM_DICT(f) \
-        LOAD_SNIP(f) \
-        buf_add (&vb->txt_data, snip, snip_len); \
-        buf_add (&vb->txt_data, "\t", 1);
-
-
     START_TIMER;
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "piz_sam_reconstruct_vb", vb->vblock_i);
@@ -208,6 +214,8 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
     char pos_str[50], pnext_str[50];
 
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+
+        uint32_t sam_line_i = vb->first_line + vb_line_i;
 
         // QNAME - reconstruct from its subfield components
         LOAD_SNIP (SAM_QNAME);
@@ -225,7 +233,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
             buf_add (&vb->txt_data, "\t", 1);
         }
         else { // different rname - get from random_pos
-            vb->last_pos = seg_pos_snip_to_int (&vb->random_pos_data.data[vb->next_random_pos], vb_line_i);
+            vb->last_pos = seg_pos_snip_to_int (&vb->random_pos_data.data[vb->next_random_pos], vb_line_i, "POS");
             piz_sam_reconstruct_pos (vb, vb->first_line + vb_line_i, '\t');
         }
         last_rname_word_index = this_rname_word_index;
