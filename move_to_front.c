@@ -122,7 +122,7 @@ int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned s
     return NIL;
 }
 
-// PIZ only (uses word_list): called when pizzing a genotype section - returns snip and index, and advances the index
+// PIZ only (uses word_list): returns word index, and advances the iterator
 uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx, 
                             SnipIterator *override_iterator,   // if NULL, taken from ctx
                             const char **snip, uint32_t *snip_len, // optional out

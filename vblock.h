@@ -254,14 +254,20 @@ typedef struct vblock_sam_ {
 
     SubfieldMapper qname_mapper;         // ZIP & PIZ
 
-    Buffer pos_data;                     // ZIP & PIZ: all POS data - POS, PNEXT as well as POS data in SA, OA and XA
+    uint32_t last_pos;                   // ZIP & PIZ: POS of previous line
+    uint32_t last_rname_node_index;      // ZIP & PIZ: RNAME node index of previous line
 
+    Buffer random_pos_data;              // POS data - data from : 
+                                         // 1. POS if RNAME differs from prev line RNAME
+                                         // 2. PNEXT where RNEXT is not ('=' or equal to RNAME) 
+                                         // 3. POS data in SA, OA and XA
     // PIZ-only stuff
     int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
     Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
     Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
     Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
-    uint32_t next_pos, next_seq, next_qual; // PIZ only: indeces into pos_data, seq_data, qual_data
+    uint32_t next_seq, next_qual;        // PIZ only: indeces into seq_data, qual_data
+    uint32_t next_random_pos;            // PIZ only: indeces into delta_pos_data, random_pos_data
     uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
 

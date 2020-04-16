@@ -33,6 +33,7 @@ extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len, uns
 extern uint32_t seg_one_field (VBlockP vb, const char *str, unsigned len, unsigned vb_line_i, int f, 
                                SectionType sec_b250, bool *is_new);
 
+extern int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i);
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int pos_field, SectionType sec_pos_b250,
                               const char *pos_str, unsigned pos_len, unsigned vb_line_i);
                                
@@ -40,16 +41,14 @@ extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int pos_field, Secti
 // ---------
 // VCF Stuff
 // ---------
-//extern const char *seg_vcf_data_line (VBlockP vb_, const char *field_start_line, uint32_t vb_line_i);
 extern SegDataLineFuncType seg_vcf_data_line;
-
 extern void seg_vcf_complete_missing_lines (VBlockVCFP vb);
 
 // ---------
 // SAM Stuff
 // ---------
+extern void seg_sam_initialize (VBlockSAMP vb);
 extern SegDataLineFuncType seg_sam_data_line;
-
 extern uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
 
 #endif

@@ -69,9 +69,8 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     mtf_clone_ctx (vb_);
 
     // split each line in this variant block to its components
-    
-    vb->pos_data.name = "POS"; vb->pos_data.param = vb->vblock_i; // initialize for seg
-    
+    seg_sam_initialize (vb);  
+
     seg_all_data_lines (vb_, seg_sam_data_line, sizeof (ZipDataLineSAM),
                         SAM_QNAME, SAM_OPTIONAL, sam_field_names, SEC_SAM_QNAME_DICT);
 
@@ -117,8 +116,8 @@ void zip_sam_compress_one_vb (VBlockP vb_)
             }
         }
 
-    // generate & compress the POS data
-    zfile_compress_section_data_alg (vb_, SEC_SAM_POS_DATA, &vb->pos_data, NULL, 0, COMPRESS_LZMA);
+    // generate & compress the Random POS data
+    zfile_compress_section_data_alg (vb_, SEC_SAM_RAND_POS_DATA,  &vb->random_pos_data, NULL, 0, COMPRESS_LZMA);
 
     // generate & compress the SEQ & QUAL data
     uint32_t seq_len=0, qual_len=0;

@@ -1026,7 +1026,7 @@ void zfile_sam_read_one_vb (VBlockSAM *vb)
     // read the POS, SEQ and QUAL data
     *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
     zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
-                        SEC_SAM_POS_DATA, sections_vb_next (&sl));    
+                        SEC_SAM_RAND_POS_DATA, sections_vb_next (&sl));    
 
     *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
     zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 

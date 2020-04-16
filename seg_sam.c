@@ -12,13 +12,20 @@
 
 #define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
 
+void seg_sam_initialize (VBlockSAM *vb)
+{
+    buf_alloc (vb, &vb->random_pos_data, 1000000, 1, "random_pos_data", vb->vblock_i); // initial ~1MB allocation
+
+    vb->last_pos = 0;
+    vb->last_rname_node_index = (uint32_t)-1;
+}
+
 static inline uint32_t seg_sam_one_field (VBlockSAM *vb, const char *str, unsigned len, unsigned vb_line_i, SamFields f, 
                                           bool *is_new)  // optional out
 {
     return seg_one_field ((VBlockP)vb, str, len, vb_line_i, f, SEC_SAM_QNAME_B250 + f*2, is_new);
 }                                          
   
-
 // We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings.
 // Up to MAX_SUBFIELDS subfields are permitted.
 // each subfield is stored in its own directory called QNAME_n where n is the subfield number starting from 0. 
@@ -127,10 +134,10 @@ static unsigned seg_sam_sa_or_oa_field (VBlockSAM *vb, const char *field, unsign
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
 
         // pos - add to the pos data together with all other pos data (POS, PNEXT etc).
-        buf_alloc_more (vb, &vb->pos_data, pos_len+1, vb->num_lines, char, 2);
-        buf_add (&vb->pos_data, pos, pos_len); 
-        buf_add (&vb->pos_data, "\t", 1); 
-        vb->txt_section_bytes[SEC_SAM_POS_DATA] += pos_len + 1; 
+        buf_alloc_more (vb, &vb->random_pos_data, pos_len+1, vb->num_lines, char, 2);
+        buf_add (&vb->random_pos_data, pos, pos_len); 
+        buf_add (&vb->random_pos_data, "\t", 1); 
+        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += pos_len + 1; 
 
         // nm : we store in the same dictionary as the Optional subfield NM
         seg_one_subfield ((VBlockP)vb, nm, nm_len, vb_line_i, (DictIdType)dict_id_OPTION_NM, 
@@ -177,10 +184,10 @@ static unsigned seg_sam_xa_field (VBlockSAM *vb, const char *field, unsigned fie
         // pos - add to the pos data together with all other pos data (POS, PNEXT etc),
         // strand - add to separate STRAND dictionary, to not adversely affect compression of POS.
         // there is no advantage to storing the strand together with pos as they are not correlated.
-        buf_alloc_more (vb, &vb->pos_data, pos_len, 0, char, 2);
-        buf_add (&vb->pos_data, pos+1, pos_len-1); 
-        buf_add (&vb->pos_data, "\t", 1); 
-        vb->txt_section_bytes[SEC_SAM_POS_DATA] += pos_len; // one less for the strand, one more for the \t 
+        buf_alloc_more (vb, &vb->random_pos_data, pos_len, 0, char, 2);
+        buf_add (&vb->random_pos_data, pos+1, pos_len-1); 
+        buf_add (&vb->random_pos_data, "\t", 1); 
+        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += pos_len; // one less for the strand, one more for the , 
 
         // strand
         seg_one_subfield ((VBlockP)vb, pos, 1, vb_line_i, (DictIdType)dict_id_OPTION_STRAND, 
@@ -211,6 +218,9 @@ error:
 static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned field_len, 
                                     char separator, unsigned vb_line_i)
 {
+    ASSERT (field_len, "Error in %s: line invalidly ends with a tab. vb_i=%u vb_line_i=%u", 
+            file_printname (txt_file), vb->vblock_i, vb_line_i);
+
     ASSERT (field_len >= 6 && field[2] == ':' && field[4] == ':', "Error in %s: invalid optional field format: %.*s",
             txt_name, field_len, field);
 
@@ -238,6 +248,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
                     file_printname (txt_file), dl->seq_len, field_len-5, field_len-5, &field[5]);
 
             dl->e2_data_start = &field[5] - vb->txt_data.data;
+            vb->txt_section_bytes[SEC_SAM_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_U2) {
@@ -247,14 +258,15 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
                     file_printname (txt_file), dl->seq_len, field_len-5, field_len-5, &field[5]);
 
             dl->u2_data_start = &field[5] - vb->txt_data.data;
+            vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // All other subfields - have their own dictionary
         else        
             seg_one_subfield ((VBlock *)vb, &field[5], field_len-5, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
                              (field_len-5) + 1); // +1 for \t
 
-        if (separator == '\n') 
-            vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250]--; // \n is already accounted for in SEC_SAM_OPTIONAL_B250
+        //if (separator == '\n') 
+        //    vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250]--; // \n is already accounted for in SEC_SAM_OPTIONAL_B250
     }
 
     // special subfield - in the normal field, store just the number of repeats.
@@ -380,14 +392,24 @@ const char *seg_sam_data_line (VBlock *vb_,
     // RNAME
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNAME");
-    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
+    uint32_t rname_node_index = seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
 
-    // POS - add to vb->pos_data (not a dictionary)
+    // POS - two options:
+    // 1. if RNAME is the same as the previous line - store the delta in SAM_POS dictionary
+    // 2. If its a different RNAME - add to vb->random_pos_data (not a dictionary)
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
-    buf_alloc_more (vb, &vb->pos_data, field_len+1, vb->num_lines*(field_len+3), char, 2);
-    buf_add (&vb->pos_data, field_start, field_len+1); // including the \t
-    vb->txt_section_bytes[SEC_SAM_POS_DATA] += field_len+1;
+    
+    if (rname_node_index != vb->last_rname_node_index) { // different rname than prev line - store full pos in random
+        buf_alloc_more (vb, &vb->random_pos_data, field_len+1, 0, char, 2);
+        buf_add (&vb->random_pos_data, field_start, field_len+1); // including the \t
+        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += field_len+1;
+        vb->last_pos = seg_pos_snip_to_int (field_start, vb_line_i);
+    }
+    else // same rname - do a delta
+        vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i);
+
+    vb->last_rname_node_index = rname_node_index;
 
     // MAPQ
     field_start = next_field;
@@ -403,14 +425,30 @@ const char *seg_sam_data_line (VBlock *vb_,
     // RNEXT - add to RNAME dictionary
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNEXT");
-    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
-
-    // PNEXT - add to vb->pos_data (not a dictionary)
+    uint32_t rnext_node_index = seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
+    
+    bool rnext_same_as_rname = (field_len == 1 && (field_start[0] == '=' || field_start[0] == '*')) || 
+                                (rnext_node_index == rname_node_index);
+    // PNEXT - 2.5 options:
+    // 1. if RNEXT is the same as RNAME or unknown (i.e. either it is "=" or "*" or the string is the same) - store the delta
+    //    vs. POS in SAM_PNEXT dictionary
+    //    1A. If 1, but PNEXT is "0" and hence "unavailable" per SAM specification - store "*" in the SAM_PNEXT dictionary
+    // 2. If RNEXT and RNAME are different - add to vb->random_pos_data (not a dictionary)
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "PNEXT");
-    buf_alloc_more (vb, &vb->pos_data, field_len+1, vb->num_lines, char, 2);
-    buf_add (&vb->pos_data, field_start, field_len+1); // including the \t
-    vb->txt_section_bytes[SEC_SAM_POS_DATA] += field_len+1;
+        
+    if (rnext_same_as_rname) { // RNAME and RNEXT are the same - store delta in dictionary
+        if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable"
+            seg_sam_one_field (vb, "*", 1, vb_line_i, SAM_PNEXT, NULL); 
+        else
+            seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i);
+    }
+
+    else { // RNAME and RNEXT differ - store in random_pos
+        buf_alloc_more (vb, &vb->random_pos_data, field_len+1, 0, char, 2);
+        buf_add (&vb->random_pos_data, field_start, field_len+1); // including the \t
+        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += field_len+1;
+    }
 
     // TLEN
     field_start = next_field;

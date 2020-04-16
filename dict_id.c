@@ -16,7 +16,7 @@ uint64_t dict_id_vcf_fields[NUM_VCF_FIELDS] = {0,0,0,0,0,0,0,0},
          dict_id_INFO_13=0;
 
 // SAM stuff
-uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0},
+uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
          dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
          dict_id_OPTION_H1=0, dict_id_OPTION_H2=0, dict_id_OPTION_MQ=0, dict_id_OPTION_NH=0, dict_id_OPTION_NM=0, dict_id_OPTION_OA=0,
          dict_id_OPTION_OC=0, dict_id_OPTION_PG=0, dict_id_OPTION_E2=0, dict_id_OPTION_U2=0,

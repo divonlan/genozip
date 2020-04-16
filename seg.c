@@ -86,7 +86,7 @@ uint32_t seg_one_field (VBlock *vb, const char *str, unsigned len, unsigned vb_l
     MtfNode *node;
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, &node, is_new);
 
-    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len, "Error in seg_one_field: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
+    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, "Error in seg_one_field: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
             node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
@@ -135,8 +135,8 @@ const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline
 
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
-int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int pos_field, SectionType sec_pos_b250,
-                       const char *pos_str, unsigned pos_len, unsigned vb_line_i)
+// reads a tab-terminated POS string
+int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i)
 {
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
@@ -144,12 +144,17 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int pos_field, SectionType 
         ASSERT (*s >= '0' && *s <= '9', "Error: POS field in vb_line_i=%u must be an integer number between 0 and %u", vb_line_i, MAX_POS);
         this_pos_64 = this_pos_64 * 10 + (*s - '0');
     }
-
-    int32_t this_pos = (int32_t)this_pos_64;
-
     ASSERT (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, 
-            "Error: Invalid POS in vb_line_i=%u - value should be between 0 and %u, but found %u", vb_line_i, MAX_POS, this_pos);
+            "Error: Invalid POS in vb_line_i=%u - value should be between 0 and %u, but found %"PRIu64, vb_line_i, MAX_POS, this_pos_64);
     
+    return (int32_t)this_pos_64;
+}
+
+int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int pos_field, SectionType sec_pos_b250,
+                       const char *pos_str, unsigned pos_len, unsigned vb_line_i)
+{
+    int32_t this_pos = seg_pos_snip_to_int (pos_str, vb_line_i);
+
     int32_t pos_delta = this_pos - last_pos;
     
     // print our string without expensive sprintf

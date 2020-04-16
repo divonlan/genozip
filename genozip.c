@@ -238,12 +238,13 @@ static void main_show_sections (void)
         SEC_VCF_HT_DATA,       SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
 
         SEC_SAM_VB_HEADER,
-        SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
-        SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
-        SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     
-        SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      
-        SEC_SAM_POS_DATA,      SEC_SAM_SEQ_DATA,       SEC_SAM_QUAL_DATA,      
-        SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT
+        SEC_SAM_SEQ_DATA,      SEC_SAM_QUAL_DATA,      SEC_SAM_RAND_POS_DATA,
+        SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
+        SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
+        SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,
+        SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      SEC_SAM_CIGAR_B250,     SEC_SAM_CIGAR_DICT,     
+        SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT,      
+        SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250,  SEC_SAM_OPTNL_SF_DICT
     };
 
     static const char *categories[] = {
@@ -256,11 +257,12 @@ static void main_show_sections (void)
         "Haplotype data", "HT separator char", "Phasing char",
 
         "Line block metadata",
+        "SEQ data", "QUAL data", "Random POS data", 
         "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
         "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
+        "POS b250 (delta)", "POS dict (delta)", 
         "MAPQ b250", "MAPQ dict", "CIGAR b250", "CIGAR dict", 
-        "TLEN b250", "TLEN dict",
-        "POS data", "SEQ data", "QUAL data", 
+        "TLEN b250", "TLEN dict", "PNEXT b250 (delta)", "PNEXT dict (delta)",
         "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict"
     };
 
@@ -279,13 +281,36 @@ static void main_show_sections (void)
 
         if (!tbytes && !zbytes) continue;
 
-        char *vcf_size_str = (tbytes || section_type_is_dictionary (sec_i)) ? buf_display_size(tbytes, vsize) : "       ";
-        
-        fprintf (stderr, format, categories[sec_i], zsections, buf_display_uint (zentries, zentries_str),
-                 vcf_size_str, 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
-                 buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
-                 zbytes ? (double)tbytes / (double)zbytes : 0,
-                 !zbytes ? (tbytes ? "\b\b\bInf" : "\b\b\b---") : "");
+        bool is_dict = section_type_is_dictionary (secs[sec_i]);
+        bool is_b250 = section_type_is_b250 (secs[sec_i]);
+
+        int64_t ratio_zbytes;
+        if (secs[sec_i] == SEC_VCF_INFO_B250 || secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250) 
+            ratio_zbytes = zbytes + z_file->section_bytes[secs[sec_i+1]] + z_file->section_bytes[secs[sec_i+2]] 
+                                  + z_file->section_bytes[secs[sec_i+3]];
+        else if (is_dict || secs[sec_i] == SEC_VCF_INFO_SF_B250 || secs[sec_i] == SEC_SAM_QNAME_SF_B250 || secs[sec_i] == SEC_SAM_OPTNL_SF_B250)
+            ratio_zbytes = 0;
+        else if (is_b250) 
+            ratio_zbytes = zbytes + z_file->section_bytes[secs[sec_i+1]]; // b250 and dict combined
+        else              
+            ratio_zbytes = zbytes;
+
+        int64_t ratio_tbytes;
+        if (secs[sec_i] == SEC_VCF_INFO_B250 || secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250) 
+            ratio_tbytes = tbytes + txt_file->section_bytes[secs[sec_i+2]];
+        else
+            ratio_tbytes = tbytes;
+
+        fprintf (stderr, format, categories[sec_i], zsections, 
+                 buf_display_uint (zentries, zentries_str),
+                 tbytes ? buf_display_size(tbytes, vsize) : "       ", 
+                 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
+                 buf_display_size(zbytes, zsize), 
+                 100.0 * (double)zbytes / (double)z_file->disk_size,
+                 ratio_zbytes ? (double)ratio_tbytes / (double)ratio_zbytes : 0,
+                 !ratio_zbytes ? (ratio_tbytes && secs[sec_i] != SEC_VCF_INFO_SF_B250  && 
+                                                  secs[sec_i] != SEC_SAM_QNAME_SF_B250 && 
+                                                  secs[sec_i] != SEC_SAM_OPTNL_SF_B250 ? "\b\b\bInf" : "\b\b\b---") : "");
 
         total_sections += zsections;
         total_entries  += zentries;
@@ -337,9 +362,9 @@ static void main_show_content (void)
 #define NUM_CATEGORIES 6
 
     int sections_per_category[NUM_CATEGORIES][100] = { 
-        { SEC_VCF_HT_DATA , NIL },
+        { SEC_VCF_HT_DATA ,  NIL },
         { SEC_VCF_PHASE_DATA, SEC_VCF_GT_DATA, SEC_VCF_FRMT_SF_DICT, SEC_STATS_HT_SEPERATOR, NIL},
-        { SEC_SAM_SEQ_DATA, NIL },
+        { SEC_SAM_SEQ_DATA,  NIL },
         { SEC_SAM_QUAL_DATA, NIL },
         { SEC_TXT_HEADER, 
           SEC_VCF_VB_HEADER, SEC_VCF_CHROM_B250, SEC_VCF_POS_B250, SEC_VCF_ID_B250, SEC_VCF_REFALT_B250, 
@@ -348,12 +373,12 @@ static void main_show_content (void)
           SEC_VCF_CHROM_DICT, SEC_VCF_POS_DICT, SEC_VCF_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
           SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,           
           
-          SEC_SAM_VB_HEADER,     SEC_SAM_POS_DATA,
+          SEC_SAM_VB_HEADER,     SEC_SAM_RAND_POS_DATA,
           SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
           SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
-          SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT, 
-          SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,    
-          SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT, 
+          SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      
+          SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      
+          SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT, 
           SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
           
           NIL },
