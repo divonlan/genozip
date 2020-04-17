@@ -52,7 +52,7 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading VCF data
 
 // the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0,
+int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
@@ -537,13 +537,14 @@ static void main_genounzip (const char *z_filename,
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
-    if (!txt_filename && (!flag_stdout || flag_bgzip) && !flag_split) {
+    if (!txt_filename && (!flag_stdout || flag_bgzip || flag_bcf || flag_bam) && !flag_split) {
         txt_filename = (char *)malloc(fn_len + 10);
         ASSERT(txt_filename, "Error: failed to malloc txt_filename, len=%u", fn_len+10);
 
-        // .vcf.genozip -> .vcf or .vcf.gz
-        sprintf ((char *)txt_filename, "%.*s%s", (int)(fn_len - strlen(GENOZIP_EXT)), z_filename,
-                 flag_bgzip ? ".gz" : "");    
+        // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz
+        sprintf ((char *)txt_filename, "%.*s%s", 
+                 (int)(fn_len - strlen(GENOZIP_EXT)), z_filename,
+                 flag_bgzip ? ".gz" : flag_bam ? ".bam" : flag_bcf ? ".bcf" : "");    
     }
 
     z_file = file_open (z_filename, READ, Z_FILE, 0);    
@@ -813,6 +814,8 @@ int main (int argc, char **argv)
         #define _DL {"replace",       no_argument,       &flag_replace,      1 }
         #define _V  {"version",       no_argument,       &command, VERSION     }
         #define _z  {"bgzip",         no_argument,       &flag_bgzip,        1 }
+        #define _zb {"bam",           no_argument,       &flag_bam,          1 }
+        #define _zc {"bcf",           no_argument,       &flag_bcf,          1 }
         #define _m  {"md5",           no_argument,       &flag_md5,          1 }
         #define _t  {"test",          no_argument,       &flag_test,         1 }
         #define _9  {"optimize",      no_argument,       &flag_optimize,     1 } // US spelling
@@ -857,10 +860,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
-        static Option genounzip_lo[]  = {     _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,               _00 };
-        static Option genocat_lo[]    = {             _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,               _00 };
-        static Option genols_lo[]     = {             _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                                                _st, _sm,                                       _dm,               _00 };
+        static Option genozip_lo[]    = { _i, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
+        static Option genounzip_lo[]  = {     _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,               _00 };
+        static Option genocat_lo[]    = {             _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,               _00 };
+        static Option genols_lo[]     = {             _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.

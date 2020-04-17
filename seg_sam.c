@@ -222,7 +222,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
                                     char separator, unsigned vb_line_i)
 {
     ASSERT (field_len, "Error in %s: line invalidly ends with a tab. vb_i=%u vb_line_i=%u", 
-            file_printname (txt_file), vb->vblock_i, vb_line_i);
+            txt_name, vb->vblock_i, vb_line_i);
 
     ASSERT (field_len >= 6 && field[2] == ':' && field[4] == ':', "Error in %s: invalid optional field format: %.*s",
             txt_name, field_len, field);
@@ -265,7 +265,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
             ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
             ASSERT (field_len-5 == dl->seq_len, 
                     "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
-                    file_printname (txt_file), dl->seq_len, field_len-5, field_len-5, &field[5]);
+                    txt_name, dl->seq_len, field_len-5, field_len-5, &field[5]);
 
             dl->e2_data_start = &field[5] - vb->txt_data.data;
             vb->txt_section_bytes[SEC_SAM_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
@@ -275,7 +275,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
             ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
             ASSERT (field_len-5 == dl->seq_len, 
                     "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
-                    file_printname (txt_file), dl->seq_len, field_len-5, field_len-5, &field[5]);
+                    txt_name, dl->seq_len, field_len-5, field_len-5, &field[5]);
 
             dl->u2_data_start = &field[5] - vb->txt_data.data;
             vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += dl->seq_len + 1; // +1 for \t
@@ -503,6 +503,6 @@ const char *seg_sam_data_line (VBlock *vb_,
         vb->txt_section_bytes[SEC_SAM_OPTIONAL_B250] -= (1 + (oname[0]=='*'));  
 
     vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start_line));
-    
+
     return next_field;
 }

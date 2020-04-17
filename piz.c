@@ -167,6 +167,9 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5", z_name);
     }
 
+    // case: we couldn't open the file because we didn't know what type it is - open it now
+    if (!txt_file->file) file_open_txt (txt_file);
+
     if (data_type == EOF) goto finish;
 
     if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_vcf_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet

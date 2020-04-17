@@ -202,8 +202,15 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
 // several threads in parallel.
 void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_last_file)
 {
+    static DataType last_data_type = DATA_TYPE_NONE;
     static unsigned last_vblock_i = 0; // used if we're concatenating files - the vblock_i will continue from one file to the next
     if (!flag_concat) last_vblock_i = 0; // reset if we're not concatenating
+
+    // we cannot concatenate files of different type
+    ASSERT (!flag_concat || txt_file->data_type == last_data_type || last_data_type == DATA_TYPE_NONE, 
+            "%s: cannot concatenate %s because it is a %s file, whereas the previous file was a %s",
+             global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
+    last_data_type =  txt_file->data_type;
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
