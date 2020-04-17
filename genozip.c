@@ -444,9 +444,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     const unsigned FILENAME_WIDTH = 40;
 
-    const char *head_format = "\n%5s %10s %10s %10s %6s %s  %*s %s\n";
-    const char *foot_format = "\nTotal:           %10s %10s %5uX\n";
-    const char *item_format = "%5s %10s %10s %10s %5uX %s  %s%s%*s %s\n";
+    const char *head_format = "\n%5s %11s %10s %10s %6s %s  %*s %s\n";
+    const char *foot_format = "\nTotal:            %10s %10s %5uX\n";
+    const char *item_format = "%5s %11s %10s %10s %5uX %s  %s%s%*s %s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
