@@ -177,7 +177,7 @@ bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this 
     static Buffer header_section = EMPTY_BUFFER;
 
     int header_offset = zfile_read_section (evb, 0, NO_SB_I, &header_section, "header_section", 
-                                            sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, SEEK_NONE);
+                                            sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, NULL);
     if (header_offset == EOF) {
         buf_free (&header_section);
         return false; // empty file (or in case of split mode - no more components) - not an error

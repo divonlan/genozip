@@ -36,7 +36,7 @@ extern void zfile_compress_b250_data (VBlockP vb, MtfContextP ctx);
 extern int zfile_read_section (VBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */
                                BufferP data /* buffer to append */, const char *buf_name,
                                unsigned header_size, SectionType expected_sec_type,
-                               uint64_t offset); // offset or SEEK_NONE 
+                               ConstSectionListEntryP sl); 
 
 extern void zfile_uncompress_section (VBlockP vb, void *section_header, 
                                       BufferP uncompressed_data, const char *uncompressed_data_buf_name,
@@ -45,6 +45,8 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
 extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */);
+
+extern bool zfile_skip_section_by_flags (SectionType st, DictIdType dict_id);
 
 // -----------------------------
 // VCF stuff

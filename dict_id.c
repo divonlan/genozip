@@ -29,6 +29,8 @@ uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
           
 static DataType last_data_type = DATA_TYPE_NONE;
 
+DictIdType DICT_ID_NONE = {0};
+
 void dict_id_initialize (DataType data_type) 
 {   // note: this uint64_t values will be different in big and little endian machines 
     // (it's ok, they never get stored in the file)

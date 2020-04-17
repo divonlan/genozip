@@ -71,7 +71,7 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 
 #define file_is_sam(file) ((file)->type == SAM || (file)->type == BAM)
 
-typedef struct file_ {
+typedef struct File {
     void *file;
     char *name;                        // allocated by file_open(), freed by file_close()
     FileMode mode;

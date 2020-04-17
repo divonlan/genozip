@@ -143,20 +143,21 @@ bool sections_get_next_dictionary (SectionListEntry **sl_ent) // if *sl_ent==NUL
 }
 
 // called by PIZ I/O : zfile_vcf_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
-uint64_t sections_vb_first (uint32_t vb_i, SectionListEntry **sl_ent)
+SectionListEntry *sections_vb_first (uint32_t vb_i)
 {
+    SectionListEntry *sl=NULL;
     unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
-        *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, i);
-        if ((*sl_ent)->vblock_i == vb_i) break; // found!
+        sl = ENT (SectionListEntry, z_file->section_list_buf, i);
+        if (sl->vblock_i == vb_i) break; // found!
     }
 
     ASSERT (i < z_file->section_list_buf.len, "Error in sections_get_next_vb_section: cannot find any section for vb_i=%u", vb_i);
 
-    return (*sl_ent)->offset;
+    return sl;
 }
 
-// called by PIZ I/O : zfile_vcf_read_one_vb. Returns the offset of the next section with this vb_i
-uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */)
+/*// called by PIZ I/O : zfile_vcf_read_one_vb. Returns the offset of the next section with this vb_i
+uint64_t sections_vb_next (SectionListEntry **sl_ent)
 {
     ASSERT0 (*sl_ent, "Error in sections_vb_next: *sl_ent is NULL");
 
@@ -172,7 +173,7 @@ uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */)
 
     return (*sl_ent)->offset;
 }
-
+*/
 // called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
 bool sections_has_more_vcf_components()
 {
@@ -256,12 +257,12 @@ const char *encryption_name (unsigned encryption_type)
 }
 
 // called by PIZ I/O
-uint64_t sections_get_offset_first_section_of_type (SectionType st)
+SectionListEntry *sections_get_offset_first_section_of_type (SectionType st)
 {
     ARRAY (SectionListEntry, sl, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++)
-        if (sl[i].section_type == st) return sl[i].offset;
+        if (sl[i].section_type == st) return &sl[i];
 
     ABORT ("Error in sections_get_offset_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
     return 0; // never reaches here - squash compiler warning

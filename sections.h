@@ -27,7 +27,7 @@ typedef enum {
     SEC_VCF_PHASE_DATA     = 4,  SEC_VCF_HT_DATA         = 5,
 
     // data sections added in v2
-    SEC_GENOZIP_HEADER     = 6,   SEC_RANDOM_ACCESS  = 7,
+    SEC_GENOZIP_HEADER     = 6,   SEC_RANDOM_ACCESS      = 7,
 
     SEC_VCF_CHROM_DICT     = 8,   SEC_VCF_CHROM_B250     = 9,
     SEC_VCF_POS_DICT       = 10,  SEC_VCF_POS_B250       = 11,
@@ -129,7 +129,7 @@ typedef enum {
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
-typedef struct section_header_ {
+typedef struct SectionHeader {
     uint32_t magic; 
     uint32_t compressed_offset;      // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
     uint32_t data_encrypted_len;     // = data_compressed_len + padding if encrypted, 0 if not
@@ -205,7 +205,7 @@ typedef struct {
 } SectionHeaderBase250;         
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
-typedef struct {
+typedef struct SectionListEntry {
     uint64_t offset;                   // offset of this section in the file
     DictIdType dict_id;                // used if this section is a DICT or a B250 section
     uint32_t vblock_i;
@@ -332,9 +332,9 @@ extern uint8_t sections_count_sec_type (unsigned vb_i, SectionType sec);
 extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
 extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
 extern bool sections_has_more_vcf_components(void);
-extern uint64_t sections_get_offset_first_section_of_type (SectionType st);
-extern uint64_t sections_vb_first (uint32_t vb_i, SectionListEntry **sl_ent);
-extern uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */);
+extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st);
+extern SectionListEntry *sections_vb_first (uint32_t vb_i);
+//extern uint64_t sections_vb_next (SectionListEntry **sl_ent /* in / out */);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

@@ -88,8 +88,8 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
             // if the regions are negative, transform them to the positive complement instead
             regions_transform_negative_to_positive_complement();
 
-            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, 
-                                sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS));
+            SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS);
+            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, ra_sl);
 
             zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
 

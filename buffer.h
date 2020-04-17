@@ -16,7 +16,7 @@ struct variant_block_;
 typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY} BufferType; // BUF_UNALLOCATED must be 0
 #define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY" }
 
-typedef struct buffer_ {
+typedef struct Buffer {
     BufferType type;
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     const char *name; // name of allocator - used for memory debugging & statistics

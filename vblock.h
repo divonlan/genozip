@@ -92,7 +92,7 @@ typedef struct {
     \
     Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */
 
-typedef struct vblock_ {
+typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;
 
@@ -156,7 +156,7 @@ typedef struct {
 } PizDataLineVCF;
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
-typedef struct vblock_vcf_ {
+typedef struct VBlockVCF {
 
     VBLOCK_COMMON_FIELDS
 
@@ -247,7 +247,7 @@ typedef struct {
 } ZipDataLineSAM;
 
 // IMPORTANT: if changing fields in VBlockSAM, also update vb_sam_release_vb
-typedef struct vblock_sam_ {
+typedef struct VBlockSAM {
 
     VBLOCK_COMMON_FIELDS
 

@@ -50,22 +50,24 @@
  
 #define MAX_32BIT_WINDOWS_MEMORY (1.7*1024*1024*1024) // 1.7GB - so Windows 32bit code doesn't explode at 2GB. TO DO - make this platform specific or get ulimits
 
-// ----------------------------------------------------------------------------------------------
-// pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity)
-// ----------------------------------------------------------------------------------------------
-typedef struct vblock_ *VBlockP;
-typedef const struct vblock_ *ConstVBlockP;
-typedef struct vblock_vcf_ *VBlockVCFP;
-typedef const struct vblock_vcf_ *ConstVBlockVCFP;
-typedef struct vblock_sam_ *VBlockSAMP;
-typedef const struct vblock_sam_ *ConstVBlockSAMP;
-typedef struct file_ *FileP;
-typedef const struct file_ *ConstFileP;
-typedef struct buffer_ *BufferP;
-typedef const struct buffer_ *ConstBufferP;
-typedef struct mtfcontext_ *MtfContextP;
-typedef struct mtfnode_ *MtfNodeP;
-typedef struct section_header_ *SectionHeaderP;
+// ------------------------------------------------------------------------------------------------------------------------
+// pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
+// ------------------------------------------------------------------------------------------------------------------------
+typedef struct VBlock *VBlockP;
+typedef const struct VBlock *ConstVBlockP;
+typedef struct VBlockVCF *VBlockVCFP;
+typedef const struct VBlockVCF *ConstVBlockVCFP;
+typedef struct VBlockSAM *VBlockSAMP;
+typedef const struct VBlockSAM *ConstVBlockSAMP;
+typedef struct File *FileP;
+typedef const struct File *ConstFileP;
+typedef struct Buffer *BufferP;
+typedef const struct Buffer *ConstBufferP;
+typedef struct MtfContext *MtfContextP;
+typedef struct MtfNode *MtfNodeP;
+typedef struct SectionHeader *SectionHeaderP;
+typedef struct SectionListEntry *SectionListEntryP;
+typedef const struct SectionListEntry *ConstSectionListEntryP;
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 

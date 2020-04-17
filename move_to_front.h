@@ -23,7 +23,7 @@
 #define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
 #define NIL ((int32_t)-1)
-typedef struct mtfnode_ {
+typedef struct MtfNode {
     uint32_t char_index;      // character index into dictionary array
     uint32_t snip_len;        // not including \t terminator present in dictionary array
     Base250 word_index;       // word index into dictionary 
@@ -45,7 +45,7 @@ typedef struct {
     int32_t prev_word_index;   // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
 
-typedef struct mtfcontext_ {
+typedef struct MtfContext {
     // ----------------------------
     // common fields for ZIP & PIZ
     // ----------------------------
