@@ -9,6 +9,7 @@
 #include "move_to_front.h"
 #include "header.h"
 #include "file.h"
+#include "random_access.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
 
@@ -403,6 +404,8 @@ const char *seg_sam_data_line (VBlock *vb_,
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNAME");
     uint32_t rname_node_index = seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
 
+    random_access_update_chrom (vb_, vb_line_i, rname_node_index);
+
     // POS - two options:
     // 1. if RNAME is the same as the previous line - store the delta in SAM_POS dictionary
     // 2. If its a different RNAME - add to vb->random_pos_data (not a dictionary)
@@ -417,6 +420,8 @@ const char *seg_sam_data_line (VBlock *vb_,
     }
     else // same rname - do a delta
         vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i, "POS");
+
+    random_access_update_pos (vb_, vb->last_pos);
 
     vb->last_rname_node_index = rname_node_index;
 
@@ -497,5 +502,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     if (oname_len == 1) 
         vb->txt_section_bytes[SEC_SAM_OPTIONAL_B250] -= (1 + (oname[0]=='*'));  
 
+    vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start_line));
+    
     return next_field;
 }

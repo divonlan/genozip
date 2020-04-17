@@ -36,7 +36,7 @@
 #include "dict_id.h"
 #include "vblock.h"
 #include "endianness.h"
-#include "regions_vcf.h"
+#include "regions.h"
 #include "samples.h"
 #include "gtshark_vcf.h"
 #include "stream.h"
@@ -130,7 +130,8 @@ static int main_print_help (bool explicit)
     
     if (flag_force) exe_type = (ExeType)4; // -h -f shows developer help
 
-    main_print (texts[exe_type], sizes[exe_type] / sizeof(char*), "                     ",  "\n", 0);
+    main_print (texts[exe_type], sizes[exe_type] / sizeof(char*), 
+                flag_force ? "                          " : "                     ",  "\n", 0);
     main_print (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
 
 // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
@@ -229,7 +230,7 @@ static void main_show_sections (void)
 
     // the order in which we want them displayed
     const SectionType secs[] = {
-        SEC_GENOZIP_HEADER,    SEC_VCF_RANDOM_ACCESS,  SEC_TXT_HEADER,        SEC_VCF_VB_HEADER,
+        SEC_GENOZIP_HEADER,    SEC_RANDOM_ACCESS,  SEC_TXT_HEADER,        SEC_VCF_VB_HEADER,
         SEC_VCF_CHROM_B250,    SEC_VCF_CHROM_DICT,     SEC_VCF_POS_B250,      SEC_VCF_POS_DICT, 
         SEC_VCF_ID_B250,       SEC_VCF_ID_DICT,        SEC_VCF_REFALT_B250,   SEC_VCF_REFALT_DICT, 
         SEC_VCF_QUAL_B250,     SEC_VCF_QUAL_DICT,      SEC_VCF_FILTER_B250,   SEC_VCF_FILTER_DICT, 
@@ -382,7 +383,7 @@ static void main_show_content (void)
           SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
           
           NIL },
-        { SEC_VCF_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }
+        { SEC_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }
     };
 
     for (unsigned i=0; i < NUM_CATEGORIES; i++) {
@@ -857,9 +858,9 @@ int main (int argc, char **argv)
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _i, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,     _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
-        static Option genounzip_lo[]  = {     _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,      _st, _sm, _sh, _si,                             _dm,               _00 };
-        static Option genocat_lo[]    = {             _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                    _st, _sm,                                       _dm,               _00 };
-        static Option genols_lo[]     = {             _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                                      _st, _sm,                                       _dm,               _00 };
+        static Option genounzip_lo[]  = {     _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,               _00 };
+        static Option genocat_lo[]    = {             _f, _h,     _L1, _L2, _q, _Q,          _V,         _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,               _00 };
+        static Option genols_lo[]     = {             _f, _h,     _L1, _L2, _q,              _V,                      _p,                                                                                                                _st, _sm,                                       _dm,               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.

@@ -28,11 +28,14 @@ void vb_release_vb (VBlock **vb_p)
     *vb_p = NULL;
 
     vb->num_lines = vb->first_line = vb->vblock_i = vb->txt_data_next_offset = 0;
-    vb->vb_data_size = vb->vb_data_read_size = 0;
+    vb->vb_data_size = vb->vb_data_read_size = vb->last_pos = 0;
     vb->ready_to_dispatch = vb->is_processed = false;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = 0;
     
+    buf_free(&vb->ra_buf);
+    vb->chrom_node_index = 0; 
+
     memset(vb->txt_section_bytes, 0, sizeof(vb->txt_section_bytes));
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
     memset(vb->z_num_sections, 0, sizeof(vb->z_num_sections));
@@ -49,6 +52,7 @@ void vb_release_vb (VBlock **vb_p)
     buf_free(&vb->show_headers_buf);
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
+    buf_free(&vb->region_ra_intersection_matrix);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
@@ -170,7 +174,7 @@ unsigned vb_vcf_num_sections(VBlockVCF *vb)
 
 
 //--------------------------------
-// SAM stuff
+// VCF stuff
 //--------------------------------
 
 // cleanup vb (except common) and get it ready for another usage (without freeing memory held in the Buffers)
@@ -201,9 +205,7 @@ static void vb_vcf_release_vb (VBlockVCF *vb)
     vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = false;
     vb->phase_type = PHASE_UNKNOWN;
-    vb->max_gt_line_len = vb->last_pos = 0;
-    vb->curr_ra_ent = NULL; 
-    vb->curr_ra_ent_is_initialized = false;
+    vb->max_gt_line_len = 0;
 
     buf_free(&vb->line_variant_data);
     buf_free(&vb->line_gt_data);
@@ -229,8 +231,6 @@ static void vb_vcf_release_vb (VBlockVCF *vb)
     buf_free(&vb->helper_index_buf);
     buf_free(&vb->ht_columns_data);
     buf_free(&vb->format_info_buf);
-    buf_free(&vb->ra_buf);
-    buf_free(&vb->region_ra_intersection_matrix);
     buf_free(&vb->column_of_zeros);
 
     buf_free(&vb->gtshark_db_db_data);
@@ -277,7 +277,7 @@ static void vb_sam_release_vb (VBlockSAM *vb)
 {
     vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = vb->next_random_pos = 0;
     vb->nm_did_i = vb->strand_did_i = vb->mc_did_i = 0;
-    vb->last_pos = vb->last_rname_node_index = 0;
+    vb->last_rname_node_index = vb->longest_line_len = 0;
 
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     
@@ -285,6 +285,7 @@ static void vb_sam_release_vb (VBlockSAM *vb)
     if (command == ZIP && vb->data_lines)
         memset (vb->data_lines, 0, sizeof(ZipDataLineSAM) * vb->num_lines_alloced);
 
+    buf_free (&vb->reconstructed_line);
     buf_free (&vb->random_pos_data);
     buf_free (&vb->optional_mapper_buf);
     buf_free (&vb->seq_data);

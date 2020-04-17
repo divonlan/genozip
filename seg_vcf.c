@@ -8,8 +8,8 @@
 #include "vblock.h"
 #include "move_to_front.h"
 #include "header.h"
-#include "random_access_vcf.h"
-#include "optimize_vcf.h"
+#include "random_access.h"
+#include "optimize.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])
 
@@ -26,7 +26,7 @@ static void seg_chrom_field (VBlockVCF *vb, const char *chrom_str, unsigned chro
 
     uint32_t chrom_node_index = seg_vcf_one_field (vb, chrom_str, chrom_str_len, vb_line_i, VCF_CHROM, NULL);
 
-    random_access_update_chrom (vb, vb_line_i, chrom_node_index);
+    random_access_update_chrom ((VBlockP)vb, vb_line_i, chrom_node_index);
 }
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
@@ -202,7 +202,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, u
                 unsigned optimized_snip_len;
                 char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
                 if (flag_optimize && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
-                    optimize_info (ctx->dict_id, this_value, this_value_len, optimized_snip, &optimized_snip_len)) {
+                    optimize_vcf_info (ctx->dict_id, this_value, this_value_len, optimized_snip, &optimized_snip_len)) {
                  
                     vb->vb_data_size -= (int)this_value_len - (int)optimized_snip_len;
                     this_value = optimized_snip;
@@ -438,7 +438,7 @@ static int seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
 
         if (flag_optimize && cell_gt_data && len && 
             (ctx->dict_id.num == dict_id_FORMAT_PL || ctx->dict_id.num == dict_id_FORMAT_GL || ctx->dict_id.num == dict_id_FORMAT_GP) && 
-            optimize_format (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
+            optimize_vcf_format (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
 
             node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, optimized_snip, optimized_snip_len, &node, NULL);
             vb->vb_data_size -= (int)len - (int)optimized_snip_len;
@@ -538,7 +538,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
     vb->last_pos = seg_pos_field (vb_, vb->last_pos, VCF_POS, SEC_VCF_POS_B250, field_start, field_len, vb_line_i, "POS");
-    random_access_update_pos (vb, vb->last_pos);
+    random_access_update_pos (vb_, vb->last_pos);
 
     // ID
     field_start = next_field;

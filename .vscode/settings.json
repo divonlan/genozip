@@ -31,7 +31,7 @@
         "tuple": "c",
         "type_traits": "c",
         "move_to_front.h": "c",
-        "random_access_vcf.h": "c",
+        "random_access.h": "c",
         "profiler.h": "c",
         "txtfile.h": "c",
         "header.h": "c",

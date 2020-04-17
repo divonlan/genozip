@@ -18,7 +18,7 @@
 #include "zip.h"
 #include "base250.h"
 #include "endianness.h"
-#include "random_access_vcf.h"
+#include "random_access.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_file)
 {
@@ -178,15 +178,15 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, false);  
    
-    // if this is VCF data, compress all random access records into evb->z_data
-    if (z_file->data_type == DATA_TYPE_VCF) { 
-        if (flag_show_index) random_access_show_index();
+    // if this is VCF or SAM data, compress all random access records into evb->z_data
+    if (z_file->data_type == DATA_TYPE_VCF || z_file->data_type == DATA_TYPE_SAM) { 
+        if (flag_show_index) random_access_show_index(true);
         
         BGEN_random_access(); // make ra_buf into big endian
 
         z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
 
-        zfile_compress_section_data (evb, SEC_VCF_RANDOM_ACCESS, &z_file->ra_buf);
+        zfile_compress_section_data_alg (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf, 0,0, COMPRESS_LZMA); // ra data compresses better with LZMA than BZLIB
     }
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data

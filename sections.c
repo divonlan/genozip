@@ -9,7 +9,7 @@
 #include "file.h"
 #include "vblock.h"
 #include "endianness.h"
-#include "random_access_vcf.h"
+#include "random_access.h"
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)

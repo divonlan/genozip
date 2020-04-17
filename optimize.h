@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   optimize_vcf.h
+//   optimize.h
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
@@ -11,7 +11,9 @@
 #include "dict_id.h"
 #include <stdbool.h>
 
-extern bool optimize_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
-extern bool optimize_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
+extern bool optimize_vcf_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
+extern bool optimize_vcf_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
+
+extern void optimize_phred_quality_string (char *str, unsigned len);
 
 #endif

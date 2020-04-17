@@ -50,6 +50,14 @@ typedef struct {
     \
     ProfilerRec profile; \
     \
+    /* random access, chrom, pos */ \
+    Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
+    int32_t chrom_node_index;  /* ZIP: index into ra_buf: used by random_access_update_chrom/random_access_update_pos to sync between them */\
+    int32_t last_pos;          /* value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes */\
+    \
+    /* regions & filters */ \
+    Buffer region_ra_intersection_matrix;  /* PIZ: a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region */\
+    \
     /* crypto stuff */\
     Buffer spiced_pw;  /* used by crypt_generate_aes_key() */\
     uint8_t aes_round_key[240];/* for 256 bit aes */\
@@ -162,12 +170,6 @@ typedef struct vblock_vcf_ {
     bool has_haplotype_data;   // ditto for haplotype data
     PhaseType phase_type;      // phase type of this variant block
     
-    // random access, chrom, pos
-    Buffer ra_buf;             // ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_VCF_RANDOM_ACCESS section at the end of the genozip file        
-    RAEntry *curr_ra_ent;      // these two are used by random_access_update_chrom/random_access_update_pos to sync between them
-    int32_t last_pos;          // value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes
-    bool curr_ra_ent_is_initialized; 
-
     // working memory for segregate - we segregate a line components into these buffers, and when done
     // we copy it back to DataLine - the buffers overlaying the line field
     Buffer line_variant_data;  // string terminated by a newline. len includes the newline. (used for decompressing)
@@ -220,9 +222,6 @@ typedef struct vblock_vcf_ {
     Buffer gtshark_exceptions_allele; // ZIP & PIZ: each index (including terminating 0) corresponding to the index in exception_ht_i_offset
     Buffer gtshark_vcf_data;          // PIZ only
 
-    // regions & filters
-    Buffer region_ra_intersection_matrix;      // a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region
-    
     // backward compatibility with genozip v1 
     Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)
     Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by piz_vcf_reconstruct_vb
@@ -254,7 +253,6 @@ typedef struct vblock_sam_ {
 
     SubfieldMapper qname_mapper;         // ZIP & PIZ
 
-    uint32_t last_pos;                   // ZIP & PIZ: POS of previous line
     uint32_t last_rname_node_index;      // ZIP: RNAME node index of previous line
 
     unsigned mc_did_i;                   // ZIP: did_i of mc (small letters) optional field
@@ -263,7 +261,11 @@ typedef struct vblock_sam_ {
                                          // 1. POS if RNAME differs from prev line RNAME
                                          // 2. PNEXT where RNEXT is not ('=' or equal to RNAME) 
                                          // 3. POS data in SA, OA and XA
+
+    uint32_t longest_line_len;           // length of longest line of SAM data in this vb
+
     // PIZ-only stuff
+    Buffer reconstructed_line;           // PIZ: reconstruction of current line
     int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
     Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
     Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists

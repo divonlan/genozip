@@ -111,7 +111,7 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
 
 // PIZ: search for a node matching this snip in a directory and return the node index. note that we do a linear
 // search as PIZ doesn't have hash tables.
-int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned snip_len)
+int32_t mtf_search_for_word_index (MtfContext *ctx, const char *snip, unsigned snip_len)
 {
     MtfWord *words = (MtfWord *)ctx->word_list.data;
 
@@ -164,7 +164,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
                 DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, (uint32_t)ctx->word_list.len);
 
         //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
-        MtfWord *dict_word = mtf_get_word (ctx, word_index);
+        MtfWord *dict_word = ENT (MtfWord, ctx->word_list, word_index);
 
         if (snip) {
             *snip = &ctx->dict.data[dict_word->char_index];
@@ -646,12 +646,13 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     buf_alloc (evb, &zf_ctx->dict, zf_ctx->dict.len + fragment.len, CTX_GROWTH, "z_file->mtf_ctx->dict", header->h.section_type);
     buf_set_overlayable (&zf_ctx->dict);
 
-    memcpy (&zf_ctx->dict.data[zf_ctx->dict.len], fragment.data, fragment.len);
+    memcpy (AFTERENT (char, zf_ctx->dict), fragment.data, fragment.len);
     zf_ctx->dict.len += fragment.len;
 
     // extend word list memory - and calculate the new words. If there is no room - old memory is abandoned 
     // (so that VBs that are overlaying it continue to work uninterrupted) and a new memory is allocated
-    buf_alloc (evb, &zf_ctx->word_list, (zf_ctx->word_list.len + num_snips) * sizeof (MtfWord), CTX_GROWTH, "z_file->mtf_ctx->word_list", header->h.section_type);
+    buf_alloc (evb, &zf_ctx->word_list, (zf_ctx->word_list.len + num_snips) * sizeof (MtfWord), CTX_GROWTH, 
+               "z_file->mtf_ctx->word_list", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->word_list);
 
     bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, vcf_field_names[VCF_REFALT], MIN (strlen(vcf_field_names[VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
@@ -659,7 +660,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     char *start = fragment.data;
     for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
 
-        MtfWord *word = mtf_get_word (zf_ctx, zf_ctx->word_list.len++);
+        MtfWord *word = &NEXTENT (MtfWord, zf_ctx->word_list);
 
         char *c=start; while (*c != '\t') c++;
 
@@ -717,6 +718,18 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
         }
     }
     vb->num_dict_ids = z_file->num_dict_ids;
+}
+
+// used by random_access_show_index
+MtfNode *mtf_get_node_by_word_index (MtfContext *ctx, uint32_t word_index)
+{
+    ARRAY (MtfNode, mtf, ctx->mtf);
+
+    for (uint32_t i=0; i < ctx->mtf.len; i++)
+        if (mtf[i].word_index.n == word_index) return &mtf[i];
+
+    ABORT ("mtf_search_for_char_index_by_word_index failed to find word_index=%u in did_i=%u", word_index, ctx->did_i);
+    return NULL; // never reaches here
 }
 
 static int sorter_cmp(const void *a_, const void *b_)  

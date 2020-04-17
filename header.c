@@ -23,6 +23,8 @@ const char *sam_field_names[NUM_SAM_FIELDS] = { "QNAME", "FLAG", "RNAME", "POS",
 
 const unsigned datatype_last_field[NUM_DATATYPES] = { VCF_FORMAT, SAM_OPTIONAL };
 
+const unsigned chrom_did_i_by_data_type[NUM_DATATYPES] = { VCF_CHROM, SAM_RNAME };
+
 // -----------
 // VCF stuff
 // -----------

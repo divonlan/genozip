@@ -12,6 +12,8 @@
 #include "zip.h"
 #include "seg.h"
 #include "txtfile.h"
+#include "optimize.h"
+#include "random_access.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
 
@@ -43,10 +45,18 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
                                                char **line_u2_data,   uint32_t *line_u2_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
+     
     *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
     *line_qual_len  = dl->seq_len;
     *line_u2_data   = dl->u2_data_start ? ENT (char, vb->txt_data, dl->u2_data_start) : NULL;
     *line_u2_len    = dl->u2_data_start ? dl->seq_len : 0;
+
+    // note - we optimize just before compression - likely the string will remain in CPU cache
+    // removing the need for a separate load from RAM
+    if (flag_optimize) {
+        optimize_phred_quality_string (*line_qual_data, *line_qual_len);
+        if (*line_u2_data) optimize_phred_quality_string (*line_u2_data, *line_u2_len);
+    }
 }
 
 // this function receives all lines of a variant block and processes them
@@ -93,6 +103,9 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     // zip_vcf_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     mtf_merge_in_vb_ctx(vb_);
+
+    // now, we merge vb->ra_buf into z_file->ra_buf
+    random_access_merge_in_vb (vb_);
 
     // generate & write b250 data for all fields (FLAG to OPTIONAL)
     for (SamFields f=SAM_QNAME ; f <= SAM_OPTIONAL ; f++) {

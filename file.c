@@ -88,6 +88,7 @@ static bool file_open_txt (File *file)
     }
     else { // WRITE - data_type is already set by file_open
         if (file->data_type == DATA_TYPE_VCF) 
+            
             ASSERT (file->type == VCF || file->type == VCF_GZ || file->type == VCF_BGZ, 
                     "%s: output file must have a .vcf or .vcf.gz or .vcf.bgz extension", global_cmd); 
 
@@ -190,20 +191,25 @@ static bool file_open_txt (File *file)
 // returns true if successful
 static bool file_open_z (File *file)
 {
+    ASSERT (file_has_ext (file->name, GENOZIP_EXT), "%s: file %s must have a " GENOZIP_EXT " extension", 
+            global_cmd, file->name);
+
     // for READ, set data_type
     if (file->mode == READ) {
         switch (file->type) {
             case VCF_GENOZIP : file->data_type = DATA_TYPE_VCF; break;
             case SAM_GENOZIP : file->data_type = DATA_TYPE_SAM; break; 
-            default          : ABORT ("%s: input file must have a " VCF_GENOZIP_ " or " SAM_GENOZIP_ " extension", global_cmd); 
+            default          : file->data_type = DATA_TYPE_NONE; // to be determined after the genozip header is read
         }
     }
     else { // WRITE - data_type is already set by file_open
-        if (file->data_type == DATA_TYPE_VCF)
-            ASSERT (file->type == VCF_GENOZIP, "%s: output file must have a " VCF_GENOZIP_ " extension", global_cmd);
-       
-        if (file->data_type == DATA_TYPE_SAM)
-            ASSERT (file->type == SAM_GENOZIP, "%s: output file must have a " SAM_GENOZIP_ " extension", global_cmd);
+        // set file->type according to the data type, overriding the previous setting - i.e. if the user
+        // uses the --output option, he is unrestricted in the choice of a file name
+        switch (file->data_type) {
+            case DATA_TYPE_VCF : file->type = VCF_GENOZIP; break;
+            case DATA_TYPE_SAM : file->type = SAM_GENOZIP; break; 
+            default: ABORT ("Error in file_open_z: unknown data type %u", file->data_type);
+        }   
     }
 
     file->file = file->is_remote ? url_open (NULL, file->name) 

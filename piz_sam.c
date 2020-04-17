@@ -15,12 +15,13 @@
 #include "seg.h"
 #include "header.h"
 #include "move_to_front.h"
+#include "regions.h"
 
 #   define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[(did_i)], NULL, &snip, &snip_len, sam_line_i); 
 #   define RECONSTRUCT_FROM_DICT(f) \
         LOAD_SNIP(f) \
-        buf_add (&vb->txt_data, snip, snip_len); \
-        buf_add (&vb->txt_data, "\t", 1);
+        buf_add (&vb->reconstructed_line, snip, snip_len); \
+        buf_add (&vb->reconstructed_line, "\t", 1);
 
 static void piz_sam_reconstruct_pos (VBlockSAM *vb, uint32_t sam_line_i, char separator)
 {
@@ -28,8 +29,8 @@ static void piz_sam_reconstruct_pos (VBlockSAM *vb, uint32_t sam_line_i, char se
     
     ASSERT (i < vb->random_pos_data.len, "Error reading sam_line=%u: unexpected end of RANDOM_POS data", sam_line_i);
 
-    buf_add (&vb->txt_data, &vb->random_pos_data.data[vb->next_random_pos], i - vb->next_random_pos + (separator=='\t'));
-    if (separator != '\t') buf_add (&vb->txt_data, &separator, 1);
+    buf_add (&vb->reconstructed_line, &vb->random_pos_data.data[vb->next_random_pos], i - vb->next_random_pos + (separator=='\t'));
+    if (separator != '\t') buf_add (&vb->reconstructed_line, &separator, 1);
     
     vb->next_random_pos = i+1; // skip the trailing \t too
 }
@@ -42,7 +43,7 @@ static void piz_sam_reconstruct_seq_qual (VBlockSAM *vb, uint32_t cigar_seq_len,
     uint32_t len = (*next >= data->len || data->data[*next] == '*') ? 1 : cigar_seq_len;
     ASSERT (*next + len <= data->len, "Error reading sam_line=%u: unexpected end of %s data", sam_line_i, field_name);
 
-    buf_add (&vb->txt_data, &data->data[*next], len);
+    buf_add (&vb->reconstructed_line, &data->data[*next], len);
     
     *next += len;
 }
@@ -94,9 +95,9 @@ static void piz_sam_reconstruct_qname (VBlockSAM *vb, const char *template, unsi
         unsigned snip_len;
         mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[vb->qname_mapper.did_i[i]], NULL, &snip, &snip_len, sam_line_i);
 
-        buf_add (&vb->txt_data, snip, snip_len);
+        buf_add (&vb->reconstructed_line, snip, snip_len);
 
-        buf_add (&vb->txt_data, (i < template_len) ? &template[i] : "\t", 1); // add separator
+        buf_add (&vb->reconstructed_line, (i < template_len) ? &template[i] : "\t", 1); // add separator
     }
 }
 
@@ -105,8 +106,8 @@ static void piz_sam_reconstruct_sa_oa_xa (VBlockSAM *vb, bool is_xa, uint32_t sa
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
 
-#   define ADD_SNIP(start,sep) { buf_add (&vb->txt_data, &snip[start], snip_len-start); \
-                                 buf_add (&vb->txt_data, sep, 1); }
+#   define ADD_SNIP(start,sep) { buf_add (&vb->reconstructed_line, &snip[start], snip_len-start); \
+                                 buf_add (&vb->reconstructed_line, sep, 1); }
 
 #   define GET_ADD_SNIP(did_i, sep) { mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[did_i], NULL, &snip, &snip_len, sam_line_i);\
                                       ADD_SNIP(0, sep); }
@@ -118,7 +119,7 @@ static void piz_sam_reconstruct_sa_oa_xa (VBlockSAM *vb, bool is_xa, uint32_t sa
     // strand
     mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[vb->strand_did_i], NULL, &snip, &snip_len, sam_line_i);\
 
-    if (is_xa) buf_add (&vb->txt_data, snip, 1); // XA: add strand concatenated with pos
+    if (is_xa) buf_add (&vb->reconstructed_line, snip, 1); // XA: add strand concatenated with pos
     
     // pos
     piz_sam_reconstruct_pos (vb, sam_line_i, ',');
@@ -146,7 +147,7 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
     const char *snip; unsigned snip_len;
     for (unsigned sf_i=0; sf_i < opt_map->num_subfields; sf_i++) {
 
-        buf_add (&vb->txt_data, &oname[sf_i*5], 5)
+        buf_add (&vb->reconstructed_line, &oname[sf_i*5], 5)
 
         DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&oname[sf_i*5], 2));
         MtfContext *ctx = &vb->mtf_ctx[opt_map->did_i[sf_i]];
@@ -162,14 +163,14 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
         // MC and OC are stored in the CIGAR dictionary
         else if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) {
             mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[SAM_CIGAR], NULL, &snip, &snip_len, sam_line_i);
-            buf_add (&vb->txt_data, snip, snip_len);
+            buf_add (&vb->reconstructed_line, snip, snip_len);
         }
 
         else if (dict_id.num == dict_id_OPTION_mc && oname[sf_i*5 + 3] == 'i') {
             LOAD_SNIP (ctx->did_i);
             char mc_str[30];
             piz_decode_pos (vb->last_pos, snip, snip_len, mc_str, &snip_len); 
-            buf_add (&vb->txt_data, mc_str, snip_len);
+            buf_add (&vb->reconstructed_line, mc_str, snip_len);
         }
         
         // SA, XA and OA have subsubfields IF snip starts with ascii 255
@@ -184,22 +185,22 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
                     piz_sam_reconstruct_sa_oa_xa (vb, (dict_id.num == dict_id_OPTION_XA), sam_line_i);
             }
             else
-                buf_add (&vb->txt_data, snip, snip_len);
+                buf_add (&vb->reconstructed_line, snip, snip_len);
         }
 
         // other optional fields - get each for its own dictionary
         else {        
             mtf_get_next_snip ((VBlockP)vb, ctx, NULL, &snip, &snip_len, sam_line_i);
 
-            buf_add (&vb->txt_data, snip, snip_len);
+            buf_add (&vb->reconstructed_line, snip, snip_len);
         }
 
         if (sf_i != opt_map->num_subfields-1)
-            buf_add (&vb->txt_data, "\t", 1);
+            buf_add (&vb->reconstructed_line, "\t", 1);
     }
     
     if (oname_len % 5 == 1 && oname[oname_len-1] == '#') // Windows style end-of-line \r\n
-        buf_add (&vb->txt_data, "\r", 1);
+        buf_add (&vb->reconstructed_line, "\r", 1);
 }
 
 static void piz_sam_reconstruct_vb (VBlockSAM *vb)
@@ -207,13 +208,16 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
     START_TIMER;
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "piz_sam_reconstruct_vb", vb->vblock_i);
+    buf_alloc (vb, &vb->reconstructed_line, vb->longest_line_len, 1, "reconstructed_line", vb->vblock_i);
 
     uint32_t cigar_seq_len=0, snip_len;
     const char *snip;
     uint32_t last_rname_word_index = (uint32_t)-1;
     char pos_str[50], pnext_str[50];
-
+    
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+
+        vb->reconstructed_line.len = 0; // initialize for a new line
 
         uint32_t sam_line_i = vb->first_line + vb_line_i;
 
@@ -229,8 +233,8 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         if (this_rname_word_index == last_rname_word_index) {
             LOAD_SNIP (SAM_POS);
             vb->last_pos = piz_decode_pos (vb->last_pos, snip, snip_len, pos_str, &snip_len); 
-            buf_add (&vb->txt_data, pos_str, snip_len);
-            buf_add (&vb->txt_data, "\t", 1);
+            buf_add (&vb->reconstructed_line, pos_str, snip_len);
+            buf_add (&vb->reconstructed_line, "\t", 1);
         }
         else { // different rname - get from random_pos
             vb->last_pos = seg_pos_snip_to_int (&vb->random_pos_data.data[vb->next_random_pos], vb_line_i, "POS");
@@ -246,11 +250,11 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         cigar_seq_len = seg_sam_seq_len_from_cigar (snip, snip_len);
         
         if (snip[snip_len-1] == '*') {  // if its something like "151*" make it "*"
-            buf_add (&vb->txt_data, "*\t", 2);
+            buf_add (&vb->reconstructed_line, "*\t", 2);
         }
         else {
-            buf_add (&vb->txt_data, snip, snip_len); 
-            buf_add (&vb->txt_data, "\t", 1);
+            buf_add (&vb->reconstructed_line, snip, snip_len); 
+            buf_add (&vb->reconstructed_line, "\t", 1);
         }
 
         // RNEXT - from RNAME dictionary
@@ -269,12 +273,12 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
             LOAD_SNIP (SAM_PNEXT);
 
             if (snip_len == 1 && snip[0] == '*') {  // this refers to the PNEXT snip
-                buf_add (&vb->txt_data, "0\t", 2);
+                buf_add (&vb->reconstructed_line, "0\t", 2);
             }
             else { 
                 piz_decode_pos (vb->last_pos, snip, snip_len, pnext_str, &snip_len); 
-                buf_add (&vb->txt_data, pnext_str, snip_len);
-                buf_add (&vb->txt_data, "\t", 1);
+                buf_add (&vb->reconstructed_line, pnext_str, snip_len);
+                buf_add (&vb->reconstructed_line, "\t", 1);
             }
         }
         else
@@ -285,17 +289,21 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         
         // SEQ & QUAL data
         piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->seq_data,  &vb->next_seq,  "SEQ",  vb->first_line + vb_line_i);
-        buf_add (&vb->txt_data, "\t", 1);
+        buf_add (&vb->reconstructed_line, "\t", 1);
 
         piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, "QUAL", vb->first_line + vb_line_i);
 
         // OPTIONAL fields, and Windows-style \r if needed
         uint32_t word_index = LOAD_SNIP (SAM_OPTIONAL);
-        if (snip_len != 1 || (snip[0] != '#' && snip[0] != '*')) buf_add (&vb->txt_data, "\t", 1);
+        if (snip_len != 1 || (snip[0] != '#' && snip[0] != '*')) buf_add (&vb->reconstructed_line, "\t", 1);
         
         piz_sam_reconstruct_optional_fields (vb, cigar_seq_len, snip, snip_len, word_index, vb->first_line + vb_line_i);
 
-        buf_add (&vb->txt_data, "\n", 1);
+        buf_add (&vb->reconstructed_line, "\n", 1);
+
+        // output the reconstructed line - unless it needs to be skipped according to --regions
+        if (!flag_regions || regions_is_site_included (last_rname_word_index, vb->last_pos)) 
+            buf_add (&vb->txt_data, vb->reconstructed_line.data, vb->reconstructed_line.len);
     }
 
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
@@ -318,9 +326,10 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
     unsigned *section_index = (unsigned *)vb->z_section_headers.data;
 
     SectionHeaderVbHeaderSAM *header = (SectionHeaderVbHeaderSAM *)(vb->z_data.data + section_index[0]);
-    vb->first_line              = BGEN32 (header->first_line);
-    vb->num_lines               = BGEN32 (header->num_lines);
-    vb->vb_data_size            = BGEN32 (header->vb_data_size);
+    vb->first_line       = BGEN32 (header->first_line);
+    vb->num_lines        = BGEN32 (header->num_lines);
+    vb->vb_data_size     = BGEN32 (header->vb_data_size);
+    vb->longest_line_len = BGEN32 (header->longest_line_len);
 
     // in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every sam component

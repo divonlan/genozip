@@ -11,9 +11,10 @@
 
 // data types genozip can compress
 #define NUM_DATATYPES 2
-typedef enum { DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
+typedef enum { DATA_TYPE_VCF_V1=-2, DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
 #define DATATYPE_NAMES { "VCF", "SAM" } // index in array matches values in DataType
 extern const unsigned datatype_last_field[NUM_DATATYPES];
+const extern unsigned chrom_did_i_by_data_type[NUM_DATATYPES];
 
 // VCF related global parameters - set before any thread is created, and never change
 extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;

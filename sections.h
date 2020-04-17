@@ -27,7 +27,7 @@ typedef enum {
     SEC_VCF_PHASE_DATA     = 4,  SEC_VCF_HT_DATA         = 5,
 
     // data sections added in v2
-    SEC_GENOZIP_HEADER     = 6,   SEC_VCF_RANDOM_ACCESS  = 7,
+    SEC_GENOZIP_HEADER     = 6,   SEC_RANDOM_ACCESS  = 7,
 
     SEC_VCF_CHROM_DICT     = 8,   SEC_VCF_CHROM_B250     = 9,
     SEC_VCF_POS_DICT       = 10,  SEC_VCF_POS_B250       = 11,
@@ -69,7 +69,7 @@ typedef enum {
     "SEC_VCF_FRMT_SF_DICT"  ,  "SEC_VCF_GT_DATA"  ,\
     "SEC_VCF_PHASE_DATA"    ,  "SEC_VCF_HT_DATA "       ,\
     \
-    "SEC_GENOZIP_HEADER"    ,  "SEC_VCF_RANDOM_ACCESS"  ,\
+    "SEC_GENOZIP_HEADER"    ,  "SEC_RANDOM_ACCESS"  ,\
     \
     "SEC_VCF_CHROM_DICT"    ,  "SEC_VCF_CHROM_B250"     ,\
     "SEC_VCF_POS_DICT"      ,  "SEC_VCF_POS_B250"       ,\
@@ -244,7 +244,7 @@ typedef struct {
     uint16_t unused3;                  // new in v2: padding / ffu
 } SectionHeaderVbHeaderVCF; 
 
-// the data of SEC_VCF_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
+// the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct {
     uint32_t vblock_i;                 // the vb_i in which this range appears
@@ -316,8 +316,9 @@ typedef struct {
     // features of the data
     uint32_t vb_data_size;             // size of variant block as it appears in the source file
     uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
+    uint32_t longest_line_len;         // length of the longest line in this VB
 
-    uint64_t ffu;                      // for future use
+    uint32_t ffu;                      // for future use
 } SectionHeaderVbHeaderSAM; 
 
 #pragma pack(pop)

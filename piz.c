@@ -16,8 +16,8 @@
 #include "endianness.h"
 #include "piz.h"
 #include "sections.h"
-#include "random_access_vcf.h"
-#include "regions_vcf.h"
+#include "random_access.h"
+#include "regions.h"
 #include "samples.h"
 #include "dict_id.h"
 
@@ -71,33 +71,35 @@ int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta
 static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 {
     int16_t data_type = zfile_read_genozip_header (original_file_digest);
-    if (data_type == MAYBE_V1 || data_type == EOF) return data_type;
+    if (data_type == DATA_TYPE_VCF_V1 || data_type == EOF) return data_type;
 
-    // if the user wants to see only the VCF header, we can skip the dictionaries, regions and random access
+    dict_id_initialize (z_file->data_type);
+    
+    // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
         
-        if (flag_regions) {
-            zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM dictionaries - needed for regions_make_chregs()
+        // read random access, but only if we are going to need it
+        if (flag_regions || flag_show_index) {
+            zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
             // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-            regions_make_chregs();
+            regions_make_chregs (chrom_did_i_by_data_type[data_type]);
 
             // if the regions are negative, transform them to the positive complement instead
             regions_transform_negative_to_positive_complement();
-        }
 
-        // read random access, but only if we are going to need it
-        if (flag_regions || flag_show_index) {
+            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, 
+                                sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS));
 
-            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_VCF_RANDOM_ACCESS, 
-                                sections_get_offset_first_section_of_type (SEC_VCF_RANDOM_ACCESS));
-
-            zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_VCF_RANDOM_ACCESS);
+            zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
 
             z_file->ra_buf.len /= random_access_sizeof_entry();
             BGEN_random_access();
 
-            if (flag_show_index) random_access_show_index();
+            if (flag_show_index) {
+                random_access_show_index(false);
+                if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-index, we only show the index, not the data
+            }
 
             buf_free (&evb->z_data);
         }
@@ -150,8 +152,6 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (!dispatcher) 
         dispatcher = dispatcher_init (max_threads, 0, flag_test, is_last_file, z_basename);
     
-    dict_id_initialize (z_file->data_type);
-    
     // read genozip header
     Md5Hash original_file_digest;
 
@@ -160,7 +160,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (is_first_vcf_component) {
         data_type = piz_read_global_area (&original_file_digest);
 
-        if (data_type != MAYBE_V1)  // genozip v2+ - move cursor past first txt header
+        if (data_type != DATA_TYPE_VCF_V1)  // genozip v2+ - move cursor past first txt header
             ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
 
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
@@ -172,7 +172,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_vcf_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 
     // read and write VCF header. in split mode this also opens txt_file
-    piz_successful = (data_type != MAYBE_V1) ? header_genozip_to_txt (&original_file_digest)
+    piz_successful = (data_type != DATA_TYPE_VCF_V1) ? header_genozip_to_txt (&original_file_digest)
                                              : v1_header_genozip_to_vcf (&original_file_digest);
     
     ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", z_name);
@@ -195,31 +195,27 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 
                 bool skipped_vb;
                 static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
-                switch (sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix)) {
+                SectionType header_type = sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix);
+                switch (header_type) {
+                    case SEC_SAM_VB_HEADER: 
                     case SEC_VCF_VB_HEADER: {
 
-                        // if we skipped VBs or we skipped the sample sections in the last vb, we need to seek forward 
-                        if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); // 1 more VBs were skipped by sections_get_next_header_type() - we seek forward to this vb
+                        // if we skipped VBs or we skipped the sample sections in the last vb (flag_drop_genotypes), we need to seek forward 
+                        if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); 
 
-                        VBlockVCF *next_vb = (VBlockVCF *)dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
+                        VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
                         
                         if (region_ra_intersection_matrix.data) {
                             buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix", next_vb->vblock_i);
                             buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
                         }
                         
-                        zfile_vcf_read_one_vb (next_vb); 
+                        if      (header_type == SEC_VCF_VB_HEADER) zfile_vcf_read_one_vb ((VBlockVCFP)next_vb); 
+                        else if (header_type == SEC_SAM_VB_HEADER) zfile_sam_read_one_vb ((VBlockSAMP)next_vb); 
+
                         compute = true;
                         break;
                     }
-                    case SEC_SAM_VB_HEADER: {
-                        VBlockSAM *next_vb = (VBlockSAM *)dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
-                        zfile_sam_read_one_vb (next_vb); 
-                        compute = true;
-                        break;
-                    }
-                    case SEC_EOF: 
-                        break; 
 
                     case SEC_TXT_HEADER: // 2nd+ vcf header of a concatenated file
                         if (!flag_split) {
@@ -227,8 +223,11 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                             continue;
                         }
                         break; // eof if splitting
-
-                    default: ABORT0 ("Error: unexpected section_type");
+                    
+                    case SEC_EOF: 
+                        break; 
+                    
+                    default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));
                 }
             }
             else compute = v1_zfile_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1

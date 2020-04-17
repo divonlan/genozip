@@ -97,6 +97,9 @@ static bool zfile_skip_section_by_flags (SectionType st)
     case DATA_TYPE_SAM:
         break;
 
+    case DATA_TYPE_NONE:
+        return false; // this happens when reading the genozip header section for a file named "xxx.genozip" (without the data type in the name) - i.e. before the file type is known
+
     default:
         ABORT ("Error in zfile_skip_section_by_flags: invalid data_type: %d", z_file->data_type);
     }
@@ -411,8 +414,8 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
         // cases where we can skip reading these dictionaries because we don't be using them
         SectionType st = sl_ent->section_type;
-        if (read_chrom == DICTREAD_CHROM_ONLY   && st != SEC_VCF_CHROM_DICT) continue;
-        if (read_chrom == DICTREAD_EXCEPT_CHROM && st == SEC_VCF_CHROM_DICT) continue;
+        if (read_chrom == DICTREAD_CHROM_ONLY   && st != SEC_VCF_CHROM_DICT && st != SEC_SAM_RNAME_DICT) continue;
+        if (read_chrom == DICTREAD_EXCEPT_CHROM && (st == SEC_VCF_CHROM_DICT || st == SEC_SAM_RNAME_DICT)) continue;
         if (zfile_skip_section_by_flags (st)) continue;
         
         zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st, sl_ent->offset);    
@@ -454,7 +457,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // case: this is not a valid genozip v2+ file... maybe its v1?
     if (BGEN32 (footer.magic) != GENOZIP_MAGIC) {
         file_seek (z_file, 0, SEEK_SET, false);
-        return MAYBE_V1;
+        return DATA_TYPE_VCF_V1;
     }
 
     // read genozip header
@@ -469,6 +472,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
+    z_file->data_type = data_type; // this we set by file_open_z but only if extension was .[datatype].genozip 
 
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
             "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
@@ -954,7 +958,8 @@ void zfile_sam_compress_vb_header (VBlockSAM *vb)
     vb_header.h.data_compression_alg  = COMPRESS_NONE;
     vb_header.num_lines               = BGEN32 (vb->num_lines);
     vb_header.vb_data_size            = BGEN32 (vb->vb_data_size);
-    
+    vb_header.longest_line_len        = BGEN32 (vb->longest_line_len);
+
     // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.
     vb->z_data.name = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
     vb->z_data.param = vb->vblock_i;

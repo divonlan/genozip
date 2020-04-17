@@ -4,7 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "regions_vcf.h"
+#include "regions.h"
 #include "buffer.h"
 #include "move_to_front.h"
 #include "header.h"
@@ -188,12 +188,12 @@ void regions_add (const char *region_str)
 // convert the list of regions as parsed from --regions, to an array of chregs - one for each chromosome.
 // 1. convert the chrom string to a chrom word index
 // 2. for "all chrom" regions - include them in all chregs
-void regions_make_chregs(void)
+void regions_make_chregs(unsigned chrom_did_i)
 {
     if (!flag_regions) return; // nothing to do
 
     ARRAY (Region, regions, regions_buf);
-    MtfContext *chrom_ctx = &z_file->mtf_ctx[VCF_CHROM];
+    MtfContext *chrom_ctx = &z_file->mtf_ctx[chrom_did_i];
 
     num_chroms = chrom_ctx->word_list.len;
     chregs = calloc (num_chroms, sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
@@ -204,9 +204,9 @@ void regions_make_chregs(void)
         
         int32_t chrom_word_index = NIL; // All chromosomes, unless reg->chrom is defined
         if (reg->chrom) {
-            chrom_word_index = mtf_search_for_node_index (chrom_ctx, regions[i].chrom, strlen (regions[i].chrom));
+            chrom_word_index = mtf_search_for_word_index (chrom_ctx, regions[i].chrom, strlen (regions[i].chrom));
 
-            // if the requested chrom does not exist in the VCF, we remove this region
+            // if the requested chrom does not exist in the file, we remove this region
             if (chrom_word_index == NIL) continue;
         }
 

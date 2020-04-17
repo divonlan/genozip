@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include "optimize_vcf.h"
+#include "optimize.h"
 #include "dict_id.h"
 #include "header.h"
 
@@ -99,7 +99,7 @@ static inline bool optimize_vector_2_sig_dig (const char *snip, unsigned len, ch
     return true;
 }
 
-static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+static inline bool optimize_vcf_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
 
@@ -133,20 +133,20 @@ static inline bool optimize_pl (const char *snip, unsigned len, char *optimized_
     return true;
 }
 
-// we separate to too almost identical functions optimize_format, optimize_info to gain a bit of performace -
+// we separate to too almost identical functions optimize_vcf_format, optimize_vcf_info to gain a bit of performace -
 // less conditions - as the caller knows if he is format or info
-bool optimize_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+bool optimize_vcf_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (dict_id.num == dict_id_FORMAT_GL) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
     if (dict_id.num == dict_id_FORMAT_GP) return 
     optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
-    if (dict_id.num == dict_id_FORMAT_PL) return optimize_pl (snip, len, optimized_snip, optimized_snip_len);
+    if (dict_id.num == dict_id_FORMAT_PL) return optimize_vcf_pl (snip, len, optimized_snip, optimized_snip_len);
     
     ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
     return 0; // never reaches here, avoid compiler warning
 }
 
-bool optimize_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+bool optimize_vcf_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (dict_id.num == dict_id_INFO_VQSLOD) 
         return optimize_float_2_sig_dig (snip, len, 0, optimized_snip, optimized_snip_len);
@@ -154,3 +154,41 @@ bool optimize_info (DictIdType dict_id, const char *snip, unsigned len, char *op
     ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
     return 0; // never reaches here, avoid compiler warning
 }
+
+// change the quality scores to be in a small number of bins, similar to Illumina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf
+// This is assuming standard Sanger format of Phred scores between 0 and 93 encoded in ASCII 33->126
+// See here: https://pythonhosted.org/OBITools/fastq.html
+// 0,1,2 - unchanged
+// 2–9   -> 6
+// 10–19 -> 15
+// 20–24 -> 22
+// 25–29 -> 27
+// 30–34 -> 33
+// 35–39 -> 37
+// ≥ 40  -> 40
+void optimize_phred_quality_string (char *str, unsigned len)
+{
+    static unsigned char phred_mapper[256];
+    static bool phread_mapper_initialized = false;
+
+#   define PHRED(i) ((i)-33)
+
+    // one time initialization
+    if (!phread_mapper_initialized) {
+        for (unsigned i=0; i < 256; i++) {
+            if (i <= 34) phred_mapper[i]=i;  // ASCII 0->34 unchanged
+            else if (PHRED(i) >= 2  && PHRED(i) <= 9 ) phred_mapper[i] = 33 + 6;
+            else if (PHRED(i) >= 10 && PHRED(i) <= 19) phred_mapper[i] = 33 + 15;
+            else if (PHRED(i) >= 20 && PHRED(i) <= 24) phred_mapper[i] = 33 + 22;
+            else if (PHRED(i) >= 25 && PHRED(i) <= 29) phred_mapper[i] = 33 + 27;
+            else if (PHRED(i) >= 30 && PHRED(i) <= 34) phred_mapper[i] = 33 + 33;
+            else if (PHRED(i) >= 35 && PHRED(i) <= 39) phred_mapper[i] = 33 + 37;
+            else if (PHRED(i) >= 40                  ) phred_mapper[i] = 33 + 40;
+        }
+        phread_mapper_initialized = true;
+    }
+
+    // do the mapping
+    for (; len; str++, len--) *str = (char)phred_mapper[(uint8_t)*str];
+}
+

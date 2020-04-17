@@ -19,7 +19,7 @@
 #include "zip.h"
 #include "base250.h"
 #include "endianness.h"
-#include "random_access_vcf.h"
+#include "random_access.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])
 
@@ -421,7 +421,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     mtf_merge_in_vb_ctx(vb_);
 
     // now, we merge vb->ra_buf into z_file->ra_buf
-    random_access_merge_in_vb (vb);
+    random_access_merge_in_vb (vb_);
 
     // generate & write b250 data for all fields (CHROM to FORMAT)
     for (VcfFields f=VCF_CHROM ; f <= VCF_FORMAT ; f++) {

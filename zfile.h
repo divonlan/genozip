@@ -31,7 +31,6 @@ extern void zfile_compress_dictionary_data (VBlockP vb, MtfContextP ctx,
 extern void zfile_compress_b250_data (VBlockP vb, MtfContextP ctx);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
-#define MAYBE_V1 (-2) // zfile_read_section returns this if the first section cannot be read
 #define SEEK_NONE ((uint64_t)-1)
 #define NO_SB_I ((uint32_t)-1)
 extern int zfile_read_section (VBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */

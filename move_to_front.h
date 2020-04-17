@@ -102,7 +102,7 @@ static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250
 
 extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
 extern uint32_t mtf_get_next_snip (VBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
-extern int32_t mtf_search_for_node_index (MtfContext *ctx, const char *snip, unsigned snip_len);
+extern int32_t mtf_search_for_word_index (MtfContext *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VBlockP vb);
 extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
@@ -120,7 +120,6 @@ extern void mtf_free_context (MtfContext *ctx);
 extern void mtf_destroy_context (MtfContext *ctx);
 
 extern void mtf_vb_1_lock (VBlockP vb);
-
-#define mtf_get_word(ctx, word_index) (&((MtfWord*)(ctx)->word_list.data)[(word_index)])
+extern MtfNode *mtf_get_node_by_word_index (MtfContext *ctx, uint32_t word_index);
 
 #endif
