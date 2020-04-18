@@ -169,10 +169,9 @@ bool comp_compress_bzlib (VBlock *vb,
 
             bool final = (line_i == vb->num_lines - 1) && !avail_in_2;
 
-//printf("BEFORE: line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out);                
             ret = BZ2_bzCompress (&strm, final ? BZ_FINISH : BZ_RUN);
-//printf("AFTER:  line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out); // DEBUG
-            if (soft_fail && ret == BZ_FINISH_OK) { // TO DO - what is the condition for out of output space in BZ_RUN?
+
+            if (soft_fail && ((!final && !strm.avail_out) || (final && ret != BZ_STREAM_END))) {
                 success = false; // data_compressed_len too small
                 break;
             }
@@ -349,7 +348,7 @@ bool comp_compress_lzma (VBlock *vb,
         *compressed_len -= outstream.avail_out; 
     }
 
-    if (res == SZ_ERROR_OUTPUT_EOF && soft_fail)  // data_compressed_len is too small
+    if (soft_fail && ((callback && res == SZ_ERROR_WRITE) || (!callback && res == SZ_ERROR_OUTPUT_EOF)))  // data_compressed_len is too small
         success = false;
     else
         ASSERT (res == SZ_OK, "Error: LzmaEnc_MemEncode failed: %s", lzma_errstr (res));
