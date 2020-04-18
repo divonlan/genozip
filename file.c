@@ -19,6 +19,7 @@
 #include "stream.h"
 #include "url.h"
 #include "compressor.h"
+#include "vblock.h"
 
 // globals
 File *z_file   = NULL;
@@ -262,6 +263,8 @@ static bool file_open_z (File *file)
     // initialize read buffer indices
     if (file->mode == READ) 
         file->z_last_read = file->z_next_read = READ_BUFFER_SIZE;
+
+    memset (file->dict_id_to_did_i_map, DID_I_NONE, sizeof(file->dict_id_to_did_i_map));
 
     return file->file != 0;
 }

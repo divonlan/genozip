@@ -83,7 +83,8 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
             ASSERT (dict_id_is_vcf_format_sf (subfield), 
                     "Error: string %.*s in the FORMAT field of vb_line_i=%u is not a legal subfield", DICT_ID_LEN, subfield.id, vb_line_i);
 
-            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_format_subfields, subfield, SEC_VCF_FRMT_SF_DICT);
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, 
+                                                      &vb->num_format_subfields, subfield, SEC_VCF_FRMT_SF_DICT);
             
             format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
         } 
@@ -186,7 +187,8 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, u
                 DictIdType dict_id = dict_id_vcf_info_sf (dict_id_make (this_name, this_name_len));
 
                 // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
-                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, dict_id, SEC_VCF_INFO_SF_DICT);
+                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, 
+                                                          &vb->num_info_subfields, dict_id, SEC_VCF_INFO_SF_DICT);
                 iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
 
                 // allocate memory if needed

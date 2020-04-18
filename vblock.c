@@ -38,8 +38,9 @@ void vb_release_vb (VBlock **vb_p)
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
     memset(vb->z_num_sections, 0, sizeof(vb->z_num_sections));
     memset(vb->z_section_entries, 0, sizeof(vb->z_section_entries));
-    memset (&vb->profile, 0, sizeof (vb->profile));
-
+    memset(&vb->profile, 0, sizeof (vb->profile));
+    memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
+     
     buf_free(&vb->ra_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->txt_data);

@@ -389,7 +389,7 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
         if (flag_strip) continue;
 
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_QNAME_SF_DICT);
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_QNAME_SF_DICT);
 
         vb->qname_mapper.did_i[sf_i] = ctx->did_i;
 
@@ -402,7 +402,7 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
         if (zfile_skip_section_by_flags (SEC_SAM_OPTNL_SF_B250, header->dict_id)) continue;
 
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_OPTNL_SF_DICT);
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_OPTNL_SF_DICT);
 
         zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_SAM_OPTNL_SF_B250);    
     }

@@ -56,7 +56,7 @@ uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, unsigned v
                            DictIdType dict_id, SectionType sec_b250, int accounts_for_chars)
 {
     MtfNode *node;
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, dict_id, sec_b250 - 1);
+    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, sec_b250 - 1);
 
     // allocate memory if needed
     buf_alloc (vb, &ctx->mtf_i, MAX (vb->num_lines, ctx->mtf_i.len + 1) * sizeof (uint32_t),
@@ -211,7 +211,7 @@ static void seg_realloc_datalines (VBlock *vb, uint32_t new_num_data_lines, unsi
     vb->num_lines_alloced = new_num_data_lines;
 }
 
-static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line, int first_field, int last_field)
+static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line)
 {
     ASSERT (!!vb->data_lines == !!vb->num_lines_alloced, 
             "Error: expecting vb->data_lines to be nonzero iff vb->num_lines_alloced is nonzero. vb_i=%u", vb->vblock_i);
@@ -259,7 +259,7 @@ static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line, int 
     }
 
     // allocate (or realloc) the mtf_i for the fields which each have num_lines entries
-    for (int f=first_field; f <= last_field; f++) 
+    for (int f=0; f <= datatype_last_field[txt_file->data_type]; f++) 
         buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->num_lines * sizeof (uint32_t), 1, "mtf_ctx->mtf_i", f);
 }
 
@@ -267,22 +267,29 @@ static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line, int 
 void seg_all_data_lines (VBlock *vb,
                          SegDataLineFuncType seg_data_line, 
                          unsigned sizeof_line,
-                         int first_field, int last_field,
                          const char **field_names,
                          SectionType first_field_dict_section)
 {
     START_TIMER;
 
-    vb->num_dict_ids = MAX (last_field+1, vb->num_dict_ids); // first mtf_ctx are reserved for the field (vb->num_dict_ids might be already higher due to previous VBs)
+    int last_field = datatype_last_field[txt_file->data_type];
 
-    // Set ctx stuff for QNAME->OPTIONAL fields (note: mtf_i is allocated by seg_allocate_per_line_memory)
-    for (int f=first_field; f <= last_field; f++) {
+    vb->num_dict_ids = MAX (last_field+1, vb->num_dict_ids); // first mtf_ctx are reserved for the field (vb->num_dict_ids might be already higher due to previous VBs)
+    
+ 
+    // Set ctx stuff for fields (note: mtf_i is allocated by seg_allocate_per_line_memory)
+    memset (vb->dict_id_to_did_i_map, DID_I_NONE, sizeof(vb->dict_id_to_did_i_map));
+    for (int f=0; f <= last_field; f++) 
+        mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
+                                dict_id_field (dict_id_make (field_names[f], strlen(field_names[f]))), 
+                                first_field_dict_section + f*2);
+/*        vb->mtf_ctx[f].dict_id 
         vb->mtf_ctx[f].dict_id = dict_id_field (dict_id_make (field_names[f], strlen(field_names[f])));
         vb->mtf_ctx[f].b250_section_type = first_field_dict_section + f*2 + 1; // b250 is always one after its dict
-        vb->mtf_ctx[f].dict_section_type = first_field_dict_section + f*2;
+        vb->mtf_ctx[f].dict_section_type = ;
     }
-
-    seg_allocate_per_line_memory (vb, sizeof_line, first_field, last_field); // set vb->num_lines to an initial estimate
+*/
+    seg_allocate_per_line_memory (vb, sizeof_line); // set vb->num_lines to an initial estimate
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set = false;
@@ -299,7 +306,7 @@ void seg_all_data_lines (VBlock *vb,
 
         // if our estimate number of lines was too small, increase it
         if (vb_line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
-            seg_allocate_per_line_memory (vb, sizeof_line, first_field, last_field); // increase number of lines as evidently we need more
+            seg_allocate_per_line_memory (vb, sizeof_line); // increase number of lines as evidently we need more
 
         // if there is no global_hash yet, and we've past half of the data,
         // collect stats to help mtf_merge create one when we merge

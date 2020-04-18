@@ -566,40 +566,49 @@ uint8_t mtf_get_existing_did_i_by_dict_id (VBlock *vb, DictIdType dict_id)
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
 MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */, 
+                                    uint8_t *dict_id_to_did_i_map,
                                     unsigned *num_dict_ids, 
                                     uint8_t *num_subfields, // variable to increment if a new context is added
                                     DictIdType dict_id,
                                     SectionType dict_section_type)
 {
-    int did_i = dict_id_get_field (dict_id); // will return the field if its a main field dict (even if the dictinary doesn't exit yet), or -1 if not
+    // attempt to get did_i from dict_id mapper
+    uint8_t did_i = dict_id_to_did_i_map[dict_id.map_key];
+    if (did_i != DID_I_NONE && mtf_ctx[did_i].dict_id.num == dict_id.num) goto done;
 
-    // case: not a main field dict - find the did_i if we have it already
-    if (did_i < 0) { // did_i is minus the next field
-        did_i=-did_i ; for (; did_i < *num_dict_ids; did_i++) 
-            if (dict_id.num == mtf_ctx[did_i].dict_id.num) break;
-    }
+    // case: its not in mapper - mapper is occupied by another - perhaps it exists
+    // and missing the opportunity to enter mapper - search for it
+    if (did_i != DID_I_NONE)    
+        for (did_i=0; did_i < *num_dict_ids; did_i++) 
+            if (dict_id.num == mtf_ctx[did_i].dict_id.num) goto done;
 
+    // this is a new new context - initialize it
+    if (dict_id_is_field (dict_id))
+        did_i = dict_id_get_field (dict_id);
+    else    
+        did_i = *num_dict_ids; // note: num_dict_ids is initialized in seg_all_data_lines
+    
     MtfContext *ctx = &mtf_ctx[did_i]; // existing or new
 
-    // case: dict_id encountered for this first time - initialize a mtf_ctx
-    if (!ctx->dict_id.num) {
+    //fprintf (stderr, "New context: dict_id=%.8s in did_i=num_dict_ids=%u \n", dict_id_printable (dict_id).id, did_i);
+    ASSERT (*num_dict_ids+1 < MAX_DICTS, 
+            "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
 
-        //fprintf (stderr,  ("Inserting new vb dict_id=%.8s in did_i=num_dict_ids=%u \n", dict_id_printable (dict_id).id, did_i);
-        ASSERT (*num_dict_ids+1 < MAX_DICTS, 
-                "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
+    ctx->did_i             = did_i;
+    ctx->dict_id           = dict_id;
+    ctx->dict_section_type = dict_section_type;
+    ctx->b250_section_type = dict_section_type + 1; // the b250 is 1 after the dictionary for all dictionary sections
+    mtf_init_iterator (ctx);
+    dict_id_to_did_i_map[dict_id.map_key] = did_i;
 
-        ctx->did_i             = did_i;
-        ctx->dict_id           = dict_id;
-        ctx->dict_section_type = dict_section_type;
-        ctx->b250_section_type = dict_section_type + 1; // the b250 is 1 after the dictionary for all dictionary sections
-        mtf_init_iterator (ctx);
+    // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields
+    // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
+    (*num_dict_ids) = MAX (datatype_last_field[z_file->data_type], did_i) + 1; 
 
-        // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields
-        // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-        (*num_dict_ids) = MAX (datatype_last_field[z_file->data_type], did_i) + 1; 
+    if (num_subfields) (*num_subfields)++;
 
-        if (num_subfields) (*num_subfields)++;
-    }
+done:
+    ctx = &mtf_ctx[did_i];
 
     ASSERT (ctx->dict_section_type == dict_section_type, "Error: mismatch in dict_id=%.*s dict_section_type: requested %s but in the ctx says: %s",
             DICT_ID_LEN, dict_id_printable (dict_id).id, st_name(dict_section_type), st_name(ctx->dict_section_type));
@@ -638,7 +647,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
-    MtfContext *zf_ctx = mtf_get_ctx_by_dict_id (z_file->mtf_ctx, &z_file->num_dict_ids, NULL, header->dict_id, header->h.section_type);
+    MtfContext *zf_ctx = mtf_get_ctx_by_dict_id (z_file->mtf_ctx, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id, header->h.section_type);
     
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment

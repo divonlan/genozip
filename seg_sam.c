@@ -60,7 +60,7 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
                 sf_dict_id.id[5] = sf_i / 10 + '0';
                 sf_dict_id.id[6] = sf_i % 10 + '0';
 
-                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, sf_dict_id, SEC_SAM_QNAME_SF_DICT);
+                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, sf_dict_id, SEC_SAM_QNAME_SF_DICT);
                 vb->qname_mapper.did_i[sf_i] = sf_ctx->did_i;
                 vb->qname_mapper.num_subfields++;
             }
@@ -255,7 +255,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
         // we encode as a delta.
         else if (dict_id.num == dict_id_OPTION_mc && field[3] == 'i') {
             if (vb->mc_did_i == DID_I_NONE)
-                vb->mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
+                vb->mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
 
             seg_pos_field ((VBlockP)vb, vb->last_pos, vb->mc_did_i, SEC_SAM_OPTNL_SF_B250, &field[5], field_len-5, vb_line_i, "mc");
         }

@@ -132,9 +132,6 @@ int dict_id_get_field (DictIdType dict_id)
 {
     static const uint64_t *dict_id_datatype_fields[NUM_DATATYPES] = { dict_id_vcf_fields, dict_id_sam_fields };
 
-    if (!dict_id_is_field (dict_id)) 
-        return -(datatype_last_field[last_data_type] + 1); // not a main field - returning minus the next field
-
     for (int f=0; f <= datatype_last_field[last_data_type]; f++)
         if (dict_id.num == dict_id_datatype_fields[last_data_type][f]) return f;
 

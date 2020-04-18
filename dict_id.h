@@ -20,6 +20,7 @@
 typedef union {
     uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN]; // \0-padded IDs 
+    uint16_t map_key;        // we use the first two bytes as they key into vb/z_file->dict_id_mapper
 } DictIdType;
 
 #pragma pack(pop)

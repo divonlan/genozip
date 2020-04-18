@@ -853,7 +853,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
         if (flag_strip) continue; // we don't need INFO stuff if --strip
 
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, &vb->num_dict_ids, &vb->num_info_subfields, 
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, &vb->num_info_subfields, 
                                                   header->dict_id, SEC_VCF_INFO_SF_DICT);
 
         zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_VCF_INFO_SF_B250);    

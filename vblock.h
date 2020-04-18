@@ -80,6 +80,7 @@ typedef struct {
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     uint32_t num_dict_ids;            /* total number of dictionaries of all types */\
     MtfContext mtf_ctx[MAX_DICTS];    \
+    uint8_t dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     int32_t txt_section_bytes[NUM_SEC_TYPES];  /* how many bytes did each section have in the original vcf file - should add up to the file size */\

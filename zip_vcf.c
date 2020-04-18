@@ -381,8 +381,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 
     // split each line in this variant block to its components
 
-    seg_all_data_lines (vb_, seg_vcf_data_line, sizeof (ZipDataLineVCF), 
-                        VCF_CHROM, VCF_FORMAT, vcf_field_names, SEC_VCF_CHROM_DICT);
+    seg_all_data_lines (vb_, seg_vcf_data_line, sizeof (ZipDataLineVCF), vcf_field_names, SEC_VCF_CHROM_DICT);
     
     if (vb->has_haplotype_data)
         seg_vcf_complete_missing_lines (vb);

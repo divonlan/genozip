@@ -81,8 +81,7 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     // split each line in this variant block to its components
     seg_sam_initialize (vb);  
 
-    seg_all_data_lines (vb_, seg_sam_data_line, sizeof (ZipDataLineSAM),
-                        SAM_QNAME, SAM_OPTIONAL, sam_field_names, SEC_SAM_QNAME_DICT);
+    seg_all_data_lines (vb_, seg_sam_data_line, sizeof (ZipDataLineSAM), sam_field_names, SEC_SAM_QNAME_DICT);
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely

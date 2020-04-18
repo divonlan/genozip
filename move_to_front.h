@@ -107,7 +107,7 @@ extern void mtf_clone_ctx (VBlockP vb);
 extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
-extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id, SectionType dict_section_type);
+extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id, SectionType dict_section_type);
 extern uint8_t mtf_get_existing_did_i_by_dict_id (VBlockP vb, DictIdType dict_id);
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);
