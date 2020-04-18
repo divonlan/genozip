@@ -121,7 +121,7 @@ const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline
             
     ASSERT (*str_len, "Error: missing %s field in vb_line_i=%u", item_name, vb_line_i);
 
-    ASSERT (str[i] != '\t' || txt_file->data_type != DATA_TYPE_VCF || strcmp (item_name, vcf_field_names[VCF_INFO]), 
+    ASSERT (str[i] != '\t' || txt_file->data_type != DATA_TYPE_VCF || strcmp (item_name, field_names[DATA_TYPE_VCF][VCF_INFO]), 
            "Error: while segmenting %s in vb_line_i=%u: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name, vb_line_i);
 
@@ -266,30 +266,12 @@ static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line)
 // split each lines in this variant block to its components
 void seg_all_data_lines (VBlock *vb,
                          SegDataLineFuncType seg_data_line, 
-                         unsigned sizeof_line,
-                         const char **field_names,
-                         SectionType first_field_dict_section)
+                         unsigned sizeof_line)
 {
     START_TIMER;
 
-    int last_field = datatype_last_field[txt_file->data_type];
-
-    vb->num_dict_ids = MAX (last_field+1, vb->num_dict_ids); // first mtf_ctx are reserved for the field (vb->num_dict_ids might be already higher due to previous VBs)
-    
- 
-    // Set ctx stuff for fields (note: mtf_i is allocated by seg_allocate_per_line_memory)
-    memset (vb->dict_id_to_did_i_map, DID_I_NONE, sizeof(vb->dict_id_to_did_i_map));
-    for (int f=0; f <= last_field; f++) 
-        mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
-                                dict_id_field (dict_id_make (field_names[f], strlen(field_names[f]))), 
-                                first_field_dict_section + f*2);
-/*        vb->mtf_ctx[f].dict_id 
-        vb->mtf_ctx[f].dict_id = dict_id_field (dict_id_make (field_names[f], strlen(field_names[f])));
-        vb->mtf_ctx[f].b250_section_type = first_field_dict_section + f*2 + 1; // b250 is always one after its dict
-        vb->mtf_ctx[f].dict_section_type = ;
-    }
-*/
-    seg_allocate_per_line_memory (vb, sizeof_line); // set vb->num_lines to an initial estimate
+    mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
+    seg_allocate_per_line_memory (vb, sizeof_line); // set vb->num_lines to an initial estimate and allocate ctx->mtf_i
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set = false;

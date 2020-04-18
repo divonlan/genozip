@@ -11,8 +11,7 @@
 
 typedef const char *SegDataLineFuncType (VBlockP vb, const char *field_start_line, uint32_t vb_line_i);
 
-extern void seg_all_data_lines (VBlockP vb, SegDataLineFuncType seg_data_line, unsigned sizeof_line, 
-                                const char **field_names, SectionType first_field_dict_section);
+extern void seg_all_data_lines (VBlockP vb, SegDataLineFuncType seg_data_line, unsigned sizeof_line); 
 
 extern DictIdType seg_get_format_subfield (const char **data, uint32_t *len, unsigned line_i);
 

@@ -18,11 +18,11 @@ static bool is_first_txt = true;
 
 // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed.
 // (names are not longer than 8=DICT_ID_LEN as the code assumes it)
-const char *vcf_field_names[NUM_VCF_FIELDS] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
-const char *sam_field_names[NUM_SAM_FIELDS] = { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" };
+const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE] =
+    { { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" },
+      { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" } };
 
 const unsigned datatype_last_field[NUM_DATATYPES] = { VCF_FORMAT, SAM_OPTIONAL };
-
 const unsigned chrom_did_i_by_data_type[NUM_DATATYPES] = { VCF_CHROM, SAM_RNAME };
 
 // -----------

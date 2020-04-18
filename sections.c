@@ -11,6 +11,8 @@
 #include "endianness.h"
 #include "random_access.h"
 
+const SectionType first_field_dict_section[NUM_DATATYPES] = { SEC_VCF_CHROM_DICT, SEC_SAM_QNAME_DICT };
+
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {

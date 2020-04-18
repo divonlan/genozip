@@ -38,7 +38,7 @@ void dict_id_initialize (DataType data_type)
     switch (data_type) { 
     case DATA_TYPE_VCF:
         for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
-            dict_id_vcf_fields[f] = dict_id_field (dict_id_make (vcf_field_names[f], strlen (vcf_field_names[f]))).num; 
+            dict_id_vcf_fields[f] = dict_id_field (dict_id_make (field_names[DATA_TYPE_VCF][f], strlen (field_names[DATA_TYPE_VCF][f]))).num; 
         
         dict_id_FORMAT_PL   = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
         dict_id_FORMAT_GP   = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
@@ -55,7 +55,7 @@ void dict_id_initialize (DataType data_type)
 
     case DATA_TYPE_SAM:
         for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++)
-            dict_id_sam_fields[f] = dict_id_field (dict_id_make (sam_field_names[f], strlen (sam_field_names[f]))).num; 
+            dict_id_sam_fields[f] = dict_id_field (dict_id_make (field_names[DATA_TYPE_SAM][f], strlen (field_names[DATA_TYPE_SAM][f]))).num; 
 
         dict_id_OPTION_AM = dict_id_sam_optnl_sf (dict_id_make ("AM", 2)).num;
         dict_id_OPTION_AS = dict_id_sam_optnl_sf (dict_id_make ("AS", 2)).num;
@@ -127,14 +127,3 @@ const char *dict_id_display_type (DictIdType dict_id)
     return "ERROR!";
 }
 
-// returns field to which this dict_id belongs, if its a main field dict_id, or minus the next field if not
-int dict_id_get_field (DictIdType dict_id)
-{
-    static const uint64_t *dict_id_datatype_fields[NUM_DATATYPES] = { dict_id_vcf_fields, dict_id_sam_fields };
-
-    for (int f=0; f <= datatype_last_field[last_data_type]; f++)
-        if (dict_id.num == dict_id_datatype_fields[last_data_type][f]) return f;
-
-    ABORT ("Error in dict_id_get_field: dict_id=%.*s is not a field dictionary despite appeared to be so", DICT_ID_LEN, dict_id.id); 
-    return 0; // quieten compiler warning - never reaches here
-}

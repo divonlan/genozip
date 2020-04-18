@@ -123,6 +123,8 @@ typedef enum {
 #define ENCRYPTION_TYPE_AES256 1
 #define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit" }
 
+extern const SectionType first_field_dict_section[NUM_DATATYPES];
+
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
 // section headers are encoded in Big Endian (see https://en.wikipedia.org/wiki/Endianness)

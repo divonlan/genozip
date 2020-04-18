@@ -40,7 +40,7 @@ void vb_release_vb (VBlock **vb_p)
     memset(vb->z_section_entries, 0, sizeof(vb->z_section_entries));
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
-     
+
     buf_free(&vb->ra_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->txt_data);
@@ -155,19 +155,20 @@ VBlock *vb_get_vb (unsigned vblock_i)
             pool->vb[vb_i]->data_type = z_file->data_type;
         }
 
-        if (!pool->vb[vb_i]->in_use) {
-            pool->vb[vb_i]->id = vb_i;
-            break;
-        }
+        if (!pool->vb[vb_i]->in_use) break;
     }
 
     ASSERT (vb_i < pool->num_vbs, "Error: VB pool is full - it already has %u VBs", pool->num_vbs)
 
-    pool->vb[vb_i]->in_use           = true;
-    pool->vb[vb_i]->vblock_i         = vblock_i;
-    pool->vb[vb_i]->buffer_list.vb_i = vblock_i;
+    // initialize VB fields that need to be a value other than 0
+    VBlock *vb = pool->vb[vb_i];
+    vb->id               = vb_i;
+    vb->in_use           = true;
+    vb->vblock_i         = vblock_i;
+    vb->buffer_list.vb_i = vblock_i;
+    memset (vb->dict_id_to_did_i_map, DID_I_NONE, sizeof(vb->dict_id_to_did_i_map));
 
-    return pool->vb[vb_i];
+    return vb;
 }
 
 // free memory allocations that assume subsequent files will have the same number of samples.

@@ -582,15 +582,11 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
         for (did_i=0; did_i < *num_dict_ids; did_i++) 
             if (dict_id.num == mtf_ctx[did_i].dict_id.num) goto done;
 
-    // this is a new new context - initialize it
-    if (dict_id_is_field (dict_id))
-        did_i = dict_id_get_field (dict_id);
-    else    
-        did_i = *num_dict_ids; // note: num_dict_ids is initialized in seg_all_data_lines
+    did_i = *num_dict_ids; // note: *num_dict_ids cannot be updated until ctx is initialized, see comment below
     
     MtfContext *ctx = &mtf_ctx[did_i]; // existing or new
 
-    //fprintf (stderr, "New context: dict_id=%.8s in did_i=num_dict_ids=%u \n", dict_id_printable (dict_id).id, did_i);
+    //fprintf (stderr, "New context: dict_id=%.8s in did_i=%u \n", dict_id_printable (dict_id).id, did_i);
     ASSERT (*num_dict_ids+1 < MAX_DICTS, 
             "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
 
@@ -599,11 +595,13 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
     ctx->dict_section_type = dict_section_type;
     ctx->b250_section_type = dict_section_type + 1; // the b250 is 1 after the dictionary for all dictionary sections
     mtf_init_iterator (ctx);
-    dict_id_to_did_i_map[dict_id.map_key] = did_i;
+    
+    if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
+        dict_id_to_did_i_map[dict_id.map_key] = did_i;
 
-    // thread safety: the increment below MUST be AFTER memcpy, bc piz_get_line_subfields
+    // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-    (*num_dict_ids) = MAX (datatype_last_field[z_file->data_type], did_i) + 1; 
+    (*num_dict_ids) = did_i + 1; 
 
     if (num_subfields) (*num_subfields)++;
 
@@ -614,6 +612,23 @@ done:
             DICT_ID_LEN, dict_id_printable (dict_id).id, st_name(dict_section_type), st_name(ctx->dict_section_type));
 
     return ctx;
+}
+
+// called from seg_all_data_lines (ZIP) and zfile_read_all_dictionaries (PIZ) to initialize all
+// primary field ctx's. these are not always used (e.g. when some are not read from disk due to --strip)
+// but we maintain their fixed positions anyway as the code relies on it
+void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, 
+                                        uint8_t *dict_id_to_did_i_map,
+                                        unsigned *num_dict_ids)
+{
+    for (int f=0; f <= datatype_last_field[txt_file->data_type]; f++) {
+        
+        const char *fname = field_names[z_file->data_type][f];
+        
+        mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, 
+                                dict_id_field (dict_id_make (fname, strlen(fname))), 
+                                first_field_dict_section[z_file->data_type] + f*2);
+    }
 }
 
 // PIZ only: this is called by the I/O thread after reading a dictionary section 
@@ -664,7 +679,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
                "z_file->mtf_ctx->word_list", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->word_list);
 
-    bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, vcf_field_names[VCF_REFALT], MIN (strlen(vcf_field_names[VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
+    bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, field_names[DATA_TYPE_VCF][VCF_REFALT], MIN (strlen(field_names[DATA_TYPE_VCF][VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
 
     char *start = fragment.data;
     for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
@@ -711,6 +726,10 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
             vb_ctx->dict_id           = zf_ctx->dict_id;
             vb_ctx->b250_section_type = zf_ctx->b250_section_type;
             vb_ctx->dict_section_type = zf_ctx->dict_section_type;
+            
+            if (vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] == DID_I_NONE)
+                vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
+
             mtf_init_iterator (vb_ctx);
 
             buf_overlay (vb, &vb_ctx->dict, &zf_ctx->dict, "ctx->dict", did_i);    
@@ -780,6 +799,7 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
         buf_destroy (&old_dict);
     }
 }
+
 
 // zero all sorters - this is called in case of a re-do of the first VB due to ploidy overflow
 void mtf_zero_all_sorters (VBlock *vb)
