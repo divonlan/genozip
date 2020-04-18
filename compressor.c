@@ -15,8 +15,6 @@
 #include "crypt.h"
 #include "zfile.h"
 
-#define BZLIB_BLOCKSIZE100K 9 /* maximum mem allocation for bzlib */
-
 // -----------------------------------------------------
 // memory functions that serve the compression libraries
 // -----------------------------------------------------
@@ -135,8 +133,8 @@ bool comp_compress_bzlib (VBlock *vb,
     strm.bzalloc = comp_bzalloc;
     strm.bzfree  = comp_bzfree;
     strm.opaque  = vb; // just passed to malloc/free
-
-    int init_ret = BZ2_bzCompressInit (&strm, BZLIB_BLOCKSIZE100K, 0, 30);
+    
+    int init_ret = BZ2_bzCompressInit (&strm, flag_fast ? 1 : 9, 0, 30); // we optimize for size (normally) or speed (if user selected --fast)
     ASSERT (init_ret == BZ_OK, "Error: BZ2_bzCompressInit failed: %s", BZ2_errstr(init_ret));
 
     strm.next_out  = compressed;
@@ -185,9 +183,8 @@ bool comp_compress_bzlib (VBlock *vb,
                 strm.next_in  = next_in_2;
                 strm.avail_in = avail_in_2;
 
-//printf("BEFORE: line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out);                
                 ret = BZ2_bzCompress (&strm, final ? BZ_FINISH : BZ_RUN);
-//printf("AFTER:  line_i=%u compress_ret=%d avail_in=%u avail_out=%u\n", line_i, compress_ret, strm.avail_in, strm.avail_out); // DEBUG
+
                 if (soft_fail && ret == BZ_FINISH_OK) { // TO DO - what is the condition for out of output space in BZ_RUN?
                     success = false; // data_compressed_len too small
                     break;
@@ -386,6 +383,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                     CompGetLineCallback callback)  // option 2 - compress data one line at a time
 { 
     ASSERT0 (!uncompressed_data || !callback, "Error in comp_compress: expecting either uncompressed_data or callback but not both");
+
+    // if the user requested --fast - we always use BZLIB, never LZMA
+    if (flag_fast && header->data_compression_alg == COMPRESS_LZMA)
+        header->data_compression_alg = COMPRESS_BZLIB;
 
     static Compressor compressors[NUM_COMPRESSOR_ALGS] = { comp_compress_none, comp_compress_bzlib, comp_compress_lzma };
 

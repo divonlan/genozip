@@ -111,8 +111,6 @@
 4.0.11
 - bug fixes
 
-Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)
-
 5.0.0
 - Added full support for compressing SAM/BAM files
 - Compression improvements for some VCF files with lots of non-GT FORMAT subfields
@@ -120,3 +118,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Added --input - tell genozip what type of file is being redirected in
 - Added --stdin-size - tell genozip the size of a redirected input file, for faster execution
 - Added --show-index for genounzip and genocat - see index embedded in a genozip file
+- Added --fast option for faster compression
+
+Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

@@ -49,6 +49,8 @@ static const char *help_genozip[] = {
     "",
     "   -o --output       <output-filename>. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
     "",
+    "   -F --fast         Compress (a lot) faster, at the expense of a somewhat lower compression ratio. Files compressed with this option also uncompress faster",
+    "",
     "   -p --password     <password>. Password-protected - encrypted with 256-bit AES",
     "",
     "   -m --md5          Calculate the MD5 hash of the original textual file (vcf, sam). When the resulting file is decompressed, this MD5 will be compared to the MD5 of the textual decompressed file.",

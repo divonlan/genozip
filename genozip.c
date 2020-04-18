@@ -55,7 +55,7 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading VCF data
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
-    flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0,
+    flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_strip=0,
     flag_debug_memory=0, flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0;
 
@@ -831,6 +831,7 @@ int main (int argc, char **argv)
         #define _zc {"bcf",           no_argument,       &flag_bcf,          1 }
         #define _m  {"md5",           no_argument,       &flag_md5,          1 }
         #define _t  {"test",          no_argument,       &flag_test,         1 }
+        #define _fa {"fast",          no_argument,       &flag_fast,         1 }
         #define _9  {"optimize",      no_argument,       &flag_optimize,     1 } // US spelling
         #define _9a {"optimise",      no_argument,       &flag_optimize,     1 } // British spelling
         #define _gt {"gtshark",       no_argument,       &flag_gtshark,      1 } 
@@ -873,18 +874,18 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,               _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,               _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,               _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _fa, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,          _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,          _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:Oo:p:B:S:9KW", // genozip
-            "czfhLqQt^V@:Oo:p:m",              // genounzip
-            "hLVp:qf",                         // genols
-            "hLV@:p:qQ1r:t:s:H1Go:f  "         // genocat
+            "i:I:cdfhlLqQt^Vzm@:Oo:p:B:S:9KWF", // genozip
+            "czfhLqQt^V@:Oo:p:m",               // genounzip
+            "hLVp:qf",                          // genols
+            "hLV@:p:qQ1r:t:s:H1Go:f  "          // genocat
         };
 
         int option_index = -1;
@@ -904,6 +905,7 @@ int main (int argc, char **argv)
             case 'i' : file_set_input_type (optarg); break;
             case 'I' : file_set_input_size (optarg); break;
             case 'c' : flag_stdout        = 1      ; break;
+            case 'F' : flag_fast          = 1      ; break;
             case 'z' : flag_bgzip         = 1      ; break;
             case 'f' : flag_force         = 1      ; break;
             case '^' : flag_replace       = 1      ; break;
