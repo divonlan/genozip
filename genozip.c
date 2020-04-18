@@ -59,6 +59,8 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_strip=0,
     flag_debug_memory=0, flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0;
 
+uint64_t flag_stdin_size = 0;
+
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 },  // argument of --show-dict-one
            dict_id_dump_one_b250 = { 0 };  // argument of --dump-b250-one
@@ -347,9 +349,11 @@ static void main_show_sections (void)
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
              buf_display_uint (total_z, s1), buf_display_uint (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
 
-    ASSERTW (total_txt == txt_file->txt_data_size_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
+    // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_size is 
+    // missing, while txt_data_so_far_single is what was actually processed
+    ASSERTW (total_txt == txt_file->txt_data_so_far_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), buf_display_uint (total_txt, s1), buf_display_uint (txt_file->txt_data_size_single, s2), 
-             (int32_t)(txt_file->txt_data_size_single - total_txt));
+             (int32_t)(txt_file->txt_data_so_far_single - total_txt)); 
 
 }
 
@@ -422,8 +426,8 @@ static void main_show_content (void)
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);
 
-    ASSERTW (total_txt == txt_file->txt_data_size_single, "Hmm... incorrect calculation for VCF sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
-             total_txt, txt_file->txt_data_size_single, txt_file->txt_data_size_single - total_txt);
+    ASSERTW (total_txt == txt_file->txt_data_size_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
+             dt_name (z_file->data_type), total_txt, txt_file->txt_data_size_single, txt_file->txt_data_size_single - total_txt);
 
 }
 
@@ -809,7 +813,8 @@ int main (int argc, char **argv)
     // process command line options
     while (1) {
 
-        #define _i  {"stdin",         required_argument, 0, 'i'                }
+        #define _i  {"input",         required_argument, 0, 'i'                }
+        #define _I  {"stdin-size",    required_argument, 0, 'I'                }
         #define _c  {"stdout",        no_argument,       &flag_stdout,       1 }
         #define _d  {"decompress",    no_argument,       &command, UNZIP       }
         #define _f  {"force",         no_argument,       &flag_force,        1 }
@@ -868,18 +873,18 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
-        static Option genounzip_lo[]  = {     _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,               _00 };
-        static Option genocat_lo[]    = {             _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,               _00 };
-        static Option genols_lo[]     = {             _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,               _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,               _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,               _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "i:cdfhlLqQt^Vzm@:Oo:p:B:S:9KW", // genozip
-            "czfhLqQt^V@:Oo:p:m",            // genounzip
-            "hLVp:qf",                       // genols
-            "hLV@:p:qQ1r:t:s:H1Go:f"         // genocat
+            "i:I:cdfhlLqQt^Vzm@:Oo:p:B:S:9KW", // genozip
+            "czfhLqQt^V@:Oo:p:m",              // genounzip
+            "hLVp:qf",                         // genols
+            "hLV@:p:qQ1r:t:s:H1Go:f  "         // genocat
         };
 
         int option_index = -1;
@@ -896,7 +901,8 @@ int main (int argc, char **argv)
                 command=c; 
                 break;
 
-            case 'i' : file_set_stdin_type (optarg); break;
+            case 'i' : file_set_input_type (optarg); break;
+            case 'I' : file_set_input_size (optarg); break;
             case 'c' : flag_stdout        = 1      ; break;
             case 'z' : flag_bgzip         = 1      ; break;
             case 'f' : flag_force         = 1      ; break;

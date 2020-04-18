@@ -44,12 +44,15 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     SAM,  BAM,  SAM_GENOZIP,
                     AFTER_LAST_FILE_TYPE } FileType;
 
-#define FILE_EXTS {"Unknown",\
+#define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
                    SAM_, BAM_, SAM_GENOZIP_, \
                    "stdin", "stdout" }
+extern const char *file_exts[];
 
-extern char *file_exts[];
+// possible arguments for --input
+#define INPUT_FILES_ACCEPTED { VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, BCF, BCF_GZ, BCF_BGZ,\
+                               SAM, BAM }
 
 #define COMPRESSIBLE_EXTS VCF_ " " VCF_GZ_ " " VCF_BGZ_ " " VCF_BZ2_ " " VCF_XZ_ " " BCF_ " " BCF_GZ_ " " BCF_BGZ_ " "\
                           SAM_ " " BAM_
@@ -156,7 +159,8 @@ extern size_t file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, bool soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern uint64_t file_tell (File *file);
 extern uint64_t file_get_size (const char *filename);
-extern void file_set_stdin_type (const char *type_str);
+extern void file_set_input_type (const char *type_str);
+extern void file_set_input_size (const char *size_str);
 extern FileType file_get_stdin_type (void);
 extern bool file_is_dir (const char *filename);
 extern void file_remove (const char *filename, bool fail_quietly);

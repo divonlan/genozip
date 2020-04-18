@@ -280,7 +280,13 @@ void txtfile_write_one_vblock_sam (VBlockSAMP vb)
 // ZIP only - estimate the size of the vcf data in this file. affects the hash table size and the progress indicator.
 void txtfile_estimate_txt_data_size (VBlock *vb)
 {
-    if (!txt_file->disk_size) return; // we're unable to estimate if the disk size is not known
+    uint64_t disk_size = txt_file->disk_size; 
+
+    // case: we don't know the disk file size (because its stdin or a URL where the server doesn't provide the size)
+    if (!disk_size) { 
+        if (flag_stdin_size) disk_size = flag_stdin_size; // use the user-provided size, if there is one
+        else return; // we're unable to estimate if the disk size is not known
+    } 
     
     double ratio=1;
 
@@ -307,5 +313,5 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
     else ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
 
-    txt_file->txt_data_size_single = txt_file->disk_size * ratio;
+    txt_file->txt_data_size_single = disk_size * ratio;
 }

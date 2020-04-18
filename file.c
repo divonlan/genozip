@@ -28,27 +28,13 @@ File *txt_file = NULL;
 static StreamP input_decompressor  = NULL; // bcftools or xz or samtools - only one at a time
 static StreamP output_compressor   = NULL; // bgzip, samtools, bcftools
 
-static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --stdin command line option
+static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --input command line option
 
 // global pointers - so the can be compared eg "if (mode == READ)"
 const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
 const char *WRITE = "wb";
 
-char *file_exts[] = FILE_EXTS;
-
-void file_set_stdin_type (const char *type_str)
-{
-    if (type_str)
-        for (stdin_type=UNKNOWN_FILE_TYPE+1; stdin_type < AFTER_LAST_FILE_TYPE; stdin_type++)
-            if (!strcmp (type_str, &file_exts[stdin_type][1])) break; // compare to file extension without the leading .
-
-    ASSERT (stdin_type==SAM || stdin_type==VCF, "%s: --stdin/-i option can only accept 'vcf' or 'sam'", global_cmd);
-}
-
-FileType file_get_stdin_type (void)
-{
-    return stdin_type;
-}
+const char *file_exts[] = FILE_EXTS;
 
 static FileType file_get_type (const char *filename)
 {
@@ -56,6 +42,46 @@ static FileType file_get_type (const char *filename)
         if (file_has_ext (filename, file_exts[ft])) return ft;
 
     return UNKNOWN_FILE_TYPE;
+}
+
+void file_set_input_size (const char *size_str)
+{   
+    unsigned len = strlen (size_str);
+
+    for (unsigned i=0; i < len; i++) {
+        ASSERT (size_str[i] >= '0' && size_str[i] <= '9', "%s: expecting the file size in bytes to be a positive integer: %s", global_cmd, size_str);
+
+        flag_stdin_size = flag_stdin_size * 10 + (size_str[i] - '0'); 
+    }
+}
+
+void file_set_input_type (const char *type_str)
+{
+    static FileType input_files_accepted[] = INPUT_FILES_ACCEPTED;
+
+    char *ext = malloc (strlen (type_str) + 2); // +1 for . +1 for \0
+    sprintf (ext, ".%s", type_str);
+
+    stdin_type = file_get_type (ext);
+
+    for (unsigned i=0; i < sizeof(input_files_accepted)/sizeof(input_files_accepted[0]); i++) 
+        if (stdin_type == input_files_accepted[i]) {
+            free (ext);
+            return; // all good 
+        }
+
+    // the user's argument is not an accepted input file type - print error message
+    fprintf (stderr, "%s: --input must be ones of these: ", global_cmd);
+    for (unsigned i=0; i < sizeof(input_files_accepted)/sizeof(input_files_accepted[0]); i++) 
+        fprintf (stderr, "%s ", &file_exts[input_files_accepted[i]][1]);
+    fprintf (stderr, "\n");
+
+    exit_on_error();
+}
+    
+FileType file_get_stdin_type (void)
+{
+    return stdin_type;
 }
 
 static void file_ask_user_to_confirm_overwrite (const char *filename)
@@ -106,6 +132,10 @@ bool file_open_txt (File *file)
 {
     // for READ, set data_type
     if (file->mode == READ) {
+        
+        // if user provided the type with --input, we use that overriding the type derived from the file name
+        if (stdin_type) file->type = stdin_type;
+
         if      (file_is_vcf (file)) file->data_type = DATA_TYPE_VCF;
         else if (file_is_sam (file)) file->data_type = DATA_TYPE_SAM;
         else ABORT ("%s: input file must have one of the following extensions: " COMPRESSIBLE_EXTS, global_cmd);
@@ -333,7 +363,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type /* only used for WRITE */)
 {
     ASSERT (mode==WRITE || stdin_type != UNKNOWN_FILE_TYPE, 
-            "%s: to redirect from standard input use the --stdin option eg '--stdin vcf'. See '%s --help' for more details", global_cmd, global_cmd);
+            "%s: to redirect from standard input use the --input option eg '--input vcf'. See '%s --help' for more details", global_cmd, global_cmd);
 
     File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
@@ -433,7 +463,7 @@ bool file_has_ext (const char *filename, const char *extension)
     unsigned ext_len = strlen (extension);
     unsigned fn_len  = strlen (filename);
     
-    return fn_len > ext_len && !strncmp (&filename[fn_len-ext_len], extension, ext_len);
+    return fn_len >= ext_len && !strncmp (&filename[fn_len-ext_len], extension, ext_len);
 }
 
 // get basename of a filename - we write our own basename for Visual C and Windows compatibility

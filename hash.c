@@ -175,7 +175,8 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 // is less likely to fit into the CPU memory caches
 void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext *first_merging_vb_ctx)
 {
-    // note on txt_data_size_single: if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
+    // note on txt_data_size_single: if its a physical plain VCF file - this is the file size. 
+    // if not - its an estimate done after the first VB by txtfile_estimate_txt_data_size
     double estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->num_lines;
 

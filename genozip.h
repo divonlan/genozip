@@ -92,6 +92,8 @@ extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_strip, flag_gt_only,
            flag_header_one;
 
+extern uint64_t flag_stdin_size;
+
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VBlockP evb;
 

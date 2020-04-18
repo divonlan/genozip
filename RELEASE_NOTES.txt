@@ -117,5 +117,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Added full support for compressing SAM/BAM files
 - Compression improvements for some VCF files with lots of non-GT FORMAT subfields
 - Added genounzip output options: --bcf for VCF files and --bam for SAM files
-- Added --stdin - tell genozip what type of file is being redirected in
+- Added --input - tell genozip what type of file is being redirected in
+- Added --stdin-size - tell genozip the size of a redirected input file, for faster execution
 - Added --show-index for genounzip and genocat - see index embedded in a genozip file
