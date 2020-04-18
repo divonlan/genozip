@@ -220,8 +220,8 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
         else if (n_ratio > 2.1) max_growth_plan = 3;
         else if (n_ratio > 1.8) max_growth_plan = 4;
         else if (n_ratio > 1.5) max_growth_plan = 5;
-        else if (n_ratio > 1.2) max_growth_plan = 6;
-        else if (n_ratio > 1.1) max_growth_plan = 7;
+        else if (n_ratio > 1.2) max_growth_plan = 7;
+        else if (n_ratio > 1.1) max_growth_plan = 9;
         else                    max_growth_plan = sizeof(growth_plan) / sizeof(growth_plan[0]);
         
         for (int i=max_growth_plan; i >= 0 ; i--)
