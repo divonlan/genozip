@@ -156,24 +156,6 @@ SectionListEntry *sections_vb_first (uint32_t vb_i)
     return sl;
 }
 
-/*// called by PIZ I/O : zfile_vcf_read_one_vb. Returns the offset of the next section with this vb_i
-uint64_t sections_vb_next (SectionListEntry **sl_ent)
-{
-    ASSERT0 (*sl_ent, "Error in sections_vb_next: *sl_ent is NULL");
-
-    uint32_t vb_i = (*sl_ent)->vblock_i;
-
-    // get next section - just verify that it belongs to this vb_i
-    ASSERT (1 + *sl_ent <= LASTENT (SectionListEntry, z_file->section_list_buf), 
-            "Error in sections_get_next_vb_section: there are no more sections (called for vb_i=%u)", vb_i);
-
-    (*sl_ent)++;
-
-    ASSERT ((*sl_ent)->vblock_i == vb_i, "Error in sections_get_next_vb_section: vb_i=%u has no more sections", vb_i);
-
-    return (*sl_ent)->offset;
-}
-*/
 // called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
 bool sections_has_more_vcf_components()
 {
@@ -188,6 +170,22 @@ void BGEN_sections_list()
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
         ent[i].vblock_i = BGEN32 (ent[i].vblock_i);
         ent[i].offset          = BGEN64 (ent[i].offset);
+    }
+}
+
+void sections_get_sizes (DictIdType dict_id, uint32_t *dict_compressed_size, uint32_t *b250_compressed_size)
+{
+    *dict_compressed_size = *b250_compressed_size = 0;
+    
+    for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
+
+        SectionListEntry *section = ENT (SectionListEntry, z_file->section_list_buf, i);
+
+        if (section->dict_id.num == dict_id.num && section_type_is_dictionary (section->section_type))
+            *dict_compressed_size += (section+1)->offset - section->offset;
+
+        else if (section->dict_id.num == dict_id.num && section_type_is_b250 (section->section_type))
+            *b250_compressed_size += (section+1)->offset - section->offset;
     }
 }
 

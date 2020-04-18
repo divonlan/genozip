@@ -325,14 +325,22 @@ static void main_show_sections (void)
              (double)total_txt / (double)total_z, "");
 
     fprintf (stderr, "\nDictionaries:\n");
-    fprintf (stderr, "did_i Name     Type            #Words        #Uniq         Hash    uncomp_dict_size\n");
+    fprintf (stderr, "did_i Name     Type            #Words        #Uniq         Hash    uncomp      comp      comp     comp     %% of \n");
+    fprintf (stderr, "                                                                   dict        dict      b250     TOTAL    file \n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
+        char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
+        uint32_t dict_compressed_size, b250_compressed_size;
+
         const MtfContext *ctx = &z_file->mtf_ctx[i];
     
-        char s1[20], s2[20], s3[20];
-        fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s\n", i, -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
+        sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
+
+        fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s %9s %9s %9s %5.1f\n", i, -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
                  dict_id_display_type (ctx->dict_id), buf_display_uint (ctx->mtf_i.len, s1), buf_display_uint (ctx->mtf.len, s2), 
-                 buf_display_uint (ctx->global_hash_prime, s3), buf_display_size(ctx->dict.len, vsize));
+                 buf_display_uint (ctx->global_hash_prime, s3), buf_display_size (ctx->dict.len, vsize),
+                 buf_display_size (dict_compressed_size, s4), buf_display_size (b250_compressed_size, s5),
+                 buf_display_size (dict_compressed_size + b250_compressed_size, s6),
+                 100.0 * (double)(dict_compressed_size + b250_compressed_size) / (double)total_z);
     }
 
     char s1[20], s2[20];

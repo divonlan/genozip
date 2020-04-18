@@ -586,12 +586,17 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
 
     uint64_t genozip_header_offset = z_file->disk_so_far + z_data->len; // capture before comp_compress that increases len
 
+    // prepare section list for disk - Big Endian and length in bytes
     BGEN_sections_list();
+    z_file->section_list_buf.len *= sizeof (SectionListEntry); // change to counting bytes
 
     // compress section into z_data - to be eventually written to disk by the I/O thread
-    z_file->section_list_buf.len *= sizeof (SectionListEntry); // change to counting bytes
     evb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
     comp_compress (evb, z_data, true, &header.h, z_file->section_list_buf.data, NULL);
+
+    // restore
+    z_file->section_list_buf.len /= sizeof (SectionListEntry); 
+    BGEN_sections_list();
 
     // add a footer to this section - this footer appears AFTER the genozip header data, 
     // facilitating reading the genozip header in reverse from the end of the file
