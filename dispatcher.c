@@ -269,8 +269,8 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     if (flag_show_time) 
         profiler_print_report (&evb->profile, 
-                               dd->max_threads, dd->max_vb_id_so_far,
-                               dd->filename, dd->next_vb_i);
+                               dd->max_threads, dd->max_vb_id_so_far+1,
+                               dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty
 
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
