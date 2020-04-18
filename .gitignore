@@ -8,7 +8,6 @@
 *.bgz
 *.bz2
 *.xz
-!backward-compatibility-test/*.genozip
 *.exe
 !windows/genozip-installer.exe
 genozip
@@ -36,7 +35,6 @@ mac/scripts/*
 *.bam
 !test-file.vcf
 !minimal.vcf
-!backward-compatibility-test/*.vcf
 *stackdump
 .altool_app_specifc_password
 mac/.mac_username
@@ -49,3 +47,5 @@ mac/*.pkg
 analyze hgdp_wgs.20190516.full.chr1.vcf and gtshark/*
 fastq/*
 lzma/unused
+!backward-compatibility-test/*.genozip
+!backward-compatibility-test/*.vcf
