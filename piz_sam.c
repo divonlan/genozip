@@ -52,6 +52,32 @@ static void piz_sam_reconstruct_seq_qual (VBlockSAM *vb, uint32_t cigar_seq_len,
     *next += len;
 }
 
+static void piz_sam_reconstruct_md (VBlockSAM *vb, uint32_t sam_line_i, uint32_t cigar_seq_len, bool skip)
+{
+    uint32_t next_md_start = vb->next_md;
+    ARRAY (char, md, vb->md_data);
+    
+    for (; vb->next_md < vb->md_data.len && md[vb->next_md] != '\t'; vb->next_md++);
+    ASSERT (vb->next_md < vb->md_data.len, "Error reading sam_line=%u: unexpected end of MD data", sam_line_i);
+
+    uint32_t md_len = vb->next_md - next_md_start;
+
+    if (!skip) {
+        // case: MD is stored as-is - just copy it
+        if (md_len) {
+            buf_add (&vb->reconstructed_line, &md[next_md_start], md_len);
+        }
+        // case: MD is an empty string - reconstruct the original MD that is the sequence length
+        else {
+            char seq_len_str[20]; 
+            unsigned seq_len_str_len;
+            buf_display_uint_no_commas (cigar_seq_len, seq_len_str, &seq_len_str_len);
+            buf_add (&vb->reconstructed_line, seq_len_str, seq_len_str_len);
+        }
+    }
+    vb->next_md++; // skip the tab;
+}
+
 static void piz_sam_map_optional_subfields (VBlockSAM *vb)
 {
     // terminology: we call a list of INFO subfield names, an "oname". An oname looks something like
@@ -161,7 +187,7 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
         if (!flag_strip) buf_add (&vb->reconstructed_line, &oname[sf_i*5], 5)
 
         DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&oname[sf_i*5], 2));
-        MtfContext *ctx = &vb->mtf_ctx[opt_map->did_i[sf_i]];
+        MtfContext *ctx = &vb->mtf_ctx[opt_map->did_i[sf_i]]; // DID_I_NONE if this subfield has no dictionary (eg MD, E2, U2)
 
         // E2 doesn't have a dictionary - its data is stored in SEQ
         if (dict_id.num == dict_id_OPTION_E2)
@@ -172,18 +198,9 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
             if (!flag_strip) piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, "U2", sam_line_i, false);
         }
 
-        else if (dict_id.num == dict_id_OPTION_MD) {
-            mtf_get_next_snip ((VBlockP)vb, ctx, NULL, &snip, &snip_len, sam_line_i);
-
-            // snip is as empty string, then the original MD was just seq_len
-            if (!snip_len) { // reconstruct MD from seq_len
-                char md_str[20];
-                buf_display_uint_no_commas (cigar_seq_len, md_str, &snip_len);
-                buf_add (&vb->reconstructed_line, md_str, snip_len);
-            }
-            else buf_add (&vb->reconstructed_line, snip, snip_len);
-
-        }
+        else if (dict_id.num == dict_id_OPTION_MD) 
+            piz_sam_reconstruct_md (vb, sam_line_i, cigar_seq_len, flag_strip);
+        
         // MC and OC are stored in the CIGAR dictionary
         else if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) {
             if (!flag_strip) {
@@ -422,9 +439,12 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
 
     piz_sam_map_optional_subfields (vb);
 
-    // POS, SEQ and QUAL (data also contains E2 and U2 respectively, if they exist)
+    // RAND_POS, MD, SEQ and QUAL (data also contains E2 and U2 respectively, if they exist)
     SectionHeader *pos_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
     zfile_uncompress_section ((VBlockP)vb, pos_header, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA);    
+    
+    SectionHeader *md_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
+    zfile_uncompress_section ((VBlockP)vb, md_header, &vb->md_data, "md_data", SEC_SAM_MD_DATA);    
     
     SectionHeader *seq_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
     zfile_uncompress_section ((VBlockP)vb, seq_header, &vb->seq_data, "seq_data", SEC_SAM_SEQ_DATA);    

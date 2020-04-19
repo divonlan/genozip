@@ -15,8 +15,6 @@
 
 void seg_sam_initialize (VBlockSAM *vb)
 {
-    buf_alloc (vb, &vb->random_pos_data, 1000000, 1, "random_pos_data", vb->vblock_i); // initial ~1MB allocation
-
     vb->last_pos = 0;
     vb->last_rname_node_index = (uint32_t)-1;
 
@@ -117,6 +115,15 @@ static inline int seg_sam_get_next_subitem (const char *str, int str_len, char s
 #define DEC_SSF(ssf) const char *ssf; \
                      int ssf##_len;
 
+static inline void seg_sam_add_to_data_buf (VBlockSAM *vb, Buffer *buf, const char *buf_name, SectionType sec, 
+                                            const char *snip, unsigned snip_len, unsigned add_bytes)
+{
+    buf_alloc (vb, buf, MAX (buf->len + snip_len+1, vb->num_lines * (snip_len+3)), 2, buf_name, vb->vblock_i);
+    if (snip_len) buf_add (buf, snip, snip_len); 
+    buf_add (buf, "\t", 1); 
+    vb->txt_section_bytes[sec] += add_bytes;
+}
+
 static unsigned seg_sam_sa_or_oa_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
 {
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
@@ -137,10 +144,7 @@ static unsigned seg_sam_sa_or_oa_field (VBlockSAM *vb, const char *field, unsign
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
 
         // pos - add to the random pos data together with all other random pos data (originating from POS, PNEXT etc).
-        buf_alloc_more (vb, &vb->random_pos_data, pos_len+1, vb->num_lines, char, 2);
-        buf_add (&vb->random_pos_data, pos, pos_len); 
-        buf_add (&vb->random_pos_data, "\t", 1); 
-        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += pos_len + 1; 
+        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, pos, pos_len, pos_len+1);
 
         // nm : we store in the same dictionary as the Optional subfield NM
         seg_one_subfield ((VBlockP)vb, nm, nm_len, vb_line_i, (DictIdType)dict_id_OPTION_NM, 
@@ -187,11 +191,8 @@ static unsigned seg_sam_xa_field (VBlockSAM *vb, const char *field, unsigned fie
         // pos - add to the pos data together with all other pos data (POS, PNEXT etc),
         // strand - add to separate STRAND dictionary, to not adversely affect compression of POS.
         // there is no advantage to storing the strand together with pos as they are not correlated.
-        buf_alloc_more (vb, &vb->random_pos_data, pos_len, 0, char, 2);
-        buf_add (&vb->random_pos_data, pos+1, pos_len-1); 
-        buf_add (&vb->random_pos_data, "\t", 1); 
-        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += pos_len; // one less for the strand, one more for the , 
-
+        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, pos+1, pos_len-1, 
+                                 pos_len); // one less for the strand, one more for the ,
         // strand
         seg_one_subfield ((VBlockP)vb, pos, 1, vb_line_i, (DictIdType)dict_id_OPTION_STRAND, 
                           SEC_SAM_OPTNL_SF_B250, 1);
@@ -264,16 +265,11 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
             seg_sam_one_field (vb, value, value_len, vb_line_i, SAM_CIGAR, NULL);
 
-        else if (dict_id.num == dict_id_OPTION_MD) {
+        else if (dict_id.num == dict_id_OPTION_MD) 
             // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
-            if (seg_sam_is_md_same_as_seq_len (value, value_len, dl->seq_len)) {
-                vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250] += value_len;
-                value_len = 0;
-            }
-
-            seg_one_subfield ((VBlock *)vb, value, value_len, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
-                             (value_len) + 1); // +1 for \t
-        }
+            seg_sam_add_to_data_buf (vb, &vb->md_data, "md_data", SEC_SAM_MD_DATA, value, 
+                                     seg_sam_is_md_same_as_seq_len (value, value_len, dl->seq_len) ? 0 : value_len, 
+                                     value_len+1);
 
         // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
         // we encode as a delta.
@@ -435,9 +431,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
     
     if (rname_node_index != vb->last_rname_node_index) { // different rname than prev line - store full pos in random
-        buf_alloc_more (vb, &vb->random_pos_data, field_len+1, 0, char, 2);
-        buf_add (&vb->random_pos_data, field_start, field_len+1); // including the \t
-        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += field_len+1;
+        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1);
         vb->last_pos = seg_pos_snip_to_int (field_start, vb_line_i, "POS");
     }
     else // same rname - do a delta
@@ -480,11 +474,8 @@ const char *seg_sam_data_line (VBlock *vb_,
             seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i, "PNEXT");
     }
 
-    else { // RNAME and RNEXT differ - store in random_pos
-        buf_alloc_more (vb, &vb->random_pos_data, field_len+1, 0, char, 2);
-        buf_add (&vb->random_pos_data, field_start, field_len+1); // including the \t
-        vb->txt_section_bytes[SEC_SAM_RAND_POS_DATA] += field_len+1;
-    }
+    else  // RNAME and RNEXT differ - store in random_pos
+        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1);
 
     // TLEN
     field_start = next_field;

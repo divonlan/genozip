@@ -232,7 +232,7 @@ static void main_show_sections (void)
 
     // the order in which we want them displayed
     const SectionType secs[] = {
-        SEC_GENOZIP_HEADER,    SEC_RANDOM_ACCESS,  SEC_TXT_HEADER,        SEC_VCF_VB_HEADER,
+        SEC_GENOZIP_HEADER,    SEC_RANDOM_ACCESS,      SEC_TXT_HEADER,        SEC_VCF_VB_HEADER,
         SEC_VCF_CHROM_B250,    SEC_VCF_CHROM_DICT,     SEC_VCF_POS_B250,      SEC_VCF_POS_DICT, 
         SEC_VCF_ID_B250,       SEC_VCF_ID_DICT,        SEC_VCF_REFALT_B250,   SEC_VCF_REFALT_DICT, 
         SEC_VCF_QUAL_B250,     SEC_VCF_QUAL_DICT,      SEC_VCF_FILTER_B250,   SEC_VCF_FILTER_DICT, 
@@ -241,7 +241,7 @@ static void main_show_sections (void)
         SEC_VCF_HT_DATA,       SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
 
         SEC_SAM_VB_HEADER,
-        SEC_SAM_SEQ_DATA,      SEC_SAM_QUAL_DATA,      SEC_SAM_RAND_POS_DATA,
+        SEC_SAM_SEQ_DATA,      SEC_SAM_QUAL_DATA,      SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,
         SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
         SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
         SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,
@@ -260,7 +260,7 @@ static void main_show_sections (void)
         "Haplotype data", "HT separator char", "Phasing char",
 
         "Line block metadata",
-        "SEQ data", "QUAL data", "Random POS data", 
+        "SEQ data", "QUAL data", "Random POS data", "MD data",
         "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
         "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
         "POS b250 (delta)", "POS dict (delta)", 
@@ -386,7 +386,7 @@ static void main_show_content (void)
           SEC_VCF_CHROM_DICT, SEC_VCF_POS_DICT, SEC_VCF_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
           SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,           
           
-          SEC_SAM_VB_HEADER,     SEC_SAM_RAND_POS_DATA,
+          SEC_SAM_VB_HEADER,     SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA, 
           SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
           SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
           SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      

@@ -262,7 +262,8 @@ typedef struct VBlockSAM {
                                          // 1. POS if RNAME differs from prev line RNAME
                                          // 2. PNEXT where RNEXT is not ('=' or equal to RNAME) 
                                          // 3. POS data in SA, OA and XA
-
+    Buffer md_data;                      // MD data - from optional field MD;
+    
     uint32_t longest_line_len;           // length of longest line of SAM data in this vb
 
     // PIZ-only stuff
@@ -272,7 +273,7 @@ typedef struct VBlockSAM {
     Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
     Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
     uint32_t next_seq, next_qual;        // PIZ only: indeces into seq_data, qual_data
-    uint32_t next_random_pos;            // PIZ only: indeces into delta_pos_data, random_pos_data
+    uint32_t next_random_pos, next_md;   // PIZ only: indeces into random_pos_data, md_data
     uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
 

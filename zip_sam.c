@@ -126,8 +126,9 @@ void zip_sam_compress_one_vb (VBlockP vb_)
             }
         }
 
-    // generate & compress the Random POS data
+    // generate & compress the MD and Random POS data
     zfile_compress_section_data_alg (vb_, SEC_SAM_RAND_POS_DATA,  &vb->random_pos_data, NULL, 0, COMPRESS_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_SAM_MD_DATA, &vb->md_data, NULL, 0, COMPRESS_BZLIB);
 
     // generate & compress the SEQ & QUAL data
     uint32_t seq_len=0, qual_len=0;
