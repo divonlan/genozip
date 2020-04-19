@@ -18,8 +18,8 @@ uint64_t dict_id_vcf_fields[NUM_VCF_FIELDS] = {0,0,0,0,0,0,0,0},
 // SAM stuff
 uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
          dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
-         dict_id_OPTION_H1=0, dict_id_OPTION_H2=0, dict_id_OPTION_MQ=0, dict_id_OPTION_NH=0, dict_id_OPTION_NM=0, dict_id_OPTION_OA=0,
-         dict_id_OPTION_OC=0, dict_id_OPTION_PG=0, dict_id_OPTION_E2=0, dict_id_OPTION_U2=0,
+         dict_id_OPTION_H1=0, dict_id_OPTION_H2=0, dict_id_OPTION_MD=0, dict_id_OPTION_MQ=0, dict_id_OPTION_NH=0, dict_id_OPTION_NM=0, 
+         dict_id_OPTION_OA=0, dict_id_OPTION_OC=0, dict_id_OPTION_PG=0, dict_id_OPTION_E2=0, dict_id_OPTION_U2=0,
          dict_id_OPTION_PQ=0, dict_id_OPTION_PU=0, dict_id_OPTION_RG=0, dict_id_OPTION_SA=0, dict_id_OPTION_SM=0, dict_id_OPTION_TC=0, 
          dict_id_OPTION_UQ=0, dict_id_OPTION_CC=0, dict_id_OPTION_CG=0, dict_id_OPTION_MC=0,
          dict_id_OPTION_X0=0, dict_id_OPTION_X1=0, dict_id_OPTION_XA=0, dict_id_OPTION_XN=0, dict_id_OPTION_XM=0, dict_id_OPTION_XO=0,
@@ -83,6 +83,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_TC = dict_id_sam_optnl_sf (dict_id_make ("TC", 2)).num;
         dict_id_OPTION_UQ = dict_id_sam_optnl_sf (dict_id_make ("UQ", 2)).num;
         dict_id_OPTION_U2 = dict_id_sam_optnl_sf (dict_id_make ("U2", 2)).num;
+        dict_id_OPTION_MD = dict_id_sam_optnl_sf (dict_id_make ("MD", 2)).num;
                 
         dict_id_OPTION_X0 = dict_id_sam_optnl_sf (dict_id_make ("X0", 2)).num; 
         dict_id_OPTION_X1 = dict_id_sam_optnl_sf (dict_id_make ("X1", 2)).num; 
