@@ -113,6 +113,11 @@ typedef enum {
                                         (s) == SEC_VCF_INFO_SF_B250 || \
                                        ((s) >= SEC_SAM_QNAME_SF_B250 && (s) <= SEC_SAM_OPTIONAL_B250 && (s) % 2 == SEC_SAM_QNAME_SF_B250 % 2))
 
+extern const SectionType first_field_dict_section[NUM_DATATYPES];
+
+#define FIELD_TO_B250_SECTION(f) (first_field_dict_section[z_file->data_type] + (f)*2)
+#define FIELD_TO_DICT_SECTION(f) (FIELD_TO_B250_SECTION(f) - 1)
+
 // Section headers - big endian
 
 #define GENOZIP_MAGIC 0x27052012
@@ -122,8 +127,6 @@ typedef enum {
 #define ENCRYPTION_TYPE_NONE   0
 #define ENCRYPTION_TYPE_AES256 1
 #define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit" }
-
-extern const SectionType first_field_dict_section[NUM_DATATYPES];
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 

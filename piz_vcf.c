@@ -844,7 +844,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         if (flag_strip && (f == VCF_ID || f >= VCF_QUAL)) continue; // we don't need most of the fields if --strip
         if ((flag_drop_genotypes || flag_gt_only) && f==VCF_FORMAT) continue; // we don't need FORMAT if --gt-only or --drop-genotypes
 
-        zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", SEC_VCF_CHROM_B250 + f*2);
+        zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", FIELD_TO_B250_SECTION(f));
     }
 
     for (uint8_t sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {

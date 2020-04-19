@@ -10,13 +10,14 @@
 #include "header.h"
 #include "random_access.h"
 #include "optimize.h"
+#include "file.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])
 
 static inline uint32_t seg_vcf_one_field (VBlockVCF *vb, const char *str, unsigned len, unsigned vb_line_i, VcfFields f, 
                                           bool *is_new)  // optional out
 {
-    return seg_one_field ((VBlockP)vb, str, len, vb_line_i, f, SEC_VCF_CHROM_B250 + f*2, is_new);
+    return seg_one_field ((VBlockP)vb, str, len, vb_line_i, f, FIELD_TO_B250_SECTION(f), is_new);
 }                                          
                                
 // returns true if this line has the same chrom as this VB, or if it is the first line

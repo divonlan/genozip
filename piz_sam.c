@@ -17,6 +17,7 @@
 #include "move_to_front.h"
 #include "regions.h"
 #include "zfile.h"
+#include "file.h"
 
 #   define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[(did_i)], NULL, &snip, &snip_len, sam_line_i); 
 #   define RECONSTRUCT_FROM_DICT(f)  \
@@ -375,7 +376,7 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
     // uncompress the fields     
     for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++) {
 
-        SectionType b250_sec = SEC_SAM_QNAME_B250 + f*2;
+        SectionType b250_sec = FIELD_TO_B250_SECTION(f);
 
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
         if (zfile_skip_section_by_flags (b250_sec, DICT_ID_NONE)) continue;

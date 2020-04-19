@@ -901,7 +901,8 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
     for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
                 
         ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_VCF_CHROM_B250 + f*2, sl++);
+        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
+                            FIELD_TO_B250_SECTION(f), sl++);
     }
 
     // read the info subfield sections into memory (if any)
@@ -1037,7 +1038,7 @@ void zfile_sam_read_one_vb (VBlockSAM *vb)
         
         *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
         zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
-                            SEC_SAM_QNAME_B250 + f*2, sl++);   
+                            FIELD_TO_B250_SECTION(f), sl++);   
     }
 
     // read the QNAME subfields sections into memory (if any)
