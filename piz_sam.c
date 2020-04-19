@@ -172,6 +172,18 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
             if (!flag_strip) piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, "U2", sam_line_i, false);
         }
 
+        else if (dict_id.num == dict_id_OPTION_MD) {
+            mtf_get_next_snip ((VBlockP)vb, ctx, NULL, &snip, &snip_len, sam_line_i);
+
+            // snip is as empty string, then the original MD was just seq_len
+            if (!snip_len) { // reconstruct MD from seq_len
+                char md_str[20];
+                buf_display_uint_no_commas (cigar_seq_len, md_str, &snip_len);
+                buf_add (&vb->reconstructed_line, md_str, snip_len);
+            }
+            else buf_add (&vb->reconstructed_line, snip, snip_len);
+
+        }
         // MC and OC are stored in the CIGAR dictionary
         else if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) {
             if (!flag_strip) {

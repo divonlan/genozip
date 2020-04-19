@@ -627,7 +627,7 @@ void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */,
         
         mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, 
                                 dict_id_field (dict_id_make (fname, strlen(fname))), 
-                                FIELD_TO_B250_SECTION(f));
+                                FIELD_TO_DICT_SECTION(f));
     }
 }
 

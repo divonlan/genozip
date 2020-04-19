@@ -216,9 +216,20 @@ error:
     return 0;
 }
 
+static inline bool seg_sam_is_md_same_as_seq_len (const char *md, unsigned md_len, uint32_t seq_len)
+{
+    uint32_t n=0;
+    for (unsigned i=0; i < md_len; i++) {
+        if (md[i] < '0' || md[i] > '9') return false; // not all numeric
+        n = n*10 + (md[i] - '0');
+    }
+
+    return n == seq_len;
+}
+
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
-static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned field_len, 
+static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, 
                                     char separator, unsigned vb_line_i)
 {
     ASSERT (field_len, "Error in %s: line invalidly ends with a tab. vb_i=%u vb_line_i=%u", 
@@ -253,6 +264,17 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
         if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
             seg_sam_one_field (vb, value, value_len, vb_line_i, SAM_CIGAR, NULL);
 
+        else if (dict_id.num == dict_id_OPTION_MD) {
+            // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
+            if (seg_sam_is_md_same_as_seq_len (value, value_len, dl->seq_len)) {
+                vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250] += value_len;
+                value_len = 0;
+            }
+
+            seg_one_subfield ((VBlock *)vb, value, value_len, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
+                             (value_len) + 1); // +1 for \t
+        }
+
         // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
         // we encode as a delta.
         else if (dict_id.num == dict_id_OPTION_mc && field[3] == 'i') {
@@ -264,7 +286,6 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
 
         // E2 - SEQ data (note: E2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_E2) { 
-            ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
             ASSERT (value_len == dl->seq_len, 
                     "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                     txt_name, dl->seq_len, value_len, value_len, value);
@@ -274,7 +295,6 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
         }
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_U2) {
-            ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
             ASSERT (value_len == dl->seq_len, 
                     "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                     txt_name, dl->seq_len, value_len, value_len, value);
@@ -487,7 +507,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     for (oname_len=0; oname_len < MAX_SUBFIELDS*5 && separator != '\n'; oname_len += 5) {
         field_start = next_field;
         next_field = seg_get_next_item (field_start, &len, true, true, false, vb_line_i, &field_len, &separator, &has_13, "OPTIONAL-subfield");
-        seg_sam_optional_field (vb, field_start, field_len, separator, vb_line_i);
+        seg_sam_optional_field (vb, dl, field_start, field_len, separator, vb_line_i);
         memcpy (&oname[oname_len], field_start, 5);
     }
     ASSERT (separator=='\n', "Error in %s: too many optional fields, limit is %u", txt_name, MAX_SUBFIELDS);
