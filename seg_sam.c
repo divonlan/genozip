@@ -26,7 +26,7 @@ void seg_sam_initialize (VBlockSAM *vb)
 static inline uint32_t seg_sam_one_field (VBlockSAM *vb, const char *str, unsigned len, unsigned vb_line_i, SamFields f, 
                                           bool *is_new)  // optional out
 {
-    return seg_one_field ((VBlockP)vb, str, len, vb_line_i, f, SEC_SAM_QNAME_B250 + f*2, is_new);
+    return seg_one_field ((VBlockP)vb, str, len, vb_line_i, f, FIELD_TO_B250_SECTION(f), is_new);
 }                                          
   
 // We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings.
@@ -228,14 +228,16 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
             txt_name, field_len, field);
 
     DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (field, 2));
+    const char *value = &field[5]; // the "abcdefg" part of "MX:Z:abcdefg"
+    unsigned value_len = field_len - 5;
 
     // some fields have "repeats" - multiple instances of the same format of data separated by a ;
     unsigned repeats = 0; 
     if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA)
-        repeats = seg_sam_sa_or_oa_field (vb, &field[5], field_len-5, vb_line_i);
+        repeats = seg_sam_sa_or_oa_field (vb, value, value_len, vb_line_i);
 
     else if (dict_id.num == dict_id_OPTION_XA && field[3] == 'Z') 
-        repeats = seg_sam_xa_field (vb, &field[5], field_len-5, vb_line_i);
+        repeats = seg_sam_xa_field (vb, value, value_len, vb_line_i);
 
     // special subfield - in the subfield, store just the (char)-1 + the number of repeats.
     // the data itself was already stored in the subsubfields in seg_sam_*_field
@@ -249,7 +251,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
 
         // fields containing CIGAR format data
         if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
-            seg_sam_one_field (vb, &field[5], field_len-5, vb_line_i, SAM_CIGAR, NULL);
+            seg_sam_one_field (vb, value, value_len, vb_line_i, SAM_CIGAR, NULL);
 
         // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
         // we encode as a delta.
@@ -257,33 +259,33 @@ static void seg_sam_optional_field (VBlockSAM *vb, const char *field, unsigned f
             if (vb->mc_did_i == DID_I_NONE)
                 vb->mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
 
-            seg_pos_field ((VBlockP)vb, vb->last_pos, vb->mc_did_i, SEC_SAM_OPTNL_SF_B250, &field[5], field_len-5, vb_line_i, "mc");
+            seg_pos_field ((VBlockP)vb, vb->last_pos, vb->mc_did_i, SEC_SAM_OPTNL_SF_B250, value, value_len, vb_line_i, "mc");
         }
 
         // E2 - SEQ data (note: E2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_E2) { 
             ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
-            ASSERT (field_len-5 == dl->seq_len, 
+            ASSERT (value_len == dl->seq_len, 
                     "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
-                    txt_name, dl->seq_len, field_len-5, field_len-5, &field[5]);
+                    txt_name, dl->seq_len, value_len, value_len, value);
 
-            dl->e2_data_start = &field[5] - vb->txt_data.data;
+            dl->e2_data_start = value - vb->txt_data.data;
             vb->txt_section_bytes[SEC_SAM_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_U2) {
             ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
-            ASSERT (field_len-5 == dl->seq_len, 
+            ASSERT (value_len == dl->seq_len, 
                     "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
-                    txt_name, dl->seq_len, field_len-5, field_len-5, &field[5]);
+                    txt_name, dl->seq_len, value_len, value_len, value);
 
-            dl->u2_data_start = &field[5] - vb->txt_data.data;
+            dl->u2_data_start = value - vb->txt_data.data;
             vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // All other subfields - have their own dictionary
         else        
-            seg_one_subfield ((VBlock *)vb, &field[5], field_len-5, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
-                             (field_len-5) + 1); // +1 for \t
+            seg_one_subfield ((VBlock *)vb, value, value_len, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250,
+                             (value_len) + 1); // +1 for \t
     }
 
     if (separator == '\n') 
