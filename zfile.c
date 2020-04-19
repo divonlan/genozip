@@ -353,7 +353,7 @@ int zfile_read_section (VBlock *vb,
                         unsigned header_size, SectionType expected_sec_type,
                         const SectionListEntry *sl)   // NULL for no seeking
 {
-    ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but sl->section_type=%s",
+    ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s",
             st_name (expected_sec_type), st_name(sl->section_type));
 
     if (sl && zfile_skip_section_by_flags (expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
@@ -860,6 +860,12 @@ void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCF *vb, const Buffer *hap
     buf_free (&vb->gtshark_db_gt_data);
 }
 
+#define READ_SB_SECTION(sec,header_type,sb_i) \
+    { *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len; \
+      zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
+
+#define READ_SECTION(sec,header_type) READ_SB_SECTION(sec, header_type, NO_SB_I)
+
 void zfile_vcf_read_one_vb (VBlockVCF *vb)
 { 
     START_TIMER;
@@ -898,20 +904,13 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
     unsigned section_i=1;
 
     // read the 8 fields (CHROM to FORMAT)    
-    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
-                
-        ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
-                            FIELD_TO_B250_SECTION(f), sl++);
-    }
+    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
+        READ_SECTION (FIELD_TO_B250_SECTION(f), SectionHeaderBase250);
 
     // read the info subfield sections into memory (if any)
     vb->num_info_subfields = sections_count_sec_type (vb->vblock_i, SEC_VCF_INFO_SF_B250); // also used later in piz_uncompress_all_sections()
-    for (uint8_t sf_i=0; sf_i < vb->num_info_subfields; sf_i++) {
-        ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), SEC_VCF_INFO_SF_B250, sl++);
-    }
+    for (uint8_t sf_i=0; sf_i < vb->num_info_subfields; sf_i++) 
+        READ_SECTION (SEC_VCF_INFO_SF_B250, SectionHeaderBase250);
 
     // read the sample data
     uint32_t num_sample_blocks     = BGEN32 (vb_header->num_sample_blocks);
@@ -928,37 +927,21 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
         // make sure we have enough space for the section pointers
         buf_alloc (vb, &vb->z_section_headers, sizeof (unsigned) * (section_i + 3), 2, "z_section_headers", 2);
 
-        if (vb_header->has_genotype_data) {
+        if (vb_header->has_genotype_data)
+            READ_SB_SECTION (SEC_VCF_GT_DATA, SectionHeader, sb_i);
 
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_GT_DATA, sl++);
-        }
+        if (vb_header->phase_type == PHASE_MIXED_PHASED) 
+            READ_SB_SECTION (SEC_VCF_PHASE_DATA, SectionHeader, sb_i);
 
-        if (vb_header->phase_type == PHASE_MIXED_PHASED) {
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_PHASE_DATA, sl++);
-        }
-
-        if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) {
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_HT_DATA, sl++);    
-        }
+        if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) 
+            READ_SB_SECTION (SEC_VCF_HT_DATA, SectionHeader, sb_i);
 
         if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_LINE, sl++);    
-
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_HTI, sl++);    
-
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_X_ALLELE, sl++);    
-
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_DB, sl++);    
-
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_GTSHARK_DB_GT, sl++);    
+            READ_SB_SECTION (SEC_HT_GTSHARK_X_LINE,   SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_X_HTI,    SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_X_ALLELE, SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_DB_DB,    SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_DB_GT,    SectionHeader, sb_i);
         }
     }
     
@@ -1011,11 +994,12 @@ void zfile_sam_read_one_vb (VBlockSAM *vb)
     // 3. SEC_SAM_QNAME_SF_B250 - QNAME subfields
     // 4. SEC_SAM_OPTNL_SF_B250 - OPTIONAL subfields
     // 5. SEC_SAM_RAND_POS_DATA - Random POS data - for non-delta pos data from POS, PNEXT, SA, OA, XA
-    // 6. SEC_SAM_SEQ_DATA      - Sequences data from SEQ, E2
-    // 7. SEC_SAM_QUAL_DATA     - Quality data from QUAL, U2    
+    // 6. SEC_SAM_MD_DATA       - Data for the optional MD field
+    // 7. SEC_SAM_SEQ_DATA      - Sequences data from SEQ, E2
+    // 8. SEC_SAM_QUAL_DATA     - Quality data from QUAL, U2    
 
     SectionListEntry *sl = sections_vb_first (vb->vblock_i);
-
+    
     int vb_header_offset = zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data",
                                                sizeof(SectionHeaderVbHeaderSAM), SEC_SAM_VB_HEADER, sl++);
 
@@ -1034,43 +1018,24 @@ void zfile_sam_read_one_vb (VBlockSAM *vb)
     unsigned section_i=1;
 
     // read the fields
-    for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++) {
-        
-        *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
-                            FIELD_TO_B250_SECTION(f), sl++);   
-    }
+    for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++) 
+        READ_SECTION (FIELD_TO_B250_SECTION(f), SectionHeaderBase250);
 
     // read the QNAME subfields sections into memory (if any)
     vb->qname_mapper.num_subfields = sections_count_sec_type (vb->vblock_i, SEC_SAM_QNAME_SF_B250); 
-    for (uint8_t sf_i=0; sf_i < vb->qname_mapper.num_subfields; sf_i++) {
-        *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
-
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
-                            SEC_SAM_QNAME_SF_B250, sl++);    
-    }
+    for (uint8_t sf_i=0; sf_i < vb->qname_mapper.num_subfields; sf_i++) 
+        READ_SECTION (SEC_SAM_QNAME_SF_B250, SectionHeaderBase250);
 
     // read the OPTIONAL subfields sections into memory (if any)
     vb->num_optional_subfield_b250s = sections_count_sec_type (vb->vblock_i, SEC_SAM_OPTNL_SF_B250);
-    for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s; sf_i++) {
-        *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
+    for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s; sf_i++) 
+        READ_SECTION (SEC_SAM_OPTNL_SF_B250, SectionHeaderBase250);
 
-        zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderBase250), 
-                            SEC_SAM_OPTNL_SF_B250, sl++);    
-    }
-
-    // read the POS, SEQ and QUAL data
-    *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
-    zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
-                        SEC_SAM_RAND_POS_DATA, sl++);    
-
-    *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
-    zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
-                        SEC_SAM_SEQ_DATA, sl++);    
-
-    *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
-    zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeader), 
-                        SEC_SAM_QUAL_DATA, sl++);    
+    // read the RAND_POS, MD, SEQ and QUAL data
+    READ_SECTION (SEC_SAM_RAND_POS_DATA, SectionHeader);
+    READ_SECTION (SEC_SAM_MD_DATA,       SectionHeader);
+    READ_SECTION (SEC_SAM_SEQ_DATA,      SectionHeader);
+    READ_SECTION (SEC_SAM_QUAL_DATA,     SectionHeader);
 
     COPY_TIMER (vb->profile.zfile_read_one_vb);
 }
