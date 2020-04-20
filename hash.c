@@ -131,6 +131,8 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->dict_id.num == dict_id_OPTION_XS ||
             vb_ctx->dict_id.num == dict_id_OPTION_XE ||
             
+            // biobambam tags
+            
             vb_ctx->dict_id.num == dict_id_OPTION_STRAND)
             
             vb_ctx->local_hash_prime = hash_next_size_up(500);
@@ -145,7 +147,6 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         // typically medium - use hash table ~ 50000
         else 
         if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_CIGAR]  ||
-            vb_ctx->dict_id.num == dict_id_OPTION_CG ||
             vb_ctx->dict_id.num == dict_id_OPTION_MC)
 
             vb_ctx->local_hash_prime = hash_next_size_up(50000);

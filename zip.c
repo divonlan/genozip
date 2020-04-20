@@ -72,7 +72,9 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
 void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 {
-    buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 5-numeral.
+    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%.*s", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
+
+    buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
                1.1, "ctx->b250_buf", 0);
 
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
@@ -122,6 +124,7 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 
         else ABORT ("Error in zip_generate_b250_section: invalid node_index=%u", node_index);        
     }
+
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
         fprintf (stderr, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
@@ -254,7 +257,11 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
             if (!processed_vb) continue; // no running compute threads 
 
             // update z_data in memory (its not written to disk yet)
-            zfile_update_compressed_vb_header (processed_vb, txt_line_i);
+            switch (z_file->data_type) {
+                case DATA_TYPE_VCF: zfile_vcf_update_compressed_vb_header (processed_vb, txt_line_i); break;
+                case DATA_TYPE_SAM: zfile_sam_update_compressed_vb_header (processed_vb, txt_line_i); break;
+                default: ABORT ("Error in zip_dispatcher: invalid data_type=%u", z_file->data_type);
+            }
 
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->num_lines);
             txt_line_i += processed_vb->num_lines;

@@ -48,5 +48,8 @@ extern void seg_vcf_complete_missing_lines (VBlockVCFP vb);
 extern void seg_sam_initialize (VBlockSAMP vb);
 extern SegDataLineFuncType seg_sam_data_line;
 extern uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
+extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len, bool *is_numeric);
+
+#define MAX_SAM_MD_LEN 1000 // THIS CANNOT CHANGE - IT IS PART OF THE FILE FORMAT - maximum length of MD that is shortened.
 
 #endif

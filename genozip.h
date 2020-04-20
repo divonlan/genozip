@@ -101,6 +101,11 @@ extern VBlockP evb;
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
+
+#define IS_DIGIT(c)   ((c)>='0' && (c)<='9')
+#define IS_CLETTER(c) ((c)>='A' && (c)<='Z')
+#define IS_SLETTER(c) ((c)>='a' && (c)<='z')
+#define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
 #endif
 
 // sanity checks

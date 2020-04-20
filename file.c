@@ -49,7 +49,7 @@ void file_set_input_size (const char *size_str)
     unsigned len = strlen (size_str);
 
     for (unsigned i=0; i < len; i++) {
-        ASSERT (size_str[i] >= '0' && size_str[i] <= '9', "%s: expecting the file size in bytes to be a positive integer: %s", global_cmd, size_str);
+        ASSERT (IS_DIGIT (size_str[i]), "%s: expecting the file size in bytes to be a positive integer: %s", global_cmd, size_str);
 
         flag_stdin_size = flag_stdin_size * 10 + (size_str[i] - '0'); 
     }

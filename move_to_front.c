@@ -555,8 +555,6 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
 // or returns NIL, if not
 uint8_t mtf_get_existing_did_i_by_dict_id (VBlock *vb, DictIdType dict_id)
 {
-    //MtfContext *mtf_ctx = z_file->mtf_ctx;
-
     for (uint8_t did_i=0; did_i < z_file->num_dict_ids; did_i++) 
         if (dict_id.num == vb->mtf_ctx[did_i].dict_id.num) return did_i;
 

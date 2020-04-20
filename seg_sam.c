@@ -17,8 +17,6 @@ void seg_sam_initialize (VBlockSAM *vb)
 {
     vb->last_pos = 0;
     vb->last_rname_node_index = (uint32_t)-1;
-
-    vb->mc_did_i = DID_I_NONE;
 }
 
 static inline uint32_t seg_sam_one_field (VBlockSAM *vb, const char *str, unsigned len, unsigned vb_line_i, SamFields f, 
@@ -36,9 +34,11 @@ static inline uint32_t seg_sam_one_field (VBlockSAM *vb, const char *str, unsign
 // QNAME formats:
 // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
 // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
-static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qname_len, unsigned vb_line_i)
+static inline void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qname_len, unsigned vb_line_i)
 {
-    static DictIdType sf_dict_id = { .id = { 'Q' | 0xc0 ,'N','A','M','E','0','0', 0} }; // 0xc0 because it is a QNAME subfield (see dict_id.h)
+    // note on id: first char must be a letter per SAM spec and also dict_id_* assumption. The second character
+    // is the subfield, because we want to use for mapping in dict_id_to_did_i_map
+    static DictIdType sf_dict_id = { .id = { 'Q','0','N','A','M','E', 0, 0} }; // 0xc0 because it is a QNAME subfield (see dict_id.h)
 
     const char *snip = qname;
     unsigned snip_len = 0;
@@ -46,19 +46,22 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
     char template[MAX_SUBFIELDS];
     MtfNode *node;
 
+#define MAX_QNAME_COMPONENTS (10+26)
+
     // add each subfield to its dictionary QNAME00 through QNAME62
     for (unsigned i=0; i <= qname_len; i++) { // one more than qname_len - to finalize the last subfield
 
-        if (i==qname_len || qname[i]==':' || qname[i]=='/') { // a subfield ended - separator between subfields
+        if (i==qname_len || 
+            ((qname[i]==':' || qname[i]=='/') && sf_i < MAX_QNAME_COMPONENTS-1)) { // a subfield ended - separator between subfields
             
             // process the subfield that just ended
             MtfContext *sf_ctx;
 
             if (vb->qname_mapper.num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
-                sf_dict_id.id[5] = sf_i / 10 + '0';
-                sf_dict_id.id[6] = sf_i % 10 + '0';
+                sf_dict_id.id[1] = (sf_i <= 9) ? (sf_i + '0') : (sf_i-10 + 'a');
 
-                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, sf_dict_id, SEC_SAM_QNAME_SF_DICT);
+                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
+                                                 dict_id_sam_qname_sf (sf_dict_id), SEC_SAM_QNAME_SF_DICT);
                 vb->qname_mapper.did_i[sf_i] = sf_ctx->did_i;
                 vb->qname_mapper.num_subfields++;
             }
@@ -96,6 +99,41 @@ static void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qnam
     vb->txt_section_bytes[SEC_SAM_QNAME_SF_B250] += qname_len - (sf_i-1); // the entire field except for the / and : separators
 }
 
+// if this row's tlen is the negative of the previous row - store "*" instead of the tlen - thereby cutting
+// the number of dictionary words by half and improving compression
+static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, unsigned vb_line_i)
+{
+    ASSERT (tlen_len, "%s: empty TLEN field found in vb_i=%u vb_line_i=%u", global_cmd, vb->vblock_i, vb_line_i);
+
+    bool tlen_is_positive = (tlen[0] != '-');
+
+    // case: tlen is a negative number, with absolute value the same as positive vb->tlen_snip
+    // e.g. tlen="-1000" ; previous line="1000"
+    bool this_neg_prev_pos = vb->last_tlen_abs && 
+                             (vb->last_tlen_abs_len == tlen_len-1) && 
+                             !tlen_is_positive && vb->last_tlen_is_positive &&
+                             !memcmp (vb->last_tlen_abs, &tlen[1], tlen_len - 1);
+
+    bool this_pos_prev_neg = vb->last_tlen_abs && 
+                             (vb->last_tlen_abs_len == tlen_len) && 
+                             tlen_is_positive && !vb->last_tlen_is_positive &&
+                             !memcmp (vb->last_tlen_abs, tlen, tlen_len);
+
+    // case: tlen is the negative of previous line - replace it with "*"
+    if (this_neg_prev_pos || this_pos_prev_neg) {
+        seg_sam_one_field (vb, "*", 1, vb_line_i, SAM_TLEN, NULL);
+        vb->txt_section_bytes[SEC_SAM_QNAME_B250] += tlen_len - 1; // seg_sam_one_field only added 2 (1 for \t), we should add the rest
+    }
+
+    // case: tlen is not negative of previous line - add as is
+    else 
+        seg_sam_one_field (vb, tlen, tlen_len, vb_line_i, SAM_TLEN, NULL);
+
+    vb->last_tlen_abs         = &tlen[!tlen_is_positive]; // store absolute value
+    vb->last_tlen_is_positive = tlen_is_positive;
+    vb->last_tlen_abs_len     = tlen_len - !tlen_is_positive;
+}
+
 // returns length of string ending with separator, or -1 if separator was not found
 static inline int seg_sam_get_next_subitem (const char *str, int str_len, char separator)
 {
@@ -124,7 +162,7 @@ static inline void seg_sam_add_to_data_buf (VBlockSAM *vb, Buffer *buf, const ch
     vb->txt_section_bytes[sec] += add_bytes;
 }
 
-static unsigned seg_sam_sa_or_oa_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
+static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
 {
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
     // Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
@@ -171,7 +209,7 @@ error:
     return 0;
 }
 
-static unsigned seg_sam_xa_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
+static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
 {
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
@@ -217,15 +255,90 @@ error:
     return 0;
 }
 
-static inline bool seg_sam_is_md_same_as_seq_len (const char *md, unsigned md_len, uint32_t seq_len)
+uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len, bool *is_numeric)
 {
-    uint32_t n=0;
-    for (unsigned i=0; i < md_len; i++) {
-        if (md[i] < '0' || md[i] > '9') return false; // not all numeric
-        n = n*10 + (md[i] - '0');
+    uint32_t result=0, curr_num=0;
+
+    for (unsigned i=0; i < md_str_len; i++) {   
+        if (IS_DIGIT (md_str[i])) 
+            curr_num = curr_num * 10 + (md_str[i] - '0');
+
+        else {
+            result += curr_num + 1; // number terminates here + one character
+            curr_num = 0;
+        }
     }
 
-    return n == seq_len;
+    result += curr_num; // in case the string ends with a number
+
+    if (is_numeric) *is_numeric = (result == curr_num); // md is only digits
+
+    return result;
+}
+
+// if the the case where sequence length as calculated from the MD is the same as that calculated
+// from the CIGAR/SEQ/QUAL (note: this is required by the SAM spec but nevertheless genozip doesn't require it):
+// MD is shortened to replace the last number with a *, since it can be calculated knowing the length. The result is that
+// multiple MD values collapse to one, e.g. "MD:Z:119C30" and "MD:Z:119C31" both become "MD:Z:119C*" hence improving compression.
+// In the case where the MD is simply a number "151" and drop it altogther and keep just an empty string.
+static inline bool seg_sam_get_shortened_MD (const char *md_str, unsigned md_str_len, uint32_t seq_len
+,                                            char *new_md_str, unsigned *new_md_str_len)
+{
+    bool is_numeric;
+    uint32_t seq_len_by_md = seg_sam_get_seq_len_by_MD_field (md_str, md_str_len, &is_numeric);
+
+    if (seq_len_by_md != seq_len) return false;  // MD string doesn't comply with SAM spec and is therefore not changed
+
+    // case - MD is just a number eg "151" that is equal seq_len - we make it an empty string
+    if (is_numeric) {
+        *new_md_str_len = 0;
+        return true;
+    }
+    
+    // case - MD ends with a number eg "119C31" - we replace it with "119C*"
+    else if (IS_DIGIT (md_str[md_str_len-1])) {
+        memcpy (new_md_str, md_str, md_str_len);
+        int i=md_str_len-1; for (; i>=0; i--)
+            if (!IS_DIGIT (md_str[i])) break;
+        
+        new_md_str[i+1] = '*';
+        *new_md_str_len = i+2;
+        return true;
+    }
+
+    return false; // MD doesn't end with a number and is hence unchanged (this normally doesn't occur as the MD would finish with 0)
+}
+
+// AS and XS are values (at least as set by BWA) at most the seq_len, and AS is often equal to it. we modify
+// it to be new_value=(value-seq_len) 
+static inline void seg_sam_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictIdType dict_id, 
+                                     const char *snip, unsigned snip_len, uint32_t vb_line_i)
+{
+    bool positive_delta = true;
+
+    // verify that its a unsigned number
+    for (unsigned i=0; i < snip_len; i++)
+        if (!IS_DIGIT (snip[i])) positive_delta = false;
+
+    int32_t as;
+    if (positive_delta) {
+        as = atoi (snip); // type i is signed 32 bit by SAM specification
+        if (dl->seq_len < as) positive_delta=false;
+    }
+
+    // if possible, store the positive delta - preceded by a "*"
+    if (positive_delta) {
+        char new_snip[20];    
+        unsigned delta_len;
+        new_snip[0] = '*'; 
+        buf_display_uint_no_commas (dl->seq_len-as, &new_snip[1], &delta_len);
+
+        seg_one_subfield ((VBlock *)vb, new_snip, delta_len+1, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250, snip_len + 1); 
+    }
+
+    // not possible - just store unmodified
+    else
+        seg_one_subfield ((VBlock *)vb, snip, snip_len, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250, snip_len + 1); // +1 for \t
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -239,17 +352,17 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
     ASSERT (field_len >= 6 && field[2] == ':' && field[4] == ':', "Error in %s: invalid optional field format: %.*s",
             txt_name, field_len, field);
 
-    DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (field, 2));
+    DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (field, 4));
     const char *value = &field[5]; // the "abcdefg" part of "MX:Z:abcdefg"
     unsigned value_len = field_len - 5;
 
     // some fields have "repeats" - multiple instances of the same format of data separated by a ;
     unsigned repeats = 0; 
     if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA)
-        repeats = seg_sam_sa_or_oa_field (vb, value, value_len, vb_line_i);
+        repeats = seg_sam_SA_or_OA_field (vb, value, value_len, vb_line_i);
 
-    else if (dict_id.num == dict_id_OPTION_XA && field[3] == 'Z') 
-        repeats = seg_sam_xa_field (vb, value, value_len, vb_line_i);
+    else if (dict_id.num == dict_id_OPTION_XA) 
+        repeats = seg_sam_XA_field (vb, value, value_len, vb_line_i);
 
     // special subfield - in the subfield, store just the (char)-1 + the number of repeats.
     // the data itself was already stored in the subsubfields in seg_sam_*_field
@@ -265,19 +378,34 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
             seg_sam_one_field (vb, value, value_len, vb_line_i, SAM_CIGAR, NULL);
 
-        else if (dict_id.num == dict_id_OPTION_MD) 
+        // MD's logical length is normally the same as seq_len, we use this to optimize it.
+        // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
+        else if (dict_id.num == dict_id_OPTION_MD) {
             // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
-            seg_sam_add_to_data_buf (vb, &vb->md_data, "md_data", SEC_SAM_MD_DATA, value, 
-                                     seg_sam_is_md_same_as_seq_len (value, value_len, dl->seq_len) ? 0 : value_len, 
-                                     value_len+1);
+            char new_md[MAX_SAM_MD_LEN];
+            unsigned new_md_len;
+            bool md_is_changeable = (value_len <= MAX_SAM_MD_LEN);
 
+            if (md_is_changeable) 
+                md_is_changeable = seg_sam_get_shortened_MD (value, value_len, dl->seq_len, new_md, &new_md_len);
+
+            seg_sam_add_to_data_buf (vb, &vb->md_data, "md_data", SEC_SAM_MD_DATA, 
+                                     md_is_changeable ? new_md : value, 
+                                     md_is_changeable ? new_md_len : value_len, 
+                                     value_len+1);
+        }
+
+        // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
+        // it to be new_AS=(AS-seq_len) 
+        else if (dict_id.num == dict_id_OPTION_AS) 
+            seg_sam_AS_field (vb, dl, dict_id, value, value_len, vb_line_i);
+        
         // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
         // we encode as a delta.
-        else if (dict_id.num == dict_id_OPTION_mc && field[3] == 'i') {
-            if (vb->mc_did_i == DID_I_NONE)
-                vb->mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
+        else if (dict_id.num == dict_id_OPTION_mc) {
+            uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
 
-            seg_pos_field ((VBlockP)vb, vb->last_pos, vb->mc_did_i, SEC_SAM_OPTNL_SF_B250, value, value_len, vb_line_i, "mc");
+            seg_pos_field ((VBlockP)vb, vb->last_pos, mc_did_i, SEC_SAM_OPTNL_SF_B250, value, value_len, vb_line_i, "mc:i");
         }
 
         // E2 - SEQ data (note: E2 doesn't have a dictionary)
@@ -320,7 +448,7 @@ uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len)
 
     for (unsigned i=0; i < cigar_len; i++) {
         char c = cigar[i];
-        if (c >= '0' && c <= '9') 
+        if (IS_DIGIT (c)) 
             n = n*10 + (c - '0');
         
         else if (c=='M' || c=='I' || c=='S' || c=='=' || c=='X' || c=='*') { // these "consume" sequences
@@ -477,10 +605,10 @@ const char *seg_sam_data_line (VBlock *vb_,
     else  // RNAME and RNEXT differ - store in random_pos
         seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1);
 
-    // TLEN
+    // TLEN - replace a value that is the negative of the previous line with "*"
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "TLEN");
-    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_TLEN, NULL);
+    seg_sam_tlen_field (vb, field_start, field_len, vb_line_i);
 
     // SEQ & QUAL
     dl->seq_data_start = next_field - vb->txt_data.data;

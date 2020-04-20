@@ -141,7 +141,7 @@ int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i, const char
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
     const char *s; for (s=pos_str; *s != '\t' && *s != '\n' && *s != '\r'; s++) {
-        ASSERT (*s >= '0' && *s <= '9', "Error: '%s' field in vb_line_i=%u must be an integer number between 0 and %u, seeing: %.*s", 
+        ASSERT (IS_DIGIT (*s), "Error: '%s' field in vb_line_i=%u must be an integer number between 0 and %u, seeing: %.*s", 
                 field_name, vb_line_i, MAX_POS, (int)(s-pos_str+1), pos_str);
 
         this_pos_64 = this_pos_64 * 10 + (*s - '0');

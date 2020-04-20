@@ -47,7 +47,7 @@ static bool regions_parse_pos (const char *str,
             if (hyphen_found) goto fail; // only one hyphen is permitted
             hyphen_found = true;
         }
-        else if (str[i] >= '0' && str[i] <= '9') 
+        else if (IS_DIGIT (str[i]))
             digit_found = true;
         else
             goto fail; // only digits and hyphen are allowed

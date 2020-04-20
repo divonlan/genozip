@@ -36,7 +36,7 @@ void zip_vcf_set_global_samples_per_block (const char *num_samples_str)
 {
     unsigned len = strlen (num_samples_str);
     for (unsigned i=0; i < len; i++) 
-        ASSERT (num_samples_str[i] >= '0' && num_samples_str[i] <= '9', "Error: invalid argument of --sblock: %s. Expecting an integer number between 1 and 65535", num_samples_str);
+        ASSERT (IS_DIGIT (num_samples_str[i]), "Error: invalid argument of --sblock: %s. Expecting an integer number between 1 and 65535", num_samples_str);
 
     global_samples_per_block = atoi (num_samples_str);
 

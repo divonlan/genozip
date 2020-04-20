@@ -113,18 +113,23 @@ void zip_sam_compress_one_vb (VBlockP vb_)
         zfile_compress_b250_data (vb_, ctx);
     }
 
-    // generate & write b250 data for all QNAME (first) and OPTIONAL (after) subfields
-    for (SectionType sec=SEC_SAM_QNAME_SF_DICT; sec <= SEC_SAM_OPTNL_SF_DICT; sec += SEC_SAM_OPTNL_SF_DICT - SEC_SAM_QNAME_SF_DICT)
+    // generate & write b250 data for all QNAME subfields
+    for (unsigned qname_sf_i=0; qname_sf_i < vb->qname_mapper.num_subfields; qname_sf_i++) {
+        MtfContext *ctx = &vb->mtf_ctx[vb->qname_mapper.did_i[qname_sf_i]];
+        zip_generate_b250_section (vb_, ctx);
+        zfile_compress_b250_data  (vb_, ctx);
+    }
 
-        for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
-                    
-            MtfContext *ctx = &vb->mtf_ctx[did_i];
-            
-            if (ctx->mtf_i.len && ctx->dict_section_type == sec) {
-                zip_generate_b250_section (vb_, ctx);
-                zfile_compress_b250_data (vb_, ctx);
-            }
+    // generate & write b250 data for all OPTIONAL subfields
+    for (unsigned did_i=datatype_last_field[DATA_TYPE_SAM]+1; did_i < vb->num_dict_ids; did_i++) {
+                
+        MtfContext *ctx = &vb->mtf_ctx[did_i];
+        
+        if (ctx->mtf_i.len && ctx->dict_section_type == SEC_SAM_OPTNL_SF_DICT) {
+            zip_generate_b250_section (vb_, ctx);
+            zfile_compress_b250_data (vb_, ctx);
         }
+    }
 
     // generate & compress the MD and Random POS data
     zfile_compress_section_data_alg (vb_, SEC_SAM_RAND_POS_DATA,  &vb->random_pos_data, NULL, 0, COMPRESS_LZMA);

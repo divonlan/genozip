@@ -15,7 +15,7 @@
 static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_at /* 0 if no cap */,
                                              char *optimized_snip, unsigned *optimized_snip_len)
 {
-    if ((snip[0] < '0' || snip[0] > '9') && snip[0] != '.' && snip[0] != '-') return false; // not a number
+    if (!IS_DIGIT(snip[0]) && snip[0] != '.' && snip[0] != '-') return false; // not a number
 
     bool negative = (snip[0] == '-');
 
@@ -123,7 +123,7 @@ static inline bool optimize_vcf_pl (const char *snip, unsigned len, char *optimi
             if (i < len) *(writer++) = ',';
             digit_i=0;
         }
-        else if (snip[i] >= '0' && snip[i] <= '9')
+        else if (IS_DIGIT (snip[i]))
             digit_i++;
         
         else return false; // another character

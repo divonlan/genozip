@@ -351,8 +351,10 @@ static void vb_vcf_cleanup_memory (VBlockVCF *vb)
 static void vb_sam_release_vb (VBlockSAM *vb)
 {
     vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = vb->next_random_pos = vb->next_md = 0;
-    vb->nm_did_i = vb->strand_did_i = vb->mc_did_i = 0;
+    vb->nm_did_i = vb->strand_did_i = vb->last_tlen_abs_len = 0;
     vb->last_rname_node_index = vb->longest_line_len = 0;
+    vb->last_tlen_abs = 0;
+    vb->last_tlen_is_positive = 0;
 
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     

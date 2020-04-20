@@ -111,9 +111,7 @@ static int main_print (const char **text, unsigned num_lines,
         bool wrapped = false;
         while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
             int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
-                        c>=0 && ((line[c] >= 'A' && line[c] <= 'Z') || 
-                                 (line[c] >= 'a' && line[c] <= 'z') ||
-                                 (line[c] >= '0' && line[c] <= '9')); // wrap lines at - and | too, so we can break very long regex strings like in genocat
+                        c>=0 && (IS_LETTER(line[c]) || IS_DIGIT (line[c])); // wrap lines at - and | too, so we can break very long regex strings like in genocat
                         c--); // find 
             printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + (line[c]==' '); // skip space too
@@ -777,7 +775,7 @@ void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
     ASSERT (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
 
     for (unsigned i=0; i < len; i++) {
-        ASSERT (mem_size_mb_str[i] >= '0' && mem_size_mb_str[i] <= '9', err_msg, mem_size_mb_str);
+        ASSERT (IS_DIGIT (mem_size_mb_str[i]), err_msg, mem_size_mb_str);
     }
 
     unsigned mem_size_mb = atoi (mem_size_mb_str);
@@ -789,9 +787,9 @@ void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 int main (int argc, char **argv)
 {
 #ifdef _WIN32
-    // lowercase argv to allow case-insensitive comparison in Windows
+    // lowercase argv[0] to allow case-insensitive comparison in Windows
     for (char *c=argv[0]; *c; c++) 
-        if (*c >= 'A' && *c <= 'Z') 
+        if (IS_CLETTER (*c))
             *c += 'a' - 'A';
 #endif
 
@@ -875,8 +873,8 @@ int main (int argc, char **argv)
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _fa, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh,           _si,                   _dm,          _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,                _sT,                                              _st, _sm,                _si,                   _dm,          _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si,                   _dm,          _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm,      _si,                   _dm,          _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 

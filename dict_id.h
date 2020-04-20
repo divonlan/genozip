@@ -61,14 +61,14 @@ extern uint64_t dict_id_vcf_fields[], dict_id_sam_fields[],
                 dict_id_OPTION_H0, dict_id_OPTION_H1, dict_id_OPTION_H2, dict_id_OPTION_MQ, dict_id_OPTION_NH, dict_id_OPTION_NM, 
                 dict_id_OPTION_OA, dict_id_OPTION_OC, dict_id_OPTION_PG, dict_id_OPTION_PQ, dict_id_OPTION_PU, dict_id_OPTION_RG, 
                 dict_id_OPTION_SA, dict_id_OPTION_SM, dict_id_OPTION_TC, dict_id_OPTION_U2, dict_id_OPTION_UQ, dict_id_OPTION_CC, 
-                dict_id_OPTION_CG, dict_id_OPTION_MC, dict_id_OPTION_MD,
+                dict_id_OPTION_MC, dict_id_OPTION_MD,
     
                 // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
                 dict_id_OPTION_X0, dict_id_OPTION_X1, dict_id_OPTION_XA, dict_id_OPTION_XN, dict_id_OPTION_XM, dict_id_OPTION_XO,
                 dict_id_OPTION_XG, dict_id_OPTION_XS, dict_id_OPTION_XE,
 
                 // biobambam tags 
-                dict_id_OPTION_mc,
+                dict_id_OPTION_mc, dict_id_OPTION_ms,
 
                 dict_id_OPTION_STRAND;
 

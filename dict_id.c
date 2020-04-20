@@ -21,10 +21,10 @@ uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
          dict_id_OPTION_H1=0, dict_id_OPTION_H2=0, dict_id_OPTION_MD=0, dict_id_OPTION_MQ=0, dict_id_OPTION_NH=0, dict_id_OPTION_NM=0, 
          dict_id_OPTION_OA=0, dict_id_OPTION_OC=0, dict_id_OPTION_PG=0, dict_id_OPTION_E2=0, dict_id_OPTION_U2=0,
          dict_id_OPTION_PQ=0, dict_id_OPTION_PU=0, dict_id_OPTION_RG=0, dict_id_OPTION_SA=0, dict_id_OPTION_SM=0, dict_id_OPTION_TC=0, 
-         dict_id_OPTION_UQ=0, dict_id_OPTION_CC=0, dict_id_OPTION_CG=0, dict_id_OPTION_MC=0,
+         dict_id_OPTION_UQ=0, dict_id_OPTION_CC=0, dict_id_OPTION_MC=0,
          dict_id_OPTION_X0=0, dict_id_OPTION_X1=0, dict_id_OPTION_XA=0, dict_id_OPTION_XN=0, dict_id_OPTION_XM=0, dict_id_OPTION_XO=0,
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
-         dict_id_OPTION_mc=0,
+         dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
          dict_id_OPTION_STRAND=0;
           
 static DataType last_data_type = DATA_TYPE_NONE;
@@ -57,45 +57,47 @@ void dict_id_initialize (DataType data_type)
         for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++)
             dict_id_sam_fields[f] = dict_id_field (dict_id_make (field_names[DATA_TYPE_SAM][f], strlen (field_names[DATA_TYPE_SAM][f]))).num; 
 
-        dict_id_OPTION_AM = dict_id_sam_optnl_sf (dict_id_make ("AM", 2)).num;
-        dict_id_OPTION_AS = dict_id_sam_optnl_sf (dict_id_make ("AS", 2)).num;
-        dict_id_OPTION_CC = dict_id_sam_optnl_sf (dict_id_make ("CC", 2)).num;
-        dict_id_OPTION_CG = dict_id_sam_optnl_sf (dict_id_make ("CG", 2)).num;
-        dict_id_OPTION_CM = dict_id_sam_optnl_sf (dict_id_make ("CM", 2)).num;
-        dict_id_OPTION_E2 = dict_id_sam_optnl_sf (dict_id_make ("E2", 2)).num;
-        dict_id_OPTION_FI = dict_id_sam_optnl_sf (dict_id_make ("FI", 2)).num;
-        dict_id_OPTION_H0 = dict_id_sam_optnl_sf (dict_id_make ("H0", 2)).num;
-        dict_id_OPTION_H1 = dict_id_sam_optnl_sf (dict_id_make ("H1", 2)).num;
-        dict_id_OPTION_H2 = dict_id_sam_optnl_sf (dict_id_make ("H2", 2)).num;
-        dict_id_OPTION_LB = dict_id_sam_optnl_sf (dict_id_make ("LB", 2)).num;
-        dict_id_OPTION_MC = dict_id_sam_optnl_sf (dict_id_make ("MC", 2)).num;
-        dict_id_OPTION_MQ = dict_id_sam_optnl_sf (dict_id_make ("MQ", 2)).num;
-        dict_id_OPTION_NH = dict_id_sam_optnl_sf (dict_id_make ("NH", 2)).num;
-        dict_id_OPTION_NM = dict_id_sam_optnl_sf (dict_id_make ("NM", 2)).num;
-        dict_id_OPTION_OA = dict_id_sam_optnl_sf (dict_id_make ("OA", 2)).num;
-        dict_id_OPTION_OC = dict_id_sam_optnl_sf (dict_id_make ("OC", 2)).num;
-        dict_id_OPTION_PG = dict_id_sam_optnl_sf (dict_id_make ("PG", 2)).num;
-        dict_id_OPTION_PQ = dict_id_sam_optnl_sf (dict_id_make ("PQ", 2)).num;
-        dict_id_OPTION_PU = dict_id_sam_optnl_sf (dict_id_make ("PU", 2)).num;
-        dict_id_OPTION_RG = dict_id_sam_optnl_sf (dict_id_make ("RG", 2)).num;
-        dict_id_OPTION_SA = dict_id_sam_optnl_sf (dict_id_make ("SA", 2)).num;
-        dict_id_OPTION_SM = dict_id_sam_optnl_sf (dict_id_make ("SM", 2)).num;
-        dict_id_OPTION_TC = dict_id_sam_optnl_sf (dict_id_make ("TC", 2)).num;
-        dict_id_OPTION_UQ = dict_id_sam_optnl_sf (dict_id_make ("UQ", 2)).num;
-        dict_id_OPTION_U2 = dict_id_sam_optnl_sf (dict_id_make ("U2", 2)).num;
-        dict_id_OPTION_MD = dict_id_sam_optnl_sf (dict_id_make ("MD", 2)).num;
+        dict_id_OPTION_AM = dict_id_sam_optnl_sf (dict_id_make ("AM:i", 4)).num;
+        dict_id_OPTION_AS = dict_id_sam_optnl_sf (dict_id_make ("AS:i", 4)).num;
+        dict_id_OPTION_CC = dict_id_sam_optnl_sf (dict_id_make ("CC:Z", 4)).num;
+        dict_id_OPTION_CM = dict_id_sam_optnl_sf (dict_id_make ("CM:i", 4)).num;
+        dict_id_OPTION_E2 = dict_id_sam_optnl_sf (dict_id_make ("E2:Z", 4)).num;
+        dict_id_OPTION_FI = dict_id_sam_optnl_sf (dict_id_make ("FI:i", 4)).num;
+        dict_id_OPTION_H0 = dict_id_sam_optnl_sf (dict_id_make ("H0:i", 4)).num;
+        dict_id_OPTION_H1 = dict_id_sam_optnl_sf (dict_id_make ("H1:i", 4)).num;
+        dict_id_OPTION_H2 = dict_id_sam_optnl_sf (dict_id_make ("H2:i", 4)).num;
+        dict_id_OPTION_LB = dict_id_sam_optnl_sf (dict_id_make ("LB:Z", 4)).num;
+        dict_id_OPTION_MC = dict_id_sam_optnl_sf (dict_id_make ("MC:Z", 4)).num;
+        dict_id_OPTION_MD = dict_id_sam_optnl_sf (dict_id_make ("MD:Z", 4)).num;
+        dict_id_OPTION_MQ = dict_id_sam_optnl_sf (dict_id_make ("MQ:i", 4)).num;
+        dict_id_OPTION_NH = dict_id_sam_optnl_sf (dict_id_make ("NH:i", 4)).num;
+        dict_id_OPTION_NM = dict_id_sam_optnl_sf (dict_id_make ("NM:i", 4)).num;
+        dict_id_OPTION_OA = dict_id_sam_optnl_sf (dict_id_make ("OA:Z", 4)).num;
+        dict_id_OPTION_OC = dict_id_sam_optnl_sf (dict_id_make ("OC:Z", 4)).num;
+        dict_id_OPTION_PG = dict_id_sam_optnl_sf (dict_id_make ("PG:Z", 4)).num;
+        dict_id_OPTION_PQ = dict_id_sam_optnl_sf (dict_id_make ("PQ:i", 4)).num;
+        dict_id_OPTION_PU = dict_id_sam_optnl_sf (dict_id_make ("PU:Z", 4)).num;
+        dict_id_OPTION_RG = dict_id_sam_optnl_sf (dict_id_make ("RG:Z", 4)).num;
+        dict_id_OPTION_SA = dict_id_sam_optnl_sf (dict_id_make ("SA:Z", 4)).num;
+        dict_id_OPTION_SM = dict_id_sam_optnl_sf (dict_id_make ("SM:i", 4)).num;
+        dict_id_OPTION_TC = dict_id_sam_optnl_sf (dict_id_make ("TC:i", 4)).num;
+        dict_id_OPTION_UQ = dict_id_sam_optnl_sf (dict_id_make ("UQ:i", 4)).num;
+        dict_id_OPTION_U2 = dict_id_sam_optnl_sf (dict_id_make ("U2:Z", 4)).num;
                 
-        dict_id_OPTION_X0 = dict_id_sam_optnl_sf (dict_id_make ("X0", 2)).num; 
-        dict_id_OPTION_X1 = dict_id_sam_optnl_sf (dict_id_make ("X1", 2)).num; 
-        dict_id_OPTION_XA = dict_id_sam_optnl_sf (dict_id_make ("XA", 2)).num; 
-        dict_id_OPTION_XN = dict_id_sam_optnl_sf (dict_id_make ("XN", 2)).num; 
-        dict_id_OPTION_XM = dict_id_sam_optnl_sf (dict_id_make ("XM", 2)).num; 
-        dict_id_OPTION_XO = dict_id_sam_optnl_sf (dict_id_make ("XO", 2)).num;
-        dict_id_OPTION_XG = dict_id_sam_optnl_sf (dict_id_make ("XG", 2)).num; 
-        dict_id_OPTION_XS = dict_id_sam_optnl_sf (dict_id_make ("XS", 2)).num; 
-        dict_id_OPTION_XE = dict_id_sam_optnl_sf (dict_id_make ("XE", 2)).num;
+        // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
+        dict_id_OPTION_X0 = dict_id_sam_optnl_sf (dict_id_make ("X0:i", 4)).num; 
+        dict_id_OPTION_X1 = dict_id_sam_optnl_sf (dict_id_make ("X1:i", 4)).num; 
+        dict_id_OPTION_XA = dict_id_sam_optnl_sf (dict_id_make ("XA:Z", 4)).num; 
+        dict_id_OPTION_XN = dict_id_sam_optnl_sf (dict_id_make ("XN:i", 4)).num; 
+        dict_id_OPTION_XM = dict_id_sam_optnl_sf (dict_id_make ("XM:i", 4)).num; 
+        dict_id_OPTION_XO = dict_id_sam_optnl_sf (dict_id_make ("XO:i", 4)).num;
+        dict_id_OPTION_XG = dict_id_sam_optnl_sf (dict_id_make ("XG:i", 4)).num; 
+        dict_id_OPTION_XS = dict_id_sam_optnl_sf (dict_id_make ("XS:i", 4)).num; 
+        dict_id_OPTION_XE = dict_id_sam_optnl_sf (dict_id_make ("XE:i", 4)).num;
 
-        dict_id_OPTION_mc = dict_id_sam_optnl_sf (dict_id_make ("mc", 2)).num;
+        // biobambam tags
+        dict_id_OPTION_mc = dict_id_sam_optnl_sf (dict_id_make ("mc:i", 4)).num;
+        dict_id_OPTION_ms = dict_id_sam_optnl_sf (dict_id_make ("ms:i", 4)).num;
 
         dict_id_OPTION_STRAND = dict_id_sam_optnl_sf (dict_id_make ("STRAND", 6)).num;
 

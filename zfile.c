@@ -102,7 +102,7 @@ bool zfile_skip_section_by_flags (SectionType st, DictIdType dict_id)
             return true;
 
         else if (flag_strip && 
-            (st == SEC_SAM_QUAL_DATA     || 
+            (st == SEC_SAM_QUAL_DATA     || st == SEC_SAM_MD_DATA ||
              st == SEC_SAM_QNAME_SF_DICT || st == SEC_SAM_QNAME_SF_B250 || st == SEC_SAM_QNAME_DICT || st == SEC_SAM_QNAME_B250 ||
              st == SEC_SAM_FLAG_DICT     || st == SEC_SAM_FLAG_B250     ||
              st == SEC_SAM_MAPQ_DICT     || st == SEC_SAM_MAPQ_B250     ||
@@ -466,6 +466,9 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
                         dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
                                            did_i, (uint32_t)ctx->word_list.len, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
         }
+        fprintf (stderr, "\n");
+
+        if (exe_type == EXE_GENOCAT) exit(0); // if this is genocat - we're done
 }
 
 
@@ -656,30 +659,6 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
     return true;
 }
 
-// ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed
-// variant data section (compressed by the compute thread in zfile_vcf_compress_vb_header) just before writing it to disk
-// note: this updates the z_data in memory (not on disk)
-void zfile_update_compressed_vb_header (VBlock *vb, uint32_t vcf_first_line_i)
-{
-    uint32_t pos=0;
-
-    SectionHeaderVbHeaderVCF *vb_header = (SectionHeaderVbHeaderVCF *)&vb->z_data.data[pos];
-    vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
-    vb_header->first_line   = BGEN32 (vcf_first_line_i);
-
-    if (flag_show_vblocks) {
-        fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u uncomprssed=%u compressed=%u num_sample_blocks=%u ht_per_line=%u max_gt_line_len=%u\n",
-                 vb->vblock_i, vcf_first_line_i, BGEN32 (vb_header->num_lines), 
-                 BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
-                 BGEN32 (vb_header->num_sample_blocks), BGEN32 (vb_header->num_haplotypes_per_line), 
-                 BGEN32 (vb_header->max_gt_line_len));
-    }
-    // now we can finally encrypt the header - if needed
-    if (vb_header->h.data_encrypted_len)  // non-zero if encrypted
-        crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
-                  BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
-}
-
 // ZIP
 void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
 {
@@ -839,6 +818,30 @@ void zfile_vcf_compress_vb_header (VBlockVCF *vb)
     vb->z_section_bytes[SEC_VCF_VB_HEADER] -= my_squeeze_len;
 }
 
+// ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed
+// variant data section (compressed by the compute thread in zfile_vcf_compress_vb_header) just before writing it to disk
+// note: this updates the z_data in memory (not on disk)
+void zfile_vcf_update_compressed_vb_header (VBlock *vb, uint32_t vcf_first_line_i)
+{
+    uint32_t pos=0;
+
+    SectionHeaderVbHeaderVCF *vb_header = (SectionHeaderVbHeaderVCF *)&vb->z_data.data[pos];
+    vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
+    vb_header->first_line   = BGEN32 (vcf_first_line_i);
+
+    if (flag_show_vblocks) {
+        fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u uncomprssed=%u compressed=%u num_sample_blocks=%u ht_per_line=%u max_gt_line_len=%u\n",
+                 vb->vblock_i, vcf_first_line_i, BGEN32 (vb_header->num_lines), 
+                 BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
+                 BGEN32 (vb_header->num_sample_blocks), BGEN32 (vb_header->num_haplotypes_per_line), 
+                 BGEN32 (vb_header->max_gt_line_len));
+    }
+    // now we can finally encrypt the header - if needed
+    if (vb_header->h.data_encrypted_len)  // non-zero if encrypted
+        crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
+                  BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
+}
+
 void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCF *vb, const Buffer *haplotype_sections_data, unsigned sb_i)
 {
     gtshark_compress_haplotype_data (vb, haplotype_sections_data, sb_i); // populates vb->gtshark_*
@@ -925,16 +928,16 @@ void zfile_vcf_read_one_vb (VBlockVCF *vb)
         NEXTENT (bool, vb->is_sb_included) = samples_is_sb_included (num_samples_per_block, sb_i);
  
         // make sure we have enough space for the section pointers
-        buf_alloc (vb, &vb->z_section_headers, sizeof (unsigned) * (section_i + 3), 2, "z_section_headers", 2);
+        buf_alloc (vb, &vb->z_section_headers, sizeof (uint32_t) * (section_i + 3), 2, "z_section_headers", 2);
 
         if (vb_header->has_genotype_data)
-            READ_SB_SECTION (SEC_VCF_GT_DATA, SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_VCF_GT_DATA,         SectionHeader, sb_i);
 
         if (vb_header->phase_type == PHASE_MIXED_PHASED) 
-            READ_SB_SECTION (SEC_VCF_PHASE_DATA, SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_VCF_PHASE_DATA,      SectionHeader, sb_i);
 
         if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) 
-            READ_SB_SECTION (SEC_VCF_HT_DATA, SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_VCF_HT_DATA,         SectionHeader, sb_i);
 
         if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
             READ_SB_SECTION (SEC_HT_GTSHARK_X_LINE,   SectionHeader, sb_i);
@@ -979,6 +982,29 @@ void zfile_sam_compress_vb_header (VBlockSAM *vb)
     vb->z_data.name = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
     vb->z_data.param = vb->vblock_i;
     comp_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, NULL, NULL);
+}
+
+// ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed
+// variant data section (compressed by the compute thread in zfile_sam_compress_vb_header) just before writing it to disk
+// note: this updates the z_data in memory (not on disk)
+void zfile_sam_update_compressed_vb_header (VBlock *vb, uint32_t vcf_first_line_i)
+{
+    uint32_t pos=0;
+
+    SectionHeaderVbHeaderSAM *vb_header = (SectionHeaderVbHeaderSAM *)&vb->z_data.data[pos];
+    vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
+    vb_header->first_line   = BGEN32 (vcf_first_line_i);
+
+    if (flag_show_vblocks) {
+        fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u uncomprssed=%u compressed=%u longest_line_len=%u\n",
+                 vb->vblock_i, vcf_first_line_i, BGEN32 (vb_header->num_lines), 
+                 BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
+                 BGEN32 (vb_header->longest_line_len));
+    }
+    // now we can finally encrypt the header - if needed
+    if (vb_header->h.data_encrypted_len)  // non-zero if encrypted
+        crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
+                  BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
 }
 
 void zfile_sam_read_one_vb (VBlockSAM *vb)

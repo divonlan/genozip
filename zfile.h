@@ -42,8 +42,6 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
                                       BufferP uncompressed_data, const char *uncompressed_data_buf_name,
                                       SectionType expected_section_type);
 
-extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
-
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */);
 
 extern bool zfile_skip_section_by_flags (SectionType st, DictIdType dict_id);
@@ -58,6 +56,7 @@ extern bool zfile_skip_section_by_flags (SectionType st, DictIdType dict_id);
 extern void zfile_write_txt_header (BufferP vcf_header_text, bool is_first_vcf);
 extern bool zfile_update_txt_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
 extern void zfile_vcf_compress_vb_header (VBlockVCFP vb);
+extern void zfile_vcf_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 extern void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCFP vb, ConstBufferP haplotype_sections_data, unsigned sb_i);
 extern void zfile_vcf_read_one_vb (VBlockVCFP vb);
 
@@ -74,5 +73,6 @@ extern int v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name
 
 extern void zfile_sam_read_one_vb (VBlockSAMP vb);
 extern void zfile_sam_compress_vb_header (VBlockSAMP vb);
+extern void zfile_sam_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 
 #endif

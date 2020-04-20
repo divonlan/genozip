@@ -39,6 +39,38 @@ static void piz_sam_reconstruct_pos (VBlockSAM *vb, uint32_t sam_line_i, char se
     vb->next_random_pos = i+1; // skip the trailing \t too
 }
 
+static void piz_sam_reconstruct_tlen (VBlockSAM *vb, const char *tlen, unsigned tlen_len)
+{
+    ASSERT0 (tlen, "Error in piz_sam_reconstruct_tlen: tlen=NULL");
+    ASSERT0 (tlen_len, "Error in piz_sam_reconstruct_tlen: tlen_len=0");
+
+    // case - tlen is the negative of the previous line
+    if ((tlen_len == 1) && (tlen[0] == '*')) {
+        ASSERT0 (vb->last_tlen_abs && vb->last_tlen_abs_len, "Error in piz_sam_reconstruct_tlen: tlen=\"*\" but this is the first line in the vb");
+
+        // if previous line was a positive, this line is negative
+        if (vb->last_tlen_is_positive) 
+            buf_add (&vb->reconstructed_line, "-", 1); 
+
+        buf_add (&vb->reconstructed_line, vb->last_tlen_abs, vb->last_tlen_abs_len); 
+
+        // flip the sign of last_tlen
+        vb->last_tlen_is_positive = !vb->last_tlen_is_positive;
+    }
+
+    // case - tlen is not a negative of previous line - output as-is
+    else {
+        buf_add (&vb->reconstructed_line, tlen, tlen_len); 
+     
+        // update last_tlen_*
+        vb->last_tlen_is_positive = tlen[0] != '-';
+        vb->last_tlen_abs         = &tlen[!vb->last_tlen_is_positive];
+        vb->last_tlen_abs_len     = tlen_len - !vb->last_tlen_is_positive;
+    }
+
+    buf_add (&vb->reconstructed_line, "\t", 1); 
+}
+
 static void piz_sam_reconstruct_seq_qual (VBlockSAM *vb, uint32_t cigar_seq_len, 
                                           const Buffer *data, uint32_t *next,
                                           const char *field_name, uint32_t sam_line_i, bool skip)
@@ -52,7 +84,21 @@ static void piz_sam_reconstruct_seq_qual (VBlockSAM *vb, uint32_t cigar_seq_len,
     *next += len;
 }
 
-static void piz_sam_reconstruct_md (VBlockSAM *vb, uint32_t sam_line_i, uint32_t cigar_seq_len, bool skip)
+static inline void piz_sam_reconstruct_AS (VBlockSAM *vb, const char *snip, unsigned snip_len,
+                                           uint32_t sam_line_i, uint32_t cigar_seq_len)
+{
+    if (snip[0] == '*') { // delta vs seq_len
+        unsigned value = cigar_seq_len - atoi (&snip[1]);
+        char value_str[20];
+        unsigned value_str_len;
+        buf_display_uint_no_commas (value, value_str, &value_str_len);
+        buf_add (&vb->reconstructed_line, value_str, value_str_len);
+    }
+    else // not delta encoded
+        buf_add (&vb->reconstructed_line, snip, snip_len);
+}
+
+static inline void piz_sam_reconstruct_MD (VBlockSAM *vb, uint32_t sam_line_i, uint32_t cigar_seq_len)
 {
     uint32_t next_md_start = vb->next_md;
     ARRAY (char, md, vb->md_data);
@@ -62,19 +108,29 @@ static void piz_sam_reconstruct_md (VBlockSAM *vb, uint32_t sam_line_i, uint32_t
 
     uint32_t md_len = vb->next_md - next_md_start;
 
-    if (!skip) {
-        // case: MD is stored as-is - just copy it
-        if (md_len) {
-            buf_add (&vb->reconstructed_line, &md[next_md_start], md_len);
-        }
-        // case: MD is an empty string - reconstruct the original MD that is the sequence length
-        else {
-            char seq_len_str[20]; 
-            unsigned seq_len_str_len;
-            buf_display_uint_no_commas (cigar_seq_len, seq_len_str, &seq_len_str_len);
-            buf_add (&vb->reconstructed_line, seq_len_str, seq_len_str_len);
-        }
+    char reconstruced_md_str[MAX_SAM_MD_LEN]; 
+    unsigned reconstruced_md_str_len;
+
+    // case: MD is an empty string - reconstruct the original MD that is the sequence length
+    if (!md_len) {
+        buf_display_uint_no_commas (cigar_seq_len, reconstruced_md_str, &reconstruced_md_str_len);
+        buf_add (&vb->reconstructed_line, reconstruced_md_str, reconstruced_md_str_len);
     }
+    
+    // case: MD ends with a * eg "119C*" - we reconstruct the original, eg "119C31" - using the sequence length 
+    else if (md[next_md_start+md_len-1] == '*') {
+        unsigned partial_seq_len_by_md_field = seg_sam_get_seq_len_by_MD_field (&md[next_md_start], md_len-1, NULL);
+
+        memcpy (reconstruced_md_str, &md[next_md_start], md_len-1);
+        buf_display_uint_no_commas (cigar_seq_len - partial_seq_len_by_md_field, 
+                                    &reconstruced_md_str[md_len-1], &reconstruced_md_str_len);
+        buf_add (&vb->reconstructed_line, reconstruced_md_str, md_len-1 + reconstruced_md_str_len);
+    }
+    
+    // case: MD is stored as-is - just copy it
+    else 
+        buf_add (&vb->reconstructed_line, &md[next_md_start], md_len);
+
     vb->next_md++; // skip the tab;
 }
 
@@ -107,7 +163,7 @@ static void piz_sam_map_optional_subfields (VBlockSAM *vb)
         // note - optional 
         for (unsigned i=0; i < optional_mapper->num_subfields; i++) {
                         
-            DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&optional[i*5], 2)); // get dict_id from first 2 characters eg "MX"
+            DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&optional[i*5], 4)); // get dict_id from first 4 characters eg "MX:i"
             optional_mapper->did_i[i] = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, dict_id); 
         }
     }
@@ -119,7 +175,9 @@ static void piz_sam_map_optional_subfields (VBlockSAM *vb)
 
 static void piz_sam_reconstruct_qname (VBlockSAM *vb, const char *template, unsigned template_len, uint32_t sam_line_i)
 {
-    for (unsigned i=0; i <= template_len; i++) {
+    if (template_len==1 && template[0]=='*') template_len=0; // no separators, only one components
+    
+    for (unsigned i=0; i <= template_len; i++) { // for template_len, we have template_len+1 elements
         
         const char *snip;
         unsigned snip_len;
@@ -131,7 +189,7 @@ static void piz_sam_reconstruct_qname (VBlockSAM *vb, const char *template, unsi
     }
 }
 
-static void piz_sam_reconstruct_sa_oa_xa (VBlockSAM *vb, bool is_xa, uint32_t sam_line_i)
+static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t sam_line_i)
 {
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
@@ -186,8 +244,9 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
 
         if (!flag_strip) buf_add (&vb->reconstructed_line, &oname[sf_i*5], 5)
 
-        DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&oname[sf_i*5], 2));
-        MtfContext *ctx = &vb->mtf_ctx[opt_map->did_i[sf_i]]; // DID_I_NONE if this subfield has no dictionary (eg MD, E2, U2)
+        DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&oname[sf_i*5], 4));
+        uint8_t did_i = opt_map->did_i[sf_i];
+        MtfContext *ctx = did_i != DID_I_NONE ? &vb->mtf_ctx[did_i] : NULL; // NULL if this subfield has no dictionary (eg MD, E2, U2)
 
         // E2 doesn't have a dictionary - its data is stored in SEQ
         if (dict_id.num == dict_id_OPTION_E2)
@@ -198,9 +257,19 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
             if (!flag_strip) piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, "U2", sam_line_i, false);
         }
 
-        else if (dict_id.num == dict_id_OPTION_MD) 
-            piz_sam_reconstruct_md (vb, sam_line_i, cigar_seq_len, flag_strip);
-        
+        else if (dict_id.num == dict_id_OPTION_MD) {
+            if (!flag_strip) 
+                piz_sam_reconstruct_MD (vb, sam_line_i, cigar_seq_len);
+        }
+
+        // AS is normally stored as a delta vs seq_len
+        else if (dict_id.num == dict_id_OPTION_AS) {
+            if (!flag_strip) {
+                LOAD_SNIP (did_i);
+                piz_sam_reconstruct_AS (vb, snip, snip_len, sam_line_i, cigar_seq_len);
+            }
+        }
+
         // MC and OC are stored in the CIGAR dictionary
         else if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) {
             if (!flag_strip) {
@@ -209,9 +278,9 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
             }
         }
 
-        else if (dict_id.num == dict_id_OPTION_mc && oname[sf_i*5 + 3] == 'i') {
+        else if (dict_id.num == dict_id_OPTION_mc) {
             if (!flag_strip) {
-                LOAD_SNIP (ctx->did_i);
+                LOAD_SNIP (did_i);
                 char mc_str[30];
                 piz_decode_pos (vb->last_pos, snip, snip_len, mc_str, &snip_len); 
                 buf_add (&vb->reconstructed_line, mc_str, snip_len);
@@ -219,15 +288,14 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
         }
         
         // SA, XA and OA have subsubfields IF snip starts with ascii 255
-        else if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA ||
-                 (dict_id.num == dict_id_OPTION_XA && oname[sf_i*5 + 3] == 'Z')) {
+        else if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA || dict_id.num == dict_id_OPTION_XA) {
 
             mtf_get_next_snip ((VBlockP)vb, ctx, NULL, &snip, &snip_len, sam_line_i);
 
             if (snip[0] == -1) {
                 unsigned repeats = atoi (&snip[1]);
                 for (unsigned r=0; r < repeats; r++)             
-                    piz_sam_reconstruct_sa_oa_xa (vb, (dict_id.num == dict_id_OPTION_XA), sam_line_i);
+                    piz_sam_reconstruct_SA_OA_XA (vb, (dict_id.num == dict_id_OPTION_XA), sam_line_i);
             }
             else if (!flag_strip)
                 buf_add (&vb->reconstructed_line, snip, snip_len);
@@ -348,7 +416,10 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
             IFNOTSTRIP("0",1) {}; // add the default if we're stripping
         }
         // TLEN - from its dictionary
-        IFNOTSTRIP("0",1) { RECONSTRUCT_FROM_DICT (SAM_TLEN); }
+        IFNOTSTRIP("0",1) {         
+            LOAD_SNIP (SAM_TLEN);
+            piz_sam_reconstruct_tlen (vb, snip, snip_len);
+        }
         
         // SEQ & QUAL data
         piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->seq_data,  &vb->next_seq,  "SEQ",  vb->first_line + vb_line_i, false);

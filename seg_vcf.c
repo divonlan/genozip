@@ -331,7 +331,7 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const char *s
         char ht = *(str++); 
         len--;
 
-        ASSERT ((ht >= '0' && ht <= '9') || ht == '.' || ht == '*',
+        ASSERT (IS_DIGIT(ht) || ht == '.' || ht == '*',
                 "Error: invalid VCF file - vb_line_i=%u - expecting an allele in a sample to be a number 0-9 or . , but seeing %c", vb_line_i, *str);
 
         // single-digit allele numbers
@@ -340,12 +340,12 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const char *s
         if (!len) break;
 
         // handle 2-digit allele numbers
-        if (ht != '.' && *str >= '0' && *str <= '9') {
+        if (ht != '.' && IS_DIGIT (*str)) {
             unsigned allele = 10 * (ht-'0') + (*(str++) - '0');
             len--;
 
             // make sure there isn't a 3rd digit
-            ASSERT (!len || *str < '0' || * str > '9', "Error: VCF file - vb_line_i=%u sample %u - genozip currently supports only alleles up to 99", vb_line_i, sample_i+1);
+            ASSERT (!len || !IS_DIGIT (*str), "Error: VCF file - vb_line_i=%u sample %u - genozip currently supports only alleles up to 99", vb_line_i, sample_i+1);
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
 

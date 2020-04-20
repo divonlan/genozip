@@ -256,7 +256,9 @@ typedef struct VBlockSAM {
 
     uint32_t last_rname_node_index;      // ZIP: RNAME node index of previous line
 
-    unsigned mc_did_i;                   // ZIP: did_i of mc (small letters) optional field
+    const char *last_tlen_abs;          // ZIP & PIZ: last tlen segmented - pointer into vb->txt_data.data (ZIP) or TLEN dictionary (PIZ)        
+    uint32_t last_tlen_abs_len;        // absolute value of last tlen, its sign, and the string length of last_tlen_abs
+    bool last_tlen_is_positive;
 
     Buffer random_pos_data;              // POS data - data from : 
                                          // 1. POS if RNAME differs from prev line RNAME

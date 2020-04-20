@@ -247,6 +247,10 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
                            &instream->next_in_1, &instream->avail_in_1,
                            &instream->next_in_2, &instream->avail_in_2);
 
+    ASSERT (instream->avail_in_1 + instream->avail_in_2 <= instream->avail_in, 
+            "Expecting avail_in_1=%u + avail_in_2=%u <= avail_in=%u but avail_in_1+avail_in_2=%u",
+            instream->avail_in_1, instream->avail_in_2, instream->avail_in, instream->avail_in_1+instream->avail_in_2);
+            
     uint32_t bytes_served_1 = MIN (instream->avail_in_1, *size);
     if (bytes_served_1) {
         memcpy (buf, instream->next_in_1, bytes_served_1);
