@@ -258,7 +258,7 @@ static void main_show_sections (void)
         "Haplotype data", "HT separator char", "Phasing char",
 
         "Line block metadata",
-        "SEQ data", "QUAL data", "Random POS data", "MD data",
+        "SEQ data", "QUAL data", "RAND_POS data", "MD data",
         "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
         "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
         "POS b250 (delta)", "POS dict (delta)", 

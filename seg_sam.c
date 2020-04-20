@@ -10,6 +10,7 @@
 #include "header.h"
 #include "file.h"
 #include "random_access.h"
+#include "endianness.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
 
@@ -153,6 +154,47 @@ static inline int seg_sam_get_next_subitem (const char *str, int str_len, char s
 #define DEC_SSF(ssf) const char *ssf; \
                      int ssf##_len;
 
+static inline uint32_t seg_sam_add_to_random_pos_data (VBlockSAM *vb, SectionType sec, 
+                                                       const char *snip, unsigned snip_len, unsigned add_bytes,
+                                                       const char *field_name)
+{
+    bool standard_random_pos_encoding = true;
+
+    // it is eligable for standard encoding only if the length is within the range
+    if (!snip_len || snip_len > 10) standard_random_pos_encoding = false; // more than 10 digits is for sure bigger than 4GB=32bits
+
+    // a multi-digit number cannot have a leading zero
+    if (snip_len > 1 && snip[0] == '0') standard_random_pos_encoding = false;
+
+    // it is eligable for standard encoding only if all the characters are digits
+    uint64_t n64=0; // 64 bit just in case we go above 32 bit
+    if (standard_random_pos_encoding)
+        for (unsigned i=0; i < snip_len; i++) {
+            if (!IS_DIGIT (snip[i])) {
+                standard_random_pos_encoding = false;
+                break;
+            }
+            n64 = n64 * 10 + (snip[i] - '0');
+        }
+
+    // it is eligable for standard encoding only if it fits in 32 bit (0xffffffff is reserved for a future escape, if needed)
+    if (n64 > 0xfffffffe) standard_random_pos_encoding = false;
+
+    ASSERT (standard_random_pos_encoding, "%s: Error in %s, vb_i=%u: Bad position data in field %s - expecting an integer between 0 and %u without leading zeros, but instead seeing \"%.*s\"",
+            global_cmd, txt_name, vb->vblock_i, field_name, 0xfffffffe, snip_len, snip);
+
+    buf_alloc (vb, &vb->random_pos_data, sizeof(uint32_t) * MAX (vb->random_pos_data.len+1, vb->num_lines), 2, 
+               "random_pos_data", vb->vblock_i);
+
+    // 32 bit number - this compresses better than textual numbers with LZMA
+    uint32_t n32 = (uint32_t)n64;
+    NEXTENT (uint32_t, vb->random_pos_data) = BGEN32 (n32);
+
+    vb->txt_section_bytes[sec] += add_bytes;
+
+    return n32;
+}
+
 static inline void seg_sam_add_to_data_buf (VBlockSAM *vb, Buffer *buf, const char *buf_name, SectionType sec, 
                                             const char *snip, unsigned snip_len, unsigned add_bytes)
 {
@@ -162,7 +204,8 @@ static inline void seg_sam_add_to_data_buf (VBlockSAM *vb, Buffer *buf, const ch
     vb->txt_section_bytes[sec] += add_bytes;
 }
 
-static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i)
+static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i,
+                                        const char *field_name)
 {
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
     // Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
@@ -182,7 +225,7 @@ static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsign
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
 
         // pos - add to the random pos data together with all other random pos data (originating from POS, PNEXT etc).
-        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, pos, pos_len, pos_len+1);
+        seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, pos, pos_len, pos_len+1, field_name);
 
         // nm : we store in the same dictionary as the Optional subfield NM
         seg_one_subfield ((VBlockP)vb, nm, nm_len, vb_line_i, (DictIdType)dict_id_OPTION_NM, 
@@ -229,8 +272,8 @@ static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned fie
         // pos - add to the pos data together with all other pos data (POS, PNEXT etc),
         // strand - add to separate STRAND dictionary, to not adversely affect compression of POS.
         // there is no advantage to storing the strand together with pos as they are not correlated.
-        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, pos+1, pos_len-1, 
-                                 pos_len); // one less for the strand, one more for the ,
+        seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, pos+1, pos_len-1, pos_len, "XA"); // one less for the strand, one more for the ,
+
         // strand
         seg_one_subfield ((VBlockP)vb, pos, 1, vb_line_i, (DictIdType)dict_id_OPTION_STRAND, 
                           SEC_SAM_OPTNL_SF_B250, 1);
@@ -359,7 +402,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
     // some fields have "repeats" - multiple instances of the same format of data separated by a ;
     unsigned repeats = 0; 
     if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA)
-        repeats = seg_sam_SA_or_OA_field (vb, value, value_len, vb_line_i);
+        repeats = seg_sam_SA_or_OA_field (vb, value, value_len, vb_line_i, dict_id.num == dict_id_OPTION_SA ? "SA" : "OA");
 
     else if (dict_id.num == dict_id_OPTION_XA) 
         repeats = seg_sam_XA_field (vb, value, value_len, vb_line_i);
@@ -560,10 +603,9 @@ const char *seg_sam_data_line (VBlock *vb_,
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
     
-    if (rname_node_index != vb->last_rname_node_index) { // different rname than prev line - store full pos in random
-        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1);
-        vb->last_pos = seg_pos_snip_to_int (field_start, vb_line_i, "POS");
-    }
+    if (rname_node_index != vb->last_rname_node_index)  // different rname than prev line - store full pos in random
+        vb->last_pos = seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1, "POS");
+
     else // same rname - do a delta
         vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i, "POS");
 
@@ -605,7 +647,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     }
 
     else  // RNAME and RNEXT differ - store in random_pos
-        seg_sam_add_to_data_buf (vb, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1);
+        seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1, "PNEXT");
 
     // TLEN - replace a value that is the negative of the previous line with "*"
     field_start = next_field;

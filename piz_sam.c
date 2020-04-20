@@ -25,18 +25,23 @@
         buf_add (&vb->reconstructed_line, snip, snip_len); \
         buf_add (&vb->reconstructed_line, "\t", 1); 
 
-static void piz_sam_reconstruct_pos (VBlockSAM *vb, uint32_t sam_line_i, char separator, bool skip)
+// reconstructs POS from random_pos_data, and returns a pointer to the reconstructed pos string (terminated by separator) 
+static uint32_t piz_sam_reconstruct_random_pos (VBlockSAM *vb, uint32_t sam_line_i, char separator, bool skip)
 {
-    unsigned i=vb->next_random_pos; for (; i < vb->random_pos_data.len && vb->random_pos_data.data[i] != '\t'; i++);
+    ASSERT (vb->next_random_pos < vb->random_pos_data.len, "Error reading sam_line=%u: unexpected end of RANDOM_POS data", sam_line_i);
     
-    ASSERT (i < vb->random_pos_data.len, "Error reading sam_line=%u: unexpected end of RANDOM_POS data", sam_line_i);
-
+    uint32_t pos = BGEN32 (*ENT (uint32_t, vb->random_pos_data, vb->next_random_pos++));
+    
     if (!skip) {
-        buf_add (&vb->reconstructed_line, &vb->random_pos_data.data[vb->next_random_pos], i - vb->next_random_pos + (separator=='\t'));
-        if (separator != '\t') buf_add (&vb->reconstructed_line, &separator, 1);
+        char pos_str[20];
+        unsigned pos_str_len;
+        buf_display_uint_no_commas (pos, pos_str, &pos_str_len);
+
+        buf_add (&vb->reconstructed_line, pos_str, pos_str_len);
+        buf_add (&vb->reconstructed_line, &separator, 1);
     }
 
-    vb->next_random_pos = i+1; // skip the trailing \t too
+    return pos;
 }
 
 static void piz_sam_reconstruct_tlen (VBlockSAM *vb, const char *tlen, unsigned tlen_len)
@@ -176,7 +181,7 @@ static void piz_sam_map_optional_subfields (VBlockSAM *vb)
 static void piz_sam_reconstruct_qname (VBlockSAM *vb, const char *template, unsigned template_len, uint32_t sam_line_i)
 {
     if (template_len==1 && template[0]=='*') template_len=0; // no separators, only one components
-    
+
     for (unsigned i=0; i <= template_len; i++) { // for template_len, we have template_len+1 elements
         
         const char *snip;
@@ -215,7 +220,7 @@ static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t sa
     }
 
     // pos
-    piz_sam_reconstruct_pos (vb, sam_line_i, ',', flag_strip); // if flag_strip - consume but don't output
+    piz_sam_reconstruct_random_pos (vb, sam_line_i, ',', flag_strip); // if flag_strip - consume but don't output
     
     if (!is_xa) ADD_SNIP(0, ","); // SA and OA: add strand now
 
@@ -357,10 +362,9 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
             buf_add (&vb->reconstructed_line, pos_str, snip_len);
             buf_add (&vb->reconstructed_line, "\t", 1);
         }
-        else { // different rname - get from random_pos
-            vb->last_pos = seg_pos_snip_to_int (&vb->random_pos_data.data[vb->next_random_pos], vb_line_i, "POS");
-            piz_sam_reconstruct_pos (vb, vb->first_line + vb_line_i, '\t', false);
-        }
+        else  // different rname - get from random_pos
+            vb->last_pos = piz_sam_reconstruct_random_pos (vb, vb->first_line + vb_line_i, '\t', false);
+
         last_rname_word_index = this_rname_word_index;
 
         // MAPQ - from its dictionary
@@ -412,7 +416,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         }
         else {
             // note: we always consume (but possible skip outputting), even if flag_strip because it consumes the same random_pos as POS
-            piz_sam_reconstruct_pos (vb, vb->first_line + vb_line_i, '\t', flag_strip);
+            piz_sam_reconstruct_random_pos (vb, vb->first_line + vb_line_i, '\t', flag_strip);
             IFNOTSTRIP("0",1) {}; // add the default if we're stripping
         }
         // TLEN - from its dictionary
@@ -513,7 +517,8 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
     // RAND_POS, MD, SEQ and QUAL (data also contains E2 and U2 respectively, if they exist)
     SectionHeader *pos_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
     zfile_uncompress_section ((VBlockP)vb, pos_header, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA);    
-    
+    vb->random_pos_data.len /= 4; // its an array of uint32_t
+
     SectionHeader *md_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
     zfile_uncompress_section ((VBlockP)vb, md_header, &vb->md_data, "md_data", SEC_SAM_MD_DATA);    
     
