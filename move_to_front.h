@@ -114,7 +114,7 @@ extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VBlockP vb);
 extern void mtf_zero_all_sorters (VBlockP vb);
 
-extern void mtf_initialize_mutex (void);
+extern void mtf_initialize_for_zip (void);
 extern void mtf_update_stats (VBlockP vb);
 extern void mtf_free_context (MtfContext *ctx);
 extern void mtf_destroy_context (MtfContext *ctx);

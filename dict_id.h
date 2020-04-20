@@ -72,7 +72,7 @@ extern uint64_t dict_id_vcf_fields[], dict_id_sam_fields[],
 
                 dict_id_OPTION_STRAND;
 
-extern void dict_id_initialize (DataType data_type);
+extern void dict_id_initialize (void);
 
 extern const char *dict_id_display_type (DictIdType dict_id);
 

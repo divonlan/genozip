@@ -336,7 +336,7 @@ void mtf_clone_ctx (VBlock *vb)
     COPY_TIMER (vb->profile.mtf_clone_ctx)
 }
 
-void mtf_initialize_mutex (void)
+void mtf_initialize_for_zip (void)
 {
     if (z_file->dicts_mutex_initialized) return;
 
@@ -430,6 +430,10 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
         // first data for this dict (usually, but not always, vb_i=1) - move to zf_ctx and leave overlay
         zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->mtf.len; // number of new words in this dict from this VB
 
+        // thread safety note: zf_ctx buffers are already added to evb's buffer list by file_initialize_z_file_buffers
+        // so these buf_move calls don't touch buf_lists and hence there is no possibility of conflict with the I/O thread
+        // that might be concurently writing to its buffer list
+
         buf_move (evb, &zf_ctx->dict, merging_vb, &vb_ctx->dict);
         buf_set_overlayable (&zf_ctx->dict);
         buf_overlay (merging_vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict", did_i);
@@ -440,7 +444,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
         // allocate hash table, based on the statitics gather by this first vb that is merging this dict and 
         // populate the hash table without needing to reevalate the snips (we know none are in the hash table, but all are in mtf and dict)
-        if (!buf_is_allocated (&zf_ctx->global_hash)) 
+        if (zf_ctx->global_hash.size <= 1) // only initial allocation in zip_dict_data_initialize
             hash_alloc_global (merging_vb, zf_ctx, vb_ctx);
 
         // encode in base250 - to be used by zip_vcf_generate_genotype_one_section() and zip_generate_b250_section()

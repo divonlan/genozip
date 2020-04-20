@@ -263,6 +263,39 @@ bool file_open_txt (File *file)
     return file->file != 0;
 }
 
+// we insert all the z_file buffers into the buffer list in advance, to avoid this 
+// thread satety issue:
+// without our pre-allocation, some of these buffers will be first allocated by a compute threads 
+// when the first vb containing a certain did_i is merged in (for the mtf_ctx buffers) or
+// when the first dictionary is compressed (for dict_data) or ra is merged (for ra_buf). while these operations 
+// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
+// may change buf_lists in evb buffers, while the I/O thread might be doing so concurrently
+// resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
+// of the execution.
+// with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
+static void file_initialize_z_file_buffers (File *file)
+{
+    for (unsigned i=0; i < MAX_DICTS; i++) {
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].dict);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].b250);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].mtf);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].mtf_i);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].global_hash);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].ol_dict);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].ol_mtf);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].local_hash);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].sorter);
+        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].word_list);
+    }
+
+    buf_add_to_buffer_list (evb, &file->dict_data);
+    buf_add_to_buffer_list (evb, &file->ra_buf);
+    buf_add_to_buffer_list (evb, &file->section_list_buf);
+    buf_add_to_buffer_list (evb, &file->section_list_dict_buf);
+    buf_add_to_buffer_list (evb, &file->unconsumed_txt);
+    buf_add_to_buffer_list (evb, &file->v1_next_vcf_header);
+}
+
 // returns true if successful
 static bool file_open_z (File *file)
 {
@@ -295,6 +328,8 @@ static bool file_open_z (File *file)
         file->z_last_read = file->z_next_read = READ_BUFFER_SIZE;
 
     memset (file->dict_id_to_did_i_map, DID_I_NONE, sizeof(file->dict_id_to_did_i_map));
+
+    file_initialize_z_file_buffers (file);
 
     return file->file != 0;
 }

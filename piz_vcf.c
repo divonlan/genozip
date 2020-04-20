@@ -673,7 +673,7 @@ static void piz_vcf_realloc_datalines (VBlockVCF *vb, uint32_t new_num_data_line
 {
     // we need to remove the Buffers within the PizDataLineVCF from the buffer list, and re-add them with their new address
     for (uint32_t i=0; i < vb->num_lines_alloced ; i++) 
-        buf_remove_from_buffer_list ((VBlockP)vb, &DATA_LINE(vb, i)->line);
+        buf_remove_from_buffer_list (&DATA_LINE(vb, i)->line);
 
     vb->data_lines = REALLOC (vb->data_lines, new_num_data_lines * sizeof (PizDataLineVCF));
     memset (DATA_LINE (vb, vb->num_lines_alloced), 0, (new_num_data_lines - vb->num_lines_alloced) * sizeof(PizDataLineVCF));

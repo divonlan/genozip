@@ -162,10 +162,10 @@ VBlock *vb_get_vb (unsigned vblock_i)
 
     // initialize VB fields that need to be a value other than 0
     VBlock *vb = pool->vb[vb_i];
-    vb->id               = vb_i;
-    vb->in_use           = true;
-    vb->vblock_i         = vblock_i;
-    vb->buffer_list.vb_i = vblock_i;
+    vb->id             = vb_i;
+    vb->in_use         = true;
+    vb->vblock_i       = vblock_i;
+    vb->buffer_list.vb = vb;
     memset (vb->dict_id_to_did_i_map, DID_I_NONE, sizeof(vb->dict_id_to_did_i_map));
 
     return vb;

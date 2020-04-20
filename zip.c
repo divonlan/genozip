@@ -219,7 +219,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
     Dispatcher dispatcher = dispatcher_init (max_threads, last_vblock_i, false, is_last_file, vcf_basename);
 
-    dict_id_initialize (z_file->data_type);
+    dict_id_initialize();
 
     unsigned txt_line_i = 1; // the next line to be read (first line = 1)
     
@@ -228,7 +228,8 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     bool success = header_txt_to_genozip (&txt_line_i);
     if (!success) goto finish;
 
-    mtf_initialize_mutex();
+    mtf_initialize_for_zip();
+
     if (z_file->data_type == DATA_TYPE_VCF) zip_vcf_initialize();
 
     uint32_t max_lines_per_vb=0;

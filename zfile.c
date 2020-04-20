@@ -214,7 +214,6 @@ static void zfile_get_metadata(char *metadata)
 void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx, 
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
-//printf ("Start compress dict vb_i=%u did_i=%u\n", vb->vblock_i, ctx->did_i);
     START_TIMER;
 
     ASSERT (section_type_is_dictionary(ctx->dict_section_type),
@@ -228,7 +227,7 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     header.h.data_uncompressed_len = BGEN32 (num_chars);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary));
     header.h.data_compression_alg  = COMPRESS_BZLIB;
-    header.h.vblock_i       = BGEN32 (vb->vblock_i);
+    header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.num_snips               = BGEN32 (num_words);
     header.dict_id                 = ctx->dict_id;
@@ -242,7 +241,6 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
         fprintf (stderr, "%.*s\t", num_chars, data);
 
     z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
-    z_file->dict_data.param = ctx->did_i;
     comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
 
     COPY_TIMER (vb->profile.zfile_compress_dictionary_data)    

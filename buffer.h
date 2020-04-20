@@ -19,6 +19,7 @@ typedef enum {BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY} BufferType; // BUF_UN
 typedef struct Buffer {
     BufferType type;
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
+    
     const char *name; // name of allocator - used for memory debugging & statistics
     uint32_t param;   // parameter provided by allocator - used for memory debugging & statistics
     uint64_t size;    // number of bytes allocated to memory
@@ -27,13 +28,22 @@ typedef struct Buffer {
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 
     // info on the allocator of this buffer
-    VBlockP allocating_vb;
-    uint32_t vb_i;    // the vblock_i that allocated this buffer
+    VBlockP vb;       // vb that owns this buffer, and which this buffer is in its buf_list
     const char *func; // the allocating function
     uint32_t code_line;
 } Buffer;
 
-#define EMPTY_BUFFER {BUF_UNALLOCATED,false,NULL,0,0,0,NULL,NULL,NULL,0,NULL,0}
+#define EMPTY_BUFFER { .type        = BUF_UNALLOCATED,\
+                       .overlayable = false,\
+                       .name        = NULL,\
+                       .param       = 0,\
+                       .size        = 0,\
+                       .len         = 0,\
+                       .data        = NULL,\
+                       .memory      = NULL,\
+                       .vb          = NULL,\
+                       .func        = NULL,\
+                       .code_line   =0 }
 
 #define ARRAY(element_type, name, buf) element_type *name = ((element_type *)((buf).data)) 
 
@@ -107,7 +117,7 @@ extern char *buf_display_pointer (const void *p, char *str /* POINTER_STR_LEN by
 #define buf_zero(buf_p) { memset ((buf_p)->data, 0, (buf_p)->size); }
 
 extern void buf_add_to_buffer_list (VBlockP vb, Buffer *buf);
-extern void buf_remove_from_buffer_list (VBlockP vb, Buffer *buf);
+extern void buf_remove_from_buffer_list (Buffer *buf);
 
 extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
 #define FREE(p) buf_low_level_free (p, __FUNCTION__, __LINE__);

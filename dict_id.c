@@ -6,6 +6,7 @@
 #include "genozip.h"
 #include "dict_id.h"
 #include "header.h"
+#include "file.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 
@@ -27,15 +28,13 @@ uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
          dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
          dict_id_OPTION_STRAND=0;
           
-static DataType last_data_type = DATA_TYPE_NONE;
-
 DictIdType DICT_ID_NONE = {0};
 
-void dict_id_initialize (DataType data_type) 
+void dict_id_initialize (void) 
 {   // note: this uint64_t values will be different in big and little endian machines 
     // (it's ok, they never get stored in the file)
 
-    switch (data_type) { 
+    switch (z_file->data_type) { 
     case DATA_TYPE_VCF:
         for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
             dict_id_vcf_fields[f] = dict_id_field (dict_id_make (field_names[DATA_TYPE_VCF][f], strlen (field_names[DATA_TYPE_VCF][f]))).num; 
@@ -104,28 +103,26 @@ void dict_id_initialize (DataType data_type)
         break;
 
     default:
-        ABORT ("Error in dict_id_initialize: unknown data_type: %d", data_type);
+        ABORT ("Error in dict_id_initialize: unknown data_type: %d", z_file->data_type);
     }
-
-    last_data_type = data_type;
 }
 
 const char *dict_id_display_type (DictIdType dict_id)
 {
-    switch (last_data_type) { 
-    case DATA_TYPE_VCF:
-        if (dict_id_is_field (dict_id))     return "FIELD";
-        if (dict_id_is_vcf_info_sf (dict_id))   return "INFO";
-        if (dict_id_is_vcf_format_sf (dict_id)) return "FORMAT";
-        break;
+    switch (z_file->data_type) { 
+        case DATA_TYPE_VCF:
+            if (dict_id_is_field (dict_id))     return "FIELD";
+            if (dict_id_is_vcf_info_sf (dict_id))   return "INFO";
+            if (dict_id_is_vcf_format_sf (dict_id)) return "FORMAT";
+            break;
 
-    case DATA_TYPE_SAM:
-        if (dict_id_is_field (dict_id))     return "FIELD";
-        if (dict_id_is_sam_qname_sf (dict_id))  return "QNAME";
-        if (dict_id_is_sam_optnl_sf (dict_id))  return "OPTION";
-        break;
-    
-    default: break; 
+        case DATA_TYPE_SAM:
+            if (dict_id_is_field (dict_id))     return "FIELD";
+            if (dict_id_is_sam_qname_sf (dict_id))  return "QNAME";
+            if (dict_id_is_sam_optnl_sf (dict_id))  return "OPTION";
+            break;
+        
+        default: break; 
     }
     return "ERROR!";
 }

@@ -73,7 +73,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
     int16_t data_type = zfile_read_genozip_header (original_file_digest);
     if (data_type == DATA_TYPE_VCF_V1 || data_type == EOF) return data_type;
 
-    dict_id_initialize (z_file->data_type);
+    dict_id_initialize();
     
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
