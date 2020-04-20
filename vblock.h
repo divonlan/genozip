@@ -240,8 +240,9 @@ extern unsigned vb_vcf_num_sections (VBlockVCF *vb);
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
     // the following 4 are indeces, lens into txt_data 
-    uint32_t seq_data_start, qual_data_start, e2_data_start, u2_data_start;
-    uint32_t seq_len;        // same length for seq_data_start and qual_data_start, per SAM specification
+    uint32_t seq_data_start, qual_data_start, e2_data_start, u2_data_start; // start within vb->txt_data
+    uint32_t seq_data_len, qual_data_len, e2_data_len, u2_data_len;         // length within vb->txt_data
+    uint32_t seq_len;        // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 
     uint32_t qname_mtf_i;    // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
     uint32_t optional_mtf_i; // the mtf_i into mtx_ctx[SAM_OPTIONAL].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip

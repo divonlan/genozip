@@ -415,6 +415,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
                     txt_name, dl->seq_len, value_len, value_len, value);
 
             dl->e2_data_start = value - vb->txt_data.data;
+            dl->e2_data_len   = value_len;
             vb->txt_section_bytes[SEC_SAM_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
@@ -424,6 +425,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
                     txt_name, dl->seq_len, value_len, value_len, value);
 
             dl->u2_data_start = value - vb->txt_data.data;
+            dl->u2_data_len   = value_len;
             vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // All other subfields - have their own dictionary
@@ -477,21 +479,21 @@ uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len)
     return seq_len;
 }
 
-static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned seq_len, unsigned qual_len, unsigned vb_line_i)
+static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned vb_line_i)
 {
     const char *seq  = &vb->txt_data.data[dl->seq_data_start];
     const char *qual = &vb->txt_data.data[dl->qual_data_start];
 
-    bool seq_is_available  = seq_len  != 1 || *seq  != '*';
-    bool qual_is_available = qual_len != 1 || *qual != '*';
+    bool seq_is_available  = dl->seq_data_len  != 1 || *seq  != '*';
+    bool qual_is_available = dl->qual_data_len != 1 || *qual != '*';
 
     // handle the case where CIGAR is "*" and we get the dl->seq_len directly from SEQ or QUAL
     if (!dl->seq_len) { // CIGAR is not available
-        ASSERT (!seq_is_available || !qual_is_available || seq_len==qual_len, 
+        ASSERT (!seq_is_available || !qual_is_available || dl->seq_data_len==dl->qual_data_len, 
                 "Bad line in %s: SEQ length is %u, QUAL length is %u, unexpectedly differ. SEQ=%.*s QUAL=%.*s", 
-                txt_name, seq_len, qual_len, seq_len, seq, qual_len, qual);    
+                txt_name, dl->seq_data_len, dl->qual_data_len, dl->seq_data_len, seq, dl->qual_data_len, qual);    
 
-        dl->seq_len = MAX (seq_len, qual_len); // one or both might be not available and hence =1
+        dl->seq_len = MAX (dl->seq_data_len, dl->qual_data_len); // one or both might be not available and hence =1
     
         char new_cigar[20];
         sprintf (new_cigar, "%u*", dl->seq_len); // eg "151*". if both SEQ and QUAL are unavailable it will be "1*"
@@ -501,18 +503,18 @@ static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned
         vb->txt_section_bytes[SEC_SAM_CIGAR_B250] -= (new_cigar_len-1); // adjust - actual SAM length was only one (seg_sam_one_field added new_cigar_len)
     } 
     else { // CIGAR is available - just check the seq and qual lengths
-        ASSERT (!seq_is_available || seq_len == dl->seq_len, 
+        ASSERT (!seq_is_available || dl->seq_data_len == dl->seq_len, 
                 "Bad line in %s: according to CIGAR, expecting SEQ length to be %u but it is %u. SEQ=%.*s", 
-                txt_name, dl->seq_len, seq_len, seq_len, seq);
+                txt_name, dl->seq_len, dl->seq_data_len, dl->seq_data_len, seq);
 
-        ASSERT (!qual_is_available || qual_len == dl->seq_len, 
+        ASSERT (!qual_is_available || dl->qual_data_len == dl->seq_len, 
                 "Bad line in %s: according to CIGAR, expecting QUAL length to be %u but it is %u. QUAL=%.*s", 
-                txt_name, dl->seq_len, qual_len, qual_len, qual);    
+                txt_name, dl->seq_len, dl->qual_data_len, dl->qual_data_len, qual);    
     }
 
     // byte counts for --show-sections 
-    vb->txt_section_bytes[SEC_SAM_SEQ_DATA]  += seq_len  + 1; // +1 for terminating \t
-    vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += qual_len + 1; 
+    vb->txt_section_bytes[SEC_SAM_SEQ_DATA]  += dl->seq_data_len  + 1; // +1 for terminating \t
+    vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += dl->qual_data_len + 1; 
 }
 
 /* split the data line into sections - 
@@ -529,7 +531,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
 
     const char *next_field, *field_start;
-    unsigned field_len=0, seq_len=0, qual_len=0;
+    unsigned field_len=0;
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
@@ -612,12 +614,12 @@ const char *seg_sam_data_line (VBlock *vb_,
 
     // SEQ & QUAL
     dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (next_field, &len, false, true, false, vb_line_i, &seq_len, &separator, &has_13, "SEQ");
+    next_field = seg_get_next_item (next_field, &len, false, true, false, vb_line_i, &dl->seq_data_len, &separator, &has_13, "SEQ");
 
     dl->qual_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (next_field, &len, true, true, false, vb_line_i, &qual_len, &separator, &has_13, "QUAL");
+    next_field = seg_get_next_item (next_field, &len, true, true, false, vb_line_i, &dl->qual_data_len, &separator, &has_13, "QUAL");
 
-    seg_sam_seq_qual_fields (vb, dl, seq_len, qual_len, vb_line_i); // also updates cigar if it is "*"
+    seg_sam_seq_qual_fields (vb, dl, vb_line_i); // also updates cigar if it is "*"
 
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
     char oname[MAX_SUBFIELDS * 5 + 1]; // each name is 5 characters per SAM specification, eg "MC:Z:" ; +1 for # in case of \r

@@ -34,9 +34,9 @@ static void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
 {
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
     *line_seq_data = ENT (char, vb->txt_data, dl->seq_data_start);
-    *line_seq_len  = dl->seq_len;
+    *line_seq_len  = dl->seq_data_len;
     *line_e2_data  = dl->e2_data_start ? ENT (char, vb->txt_data, dl->e2_data_start) : NULL;
-    *line_e2_len   = dl->e2_data_start ? dl->seq_len : 0;
+    *line_e2_len   = dl->e2_data_len;
 }   
 
 // callback function for compress to get data of one line (called by comp_compress_bzlib)
@@ -47,9 +47,9 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
      
     *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
-    *line_qual_len  = dl->seq_len;
+    *line_qual_len  = dl->qual_data_len;
     *line_u2_data   = dl->u2_data_start ? ENT (char, vb->txt_data, dl->u2_data_start) : NULL;
-    *line_u2_len    = dl->u2_data_start ? dl->seq_len : 0;
+    *line_u2_len    = dl->u2_data_len;
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
