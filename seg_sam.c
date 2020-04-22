@@ -517,7 +517,6 @@ const char *seg_sam_data_line (VBlock *vb_,
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNAME");
     uint32_t rname_node_index = seg_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME);
-    dl->rname_node_index = rname_node_index;
 
     random_access_update_chrom (vb_, vb_line_i, rname_node_index);
 
@@ -532,8 +531,6 @@ const char *seg_sam_data_line (VBlock *vb_,
 
     else // same rname - do a delta
         vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i, "POS");
-
-    dl->pos_start = vb->last_pos;
 
     random_access_update_pos (vb_, vb->last_pos);
 

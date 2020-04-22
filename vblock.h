@@ -244,8 +244,6 @@ typedef struct {
     uint32_t seq_data_start, qual_data_start, e2_data_start, u2_data_start; // start within vb->txt_data
     uint32_t seq_data_len, qual_data_len, e2_data_len, u2_data_len;         // length within vb->txt_data
     uint32_t seq_len;        // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
-
-    uint32_t rname_node_index, pos_start; // used to optimize seq data before serving to compressor
 } ZipDataLineSAM;
 
 // IMPORTANT: if changing fields in VBlockSAM, also update vb_sam_release_vb and vb_sam_destroy_vb
