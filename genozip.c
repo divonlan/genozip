@@ -222,9 +222,11 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     const unsigned FILENAME_WIDTH = 40;
 
-    const char *head_format = "\n%5s %11s %10s %10s %6s %s  %*s %s\n";
-    const char *foot_format = "\nTotal:            %10s %10s %5uX\n";
-    const char *item_format = "%5s %11s %10s %10s %5uX %s  %s%s%*s %s\n";
+    const char *head_format   = "\n%5s %11s %10s %10s %6s %s  %*s %s\n";
+    const char *foot_format_1 = "\nTotal:            %10s %10s %5uX\n";
+    const char *foot_format_2 = "\nTotal:            %10s %10s %5.1fX\n";
+    const char *item_format_1 = "%5s %11s %10s %10s %5uX %s  %s%s%*s %s\n";
+    const char *item_format_2 = "%5s %11s %10s %10s %5.1fX %s  %s%s%*s %s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -234,9 +236,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
         if (files_listed > 1) {
             str_size(total_compressed_len, z_size_str);
             str_size(total_uncompressed_len, txt_size_str);
-            unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
+            double ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            bufprintf (evb, &str_buf, foot_format, z_size_str, txt_size_str, ratio);
+            bufprintf (evb, &str_buf, ratio < 100 ? foot_format_2 : foot_format_1, z_size_str, txt_size_str, ratio);
         }
         
         ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension", 
@@ -266,14 +268,14 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
                                              &md5_hash_concat, created, FILE_METADATA_LEN);
     if (!success) goto finish;
 
-    unsigned ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
+    double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
     
     str_size (z_file->disk_size, z_size_str);
     str_size (txt_data_size, txt_size_str);
     str_uint_commas (num_lines, num_lines_str);
     str_uint_commas (num_samples, indiv_str);
     
-    bufprintf (evb, &str_buf, item_format, indiv_str, num_lines_str, 
+    bufprintf (evb, &str_buf, ratio < 100 ? item_format_2 : item_format_1, indiv_str, num_lines_str, 
                z_size_str, txt_size_str, ratio, 
                md5_display (&md5_hash_concat, true),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),

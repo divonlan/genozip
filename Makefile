@@ -352,15 +352,15 @@ endif # Darwin
 
 clean-debug:
 	@echo Cleaning up debug
-	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) 
+	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) *.debug-o
 
 clean-optimized:
 	@echo Cleaning up optimized
-	@rm -f $(OBJS) $(EXECUTABLES) 
+	@rm -f $(OBJS) $(EXECUTABLES) *.o
 
 clean: clean-debug clean-optimized
 	@echo Cleaning up
-	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS)
+	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d
 
 .PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp
 
