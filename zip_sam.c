@@ -20,6 +20,8 @@
 // get lengths of sequence data (SEQ+E2) and quality data (QUAL+U2)
 static void zip_sam_get_seq_qual_len (VBlockSAM *vb, uint32_t *seq_len, uint32_t *qual_len)
 {
+    *seq_len = *qual_len = 0;
+
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
         ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
         *seq_len  += dl->seq_len * (1 + !!dl->e2_data_start); // length SEQ and E2 - they must be the same per SAM file specification
@@ -60,7 +62,7 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 }
 
 // this function receives all lines of a variant block and processes them
-// in memory to the compressed format. This thread then terminates the I/O thread writes the output.
+// in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
 void zip_sam_compress_one_vb (VBlockP vb_)
 { 
     START_TIMER;
@@ -79,9 +81,7 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     mtf_clone_ctx (vb_);
 
     // split each line in this variant block to its components
-    seg_sam_initialize (vb);  
-
-    seg_all_data_lines (vb_, seg_sam_data_line, sizeof (ZipDataLineSAM));
+    seg_all_data_lines (vb_, seg_sam_data_line, seg_sam_initialize, sizeof (ZipDataLineSAM));
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
@@ -95,8 +95,7 @@ void zip_sam_compress_one_vb (VBlockP vb_)
         txtfile_estimate_txt_data_size (vb_);
     }
 
-    //unsigned variant_data_header_pos = vb->z_data.len;
-    zfile_sam_compress_vb_header (vb); // vblock header
+    zfile_compress_generic_vb_header (vb_); // vblock header
 
     // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
     // zip_vcf_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
@@ -107,21 +106,13 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     random_access_merge_in_vb (vb_);
 
     // generate & write b250 data for all fields (FLAG to OPTIONAL)
-    for (SamFields f=SAM_QNAME ; f <= SAM_OPTIONAL ; f++) {
-        MtfContext *ctx = &vb->mtf_ctx[f];
-        zip_generate_b250_section (vb_, ctx);
-        zfile_compress_b250_data (vb_, ctx);
-    }
+    zip_generate_and_compress_fields (vb_);;
 
     // generate & write b250 data for all QNAME subfields
-    for (unsigned qname_sf_i=0; qname_sf_i < vb->qname_mapper.num_subfields; qname_sf_i++) {
-        MtfContext *ctx = &vb->mtf_ctx[vb->qname_mapper.did_i[qname_sf_i]];
-        zip_generate_b250_section (vb_, ctx);
-        zfile_compress_b250_data  (vb_, ctx);
-    }
+    zip_generate_and_compress_subfields (vb_, &vb->qname_mapper);
 
     // generate & write b250 data for all OPTIONAL subfields
-    for (unsigned did_i=datatype_last_field[DATA_TYPE_SAM]+1; did_i < vb->num_dict_ids; did_i++) {
+    for (unsigned did_i=datatype_last_field[DT_SAM]+1; did_i < vb->num_dict_ids; did_i++) {
                 
         MtfContext *ctx = &vb->mtf_ctx[did_i];
         
@@ -137,10 +128,10 @@ void zip_sam_compress_one_vb (VBlockP vb_)
     zfile_compress_section_data_alg (vb_, SEC_SAM_MD_DATA, &vb->md_data, NULL, 0, COMPRESS_BZLIB);
 
     // generate & compress the SEQ & QUAL data
-    uint32_t seq_len=0, qual_len=0;
+    uint32_t seq_len, qual_len;
     zip_sam_get_seq_qual_len (vb, &seq_len, &qual_len);
-    zfile_compress_section_data_alg (vb_, SEC_SAM_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  seq_len,  COMPRESS_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_SAM_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, qual_len, COMPRESS_BZLIB);
+    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  seq_len,  COMPRESS_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, qual_len, COMPRESS_BZLIB);
 
     // tell dispatcher this thread is done and can be joined. 
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true

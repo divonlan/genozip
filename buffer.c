@@ -11,6 +11,7 @@
 #include "profiler.h"
 #include "buffer.h"
 #include "vblock.h"
+#include "strings.h"
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
@@ -46,74 +47,6 @@ static const char *bt_str (const Buffer *buf)
         return "INVALID";
 }
 
-char *buf_display_size (int64_t size, char *str /* out */)
-{
-    if      (size > (1LL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
-    else if (size > (1LL << 30)) sprintf (str, "%3.1lf GB", ((double)size) / (double)(1LL << 30));
-    else if (size > (1LL << 20)) sprintf (str, "%3.1lf MB", ((double)size) / (double)(1LL << 20));
-    else if (size > (1LL << 10)) sprintf (str, "%3.1lf KB", ((double)size) / (double)(1LL << 10));
-    else                         sprintf (str, "%3d B"    ,     (int)size)                       ;
-
-    return str; // for convenience so caller can use in printf directly
-}
-
-char *buf_display_uint_no_commas (int64_t n, char *str /* out */, unsigned *len)
-{
-    *len=0;
-
-    if (n==0) {
-        str[0] = '0';
-        *len=1;
-    }
-
-    else {
-        char rev[50] = {}; // "initialize" to avoid compiler warning
-        while (n) {
-            rev[(*len)++] = '0' + n % 10;
-            n /= 10;
-        }
-        // now reverse it
-        for (int i=0; i < (*len); i++) str[i] = rev[(*len)-i-1];
-    }
-
-    str[(*len)] = '\0'; // string terminator
-    return str;
-}
-
-char *buf_display_uint (int64_t n, char *str /* out */)
-{
-    unsigned len = 0, orig_len=0;
-
-    if (n==0) 
-        str[0] = '0';
-        
-    else {
-        char rev[50] = {}; // "initialize" to avoid compiler warning
-        while (n) {
-            if (orig_len && orig_len % 3 == 0) rev[len++] = ',';    
-            rev[len++] = '0' + n % 10;
-            orig_len++;
-            n /= 10;
-        }
-        // now reverse it
-        for (int i=0; i < len; i++) str[i] = rev[len-i-1];
-    }
-
-    str[len] = '\0'; // string terminator
-    return str;
-}
-
-#define POINTER_STR_LEN 19
-char *buf_display_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/)
-{
-#ifdef _MSC_VER
-    sprintf (str, "0x%I64x", (uint64_t)p);
-#else
-    sprintf (str, "0x%"PRIx64, (uint64_t)p);
-#endif
-    return str;
-}
-
 // get string with buffer's metadata for debug message. this function is NOT thread-safe
 char *buf_display (const Buffer *buf)
 {
@@ -121,7 +54,7 @@ char *buf_display (const Buffer *buf)
 
     char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN];
     sprintf (str, "Buffer %s (%u): size=%"PRIu64" len=%"PRIu64" data=%s memory=%s",
-             buf->name, buf->param, buf->size, buf->len, buf_display_pointer(buf->data, s1), buf_display_pointer(buf->memory,s2));
+             buf->name, buf->param, buf->size, buf->len, str_pointer(buf->data, s1), str_pointer(buf->memory,s2));
     return str;    
 }
 
@@ -170,7 +103,7 @@ static void buf_find_underflow_culprit (const char *memory)
                     char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                     fprintf (stderr,
                             "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
-                            vb ? vb->id : -999, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(after_buf-1,s3), buf->name, buf->param,
+                            vb ? vb->id : -999, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(after_buf-1,s3), buf->name, buf->param,
                             buf->func, buf->code_line, buf->vb->vblock_i, buf_i, 
                             of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                     found = true;
@@ -219,31 +152,31 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary)
 
             if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
                         fprintf (stderr, "%sMemory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u\n",
-                        nl[primary], vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
+                        nl[primary], vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb->vblock_i, buf_i);
                 corruption = true;
             }
             if (buf->type < BUF_UNALLOCATED || buf->type > BUF_OVERLAY) {
                 fprintf (stderr, "%sMemory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", 
-                         nl[primary], vb ? vb->id : -999, vb->vblock_i, buf_display_pointer (buf, s1), buf_i);
+                         nl[primary], vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (!buf->name) {
                 fprintf (stderr, "%sMemory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", 
-                         nl[primary], vb ? vb->id : -999, vb->vblock_i, buf_display_pointer (buf, s1), buf_i);
+                         nl[primary], vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
                 fprintf (stderr, 
-                        buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
+                        str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
                          "%sMemory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%s memory=%s func=%s:%u : Corrupt Buffer structure - expecting data+8 == memory. name=%s:%u buf->data=%s\n", 
-                         nl[primary], vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf->func, buf->code_line, buf->name, buf->param, buf_display_pointer(buf->data,s3));
+                         nl[primary], vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, str_pointer(buf,s1), str_pointer(buf->memory,s2), buf->func, buf->code_line, buf->name, buf->param, str_pointer(buf->data,s3));
                 corruption = true;
             }
             else if (buf_has_underflowed(buf)) {
                 fprintf (stderr, 
                         "%sMemory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
+                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb->vblock_i, buf_i, 
                         buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
 
@@ -258,7 +191,7 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary)
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
                         "%sMemory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %s memory: %s-%s name: %s:%u. Allocated: %s:%u vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), buf_display_pointer(buf,s1), buf_display_pointer(buf->memory,s2), buf_display_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
+                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3), buf->name, buf->param,
                         buf->func, buf->code_line, buf->vb->vblock_i, buf_i, 
                         of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                 
@@ -357,7 +290,7 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
 
     for (int vb_i=0; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
         VBlockVCF *vb_vcf = (VBlockVCF *)vb_pool->vb[vb_i];
-        if (vb_vcf && vb_vcf->data_type == DATA_TYPE_VCF && vb_vcf->num_lines_alloced) {
+        if (vb_vcf && vb_vcf->data_type == DT_VCF && vb_vcf->num_lines_alloced) {
             stats[num_stats-1].bytes += vb_vcf->num_lines_alloced * (command==ZIP ? sizeof (ZipDataLineVCF) : sizeof (PizDataLineVCF));
             stats[num_stats-1].buffers += 1;
         }
@@ -370,12 +303,12 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
     char str[30];
-    buf_display_size (total_bytes, str);
+    str_size (total_bytes, str);
     fprintf (stderr, "Total bytes: %s in %u buffers in %u buffer lists:\n", str, num_buffers, vb_pool->num_allocated_vbs);
     fprintf (stderr, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++) {
-        buf_display_size (stats[i].bytes, str);
+        str_size (stats[i].bytes, str);
         fprintf (stderr, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
     }
 }
@@ -400,7 +333,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
     if (flag_debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
         char s[POINTER_STR_LEN];
         fprintf (stderr, "Init: %s:%u: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
-                 buf->name, buf->param, buf->size, buf_display_pointer(buf,s), vb->id, (uint32_t)vb->buffer_list.len-1);
+                 buf->name, buf->param, buf->size, str_pointer(buf,s), vb->id, (uint32_t)vb->buffer_list.len-1);
     }
     
     buf->vb = vb; // successfully added to buf list
@@ -528,7 +461,7 @@ uint64_t buf_alloc_do (VBlock *vb,
 
 //    char size_str[20];
 //    ASSERTW (new_size < 0x80000000ULL, "FYI: allocated > 2GB of memory buffer for %s:%u: allocated=%s. Caller: %s:%u vb_i=%u", 
-//             name, param, buf_display_size (new_size, size_str), func, code_line, vb->vblock_i);
+//             name, param, str_size (new_size, size_str), func, code_line, vb->vblock_i);
 
 finish:
     if (vb != evb) COPY_TIMER (vb->profile.buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread
@@ -646,7 +579,7 @@ void buf_remove_from_buffer_list (Buffer *buf)
             
             if (flag_debug_memory) {
                 char s[POINTER_STR_LEN];
-                fprintf (stderr, "Destroy:%s:%u: buffer=%s buf->vb->id=%d buf_i=%u\n", buf->name, buf->param, buf_display_pointer(buf,s), buf->vb->id, i);
+                fprintf (stderr, "Destroy:%s:%u: buffer=%s buf->vb->id=%d buf_i=%u\n", buf->name, buf->param, str_pointer(buf,s), buf->vb->id, i);
             }
 
             buf_list[i] = NULL;
@@ -741,7 +674,7 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 {
     if (flag_debug_memory) {
         char s[POINTER_STR_LEN];
-        fprintf (stderr, "Memory freed by free(): %s %s:%u\n", buf_display_pointer (p, s), func, code_line);
+        fprintf (stderr, "Memory freed by free(): %s %s:%u\n", str_pointer (p, s), func, code_line);
     }
 
     free (p);
@@ -753,7 +686,7 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
 
     if (flag_debug_memory && new != p) {
         char s[POINTER_STR_LEN];
-        fprintf (stderr, "Memory freed by realloc(): %s %s:%u\n", buf_display_pointer (p, s), func, code_line);
+        fprintf (stderr, "Memory freed by realloc(): %s %s:%u\n", str_pointer (p, s), func, code_line);
     }
 
     return new;

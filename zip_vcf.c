@@ -20,6 +20,7 @@
 #include "base250.h"
 #include "endianness.h"
 #include "random_access.h"
+#include "strings.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])
 
@@ -381,7 +382,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 
     // split each line in this variant block to its components
 
-    seg_all_data_lines (vb_, seg_vcf_data_line, sizeof (ZipDataLineVCF));
+    seg_all_data_lines (vb_, seg_vcf_data_line, NULL, sizeof (ZipDataLineVCF));
     
     if (vb->has_haplotype_data)
         seg_vcf_complete_missing_lines (vb);
@@ -412,7 +413,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
         zip_vcf_generate_phase_sections (vb);
 
     //unsigned variant_data_header_pos = vb->z_data.len;
-    zfile_vcf_compress_vb_header (vb); // variant data header + ht index
+    zfile_vcf_compress_vb_header (vb_); // variant data header + ht index
 
     // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
     // zip_vcf_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
@@ -423,11 +424,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     random_access_merge_in_vb (vb_);
 
     // generate & write b250 data for all fields (CHROM to FORMAT)
-    for (VcfFields f=VCF_CHROM ; f <= VCF_FORMAT ; f++) {
-        MtfContext *ctx = &vb->mtf_ctx[f];
-        zip_generate_b250_section (vb_, ctx);
-        zfile_compress_b250_data (vb_, ctx);
-    }
+    zip_generate_and_compress_fields (vb_);;
 
     // generate & write b250 data for all INFO subfields
     uint8_t num_info_subfields=0;
@@ -458,7 +455,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 
             gt_data_alg = zip_vcf_get_best_gt_compressor (vb_, &vb->genotype_one_section_data);
 
-            zfile_compress_section_data_alg (vb_, SEC_VCF_GT_DATA, &vb->genotype_one_section_data, NULL, 0, gt_data_alg);
+            zfile_compress_section_data_alg (vb_, SEC_GT_DATA, &vb->genotype_one_section_data, NULL, 0, gt_data_alg);
 
             buf_free (&vb->genotype_one_section_data);
         }

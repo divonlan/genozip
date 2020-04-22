@@ -68,7 +68,7 @@ int v1_zfile_read_section (VBlock *vb,
     bool new_vcf_component = false;
     unsigned new_header_size=0;
 
-    if (!is_magical && is_encrypted && expected_sec_type == SEC_VCF_VB_HEADER) {
+    if (!is_magical && is_encrypted && expected_sec_type == SEC_VB_HEADER) {
     
         // reverse failed decryption
         v1_crypt_do (vb, (uint8_t*)header, header_size, vb->vblock_i, vb->z_next_header_i);
@@ -117,7 +117,7 @@ int v1_zfile_read_section (VBlock *vb,
     bool found_a_vcf_header = header->section_type == SEC_TXT_HEADER;
     
     // check that we received the section type we expect, 
-    ASSERT (header->section_type == expected_sec_type || (found_a_vcf_header && expected_sec_type == SEC_VCF_VB_HEADER),
+    ASSERT (header->section_type == expected_sec_type || (found_a_vcf_header && expected_sec_type == SEC_VB_HEADER),
             "Error: genozip v1 file - unexpected section type: expecting %s, found %s", st_name(expected_sec_type), st_name(header->section_type));
 
     unsigned expected_header_size = new_vcf_component ? new_header_size : header_size;
@@ -127,17 +127,17 @@ int v1_zfile_read_section (VBlock *vb,
     ASSERT (!(header->section_type == SEC_TXT_HEADER && compressed_offset == sizeof(SectionHeaderTxtHeader)), 
             "Error: failed to read file %s - it appears to be truncated or corrupted", z_name);
 
-    ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VCF_VB_HEADER, // for variant data, we also have the permutation index
+    ASSERT (compressed_offset == crypt_padded_len (expected_header_size) || expected_sec_type == SEC_VB_HEADER, // for variant data, we also have the permutation index
             "Error: genozip v1 file - invalid header - expecting compressed_offset to be %u but found %u", expected_header_size, compressed_offset);
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
     buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "v1_zfile_read_section", 2);
     header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
-    // in case we're expecting SEC_VCF_VB_HEADER - read the rest of the header: 
-    // if we found SEC_VCF_VB_HEADER, we need to read haplotype index, and if we found a SEC_TXT_HEADER of a concatenated
+    // in case we're expecting SEC_VB_HEADER - read the rest of the header: 
+    // if we found SEC_VB_HEADER, we need to read haplotype index, and if we found a SEC_TXT_HEADER of a concatenated
     // file componented - we need to read the read of the header as it is bigger than Variant Data header that was read
-    if (expected_sec_type == SEC_VCF_VB_HEADER && !new_vcf_component) {
+    if (expected_sec_type == SEC_VB_HEADER && !new_vcf_component) {
 
         int bytes_left_over = compressed_offset - header_size;
         ASSERT (bytes_left_over >= 0, "Error: genozip v1 file - expected bytes_left_over=%d to be >=0", bytes_left_over)
@@ -164,7 +164,7 @@ int v1_zfile_read_section (VBlock *vb,
                 "Error: genozip v1 file - failed to read section data, section_type=%s", st_name(header->section_type));
     }
 
-    // deal with a VCF header that was encountered while expecting a SEC_VCF_VB_HEADER (i.e. 2nd+ component of a concatenated file)
+    // deal with a VCF header that was encountered while expecting a SEC_VB_HEADER (i.e. 2nd+ component of a concatenated file)
     if (new_vcf_component) {
 
         if (flag_split) {
@@ -189,7 +189,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
     START_TIMER;
 
     int vardata_header_offset = v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data",
-                                                       sizeof(v1_SectionHeaderVariantData), SEC_VCF_VB_HEADER, true);
+                                                       sizeof(v1_SectionHeaderVariantData), SEC_VB_HEADER, true);
     if (vardata_header_offset == EOF) {
 
         // update size - in case they were not known (pipe, gzip etc)
@@ -248,7 +248,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
 
         if (has_genotype_data) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_GT_DATA, false);
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GT_DATA, false);
         }
 
         if (phase_type == PHASE_MIXED_PHASED) {
@@ -664,7 +664,7 @@ void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
     // get the variant data - newline-seperated lines, each containing the first 8 (if no FORMAT field) or 9 fields (if FORMAT exists)
     zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[0], 
-                              &vb->v1_variant_data_section_data, "v1_variant_data_section_data", SEC_VCF_VB_HEADER);
+                              &vb->v1_variant_data_section_data, "v1_variant_data_section_data", SEC_VB_HEADER);
     
     v1_SectionHeaderVariantData *vardata_header = (v1_SectionHeaderVariantData *)(vb->z_data.data + section_index[0]);
     vb->first_line              = BGEN32 (vardata_header->first_line);
@@ -718,7 +718,7 @@ void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) 
             zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], 
-                                      &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_VCF_GT_DATA);
+                                      &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_GT_DATA);
         
         // next, comes phase data
         if (vb->phase_type == PHASE_MIXED_PHASED) {
@@ -780,7 +780,7 @@ bool v1_header_genozip_to_vcf (Md5Hash *digest)
     // in split mode - we open the output VCF file of the component
     if (flag_split) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode");
-        txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, DATA_TYPE_VCF);
+        txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, DT_VCF);
     }
 
     extern Buffer global_vcf_header_line; // defined in header_vcf.c

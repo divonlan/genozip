@@ -10,8 +10,9 @@
 #include "vblock.h"
 #include "endianness.h"
 #include "random_access.h"
+#include "strings.h"
 
-const SectionType first_field_dict_section[NUM_DATATYPES] = { SEC_VCF_CHROM_DICT, SEC_SAM_QNAME_DICT };
+const SectionType first_field_dict_section[NUM_DATATYPES] = FIRST_FIELD_DICT_SECTION;
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
@@ -115,12 +116,12 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
         *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_cursor++);
  
         SectionType sec_type = (*sl_ent)->section_type;
-        if (sec_type == SEC_TXT_HEADER || sec_type == SEC_SAM_VB_HEADER) 
+        if (sec_type == SEC_TXT_HEADER) 
             return sec_type;
 
-        if (sec_type == SEC_VCF_VB_HEADER) {
+        if (sec_type == SEC_VB_HEADER) {
             if (random_access_is_vb_included ((*sl_ent)->vblock_i, region_ra_intersection_matrix))
-                return SEC_VCF_VB_HEADER;
+                return SEC_VB_HEADER;
             
             else if (skipped_vb) *skipped_vb = true;
         }
@@ -159,7 +160,7 @@ SectionListEntry *sections_vb_first (uint32_t vb_i)
 }
 
 // called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
-bool sections_has_more_vcf_components()
+bool sections_has_more_components()
 {
     return z_file->sl_cursor==0 || 
            ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_cursor-1)->section_type == SEC_TXT_HEADER;
@@ -201,10 +202,10 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     fprintf (stderr, "  data_type: %s\n",                     dt_name (BGEN16 (header->data_type)));
     fprintf (stderr, "  encryption_type: %s\n",               encryption_name (header->encryption_type)); 
     fprintf (stderr, "  num_samples: %u\n",                   BGEN32 (header->num_samples));
-    fprintf (stderr, "  uncompressed_data_size: %s\n",        buf_display_uint (BGEN64 (header->uncompressed_data_size), size_str));
+    fprintf (stderr, "  uncompressed_data_size: %s\n",        str_uint_commas (BGEN64 (header->uncompressed_data_size), size_str));
     fprintf (stderr, "  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
     fprintf (stderr, "  num_sections: %u\n",                  num_sections);
-    fprintf (stderr, "  num_vcf_components: %u\n",            BGEN32 (header->num_vcf_components));
+    fprintf (stderr, "  num_components: %u\n",            BGEN32 (header->num_components));
     fprintf (stderr, "  md5_hash_concat: %s\n",               md5_display (&header->md5_hash_concat, false));
     fprintf (stderr, "  created: %*s\n",                      -FILE_METADATA_LEN, header->created);
 
@@ -224,7 +225,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     }
 }
 
-static const char *sections_type_name (unsigned item, const char **names, unsigned num_names)
+static const char *type_name (unsigned item, const char **names, unsigned num_names)
 {
     if (item > num_names) {
         static char str[50];
@@ -241,19 +242,19 @@ const char *st_name(SectionType sec_type)
     
     if (sec_type == SEC_EOF) return "SEC_EOF";
     
-    return sections_type_name (sec_type, names, sizeof(names)/sizeof(names[0]));
+    return type_name (sec_type, names, sizeof(names)/sizeof(names[0]));
 }
 
 const char *dt_name (unsigned data_type)
 {
     static const char *names[NUM_DATATYPES] = DATATYPE_NAMES;
-    return sections_type_name (data_type, names, sizeof(names)/sizeof(names[0]));
+    return type_name (data_type, names, sizeof(names)/sizeof(names[0]));
 }
 
 const char *encryption_name (unsigned encryption_type)
 {
     static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
-    return sections_type_name (encryption_type, names, sizeof(names)/sizeof(names[0]));
+    return type_name (encryption_type, names, sizeof(names)/sizeof(names[0]));
 }
 
 // called by PIZ I/O

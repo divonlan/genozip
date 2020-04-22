@@ -20,6 +20,7 @@
 #include "url.h"
 #include "compressor.h"
 #include "vblock.h"
+#include "strings.h"
 
 // globals
 File *z_file   = NULL;
@@ -35,6 +36,34 @@ const char *READ  = "rb";  // use binary mode (b) in read and write so Windows d
 const char *WRITE = "wb";
 
 const char *file_exts[] = FILE_EXTS;
+const FileType input_ft_by_dt [NUM_DATATYPES][20] = INPUT_FT_BY_DT;
+const FileType output_ft_by_dt[NUM_DATATYPES][20] = OUTPUT_FT_BY_DT;
+const FileType genozip_ft_by_dt[NUM_DATATYPES] = GENOZIP_TYPE_BY_DT;
+
+// get data type by file type
+static DataType file_get_data_type (FileType ft, bool is_input)
+{
+    for (DataType dt=0; dt < NUM_DATATYPES; dt++) 
+        for (unsigned i=0; (is_input ? input_ft_by_dt : output_ft_by_dt)[dt][i]; i++)
+            if ((is_input ? input_ft_by_dt : output_ft_by_dt)[dt][i] == ft) return dt;
+
+    return DT_NONE;
+}
+
+// possible arguments for --input
+static char *file_compressible_extensions(void)
+{
+    static char s[1000] = {0};
+
+    for (DataType dt=0; dt < NUM_DATATYPES; dt++) {
+        sprintf (&s[strlen (s)], "\n%s: ", dt_name (dt));
+
+        for (unsigned i=0; input_ft_by_dt[dt][i]; i++)
+            sprintf (&s[strlen(s)], "%s ", &file_exts[input_ft_by_dt[dt][i]][1]);
+    }
+
+    return s;
+}
 
 static FileType file_get_type (const char *filename)
 {
@@ -57,26 +86,20 @@ void file_set_input_size (const char *size_str)
 
 void file_set_input_type (const char *type_str)
 {
-    static FileType input_files_accepted[] = INPUT_FILES_ACCEPTED;
-
     char *ext = malloc (strlen (type_str) + 2); // +1 for . +1 for \0
     sprintf (ext, ".%s", type_str);
 
+    str_to_lowercase (ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
+
     stdin_type = file_get_type (ext);
 
-    for (unsigned i=0; i < sizeof(input_files_accepted)/sizeof(input_files_accepted[0]); i++) 
-        if (stdin_type == input_files_accepted[i]) {
-            free (ext);
-            return; // all good 
-        }
+    if (file_is_compressible (stdin_type)) {
+        free (ext);
+        return; // all good 
+    }
 
     // the user's argument is not an accepted input file type - print error message
-    fprintf (stderr, "%s: --input must be ones of these: ", global_cmd);
-    for (unsigned i=0; i < sizeof(input_files_accepted)/sizeof(input_files_accepted[0]); i++) 
-        fprintf (stderr, "%s ", &file_exts[input_files_accepted[i]][1]);
-    fprintf (stderr, "\n");
-
-    exit_on_error();
+    ABORT ("%s: --input (or -i) must be ones of these: %s", global_cmd, file_compressible_extensions());
 }
     
 FileType file_get_stdin_type (void)
@@ -136,55 +159,81 @@ bool file_open_txt (File *file)
         // if user provided the type with --input, we use that overriding the type derived from the file name
         if (stdin_type) file->type = stdin_type;
 
-        if      (file_is_vcf (file)) file->data_type = DATA_TYPE_VCF;
-        else if (file_is_sam (file)) file->data_type = DATA_TYPE_SAM;
-        else ABORT ("%s: input file must have one of the following extensions: " COMPRESSIBLE_EXTS, global_cmd);
+        file->data_type = file_get_data_type (file->type, true);
+
+        ASSERT (file->data_type != DT_NONE || !file_has_ext (file->name, ".genozip"), 
+                "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
+
+        ASSERT (file->data_type != DT_NONE, "%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
+                global_cmd, file_printname (file),  file_compressible_extensions());
     }
     else { // WRITE - data_type is already set by file_open
-        if (file->data_type == DATA_TYPE_VCF) {
-            
-            ASSERT (file->type == VCF || file->type == VCF_GZ || file->type == VCF_BGZ || file->type == BCF, 
-                    "%s: output file must have a .vcf or .bcf or .vcf.gz or .vcf.bgz extension", global_cmd); 
+
+        if (file->data_type >= 0 && file->data_type < NUM_DATATYPES) {    
+            // see if the file type is a support type of output files
+            bool found = false;
+            for (unsigned i=0; output_ft_by_dt[file->data_type][i]; i++) 
+                if (output_ft_by_dt[file->data_type][i] == file->type) {
+                    found = true;
+                    break;
+                }
+
+            // if the file is not a recognized output file, use the default plain file format
+            if (!found) file->type = output_ft_by_dt[file->data_type][0]; 
         }
-        else if (file->data_type == DATA_TYPE_SAM) {
-            ASSERT (file->type == SAM || file->type == BAM, 
-                    "%s: output file must have a .sam or .bam", global_cmd); 
-        }
+
         // if we don't know our type based on our own name, consult z_file (this happens when opening 
         // from piz_dispacher)
-        else if (file->data_type == DATA_TYPE_NONE && z_file && z_file->data_type != DATA_TYPE_NONE) {
+        else if (file->data_type == DT_NONE && z_file && z_file->data_type != DT_NONE) {
             file->data_type = z_file->data_type;
 
-            #define ENFORCE_TYPE_FLAG(flag,dt) ASSERT (!flag_##flag, "%s: the --" #flag " flag cannot be used with files containing %s data like %s", global_cmd, dt, z_name);
+            #define FORBID_THIS_FLAG(flag,dt) ASSERT (!flag_##flag, "%s: the --" #flag " flag cannot be used with files containing %s data like %s", global_cmd, dt, z_name);
             
             switch (file->data_type) {
-                case DATA_TYPE_VCF : 
-                    ENFORCE_TYPE_FLAG (bam, "VCF");
+                case DT_VCF : 
+                    FORBID_THIS_FLAG (bam, "VCF");
                     file->type = (flag_bgzip ? VCF_GZ : (flag_bcf ? BCF : VCF)); 
                     break;
                 
-                case DATA_TYPE_SAM : 
-                    ENFORCE_TYPE_FLAG (bcf, "SAM");
-                    ENFORCE_TYPE_FLAG (bgzip, "SAM");
+                case DT_SAM : 
+                    FORBID_THIS_FLAG (bcf, "SAM");
+                    FORBID_THIS_FLAG (bgzip, "SAM");
                     file->type = (flag_bam ? BAM : SAM); 
                     break;
                 
-                default: ABORT ("Error in file_open_txt: unknown data_type=%u", file->data_type);
+                case DT_FASTQ : 
+                    FORBID_THIS_FLAG (bcf, "FASTQ");
+                    FORBID_THIS_FLAG (bam, "FASTQ");
+                    file->type = (flag_bgzip ? FASTQ_GZ : FASTQ); 
+                    break;
+                
+                case DT_FASTA : 
+                    FORBID_THIS_FLAG (bcf, "FASTA");
+                    FORBID_THIS_FLAG (bam, "FASTA");
+                    file->type = (flag_bgzip ? FASTA_GZ : FASTA); 
+                    break;
+                
+                case DT_ME23 : 
+                    FORBID_THIS_FLAG (bcf, "23andMe");
+                    FORBID_THIS_FLAG (bam, "23andMe");
+                    FORBID_THIS_FLAG (bgzip, "23andMe");
+                    file->type = (flag_bgzip ? FASTA_GZ : FASTA); 
+                    break;
+                
+                default: ABORT ("Error in file_open_txt: unknown data_type=%s", dt_name (file->data_type));
             }
         }
     }
 
-    switch (file->type) {
-    case VCF:
-    case SAM:
+    if (file_is_plain_type (file->type)) {
         // don't actually open the file if we're just testing in genounzip
         if (flag_test && file->mode == WRITE) return true;
 
         file->file = file->is_remote ? url_open (NULL, file->name) : fopen (file->name, file->mode);
-        break;
+    }
+    
+    else if (file_is_gz_type (file->type)) {
 
-    case VCF_GZ:
-    case VCF_BGZ:
         if (file->mode == READ) {
             if (file->is_remote) { 
                 FILE *url_fp = url_open (NULL, file->name);
@@ -195,18 +244,20 @@ bool file_open_txt (File *file)
         }
         else 
             file_redirect_output_to_stream (file, "bgzip", "--stdout", NULL);
-        break;
+    }
+    
+    else if (file_is_bz2_type (file->type)) {
 
-    case VCF_BZ2:
         if (file->is_remote) {            
             FILE *url_fp = url_open (NULL, file->name);
             file->file = BZ2_bzdopen (fileno(url_fp), file->mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
         }
         else
             file->file = BZ2_bzopen (file->name, file->mode);  // for local files we decompress ourselves   
-        break;
+    }
 
-    case VCF_XZ:
+    else if (file_is_xz_type (file->type)) {
+
         input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                             file->is_remote ? file->name : NULL,     // url
                                             "To compress an .xz file", "xz",         // reason, exec_name
@@ -215,39 +266,38 @@ bool file_open_txt (File *file)
                                             flag_quiet ? "--quiet" : SKIP_ARG, 
                                             NULL);            
         file->file = stream_from_stream_stdout (input_decompressor);
-        break;
+    }
 
-    case BAM:
-    case BCF:
-    case BCF_GZ:
-    case BCF_BGZ: {
+
+    else if (file_is_bam_type (file->type) || file_is_bcf_type (file->type)) {
+
+        bool bam = file_is_bam_type (file->type);
+
         if (file->mode == READ) {
             char reason[100];
             sprintf (reason, "To compress a %s file", file_exts[file->type]);
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,         // url                                        
                                                 reason, 
-                                                file->type == BAM ? "samtools" : "bcftools", // exec_name
+                                                bam ? "samtools" : "bcftools", // exec_name
                                                 "view", 
                                                 "--threads", "8", 
-                                                file->type == BAM ? "-OSAM" : "-Ov",
+                                                bam ? "-OSAM" : "-Ov",
                                                 file->is_remote ? SKIP_ARG : file->name,    // local file name 
-                                                file->type == BAM ? "-h" : NULL, // include header in SAM output
+                                                bam ? "-h" : NULL, // include header in SAM output
                                                 NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
         }
         else { // write
             file_redirect_output_to_stream (file, 
-                                            file->type==BAM ? "samtools" : "bcftools", 
+                                            bam ? "samtools" : "bcftools", 
                                             "view", 
-                                            file->type==BAM ? "-OBAM" : "-Ob");            
-
+                                            bam ? "-OBAM" : "-Ob");            
         }
-        break;
     }
 
-    default:
-        if (file->mode == WRITE && file->data_type == DATA_TYPE_NONE) {
+    else {
+        if (file->mode == WRITE && file->data_type == DT_NONE) {
             // user is trying to genounzip a .genozip file that is not a recognized extension -
             // that's ok - we will discover its type after reading the genozip header in zip_dispatcher
             return true; // let's call this a success anyway
@@ -304,20 +354,17 @@ static bool file_open_z (File *file)
 
     // for READ, set data_type
     if (file->mode == READ) {
-        switch (file->type) {
-            case VCF_GENOZIP : file->data_type = DATA_TYPE_VCF; break;
-            case SAM_GENOZIP : file->data_type = DATA_TYPE_SAM; break; 
-            default          : file->data_type = DATA_TYPE_NONE; // to be determined after the genozip header is read
-        }
+        file->data_type = DT_NONE; // if we don't find it, it will be determined after the genozip header is read
+        for (DataType dt=0; dt < NUM_DATATYPES; dt++)
+            if (file->type == genozip_ft_by_dt[dt]) {
+                file->data_type = dt;
+                break;
+            }
     }
     else { // WRITE - data_type is already set by file_open
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
-        switch (file->data_type) {
-            case DATA_TYPE_VCF : file->type = VCF_GENOZIP; break;
-            case DATA_TYPE_SAM : file->type = SAM_GENOZIP; break; 
-            default: ABORT ("Error in file_open_z: unknown data type %u", file->data_type);
-        }   
+        file->type = genozip_ft_by_dt[file->data_type];
     }
 
     file->file = file->is_remote ? url_open (NULL, file->name) 
@@ -377,7 +424,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
     file->mode = mode;
 
-    if (mode==READ || data_type != DATA_TYPE_NONE) // if its NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
+    if (mode==READ || data_type != DT_NONE) // if its NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
         file->type = file_get_type (file->name);
 
     if (file->mode == WRITE) 
@@ -398,7 +445,8 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type /* only used for WRITE */)
 {
     ASSERT (mode==WRITE || stdin_type != UNKNOWN_FILE_TYPE, 
-            "%s: to redirect from standard input use the --input option eg '--input vcf'. See '%s --help' for more details", global_cmd, global_cmd);
+            "%s: to redirect from standard input use --input (or -i) with one of the supported file types:%s", 
+            global_cmd, file_compressible_extensions());
 
     File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
@@ -408,11 +456,15 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
 
     file->supertype = supertype;
     
-    file->data_type = (mode==READ) ? (stdin_type == VCF ? DATA_TYPE_VCF : DATA_TYPE_SAM)
-                                   : data_type;
+    if (mode==READ) {
+        file->data_type = file_get_data_type (stdin_type, true);
+        file->type = stdin_type; 
+    }
+    else { // WRITE
+        file->data_type = data_type;
+        file->type = output_ft_by_dt[data_type][0];
+    }
 
-    file->type = (mode==READ) ? stdin_type 
-                              : (data_type == DATA_TYPE_VCF ? VCF : SAM);
     file->redirected = true;
     
     return file;
@@ -426,18 +478,17 @@ void file_close (File **file_p,
 
     if (file->file) {
 
-        if (file->mode == READ && (file->type == VCF_GZ || file->type == VCF_BGZ)) {
+        if (file->mode == READ && file_is_gz_type (file->type)) {
             int ret = gzclose_r((gzFile)file->file);
-            ASSERTW (!ret, "Warning: failed to close vcf.gz file: %s", file_printname (file));
+            ASSERTW (!ret, "%s: warning: failed to close file: %s", global_cmd, file_printname (file));
         }
-        else if (file->mode == READ && file->type == VCF_BZ2) 
+        else if (file->mode == READ && file_is_bz2_type (file->type))
             BZ2_bzclose((BZFILE *)file->file);
         
-        else if (file->mode == READ && 
-                 (file->type == BCF || file->type == BCF_GZ || file->type == BCF_BGZ || file->type == VCF_XZ)) 
+        else if (file->mode == READ && file_is_read_via_ext_decompressor_type (file->type)) 
             stream_close (&input_decompressor, STREAM_WAIT_FOR_PROCESS);
 
-        else if (file->mode == WRITE && (file->type == VCF_GZ || file->type == VCF_BGZ)) 
+        else if (file->mode == WRITE && file_is_written_via_ext_compressor_type (file->type)) 
             stream_close (&output_compressor, STREAM_WAIT_FOR_PROCESS);
 
         else 
@@ -579,10 +630,10 @@ bool file_seek (File *file, int64_t offset,
 
 uint64_t file_tell (File *file)
 {
-    if (command == ZIP && (file->type == VCF_GZ || file->type == VCF_BGZ))
+    if (command == ZIP && file_is_gz_type (file->type))
         return gzconsumed64 ((gzFile)txt_file->file); 
     
-    if (command == ZIP && file->type == VCF_BZ2)
+    if (command == ZIP && file_is_bz2_type (file->type))
         return BZ2_consumed ((BZFILE *)txt_file->file); 
 
 #ifdef __APPLE__

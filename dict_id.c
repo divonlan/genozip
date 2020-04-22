@@ -10,15 +10,15 @@
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 
+uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
+
 // VCF stuff
-uint64_t dict_id_vcf_fields[NUM_VCF_FIELDS] = {0,0,0,0,0,0,0,0},
-         dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, 
+uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, 
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_13=0;
 
 // SAM stuff
-uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
-         dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
+uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
          dict_id_OPTION_H1=0, dict_id_OPTION_H2=0, dict_id_OPTION_MD=0, dict_id_OPTION_MQ=0, dict_id_OPTION_NH=0, dict_id_OPTION_NM=0, 
          dict_id_OPTION_OA=0, dict_id_OPTION_OC=0, dict_id_OPTION_PG=0, dict_id_OPTION_E2=0, dict_id_OPTION_U2=0,
          dict_id_OPTION_PQ=0, dict_id_OPTION_PU=0, dict_id_OPTION_RG=0, dict_id_OPTION_SA=0, dict_id_OPTION_SM=0, dict_id_OPTION_TC=0, 
@@ -27,18 +27,20 @@ uint64_t dict_id_sam_fields[NUM_SAM_FIELDS] = {0,0,0,0,0,0,0,0,0},
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
          dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
          dict_id_OPTION_STRAND=0;
-          
+
 DictIdType DICT_ID_NONE = {0};
 
 void dict_id_initialize (void) 
 {   // note: this uint64_t values will be different in big and little endian machines 
     // (it's ok, they never get stored in the file)
 
+    for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) {
+        const char *field_name = field_names[z_file->data_type][f];
+        dict_id_fields[f] = dict_id_field (dict_id_make (field_name, strlen (field_name))).num; 
+    }
+
     switch (z_file->data_type) { 
-    case DATA_TYPE_VCF:
-        for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
-            dict_id_vcf_fields[f] = dict_id_field (dict_id_make (field_names[DATA_TYPE_VCF][f], strlen (field_names[DATA_TYPE_VCF][f]))).num; 
-        
+    case DT_VCF:
         dict_id_FORMAT_PL   = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
         dict_id_FORMAT_GP   = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
         dict_id_FORMAT_GL   = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
@@ -52,10 +54,7 @@ void dict_id_initialize (void)
         dict_id_INFO_13     = dict_id_vcf_info_sf   (dict_id_make ("#", 1)).num; // This appears if the VCF line has a Windows-style \r\n line ending
         break;
 
-    case DATA_TYPE_SAM:
-        for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++)
-            dict_id_sam_fields[f] = dict_id_field (dict_id_make (field_names[DATA_TYPE_SAM][f], strlen (field_names[DATA_TYPE_SAM][f]))).num; 
-
+    case DT_SAM:
         dict_id_OPTION_AM = dict_id_sam_optnl_sf (dict_id_make ("AM:i", 4)).num;
         dict_id_OPTION_AS = dict_id_sam_optnl_sf (dict_id_make ("AS:i", 4)).num;
         dict_id_OPTION_CC = dict_id_sam_optnl_sf (dict_id_make ("CC:Z", 4)).num;
@@ -103,21 +102,21 @@ void dict_id_initialize (void)
         break;
 
     default:
-        ABORT ("Error in dict_id_initialize: unknown data_type: %d", z_file->data_type);
+        break; // no special fields for the other data types
     }
 }
 
 const char *dict_id_display_type (DictIdType dict_id)
 {
+    if (dict_id_is_field (dict_id))                 return "FIELD";
+
     switch (z_file->data_type) { 
-        case DATA_TYPE_VCF:
-            if (dict_id_is_field (dict_id))     return "FIELD";
+        case DT_VCF:
             if (dict_id_is_vcf_info_sf (dict_id))   return "INFO";
             if (dict_id_is_vcf_format_sf (dict_id)) return "FORMAT";
             break;
 
-        case DATA_TYPE_SAM:
-            if (dict_id_is_field (dict_id))     return "FIELD";
+        case DT_SAM:
             if (dict_id_is_sam_qname_sf (dict_id))  return "QNAME";
             if (dict_id_is_sam_optnl_sf (dict_id))  return "OPTION";
             break;

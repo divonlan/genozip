@@ -24,6 +24,7 @@
 #endif
 
 #include "genozip.h"
+#include "header.h"
 #include "text_license.h"
 #include "text_help.h"
 #include "version.h" // automatically incremented by the make when we create a new distribution
@@ -41,7 +42,8 @@
 #include "gtshark_vcf.h"
 #include "stream.h"
 #include "url.h"
-#include "header.h"
+#include "strings.h"
+#include "stats.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -49,7 +51,7 @@ ExeType exe_type;
 int command = -1;  // must be static or global to initialize list_options 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
-uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading VCF data
+uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
 
 // the flags - representing command line options - available globally
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
@@ -74,7 +76,7 @@ void exit_on_error(void)
     url_kill_curl();
     file_kill_external_compressors(); 
 
-    // if we're in ZIP - remove failed genozip file (but don't remove partial failed VCF file in PIZ - it might be still useful to the user)
+    // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
     if (command == ZIP && z_file && z_file->name) {
         char *save_name = malloc (strlen (z_file->name)+1);
         strcpy (save_name, z_file->name);
@@ -195,240 +197,6 @@ static bool main_am_i_in_docker (void)
     return true;
 }
 
-static void main_show_file_metadata (void)
-{
-    fprintf (stderr, "\n\n");
-    if (txt_file->name) fprintf (stderr, "%s file name: %s\n", dt_name (z_file->data_type), txt_file->name);
-    
-    char ls[30];
-    switch (z_file->data_type) {
-    case DATA_TYPE_VCF:
-        fprintf (stderr, "Individuals: %u   Variants: %s   Dictionaries: %u\n", 
-                global_vcf_num_samples, buf_display_uint (z_file->num_lines, ls), z_file->num_dict_ids);
-        break;
-
-    case DATA_TYPE_SAM:
-        fprintf (stderr, "Alignment lines: %s   Dictionaries: %u\n", 
-                 buf_display_uint (z_file->num_lines, ls), z_file->num_dict_ids);
-        break;
-
-    default:
-        ABORT ("Error in main_show_file_metadata: invalid data_type=%d", z_file->data_type);
-    }
-}
-
-static void main_show_sections (void)
-{
-    main_show_file_metadata();
-
-    char vsize[30], zsize[30], zentries_str[30];
-
-    fprintf (stderr, "Sections stats:\n");
-    fprintf (stderr, "                           #Sec   #Entries                %-3s     %%        GENOZIP     %%   Ratio\n",
-             dt_name (z_file->data_type));
-    const char *format = "%22s    %6u  %16s  %9s %5.1f      %9s %5.1f  %6.1f%s\n";
-
-    // the order in which we want them displayed
-    const SectionType secs[] = {
-        SEC_GENOZIP_HEADER,    SEC_RANDOM_ACCESS,      SEC_TXT_HEADER,        SEC_VCF_VB_HEADER,
-        SEC_VCF_CHROM_B250,    SEC_VCF_CHROM_DICT,     SEC_VCF_POS_B250,      SEC_VCF_POS_DICT, 
-        SEC_VCF_ID_B250,       SEC_VCF_ID_DICT,        SEC_VCF_REFALT_B250,   SEC_VCF_REFALT_DICT, 
-        SEC_VCF_QUAL_B250,     SEC_VCF_QUAL_DICT,      SEC_VCF_FILTER_B250,   SEC_VCF_FILTER_DICT, 
-        SEC_VCF_INFO_B250,     SEC_VCF_INFO_DICT,      SEC_VCF_INFO_SF_B250,  SEC_VCF_INFO_SF_DICT, 
-        SEC_VCF_FORMAT_B250,   SEC_VCF_FORMAT_DICT,    SEC_VCF_GT_DATA,       SEC_VCF_FRMT_SF_DICT,
-        SEC_VCF_HT_DATA,       SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
-
-        SEC_SAM_VB_HEADER,
-        SEC_SAM_SEQ_DATA,      SEC_SAM_QUAL_DATA,      SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,
-        SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
-        SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
-        SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,
-        SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      SEC_SAM_CIGAR_B250,     SEC_SAM_CIGAR_DICT,     
-        SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT,      
-        SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250,  SEC_SAM_OPTNL_SF_DICT
-    };
-
-    static const char *categories[] = {
-        "Genozip header", "Random access index", "Source file header", "Variant block metadata", 
-        "CHROM b250", "CHROM dict", "POS b250", "POS dict", 
-        "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
-        "QUAL b250", "QUAL dict", "FILTER b250", "FILTER dict",
-        "INFO names b250", "INFO names dict", "INFO values b250", "INFO values dict", 
-        "FORMAT b250", "FORMAT dict", "FORMAT subfields b250", "FORMAT subfields dict",
-        "Haplotype data", "HT separator char", "Phasing char",
-
-        "Line block metadata",
-        "SEQ data", "QUAL data", "RAND_POS data", "MD data",
-        "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
-        "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
-        "POS b250 (delta)", "POS dict (delta)", 
-        "MAPQ b250", "MAPQ dict", "CIGAR b250", "CIGAR dict", 
-        "TLEN b250", "TLEN dict", "PNEXT b250 (delta)", "PNEXT dict (delta)",
-        "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict"
-    };
-
-    unsigned num_secs       = sizeof(secs)/sizeof(secs[0]);
-    unsigned num_categories = sizeof(categories)/sizeof(categories[0]);
-    ASSERT (num_categories == num_secs, "Error: num_categories=%u but num_secs=%u, expecting them to be equal", num_categories, num_secs);
-
-    int64_t total_txt=0, total_z=0, total_entries=0;
-    uint32_t total_sections=0;
-
-    for (unsigned sec_i=0; sec_i < num_secs; sec_i++) {
-        int64_t tbytes    = txt_file->section_bytes[secs[sec_i]];
-        int64_t zbytes    = z_file->section_bytes[secs[sec_i]];
-        int64_t zentries  = z_file->section_entries[secs[sec_i]];
-        int32_t zsections = z_file->num_sections[secs[sec_i]];
-
-        if (!tbytes && !zbytes) continue;
-
-        bool is_dict = section_type_is_dictionary (secs[sec_i]);
-        bool is_b250 = section_type_is_b250 (secs[sec_i]);
-
-        int64_t ratio_zbytes;
-        if (secs[sec_i] == SEC_VCF_INFO_B250 || secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250) 
-            ratio_zbytes = zbytes + z_file->section_bytes[secs[sec_i+1]] + z_file->section_bytes[secs[sec_i+2]] 
-                                  + z_file->section_bytes[secs[sec_i+3]];
-        else if (is_dict || secs[sec_i] == SEC_VCF_INFO_SF_B250 || secs[sec_i] == SEC_SAM_QNAME_SF_B250 || secs[sec_i] == SEC_SAM_OPTNL_SF_B250)
-            ratio_zbytes = 0;
-        else if (is_b250) 
-            ratio_zbytes = zbytes + z_file->section_bytes[secs[sec_i+1]]; // b250 and dict combined
-        else              
-            ratio_zbytes = zbytes;
-
-        int64_t ratio_tbytes;
-        if (secs[sec_i] == SEC_VCF_INFO_B250 || secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250) 
-            ratio_tbytes = tbytes + txt_file->section_bytes[secs[sec_i+2]];
-        else
-            ratio_tbytes = tbytes;
-
-        fprintf (stderr, format, categories[sec_i], zsections, 
-                 buf_display_uint (zentries, zentries_str),
-                 tbytes ? buf_display_size(tbytes, vsize) : "       ", 
-                 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
-                 buf_display_size(zbytes, zsize), 
-                 100.0 * (double)zbytes / (double)z_file->disk_size,
-                 ratio_zbytes ? (double)ratio_tbytes / (double)ratio_zbytes : 0,
-                 !ratio_zbytes ? (ratio_tbytes && secs[sec_i] != SEC_VCF_INFO_SF_B250  && 
-                                                  secs[sec_i] != SEC_SAM_QNAME_SF_B250 && 
-                                                  secs[sec_i] != SEC_SAM_OPTNL_SF_B250 ? "\b\b\bInf" : "\b\b\b---") : "");
-
-        total_sections += zsections;
-        total_entries  += zentries;
-        total_txt      += tbytes;
-        total_z        += zbytes;
-    }
-
-    fprintf (stderr, format, "TOTAL", total_sections, buf_display_uint (total_entries, zentries_str),
-             buf_display_size(total_txt, vsize), 100.0 * (double)total_txt / (double)txt_file->txt_data_size_single,
-             buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
-             (double)total_txt / (double)total_z, "");
-
-    fprintf (stderr, "\nDictionaries:\n");
-    fprintf (stderr, "did_i Name     Type            #Words        #Uniq         Hash    uncomp      comp      comp     comp     %% of \n");
-    fprintf (stderr, "                                                                   dict        dict      b250     TOTAL    file \n");
-    for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
-        char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
-        uint32_t dict_compressed_size, b250_compressed_size;
-
-        const MtfContext *ctx = &z_file->mtf_ctx[i];
-    
-        sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
-
-        fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s %9s %9s %9s %5.1f\n", i, -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
-                 dict_id_display_type (ctx->dict_id), buf_display_uint (ctx->mtf_i.len, s1), buf_display_uint (ctx->mtf.len, s2), 
-                 buf_display_uint (ctx->global_hash_prime, s3), buf_display_size (ctx->dict.len, vsize),
-                 buf_display_size (dict_compressed_size, s4), buf_display_size (b250_compressed_size, s5),
-                 buf_display_size (dict_compressed_size + b250_compressed_size, s6),
-                 100.0 * (double)(dict_compressed_size + b250_compressed_size) / (double)total_z);
-    }
-
-    char s1[20], s2[20];
-    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             buf_display_uint (total_z, s1), buf_display_uint (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
-
-    // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_size is 
-    // missing, while txt_data_so_far_single is what was actually processed
-    ASSERTW (total_txt == txt_file->txt_data_so_far_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             dt_name (z_file->data_type), buf_display_uint (total_txt, s1), buf_display_uint (txt_file->txt_data_size_single, s2), 
-             (int32_t)(txt_file->txt_data_so_far_single - total_txt)); 
-
-}
-
-static void main_show_content (void)
-{
-    main_show_file_metadata();
-
-    char vsize[30], zsize[30];
-    int64_t total_txt=0, total_z=0;
-
-    fprintf (stderr, "Compression stats:\n");
-    fprintf (stderr, "                              VCF     %%       GENOZIP     %%  Ratio\n");
-    const char *format = "%22s   %8s %5.1f      %8s %5.1f  %5.1f%s\n";
-
-    const char *categories[] = {"Haplotype data", "Other sample data", 
-                                "SEQ data", "QUAL data",
-                                "Header & other fields", "Index" };
-
-#define NUM_CATEGORIES 6
-
-    int sections_per_category[NUM_CATEGORIES][100] = { 
-        { SEC_VCF_HT_DATA ,  NIL },
-        { SEC_VCF_PHASE_DATA, SEC_VCF_GT_DATA, SEC_VCF_FRMT_SF_DICT, SEC_STATS_HT_SEPERATOR, NIL},
-        { SEC_SAM_SEQ_DATA,  NIL },
-        { SEC_SAM_QUAL_DATA, NIL },
-        { SEC_TXT_HEADER, 
-          SEC_VCF_VB_HEADER, SEC_VCF_CHROM_B250, SEC_VCF_POS_B250, SEC_VCF_ID_B250, SEC_VCF_REFALT_B250, 
-          
-          SEC_VCF_QUAL_B250, SEC_VCF_FILTER_B250, SEC_VCF_INFO_B250, SEC_VCF_FORMAT_B250, SEC_VCF_INFO_SF_B250, 
-          SEC_VCF_CHROM_DICT, SEC_VCF_POS_DICT, SEC_VCF_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
-          SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,           
-          
-          SEC_SAM_VB_HEADER,     SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA, 
-          SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
-          SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
-          SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      
-          SEC_SAM_CIGAR_B250,    SEC_SAM_CIGAR_DICT,     SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      
-          SEC_SAM_PNEXT_B250,    SEC_SAM_PNEXT_DICT, 
-          SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
-          
-          NIL },
-        { SEC_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }
-    };
-
-    for (unsigned i=0; i < NUM_CATEGORIES; i++) {
-
-        int64_t tbytes=0, zbytes=0;
-        for (int *sec_i = sections_per_category[i]; *sec_i != NIL; sec_i++) {
-            tbytes += txt_file->section_bytes[*sec_i];
-            zbytes += z_file->section_bytes[*sec_i];
-        }
-
-        if (!tbytes && !zbytes) continue;
-
-        fprintf (stderr, format, categories[i], 
-                 buf_display_size(tbytes, vsize), 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
-                 buf_display_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
-                 zbytes ? (double)tbytes / (double)zbytes : 0,
-                 !zbytes ? (tbytes ? "\b\b\bInf" : "\b\b\b---") : "");
-
-        total_txt      += tbytes;
-        total_z        += zbytes;
-    }
-
-    fprintf (stderr, format, "TOTAL", 
-             buf_display_size(total_txt, vsize), 100.0 * (double)total_txt / (double)txt_file->txt_data_size_single,
-             buf_display_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
-             (double)total_txt / (double)total_z, "");
-
-    ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
-             total_z, z_file->disk_size, z_file->disk_size - total_z);
-
-    ASSERTW (total_txt == txt_file->txt_data_size_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
-             dt_name (z_file->data_type), total_txt, txt_file->txt_data_size_single, txt_file->txt_data_size_single - total_txt);
-
-}
-
 static void main_list_dir(); // forward declaration
 
 static void main_genols (const char *z_filename, bool finalize, const char *subdir, bool recursive) 
@@ -464,8 +232,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     if (finalize) {
         if (files_listed > 1) {
-            buf_display_size(total_compressed_len, z_size_str);
-            buf_display_size(total_uncompressed_len, txt_size_str);
+            str_size(total_compressed_len, z_size_str);
+            str_size(total_uncompressed_len, txt_size_str);
             unsigned ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
             bufprintf (evb, &str_buf, foot_format, z_size_str, txt_size_str, ratio);
@@ -500,10 +268,10 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     unsigned ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
     
-    buf_display_size (z_file->disk_size, z_size_str);
-    buf_display_size (txt_data_size, txt_size_str);
-    buf_display_uint (num_lines, num_lines_str);
-    buf_display_uint (num_samples, indiv_str);
+    str_size (z_file->disk_size, z_size_str);
+    str_size (txt_data_size, txt_size_str);
+    str_uint_commas (num_lines, num_lines_str);
+    str_uint_commas (num_samples, indiv_str);
     
     bufprintf (evb, &str_buf, item_format, indiv_str, num_lines_str, 
                z_size_str, txt_size_str, ratio, 
@@ -551,7 +319,7 @@ static void main_genounzip (const char *z_filename,
         txt_filename = (char *)malloc(fn_len + 10);
         ASSERT(txt_filename, "Error: failed to malloc txt_filename, len=%u", fn_len+10);
 
-        // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz
+        // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz ; fastq.genozip -> .fastq or .fastq.gz
         sprintf ((char *)txt_filename, "%.*s%s", 
                  (int)(fn_len - strlen(GENOZIP_EXT)), z_filename,
                  flag_bgzip ? ".gz" : flag_bam ? ".bam" : flag_bcf ? ".bcf" : "");    
@@ -570,7 +338,7 @@ static void main_genounzip (const char *z_filename,
         txt_file = file_open_redirect (WRITE, TXT_FILE, z_file->data_type); // STDOUT
     }
     else if (flag_split) {
-        // do nothing - the vcf component files will be opened by header_genozip_to_txt()
+        // do nothing - the component files will be opened by header_genozip_to_txt()
     }
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");
@@ -578,12 +346,12 @@ static void main_genounzip (const char *z_filename,
     
     const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
     
-    // a loop for decompressing all vcf components in split mode. in non-split mode, it collapses to one a single iteration.
+    // a loop for decompressing all components in split mode. in non-split mode, it collapses to one a single iteration.
     bool piz_successful;
-    unsigned num_vcf_components=0;
+    unsigned num_components=0;
     do {
-        piz_successful = piz_dispatcher (basename, max_threads, num_vcf_components==0, is_last_file);
-        if (piz_successful) num_vcf_components++;
+        piz_successful = piz_dispatcher (basename, max_threads, num_components==0, is_last_file);
+        if (piz_successful) num_components++;
     } while (flag_split && piz_successful); 
 
     if (!flag_concat && !flag_stdout && !flag_split) 
@@ -652,20 +420,24 @@ static void main_genozip (const char *txt_filename,
         if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
 
             if (!z_filename) {
-                const char *basename = url_is_url (txt_filename) ? file_basename (txt_filename, false, "", 0,0) : NULL;
-                const char *local_vcf_filename = basename ? basename : txt_filename;
+                bool is_url = url_is_url (txt_filename);
+                const char *basename = is_url ? file_basename (txt_filename, false, "", 0,0) : NULL;
+                const char *local_txt_filename = basename ? basename : txt_filename;
 
-                unsigned fn_len = strlen (local_vcf_filename);
-                z_filename = (char *)malloc (fn_len + strlen (GENOZIP_EXT) + 1);
+                unsigned fn_len = strlen (local_txt_filename);
+                z_filename = (char *)malloc (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
-                // get name, e.g. xx.bcf.gz -> xx.vcf.genozip
-                static const char *genozip_ext_by_datatype[NUM_DATATYPES] = { VCF_GENOZIP_, SAM_GENOZIP_ };
-                sprintf (z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_vcf_filename,
-                         genozip_ext_by_datatype[txt_file->data_type]); 
+                // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
+                if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
+                    sprintf (z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename,
+                             file_exts[genozip_ft_by_dt[txt_file->data_type]]); 
+                else 
+                    sprintf (z_filename, "%s%s", local_txt_filename, file_exts[genozip_ft_by_dt[txt_file->data_type]]); 
 
                 if (basename) FREE ((char*)basename);
             }
+
             z_file = file_open (z_filename, WRITE, Z_FILE, txt_file->data_type);
         }
     }
@@ -683,17 +455,17 @@ static void main_genozip (const char *txt_filename,
     const char *basename = file_basename (txt_filename, false, "(stdin)", NULL, 0);
     zip_dispatcher (basename, max_threads, is_last_file);
 
-    if (flag_show_sections && is_last_file) main_show_sections();
-    if (flag_show_content && is_last_file)  main_show_content();
+    if (flag_show_sections && is_last_file) stats_show_sections();
+    if (flag_show_content && is_last_file)  stats_show_content();
 
-    bool remove_vcf_file = z_file && flag_replace && txt_filename;
+    bool remove_txt_file = z_file && flag_replace && txt_filename;
 
     file_close (&txt_file, !is_last_file);
 
     if ((is_last_file || !flag_concat) && !flag_stdout && z_file) 
         file_close (&z_file, !is_last_file); 
 
-    if (remove_vcf_file) file_remove (txt_filename, true); 
+    if (remove_txt_file) file_remove (txt_filename, true); 
 
     FREE ((void *)basename);
 
@@ -769,7 +541,7 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
 
 void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 {
-    const char *err_msg = "Error: invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The VCF file will be read and processed in blocks of this number of megabytes.";
+    const char *err_msg = "Error: invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The file will be read and processed in blocks of this number of megabytes.";
 
     unsigned len = strlen (mem_size_mb_str);
     ASSERT (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
@@ -788,9 +560,7 @@ int main (int argc, char **argv)
 {
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows
-    for (char *c=argv[0]; *c; c++) 
-        if (IS_CLETTER (*c))
-            *c += 'a' - 'A';
+    str_to_lowercase (argv[0]);
 #endif
 
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
@@ -1014,7 +784,7 @@ int main (int argc, char **argv)
 
     // default values, if not overridden by the user
     if (!flag_vblock) genozip_set_global_max_memory_per_vb (TXT_DATA_PER_VB); 
-    if (!flag_sblock) zip_vcf_set_global_samples_per_block     (SAMPLES_PER_BLOCK); 
+    if (!flag_sblock) zip_vcf_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split

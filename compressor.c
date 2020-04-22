@@ -14,6 +14,8 @@
 #include "endianness.h"
 #include "crypt.h"
 #include "zfile.h"
+#include "file.h"
+#include "strings.h"
 
 // -----------------------------------------------------
 // memory functions that serve the compression libraries
@@ -47,7 +49,7 @@ static void comp_free (VBlock *vb, void *addr)
 
     char addr_str[POINTER_STR_LEN];
     ABORT ("Error: comp_free failed to find buffer to free. vb_i=%d addr=%s", 
-           vb->vblock_i, buf_display_pointer (addr, addr_str));
+           vb->vblock_i, str_pointer (addr, addr_str));
 }
 
 static void *comp_bzalloc (void *vb_, int items, int size)
@@ -474,9 +476,9 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         // encrypt the header - we use vb_i and section_i to generate a different AES key for each section
         uint32_t vb_i  = BGEN32 (header->vblock_i);
 
-        // note: for SEC_VCF_VB_HEADER we will encrypt at the end of calculating this VB when the index data is
+        // note: for SEC_VB_HEADER in VCF we will encrypt at the end of calculating this VB when the index data is
         // known, and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (header->section_type != SEC_VCF_VB_HEADER || header->vblock_i == 0 /* terminator vb header */)
+        if (header->section_type != SEC_VB_HEADER || z_file->data_type != DT_VCF || header->vblock_i == 0 /* terminator vb header */)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, header->section_type, true);
 
         // encrypt the data body 

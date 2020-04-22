@@ -67,14 +67,15 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         // 3X the expected number of entries to reduce spill-over
         vb_ctx->local_hash_prime = hash_next_size_up (vb_ctx->num_new_entries_prev_merged_vb * 3);
 
-    else if (z_file->data_type == DATA_TYPE_VCF) {
-
+    else switch (z_file->data_type) {
+    
+    case DT_VCF:
         // if typically small - use minimal hash table
-        if (vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_CHROM]  ||
-            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FORMAT] ||
-            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_INFO]   ||
-            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_REFALT] ||
-            vb_ctx->dict_id.num == dict_id_vcf_fields[VCF_FILTER] ||
+        if (vb_ctx->dict_id.num == dict_id_fields[VCF_CHROM]  ||
+            vb_ctx->dict_id.num == dict_id_fields[VCF_FORMAT] ||
+            vb_ctx->dict_id.num == dict_id_fields[VCF_INFO]   ||
+            vb_ctx->dict_id.num == dict_id_fields[VCF_REFALT] ||
+            vb_ctx->dict_id.num == dict_id_fields[VCF_FILTER] ||
             vb_ctx->dict_id.num == dict_id_INFO_AC ||
             vb_ctx->dict_id.num == dict_id_INFO_AF ||
             vb_ctx->dict_id.num == dict_id_INFO_AN ||
@@ -89,14 +90,14 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->dict_id.num == dict_id_FORMAT_PL)
 
             vb_ctx->local_hash_prime = hash_next_size_up(segging_vb->num_lines);
-    }
+        break;
 
-    else if (z_file->data_type == DATA_TYPE_SAM) {
+    case DT_SAM:
         // typically small - use minimal hash table ~ 500
-        if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_FLAG]      ||
-            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_MAPQ]      ||
-            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_QNAME]     ||
-            vb_ctx->dict_id.num == dict_id_sam_fields[SAM_OPTIONAL]  ||
+        if (vb_ctx->dict_id.num == dict_id_fields[SAM_FLAG]      ||
+            vb_ctx->dict_id.num == dict_id_fields[SAM_MAPQ]      ||
+            vb_ctx->dict_id.num == dict_id_fields[SAM_QNAME]     ||
+            vb_ctx->dict_id.num == dict_id_fields[SAM_OPTIONAL]  ||
 
             // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
             vb_ctx->dict_id.num == dict_id_OPTION_AM ||
@@ -139,17 +140,35 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 
         // typically smallish - use hash table ~ 2000
         else 
-        if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_RNAME]  ||
+        if (vb_ctx->dict_id.num == dict_id_fields[SAM_RNAME]  ||
             vb_ctx->dict_id.num == dict_id_OPTION_CC)
 
             vb_ctx->local_hash_prime = hash_next_size_up(2000);
 
         // typically medium - use hash table ~ 50000
         else 
-        if (vb_ctx->dict_id.num == dict_id_sam_fields[SAM_CIGAR]  ||
+        if (vb_ctx->dict_id.num == dict_id_fields[SAM_CIGAR]  ||
             vb_ctx->dict_id.num == dict_id_OPTION_MC)
 
             vb_ctx->local_hash_prime = hash_next_size_up(50000);
+        break;
+
+    case DT_FASTQ:
+    case DT_FASTA:
+        if (vb_ctx->dict_id.num == dict_id_fields[FAST_DESC] ||
+            vb_ctx->dict_id.num == dict_id_fields[FAST_TEMPLATE])
+            
+            vb_ctx->local_hash_prime = hash_next_size_up(500);
+        break;
+
+    case DT_ME23:
+        if (vb_ctx->dict_id.num == dict_id_fields[ME23_CHROM])
+            
+            vb_ctx->local_hash_prime = hash_next_size_up(500);
+        break;
+
+
+    default: ABORT ("hash_alloc_local: unknown data_type=%s", dt_name (z_file->data_type));
     }
 
     // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)

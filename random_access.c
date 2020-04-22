@@ -75,7 +75,7 @@ void random_access_merge_in_vb (VBlock *vb)
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
-    MtfContext *chrom_ctx = &vb->mtf_ctx[chrom_did_i_by_data_type[vb->data_type]];
+    MtfContext *chrom_ctx = &vb->mtf_ctx[chrom_did_i_by_dt[vb->data_type]];
     ASSERT0 (chrom_ctx, "Error in random_access_merge_in_vb: cannot find chrom_ctx");
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
@@ -114,7 +114,6 @@ bool random_access_is_vb_included (uint32_t vb_i,
     static const RAEntry *next_ra = NULL;
     ASSERT0 ((vb_i==1) == !next_ra, "Error: expecting next_ra==NULL iff vb_i==1");
     if (!next_ra) next_ra = (const RAEntry *)z_file->ra_buf.data; // initialize static on first call
-
 
     bool vb_is_included=false;
     for (unsigned ra_i=0; 
@@ -171,7 +170,7 @@ void random_access_show_index (bool from_zip)
     
     ARRAY (RAEntry, ra, z_file->ra_buf);
 
-    MtfContext *ctx = &z_file->mtf_ctx[chrom_did_i_by_data_type[z_file->data_type]];
+    MtfContext *ctx = &z_file->mtf_ctx[chrom_did_i_by_dt[z_file->data_type]];
 
     for (unsigned i=0; i < z_file->ra_buf.len; i++) {
         

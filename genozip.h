@@ -29,14 +29,6 @@
 // default max amount of VCF data in each variant block. this is user-configurable with --vblock
 #define TXT_DATA_PER_VB   "128" // MB
 
-// default max number of samples in each sample block within a variant block. user configurable with --sblock
-#define SAMPLES_PER_BLOCK "4096" 
-
-#define MAX_PLOIDY         100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
-#if MAX_PLOIDY > 65535
-#error "MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeaderVCF.ploidy and VBlockVCF.ploidy are uint16_t"
-#endif
-
 #define MAX_SUBFIELDS      63   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME and SAM_OPTIONAL subfield types that is supported in one GENOZIP file.
 
 #define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined). 
@@ -44,11 +36,21 @@
 #error "MAX_DICTS cannot go beyond 255 as SubfieldMapper and SubfieldInfoMapperPiz represent did_i as uint8_t, and NIL=255"
 #endif
 
-#define MAX_ALLELE_VALUE   99 // the code currently allows for 2-digit alleles.
-
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
  
-#define MAX_32BIT_WINDOWS_MEMORY (1.7*1024*1024*1024) // 1.7GB - so Windows 32bit code doesn't explode at 2GB. TO DO - make this platform specific or get ulimits
+// ------------------------
+// VCF stuff
+// ------------------------
+
+// default max number of samples in each sample block within a variant block. user configurable with --sblock
+#define VCF_SAMPLES_PER_VBLOCK "4096" 
+
+#define VCF_MAX_PLOIDY     100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
+#if VCF_MAX_PLOIDY > 65535
+#error "VCF_MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeaderVCF.ploidy and VBlockVCF.ploidy are uint16_t"
+#endif
+
+#define VCF_MAX_ALLELE_VALUE   99 // the code currently allows for 2-digit alleles.
 
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
@@ -59,6 +61,13 @@ typedef struct VBlockVCF *VBlockVCFP;
 typedef const struct VBlockVCF *ConstVBlockVCFP;
 typedef struct VBlockSAM *VBlockSAMP;
 typedef const struct VBlockSAM *ConstVBlockSAMP;
+typedef struct VBlockFAST *VBlockFASTP;
+typedef const struct VBlockFAST *ConstVBlockFASTP;
+typedef struct VBlockME23 *VBlockME23P;
+typedef const struct VBlockME23 *ConstVBlockME23P;
+
+typedef struct SubfieldMapper *SubfieldMapperP; 
+typedef const struct SubfieldMapper *ConstSubfieldMapperP; 
 typedef struct File *FileP;
 typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;
@@ -101,11 +110,6 @@ extern VBlockP evb;
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
-
-#define IS_DIGIT(c)   ((c)>='0' && (c)<='9')
-#define IS_CLETTER(c) ((c)>='A' && (c)<='Z')
-#define IS_SLETTER(c) ((c)>='a' && (c)<='z')
-#define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
 #endif
 
 // sanity checks

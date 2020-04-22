@@ -609,7 +609,7 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
 
                 else { // allele 0 to 99
                     unsigned allele = ht - '0'; // allele 0->99 represented by ascii 48->147
-                    ASSERT (allele <= MAX_ALLELE_VALUE, "Error: allele out of range: %u (ht=ascii(%u)) line_i=%u sample_i=%u", allele, (unsigned)ht, vb->first_line + vb_line_i, sample_i+1);
+                    ASSERT (allele <= VCF_MAX_ALLELE_VALUE, "Error: allele out of range: %u (ht=ascii(%u)) line_i=%u sample_i=%u", allele, (unsigned)ht, vb->first_line + vb_line_i, sample_i+1);
                     
                     if (allele >= 10) *(next++) = '0' + allele / 10;
                     *(next++) = '0' + allele % 10;
@@ -776,16 +776,16 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     // The VB is read from disk in zfile_vcf_read_one_vb(), in the I/O thread, and is decompressed here in the 
     // Compute thread, with the exception of dictionaries that are processed by the I/O thread
     // Order of sections in a V2 VB:
-    // 1. SEC_VCF_VB_HEADER - its data is the haplotype index
+    // 1. SEC_VB_HEADER - its data is the haplotype index
     // 2. (the dictionaries were here in the file, but they are omitted from vb->z_data)
     // 3. b250 of CHROM to FORMAT fields
     // 4. SEC_VCF_INFO_SF_B250 - All INFO subfield data
     // 5. All sample data: multiple sections per sample block:
-    //    5a. SEC_VCF_GT_DATA - genotype data
+    //    5a. SEC_GT_DATA - genotype data
     //    5b. SEC_VCF_PHASE_DATA - phase data
     //    5c. SEC_VCF_HT_DATA (1 section) or SEC_HAPLOTYPE_GTSHARK (5 sections) - haplotype data
 
-    unsigned *section_index = (unsigned *)vb->z_section_headers.data;
+    ARRAY (const unsigned, section_index, vb->z_section_headers);
 
     SectionHeaderVbHeaderVCF *header = (SectionHeaderVbHeaderVCF *)(vb->z_data.data + section_index[0]);
     vb->first_line              = BGEN32 (header->first_line);
@@ -822,7 +822,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     if (global_vcf_num_samples && vb->num_haplotypes_per_line && !flag_drop_genotypes) {
 
        zfile_uncompress_section ((VBlockP)vb, &vb->z_data.data[section_index[0]], &vb->haplotype_permutation_index_squeezed, 
-                                 "haplotype_permutation_index_squeezed", SEC_VCF_VB_HEADER);
+                                 "haplotype_permutation_index_squeezed", SEC_VB_HEADER);
 
         buf_alloc (vb, &vb->haplotype_permutation_index, vb->num_haplotypes_per_line * sizeof(uint32_t), 0, 
                     "haplotype_permutation_index", vb->first_line);
@@ -837,15 +837,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     unsigned section_i=1;
 
     // uncompress the 8 fields (CHROM to FORMAT)    
-    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
-
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-
-        if (flag_strip && (f == VCF_ID || f >= VCF_QUAL)) continue; // we don't need most of the fields if --strip
-        if ((flag_drop_genotypes || flag_gt_only) && f==VCF_FORMAT) continue; // we don't need FORMAT if --gt-only or --drop-genotypes
-
-        zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", FIELD_TO_B250_SECTION(f));
-    }
+    piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
 
     for (uint8_t sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
         
@@ -890,7 +882,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) {
             if (!flag_strip && !flag_gt_only) 
-                zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i], &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_VCF_GT_DATA);
+                zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i], &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_GT_DATA);
             section_i++;
         }                
 

@@ -17,7 +17,7 @@
 // ":#" indicating that the original VCF line had a Windows-style \r\n ending
 #define DID_I_HAS_13 254 
 #define DID_I_NONE   255
-typedef struct {
+typedef struct SubfieldMapper {
     uint8_t num_subfields;        // (uint8_t)NIL if this mapper is not defined
     uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]
 } SubfieldMapper;
@@ -47,7 +47,8 @@ typedef struct {
     /* tracking execution */\
     int32_t vb_data_size;      /* expected size of decompressed VCF. Might be different than original if --optimize is used. */\
     uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
-    \
+    uint32_t longest_line_len; /* length of longest line of text line in this vb */\
+\
     ProfilerRec profile; \
     \
     /* random access, chrom, pos */ \
@@ -244,11 +245,10 @@ typedef struct {
     uint32_t seq_data_len, qual_data_len, e2_data_len, u2_data_len;         // length within vb->txt_data
     uint32_t seq_len;        // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 
-    uint32_t qname_mtf_i;    // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
-    uint32_t optional_mtf_i; // the mtf_i into mtx_ctx[SAM_OPTIONAL].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
+    uint32_t rname_node_index, pos_start; // used to optimize seq data before serving to compressor
 } ZipDataLineSAM;
 
-// IMPORTANT: if changing fields in VBlockSAM, also update vb_sam_release_vb
+// IMPORTANT: if changing fields in VBlockSAM, also update vb_sam_release_vb and vb_sam_destroy_vb
 typedef struct VBlockSAM {
 
     VBLOCK_COMMON_FIELDS
@@ -257,8 +257,8 @@ typedef struct VBlockSAM {
 
     uint32_t last_rname_node_index;      // ZIP: RNAME node index of previous line
 
-    const char *last_tlen_abs;          // ZIP & PIZ: last tlen segmented - pointer into vb->txt_data.data (ZIP) or TLEN dictionary (PIZ)        
-    uint32_t last_tlen_abs_len;        // absolute value of last tlen, its sign, and the string length of last_tlen_abs
+    const char *last_tlen_abs;           // ZIP & PIZ: last tlen segmented - pointer into vb->txt_data.data (ZIP) or TLEN dictionary (PIZ)        
+    uint32_t last_tlen_abs_len;          // absolute value of last tlen, its sign, and the string length of last_tlen_abs
     bool last_tlen_is_positive;
 
     Buffer random_pos_data;              // POS data - data from : 
@@ -267,8 +267,6 @@ typedef struct VBlockSAM {
                                          // 3. POS data in SA, OA and XA
     Buffer md_data;                      // MD data - from optional field MD;
     
-    uint32_t longest_line_len;           // length of longest line of SAM data in this vb
-
     // PIZ-only stuff
     Buffer reconstructed_line;           // PIZ: reconstruction of current line
     int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
@@ -279,5 +277,47 @@ typedef struct VBlockSAM {
     uint32_t next_random_pos, next_md;   // PIZ only: indeces into random_pos_data, md_data
     uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
+
+//-----------------------------------------
+// FASTA & FASTQ STUFF
+//-----------------------------------------
+
+// IMPORTANT: if changing fields in DataLine, also update vb_release_vb
+typedef struct {
+    uint32_t seq_data_start, qual_data_start; // start within vb->txt_data
+    uint32_t seq_len;                         // length within vb->txt_data (in case of FASTQ, this length is also applies to quality, per FASTQ spec)
+} ZipDataLineFAST;
+
+// IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb and vb_fast_destroy_vb
+typedef struct VBlockFAST { // for FASTA and FASTQ
+
+    VBLOCK_COMMON_FIELDS
+
+    SubfieldMapper desc_mapper;          // ZIP & PIZ
+
+    // PIZ-only stuff
+    Buffer reconstructed_line;           // PIZ: reconstruction of current line
+    Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
+    Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
+    uint32_t next_seq, next_qual;        // PIZ only: indeces into seq_data, qual_data
+} VBlockFAST;
+
+//-----------------------------------------
+// ME23 STUFF
+//-----------------------------------------
+
+// IMPORTANT: if changing fields in VBlockME23, also update vb_me23_release_vb and vb_me23_destroy_vb
+typedef struct VBlockME23 { // for 23andMe 
+
+    VBLOCK_COMMON_FIELDS
+
+    Buffer rsid_data;             // ZIP & PIZ
+    Buffer genotype_data;         // ZIP & PIZ
+    
+    // PIZ-only stuff
+    Buffer reconstructed_line;    // PIZ: reconstruction of current line
+    uint32_t next_rsid;           // PIZ only: used to reconstruct rsid
+    uint32_t next_genotype;       // PIZ only: used to genotype_data rsid
+} VBlockME23;
 
 #endif

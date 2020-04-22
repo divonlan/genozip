@@ -282,7 +282,7 @@ static void gtshark_generate_haplotype_data (VBlockVCF *vb, unsigned sb_i)
             ASSERT (ht_i < num_hts, "Error processing exceptions for vb_i=%u: ht_i=%u is out of range (num_hts=%u)", 
                     vb->vblock_i, ht_i, num_hts);
 
-            ASSERT (*next_allele <= '0' + MAX_ALLELE_VALUE, "Error processing exceptions for vb_i=%u: allele is out of range (ascii(%u))", vb->vblock_i, (unsigned)*next_allele);
+            ASSERT (*next_allele <= '0' + VCF_MAX_ALLELE_VALUE, "Error processing exceptions for vb_i=%u: allele is out of range (ascii(%u))", vb->vblock_i, (unsigned)*next_allele);
             haplotype_data[ht_i * num_lines + vb_line_i] = *(next_allele++);
             last_ht_i = ht_i;
         }

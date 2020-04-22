@@ -21,6 +21,21 @@
 #include "samples.h"
 #include "dict_id.h"
 
+void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
+                            unsigned *section_i /* in/out */)
+{
+    // uncompress b250 data for all primary fields
+    for (int f=0 ; f <= datatype_last_field[z_file->data_type] ; f++) {
+
+        SectionType b250_sec = FIELD_TO_B250_SECTION(f);
+
+        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
+        if (zfile_skip_section_by_flags (b250_sec, DICT_ID_NONE)) continue;
+
+        zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);
+    }
+}
+
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len,
                         char *pos_str, unsigned *pos_len) // out
@@ -71,7 +86,7 @@ int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta
 static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 {
     int16_t data_type = zfile_read_genozip_header (original_file_digest);
-    if (data_type == DATA_TYPE_VCF_V1 || data_type == EOF) return data_type;
+    if (data_type == DT_VCF_V1 || data_type == EOF) return data_type;
 
     dict_id_initialize();
     
@@ -83,7 +98,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
             zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
             // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-            regions_make_chregs (chrom_did_i_by_data_type[data_type]);
+            regions_make_chregs (chrom_did_i_by_dt[data_type]);
 
             // if the regions are negative, transform them to the positive complement instead
             regions_transform_negative_to_positive_complement();
@@ -117,7 +132,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
     return data_type;
 }
 
-static void enforce_v1_limitations (bool is_first_vcf_component)
+static void enforce_v1_limitations (bool is_first_component)
 {
     #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s compressed with genozip version 1", (lflag), z_name);
     
@@ -138,16 +153,16 @@ static void enforce_v1_limitations (bool is_first_vcf_component)
     ENFORCE(flag_strip, "--flag_strip");
 }
 
-// returns true is successfully outputted a vcf file
+// returns true is successfully outputted a txt file
 bool piz_dispatcher (const char *z_basename, unsigned max_threads, 
-                     bool is_first_vcf_component, bool is_last_file)
+                     bool is_first_component, bool is_last_file)
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
     bool piz_successful = false;
     SectionListEntry *sl_ent = NULL;
     
-    if (flag_split && !sections_has_more_vcf_components()) return false; // no more components
+    if (flag_split && !sections_has_more_components()) return false; // no more components
 
     if (!dispatcher) 
         dispatcher = dispatcher_init (max_threads, 0, flag_test, is_last_file, z_basename);
@@ -155,12 +170,12 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     // read genozip header
     Md5Hash original_file_digest;
 
-    // read genozip header, dictionaries etc and set the data type when reading the first vcf component of in case of --split, 
+    // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --split, 
     static int16_t data_type = EOF; 
-    if (is_first_vcf_component) {
+    if (is_first_component) {
         data_type = piz_read_global_area (&original_file_digest);
 
-        if (data_type != DATA_TYPE_VCF_V1)  // genozip v2+ - move cursor past first txt header
+        if (data_type != DT_VCF_V1)  // genozip v2+ - move cursor past first txt header
             ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
 
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
@@ -168,17 +183,19 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     }
 
     // case: we couldn't open the file because we didn't know what type it is - open it now
-    if (!txt_file->file) file_open_txt (txt_file);
+    if (!flag_split && !txt_file->file) file_open_txt (txt_file);
 
     if (data_type == EOF) goto finish;
 
-    if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_vcf_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
+    if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 
-    // read and write VCF header. in split mode this also opens txt_file
-    piz_successful = (data_type != DATA_TYPE_VCF_V1) ? header_genozip_to_txt (&original_file_digest)
-                                             : v1_header_genozip_to_vcf (&original_file_digest);
+    // read and write txt header. in split mode this also opens txt_file
+    piz_successful = (data_type != DT_VCF_V1) ? header_genozip_to_txt (&original_file_digest)
+                                                     : v1_header_genozip_to_vcf (&original_file_digest);
     
-    ASSERT (piz_successful || !is_first_vcf_component, "Error: failed to read VCF header in %s", z_name);
+    ASSERT (piz_successful || !is_first_component, "Error: failed to read %s header in %s", 
+            dt_name (z_file->data_type), z_name);
+
     if (!piz_successful || flag_header_only) goto finish;
 
     if (flag_split) 
@@ -200,8 +217,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                 static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
                 SectionType header_type = sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix);
                 switch (header_type) {
-                    case SEC_SAM_VB_HEADER: 
-                    case SEC_VCF_VB_HEADER: {
+                    case SEC_VB_HEADER: {
 
                         // if we skipped VBs or we skipped the sample sections in the last vb (flag_drop_genotypes), we need to seek forward 
                         if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); 
@@ -213,16 +229,16 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                             buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
                         }
                         
-                        if      (header_type == SEC_VCF_VB_HEADER) zfile_vcf_read_one_vb ((VBlockVCFP)next_vb); 
-                        else if (header_type == SEC_SAM_VB_HEADER) zfile_sam_read_one_vb ((VBlockSAMP)next_vb); 
+                        // read one VB's genozip data
+                        read_one_vb_func_by_dt[z_file->data_type](next_vb);
 
                         compute = true;
                         break;
                     }
 
-                    case SEC_TXT_HEADER: // 2nd+ vcf header of a concatenated file
+                    case SEC_TXT_HEADER: // 2nd+ txt header of a concatenated file
                         if (!flag_split) {
-                            header_genozip_to_txt (NULL); // skip 2nd+ vcf header if concatenating
+                            header_genozip_to_txt (NULL); // skip 2nd+ txt header if concatenating
                             continue;
                         }
                         break; // eof if splitting
@@ -236,10 +252,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
             else compute = v1_zfile_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
             
             if (compute) {
-                static DispatcherFuncType uncompress_funcs[NUM_DATATYPES] =  
-                    { piz_vcf_uncompress_one_vb, piz_sam_uncompress_one_vb };
-
-                dispatcher_compute (dispatcher, uncompress_funcs[z_file->data_type]);
+                dispatcher_compute (dispatcher, uncompress_func_by_dt[z_file->data_type]);
                 header_only_file = false;                
             }
             else { // eof
@@ -253,13 +266,9 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         // PRIORITY 2: Wait for the first thread (by sequential order) to complete and write data
         else { // if (dispatcher_has_processed_vb (dispatcher, NULL)) {
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
-    
-            switch (z_file->data_type) {
-                case DATA_TYPE_VCF: txtfile_write_one_vblock_vcf ((VBlockVCFP)processed_vb); break;
-                case DATA_TYPE_SAM: txtfile_write_one_vblock_sam ((VBlockSAMP)processed_vb); break;
-                default:            ABORT ("Error in piz_dispatcher: invalid data_type=%d", z_file->data_type);
-            }
-            
+
+            txtfile_write_vb_func_by_dt[z_file->data_type](processed_vb);
+
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
 
             dispatcher_finalize_one_vb (dispatcher);

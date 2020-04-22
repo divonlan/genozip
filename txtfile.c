@@ -19,6 +19,7 @@
 #include "vblock.h"
 #include "file.h"
 #include "compressor.h"
+#include "strings.h"
 #include "zlib/zlib.h"
 
 static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
@@ -38,14 +39,14 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
 
     int32_t bytes_read=0;
 
-    if (file_is_plain_txt (txt_file)) {
+    if (file_is_plain_or_ext_decompressor (txt_file)) {
         
         bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
         ASSERT (bytes_read >= 0, "Error: read failed from %s: %s", txt_name, strerror(errno));
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
         // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
-        if (!bytes_read && file_is_via_ext_decompressor (txt_file)) {
+        if (!bytes_read && file_is_read_via_ext_decompressor_type (txt_file->type)) {
             file_assert_ext_decompressor();
             goto finish; // all is good - just a normal end-of-file
         }
@@ -238,9 +239,11 @@ unsigned txtfile_write_to_disk (const Buffer *buf)
     return buf->len;
 }
 
-void txtfile_write_one_vblock_vcf (VBlockVCF *vb)
+void txtfile_write_one_vblock_vcf (VBlock *vb_)
 {
     START_TIMER;
+
+    VBlockVCF *vb = (VBlockVCFP)vb_;
 
     unsigned size_written_this_vb = 0;
 
@@ -255,23 +258,25 @@ void txtfile_write_one_vblock_vcf (VBlockVCF *vb)
     ASSERTW (size_written_this_vb == vb->vb_data_size || exe_type == EXE_GENOCAT, 
             "Warning: Variant block %u (num_lines=%u) had %s bytes in the original VCF file but %s bytes in the reconstructed file (diff=%d)", 
             vb->vblock_i, vb->num_lines, 
-            buf_display_uint (vb->vb_data_size, s1), buf_display_uint (size_written_this_vb, s2), 
+            str_uint_commas (vb->vb_data_size, s1), str_uint_commas (size_written_this_vb, s2), 
             (int32_t)size_written_this_vb - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (vb->profile.write);
 }
 
-void txtfile_write_one_vblock_sam (VBlockSAMP vb)
+void txtfile_write_one_vblock (VBlockP vb_)
 {
     START_TIMER;
 
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+    
     txtfile_write_to_disk (&vb->txt_data);
 
     char s1[20], s2[20];
     ASSERTW (vb->txt_data.len == vb->vb_data_size || exe_type == EXE_GENOCAT, 
             "Warning: vblock %u (num_lines=%u) had %s bytes in the original SAM file but %s bytes in the reconstructed file (diff=%d)", 
             vb->vblock_i, vb->num_lines, 
-            buf_display_uint (vb->vb_data_size, s1), buf_display_uint (vb->txt_data.len, s2), 
+            str_uint_commas (vb->vb_data_size, s1), str_uint_commas (vb->txt_data.len, s2), 
             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (vb->profile.write);
@@ -291,24 +296,24 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
     double ratio=1;
 
     // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
-    if (txt_file->type == VCF_GZ || txt_file->type == VCF_BGZ || txt_file->type == VCF_BZ2) 
+    if (file_is_gz_type (txt_file->type) || file_is_bz2_type (txt_file->type))
         ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size;
 
     // for compressed files for which we don't have their size (eg streaming from an http server) - we use
     // estimates based on a benchmark compression ratio of files with and without genotype data
-    else if (txt_file->type == BCF || txt_file->type == BCF_GZ || txt_file->type == BCF_BGZ)
+    else if (file_is_bcf_type (txt_file->type))
         // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
         // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
         // the bcf is compressed as it normally is.
         ratio = ((VBlockVCF *)vb)->has_genotype_data ? 8.5 : 55;
 
-    else if (txt_file->type == VCF_XZ)
+    else if (file_is_xz_type (txt_file->type))
         ratio = ((VBlockVCF *)vb)->has_genotype_data ? 12.7 : 171;
 
-    else if (txt_file->type == BAM)
+    else if (file_is_bam_type (txt_file->type))
         ratio = 4;
 
-    else if (txt_file->type == VCF || txt_file->type == SAM)
+    else if (file_is_plain_type (txt_file->type))
         ratio = 1;
 
     else ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);

@@ -16,7 +16,7 @@
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
-#define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF spec doesn't limit the ID length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
+#define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/SAM spec don't limit the ID length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
 typedef union {
     uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN]; // \0-padded IDs 
@@ -36,7 +36,7 @@ static inline DictIdType dict_id_field(    DictIdType dict_id) { dict_id.id[0] =
 #define dict_id_is_vcf_format_sf(dict_id) ((dict_id.id[0] >> 6) == 1)
 
 static inline DictIdType dict_id_vcf_info_sf(  DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
-static inline DictIdType dict_id_vcf_format_sf(DictIdType dict_id) {                                       return dict_id; } // no change - keep Msb 01
+static inline DictIdType dict_id_vcf_format_sf(DictIdType dict_id) { return dict_id; } // no change - keep Msb 01
 
 // SAM field types - overload the VCF dict id types
 #define dict_id_is_sam_qname_sf dict_id_is_vcf_info_sf
@@ -45,13 +45,17 @@ static inline DictIdType dict_id_vcf_format_sf(DictIdType dict_id) {            
 #define dict_id_sam_qname_sf dict_id_vcf_info_sf
 #define dict_id_sam_optnl_sf dict_id_vcf_format_sf
 
+// FASTQ/FASTA field types - overload the VCF dict id types
+#define dict_id_is_fast_id_sf dict_id_is_vcf_format_sf
+#define dict_id_fast_id_sf dict_id_vcf_format_sf
+
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 
 extern DictIdType DICT_ID_NONE;
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
 
-extern uint64_t dict_id_vcf_fields[], dict_id_sam_fields[], 
+extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, // some VCF FORMAT subfields
                 dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
                 dict_id_INFO_13,

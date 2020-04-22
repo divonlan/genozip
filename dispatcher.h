@@ -8,6 +8,7 @@
 
 #include "genozip.h"
 #include "buffer.h"
+#include "header.h"
 
 typedef void *Dispatcher;
 extern Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
@@ -16,8 +17,7 @@ extern void dispatcher_pause (Dispatcher dispatcher);
 extern void dispatcher_resume (Dispatcher dispatcher);
 extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i);
 
-typedef void (*DispatcherFuncType)(VBlockP);
-extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func);
+extern void dispatcher_compute (Dispatcher dispatcher, ComputeFunc func);
 extern VBlockP dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i);       
 extern bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final);                                  
 extern VBlockP dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final);

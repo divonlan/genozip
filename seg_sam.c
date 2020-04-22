@@ -11,27 +11,20 @@
 #include "file.h"
 #include "random_access.h"
 #include "endianness.h"
+#include "strings.h"
 
 #define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
 
-void seg_sam_initialize (VBlockSAM *vb)
+// called from seg_all_data_lines
+void seg_sam_initialize (VBlock *vb_)
 {
-    vb->last_pos = 0;
-    vb->last_rname_node_index = (uint32_t)-1;
-}
+    VBlockSAM *vb = (VBlockSAM *)vb_;
 
-static inline uint32_t seg_sam_one_field (VBlockSAM *vb, const char *str, unsigned len, unsigned vb_line_i, SamFields f, 
-                                          bool *is_new)  // optional out
-{
-    return seg_one_field ((VBlockP)vb, str, len, vb_line_i, f, FIELD_TO_B250_SECTION(f), is_new);
-}                                          
-  
+    buf_alloc (vb, &vb->md_data, 12 * vb->num_lines, 1, "md_data", vb->vblock_i);
+    buf_alloc (vb, &vb->random_pos_data, vb->num_lines * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
+}             
+
 // We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings.
-// Up to MAX_SUBFIELDS subfields are permitted.
-// each subfield is stored in its own directory called QNAME_n where n is the subfield number starting from 0. 
-// The separators are made into a string we call "template" that is stored in the QNAME directory - we anticipate that 
-// usually all lines have the same format, but we allow lines to have different formats.
-// If a subfield is an integer, we delta-encode it.
 // QNAME formats:
 // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
 // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
@@ -39,65 +32,11 @@ static inline void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsign
 {
     // note on id: first char must be a letter per SAM spec and also dict_id_* assumption. The second character
     // is the subfield, because we want to use for mapping in dict_id_to_did_i_map
-    static DictIdType sf_dict_id = { .id = { 'Q','0','N','A','M','E', 0, 0} }; // 0xc0 because it is a QNAME subfield (see dict_id.h)
+    static DictIdType sf_dict_id = { .id = { 'Q','0','N','A','M','E', 0, 0} }; 
 
-    const char *snip = qname;
-    unsigned snip_len = 0;
-    unsigned sf_i = 0;
-    char template[MAX_SUBFIELDS];
-    MtfNode *node;
-
-#define MAX_QNAME_COMPONENTS (10+26)
-
-    // add each subfield to its dictionary QNAME00 through QNAME62
-    for (unsigned i=0; i <= qname_len; i++) { // one more than qname_len - to finalize the last subfield
-
-        if (i==qname_len || 
-            ((qname[i]==':' || qname[i]=='/') && sf_i < MAX_QNAME_COMPONENTS-1)) { // a subfield ended - separator between subfields
-            
-            // process the subfield that just ended
-            MtfContext *sf_ctx;
-
-            if (vb->qname_mapper.num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
-                sf_dict_id.id[1] = (sf_i <= 9) ? (sf_i + '0') : (sf_i-10 + 'a');
-
-                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
-                                                 dict_id_sam_qname_sf (sf_dict_id), SEC_SAM_QNAME_SF_DICT);
-                vb->qname_mapper.did_i[sf_i] = sf_ctx->did_i;
-                vb->qname_mapper.num_subfields++;
-            }
-            else 
-                sf_ctx = MAPPER_CTX (&vb->qname_mapper, sf_i);
-
-            ASSERT0 (sf_ctx, "Error in seg_sam_qname_field: sf_ctx is NULL");
-
-            // allocate memory if needed
-            buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->num_lines, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                       CTX_GROWTH, "mtf_ctx->mtf_i", sf_ctx->did_i);
-
-            NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
-
-            // finalize this subfield and get ready for reading the next one
-            if (i < qname_len) {    
-                template[sf_i] = qname[i];
-                snip = &qname[i+1];
-                snip_len = 0;
-            }
-            sf_i++;
-        }
-        else snip_len++;
-    }
-
-    // if template is empty, make it "*"
-    if (sf_i==1) template[0] = '*';
-
-    // add template to the QNAME dictionary (note: template may be of length zero if qname has no / or :)
-    MtfContext *qname_ctx = &vb->mtf_ctx[SAM_QNAME];
-    NEXTENT (uint32_t, qname_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, qname_ctx, template, MAX (1, sf_i-1), &node, NULL);
-
-    // byte counts for --show-sections 
-    vb->txt_section_bytes[SEC_SAM_QNAME_B250]    += sf_i; // sf_i has 1 for each separator including the terminating \t
-    vb->txt_section_bytes[SEC_SAM_QNAME_SF_B250] += qname_len - (sf_i-1); // the entire field except for the / and : separators
+    seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[SAM_QNAME], qname, qname_len, &vb->qname_mapper,
+                        dict_id_sam_qname_sf (sf_dict_id), 0, 
+                        SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250, vb_line_i);
 }
 
 // if this row's tlen is the negative of the previous row - store "*" instead of the tlen - thereby cutting
@@ -122,13 +61,13 @@ static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
 
     // case: tlen is the negative of previous line - replace it with "*"
     if (this_neg_prev_pos || this_pos_prev_neg) {
-        seg_sam_one_field (vb, "*", 1, vb_line_i, SAM_TLEN, NULL);
-        vb->txt_section_bytes[SEC_SAM_QNAME_B250] += tlen_len - 1; // seg_sam_one_field only added 2 (1 for \t), we should add the rest
+        seg_one_field (vb, "*", 1, vb_line_i, SAM_TLEN);
+        vb->txt_section_bytes[SEC_SAM_QNAME_B250] += tlen_len - 1; // seg_one_field only added 2 (1 for \t), we should add the rest
     }
 
     // case: tlen is not negative of previous line - add as is
     else 
-        seg_sam_one_field (vb, tlen, tlen_len, vb_line_i, SAM_TLEN, NULL);
+        seg_one_field ((VBlockP)vb, tlen, tlen_len, vb_line_i, SAM_TLEN);
 
     vb->last_tlen_abs         = &tlen[!tlen_is_positive]; // store absolute value
     vb->last_tlen_is_positive = tlen_is_positive;
@@ -183,8 +122,7 @@ static inline uint32_t seg_sam_add_to_random_pos_data (VBlockSAM *vb, SectionTyp
     ASSERT (standard_random_pos_encoding, "%s: Error in %s, vb_i=%u: Bad position data in field %s - expecting an integer between 0 and %u without leading zeros, but instead seeing \"%.*s\"",
             global_cmd, txt_name, vb->vblock_i, field_name, 0xfffffffe, snip_len, snip);
 
-    buf_alloc (vb, &vb->random_pos_data, sizeof(uint32_t) * MAX (vb->random_pos_data.len+1, vb->num_lines), 2, 
-               "random_pos_data", vb->vblock_i);
+    buf_alloc_more (vb, &vb->random_pos_data, 1, 0, uint32_t, 2);
 
     // 32 bit number - this compresses better than textual numbers with LZMA
     uint32_t n32 = (uint32_t)n64;
@@ -193,15 +131,6 @@ static inline uint32_t seg_sam_add_to_random_pos_data (VBlockSAM *vb, SectionTyp
     vb->txt_section_bytes[sec] += add_bytes;
 
     return n32;
-}
-
-static inline void seg_sam_add_to_data_buf (VBlockSAM *vb, Buffer *buf, const char *buf_name, SectionType sec, 
-                                            const char *snip, unsigned snip_len, unsigned add_bytes)
-{
-    buf_alloc (vb, buf, MAX (buf->len + snip_len+1, vb->num_lines * (snip_len+3)), 2, buf_name, vb->vblock_i);
-    if (snip_len) buf_add (buf, snip, snip_len); 
-    buf_add (buf, "\t", 1); 
-    vb->txt_section_bytes[sec] += add_bytes;
 }
 
 static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned vb_line_i,
@@ -236,9 +165,9 @@ static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsign
                           SEC_SAM_OPTNL_SF_B250, 2);
 
         // rname, cigar and mapq: we store in the same dictionary as the primary fields
-        seg_sam_one_field (vb, rname, rname_len, vb_line_i, SAM_RNAME, NULL);
-        seg_sam_one_field (vb, cigar, cigar_len, vb_line_i, SAM_CIGAR, NULL);
-        seg_sam_one_field (vb, mapq,  mapq_len, vb_line_i, SAM_MAPQ, NULL);
+        seg_one_field ((VBlockP)vb, rname, rname_len, vb_line_i, SAM_RNAME);
+        seg_one_field ((VBlockP)vb, cigar, cigar_len, vb_line_i, SAM_CIGAR);
+        seg_one_field (vb, mapq,  mapq_len, vb_line_i, SAM_MAPQ);
     }
 
     return repeats;
@@ -283,8 +212,8 @@ static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned fie
                           SEC_SAM_OPTNL_SF_B250, nm_len+1);
 
         // rname and cigar: we store in the same dictionary as the primary fields
-        seg_sam_one_field (vb, rname, rname_len, vb_line_i, SAM_RNAME, NULL);
-        seg_sam_one_field (vb, cigar, cigar_len, vb_line_i, SAM_CIGAR, NULL);
+        seg_one_field (vb, rname, rname_len, vb_line_i, SAM_RNAME);
+        seg_one_field (vb, cigar, cigar_len, vb_line_i, SAM_CIGAR);
     }
 
     return repeats;
@@ -374,7 +303,7 @@ static inline void seg_sam_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictIdTy
         char new_snip[20];    
         unsigned delta_len;
         new_snip[0] = '*'; 
-        buf_display_uint_no_commas (dl->seq_len-as, &new_snip[1], &delta_len);
+        str_uint (dl->seq_len-as, &new_snip[1], &delta_len);
 
         seg_one_subfield ((VBlock *)vb, new_snip, delta_len+1, vb_line_i, dict_id, SEC_SAM_OPTNL_SF_B250, snip_len + 1); 
     }
@@ -419,7 +348,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
         // fields containing CIGAR format data
         if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
-            seg_sam_one_field (vb, value, value_len, vb_line_i, SAM_CIGAR, NULL);
+            seg_one_field (vb, value, value_len, vb_line_i, SAM_CIGAR);
 
         // MD's logical length is normally the same as seq_len, we use this to optimize it.
         // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
@@ -432,10 +361,10 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             if (md_is_changeable) 
                 md_is_changeable = seg_sam_get_shortened_MD (value, value_len, dl->seq_len, new_md, &new_md_len);
 
-            seg_sam_add_to_data_buf (vb, &vb->md_data, "md_data", SEC_SAM_MD_DATA, 
-                                     md_is_changeable ? new_md : value, 
-                                     md_is_changeable ? new_md_len : value_len, 
-                                     value_len+1);
+            seg_add_to_data_buf ((VBlockP)vb, &vb->md_data, SEC_SAM_MD_DATA, 
+                                 md_is_changeable ? new_md : value, 
+                                 md_is_changeable ? new_md_len : value_len,
+                                 true, value_len+1);
         }
 
         // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
@@ -459,7 +388,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->e2_data_start = value - vb->txt_data.data;
             dl->e2_data_len   = value_len;
-            vb->txt_section_bytes[SEC_SAM_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
+            vb->txt_section_bytes[SEC_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_U2) {
@@ -469,7 +398,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->u2_data_start = value - vb->txt_data.data;
             dl->u2_data_len   = value_len;
-            vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += dl->seq_len + 1; // +1 for \t
+            vb->txt_section_bytes[SEC_QUAL_DATA] += dl->seq_len + 1; // +1 for \t
         }
         // All other subfields - have their own dictionary
         else        
@@ -542,8 +471,8 @@ static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned
         sprintf (new_cigar, "%u*", dl->seq_len); // eg "151*". if both SEQ and QUAL are unavailable it will be "1*"
         unsigned new_cigar_len = strlen (new_cigar);
 
-        seg_sam_one_field (vb, new_cigar, new_cigar_len, vb_line_i, SAM_CIGAR, NULL); 
-        vb->txt_section_bytes[SEC_SAM_CIGAR_B250] -= (new_cigar_len-1); // adjust - actual SAM length was only one (seg_sam_one_field added new_cigar_len)
+        seg_one_field (vb, new_cigar, new_cigar_len, vb_line_i, SAM_CIGAR); 
+        vb->txt_section_bytes[SEC_SAM_CIGAR_B250] -= (new_cigar_len-1); // adjust - actual SAM length was only one (seg_one_field added new_cigar_len)
     } 
     else { // CIGAR is available - just check the seq and qual lengths
         ASSERT (!seq_is_available || dl->seq_data_len == dl->seq_len, 
@@ -556,16 +485,10 @@ static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned
     }
 
     // byte counts for --show-sections 
-    vb->txt_section_bytes[SEC_SAM_SEQ_DATA]  += dl->seq_data_len  + 1; // +1 for terminating \t
-    vb->txt_section_bytes[SEC_SAM_QUAL_DATA] += dl->qual_data_len + 1; 
+    vb->txt_section_bytes[SEC_SEQ_DATA]  += dl->seq_data_len  + 1; // +1 for terminating \t
+    vb->txt_section_bytes[SEC_QUAL_DATA] += dl->qual_data_len + 1; 
 }
 
-/* split the data line into sections - 
-   1. variant data - each of 9 fields (CHROM to FORMAT) is a section
-   2. genotype data (except the GT subfield) - is a section
-   3. haplotype data (the GT subfield) - a string of eg 1 or 0 (no whitespace) - ordered by the permutation order
-   4. phase data - only if MIXED phase - a string of | and / - one per sample
-*/
 const char *seg_sam_data_line (VBlock *vb_,   
                                const char *field_start_line,     // index in vb->txt_data where this line starts
                                uint32_t vb_line_i) // line within this vb (starting from 0)
@@ -588,12 +511,13 @@ const char *seg_sam_data_line (VBlock *vb_,
     // FLAG
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "FLAG");
-    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_FLAG, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, SAM_FLAG);
 
     // RNAME
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNAME");
-    uint32_t rname_node_index = seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
+    uint32_t rname_node_index = seg_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME);
+    dl->rname_node_index = rname_node_index;
 
     random_access_update_chrom (vb_, vb_line_i, rname_node_index);
 
@@ -609,6 +533,8 @@ const char *seg_sam_data_line (VBlock *vb_,
     else // same rname - do a delta
         vb->last_pos = seg_pos_field (vb_, vb->last_pos, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, vb_line_i, "POS");
 
+    dl->pos_start = vb->last_pos;
+
     random_access_update_pos (vb_, vb->last_pos);
 
     vb->last_rname_node_index = rname_node_index;
@@ -616,18 +542,18 @@ const char *seg_sam_data_line (VBlock *vb_,
     // MAPQ
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "MAPQ");
-    seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_MAPQ, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, SAM_MAPQ);
 
     // CIGAR - if CIGAR is "*" and we wait to get the length from SEQ or QUAL
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "CIGAR");
     dl->seq_len = seg_sam_seq_len_from_cigar (field_start, field_len);
-    if (dl->seq_len) seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_CIGAR, NULL); // not "*" - all good!
+    if (dl->seq_len) seg_one_field (vb, field_start, field_len, vb_line_i, SAM_CIGAR); // not "*" - all good!
 
     // RNEXT - add to RNAME dictionary
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "RNEXT");
-    uint32_t rnext_node_index = seg_sam_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME, NULL);
+    uint32_t rnext_node_index = seg_one_field (vb, field_start, field_len, vb_line_i, SAM_RNAME);
     
     bool rnext_same_as_rname = (field_len == 1 && (field_start[0] == '=' || field_start[0] == '*')) || 
                                 (rnext_node_index == rname_node_index);
@@ -641,7 +567,7 @@ const char *seg_sam_data_line (VBlock *vb_,
         
     if (rnext_same_as_rname) { // RNAME and RNEXT are the same - store delta in dictionary
         if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable"
-            seg_sam_one_field (vb, "*", 1, vb_line_i, SAM_PNEXT, NULL); 
+            seg_one_field (vb, "*", 1, vb_line_i, SAM_PNEXT); 
         else
             seg_pos_field (vb_, vb->last_pos, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, vb_line_i, "PNEXT");
     }
@@ -681,13 +607,11 @@ const char *seg_sam_data_line (VBlock *vb_,
     // if oname is empty, we make it "*" (and adjust size accounting)
     if (!oname_len) oname[oname_len++] = '*';
 
-    seg_sam_one_field (vb, oname, oname_len, vb_line_i, SAM_OPTIONAL, NULL);
+    seg_one_field (vb, oname, oname_len, vb_line_i, SAM_OPTIONAL);
 
-    // if we have no real OPTIONAL, seg_sam_one_field adds +1 for the character (correct for '#' as it stands for \r, but incorrect for '*') and +1 for the wrongly presumsed \t
+    // if we have no real OPTIONAL, seg_one_field adds +1 for the character (correct for '#' as it stands for \r, but incorrect for '*') and +1 for the wrongly presumsed \t
     if (oname_len == 1) 
         vb->txt_section_bytes[SEC_SAM_OPTIONAL_B250] -= (1 + (oname[0]=='*'));  
-
-    vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start_line));
 
     return next_field;
 }

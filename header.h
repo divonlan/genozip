@@ -10,11 +10,58 @@
 #include "md5.h"
 
 // data types genozip can compress
-#define NUM_DATATYPES 2
-typedef enum { DATA_TYPE_VCF_V1=-2, DATA_TYPE_NONE=-1, DATA_TYPE_VCF=0, DATA_TYPE_SAM=1 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
-#define DATATYPE_NAMES { "VCF", "SAM" } // index in array matches values in DataType
+#define NUM_DATATYPES 5
+typedef enum { DT_VCF_V1=-2, DT_NONE=-1, 
+               DT_VCF=0, DT_SAM=1, DT_FASTQ=2, DT_FASTA=3, DT_ME23=4 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
+#define DATATYPE_NAMES { "VCF", "SAM", "FASTQ", "FASTA", "23ANDME" } // index in array matches values in DataType
+
+#define DATATYPE_LAST_FIELD { VCF_FORMAT, SAM_OPTIONAL, FAST_TEMPLATE, FAST_TEMPLATE, ME23_POS }
 extern const unsigned datatype_last_field[NUM_DATATYPES];
-extern const unsigned chrom_did_i_by_data_type[NUM_DATATYPES];
+
+#define CHROM_DID_I_BY_DT   { VCF_CHROM, SAM_RNAME, -1, -1, ME23_CHROM } // -1 if DATATYPE_HAS_RANDOM_ACCESS is false
+extern const unsigned chrom_did_i_by_dt[NUM_DATATYPES];  // used for random access data
+
+#define DATATYPE_HAS_RANDOM_ACCESS { true, true, false, false, true }
+extern const bool datatype_has_random_access[NUM_DATATYPES];
+
+typedef void (*ComputeFunc)(VBlockP);
+#define COMPRESS_FUNC_BY_DT { zip_vcf_compress_one_vb, zip_sam_compress_one_vb,  \
+                              zip_fast_compress_one_vb, zip_fast_compress_one_vb, zip_me23_compress_one_vb }
+extern const ComputeFunc compress_func_by_dt[NUM_DATATYPES];
+
+#define UNCOMPRESS_FUNC_BY_DT { piz_vcf_uncompress_one_vb, piz_sam_uncompress_one_vb, \
+                                piz_fast_uncompress_one_vb, piz_fast_uncompress_one_vb, \
+                                piz_me23_uncompress_one_vb }
+extern const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES];
+
+typedef void (*UpdateHeaderFunc) (VBlockP vb, uint32_t vcf_first_line_i);
+#define UPDATE_HEADER_FUNC_BY_DT { zfile_vcf_update_compressed_vb_header,     \
+                                   zfile_update_compressed_vb_header, \
+                                   zfile_update_compressed_vb_header, \
+                                   zfile_update_compressed_vb_header, \
+                                   zfile_update_compressed_vb_header  }         
+extern const UpdateHeaderFunc update_header_func_by_dt[NUM_DATATYPES];
+
+typedef void (*IOFunc) (VBlockP vb);
+#define READ_ONE_VB_FUNC_BY_DT { zfile_vcf_read_one_vb,  zfile_sam_read_one_vb,   \
+                                 zfile_fast_read_one_vb, zfile_fast_read_one_vb, \
+                                 zfile_me23_read_one_vb }
+extern const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES];
+
+#define TXTFILE_WRITE_FB_FUNC_BY_DT { txtfile_write_one_vblock_vcf, txtfile_write_one_vblock, \
+                                      txtfile_write_one_vblock,     txtfile_write_one_vblock, \
+                                      txtfile_write_one_vblock } 
+extern const IOFunc txtfile_write_vb_func_by_dt[NUM_DATATYPES];
+
+#define FIRST_FIELD_DICT_SECTION { SEC_CHROM_DICT, SEC_SAM_QNAME_DICT, \
+                                   SEC_FAST_DESC_DICT, SEC_FAST_DESC_DICT, SEC_CHROM_DICT };
+
+// related to the header of the txt file of each data type
+#define TXT_HEADER_IS_ALLOWED      { true, true, false, false, true } // is it possible to have a header in this data_type
+#define TXT_HEADER_IS_REQUIRED     { true, false , false , false , false } // should we error if the header is missing
+#define TXT_HEADER_LINE_FIRST_CHAR { '#', '@', -1, -1, '#' }; // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
+
+#define STAT_SHOW_SECTIONS_LINE_NAME { "Variants", "Alignment lines", "Entries", "Sequences", "SNPs" }
 
 // VCF related global parameters - set before any thread is created, and never change
 extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;
@@ -32,8 +79,24 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
 //   the template looks like eg: "CT:Z:NM:i:" for two subfields CT and NM
 #define NUM_SAM_FIELDS 9
 typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
-#define MAX_NUM_FIELDS_PER_DATA_TYPE 30
 
+// FASTQ/FASTA fields
+#define NUM_FAST_FIELDS 2
+typedef enum { FAST_DESC, FAST_TEMPLATE } FastqFields;
+
+// 23ANDME fields
+#define NUM_ME23_FIELDS 2
+typedef enum { ME23_CHROM, ME23_POS } Me23Fields; // same order as VCF
+
+#define MAX_NUM_FIELDS_PER_DATA_TYPE 9 // maximum between NUM_*_FIELDS
+
+#define FIELD_NAMES \
+    { { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" },\
+      { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" },\
+      { "DESC", "TEMPLATE" },\
+      { "DESC", "TEMPLATE" },\
+      { "CHROM", "POS" }\
+    };
 extern const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE];
 
 extern void header_initialize(void);

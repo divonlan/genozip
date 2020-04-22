@@ -13,17 +13,26 @@
 #include "endianness.h"
 #include "file.h"
 #include "samples.h"
+#include "dispatcher.h"
+#include "zip.h"
+#include "piz.h"
+#include "zfile.h"
+#include "txtfile.h"
 
 static bool is_first_txt = true; 
 
 // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed.
 // (names are not longer than 8=DICT_ID_LEN as the code assumes it)
-const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE] =
-    { { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" },
-      { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" } };
+const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE] = FIELD_NAMES;
 
-const unsigned datatype_last_field[NUM_DATATYPES] = { VCF_FORMAT, SAM_OPTIONAL };
-const unsigned chrom_did_i_by_data_type[NUM_DATATYPES] = { VCF_CHROM, SAM_RNAME };
+const unsigned datatype_last_field[NUM_DATATYPES]      = DATATYPE_LAST_FIELD;
+const unsigned chrom_did_i_by_dt[NUM_DATATYPES]        = CHROM_DID_I_BY_DT; 
+const bool datatype_has_random_access[NUM_DATATYPES]   = DATATYPE_HAS_RANDOM_ACCESS;
+const ComputeFunc compress_func_by_dt[NUM_DATATYPES]   = COMPRESS_FUNC_BY_DT;
+const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES] = UNCOMPRESS_FUNC_BY_DT;
+const UpdateHeaderFunc update_header_func_by_dt[NUM_DATATYPES] = UPDATE_HEADER_FUNC_BY_DT;
+const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES]      = READ_ONE_VB_FUNC_BY_DT;
+const IOFunc txtfile_write_vb_func_by_dt[NUM_DATATYPES] = TXTFILE_WRITE_FB_FUNC_BY_DT;
 
 // -----------
 // VCF stuff
@@ -133,21 +142,24 @@ void header_initialize(void)
 }
 
 // ZIP: reads VCF or SAM header and writes its compressed form to the GENOZIP file
-bool header_txt_to_genozip (uint32_t *vcf_line_i)
+bool header_txt_to_genozip (uint32_t *txt_line_i)
 {    
     // data type muliplexors
-    static const char first_char     [NUM_DATATYPES] = { '#', '@' }; // VCF and SAM first character in header lines
-    static const bool header_required[NUM_DATATYPES] = { true, false }; // VCF files require at least the sample line, SAM doesn't require a header
-
-    z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
-
-    txtfile_read_header (is_first_txt, header_required[txt_file->data_type], first_char[txt_file->data_type]); // reads into evb->txt_data and evb->num_lines
+    static const char first_char     [NUM_DATATYPES] = TXT_HEADER_LINE_FIRST_CHAR;
+    static const bool header_allowed [NUM_DATATYPES] = TXT_HEADER_IS_ALLOWED;
+    static const bool header_required[NUM_DATATYPES] = TXT_HEADER_IS_REQUIRED;
     
-    *vcf_line_i += evb->num_lines;
+    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
-    // case - vcf header was found 
-    bool can_concatenate = (txt_file->data_type == DATA_TYPE_VCF) ? header_vcf_set_globals(txt_file->name, &evb->txt_data)
-                                                                    : true;
+    if (header_allowed[txt_file->data_type])
+        txtfile_read_header (is_first_txt, header_required[txt_file->data_type], first_char[txt_file->data_type]); // reads into evb->txt_data and evb->num_lines
+    
+    *txt_line_i += evb->num_lines;
+
+    // for vcf, we need to check if the samples are the same before approving concatanation.
+    // other data types can concatenate without restriction
+    bool can_concatenate = (txt_file->data_type == DT_VCF) ? header_vcf_set_globals(txt_file->name, &evb->txt_data)
+                                                           : true;
     if (!can_concatenate) { 
         // this is the second+ file in a concatenation list, but its samples are incompatible
         buf_free (&evb->txt_data);
@@ -173,7 +185,7 @@ bool header_txt_to_genozip (uint32_t *vcf_line_i)
 // PIZ: returns offset of header within data, EOF if end of file
 bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
 {
-    z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
+    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
     static Buffer header_section = EMPTY_BUFFER;
 
     int header_offset = zfile_read_section (evb, 0, NO_SB_I, &header_section, "header_section", 
@@ -183,13 +195,13 @@ bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this 
         return false; // empty file (or in case of split mode - no more components) - not an error
     }
 
-    // handle the GENOZIP header of the VCF header section
+    // handle the GENOZIP header of the txt header section
     SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)header_section.data;
 
     ASSERT (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
             "Error: invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
 
-    // in split mode - we open the output VCF file of the component
+    // in split mode - we open the output txt file of the component
     if (flag_split) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode");
         txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
@@ -207,7 +219,7 @@ bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this 
     static Buffer header_buf = EMPTY_BUFFER;
     zfile_uncompress_section (evb, header, &header_buf, "header_buf", SEC_TXT_HEADER);
 
-    bool is_vcf = (z_file->data_type == DATA_TYPE_VCF);
+    bool is_vcf = (z_file->data_type == DT_VCF);
 
     bool can_concatenate = is_vcf ? header_vcf_set_globals(z_file->name, &header_buf) : true;
     if (!can_concatenate) {

@@ -22,57 +22,143 @@
 #include "aes.h"
 
 // VCF file variations
-#define VCF_         ".vcf"
-#define VCF_GZ_      ".vcf.gz"
-#define VCF_BGZ_     ".vcf.bgz"
-#define VCF_BZ2_     ".vcf.bz2"
-#define VCF_XZ_      ".vcf.xz"
-#define BCF_         ".bcf"
-#define BCF_GZ_      ".bcf.gz"
-#define BCF_BGZ_     ".bcf.bgz"
-#define VCF_GENOZIP_ ".vcf" GENOZIP_EXT
+#define VCF_           ".vcf"
+#define VCF_GZ_        ".vcf.gz"
+#define VCF_BGZ_       ".vcf.bgz"
+#define VCF_BZ2_       ".vcf.bz2"
+#define VCF_XZ_        ".vcf.xz"
+#define BCF_           ".bcf"
+#define BCF_GZ_        ".bcf.gz"
+#define BCF_BGZ_       ".bcf.bgz"
+#define VCF_GENOZIP_   ".vcf" GENOZIP_EXT
 
 // SAM file variations
-#define SAM_         ".sam"
-#define BAM_         ".bam"
-#define SAM_GENOZIP_ ".sam" GENOZIP_EXT
+#define SAM_           ".sam"
+#define BAM_           ".bam"
+#define SAM_GENOZIP_   ".sam" GENOZIP_EXT
+
+// FASTQ file variations
+#define FASTQ_         ".fastq"
+#define FASTQ_GZ_      ".fastq.gz"
+#define FASTQ_BZ2_     ".fastq.bz2"
+#define FASTQ_XZ_      ".fastq.xz"
+#define FQ_            ".fq"
+#define FQ_GZ_         ".fq.gz"
+#define FQ_BZ2_        ".fq.bz2"
+#define FQ_XZ_         ".fq.xz"
+#define FASTQ_GENOZIP_ ".fastq" GENOZIP_EXT
+
+// FASTA file variations
+#define FASTA_         ".fasta"
+#define FASTA_GZ_      ".fasta.gz"
+#define FASTA_BZ2_     ".fasta.bz2"
+#define FASTA_XZ_      ".fasta.xz"
+#define FA_            ".fa"
+#define FA_GZ_         ".fa.gz"
+#define FA_BZ2_        ".fa.bz2"
+#define FA_XZ_         ".fa.xz"
+#define FASTA_GENOZIP_ ".fasta" GENOZIP_EXT
+
+// 23andMe file variations
+// note: 23andMe files come as a .txt, and therefore the user must specify --input to compress them. we have this
+// made-up file extension here to avoid needing special cases throughout the code
+#define ME23_          ".23andme" // *maybe* 23andMe file - needs to be verified by the header
+#define ME23_GENOZIP_  ".23andme" GENOZIP_EXT
 
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
 
 typedef enum      { UNKNOWN_FILE_TYPE, 
                     VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  
                     SAM,  BAM,  SAM_GENOZIP,
+                    FASTQ,  FASTQ_GZ,  FASTQ_BZ2, FASTQ_XZ,  FQ,  FQ_GZ,  FQ_BZ2,  FQ_XZ,  FASTQ_GENOZIP,
+                    FASTA,  FASTA_GZ,  FASTA_BZ2, FASTA_XZ,  FA,  FA_GZ,  FA_BZ2,  FA_XZ,  FASTA_GENOZIP,
+                    ME23, ME23_GENOZIP, 
                     AFTER_LAST_FILE_TYPE } FileType;
+
+#define INPUT_FT_BY_DT   { { VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ, 0 },\
+                           { SAM,  BAM, 0 },\
+                           { FASTQ,  FASTQ_GZ,  FASTQ_BZ2, FASTQ_XZ,  FQ,  FQ_GZ,  FQ_BZ2,  FQ_XZ, 0 },\
+                           { FASTA,  FASTA_GZ,  FASTA_BZ2, FASTA_XZ,  FA,  FA_GZ,  FA_BZ2,  FA_XZ, 0 },\
+                           { ME23, 0 } }                        
+extern const FileType input_ft_by_dt[NUM_DATATYPES][20];                    
+         
+#define OUTPUT_FT_BY_DT  { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   /* plain file MUST appear first on the list - this will be the */\
+                           { SAM,  BAM, 0 },                      /* default output when redirecting */ \
+                           { FASTQ,  FASTQ_GZ,  FQ,  FQ_GZ, 0 },\
+                           { FASTA,  FASTA_GZ,  FA,  FA_GZ, 0 },\
+                           { ME23, 0 } }                        
+extern const FileType output_ft_by_dt[NUM_DATATYPES][20];                    
+
+#define GENOZIP_TYPE_BY_DT { VCF_GENOZIP, SAM_GENOZIP, FASTQ_GENOZIP, FASTA_GENOZIP, ME23_GENOZIP }
+extern const FileType genozip_ft_by_dt[NUM_DATATYPES];                    
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
                    SAM_, BAM_, SAM_GENOZIP_, \
+                   FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FQ_, FQ_GZ_, FQ_BZ2_, FQ_XZ_, FASTQ_GENOZIP_, \
+                   FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FA_, FA_GZ_, FA_BZ2_, FA_XZ_, FASTA_GENOZIP_, \
+                   ME23_, ME23_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
-
-// possible arguments for --input
-#define INPUT_FILES_ACCEPTED { VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, BCF, BCF_GZ, BCF_BGZ,\
-                               SAM, BAM }
-
-#define COMPRESSIBLE_EXTS VCF_ " " VCF_GZ_ " " VCF_BGZ_ " " VCF_BZ2_ " " VCF_XZ_ " " BCF_ " " BCF_GZ_ " " BCF_BGZ_ " "\
-                          SAM_ " " BAM_
 
 typedef const char *FileMode;
 extern FileMode READ, WRITE; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 #define file_is_zip_read(file) ((file)->mode == READ && command == ZIP)
 
-#define file_is_via_ext_decompressor(file) ((file)->type == VCF_XZ || \
-                                            (file)->type == BCF || (file)->type == BCF_GZ  || (file)->type == BCF_BGZ || \
-                                            (file)->type == BAM)
+#define file_is_read_via_ext_decompressor_type(type) \
+    (type == VCF_XZ || type == BCF || type == BCF_GZ  || type == BCF_BGZ || type == BAM)
 
-// files that are read by ZIP as plain (i.e. not compressed) TXT - they might have been decompressed by an external decompressor
-#define file_is_plain_txt(file) ((file)->type == VCF || (file)->type == SAM || file_is_via_ext_decompressor(file))
+#define file_is_written_via_ext_compressor_type(type) \
+     (type == BCF || type == VCF_GZ  || type == VCF_BGZ || type == BAM || type == FASTQ_GZ || type == FASTA_GZ)
 
-#define file_is_vcf(file) ((file)->type == VCF_GZ || (file)->type == VCF_BGZ || (file)->type == VCF_BZ2 || (file)->type == VCF_XZ || \
-                           (file)->type == VCF || (file)->type == BCF || (file)->type == BCF_GZ || (file)->type == BCF_BGZ)
+// --------------------------
+// tests for data types
+// --------------------------
+#define file_is_vcf_type(type) (type == VCF_GZ || type == VCF_BGZ || type == VCF_BZ2 || type == VCF_XZ || \
+                                type == VCF || type == BCF || type == BCF_GZ || type == BCF_BGZ)
 
-#define file_is_sam(file) ((file)->type == SAM || (file)->type == BAM)
+#define file_is_sam_type(type) (type == SAM || type == BAM)
+
+#define file_is_fastq_type(type) (type == FASTQ || type == FASTQ_GZ || type == FASTQ_BZ2 || type == FASTQ_XZ || \
+                                  type == FQ || type == FQ_GZ || type == FQ_GZ || type == FQ_GZ)
+
+#define file_is_fasta_type(type) (type == FASTA || type == FASTA_GZ || type == FASTA_BZ2 || type == FASTA_XZ || \
+                                  type == FA || type == FA_GZ || type == FA_GZ || type == FA_GZ)
+
+#define file_is_me23_type(type) (type == ME23)
+
+// --------------------------
+// tests for compression types
+// --------------------------
+#define file_is_plain_type(type) (type == VCF   || \
+                                  type == SAM   || \
+                                  type == FASTQ || type == FQ || \
+                                  type == FASTA || type == FA || \
+                                  type == ME23)
+
+#define file_is_gz_type(type)  (type == VCF_GZ   || type == VCF_BGZ || \
+                                type == FASTQ_GZ || type == FQ_GZ   || \
+                                type == FASTA_GZ || type == FA_GZ)
+
+#define file_is_bz2_type(type) (type == VCF_BZ2  || \
+                               type == FASTQ_BZ2 || type == FQ_BZ2  || \
+                               type == FASTA_BZ2 || type == FA_BZ2)
+
+#define file_is_xz_type(type)  (type == VCF_XZ   || \
+                                type == FASTQ_XZ || type == FQ_XZ   || \
+                                type == FASTA_XZ || type == FA_XZ)
+
+#define file_is_bam_type(type) (type == BAM)
+
+#define file_is_bcf_type(type) (type == BCF || type == BCF_GZ || type == BCF_BGZ)
+
+#define file_is_compressible(type) (file_is_vcf_type(type)   || file_is_sam_type(type) || \
+                                    file_is_fastq_type(type) || file_is_fasta_type(type) || \
+                                    file_is_me23_type(type))
+
+#define file_is_plain_or_ext_decompressor(file) (file_is_plain_type (file->type) || \
+                                                 file_is_read_via_ext_decompressor_type(file->type))
 
 typedef struct File {
     void *file;
@@ -90,32 +176,32 @@ typedef struct File {
                                        // note: this is different from txt_data_size_single as disk_size might be compressed (gz, bz2 etc)
     int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite)
 
-    // this relate to the VCF data represented. In case of READ - only data that was picked up from the read buffer.
-    int64_t txt_data_size_single;      // txt_file: size of the VCF data. ZIP: if its a plain VCF file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
-    int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from vcf file so far
-                                       // z_file: VCF data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t txt_data_so_far_concat;    // z_file & ZIP only: VCF data represented in the GENOZIP data written so far for all VCFs
-    int64_t num_lines;                 // z_file: number of lines in all vcf files concatenated into this z_file
-                                       // txt_file: number of lines in single vcf file
+    // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
+    int64_t txt_data_size_single;      // txt_file: size of the txt data. ZIP: if its a plain txt file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
+    int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
+                                       // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
+    int64_t txt_data_so_far_concat;    // z_file & ZIP only: txt data represented in the GENOZIP data written so far for all VCFs
+    int64_t num_lines;                 // z_file: number of lines in all txt files concatenated into this z_file
+                                       // txt_file: number of lines in single txt file
 
-    // Used for READING & WRITING VCF files - but stored in the z_file structure for zip to support concatenation (and in the txt_file structure for piz)
-    Md5Context md5_ctx_concat;         // md5 context of vcf file. in concat mode - of the resulting concatenated vcf file
-    Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single vcf component
+    // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support concatenation (and in the txt_file structure for piz)
+    Md5Context md5_ctx_concat;         // md5 context of txt file. in concat mode - of the resulting concatenated txt file
+    Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single txt component
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 
     // Used for READING GENOZIP files
     Buffer v1_next_vcf_header;         // genozip v1 only: next VCF header - used when reading in --split mode
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
-    uint32_t num_vcf_components;       // set from genozip header
+    uint32_t num_components;           // set from genozip header
 
     // Used for WRITING GENOZIP files
-    uint64_t disk_at_beginning_of_this_vcf_file;     // z_file: the value of disk_size when starting to read this vcf file
+    uint64_t disk_at_beginning_of_this_txt_file;     // z_file: the value of disk_size when starting to read this txt file
     
-    SectionHeaderTxtHeader vcf_header_first;         // store the first VCF header - we might need to update it at the very end;
-    uint8_t vcf_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite vcf_header with encryption padding
+    SectionHeaderTxtHeader txt_header_first;         // store the first txt header - we might need to update it at the very end;
+    uint8_t txt_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite txt_header with encryption padding
 
-    SectionHeaderTxtHeader vcf_header_single;        // store the VCF header of single component in concat mode
-    uint8_t vcf_header_enc_padding2[AES_BLOCKLEN-1]; // same
+    SectionHeaderTxtHeader txt_header_single;        // store the txt header of single component in concat mode
+    uint8_t txt_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     pthread_mutex_t dicts_mutex;
@@ -139,8 +225,8 @@ typedef struct File {
     uint32_t num_sections[NUM_SEC_TYPES];    // used only for Z files - number of sections of this type
 
 #   define READ_BUFFER_SIZE (1<<19)    // 512KB
-    // Used for reading vcf files
-    Buffer unconsumed_txt;         // excess data read from the vcf file - moved to the next VB
+    // Used for reading txt files
+    Buffer unconsumed_txt;         // excess data read from the txt file - moved to the next VB
     
     // Used for reading genozip files
     uint32_t z_next_read, z_last_read;     // indices into read_buffer for z_file

@@ -15,7 +15,9 @@ extern void txtfile_read_vblock (VBlockP vb);
 extern unsigned txtfile_write_to_disk (ConstBufferP buf);
 extern void txtfile_estimate_txt_data_size (VBlockP vb);
 
-extern void txtfile_write_one_vblock_vcf (VBlockVCFP vb);
-extern void txtfile_write_one_vblock_sam (VBlockSAMP vb);
+extern void txtfile_write_one_vblock_vcf (VBlockP vb);
+extern void txtfile_write_one_vblock (VBlockP vb);
+extern void txtfile_write_one_vblock_fast (VBlockP vb);
+extern void txtfile_write_one_vblock_me23 (VBlockP vb);
 
 #endif

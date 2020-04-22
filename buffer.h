@@ -107,13 +107,6 @@ extern void buf_test_overflows_all_vbs (void);
 //extern int64_t buf_vb_memory_consumption (ConstVBlockP vb);
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
 
-extern char *buf_display_size (int64_t size, char *str /* out */);
-extern char *buf_display_uint (int64_t n, char *str /* out */);
-extern char *buf_display_uint_no_commas (int64_t n, char *str /* out */, unsigned *len);
-
-#define POINTER_STR_LEN 19
-extern char *buf_display_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/);
-
 #define buf_zero(buf_p) { memset ((buf_p)->data, 0, (buf_p)->size); }
 
 extern void buf_add_to_buffer_list (VBlockP vb, Buffer *buf);

@@ -36,7 +36,9 @@
         "txtfile.h": "c",
         "header.h": "c",
         "regex": "c",
-        "memory": "cpp"
+        "memory": "cpp",
+        "random": "c",
+        "strings.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

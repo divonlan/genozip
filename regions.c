@@ -10,6 +10,7 @@
 #include "header.h"
 #include "vblock.h"
 #include "file.h"
+#include "strings.h"
 
 // region as parsed from the --regions option
 typedef struct {

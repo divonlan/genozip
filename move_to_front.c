@@ -138,7 +138,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
-        ASSERT (!ctx || ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %.*s (%s)",
+        ASSERT (!ctx || ctx->b250_section_type == SEC_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %.*s (%s)",
                 txt_line, vb->vblock_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {
@@ -225,7 +225,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     segging_vb->z_section_entries[vb_ctx->b250_section_type]++; 
 
     if (!snip_len) 
-        return (!snip || (z_file->data_type == DATA_TYPE_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
+        return (!snip || (z_file->data_type == DT_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
 
     uint32_t new_mtf_i_if_no_old_one = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
@@ -328,7 +328,7 @@ void mtf_clone_ctx (VBlock *vb)
     vb->num_dict_ids = z_num_dict_ids;
 
     // For VCF: initialize mappers for VCF_FORMAT and VCF_INFO
-    if (vb->data_type == DATA_TYPE_VCF) {    
+    if (vb->data_type == DT_VCF) {    
         mtf_init_mapper (vb, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
         mtf_init_mapper (vb, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf, "iname_mapper_buf");    
     }
@@ -623,7 +623,7 @@ void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */,
                                         uint8_t *dict_id_to_did_i_map,
                                         unsigned *num_dict_ids)
 {
-    for (int f=0; f <= datatype_last_field[txt_file->data_type]; f++) {
+    for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) {
         
         const char *fname = field_names[z_file->data_type][f];
         
@@ -681,7 +681,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
                "z_file->mtf_ctx->word_list", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->word_list);
 
-    bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, field_names[DATA_TYPE_VCF][VCF_REFALT], MIN (strlen(field_names[DATA_TYPE_VCF][VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
+    bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, field_names[DT_VCF][VCF_REFALT], MIN (strlen(field_names[DT_VCF][VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
 
     char *start = fragment.data;
     for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
@@ -739,7 +739,7 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 
             // count dictionaries of genotype data subfields
             // note: this is needed only for V1 files...
-            if (vb->data_type == DATA_TYPE_VCF && dict_id_is_vcf_format_sf (vb_ctx->dict_id)) {
+            if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vb_ctx->dict_id)) {
 
                 ASSERT (++((VBlockVCFP)vb)->num_format_subfields <= MAX_SUBFIELDS, 
                         "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 

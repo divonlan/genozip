@@ -11,6 +11,7 @@
 #include "header.h"
 #include "endianness.h"
 #include "file.h"
+#include "strings.h"
 
 // store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from txt_data,
 // but in the part of txt_data has been already consumed and no longer needed.
@@ -77,12 +78,13 @@ uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, unsigned v
 }
 
 // returns the node index
-uint32_t seg_one_field (VBlock *vb, const char *str, unsigned len, unsigned vb_line_i, int f, SectionType sec_b250,
-                        bool *is_new) // optional out
+uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, unsigned vb_line_i, int did_i, SectionType sec_b250,
+                       bool *is_new) // optional out
 {
-    buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, (vb->mtf_ctx[f].mtf_i.len + 1) * sizeof (uint32_t), 2, "mtf_ctx->mtf_i", f);
+    MtfContext *ctx = &vb->mtf_ctx[did_i];
+
+    buf_alloc (vb, &ctx->mtf_i, (ctx->mtf_i.len + 1) * sizeof (uint32_t), 2, "mtf_ctx->mtf_i", did_i);
     
-    MtfContext *ctx = &vb->mtf_ctx[f];
     MtfNode *node;
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, &node, is_new);
 
@@ -90,7 +92,7 @@ uint32_t seg_one_field (VBlock *vb, const char *str, unsigned len, unsigned vb_l
             DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
             node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
-    NEXTENT (uint32_t, vb->mtf_ctx[f].mtf_i) = node_index;
+    NEXTENT (uint32_t, vb->mtf_ctx[did_i].mtf_i) = node_index;
 
     vb->txt_section_bytes[sec_b250] += len + 1;
     return node_index;
@@ -121,7 +123,7 @@ const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline
             
     ASSERT (*str_len, "Error: missing %s field in vb_line_i=%u", item_name, vb_line_i);
 
-    ASSERT (str[i] != '\t' || txt_file->data_type != DATA_TYPE_VCF || strcmp (item_name, field_names[DATA_TYPE_VCF][VCF_INFO]), 
+    ASSERT (str[i] != '\t' || txt_file->data_type != DT_VCF || strcmp (item_name, field_names[DT_VCF][VCF_INFO]), 
            "Error: while segmenting %s in vb_line_i=%u: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name, vb_line_i);
 
@@ -182,11 +184,93 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int did_i, SectionType sec_
         len = 1;
     }
 
-    seg_one_field (vb, pos_delta_str, len, vb_line_i, did_i, sec_pos_b250, NULL);
+    seg_one_snip (vb, pos_delta_str, len, vb_line_i, did_i, sec_pos_b250, NULL);
 
-    vb->txt_section_bytes[sec_pos_b250] += pos_len - len; // re-do the calculation - seg_vcf_one_field doesn't do it good in our case
+    vb->txt_section_bytes[sec_pos_b250] += pos_len - len; // re-do the calculation - seg_one_field doesn't do it good in our case
 
     return this_pos;
+}
+
+// We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : -
+// these are vendor-defined strings.
+// Up to MAX_COMPOUND_COMPONENTS subfields are permitted - if there are more, then all the trailing part is just
+// consider part of the last component.
+// each subfield is stored in its own dictionary- the second character of the dict_id  the subfield number starting
+// from 0 (0->9,a->z)
+// The separators are made into a string we call "template" that is stored in the main field dictionary - we
+// anticipate that usually all lines have the same format, but we allow lines to have different formats.
+void seg_compound_field (VBlock *vb, 
+                         MtfContext *field_ctx, const char *field, unsigned field_len, 
+                         SubfieldMapper *mapper, DictIdType sf_dict_id,
+                         char extra_separator, // a separator other than : / | (or 0 is there isn't one)
+                         SectionType field_b250_sec, SectionType sf_b250_sec, 
+                         unsigned vb_line_i)
+{
+#define MAX_COMPOUND_COMPONENTS (10+26)
+
+    const char *snip = field;
+    unsigned snip_len = 0;
+    unsigned sf_i = 0;
+    char template[MAX_COMPOUND_COMPONENTS-1]; // separators is one less than the subfields
+    MtfNode *node;
+
+    // add each subfield to its dictionary - 2nd char is 0-9,a-z
+    for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
+
+        if (i==field_len || 
+            ((field[i]==':' || field[i]=='/' || field[i]=='|' || field[i]==extra_separator) && sf_i < MAX_COMPOUND_COMPONENTS-1)) { // a subfield ended - separator between subfields
+            
+            // process the subfield that just ended
+            MtfContext *sf_ctx;
+
+            if (mapper->num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
+                sf_dict_id.id[1] = (sf_i <= 9) ? (sf_i + '0') : (sf_i-10 + 'a');
+
+                sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
+                                                 dict_id_sam_qname_sf (sf_dict_id), sf_b250_sec-1);
+                mapper->did_i[sf_i] = sf_ctx->did_i;
+                mapper->num_subfields++;
+            }
+            else 
+                sf_ctx = MAPPER_CTX (mapper, sf_i);
+
+            ASSERT0 (sf_ctx, "Error in seg_compound_field: sf_ctx is NULL");
+
+            // allocate memory if needed
+            buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->num_lines, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
+                       CTX_GROWTH, "mtf_ctx->mtf_i", sf_ctx->did_i);
+
+            NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
+
+            // finalize this subfield and get ready for reading the next one
+            if (i < field_len) {    
+                template[sf_i] = field[i];
+                snip = &field[i+1];
+                snip_len = 0;
+            }
+            sf_i++;
+        }
+        else snip_len++;
+    }
+
+    // if template is empty, make it "*"
+    if (sf_i==1) template[0] = '*';
+
+    // add template to the field dictionary (note: template may be of length zero if field has no / or :)
+    NEXTENT (uint32_t, field_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, field_ctx, template, MAX (1, sf_i-1), &node, NULL);
+
+    // byte counts for --show-sections 
+    vb->txt_section_bytes[field_b250_sec] += sf_i; // sf_i has 1 for each separator including the terminating \t or \n
+    vb->txt_section_bytes[sf_b250_sec]    += field_len - (sf_i-1); // the entire field except for the / and : separators
+}
+
+void seg_add_to_data_buf (VBlock *vb, Buffer *buf, SectionType sec, 
+                          const char *snip, unsigned snip_len, bool add_tab, unsigned add_bytes)
+{
+    buf_alloc_more (vb, buf, snip_len + !!add_tab, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_data_buf
+    if (snip_len) buf_add (buf, snip, snip_len); 
+    if (add_tab) buf_add (buf, "\t", 1); 
+    vb->txt_section_bytes[sec] += add_bytes;
 }
 
 static void seg_set_hash_hints (VBlock *vb, uint32_t vb_line_i)
@@ -266,12 +350,14 @@ static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line)
 // split each lines in this variant block to its components
 void seg_all_data_lines (VBlock *vb,
                          SegDataLineFuncType seg_data_line, 
+                         SegInitializer seg_initialize, 
                          unsigned sizeof_line)
 {
     START_TIMER;
 
     mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
     seg_allocate_per_line_memory (vb, sizeof_line); // set vb->num_lines to an initial estimate and allocate ctx->mtf_i
+    if (seg_initialize) seg_initialize (vb); // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set = false;
@@ -284,11 +370,16 @@ void seg_all_data_lines (VBlock *vb,
 
         //fprintf (stderr, "vb_line_i=%u\n", vb_line_i);
 
-        field_start = seg_data_line (vb, field_start, vb_line_i);
+        const char *next_field = seg_data_line (vb, field_start, vb_line_i);
+        
+        vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
+        field_start = next_field;
 
         // if our estimate number of lines was too small, increase it
-        if (vb_line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
-            seg_allocate_per_line_memory (vb, sizeof_line); // increase number of lines as evidently we need more
+        if (sizeof_line) {
+            if (vb_line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
+                seg_allocate_per_line_memory (vb, sizeof_line); // increase number of lines as evidently we need more
+        }
 
         // if there is no global_hash yet, and we've past half of the data,
         // collect stats to help mtf_merge create one when we merge

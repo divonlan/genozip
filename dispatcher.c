@@ -138,7 +138,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     
     // case: genozip of plain vcf files (including if decompressed by an external compressor) 
     // - we go by the amount of VCF content processed 
-    if (command == ZIP && txt_file->disk_size && file_is_plain_txt (txt_file)) { 
+    if (command == ZIP && txt_file->disk_size && file_is_plain_or_ext_decompressor (txt_file)) { 
         total = txt_file->txt_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
         sofar = z_file->txt_data_so_far_single;
     } 
@@ -311,7 +311,7 @@ VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
     return dd->next_vb;
 }
 
-void dispatcher_compute (Dispatcher dispatcher, DispatcherFuncType func)
+void dispatcher_compute (Dispatcher dispatcher, ComputeFunc func)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     Thread *th = &dd->compute_threads[dd->next_thread_to_dispatched];

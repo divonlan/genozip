@@ -24,8 +24,8 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 {
     const char *runtime = dispatcher_ellapsed_time (dispatcher, false);
     double z_bytes   = (double)z_file->disk_so_far;
-    double vcf_bytes = (double)z_file->txt_data_so_far_concat;
-    double ratio     = vcf_bytes / z_bytes;
+    double txt_bytes = (double)z_file->txt_data_so_far_concat;
+    double ratio     = txt_bytes / z_bytes;
 
     if (flag_concat) { // in concat, we don't show the compression ratio for files except for the last one
 
@@ -44,12 +44,12 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
         if (is_last_file) {
             double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
 
-            if (txt_file->type == VCF || txt_file->type == SAM || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
-                fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f           \n", 
-                            dispatcher_ellapsed_time (dispatcher, true), ratio);
+            if (file_is_plain_type (txt_file->type) || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+                fprintf (stderr, "Time: %s, %s compression ratio: %1.1f           \n", 
+                            dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio);
             else
-                fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
-                            dispatcher_ellapsed_time (dispatcher, true), ratio, 
+                fprintf (stderr, "Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
+                            dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio, 
                             source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
                             ratio2); // compression vs .gz/.bz2/.bcf/.xz... size
         }
@@ -57,12 +57,37 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
     else {
         double ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-        if (txt_file->type == VCF || txt_file->type == SAM || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+        if (file_is_plain_type (txt_file->type) || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
             fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
         
-        else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
-            fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
-                     runtime, ratio, file_exts[txt_file->type], ratio2);
+        else // source was compressed
+            fprintf (stderr, "Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
+                     runtime, dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2);
+    }
+}
+
+// generate & write b250 data for all primary fields of this data type
+void zip_generate_and_compress_fields (VBlock *vb)
+{
+    // generate & write b250 data for all primary fields
+    for (int f=0 ; f <= datatype_last_field[z_file->data_type] ; f++) {
+        MtfContext *ctx = &vb->mtf_ctx[f];
+        zip_generate_b250_section (vb, ctx);
+        zfile_compress_b250_data (vb, ctx);
+    }
+}
+
+// generate & write b250 data for all subfields mapped in a mapper
+void zip_generate_and_compress_subfields (VBlock *vb, const SubfieldMapper *mapper)
+{
+    for (unsigned sf_i=0; sf_i < mapper->num_subfields; sf_i++) {
+        
+        MtfContext *ctx = &vb->mtf_ctx[mapper->did_i[sf_i]];
+
+        if (ctx->mtf_i.len) {; // we compress only if this subfield has data this VB
+            zip_generate_b250_section (vb, ctx);
+            zfile_compress_b250_data  (vb, ctx);
+        }
     }
 }
 
@@ -95,9 +120,9 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
             uint8_t *numerals     = node->word_index.encoded.numerals;
             
-            bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_VCF_GT_DATA) && (i > 0);
+            bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_GT_DATA) && (i > 0);
 
-            if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
+            if (one_up) { // note: we can't do SEC_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
                 NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
                 if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
             }
@@ -136,7 +161,7 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 }
 
 
-static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_vcf_file, bool is_z_data)
+static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_txt_file, bool is_z_data)
 {
     START_TIMER;
 
@@ -150,15 +175,15 @@ static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool 
     z_file->disk_so_far += (int64_t)data_buf->len;
     
     if (is_z_data) {
-        if (update_vcf_file) txt_file->num_lines += (int64_t)vb->num_lines; // lines in this VCF file
-        z_file->num_lines                        += (int64_t)vb->num_lines; // lines in all concatenated VCF files in this z_file
+        if (update_txt_file) txt_file->num_lines += (int64_t)vb->num_lines; // lines in this txt file
+        z_file->num_lines                        += (int64_t)vb->num_lines; // lines in all concatenated files in this z_file
         z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
         z_file->txt_data_so_far_concat           += (int64_t)vb->vb_data_size;
     }
 
     // update section stats
     for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        if (update_vcf_file) txt_file->section_bytes[sec_i]  += vb->txt_section_bytes[sec_i];
+        if (update_txt_file) txt_file->section_bytes[sec_i]  += vb->txt_section_bytes[sec_i];
         z_file->num_sections[sec_i]     += vb->z_num_sections[sec_i];
         z_file->section_bytes[sec_i]    += vb->z_section_bytes[sec_i];
         z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
@@ -181,8 +206,9 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, false);  
    
-    // if this is VCF or SAM data, compress all random access records into evb->z_data
-    if (z_file->data_type == DATA_TYPE_VCF || z_file->data_type == DATA_TYPE_SAM) { 
+    // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
+    if (datatype_has_random_access[z_file->data_type]) {
+
         if (flag_show_index) random_access_show_index(true);
         
         BGEN_random_access(); // make ra_buf into big endian
@@ -199,38 +225,38 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     zip_output_processed_vb (evb, NULL, false, true);  
 }
 
-// this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
+// this is the main dispatcher function. It first processes the txt header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_last_file)
+void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_last_file)
 {
-    static DataType last_data_type = DATA_TYPE_NONE;
+    static DataType last_data_type = DT_NONE;
     static unsigned last_vblock_i = 0; // used if we're concatenating files - the vblock_i will continue from one file to the next
     if (!flag_concat) last_vblock_i = 0; // reset if we're not concatenating
 
     // we cannot concatenate files of different type
-    ASSERT (!flag_concat || txt_file->data_type == last_data_type || last_data_type == DATA_TYPE_NONE, 
+    ASSERT (!flag_concat || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
             "%s: cannot concatenate %s because it is a %s file, whereas the previous file was a %s",
              global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
     last_data_type =  txt_file->data_type;
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, last_vblock_i, false, is_last_file, vcf_basename);
+    Dispatcher dispatcher = dispatcher_init (max_threads, last_vblock_i, false, is_last_file, txt_basename);
 
     dict_id_initialize();
 
     unsigned txt_line_i = 1; // the next line to be read (first line = 1)
     
-    // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
+    // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
     bool success = header_txt_to_genozip (&txt_line_i);
     if (!success) goto finish;
 
     mtf_initialize_for_zip();
 
-    if (z_file->data_type == DATA_TYPE_VCF) zip_vcf_initialize();
+    if (z_file->data_type == DT_VCF) zip_vcf_initialize();
 
     uint32_t max_lines_per_vb=0;
 
@@ -245,10 +271,8 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
         bool has_free_thread = dispatcher_has_free_thread (dispatcher);
 
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
-        if (has_vb_ready_to_compute && has_free_thread) {
-            DispatcherFuncType compress_funcs[NUM_DATATYPES] = { zip_vcf_compress_one_vb, zip_sam_compress_one_vb };
-            dispatcher_compute (dispatcher, compress_funcs[z_file->data_type]);
-        }
+        if (has_vb_ready_to_compute && has_free_thread) 
+            dispatcher_compute (dispatcher, compress_func_by_dt[z_file->data_type]);
         
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
@@ -258,11 +282,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
             if (!processed_vb) continue; // no running compute threads 
 
             // update z_data in memory (its not written to disk yet)
-            switch (z_file->data_type) {
-                case DATA_TYPE_VCF: zfile_vcf_update_compressed_vb_header (processed_vb, txt_line_i); break;
-                case DATA_TYPE_SAM: zfile_sam_update_compressed_vb_header (processed_vb, txt_line_i); break;
-                default: ABORT ("Error in zip_dispatcher: invalid data_type=%u", z_file->data_type);
-            }
+            update_header_func_by_dt[z_file->data_type](processed_vb, txt_line_i); 
 
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->num_lines);
             txt_line_i += processed_vb->num_lines;
@@ -297,13 +317,13 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
         }
     } while (!dispatcher_is_done (dispatcher));
 
-    // go back and update some fields in the vcf header's section header and genozip header -
+    // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5;
     if (z_file && !z_file->redirected && txt_header_header_pos >= 0) 
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
-    // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
+    // if this a non-concatenated file, or the last component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);
 
     if (!flag_quiet) zip_display_compression_ratio (dispatcher, is_last_file);

@@ -11,21 +11,16 @@
 #include "random_access.h"
 #include "optimize.h"
 #include "file.h"
+#include "strings.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])
-
-static inline uint32_t seg_vcf_one_field (VBlockVCF *vb, const char *str, unsigned len, unsigned vb_line_i, VcfFields f, 
-                                          bool *is_new)  // optional out
-{
-    return seg_one_field ((VBlockP)vb, str, len, vb_line_i, f, FIELD_TO_B250_SECTION(f), is_new);
-}                                          
+#define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])                           
                                
 // returns true if this line has the same chrom as this VB, or if it is the first line
 static void seg_chrom_field (VBlockVCF *vb, const char *chrom_str, unsigned chrom_str_len, unsigned vb_line_i)
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint32_t chrom_node_index = seg_vcf_one_field (vb, chrom_str, chrom_str_len, vb_line_i, VCF_CHROM, NULL);
+    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, vb_line_i, VCF_CHROM);
 
     random_access_update_chrom ((VBlockP)vb, vb_line_i, chrom_node_index);
 }
@@ -96,7 +91,7 @@ static void seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
         buf_alloc (vb, &vb->line_gt_data, format_mapper.num_subfields * global_vcf_num_samples * sizeof(uint32_t), 1, "line_gt_data", vb_line_i); 
 
     bool is_new;
-    uint32_t node_index = seg_vcf_one_field (vb, field_start, field_len, vb_line_i, VCF_FORMAT, &is_new);
+    uint32_t node_index = seg_one_snip ((VBlockP)vb, field_start, field_len, vb_line_i, VCF_FORMAT, SEC_VCF_FORMAT_B250, &is_new);
 
     dl->format_mtf_i = node_index;
 
@@ -307,7 +302,7 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const char *s
         vb->txt_section_bytes[SEC_VCF_HT_DATA ] += ploidy;
     }
 
-    ASSERT (ploidy <= MAX_PLOIDY, "Error: ploidy=%u exceeds the maximum of %u in vb_line_i=%u", ploidy, MAX_PLOIDY, vb_line_i);
+    ASSERT (ploidy <= VCF_MAX_PLOIDY, "Error: ploidy=%u exceeds the maximum of %u in vb_line_i=%u", ploidy, VCF_MAX_PLOIDY, vb_line_i);
     
     // if the ploidy of this line is bigger than the ploidy of the data in this VB so far, then
     // we have to increase ploidy of all the haplotypes read in in this VB so far. This can happen for example in 
@@ -463,7 +458,7 @@ static int seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
 
     if (is_vcf_string)
         // size including : (if we have both ht and gt), but not including \t which goes into SEC_STATS_HT_SEPERATOR
-        vb->txt_section_bytes[SEC_VCF_GT_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
+        vb->txt_section_bytes[SEC_GT_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
 
     return optimized_cell_gt_data_len;
 }
@@ -540,13 +535,13 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // POS
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, VCF_POS, SEC_VCF_POS_B250, field_start, field_len, vb_line_i, "POS");
+    vb->last_pos = seg_pos_field (vb_, vb->last_pos, VCF_POS, SEC_POS_B250, field_start, field_len, vb_line_i, "POS");
     random_access_update_pos (vb_, vb->last_pos);
 
     // ID
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "ID");
-    seg_vcf_one_field (vb, field_start, field_len, vb_line_i, VCF_ID, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, VCF_ID);
 
     // REF + ALT
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
@@ -556,17 +551,17 @@ const char *seg_vcf_data_line (VBlock *vb_,
 
     unsigned alt_len=0;
     next_field = seg_get_next_item (next_field, &len, false, true, false, vb_line_i, &alt_len, &separator, &has_13, "ALT");
-    seg_vcf_one_field (vb, field_start, field_len+alt_len+1, vb_line_i, VCF_REFALT, NULL);
+    seg_one_field (vb, field_start, field_len+alt_len+1, vb_line_i, VCF_REFALT);
 
     // QUAL
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "QUAL");
-    seg_vcf_one_field (vb, field_start, field_len, vb_line_i, VCF_QUAL, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, VCF_QUAL);
 
     // FILTER
     field_start = next_field;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "FILTER");
-    seg_vcf_one_field (vb, field_start, field_len, vb_line_i, VCF_FILTER, NULL);
+    seg_one_field (vb, field_start, field_len, vb_line_i, VCF_FILTER);
 
     // INFO
     char *info_field_start = (char *)next_field; // we break the const bc seg_info_field might add a :#

@@ -46,6 +46,9 @@ extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* option
 
 extern bool zfile_skip_section_by_flags (SectionType st, DictIdType dict_id);
 
+extern void zfile_write_txt_header (BufferP vcf_header_text, bool is_first_vcf);
+extern bool zfile_update_txt_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
+
 // -----------------------------
 // VCF stuff
 // -----------------------------
@@ -53,12 +56,10 @@ extern bool zfile_skip_section_by_flags (SectionType st, DictIdType dict_id);
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
 
-extern void zfile_write_txt_header (BufferP vcf_header_text, bool is_first_vcf);
-extern bool zfile_update_txt_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
-extern void zfile_vcf_compress_vb_header (VBlockVCFP vb);
+extern void zfile_vcf_compress_vb_header (VBlockP vb);
 extern void zfile_vcf_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 extern void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCFP vb, ConstBufferP haplotype_sections_data, unsigned sb_i);
-extern void zfile_vcf_read_one_vb (VBlockVCFP vb);
+extern void zfile_vcf_read_one_vb (VBlockP vb);
 
 // -----------------------------
 // v1 compatibility (VCF only)
@@ -71,8 +72,24 @@ extern int v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name
 // SAM stuff
 // -----------------------------
 
-extern void zfile_sam_read_one_vb (VBlockSAMP vb);
-extern void zfile_sam_compress_vb_header (VBlockSAMP vb);
-extern void zfile_sam_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
+extern void zfile_sam_read_one_vb (VBlockP vb);
+extern void zfile_compress_generic_vb_header (VBlockP vb);
+extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
+
+// -----------------------------
+// FASTQ/FASTA stuff
+// -----------------------------
+
+extern void zfile_fast_read_one_vb (VBlockP vb);
+extern void zfile_fast_compress_vb_header (VBlockP vb);
+extern void zfile_fast_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
+
+// -----------------------------
+// ME23 stuff
+// -----------------------------
+
+extern void zfile_me23_read_one_vb (VBlockP vb);
+extern void zfile_me23_compress_vb_header (VBlockP vb);
+extern void zfile_me23_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 
 #endif
