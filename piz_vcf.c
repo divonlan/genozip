@@ -113,7 +113,7 @@ static void piz_vcf_map_iname_subfields (VBlockVCF *vb)
 
     for (unsigned iname_i=0; iname_i < vb->iname_mapper_buf.len; iname_i++) {
 
-        char *iname = &info_ctx->dict.data[all_inames[iname_i].char_index]; // e.g. "I1=I2=I3=" - pointer into the INFO dictionary
+        char *iname = ENT (char, info_ctx->dict, all_inames[iname_i].char_index); // e.g. "I1=I2=I3=" - pointer into the INFO dictionary
         unsigned iname_len = all_inames[iname_i].snip_len; 
         SubfieldMapper *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
 
@@ -225,7 +225,7 @@ static bool piz_vcf_get_variant_data_line (VBlockVCF *vb, unsigned vb_line_i,
                         "Error: iname_mapper word_index out of range: word_index=%d, vb->iname_mapper_buf.len=%u", 
                         word_index[VCF_INFO], (uint32_t)vb->iname_mapper_buf.len);
 
-                iname_mapper = &((SubfieldMapper *)vb->iname_mapper_buf.data)[word_index[VCF_INFO]];
+                iname_mapper = ENT (SubfieldMapper, vb->iname_mapper_buf, word_index[VCF_INFO]);
                 for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
 
                     uint8_t did_i = iname_mapper->did_i[sf_i];
@@ -280,9 +280,9 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
     START_TIMER;
     
     buf_alloc (vb, &vb->sample_iterator, sizeof(SnipIterator) * global_vcf_num_samples, 1, "sample_iterator", 0);
-    SnipIterator *sample_iterator = (SnipIterator *)vb->sample_iterator.data; // an array of SnipIterator
     
-    FormatInfo *format_num_subfields = (FormatInfo *)vb->format_info_buf.data;
+    ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
+    ARRAY (FormatInfo, format_num_subfields, vb->format_info_buf);
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
@@ -290,8 +290,8 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 
         unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
         
-        const uint8_t *next = (const uint8_t *)vb->genotype_sections_data[sb_i].data;
-        const uint8_t *after = next + vb->genotype_sections_data[sb_i].len;
+        const uint8_t *next  = FIRSTENT (const uint8_t, vb->genotype_sections_data[sb_i]);
+        const uint8_t *after = AFTERENT (const uint8_t, vb->genotype_sections_data[sb_i]);
 
         unsigned sample_after = sb_i * vb->num_samples_per_block + num_samples_in_sb;
         
@@ -333,9 +333,9 @@ static void piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, b
 
     PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
 
-    SnipIterator *sample_iterator = (SnipIterator *)vb->sample_iterator.data; // for convenience
+    ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
+    ARRAY (const FormatInfo, format_num_subfields, vb->format_info_buf);
 
-    const FormatInfo *format_num_subfields = (const FormatInfo *)vb->format_info_buf.data;
     const FormatInfo *line_format_info = &format_num_subfields[dl->format_mtf_i];
 
     char *next = vb->line_gt_data.data;
@@ -407,8 +407,8 @@ static void piz_vcf_get_phase_data_line (VBlockVCF *vb, unsigned vb_line_i)
 
         unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
 
-        memcpy (&vb->line_phase_data.data[sb_i * vb->num_samples_per_block],
-                &vb->phase_sections_data[sb_i].data[vb_line_i * num_samples_in_sb], 
+        memcpy (ENT (char, vb->line_phase_data, sb_i * vb->num_samples_per_block),
+                ENT (char, vb->phase_sections_data[sb_i], vb_line_i * num_samples_in_sb), 
                 num_samples_in_sb);
     }
 
@@ -542,48 +542,14 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
     START_TIMER;
 
     PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
-
-    // calculate the line length & allocate it
-    unsigned ht_digits_len  = dl->has_haplotype_data ? vb->num_haplotypes_per_line : 0; 
-    unsigned var_data_len   = vb->line_variant_data.len;        // includes a \n separator
-    unsigned phase_sepr_len = dl->has_haplotype_data ? global_vcf_num_samples * (vb->ploidy-1) : 0; // the phase separators (/ or |)
-    unsigned gt_colon_len   = ((dl->has_genotype_data && dl->has_haplotype_data) ? global_vcf_num_samples : 0); // the colon separating haplotype data from genotype data 
-    unsigned gt_data_len    = (dl->has_genotype_data ? vb->line_gt_data.len // includes accounting for separator (\t or \n) after each sample
-                                                     : (global_vcf_num_samples ? global_vcf_num_samples // separators after haplotype data with no genotype data
-                                                                           : 0));  //  only variant data, no samples
-    // adjustments to lengths
-    if (dl->has_haplotype_data) {
-        for (unsigned i=0; i < vb->num_haplotypes_per_line; i++) {
-            // adjust for 2-digit alleles represented by 'A'..'Z' in the haplotype data
-            if ((unsigned char)vb->line_ht_data.data[i] >= '0'+10) 
-                ht_digits_len++; // 2-digit haplotype (10 to 99)
-
-            // adjust for samples with ploidy less than vb->ploidy 
-            if ((unsigned char)vb->line_ht_data.data[i] == '*') { // '*' means "ploidy padding"
-                ht_digits_len--;
-                phase_sepr_len--;
-            }
-        }
-    }
-
-    // this buf_alloc, when just naively called with the size actually needed, is responsible for 63% of the memory
-    // consumed, and 34% of the execution time on one of our large test files. the time is mostly due to reallocs by subsequent
-    // VBs. By having a 1.1 growth factor, we avoid most of the reallocs and significantly bring down the overall
-    // execution time of genounzip
-    
-    dl->line.len = var_data_len + ht_digits_len + phase_sepr_len + gt_colon_len + gt_data_len + has_13; 
-    buf_alloc (vb, &dl->line, (dl->line.len + 2), 1.1, "dl->line", vb->first_line + vb_line_i); // +1 for string terminator, +1 for temporary additonal phase in case of '*'
-
-    char *next    = dl->line.data;
+    uint32_t line_start = vb->txt_data.len;
     char *next_gt = vb->line_gt_data.data;
 
     // add variant data - change the \n separator to \t if needed
-    memcpy (next, vb->line_variant_data.data, vb->line_variant_data.len);
+    buf_add (&vb->txt_data, vb->line_variant_data.data, vb->line_variant_data.len);
 
     if (dl->has_genotype_data || dl->has_haplotype_data) 
-        next[vb->line_variant_data.len-1] = '\t';
-
-    next += vb->line_variant_data.len;
+        *LASTENT (char, vb->txt_data) = '\t';
 
     // add samples
     for (unsigned sample_i=0; sample_i < global_vcf_num_samples; sample_i++) {
@@ -602,22 +568,22 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
                 
                 uint8_t ht = vb->line_ht_data.data[sample_i * vb->ploidy + p];
                 if (ht == '.') // unknown
-                    *(next++) = ht;
+                    NEXTENT (char, vb->txt_data) = ht;
 
                 else if (ht == '*')  // missing haplotype - delete previous phase
-                    *(--next) = 0;
+                    vb->txt_data.len--;
 
                 else { // allele 0 to 99
                     unsigned allele = ht - '0'; // allele 0->99 represented by ascii 48->147
                     ASSERT (allele <= VCF_MAX_ALLELE_VALUE, "Error: allele out of range: %u (ht=ascii(%u)) line_i=%u sample_i=%u", allele, (unsigned)ht, vb->first_line + vb_line_i, sample_i+1);
                     
-                    if (allele >= 10) *(next++) = '0' + allele / 10;
-                    *(next++) = '0' + allele % 10;
+                    if (allele >= 10) NEXTENT (char, vb->txt_data) = '0' + allele / 10;
+                    NEXTENT (char, vb->txt_data) = '0' + allele % 10;
                 }
 
                 // add the phase character between the haplotypes
                 if (vb->ploidy >= 2 && p < vb->ploidy-1) 
-                    *(next++) = phase;
+                    NEXTENT (char, vb->txt_data) = phase;
             }
         }
 
@@ -627,59 +593,34 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
             for (gt_len=0; next_gt[gt_len] != '\t' && next_gt[gt_len] != '\n'; gt_len++);
 
         // add colon separating haplotype from genotype data
-        if (dl->has_haplotype_data && dl->has_genotype_data) {
-            if (gt_len)
-                *(next++) = ':';
-            else
-                // this sample is in a line with genotype data, but has not genotype data. This is permitted
-                // by VCF spce. We adjust the line length to account for this - we couldn't have known in the beginning without 
-                // expensive scanning of the line
-                dl->line.len--;            
-        }
+        if (dl->has_haplotype_data && dl->has_genotype_data && gt_len) 
+            NEXTENT (char, vb->txt_data) = ':';
 
         // add genotype data - dropping the \t
         if (dl->has_genotype_data) {
-            memcpy (next, next_gt, gt_len);
+            buf_add (&vb->txt_data, next_gt, gt_len);
             next_gt += gt_len + 1;
-            next += gt_len;
         }
 
         // add tab separator after sample data
-        if (dl->has_haplotype_data || dl->has_genotype_data) *(next++) = '\t';
+        if (dl->has_haplotype_data || dl->has_genotype_data) 
+            NEXTENT (char, vb->txt_data) = '\t';
     }
 
     // trim trailing tabs due to missing data
-    for (; next >= dl->line.data+2 && next[-2] == '\t'; next--); // after this loop, next points to the first tab after the last non-tab character
+    for (; vb->txt_data.len >= line_start+2 && *ENT(char, vb->txt_data, vb->txt_data.len - 2) == '\t'; vb->txt_data.len--); // after this loop, next points to the first tab after the last non-tab character
 
     // now, we need to replace the last tab with \n or with \r\n (depending on has_13)
-    if (has_13) { 
-        next++;
-        next[-2] = '\r';
-    }
-
-    next[-1] = '\n'; 
-    next[0]  = '\0'; // end of string
-    
-    // sanity check (the actual can be smaller in a line with missing samples)
-    ASSERT (next - dl->line.data <= dl->line.len, "Error: unexpected line size in line_i=%u: calculated=%u, actual=%u", 
-            vb->first_line + vb_line_i, (uint32_t)dl->line.len, (unsigned)(next - dl->line.data));
-
-    dl->line.len = next - dl->line.data; // update line len to actual, which will be smaller in case of missing samples
+    vb->txt_data.len--;
+    buf_add (&vb->txt_data, has_13 ? "\r\n" : "\n", has_13 ? 2 : 1);
 
     COPY_TIMER (vb->profile.piz_vcf_merge_line);
 }
 
 static void piz_vcf_realloc_datalines (VBlockVCF *vb, uint32_t new_num_data_lines)
 {
-    // we need to remove the Buffers within the PizDataLineVCF from the buffer list, and re-add them with their new address
-    for (uint32_t i=0; i < vb->num_lines_alloced ; i++) 
-        buf_remove_from_buffer_list (&DATA_LINE(vb, i)->line);
-
     vb->data_lines = REALLOC (vb->data_lines, new_num_data_lines * sizeof (PizDataLineVCF));
     memset (DATA_LINE (vb, vb->num_lines_alloced), 0, (new_num_data_lines - vb->num_lines_alloced) * sizeof(PizDataLineVCF));
-
-    for (uint32_t i=0; i < vb->num_lines_alloced ; i++) // only those that *might* have been allocated need to be added now, if we allocate any additional, they will be added by buf_alloc
-        buf_add_to_buffer_list ((VBlockP)vb, &DATA_LINE(vb, i)->line);
 
     vb->num_lines_alloced = new_num_data_lines;
 }
@@ -737,6 +678,9 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
         (z_file->genozip_version >= 4 ? piz_vcf_map_iname_subfields : v2v3_piz_vcf_map_iname_subfields)(vb);
 
     // now reconstruct the lines, one line at a time
+
+    buf_alloc (vb, &vb->txt_data, (vb->vb_data_size + 1), 1.1, "txt_data", vb->vblock_i); // +1 bc piz_vcf_merge_line needs room for a temporary redundant '*' in case ht='*'
+
     for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
         // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->line_variant_data
@@ -760,8 +704,7 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
             }
         }
         else if (is_line_included)
-            buf_copy (vb, &DATA_LINE (vb, vb_line_i)->line, &vb->line_variant_data, 0, 0, 0, 
-                      "dl->line", vb->first_line + vb_line_i);
+            buf_add (&vb->txt_data, vb->line_variant_data.data, vb->line_variant_data.len);
             
         // reset len for next line - no need to alloc as all the lines are the same size?
         vb->line_ht_data.len = vb->line_gt_data.len = vb->line_phase_data.len = 0;

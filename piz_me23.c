@@ -22,40 +22,36 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
     START_TIMER;
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
-    buf_alloc (vb, &vb->reconstructed_line, vb->longest_line_len, 1, "reconstructed_line", vb->vblock_i);
 
     const char *snip;
     uint32_t snip_len, chrom_word_index;
     
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
-        vb->reconstructed_line.len = 0; // initialize for a new line
+        uint32_t txt_data_start = vb->txt_data.len;
         uint32_t txt_line_i = vb->first_line + vb_line_i;
 
         LOAD_SNIP_FROM_BUF (vb->rsid_data, vb->next_rsid, "RSID", '\t');
 
         bool has_13 = snip[snip_len-1] != '#'; // we added a # if line has NO \r (usually 23andMe files have it)
 
-        buf_add (&vb->reconstructed_line, snip, snip_len - !has_13); 
-        buf_add (&vb->reconstructed_line, "\t", 1);  
+        buf_add (&vb->txt_data, snip, snip_len - !has_13); 
+        buf_add (&vb->txt_data, "\t", 1);  
 
         chrom_word_index = RECONSTRUCT_FROM_DICT (ME23_CHROM);
         RECONSTRUCT_FROM_DICT_POS (ME23_POS, true, true); // reconstruct from delta
         RECONSTRUCT_FROM_TABLESS_BUF (vb->genotype_data, vb->next_genotype, 2, false, "GT_DATA");
 
         // remove the extra * added for ploidy=1 genotypes
-        if (*LASTENT(char, vb->reconstructed_line) == '*') 
-            vb->reconstructed_line.len--; 
+        if (*LASTENT(char, vb->txt_data) == '*') 
+            vb->txt_data.len--; 
 
         // add the end-of-line
-        buf_add (&vb->reconstructed_line, has_13 ? "\r\n" : "\n", 1+has_13);
-        
-        // output the reconstructed line - unless it needs to be skipped according to --regions
-        if (!flag_regions || regions_is_site_included (chrom_word_index, vb->last_pos)) {
-            // we should have enough space already, but we allocate more if needed to tolerate mispizzing which we can then debug
-            buf_alloc (vb, &vb->txt_data, vb->txt_data.len + vb->reconstructed_line.len, 1.1, "piz_me23_reconstruct_vb", vb->vblock_i); 
-            buf_add (&vb->txt_data, vb->reconstructed_line.data, vb->reconstructed_line.len);
-        }
+        buf_add (&vb->txt_data, has_13 ? "\r\n" : "\n", 1+has_13);
+
+        // after consuming sections' data, if this line is not to be outputed - shorten txt_data back to start of line
+        if (flag_regions && !regions_is_site_included (chrom_word_index, vb->last_pos))
+            vb->txt_data.len = txt_data_start; // remove excluded line
     }
 
     COPY_TIMER(vb->profile.piz_reconstruct_vb);

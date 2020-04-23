@@ -43,7 +43,6 @@ typedef struct SubfieldMapper {
     uint32_t num_lines;        /* number of lines in this variant block */\
     uint32_t num_lines_alloced;/* number of lines allocated in this variant block >= num_lines */\
     uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
-    Buffer reconstructed_line; /* PIZ only: reconstruction of current line */\
     \
     /* tracking execution */\
     int32_t vb_data_size;      /* expected size of decompressed VCF. Might be different than original if --optimize is used. */\
@@ -148,14 +147,10 @@ typedef struct {
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-    Buffer line;             // PIZ only - used to reconstruct line
-
     bool has_haplotype_data; // FORMAT field contains GT
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
     uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
-    
-    Buffer v1_variant_data;  // backward compatibility with genozip v1
 } PizDataLineVCF;
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb

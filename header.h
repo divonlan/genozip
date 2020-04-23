@@ -48,11 +48,6 @@ typedef void (*IOFunc) (VBlockP vb);
                                  zfile_me23_read_one_vb }
 extern const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES];
 
-#define TXTFILE_WRITE_FB_FUNC_BY_DT { txtfile_write_one_vblock_vcf, txtfile_write_one_vblock, \
-                                      txtfile_write_one_vblock,     txtfile_write_one_vblock, \
-                                      txtfile_write_one_vblock } 
-extern const IOFunc txtfile_write_vb_func_by_dt[NUM_DATATYPES];
-
 #define FIRST_FIELD_DICT_SECTION { SEC_CHROM_DICT, SEC_SAM_QNAME_DICT, \
                                    SEC_FAST_DESC_DICT, SEC_FAST_DESC_DICT, SEC_CHROM_DICT }
 

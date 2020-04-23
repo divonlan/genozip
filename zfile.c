@@ -433,7 +433,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         buf_free (&evb->z_data);
     }
 
-    if (flag_show_dict || dict_id_show_one_dict.num) 
+    if (flag_show_dict || dict_id_show_one_dict.num) {
         for (uint32_t did_i=0; did_i < z_file->num_dict_ids; did_i++) {
             MtfContext *ctx = &z_file->mtf_ctx[did_i];
 
@@ -450,6 +450,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         fprintf (stderr, "\n");
 
         if (exe_type == EXE_GENOCAT) exit(0); // if this is genocat - we're done
+    }
 }
 
 

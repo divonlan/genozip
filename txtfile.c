@@ -243,31 +243,6 @@ unsigned txtfile_write_to_disk (const Buffer *buf)
     return buf->len;
 }
 
-void txtfile_write_one_vblock_vcf (VBlock *vb_)
-{
-    START_TIMER;
-
-    VBlockVCF *vb = (VBlockVCFP)vb_;
-
-    unsigned size_written_this_vb = 0;
-
-    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-        Buffer *line = &((PizDataLineVCF *)vb->data_lines)[line_i].line;
-
-        if (line->len) // if this line is not filtered out
-            size_written_this_vb += txtfile_write_to_disk (line);
-    }
-
-    char s1[20], s2[20];
-    ASSERTW (size_written_this_vb == vb->vb_data_size || exe_type == EXE_GENOCAT, 
-            "Warning: Variant block %u (num_lines=%u) had %s bytes in the original VCF file but %s bytes in the reconstructed file (diff=%d)", 
-            vb->vblock_i, vb->num_lines, 
-            str_uint_commas (vb->vb_data_size, s1), str_uint_commas (size_written_this_vb, s2), 
-            (int32_t)size_written_this_vb - (int32_t)vb->vb_data_size);
-
-    COPY_TIMER (vb->profile.write);
-}
-
 void txtfile_write_one_vblock (VBlockP vb_)
 {
     START_TIMER;

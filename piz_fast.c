@@ -28,7 +28,6 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
     
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
-        vb->reconstructed_line.len = 0; // initialize for a new line
         uint32_t snip_len;
         const char *snip;
 
@@ -65,11 +64,9 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
     START_TIMER;
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
-    buf_alloc (vb, &vb->reconstructed_line, vb->longest_line_len, 1, "reconstructed_line", vb->vblock_i);
     
     for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
 
-        vb->reconstructed_line.len = 0; // initialize for a new line
         uint32_t snip_len;
         const char *snip;
 
@@ -95,7 +92,7 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
             default: { // sequence line
                 uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's \t separator
                 piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
-                buf_add (&vb->reconstructed_line, eol[has_13], eol_len[has_13]); // end of line
+                buf_add (&vb->txt_data, eol[has_13], eol_len[has_13]); // end of line
             }
         }
     }

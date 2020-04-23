@@ -112,12 +112,12 @@ void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const c
         unsigned snip_len;
         mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[mapper->did_i[i]], NULL, &snip, &snip_len, txt_line_i);
 
-        buf_add (&vb->reconstructed_line, snip, snip_len);
+        buf_add (&vb->txt_data, snip, snip_len);
         
         if (i < template_len)
-            buf_add (&vb->reconstructed_line, &template[i], 1) // add middle-field separator (buf_add is a macro - no semicolon)
+            buf_add (&vb->txt_data, &template[i], 1) // add middle-field separator (buf_add is a macro - no semicolon)
         else
-            buf_add (&vb->reconstructed_line, separator, separator_len); // add end-of-field separator
+            buf_add (&vb->txt_data, separator, separator_len); // add end-of-field separator
     }
 }
 
@@ -130,7 +130,7 @@ void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len,
     ASSERT (*next + len <= data->len, "Error reading txt_line=%u: unexpected end of %s data", txt_line_i, st_name (sec));
 
     if (!zfile_is_skip_section (sec, DICT_ID_NONE)) 
-        buf_add (&vb->reconstructed_line, &data->data[*next], len);
+        buf_add (&vb->txt_data, &data->data[*next], len);
     
     *next += len;
 }
@@ -138,10 +138,10 @@ void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len,
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
 static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 {
+    dict_id_initialize(); // needed by V1 too
+
     int16_t data_type = zfile_read_genozip_header (original_file_digest);
     if (data_type == DT_VCF_V1 || data_type == EOF) return data_type;
-
-    dict_id_initialize();
     
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
@@ -187,7 +187,7 @@ static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
 
 static void enforce_v1_limitations (bool is_first_component)
 {
-    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s compressed with genozip version 1", (lflag), z_name);
+    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s was compressed with genozip version 1", (lflag), z_name);
     
     ENFORCE(flag_test, "--test");
     ENFORCE(flag_split, "--split");
@@ -320,7 +320,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         else { // if (dispatcher_has_processed_vb (dispatcher, NULL)) {
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
 
-            txtfile_write_vb_func_by_dt[z_file->data_type](processed_vb);
+            txtfile_write_one_vblock (processed_vb);
 
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
 

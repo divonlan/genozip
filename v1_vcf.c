@@ -630,6 +630,8 @@ void v1_piz_vcf_reconstruct_vb (VBlockVCF *vb)
     variant_data_next_line = vb->v1_variant_data_section_data.data;
     variant_data_length_remaining = vb->v1_variant_data_section_data.len;
 
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
+
     for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
 
         // de-permute variant data into vb->line_variant_data

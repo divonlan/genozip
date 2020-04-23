@@ -8,16 +8,10 @@
 
 #include "genozip.h"
 
-//extern bool txtfile_get_line (VBlockP vb, unsigned line_i_in_file, bool skip_md5_vcf_header, BufferP line, const char *buf_name);
-
 extern void txtfile_read_header (bool is_first_txt, bool header_required, char first_char);
 extern void txtfile_read_vblock (VBlockP vb);
 extern unsigned txtfile_write_to_disk (ConstBufferP buf);
 extern void txtfile_estimate_txt_data_size (VBlockP vb);
-
-extern void txtfile_write_one_vblock_vcf (VBlockP vb);
 extern void txtfile_write_one_vblock (VBlockP vb);
-extern void txtfile_write_one_vblock_fast (VBlockP vb);
-extern void txtfile_write_one_vblock_me23 (VBlockP vb);
 
 #endif

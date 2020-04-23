@@ -32,7 +32,6 @@ const ComputeFunc compress_func_by_dt[NUM_DATATYPES]   = COMPRESS_FUNC_BY_DT;
 const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES] = UNCOMPRESS_FUNC_BY_DT;
 const UpdateHeaderFunc update_header_func_by_dt[NUM_DATATYPES] = UPDATE_HEADER_FUNC_BY_DT;
 const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES]      = READ_ONE_VB_FUNC_BY_DT;
-const IOFunc txtfile_write_vb_func_by_dt[NUM_DATATYPES] = TXTFILE_WRITE_FB_FUNC_BY_DT;
 
 // -----------
 // VCF stuff

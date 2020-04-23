@@ -27,20 +27,8 @@ static void vb_vcf_release_vb (VBlock *vb_)
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
     // note: vb->data_line is not freed but rather used by subsequent vbs
-    if (command == ZIP && vb->data_lines)
-        memset (vb->data_lines, 0, sizeof(ZipDataLineVCF) * vb->num_lines_alloced);
-
-    else if (command != ZIP && vb->data_lines) {
-        for (unsigned i=0; i < vb->num_lines_alloced; i++) {
-            PizDataLineVCF *dl = &((PizDataLineVCF *)vb->data_lines)[i];
-            
-            dl->has_haplotype_data = dl->has_genotype_data = 0;
-            dl->format_mtf_i = 0;
-
-            buf_free(&dl->line);
-            buf_free(&dl->v1_variant_data);
-        }
-    }
+    if (vb->data_lines)
+        memset (vb->data_lines, 0, (command==ZIP ? sizeof(ZipDataLineVCF) : sizeof(PizDataLineVCF)) * vb->num_lines_alloced);
 
     for (unsigned i=0; i < vb->num_sample_blocks; i++) {
         if (vb->haplotype_sections_data) buf_free(&vb->haplotype_sections_data[i]);
@@ -96,15 +84,6 @@ static void vb_vcf_release_vb (VBlock *vb_)
 static void vb_vcf_destroy_vb (VBlock **vb_)
 {
     VBlockVCF **vb = (VBlockVCF **)vb_;
-
-    if (command != ZIP && (*vb)->data_lines) {
-
-        for (unsigned i=0; i < (*vb)->num_lines_alloced; i++) {
-            PizDataLineVCF *dl = &((PizDataLineVCF *)(*vb)->data_lines)[i];
-            buf_destroy (&dl->line);
-            buf_destroy (&dl->v1_variant_data);
-        }
-    }
 
     for (unsigned i=0; i < (*vb)->num_sample_blocks; i++) {
         if ((*vb)->haplotype_sections_data) buf_destroy (&(*vb)->haplotype_sections_data[i]);
@@ -322,7 +301,6 @@ void vb_release_vb (VBlock **vb_p)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
-    buf_free (&vb->reconstructed_line);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
@@ -358,7 +336,6 @@ void vb_destroy_vb (VBlockP *vb)
     buf_destroy (&(*vb)->show_b250_buf);
     buf_destroy (&(*vb)->section_list_buf);
     buf_destroy (&(*vb)->region_ra_intersection_matrix);
-    buf_destroy (&(*vb)->reconstructed_line);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if ((*vb)->mtf_ctx[i].dict_id.num)
