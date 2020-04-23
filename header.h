@@ -54,7 +54,10 @@ extern const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES];
 extern const IOFunc txtfile_write_vb_func_by_dt[NUM_DATATYPES];
 
 #define FIRST_FIELD_DICT_SECTION { SEC_CHROM_DICT, SEC_SAM_QNAME_DICT, \
-                                   SEC_FAST_DESC_DICT, SEC_FAST_DESC_DICT, SEC_CHROM_DICT };
+                                   SEC_FAST_DESC_DICT, SEC_FAST_DESC_DICT, SEC_CHROM_DICT }
+
+// the chrom fields used by --regions for subsetting
+#define CHROM_FIELD_DICT_SECTION { SEC_CHROM_DICT, SEC_SAM_RNAME_DICT, -1, -1, SEC_CHROM_DICT }
 
 // related to the header of the txt file of each data type
 #define TXT_HEADER_IS_ALLOWED      { true, true, false, false, true } // is it possible to have a header in this data_type
