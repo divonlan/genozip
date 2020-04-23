@@ -256,6 +256,7 @@ extern const char *file_basename (const char *filename, bool remove_exe, const c
 extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
+extern const char *ft_name (FileType ft);
 
 #define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))
 #define txt_name file_printname(txt_file)

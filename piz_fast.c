@@ -35,7 +35,7 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
 
         // metadata looks like this - "X151YXX" - the 4 X,Y characters specify whether each row has a \r (Y=has)
         // and the number is the seq_len=qual_len
-        RECONSTRUCT_FROM_DICT (FAST_LINEMETA);
+        LOAD_SNIP (FAST_LINEMETA);
         const char *md = snip;
 
         // description line
@@ -49,7 +49,7 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
         buf_add (&vb->txt_data, eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
 
         // + line
-        buf_add (&vb->txt_data, md[2]-'X' ? "+\n" : "+\r\n", eol_len[md[2]-'X'] + 1);
+        buf_add (&vb->txt_data, md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
 
         // quality line
         piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i);
@@ -74,7 +74,7 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
         // metadata looks like this - "X>" (desc line), "X;" (comment line) "X123" (sequence line)
         // X, Y characters specify whether each row has a \r (Y=has)
-        RECONSTRUCT_FROM_DICT (FAST_LINEMETA);
+        LOAD_SNIP (FAST_LINEMETA);
         const char *md = snip;
         bool has_13 = md[0] - 'X';
 

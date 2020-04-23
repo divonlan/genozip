@@ -97,7 +97,7 @@ void zip_generate_and_compress_subfields (VBlock *vb, const SubfieldMapper *mapp
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
 void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 {
-    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%.*s", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id);
+    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%s", err_dict_id (ctx->dict_id));
 
     buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
                1.1, "ctx->b250_buf", 0);

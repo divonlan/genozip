@@ -29,25 +29,33 @@ static inline DictIdType dict_id_make(const char *str, unsigned str_len) { DictI
 static inline DictIdType dict_id_field(    DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
 
 #define dict_id_is(dict_id, str) (dict_id_make(str, strlen(str)).num == dict_id_printable (dict_id).num)
-#define dict_id_is_field(dict_id)         ((dict_id.id[0] >> 6) == 0) // 2 MSb of first byte determine dictionary type
+#define dict_id_is_field(dict_id)  ((dict_id.id[0] >> 6) == 0) // 2 MSb of first byte determine dictionary type
 
 // VCF field types
-#define dict_id_is_vcf_info_sf(dict_id)   ((dict_id.id[0] >> 6) == 3)
-#define dict_id_is_vcf_format_sf(dict_id) ((dict_id.id[0] >> 6) == 1)
+#define dict_id_is_type_1(dict_id) ((dict_id.id[0] >> 6) == 3)
+#define dict_id_is_type_2(dict_id) ((dict_id.id[0] >> 6) == 1)
 
-static inline DictIdType dict_id_vcf_info_sf(  DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
-static inline DictIdType dict_id_vcf_format_sf(DictIdType dict_id) { return dict_id; } // no change - keep Msb 01
+static inline DictIdType dict_id_type_1(DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
+static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } // no change - keep Msb 01
 
-// SAM field types - overload the VCF dict id types
-#define dict_id_is_sam_qname_sf dict_id_is_vcf_info_sf
-#define dict_id_is_sam_optnl_sf dict_id_is_vcf_format_sf
+// VCF field types -
+#define dict_id_is_vcf_info_sf   dict_id_is_type_1
+#define dict_id_is_vcf_format_sf dict_id_is_type_2
 
-#define dict_id_sam_qname_sf dict_id_vcf_info_sf
-#define dict_id_sam_optnl_sf dict_id_vcf_format_sf
+#define dict_id_vcf_info_sf      dict_id_type_1
+#define dict_id_vcf_format_sf    dict_id_type_2
 
-// FASTQ/FASTA field types - overload the VCF dict id types
-#define dict_id_is_fast_desc_sf dict_id_is_vcf_format_sf
-#define dict_id_fast_desc_sf dict_id_vcf_format_sf
+// SAM field types 
+#define dict_id_is_sam_qname_sf  dict_id_is_type_1
+#define dict_id_is_sam_optnl_sf  dict_id_is_type_2
+
+#define dict_id_sam_qname_sf     dict_id_type_1
+#define dict_id_sam_optnl_sf     dict_id_type_2
+
+// FASTQ/FASTA field types 
+#define dict_id_is_fast_desc_sf dict_id_is_type_2
+
+#define dict_id_fast_desc_sf dict_id_type_2
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 
@@ -79,5 +87,8 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
 extern void dict_id_initialize (void);
 
 extern const char *dict_id_display_type (DictIdType dict_id);
+
+// print the dict_id - NOT thread safe, for use in execution-termination messages
+extern const char *err_dict_id (DictIdType dict_id);
 
 #endif

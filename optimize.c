@@ -143,7 +143,7 @@ bool optimize_vcf_format (DictIdType dict_id, const char *snip, unsigned len, ch
     optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
     if (dict_id.num == dict_id_FORMAT_PL) return optimize_vcf_pl (snip, len, optimized_snip, optimized_snip_len);
     
-    ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
+    ABORT ("Error in optimize: unsupport dict %s", err_dict_id (dict_id));
     return 0; // never reaches here, avoid compiler warning
 }
 
@@ -152,7 +152,7 @@ bool optimize_vcf_info (DictIdType dict_id, const char *snip, unsigned len, char
     if (dict_id.num == dict_id_INFO_VQSLOD) 
         return optimize_float_2_sig_dig (snip, len, 0, optimized_snip, optimized_snip_len);
     
-    ABORT ("Error in optimize: unsupport dict %s", dict_id_printable (dict_id).id);
+    ABORT ("Error in optimize: unsupport dict %s", err_dict_id (dict_id));
     return 0; // never reaches here, avoid compiler warning
 }
 

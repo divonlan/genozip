@@ -61,6 +61,12 @@ extern const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES];
 
 #define STAT_SHOW_SECTIONS_LINE_NAME { "Variants", "Alignment lines", "Entries", "Sequences", "SNPs" }
 
+#define STAT_DICT_TYPES { { "FIELD", "INFO",   "FORMAT" }, \
+                          { "FIELD", "QNAME",  "OPTION" }, \
+                          { "FIELD", "ERROR!", "DESC"   }, \
+                          { "FIELD", "ERROR!", "DESC"   }, \
+                          { "FIELD", "ERROR!", "ERROR!" } };
+
 // VCF related global parameters - set before any thread is created, and never change
 extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;
 
@@ -105,5 +111,7 @@ extern bool header_genozip_to_txt (Md5Hash *digest);
 extern bool v1_header_genozip_to_vcf (Md5Hash *digest);
 extern bool v1_vcf_header_get_vcf_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,uint64_t *num_items_concat,
                                           Md5Hash  *md5_hash_concat, char *created, unsigned created_len);
+
+extern const char *dt_name (DataType data_type);
 
 #endif

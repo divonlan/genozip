@@ -108,21 +108,19 @@ void dict_id_initialize (void)
 
 const char *dict_id_display_type (DictIdType dict_id)
 {
-    if (dict_id_is_field (dict_id))                 return "FIELD";
+    static const char *dict_type_by_data_type[NUM_DATATYPES][3] = STAT_DICT_TYPES;
 
-    switch (z_file->data_type) { 
-        case DT_VCF:
-            if (dict_id_is_vcf_info_sf (dict_id))   return "INFO";
-            if (dict_id_is_vcf_format_sf (dict_id)) return "FORMAT";
-            break;
+    if (dict_id_is_field (dict_id))  return dict_type_by_data_type[z_file->data_type][0]; 
+    if (dict_id_is_type_1 (dict_id)) return dict_type_by_data_type[z_file->data_type][1]; 
+    if (dict_id_is_type_2 (dict_id)) return dict_type_by_data_type[z_file->data_type][2]; 
 
-        case DT_SAM:
-            if (dict_id_is_sam_qname_sf (dict_id))  return "QNAME";
-            if (dict_id_is_sam_optnl_sf (dict_id))  return "OPTION";
-            break;
-        
-        default: break; 
-    }
-    return "ERROR!";
+    return "Bug!";
 }
 
+// print the dict_id - NOT thread safe, for use in execution-termination messages
+const char *err_dict_id (DictIdType dict_id)
+{
+    static char s[DICT_ID_LEN+1];
+    sprintf (s, "%.*s", DICT_ID_LEN, dict_id_printable(dict_id).id);
+    return s;
+}

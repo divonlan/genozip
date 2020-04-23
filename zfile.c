@@ -214,8 +214,8 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     header.dict_id                 = ctx->dict_id;
 
     if (flag_show_dict)
-        fprintf (stderr, "%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
-                dict_id_printable (ctx->dict_id).id, vb->vblock_i, st_name(ctx->dict_section_type), 
+        fprintf (stderr, "%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", 
+                DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, vb->vblock_i, st_name(ctx->dict_section_type), 
                 ctx->did_i, num_words, num_chars, data);
 
     if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
@@ -238,7 +238,7 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx)
     header.h.data_uncompressed_len = BGEN32 (ctx->b250.len);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderBase250));
     header.h.data_compression_alg  = COMPRESS_BZLIB;
-    header.h.vblock_i       = BGEN32 (vb->vblock_i);
+    header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;
     header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
@@ -443,9 +443,9 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
                 fprintf (stderr, "%.*s\t", (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
             
             if (flag_show_dict)
-                fprintf (stderr, "%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", DICT_ID_LEN, 
-                        dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
-                                           did_i, (uint32_t)ctx->word_list.len, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
+                fprintf (stderr, "%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", 
+                         DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
+                         did_i, (uint32_t)ctx->word_list.len, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
         }
         fprintf (stderr, "\n");
 

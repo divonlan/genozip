@@ -134,7 +134,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
                     MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
                     Base250 index = node->word_index;
 
-                    if (flag_show_gt_nodes) fprintf (stderr, "%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
+                    if (flag_show_gt_nodes) fprintf (stderr, "%.*s:%u ", DICT_ID_LEN, err_dict_id (ctx->dict_id), index.n);
 
                     base250_copy (dst_next, index);
                     dst_next += base250_len (index.encoded.numerals);

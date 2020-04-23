@@ -5,6 +5,7 @@
 
 #include "genozip.h"
 #include "strings.h"
+#include "dict_id.h"
 
 void str_to_lowercase (char *s)
 {
@@ -82,3 +83,17 @@ char *str_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated b
 #endif
     return str;
 }
+
+const char *type_name (unsigned item, 
+                       const char * const *name, // the address in which a pointer to name is found, if item is in range
+                       unsigned num_names)
+{
+    if (item > num_names) {
+        static char str[50];
+        sprintf (str, "%u (out of range)", item);
+        return str;
+    }
+    
+    return *name;    
+}
+

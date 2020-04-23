@@ -66,8 +66,8 @@ uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, unsigned v
     uint32_t node_index = mtf_evaluate_snip_seg (vb, ctx, str, len, &node, NULL);
 
     ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
-            "Error in seg_one_subfield: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
-            DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
+            "Error in seg_one_subfield: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
+            err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),
             node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
 
     NEXTENT (uint32_t, ctx->mtf_i) = node_index;
@@ -88,8 +88,9 @@ uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, unsigned vb_li
     MtfNode *node;
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, &node, is_new);
 
-    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, "Error in seg_one_field: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
-            DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
+    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
+            "Error in seg_one_field: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
+            err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),
             node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
     NEXTENT (uint32_t, vb->mtf_ctx[did_i].mtf_i) = node_index;
@@ -227,7 +228,7 @@ void seg_compound_field (VBlock *vb,
                 sf_dict_id.id[1] = (sf_i <= 9) ? (sf_i + '0') : (sf_i-10 + 'a');
 
                 sf_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
-                                                 dict_id_sam_qname_sf (sf_dict_id), sf_b250_sec-1);
+                                                 sf_dict_id, sf_b250_sec-1);
                 mapper->did_i[sf_i] = sf_ctx->did_i;
                 mapper->num_subfields++;
             }
@@ -269,6 +270,8 @@ void seg_add_to_data_buf (VBlock *vb, Buffer *buf, SectionType sec,
                           char add_separator,  // seperator to add to the buffer after the snip. 0 if none.
                           unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
+    ASSERT0 (buf_is_allocated (buf), "Error in seg_add_to_data_buf: buf is not allocated");
+
     buf_alloc_more (vb, buf, snip_len + !!add_separator, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_data_buf
     if (snip_len) buf_add (buf, snip, snip_len); 
     if (add_separator) buf_add (buf, &add_separator, 1); 

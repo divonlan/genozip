@@ -60,6 +60,8 @@ static void hash_populate_from_mtf (MtfContext *zf_ctx)
 // 2. If not - use either num_lines for the size, or the smallest size for dicts that are typically small
 void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 {
+    ASSERT0 (z_file, "Error in hash_alloc_local: z_file is NULL");
+
     vb_ctx->local_hash_prime = 0; // initialize
 
     // if known from previously merged vb - use those values
@@ -181,7 +183,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
                "mtf_ctx->local_hash", vb_ctx->did_i);
     vb_ctx->local_hash.len = vb_ctx->local_hash_prime;
     memset (vb_ctx->local_hash.data, 0xff, vb_ctx->local_hash_prime * sizeof (LocalHashEnt)); // initialize core table
-//printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->vblock_i, dict_id_printable (vb_ctx->dict_id).id, vb_ctx->local_hash_prime); 
+//printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->vblock_i, err_dict_id (vb_ctx->dict_id), vb_ctx->local_hash_prime); 
 }
 
 // ZIP merge: allocating the global cache for a dictionary, when merging the first VB that encountered it

@@ -19,3 +19,6 @@ extern char *str_uint (int64_t n, char *str /* out */, unsigned *len);
 #define POINTER_STR_LEN 19
 extern char *str_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/);
 
+extern const char *type_name (unsigned item, 
+                              const char * const *name, // the address in which a pointer to name is found, if item is in range
+                              unsigned num_names);

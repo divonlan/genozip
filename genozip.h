@@ -27,7 +27,8 @@
 #define GENOZIP_EXT ".genozip"
 
 // default max amount of VCF data in each variant block. this is user-configurable with --vblock
-#define TXT_DATA_PER_VB   "128" // MB
+#define TXT_DATA_PER_VB_DEFAULT "128" // MB in default mode
+#define TXT_DATA_PER_VB_FAST    "16"  // MB with --fast
 
 #define MAX_SUBFIELDS      63   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME and SAM_OPTIONAL subfield types that is supported in one GENOZIP file.
 

@@ -47,7 +47,10 @@ void stats_show_sections (void)
         SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,
         SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      SEC_SAM_CIGAR_B250,     SEC_SAM_CIGAR_DICT,     
         SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT,      
-        SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250,  SEC_SAM_OPTNL_SF_DICT
+        SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250,  SEC_SAM_OPTNL_SF_DICT,
+
+        SEC_FAST_LINEMETA_B250,SEC_FAST_LINEMETA_DICT,
+        SEC_FAST_DESC_B250,    SEC_FAST_DESC_DICT,     SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT
     };
 
     static const char *categories[] = {
@@ -65,7 +68,10 @@ void stats_show_sections (void)
         "POS b250 (delta)", "POS dict (delta)", 
         "MAPQ b250", "MAPQ dict", "CIGAR b250", "CIGAR dict", 
         "TLEN b250", "TLEN dict", "PNEXT b250 (delta)", "PNEXT dict (delta)",
-        "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict"
+        "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict",
+
+        "Line metadata b250", "Line metadata dict",
+        "DESC b250", "DESC dict", "DESC subfields b250", "DESC subfields dict"
     };
 
     unsigned num_secs       = sizeof(secs)/sizeof(secs[0]);
@@ -85,25 +91,25 @@ void stats_show_sections (void)
     uint32_t total_sections=0;
 
     for (unsigned sec_i=0; sec_i < num_secs; sec_i++) {
-        int64_t tbytes    = txt_file->section_bytes[secs[sec_i]];
+        int64_t txtbytes    = txt_file->section_bytes[secs[sec_i]];
         int64_t zbytes    = z_file->section_bytes[secs[sec_i]];
         int64_t zentries  = z_file->section_entries[secs[sec_i]];
         int32_t zsections = z_file->num_sections[secs[sec_i]];
 
-        if (!tbytes && !zbytes) continue;
+        if (!txtbytes && !zbytes) continue;
 
         bool is_dict = section_type_is_dictionary (secs[sec_i]);
         bool is_b250 = section_type_is_b250 (secs[sec_i]);
 
         int64_t ratio_zbytes;
-        if (secs[sec_i] == SEC_VCF_INFO_B250 || 
+        if (secs[sec_i] == SEC_VCF_INFO_B250  || 
             secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250 ||
             secs[sec_i] == SEC_FAST_DESC_B250) 
             ratio_zbytes = zbytes + z_file->section_bytes[secs[sec_i+1]] + z_file->section_bytes[secs[sec_i+2]] 
                                   + z_file->section_bytes[secs[sec_i+3]];
         
         else if (is_dict || 
-                 secs[sec_i] == SEC_VCF_INFO_SF_B250 || 
+                 secs[sec_i] == SEC_VCF_INFO_SF_B250  || 
                  secs[sec_i] == SEC_SAM_QNAME_SF_B250 || secs[sec_i] == SEC_SAM_OPTNL_SF_B250 ||
                  secs[sec_i] == SEC_FAST_DESC_SF_B250)
             ratio_zbytes = 0;
@@ -114,28 +120,30 @@ void stats_show_sections (void)
         else              
             ratio_zbytes = zbytes;
 
-        int64_t ratio_tbytes;
-        if (secs[sec_i] == SEC_VCF_INFO_B250 || 
+        int64_t ratio_txtbytes;
+        if (secs[sec_i] == SEC_VCF_INFO_B250  || 
             secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250 ||
             secs[sec_i] == SEC_FAST_DESC_B250) 
-            ratio_tbytes = tbytes + txt_file->section_bytes[secs[sec_i+2]];
+            ratio_txtbytes = txtbytes + txt_file->section_bytes[secs[sec_i+1]] + txt_file->section_bytes[secs[sec_i+2]] 
+                                      + txt_file->section_bytes[secs[sec_i+3]];
         else
-            ratio_tbytes = tbytes;
+            ratio_txtbytes = txtbytes;
 
         fprintf (stderr, format, categories[sec_i], zsections, 
                  str_uint_commas (zentries, zentries_str),
-                 tbytes ? str_size(tbytes, vsize) : "       ", 
-                 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
+                 txtbytes ? str_size(txtbytes, vsize) : "       ", 
+                 100.0 * (double)txtbytes / (double)txt_file->txt_data_size_single,
                  str_size(zbytes, zsize), 
                  100.0 * (double)zbytes / (double)z_file->disk_size,
-                 ratio_zbytes ? (double)ratio_tbytes / (double)ratio_zbytes : 0,
-                 !ratio_zbytes ? (ratio_tbytes && secs[sec_i] != SEC_VCF_INFO_SF_B250  && 
-                                                  secs[sec_i] != SEC_SAM_QNAME_SF_B250 && 
-                                                  secs[sec_i] != SEC_SAM_OPTNL_SF_B250 ? "\b\b\bInf" : "\b\b\b---") : "");
+                 ratio_zbytes ? (double)ratio_txtbytes / (double)ratio_zbytes : 0,
+                 !ratio_zbytes ? (ratio_txtbytes && secs[sec_i] != SEC_FAST_DESC_SF_B250 && 
+                                                    secs[sec_i] != SEC_VCF_INFO_SF_B250  && 
+                                                    secs[sec_i] != SEC_SAM_QNAME_SF_B250 && 
+                                                    secs[sec_i] != SEC_SAM_OPTNL_SF_B250 ? "\b\b\bInf" : "\b\b\b---") : "");
 
         total_sections += zsections;
         total_entries  += zentries;
-        total_txt      += tbytes;
+        total_txt      += txtbytes;
         total_z        += zbytes;
     }
 
@@ -155,7 +163,7 @@ void stats_show_sections (void)
     
         sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
 
-        fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s %9s %9s %9s %5.1f\n", i, -DICT_ID_LEN, DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, 
+        fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s %9s %9s %9s %5.1f\n", i, -DICT_ID_LEN, DICT_ID_LEN, err_dict_id (ctx->dict_id), 
                  dict_id_display_type (ctx->dict_id), str_uint_commas (ctx->mtf_i.len, s1), str_uint_commas (ctx->mtf.len, s2), 
                  str_uint_commas (ctx->global_hash_prime, s3), str_size (ctx->dict.len, vsize),
                  str_size (dict_compressed_size, s4), str_size (b250_compressed_size, s5),
@@ -212,7 +220,7 @@ void stats_show_content (void)
           SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT, 
           SEC_SAM_OPTIONAL_B250,  SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
           
-          SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT,  SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,
+          SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,     SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT,  
           SEC_FAST_LINEMETA_B250, SEC_FAST_LINEMETA_DICT, SEC_FASTA_COMMENT_DATA,
 
           NIL },
@@ -221,21 +229,21 @@ void stats_show_content (void)
 
     for (unsigned i=0; i < NUM_CATEGORIES; i++) {
 
-        int64_t tbytes=0, zbytes=0;
+        int64_t txtbytes=0, zbytes=0;
         for (int *sec_i = sections_per_category[i]; *sec_i != NIL; sec_i++) {
-            tbytes += txt_file->section_bytes[*sec_i];
+            txtbytes += txt_file->section_bytes[*sec_i];
             zbytes += z_file->section_bytes[*sec_i];
         }
 
-        if (!tbytes && !zbytes) continue;
+        if (!txtbytes && !zbytes) continue;
 
         fprintf (stderr, format, categories[i], 
-                 str_size(tbytes, vsize), 100.0 * (double)tbytes / (double)txt_file->txt_data_size_single,
+                 str_size(txtbytes, vsize), 100.0 * (double)txtbytes / (double)txt_file->txt_data_size_single,
                  str_size(zbytes, zsize), 100.0 * (double)zbytes / (double)z_file->disk_size,
-                 zbytes ? (double)tbytes / (double)zbytes : 0,
-                 !zbytes ? (tbytes ? "\b\b\bInf" : "\b\b\b---") : "");
+                 zbytes ? (double)txtbytes / (double)zbytes : 0,
+                 !zbytes ? (txtbytes ? "\b\b\bInf" : "\b\b\b---") : "");
 
-        total_txt      += tbytes;
+        total_txt      += txtbytes;
         total_z        += zbytes;
     }
 

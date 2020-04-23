@@ -13,6 +13,14 @@
 
 #define DATA_LINE(vb,i) (&((ZipDataLineFAST *)((vb)->data_lines))[(i)])
 
+// called from seg_all_data_lines
+void seg_fasta_initialize (VBlock *vb_)
+{
+    VBlockFAST *vb = (VBlockFAST *)vb_;
+
+    buf_alloc (vb, &vb->comment_data, 10000, 1, "comment_data", vb->vblock_i); // arbitrary initial allocation
+}             
+             
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
@@ -62,7 +70,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
             global_cmd, txt_name, field_len, field_start, vb->vblock_i, vb_line_i);
 
     metadata[2] = 'X' + has_13;    
-    vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] += 2 + has_13; // + \n and sometimes \r
+    vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] += 2 + has_13; // + \n and sometimes \r (we account for the + here, but we don't store it)
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
     dl->qual_data_start = next_field - vb->txt_data.data;
@@ -82,6 +90,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
     str_uint (dl->seq_len, &metadata[4], &seq_len_str_len);
 
     seg_one_field (vb, metadata, 4 + seq_len_str_len, vb_line_i, FAST_LINEMETA);
+    vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] -= 5 + seq_len_str_len; // seg_one_field account for our string and \t - these were all already accounted for
 
     return next_field;
 }
@@ -102,13 +111,14 @@ const char *seg_fasta_data_line (VBlock *vb_,
                                  uint32_t vb_line_i) // line within this vb (starting from 0)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;	
-
+buf_test_overflows(vb_);
     // get entire line
     unsigned line_len;
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
-    int32_t remaing_vb_txt_len = AFTERENT (char, vb->txt_data) - line_start;
-    const char *next_field = seg_get_next_item (line_start, &remaing_vb_txt_len, true, false, false, vb_line_i, &line_len, &separator, &has_13, "DESC");
+    int32_t remaining_vb_txt_len = AFTERENT (char, vb->txt_data) - line_start;
+    const char *next_field = seg_get_next_item (line_start, &remaining_vb_txt_len, true, false, false, vb_line_i, &line_len, &separator, &has_13, "DESC");
+buf_test_overflows(vb_);
     
     // case: description line - we segment it to its components
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
@@ -119,6 +129,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
         
         static const char *desc_md[2] = { "X>", "Y>" };
         seg_one_field (vb, desc_md[has_13], 2, vb_line_i, FAST_LINEMETA);
+buf_test_overflows(vb_);
     }
 
     // case: comment line - stored in the comment buffer
@@ -127,6 +138,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
 
         static const char *comment_md[2] = { "X;", "Y;" };
         seg_one_field (vb, comment_md[has_13], 2, vb_line_i, FAST_LINEMETA);
+buf_test_overflows(vb_);
     }
 
     // case: sequence line
@@ -140,6 +152,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
         seq_md[0] = 'X' + has_13;
         str_uint (line_len, &seq_md[1], &seq_len_len);
         seg_one_field (vb, seq_md, seq_len_len + 1, vb_line_i, FAST_LINEMETA);
+buf_test_overflows(vb_);
     }
 
     return next_field;

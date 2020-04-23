@@ -18,6 +18,7 @@
 #include "piz.h"
 #include "zfile.h"
 #include "txtfile.h"
+#include "strings.h"
 
 static bool is_first_txt = true; 
 
@@ -242,4 +243,10 @@ bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this 
     is_first_txt = false;
 
     return true;
+}
+
+const char *dt_name (DataType dt)
+{
+    static const char *names[NUM_DATATYPES] = DATATYPE_NAMES;
+    return type_name (dt, &names[dt], sizeof(names)/sizeof(names[0]));
 }

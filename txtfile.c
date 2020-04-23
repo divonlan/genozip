@@ -70,20 +70,20 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
         }
 #endif
     }
-    else if (txt_file->type == VCF_GZ || txt_file->type == VCF_BGZ) { 
+    else if (file_is_gz_type (txt_file->type)) {
         bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
         
         if (bytes_read)
             txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); 
     }
-    else if (txt_file->type == VCF_BZ2) { 
+    else if (file_is_bz2_type (txt_file->type)) { 
         bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, max_bytes);
 
         if (bytes_read)
             txt_file->disk_so_far = BZ2_consumed ((BZFILE *)txt_file->file); 
     } 
     else {
-        ABORT0 ("Invalid file type");
+        ABORT ("txtfile_read_block: Invalid file type %s", ft_name (txt_file->type));
     }
     
 finish:
@@ -101,7 +101,7 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
     int32_t bytes_read;
     char prev_char='\n';
 
-    // read data from the file until either 1. EOF is reached 2. end of vcf header is reached
+    // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     while (1) { 
 
         // enlarge if needed        
@@ -129,15 +129,15 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
 
             if (prev_char == '\n' && this_read[i] != first_char) {  
 
-                uint32_t vcf_header_len = evb->txt_data.len + i;
+                uint32_t txt_header_len = evb->txt_data.len + i;
                 evb->txt_data.len += bytes_read; // increase all the way - just for buf_copy
 
                 // the excess data is for the next vb to read 
-                buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, vcf_header_len,
+                buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, 1, txt_header_len,
                           bytes_read - i, "txt_file->unconsumed_txt", 0);
 
                 txt_file->txt_data_so_far_single += i; 
-                evb->txt_data.len = vcf_header_len;
+                evb->txt_data.len = txt_header_len;
 
                 goto finish;
             }
@@ -184,7 +184,7 @@ void txtfile_read_vblock (VBlock *vb)
             break;
         }
 
-        // note: we md_udpate after every block, rather on the complete data (vb or vcf header) when its done
+        // note: we md_udpate after every block, rather on the complete data (vb or txt header) when its done
         // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
         // Note: we md5 everything we read - even unconsumed data
         txtfile_update_md5 (&vb->txt_data.data[vb->txt_data.len], bytes_one_read, false);
@@ -261,7 +261,7 @@ void txtfile_write_one_vblock (VBlockP vb_)
     COPY_TIMER (vb->profile.write);
 }
 
-// ZIP only - estimate the size of the vcf data in this file. affects the hash table size and the progress indicator.
+// ZIP only - estimate the size of the txt data in this file. affects the hash table size and the progress indicator.
 void txtfile_estimate_txt_data_size (VBlock *vb)
 {
     uint64_t disk_size = txt_file->disk_size; 
@@ -274,6 +274,8 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
     
     double ratio=1;
 
+    bool is_no_gt_vcf = (txt_file->data_type == DT_VCF && !((VBlockVCFP)vb)->has_genotype_data);
+
     // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
     if (file_is_gz_type (txt_file->type) || file_is_bz2_type (txt_file->type))
         ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size;
@@ -284,10 +286,10 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
         // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
         // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
         // the bcf is compressed as it normally is.
-        ratio = ((VBlockVCF *)vb)->has_genotype_data ? 8.5 : 55;
+        ratio = is_no_gt_vcf ? 55 : 8.5;
 
-    else if (file_is_xz_type (txt_file->type))
-        ratio = ((VBlockVCF *)vb)->has_genotype_data ? 12.7 : 171;
+    else if (file_is_xz_type (txt_file->type)) 
+        ratio = is_no_gt_vcf ? 171 : 12.7;
 
     else if (file_is_bam_type (txt_file->type))
         ratio = 4;

@@ -785,7 +785,7 @@ int main (int argc, char **argv)
     if (flag_test) flag_md5=true; // test requires md5
 
     // default values, if not overridden by the user
-    if (!flag_vblock) genozip_set_global_max_memory_per_vb (TXT_DATA_PER_VB); 
+    if (!flag_vblock) genozip_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
     if (!flag_sblock) zip_vcf_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they

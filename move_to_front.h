@@ -36,7 +36,7 @@ typedef struct {
 
 // used by vblock_i=1 to collect frequency statistics
 typedef struct {
-    int32_t mtf_i;             // index into MtfContext.mtf
+    int32_t node_index;        // index into MtfContext.mtf
     int32_t count;             // number of times this snip has been encoutered so far
 } SorterEnt;
 

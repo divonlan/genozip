@@ -704,3 +704,8 @@ void file_kill_external_compressors (void)
     stream_close (&input_decompressor, STREAM_KILL_PROCESS);
     stream_close (&output_compressor,  STREAM_KILL_PROCESS);
 }
+
+const char *ft_name (FileType ft)
+{
+    return type_name (ft, &file_exts[ft], sizeof(file_exts)/sizeof(file_exts[0]));
+}

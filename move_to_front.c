@@ -88,8 +88,8 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
 {
     ASSERT0 (ctx->dict_id.num, "Error: this ctx is not initialized");
     
-    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%.*s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
-            DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name (ctx->dict_section_type),
+    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
+            err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),
             mtf_i, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len, func, code_line);
 
     bool is_ol = mtf_i < ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
@@ -138,8 +138,8 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
-        ASSERT (!ctx || ctx->b250_section_type == SEC_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %.*s (%s)",
-                txt_line, vb->vblock_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id, st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
+        ASSERT (!ctx || ctx->b250_section_type == SEC_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s (%s)",
+                txt_line, vb->vblock_i, err_dict_id (ctx->dict_id), st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
@@ -159,9 +159,9 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
         if (word_index == WORD_INDEX_ONE_UP) 
             word_index = ctx->iterator.prev_word_index + 1;
 
-        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s \"%.*s\" dictionary has only %u entries",
+        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s %s dictionary has only %u entries",
                 txt_line, word_index, st_name (ctx->dict_section_type),
-                DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, (uint32_t)ctx->word_list.len);
+                err_dict_id (ctx->dict_id), (uint32_t)ctx->word_list.len);
 
         //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
         MtfWord *dict_word = ENT (MtfWord, ctx->word_list, word_index);
@@ -198,8 +198,8 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
     zf_ctx->mtf.len++; // we have a new dictionary item - this snip
 
     ASSERT (zf_ctx->mtf.len < MAX_WORDS_IN_CTX, 
-            "Error: too many words in directory %.*s, max allowed number of words is is %u", DICT_ID_LEN, 
-            dict_id_printable (zf_ctx->dict_id).id, MAX_WORDS_IN_CTX);
+            "Error: too many words in directory %s, max allowed number of words is is %u", 
+            err_dict_id (zf_ctx->dict_id), MAX_WORDS_IN_CTX);
 
     buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, zf_ctx->mtf.len), CTX_GROWTH, 
                "z_file->mtf_ctx->mtf", zf_ctx->did_i);
@@ -230,8 +230,8 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     uint32_t new_mtf_i_if_no_old_one = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
     ASSERT (new_mtf_i_if_no_old_one <= MAX_WORDS_IN_CTX, 
-            "Error: ctx of %.*s is full (max allowed words=%u): ol_mtf.len=%u mtf.len=%u",
-            DICT_ID_LEN, dict_id_printable(vb_ctx->dict_id).id, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
+            "Error: ctx of %s is full (max allowed words=%u): ol_mtf.len=%u mtf.len=%u",
+            err_dict_id (vb_ctx->dict_id), MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     int32_t existing_mtf_i = hash_get_entry_for_seg (segging_vb, vb_ctx,snip, snip_len, new_mtf_i_if_no_old_one, node);
@@ -245,7 +245,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     }
     
     // this snip isn't in the hash table - its a new snip
-    ASSERT (vb_ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %.*s", DICT_ID_LEN, dict_id_printable (vb_ctx->dict_id).id);
+    ASSERT (vb_ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %s", err_dict_id (vb_ctx->dict_id));
 
     segging_vb->z_section_entries[vb_ctx->dict_section_type]++; 
 
@@ -267,7 +267,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         if (vb_ctx->sorter.size > prev_size) memset (&vb_ctx->sorter.data[prev_size], 0, vb_ctx->sorter.size - prev_size);
 
         SorterEnt *sorter_ent = ENT (SorterEnt, vb_ctx->sorter, new_mtf_i_if_no_old_one);
-        sorter_ent->mtf_i = new_mtf_i_if_no_old_one;
+        sorter_ent->node_index = new_mtf_i_if_no_old_one;
         sorter_ent->count = 1;
     }
 
@@ -453,8 +453,8 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
             zf_node->word_index = base250_encode (zf_node->word_index.n); // note that vb overlays this. also, vb_1 has been sorted so word_index != node_index
 
             ASSERT (zf_node->word_index.n < zf_ctx->mtf.len, // sanity check
-                    "Error: word_index=%u out of bound - mtf.len=%u, in dictionary %.*s", 
-                    (uint32_t)zf_node->word_index.n, (uint32_t)zf_ctx->mtf.len, DICT_ID_LEN, dict_id_printable (zf_ctx->dict_id).id);
+                    "Error: word_index=%u out of bound - mtf.len=%u, in dictionary %s", 
+                    (uint32_t)zf_node->word_index.n, (uint32_t)zf_ctx->mtf.len, err_dict_id (zf_ctx->dict_id));
         }
     }
     else {
@@ -610,8 +610,8 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
 done:
     ctx = &mtf_ctx[did_i];
 
-    ASSERT (ctx->dict_section_type == dict_section_type, "Error: mismatch in dict_id=%.*s dict_section_type: requested %s but in the ctx says: %s",
-            DICT_ID_LEN, dict_id_printable (dict_id).id, st_name(dict_section_type), st_name(ctx->dict_section_type));
+    ASSERT (ctx->dict_section_type == dict_section_type, "Error: mismatch in dict_id=%s dict_section_type: requested %s but in the ctx says: %s",
+            err_dict_id (dict_id), st_name(dict_section_type), st_name(ctx->dict_section_type));
 
     return ctx;
 }
@@ -789,7 +789,7 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
 
         char *next = ctx->dict.data;
         for (unsigned i=0; i < ctx->mtf.len; i++) {
-            int32_t mtf_i = ((SorterEnt *)ctx->sorter.data)[i].mtf_i;
+            int32_t mtf_i = ((SorterEnt *)ctx->sorter.data)[i].node_index;
             MtfNode *node = &((MtfNode *)ctx->mtf.data)[mtf_i];
             memcpy (next, &old_dict.data[node->char_index], node->snip_len + 1 /* +1 for \t */);
             node->char_index   = next - ctx->dict.data;
@@ -801,7 +801,6 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
         buf_destroy (&old_dict);
     }
 }
-
 
 // zero all sorters - this is called in case of a re-do of the first VB due to ploidy overflow
 void mtf_zero_all_sorters (VBlock *vb)

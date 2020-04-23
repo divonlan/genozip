@@ -146,7 +146,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     // case: UNZIP: always ; ZIP: locally decompressed files - .vcf.gz .vcf.bgz .vcf.bz2 - 
     // we go by the physical disk size and how much has been consumed from it so far
     else if (command == UNZIP || 
-             (command == ZIP && (txt_file->type == VCF_GZ || txt_file->type == VCF_BGZ || txt_file->type == VCF_BZ2))) {
+             (command == ZIP && (file_is_gz_type (txt_file->type) || file_is_bz2_type (txt_file->type)))) {
         File *input_file  = (command == ZIP ? txt_file : z_file);
         total = input_file->disk_size; 
         sofar = input_file->disk_so_far; 
@@ -157,7 +157,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     else if (command == ZIP && !txt_file->disk_size)
         return; // we can't show anything if we don't know the file size
 
-    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u txt_file->type=%u", command, txt_file->type);
+    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u txt_file->type=%s", command, ft_name (txt_file->type));
 
     double percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow

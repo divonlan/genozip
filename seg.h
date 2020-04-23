@@ -68,6 +68,7 @@ extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md
 // ---------------------------
 extern SegDataLineFuncType seg_fastq_data_line;
 extern SegDataLineFuncType seg_fasta_data_line;
+extern SegInitializer seg_fasta_initialize;
 
 // ------------------
 // ME23 Stuff

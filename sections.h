@@ -358,7 +358,6 @@ extern SectionListEntry *sections_vb_first (uint32_t vb_i);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
-extern const char *dt_name (unsigned data_type);
 extern const char *encryption_name (unsigned encryption_type);
 extern void sections_show_gheader (SectionHeaderGenozipHeader *header);
 extern void sections_get_sizes (DictIdType dict_id, uint32_t *dict_compressed_size, uint32_t *b250_compressed_size);
