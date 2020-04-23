@@ -11,11 +11,11 @@
 
 // data types genozip can compress
 #define NUM_DATATYPES 5
-typedef enum { DT_VCF_V1=-2, DT_NONE=-1, 
+typedef enum { DT_VCF_V1=-2, DT_NONE=-1, // these values are used in the code logic, they are never written to the file
                DT_VCF=0, DT_SAM=1, DT_FASTQ=2, DT_FASTA=3, DT_ME23=4 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
 #define DATATYPE_NAMES { "VCF", "SAM", "FASTQ", "FASTA", "23ANDME" } // index in array matches values in DataType
 
-#define DATATYPE_LAST_FIELD { VCF_FORMAT, SAM_OPTIONAL, FAST_TEMPLATE, FAST_TEMPLATE, ME23_POS }
+#define DATATYPE_LAST_FIELD { VCF_FORMAT, SAM_OPTIONAL, FAST_LINEMETA, FAST_LINEMETA, ME23_POS }
 extern const unsigned datatype_last_field[NUM_DATATYPES];
 
 #define CHROM_DID_I_BY_DT   { VCF_CHROM, SAM_RNAME, -1, -1, ME23_CHROM } // -1 if DATATYPE_HAS_RANDOM_ACCESS is false
@@ -26,7 +26,7 @@ extern const bool datatype_has_random_access[NUM_DATATYPES];
 
 typedef void (*ComputeFunc)(VBlockP);
 #define COMPRESS_FUNC_BY_DT { zip_vcf_compress_one_vb, zip_sam_compress_one_vb,  \
-                              zip_fast_compress_one_vb, zip_fast_compress_one_vb, zip_me23_compress_one_vb }
+                              zip_fastq_compress_one_vb, zip_fastq_compress_one_vb, zip_me23_compress_one_vb }
 extern const ComputeFunc compress_func_by_dt[NUM_DATATYPES];
 
 #define UNCOMPRESS_FUNC_BY_DT { piz_vcf_uncompress_one_vb, piz_sam_uncompress_one_vb, \
@@ -82,7 +82,7 @@ typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM
 
 // FASTQ/FASTA fields
 #define NUM_FAST_FIELDS 2
-typedef enum { FAST_DESC, FAST_TEMPLATE } FastqFields;
+typedef enum { FAST_DESC, FAST_LINEMETA } FastqFields;
 
 // 23ANDME fields
 #define NUM_ME23_FIELDS 2
@@ -90,11 +90,11 @@ typedef enum { ME23_CHROM, ME23_POS } Me23Fields; // same order as VCF
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE 9 // maximum between NUM_*_FIELDS
 
-#define FIELD_NAMES \
+#define FIELD_NAMES /* max 8 chars per name */ \
     { { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" },\
       { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" },\
-      { "DESC", "TEMPLATE" },\
-      { "DESC", "TEMPLATE" },\
+      { "DESC", "LINEMETA" },\
+      { "DESC", "LINEMETA" },\
       { "CHROM", "POS" }\
     };
 extern const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE];

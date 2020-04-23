@@ -52,9 +52,10 @@ char *str_uint_commas (int64_t n, char *str /* out */)
 {
     unsigned len = 0, orig_len=0;
 
-    if (n==0) 
+    if (n==0) {
         str[0] = '0';
-        
+        len = 1;
+    }
     else {
         char rev[50] = {}; // "initialize" to avoid compiler warning
         while (n) {

@@ -95,7 +95,13 @@ extern void buf_copy_do (VBlockP vb, Buffer *dst, const Buffer *src, uint64_t by
 
 extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 
-#define buf_add(buf, new_data, new_data_len) { memcpy (&(buf)->data[(buf)->len], (new_data), (new_data_len));  (buf)->len += (new_data_len); }
+#define buf_add(buf, new_data, new_data_len) { uint32_t new_len = (new_data_len); /* copy in case caller uses ++ */ \
+                                               ASSERT ((buf)->len + new_len <= (buf)->size, \
+                                                       "Error in buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
+                                                       buf_desc (buf), (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
+                                               memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
+                                               (buf)->len += new_len; }
+
 extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
 #define bufprintf(vb, buf, format, ...)  { char s[5000]; sprintf (s, (format), __VA_ARGS__); buf_add_string ((vb), (buf), s); }
 
@@ -117,6 +123,8 @@ extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
 
 extern void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t code_line);
 #define REALLOC(p,size) buf_low_level_realloc (p, size, __FUNCTION__, __LINE__);
+
+extern const char *buf_desc (const Buffer *buf);
 
 
 #endif

@@ -265,11 +265,13 @@ void seg_compound_field (VBlock *vb,
 }
 
 void seg_add_to_data_buf (VBlock *vb, Buffer *buf, SectionType sec, 
-                          const char *snip, unsigned snip_len, bool add_tab, unsigned add_bytes)
+                          const char *snip, unsigned snip_len, 
+                          char add_separator,  // seperator to add to the buffer after the snip. 0 if none.
+                          unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
-    buf_alloc_more (vb, buf, snip_len + !!add_tab, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_data_buf
+    buf_alloc_more (vb, buf, snip_len + !!add_separator, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_data_buf
     if (snip_len) buf_add (buf, snip, snip_len); 
-    if (add_tab) buf_add (buf, "\t", 1); 
+    if (add_separator) buf_add (buf, &add_separator, 1); 
     vb->txt_section_bytes[sec] += add_bytes;
 }
 

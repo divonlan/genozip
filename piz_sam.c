@@ -71,19 +71,6 @@ static void piz_sam_reconstruct_tlen (VBlockSAM *vb, const char *tlen, unsigned 
     buf_add (&vb->reconstructed_line, "\t", 1); 
 }
 
-static void piz_sam_reconstruct_seq_qual (VBlockSAM *vb, uint32_t cigar_seq_len, 
-                                          const Buffer *data, uint32_t *next,
-                                          const char *field_name, uint32_t txt_line_i, bool skip)
-{
-    // seq and qual are expected to be either of length cigar_seq_len, or "*" 
-    uint32_t len = (*next >= data->len || data->data[*next] == '*') ? 1 : cigar_seq_len;
-    ASSERT (*next + len <= data->len, "Error reading sam_line=%u: unexpected end of %s data", txt_line_i, field_name);
-
-    if (!skip) buf_add (&vb->reconstructed_line, &data->data[*next], len);
-    
-    *next += len;
-}
-
 static inline void piz_sam_reconstruct_AS (VBlockSAM *vb, const char *snip, unsigned snip_len,
                                            uint32_t txt_line_i, uint32_t cigar_seq_len)
 {
@@ -102,17 +89,8 @@ static inline void piz_sam_reconstruct_MD (VBlockSAM *vb, uint32_t txt_line_i, u
 {
     const char *snip; 
     unsigned snip_len;
-    LOAD_SNIP_FROM_BUF (vb->md_data, vb->next_md, "MD");
-/*
-    uint32_t next_md_start = vb->next_md;
-    ARRAY (char, md, vb->md_data);
-    
-    for (; vb->next_md < vb->md_data.len && md[vb->next_md] != '\t'; vb->next_md++);
-    ASSERT (vb->next_md < vb->md_data.len, "Error reading sam_line=%u: unexpected end of MD data", txt_line_i);
+    LOAD_SNIP_FROM_BUF (vb->md_data, vb->next_md, "MD", '\t');
 
-    uint32_t md_len = vb->next_md - next_md_start;
-    vb->next_md++; // skip the tab;
-*/
     char reconstruced_md_str[MAX_SAM_MD_LEN]; 
     unsigned reconstruced_md_str_len;
 
@@ -176,22 +154,6 @@ static void piz_sam_map_optional_subfields (VBlockSAM *vb)
     vb->strand_did_i = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, (DictIdType)dict_id_OPTION_STRAND); 
 }
 
-static void piz_sam_reconstruct_qname (VBlockSAM *vb, const char *template, unsigned template_len, uint32_t txt_line_i)
-{
-    if (template_len==1 && template[0]=='*') template_len=0; // no separators, only one components
-
-    for (unsigned i=0; i <= template_len; i++) { // for template_len, we have template_len+1 elements
-        
-        const char *snip;
-        unsigned snip_len;
-        mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[vb->qname_mapper.did_i[i]], NULL, &snip, &snip_len, txt_line_i);
-
-        buf_add (&vb->reconstructed_line, snip, snip_len);
-
-        buf_add (&vb->reconstructed_line, (i < template_len) ? &template[i] : "\t", 1); // add separator
-    }
-}
-
 static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t txt_line_i)
 {
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
@@ -253,11 +215,11 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
 
         // E2 doesn't have a dictionary - its data is stored in SEQ
         if (dict_id.num == dict_id_OPTION_E2)
-            piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->seq_data,  &vb->next_seq, "E2", txt_line_i, flag_strip);
+            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
 
         // U2 doesn't have a dictionary - its data is stored in QUAL
         else if (dict_id.num == dict_id_OPTION_U2) {
-            if (!flag_strip) piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, "U2", txt_line_i, false);
+            if (!flag_strip) piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i);
         }
 
         else if (dict_id.num == dict_id_OPTION_MD) {
@@ -319,12 +281,12 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
 static void piz_sam_reconstruct_vb (VBlockSAM *vb)
 {
 #   define IFNOTSTRIP(def,len)  if (flag_strip) { \
-                                buf_add (&vb->reconstructed_line, def, len)  \
-                                buf_add (&vb->reconstructed_line, "\t", 1) \
-                            } else 
+                                    buf_add (&vb->reconstructed_line, def, len)  \
+                                    buf_add (&vb->reconstructed_line, "\t", 1) \
+                                } else 
     START_TIMER;
 
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "piz_sam_reconstruct_vb", vb->vblock_i);
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
     buf_alloc (vb, &vb->reconstructed_line, vb->longest_line_len, 1, "reconstructed_line", vb->vblock_i);
 
     uint32_t cigar_seq_len=0, snip_len;
@@ -340,7 +302,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         // QNAME - reconstruct from its subfield components
         IFNOTSTRIP("*",1) {
             LOAD_SNIP (SAM_QNAME);
-            piz_sam_reconstruct_qname (vb, snip, snip_len, vb->first_line + vb_line_i);
+            piz_reconstruct_compound_field ((VBlockP)vb, &vb->qname_mapper, "\t", 1, snip, snip_len, txt_line_i);
         }
 
         // FLAG, RNAME - from their dictionaries
@@ -353,7 +315,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
             RECONSTRUCT_FROM_DICT_POS (SAM_POS, true, true); // same rname - reconstruct from delta 
         }
         else  // different rname - get from random_pos
-            vb->last_pos = piz_sam_reconstruct_random_pos (vb, vb->first_line + vb_line_i, '\t', false);
+            vb->last_pos = piz_sam_reconstruct_random_pos (vb, txt_line_i, '\t', false);
 
         last_rname_word_index = this_rname_word_index;
 
@@ -404,7 +366,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         }
         else {
             // note: we always consume (but possible skip outputting), even if flag_strip because it consumes the same random_pos as POS
-            piz_sam_reconstruct_random_pos (vb, vb->first_line + vb_line_i, '\t', flag_strip);
+            piz_sam_reconstruct_random_pos (vb, txt_line_i, '\t', flag_strip);
             IFNOTSTRIP("0",1) {}; // add the default if we're stripping
         }
         // TLEN - from its dictionary
@@ -414,18 +376,18 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         }
         
         // SEQ & QUAL data
-        piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->seq_data,  &vb->next_seq,  "SEQ",  vb->first_line + vb_line_i, false);
+        piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
         buf_add (&vb->reconstructed_line, "\t", 1);
 
         IFNOTSTRIP("*",1) {
-            piz_sam_reconstruct_seq_qual (vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, "QUAL", vb->first_line + vb_line_i, false);
+            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i);
         }
 
         // OPTIONAL fields, and Windows-style \r if needed
         uint32_t word_index = LOAD_SNIP (SAM_OPTIONAL);
         if (snip_len != 1 || (snip[0] != '#' && snip[0] != '*')) buf_add (&vb->reconstructed_line, "\t", 1);
         
-        piz_sam_reconstruct_optional_fields (vb, cigar_seq_len, snip, snip_len, word_index, vb->first_line + vb_line_i);
+        piz_sam_reconstruct_optional_fields (vb, cigar_seq_len, snip, snip_len, word_index, txt_line_i);
 
         buf_add (&vb->reconstructed_line, "\n", 1);
 
@@ -473,23 +435,13 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
     piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
     
     // QNAME subfields
-    for (uint8_t sf_i=0; sf_i < vb->qname_mapper.num_subfields ; sf_i++) {
-        
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-        if (flag_strip) continue;
-
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_QNAME_SF_DICT);
-
-        vb->qname_mapper.did_i[sf_i] = ctx->did_i;
-
-        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_SAM_QNAME_SF_B250);    
-    }
+    piz_uncompress_compound_field ((VBlockP)vb, SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250, &vb->qname_mapper, &section_i);
 
     // OPTIONAL subfields
     for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s ; sf_i++) {
         
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-        if (zfile_skip_section_by_flags (SEC_SAM_OPTNL_SF_B250, header->dict_id)) continue;
+        if (zfile_is_skip_section (SEC_SAM_OPTNL_SF_B250, header->dict_id)) continue;
 
         MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_OPTNL_SF_DICT);
 

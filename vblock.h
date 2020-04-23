@@ -43,6 +43,7 @@ typedef struct SubfieldMapper {
     uint32_t num_lines;        /* number of lines in this variant block */\
     uint32_t num_lines_alloced;/* number of lines allocated in this variant block >= num_lines */\
     uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
+    Buffer reconstructed_line; /* PIZ only: reconstruction of current line */\
     \
     /* tracking execution */\
     int32_t vb_data_size;      /* expected size of decompressed VCF. Might be different than original if --optimize is used. */\
@@ -266,7 +267,6 @@ typedef struct VBlockSAM {
     Buffer md_data;                      // MD data - from optional field MD;
     
     // PIZ-only stuff
-    Buffer reconstructed_line;           // PIZ: reconstruction of current line
     int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
     Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
     Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
@@ -277,7 +277,7 @@ typedef struct VBlockSAM {
 } VBlockSAM;
 
 //-----------------------------------------
-// FASTA & FASTQ STUFF
+// FASTQ & FASTA STUFF
 //-----------------------------------------
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
@@ -286,18 +286,27 @@ typedef struct {
     uint32_t seq_len;                         // length within vb->txt_data (in case of FASTQ, this length is also applies to quality, per FASTQ spec)
 } ZipDataLineFAST;
 
-// IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb and vb_fast_destroy_vb
+// IMPORTANT: if changing fields in VBlockFASTQQ, also update vb_fastq_release_vb and vb_fastq_destroy_vb
 typedef struct VBlockFAST { // for FASTA and FASTQ
 
     VBLOCK_COMMON_FIELDS
 
-    SubfieldMapper desc_mapper;          // ZIP & PIZ
+    // shared fields FASTA and FASTQ
+    SubfieldMapper desc_mapper; // ZIP & PIZ
+    Buffer seq_data;            // PIZ only (FASTQ), PIZ&ZIP (FASTA): contains SEQ data and also E2 data for lines for which it exists
+    uint32_t next_seq;
 
-    // PIZ-only stuff
-    Buffer reconstructed_line;           // PIZ: reconstruction of current line
-    Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
-    Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
-    uint32_t next_seq, next_qual;        // PIZ only: indeces into seq_data, qual_data
+    // FASTQ-only fields
+    Buffer qual_data;           // PIZ only: contains QUAL data and also U2 data for lines for which it exists
+    uint32_t next_qual;         // PIZ only: indeces into seq_data, qual_data
+
+    // FASTA-only fields
+    Buffer comment_data;        // ZIP & PIZ
+    uint32_t next_comment;
+    // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB
+    // is interpreted as a description, not a comment
+    enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP
+
 } VBlockFAST;
 
 //-----------------------------------------
@@ -313,7 +322,6 @@ typedef struct VBlockME23 { // for 23andMe
     Buffer genotype_data;         // ZIP & PIZ
     
     // PIZ-only stuff
-    Buffer reconstructed_line;    // PIZ: reconstruction of current line
     uint32_t next_rsid;           // PIZ only: used to reconstruct rsid
     uint32_t next_genotype;       // PIZ only: used to genotype_data rsid
 } VBlockME23;

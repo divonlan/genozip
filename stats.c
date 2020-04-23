@@ -41,7 +41,7 @@ void stats_show_sections (void)
         SEC_VCF_HT_DATA,       SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
 
         SEC_SEQ_DATA,          SEC_QUAL_DATA,          SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,
-        SEC_ID_DATA,
+        SEC_ID_DATA,           SEC_FASTA_COMMENT_DATA,
         SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
         SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
         SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,
@@ -59,7 +59,7 @@ void stats_show_sections (void)
         "FORMAT b250", "FORMAT dict", "Genotype info", "FORMAT subfields dict",
         "Haplotype data", "HT separator char", "Phasing char",
 
-        "SEQ data", "QUAL data", "RAND_POS data", "MD data", "ID data",
+        "SEQ data", "QUAL data", "RAND_POS data", "MD data", "ID data", "Comment data",
         "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
         "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
         "POS b250 (delta)", "POS dict (delta)", 
@@ -212,8 +212,8 @@ void stats_show_content (void)
           SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT, 
           SEC_SAM_OPTIONAL_B250,  SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250, SEC_SAM_OPTNL_SF_DICT,
           
-          SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT,   SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,
-          SEC_FAST_TEMPLATE_B250, SEC_FAST_TEMPLATE_DICT,
+          SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT,  SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,
+          SEC_FAST_LINEMETA_B250, SEC_FAST_LINEMETA_DICT, SEC_FASTA_COMMENT_DATA,
 
           NIL },
         { SEC_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }

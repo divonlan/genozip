@@ -73,53 +73,31 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
     fprintf (stderr, "\n");
 }
 
-bool zfile_skip_section_by_flags (SectionType st, DictIdType dict_id)
+bool zfile_is_skip_section (SectionType st, DictIdType dict_id)
 {
+    static const struct {char *name; bool strip;} abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
+
+    if (flag_strip && abouts[st].strip) return true;
+
+    // other situations not covered by abouts.strip
     switch (z_file->data_type) {
-    case DT_VCF:
-        if (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_GT_DATA || st == SEC_VCF_FRMT_SF_DICT)
-            return flag_drop_genotypes || flag_gt_only || flag_strip;
+        case DT_VCF:
+            if ((flag_drop_genotypes || flag_gt_only) && 
+                (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_GT_DATA || st == SEC_VCF_FRMT_SF_DICT))
+                return true;
 
-        if (st == SEC_VCF_ID_B250 || st == SEC_VCF_ID_DICT)
-            return flag_strip;
+            break;
 
-        if (st == SEC_VCF_QUAL_B250 || st == SEC_VCF_QUAL_DICT)
-            return flag_strip;
+        case DT_SAM:
+            // note: we need OPTIONAL to check for E2 that consumes SEQ, and we need OPTNL_SF for OA, SA, and XA only
+            if (flag_strip && 
+                (st == SEC_SAM_OPTNL_SF_DICT || st == SEC_SAM_OPTNL_SF_B250) && 
+                (dict_id.num != dict_id_OPTION_SA && dict_id.num != dict_id_OPTION_OA && dict_id.num != dict_id_OPTION_XA))
+                return true;
 
-        if (st == SEC_VCF_FILTER_B250 || st == SEC_VCF_FILTER_DICT)
-            return flag_strip;
+            break;
 
-        if (st == SEC_VCF_INFO_B250 || st == SEC_VCF_INFO_DICT || st == SEC_VCF_INFO_SF_B250 || st == SEC_VCF_INFO_SF_DICT)
-            return flag_strip;
-
-        break;
-
-    case DT_SAM:
-        // note: we need OPTIONAL to check for E2 that consumes SEQ, and we need OPTNL_SF for OA, SA, and XA only
-        if (flag_strip && 
-            (st == SEC_SAM_OPTNL_SF_DICT || st == SEC_SAM_OPTNL_SF_B250) && 
-            (dict_id.num != dict_id_OPTION_SA && dict_id.num != dict_id_OPTION_OA && dict_id.num != dict_id_OPTION_XA))
-            return true;
-
-        else if (flag_strip && 
-            (st == SEC_QUAL_DATA     || st == SEC_SAM_MD_DATA ||
-             st == SEC_SAM_QNAME_SF_DICT || st == SEC_SAM_QNAME_SF_B250 || st == SEC_SAM_QNAME_DICT || st == SEC_SAM_QNAME_B250 ||
-             st == SEC_SAM_FLAG_DICT     || st == SEC_SAM_FLAG_B250     ||
-             st == SEC_SAM_MAPQ_DICT     || st == SEC_SAM_MAPQ_B250     ||
-             st == SEC_SAM_PNEXT_DICT    || st == SEC_SAM_PNEXT_B250    ||
-             st == SEC_SAM_TLEN_DICT     || st == SEC_SAM_TLEN_B250)) 
-             return true;
-
-        break;
-
-    case DT_ME23:
-        break; // never skip
-
-    case DT_NONE:
-        return false; // this happens when reading the genozip header section for a file named "xxx.genozip" (without the data type in the name) - i.e. before the file type is known
-
-    default:
-        ABORT ("Error in zfile_skip_section_by_flags: invalid data_type: %d", z_file->data_type);
+        default: break; // other sections don't have special logic not already covered in abouts
     }
 
     return false; // don't skip this section
@@ -141,7 +119,7 @@ void zfile_uncompress_section (VBlock *vb,
     else if (section_type_is_b250 (expected_section_type))
         dict_id = ((SectionHeaderBase250 *)section_header_p)->dict_id;
 
-    if (zfile_skip_section_by_flags (expected_section_type, dict_id)) return; // we skip some sections based on flags
+    if (zfile_is_skip_section (expected_section_type, dict_id)) return; // we skip some sections based on flags
 
     SectionHeader *section_header = (SectionHeader *)section_header_p;
     
@@ -357,7 +335,7 @@ int zfile_read_section (VBlock *vb,
     ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s",
             st_name (expected_sec_type), st_name(sl->section_type));
 
-    if (sl && zfile_skip_section_by_flags (expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
+    if (sl && zfile_is_skip_section (expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
 
     if (sb_i != NO_SB_I && ! *ENT(bool, ((VBlockVCFP)vb)->is_sb_included, sb_i)) return 0; // skip section if this sample block is excluded by --samples
 
@@ -443,7 +421,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         SectionType st = sl_ent->section_type;
         if (read_chrom == DICTREAD_CHROM_ONLY   && st != SEC_CHROM_DICT && st != SEC_SAM_RNAME_DICT) continue;
         if (read_chrom == DICTREAD_EXCEPT_CHROM && (st == SEC_CHROM_DICT || st == SEC_SAM_RNAME_DICT)) continue;
-        if (zfile_skip_section_by_flags (st, sl_ent->dict_id)) continue;
+        if (zfile_is_skip_section (st, sl_ent->dict_id)) continue;
         
         zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st, sl_ent);    
 
@@ -1070,7 +1048,7 @@ void zfile_sam_read_one_vb (VBlock *vb_)
 }
 
 //------------------------------------------------------------------------------
-// FASTA / FASTQ stuff
+// FASTQ & FASTA stuff
 //------------------------------------------------------------------------------
 
 void zfile_fast_read_one_vb (VBlock *vb_)
@@ -1084,7 +1062,7 @@ void zfile_fast_read_one_vb (VBlock *vb_)
     // integrated into the global dictionaries.
     // Order of sections in a VB:
     // 1. SEC_VB_HEADER - its data is the haplotype index
-    // 2. SEC_FAST_DESC_B250 and SEC_FAST_TEMPLATE_B250
+    // 2. SEC_FAST_DESC_B250 and SEC_FAST_LINEMETA_B250
     // 3. SEC_FAST_DESC_SF_B250 - Description subfields
     // 7. SEC_SEQ_DATA      - Sequences data 
     // 8. SEC_QUAL_DATA     - Quality data (FASTQ only)    
@@ -1110,18 +1088,16 @@ void zfile_fast_read_one_vb (VBlock *vb_)
 
     // read the field sections
     READ_SECTION (SEC_FAST_DESC_B250, SectionHeaderBase250);
-    READ_SECTION (SEC_FAST_TEMPLATE_B250, SectionHeaderBase250);
+    READ_SECTION (SEC_FAST_LINEMETA_B250, SectionHeaderBase250);
     
     // read the DESC subfields sections into memory (if any)
     vb->desc_mapper.num_subfields = sections_count_sec_type (vb->vblock_i, SEC_FAST_DESC_SF_B250); 
     for (uint8_t sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++) 
         READ_SECTION (SEC_FAST_DESC_SF_B250, SectionHeaderBase250);
 
-    // read SEQ and QUAL data
+    // read SEQ and QUAL data (FASTQ) or COMMENT data (FASTA)
     READ_SECTION (SEC_SEQ_DATA, SectionHeader);
-    
-    if (z_file->data_type == DT_FASTQ) // FASTA doesn't have quality data
-        READ_SECTION (SEC_QUAL_DATA, SectionHeader);
+    READ_SECTION (z_file->data_type == DT_FASTQ ? SEC_QUAL_DATA : SEC_FASTA_COMMENT_DATA, SectionHeader);
 
     COPY_TIMER (vb->profile.zfile_read_one_vb);
 }

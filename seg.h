@@ -40,7 +40,7 @@ extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int pos_field, Secti
                               const char *pos_str, unsigned pos_len, unsigned vb_line_i, const char *field_name);
 
 extern void seg_add_to_data_buf (VBlockP vb, BufferP buf, SectionType sec, 
-                                 const char *snip, unsigned snip_len, bool add_tab, unsigned add_bytes);
+                                 const char *snip, unsigned snip_len, char add_separator, unsigned add_bytes);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
                                 SubfieldMapperP mapper, DictIdType sf_dict_id, char extra_separator,
@@ -66,7 +66,8 @@ extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md
 // ---------------------------
 // FASTA and FASTQ Stuff
 // ---------------------------
-extern SegDataLineFuncType seg_fast_data_line;
+extern SegDataLineFuncType seg_fastq_data_line;
+extern SegDataLineFuncType seg_fasta_data_line;
 
 // ------------------
 // ME23 Stuff

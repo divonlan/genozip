@@ -24,21 +24,6 @@ void seg_sam_initialize (VBlock *vb_)
     buf_alloc (vb, &vb->random_pos_data, vb->num_lines * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 }             
 
-// We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings.
-// QNAME formats:
-// Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
-// PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
-static inline void seg_sam_qname_field (VBlockSAM *vb, const char *qname, unsigned qname_len, unsigned vb_line_i)
-{
-    // note on id: first char must be a letter per SAM spec and also dict_id_* assumption. The second character
-    // is the subfield, because we want to use for mapping in dict_id_to_did_i_map
-    static DictIdType sf_dict_id = { .id = { 'Q','0','N','A','M','E', 0, 0} }; 
-
-    seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[SAM_QNAME], qname, qname_len, &vb->qname_mapper,
-                        dict_id_sam_qname_sf (sf_dict_id), 0, 
-                        SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250, vb_line_i);
-}
-
 // if this row's tlen is the negative of the previous row - store "*" instead of the tlen - thereby cutting
 // the number of dictionary words by half and improving compression
 static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, unsigned vb_line_i)
@@ -364,7 +349,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             seg_add_to_data_buf ((VBlockP)vb, &vb->md_data, SEC_SAM_MD_DATA, 
                                  md_is_changeable ? new_md : value, 
                                  md_is_changeable ? new_md_len : value_len,
-                                 true, value_len+1);
+                                 '\t', value_len+1);
         }
 
         // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
@@ -496,17 +481,22 @@ const char *seg_sam_data_line (VBlock *vb_,
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
 
-    const char *next_field, *field_start;
+    const char *next_field, *field_start=field_start_line;
     unsigned field_len=0;
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
-    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
+    int32_t len = AFTERENT (char, vb->txt_data) - field_start_line;
 
-    // QNAME
+    // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. Examples:
+    // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
+    // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     field_start = field_start_line;
     next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "QNAME");
-    seg_sam_qname_field (vb, field_start, field_len, vb_line_i);
+    
+    seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[SAM_QNAME], field_start, field_len, &vb->qname_mapper,
+                        dict_id_sam_qname_sf (dict_id_make ("Q0NAME", 6)), 0, 
+                        SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250, vb_line_i);
 
     // FLAG
     field_start = next_field;

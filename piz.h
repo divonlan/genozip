@@ -12,6 +12,7 @@ extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool i
 
 extern int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, char *pos_str, unsigned *pos_len);
 extern void piz_uncompress_fields (VBlockP vb, const unsigned *section_index, unsigned *section_i);
+extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
 
 extern void piz_vcf_uncompress_one_vb (VBlockP vb);
 extern void piz_sam_uncompress_one_vb (VBlockP vb);
@@ -21,6 +22,12 @@ extern void piz_me23_uncompress_one_vb (VBlockP vb);
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb
 // ----------------------------------------------
+
+extern void piz_reconstruct_compound_field (VBlockP vb, SubfieldMapperP mapper, const char *separator, unsigned separator_len, 
+                                            const char *template, unsigned template_len, uint32_t txt_line_i);
+
+extern void piz_reconstruct_seq_qual (VBlockP vb, uint32_t seq_len, ConstBufferP data, uint32_t *next, 
+                                      SectionType sec, uint32_t txt_line_i);
 
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[(did_i)], NULL, &snip, &snip_len, txt_line_i); 
@@ -38,10 +45,10 @@ extern void piz_me23_uncompress_one_vb (VBlockP vb);
     buf_add (&vb->reconstructed_line, pos_str, snip_len);\
     if (add_tab) buf_add (&vb->reconstructed_line, "\t", 1); }
 
-#define LOAD_SNIP_FROM_BUF(buf,next,field_name) { \
+#define LOAD_SNIP_FROM_BUF(buf,next,field_name,buf_separator_char) { \
     uint32_t start = next; \
     ARRAY (char, data, buf);\
-    for (; next < buf.len && data[next] != '\t'; next++);\
+    for (; next < buf.len && data[next] != buf_separator_char; next++);\
     ASSERT (next < buf.len, \
             "Error reconstructing txt_line=%u: unexpected end of " field_name " data (len=%u)", txt_line_i, (uint32_t)buf.len); \
     snip = &data[start];\
@@ -49,10 +56,10 @@ extern void piz_me23_uncompress_one_vb (VBlockP vb);
     next++; /* skip the tab */ }
 
 // reconstructs from the buffer up to a tab    
-#define RECONSTRUCT_FROM_BUF(buf,next,field_name) { \
-    LOAD_SNIP_FROM_BUF(buf,next,field_name) \
+#define RECONSTRUCT_FROM_BUF(buf,next,field_name,buf_separator_char,reconst_sep_str,reconst_sep_str_len) { \
+    LOAD_SNIP_FROM_BUF(buf,next,field_name,buf_separator_char) \
     buf_add (&vb->reconstructed_line, snip, snip_len); \
-    buf_add (&vb->reconstructed_line, "\t", 1);  }
+    buf_add (&vb->reconstructed_line, reconst_sep_str, reconst_sep_str_len);  }
 
 // reconstructs a fix number of characters from a tab-less buffer
 #define RECONSTRUCT_FROM_TABLESS_BUF(buf,next,fixed_len,add_tab,field_name) { \

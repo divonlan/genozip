@@ -56,11 +56,12 @@ static void zip_fast_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 
 // this function receives all lines of a variant block and processes them
 // in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
-void zip_fast_compress_one_vb (VBlockP vb_)
+void zip_fastq_compress_one_vb (VBlockP vb_)
 { 
     START_TIMER;
 
     VBlockFAST *vb = (VBlockFAST *)vb_;
+    bool is_fastq = (vb->data_type == DT_FASTQ);
 
     // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need
     // to wait for our merge. that is because our dictionaries are sorted
@@ -74,7 +75,8 @@ void zip_fast_compress_one_vb (VBlockP vb_)
     mtf_clone_ctx (vb_);
 
     // split each line in this variant block to its components
-    seg_all_data_lines (vb_, seg_fast_data_line, false, sizeof (ZipDataLineFAST));
+    seg_all_data_lines (vb_, is_fastq ? seg_fastq_data_line : seg_fasta_data_line, false, 
+                        is_fastq ? sizeof (ZipDataLineFAST) : 0);
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
@@ -95,20 +97,24 @@ void zip_fast_compress_one_vb (VBlockP vb_)
     // all this is done while holding exclusive access to the z_file dictionaries.
     mtf_merge_in_vb_ctx(vb_);
 
-    // generate & write b250 data for all fields 
+    // All fields 
     zip_generate_and_compress_fields (vb_);
 
-    // generate & write b250 data for all QNAME subfields
+    // DESC subfields
     zip_generate_and_compress_subfields (vb_, &vb->desc_mapper);
-    
-    // generate & compress the SEQ & QUAL data
+
+    // SEQ
     uint32_t seq_len;
     zip_fast_get_seq_len (vb, &seq_len);
-    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_fast_get_start_len_line_i_seq,  seq_len,  COMPRESS_LZMA);
-    
-    // only if this is FASTQ, do we have QUAL data to compress
-    if (vb->data_type == DT_FASTQ)
+    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_fast_get_start_len_line_i_seq,  seq_len, COMPRESS_LZMA);
+
+    // FASTQ only: QUAL
+    if (is_fastq) 
         zfile_compress_section_data_alg (vb_, SEC_QUAL_DATA, NULL, zip_fast_get_start_len_line_i_qual, seq_len, COMPRESS_BZLIB);
+
+    // FASTA obly: COMMENT
+    else 
+        zfile_compress_section_data (vb_, SEC_FASTA_COMMENT_DATA, &vb->comment_data);
 
     // tell dispatcher this thread is done and can be joined. 
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true

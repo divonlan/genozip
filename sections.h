@@ -66,55 +66,58 @@ typedef enum {
 
     SEC_FAST_DESC_SF_DICT  = 58,  SEC_FAST_DESC_SF_B250  = 59, // used by FASTQ & FASTA
     SEC_FAST_DESC_DICT     = 60,  SEC_FAST_DESC_B250     = 61, // used by FASTQ & FASTA
-    SEC_FAST_TEMPLATE_DICT = 62,  SEC_FAST_TEMPLATE_B250 = 63, // used by FASTQ & FASTA
-    
+    SEC_FAST_LINEMETA_DICT = 62,  SEC_FAST_LINEMETA_B250 = 63, // used by FASTQ & FASTA
+    SEC_FASTA_COMMENT_DATA = 64,
+
     // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR
 } SectionType;
 
-// we put the names here in a #define so we can eyeball their identicality to SectionType
-#define SECTIONTYPE_NAMES { \
-    "SEC_TXT_HEADER"        ,  "SEC_VB_HEADER"          ,\
+// this data must be perfectly aligned with SectionType. it contains: 1. name 2. 1 if the section is stripped in --strip 
+#define SECTIONTYPE_ABOUT { \
+    {"SEC_TXT_HEADER",          0},  {"SEC_VB_HEADER",          0},\
     \
-    "SEC_VCF_FRMT_SF_DICT"  ,  "SEC_GT_DATA"            ,\
-    "SEC_VCF_PHASE_DATA"    ,  "SEC_VCF_HT_DATA "       ,\
+    {"SEC_VCF_FRMT_SF_DICT",    1},  {"SEC_GT_DATA",            1},\
+    {"SEC_VCF_PHASE_DATA",      0},  {"SEC_VCF_HT_DATA",        0},\
     \
-    "SEC_GENOZIP_HEADER"    ,  "SEC_RANDOM_ACCESS"      ,\
+    {"SEC_GENOZIP_HEADER",      0},  {"SEC_RANDOM_ACCESS",      0},\
     \
-    "SEC_CHROM_DICT"        ,  "SEC_CHROM_B250"         ,\
-    "SEC_POS_DICT"          ,  "SEC_POS_B250"           ,\
-    "SEC_VCF_ID_DICT"       ,  "SEC_VCF_ID_B250"        ,\
-    "SEC_VCF_REFALT_DICT"   ,  "SEC_VCF_REFALT_B250"    ,\
-    "SEC_VCF_QUAL_DICT"     ,  "SEC_VCF_QUAL_B250"      ,\
-    "SEC_VCF_FILTER_DICT"   ,  "SEC_VCF_FILTER_B250"    ,\
-    "SEC_VCF_INFO_DICT"     ,  "SEC_VCF_INFO_B250"      ,\
-    "SEC_VCF_FORMAT_DICT"   ,  "SEC_VCF_FORMAT_B250"    ,\
-    "SEC_VCF_INFO_SF_DICT"  ,  "SEC_VCF_INFO_SF_B250"   ,\
+    {"SEC_CHROM_DICT",          0},  {"SEC_CHROM_B250",         0},\
+    {"SEC_POS_DICT",            0},  {"SEC_POS_B250",           0},\
+    {"SEC_VCF_ID_DICT",         1},  {"SEC_VCF_ID_B250",        1},\
+    {"SEC_VCF_REFALT_DICT",     0},  {"SEC_VCF_REFALT_B250",    0},\
+    {"SEC_VCF_QUAL_DICT",       1},  {"SEC_VCF_QUAL_B250",      1},\
+    {"SEC_VCF_FILTER_DICT",     1},  {"SEC_VCF_FILTER_B250",    1},\
+    {"SEC_VCF_INFO_DICT",       1},  {"SEC_VCF_INFO_B250",      1},\
+    {"SEC_VCF_FORMAT_DICT",     1},  {"SEC_VCF_FORMAT_B250",    1},\
+    {"SEC_VCF_INFO_SF_DICT",    1},  {"SEC_VCF_INFO_SF_B250",   1},\
     \
-    "SEC_HT_GTSHARK_DB_DB"  ,  "SEC_HT_GTSHARK_DB_GT"   ,\
-    "SEC_HT_GTSHARK_X_LINE" ,  "SEC_HT_GTSHARK_X_HTI"   ,\
-    "SEC_HT_GTSHARK_X_ALLELE"                           ,\
+    {"SEC_HT_GTSHARK_DB_DB",    0},  {"SEC_HT_GTSHARK_DB_GT",   0},\
+    {"SEC_HT_GTSHARK_X_LINE",   0},  {"SEC_HT_GTSHARK_X_HTI",   0},\
+    {"SEC_HT_GTSHARK_X_ALLELE", 0},\
     \
-    "SEC_SAM_RAND_POS_DATA" ,  "SEC_SAM_MD_DATA"        ,\
-    "SEC_SEQ_DATA"          ,  "SEC_QUAL_DATA"          ,\
-    "SEC_ID_DATA"           ,\
-    "SEC_SAM_QNAME_SF_DICT" ,  "SEC_SAM_QNAME_SF_B250"  ,\
-    "SEC_SAM_OPTNL_SF_DICT" ,  "SEC_SAM_OPTNL_SF_B250"  ,\
-    "SEC_SAM_QNAME_DICT"    ,  "SEC_SAM_QNAME_B250"     ,\
-    "SEC_SAM_FLAG_DICT"     ,  "SEC_SAM_FLAG_B250"      ,\
-    "SEC_SAM_RNAME_DICT"    ,  "SEC_SAM_RNAME_B250"     ,\
-    "SEC_SAM_POS_DICT"      ,  "SEC_SAM_POS_B250"       ,\
-    "SEC_SAM_MAPQ_DICT"     ,  "SEC_SAM_MAPQ_B250"      ,\
-    "SEC_SAM_CIGAR_DICT"    ,  "SEC_SAM_CIGAR_B250"     ,\
-    "SEC_SAM_PNEXT_DICT"    ,  "SEC_SAM_PNEXT_B250"     ,\
-    "SEC_SAM_TLEN_DICT"     ,  "SEC_SAM_TLEN_B250"      ,\
-    "SEC_SAM_OPTIONAL_DICT" ,  "SEC_SAM_OPTIONAL_B250"  ,\
+    {"SEC_SAM_RAND_POS_DATA",   0},  {"SEC_SAM_MD_DATA",        1},\
+    {"SEC_SEQ_DATA",            0},\
+    {"SEC_QUAL_DATA",           1},\
+    {"SEC_ID_DATA",             1},\
+    {"SEC_SAM_QNAME_SF_DICT",   1},  {"SEC_SAM_QNAME_SF_B250",  1},\
+    {"SEC_SAM_OPTNL_SF_DICT",   0},  {"SEC_SAM_OPTNL_SF_B250",  0},\
+    {"SEC_SAM_QNAME_DICT",      1},  {"SEC_SAM_QNAME_B250",     1},\
+    {"SEC_SAM_FLAG_DICT",       1},  {"SEC_SAM_FLAG_B250",      1},\
+    {"SEC_SAM_RNAME_DICT",      0},  {"SEC_SAM_RNAME_B250",     0},\
+    {"SEC_SAM_POS_DICT",        0},  {"SEC_SAM_POS_B250",       0},\
+    {"SEC_SAM_MAPQ_DICT",       1},  {"SEC_SAM_MAPQ_B250",      1},\
+    {"SEC_SAM_CIGAR_DICT",      0},  {"SEC_SAM_CIGAR_B250",     0},\
+    {"SEC_SAM_PNEXT_DICT",      1},  {"SEC_SAM_PNEXT_B250",     1},\
+    {"SEC_SAM_TLEN_DICT",       1},  {"SEC_SAM_TLEN_B250",      1},\
+    {"SEC_SAM_OPTIONAL_DICT",   0},  {"SEC_SAM_OPTIONAL_B250",  0},\
     \
-    "SEC_FAST_DESC_SF_DICT" ,  "SEC_FAST_DESC_SF_B250"  ,\
-    "SEC_FAST_DESC_DICT"    ,  "SEC_FAST_DESC_B250"     ,\
-    "SEC_FAST_TEMPLATE_DICT" , "SEC_FAST_TEMPLATE_B250" ,\
+    {"SEC_FAST_DESC_SF_DICT",   0},  {"SEC_FAST_DESC_SF_B250",  0},\
+    {"SEC_FAST_DESC_DICT",      0},  {"SEC_FAST_DESC_B250",     0},\
+    {"SEC_FAST_LINEMETA_DICT",  0},  {"SEC_FAST_LINEMETA_B250", 0},\
+    {"SEC_FASTA_COMMENT_DATA",  1},\
     \
-    "SEC_STATS_HT_SEPERATOR" \
+    {"SEC_STATS_HT_SEPERATOR",  0} \
 }
 
 #define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) // put this here and not in sections.h as its used in vb.h that is widely used
@@ -122,11 +125,11 @@ typedef enum {
 #define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_VCF_FORMAT_DICT && (s) % 2 == SEC_CHROM_DICT % 2) ||       \
                                         (s) == SEC_VCF_INFO_SF_DICT || \
                                         (s) == SEC_VCF_FRMT_SF_DICT || \
-                                        ((s) >= SEC_SAM_QNAME_SF_DICT && (s) <= SEC_FAST_TEMPLATE_DICT && (s) % 2 == SEC_SAM_QNAME_SF_DICT % 2))
+                                        ((s) >= SEC_SAM_QNAME_SF_DICT && (s) <= SEC_FAST_LINEMETA_DICT && (s) % 2 == SEC_SAM_QNAME_SF_DICT % 2))
 
 #define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_VCF_FORMAT_B250 && (s) % 2 == SEC_CHROM_B250 % 2) ||       \
                                         (s) == SEC_VCF_INFO_SF_B250 || \
-                                       ((s) >= SEC_SAM_QNAME_SF_B250 && (s) <= SEC_FAST_TEMPLATE_B250 && (s) % 2 == SEC_SAM_QNAME_SF_B250 % 2))
+                                       ((s) >= SEC_SAM_QNAME_SF_B250 && (s) <= SEC_FAST_LINEMETA_B250 && (s) % 2 == SEC_SAM_QNAME_SF_B250 % 2))
 
 extern const SectionType first_field_dict_section[NUM_DATATYPES];
 

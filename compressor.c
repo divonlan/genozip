@@ -167,6 +167,8 @@ bool comp_compress_bzlib (VBlock *vb,
             uint32_t avail_in_2;
             callback (vb, line_i, &strm.next_in, &strm.avail_in, &next_in_2, &avail_in_2);
 
+            if (!strm.avail_in && !strm.avail_out) continue; // this line has no SEQ data - move to next line (this happens eg in FASTA)
+
             bool final = (line_i == vb->num_lines - 1) && !avail_in_2;
 
             ret = BZ2_bzCompress (&strm, final ? BZ_FINISH : BZ_RUN);
@@ -243,11 +245,17 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
         return SZ_OK;
     }
 
-    // get next line if we have no data
-    if (!instream->avail_in_1 && !instream->avail_in_2) 
-       instream->callback (instream->vb, instream->line_i, 
-                           &instream->next_in_1, &instream->avail_in_1,
-                           &instream->next_in_2, &instream->avail_in_2);
+    // get next line if we have no data - keep on calling back until there is a line with data 
+    // (not all lines must have seq data - for example, in FASTA they don't)
+    while (instream->line_i < ((VBlockP)instream->vb)->num_lines && 
+           !instream->avail_in_1 && !instream->avail_in_2) {
+
+        instream->callback (instream->vb, instream->line_i, 
+                            &instream->next_in_1, &instream->avail_in_1,
+                            &instream->next_in_2, &instream->avail_in_2);
+
+        instream->line_i++;
+    }
 
     ASSERT (instream->avail_in_1 + instream->avail_in_2 <= instream->avail_in, 
             "Expecting avail_in_1=%u + avail_in_2=%u <= avail_in=%u but avail_in_1+avail_in_2=%u",
@@ -269,9 +277,6 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
 
     *size = bytes_served_1 + bytes_served_2;
     instream->avail_in -= bytes_served_1 + bytes_served_2;
-    
-    if (!instream->avail_in_1 && !instream->avail_in_2) 
-        instream->line_i++;
 
     return SZ_OK;
 }

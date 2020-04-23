@@ -193,7 +193,6 @@ static void vb_sam_release_vb (VBlock *vb_)
     if (command == ZIP && vb->data_lines)
         memset (vb->data_lines, 0, sizeof(ZipDataLineSAM) * vb->num_lines_alloced);
 
-    buf_free (&vb->reconstructed_line);
     buf_free (&vb->random_pos_data);
     buf_free (&vb->optional_mapper_buf);
     buf_free (&vb->seq_data);
@@ -206,7 +205,6 @@ static void vb_sam_destroy_vb (VBlock **vb_)
 {
     VBlockSAM **vb = (VBlockSAM **)vb_;
 
-    buf_destroy (&(*vb)->reconstructed_line);
     buf_destroy (&(*vb)->random_pos_data);
     buf_destroy (&(*vb)->optional_mapper_buf);
     buf_destroy (&(*vb)->seq_data);
@@ -215,14 +213,14 @@ static void vb_sam_destroy_vb (VBlock **vb_)
 }
 
 //--------------------------------
-// FASTQ/FASTA stuff
+// FASTQ stuff
 //--------------------------------
 
 static void vb_fast_release_vb (VBlock *vb_)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
-    vb->next_seq = vb->next_qual = 0;
+    vb->next_seq = vb->next_qual = vb->next_comment = vb->last_line = 0;
 
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
     
@@ -230,9 +228,9 @@ static void vb_fast_release_vb (VBlock *vb_)
     if (command == ZIP && vb->data_lines)
         memset (vb->data_lines, 0, sizeof(ZipDataLineFAST) * vb->num_lines_alloced);
 
-    buf_free (&vb->reconstructed_line);
     buf_free (&vb->seq_data);
     buf_free (&vb->qual_data);
+    buf_free (&vb->comment_data);
 }
 
 // free all memory of a VB
@@ -240,9 +238,9 @@ static void vb_fast_destroy_vb (VBlock **vb_)
 {
     VBlockFAST **vb = (VBlockFAST **)vb_;
 
-    buf_destroy (&(*vb)->reconstructed_line);
     buf_destroy (&(*vb)->seq_data);
     buf_destroy (&(*vb)->qual_data);    
+    buf_destroy (&(*vb)->comment_data);
 }
 
 //--------------------------------
@@ -255,7 +253,6 @@ static void vb_me23_release_vb (VBlock *vb_)
 
     vb->next_rsid = vb->next_genotype = 0;
 
-    buf_free (&vb->reconstructed_line);
     buf_free (&vb->rsid_data);
     buf_free (&vb->genotype_data);
 }
@@ -265,7 +262,6 @@ static void vb_me23_destroy_vb (VBlock **vb_)
 {
     VBlockME23 **vb = (VBlockME23 **)vb_;
 
-    buf_destroy (&(*vb)->reconstructed_line);
     buf_destroy (&(*vb)->rsid_data);
     buf_destroy (&(*vb)->genotype_data);
 }
@@ -326,6 +322,7 @@ void vb_release_vb (VBlock **vb_p)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
+    buf_free (&vb->reconstructed_line);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
@@ -361,6 +358,7 @@ void vb_destroy_vb (VBlockP *vb)
     buf_destroy (&(*vb)->show_b250_buf);
     buf_destroy (&(*vb)->section_list_buf);
     buf_destroy (&(*vb)->region_ra_intersection_matrix);
+    buf_destroy (&(*vb)->reconstructed_line);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if ((*vb)->mtf_ctx[i].dict_id.num)

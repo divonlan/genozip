@@ -20,7 +20,7 @@ extern void zip_vcf_initialize (void);
 
 extern void zip_vcf_compress_one_vb (VBlockP vb_);
 extern void zip_sam_compress_one_vb (VBlockP vb_);
-extern void zip_fast_compress_one_vb (VBlockP vb_);
+extern void zip_fastq_compress_one_vb (VBlockP vb_);
 extern void zip_me23_compress_one_vb (VBlockP vb_);
 
 #endif

@@ -30,7 +30,7 @@ void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
         SectionType b250_sec = FIELD_TO_B250_SECTION(f);
 
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
-        if (zfile_skip_section_by_flags (b250_sec, DICT_ID_NONE)) continue;
+        if (zfile_is_skip_section (b250_sec, DICT_ID_NONE)) continue;
 
         zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);
     }
@@ -80,6 +80,59 @@ int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta
     }
 
     return last_pos;
+}
+
+void piz_uncompress_compound_field (VBlock *vb, SectionType field_b250_sec, SectionType sf_b250_sec, 
+                                    SubfieldMapper *mapper, unsigned *section_i)
+{
+    ARRAY (const unsigned, section_index, vb->z_section_headers);
+
+    for (uint8_t sf_i=0; sf_i < mapper->num_subfields ; sf_i++) {
+        
+        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
+        if (zfile_is_skip_section (field_b250_sec, DICT_ID_NONE)) continue;
+
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
+                                                  header->dict_id, sf_b250_sec-1);
+
+        mapper->did_i[sf_i] = ctx->did_i;
+
+        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", sf_b250_sec);    
+    }    
+}
+
+void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const char *separator, unsigned separator_len,
+                                     const char *template, unsigned template_len, uint32_t txt_line_i)
+{
+    if (template_len==1 && template[0]=='*') template_len=0; // no separators, only one component
+
+    for (unsigned i=0; i <= template_len; i++) { // for template_len, we have template_len+1 elements
+        
+        const char *snip;
+        unsigned snip_len;
+        mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[mapper->did_i[i]], NULL, &snip, &snip_len, txt_line_i);
+
+        buf_add (&vb->reconstructed_line, snip, snip_len);
+        
+        if (i < template_len)
+            buf_add (&vb->reconstructed_line, &template[i], 1) // add middle-field separator (buf_add is a macro - no semicolon)
+        else
+            buf_add (&vb->reconstructed_line, separator, separator_len); // add end-of-field separator
+    }
+}
+
+void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len, 
+                               const Buffer *data, uint32_t *next,
+                               SectionType sec, uint32_t txt_line_i)
+{
+    // seq and qual are expected to be either of length seq_len, or "*" 
+    uint32_t len = (*next >= data->len || data->data[*next] == '*') ? 1 : seq_len;
+    ASSERT (*next + len <= data->len, "Error reading txt_line=%u: unexpected end of %s data", txt_line_i, st_name (sec));
+
+    if (!zfile_is_skip_section (sec, DICT_ID_NONE)) 
+        buf_add (&vb->reconstructed_line, &data->data[*next], len);
+    
+    *next += len;
 }
 
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs

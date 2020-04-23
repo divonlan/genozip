@@ -46,8 +46,8 @@ static inline DictIdType dict_id_vcf_format_sf(DictIdType dict_id) { return dict
 #define dict_id_sam_optnl_sf dict_id_vcf_format_sf
 
 // FASTQ/FASTA field types - overload the VCF dict id types
-#define dict_id_is_fast_id_sf dict_id_is_vcf_format_sf
-#define dict_id_fast_id_sf dict_id_vcf_format_sf
+#define dict_id_is_fast_desc_sf dict_id_is_vcf_format_sf
+#define dict_id_fast_desc_sf dict_id_vcf_format_sf
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 

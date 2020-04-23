@@ -225,7 +225,9 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     }
 }
 
-static const char *type_name (unsigned item, const char **names, unsigned num_names)
+static const char *type_name (unsigned item, 
+                              const char * const *name, // the address in which a pointer to name is found, if item is in range
+                              unsigned num_names)
 {
     if (item > num_names) {
         static char str[50];
@@ -233,28 +235,28 @@ static const char *type_name (unsigned item, const char **names, unsigned num_na
         return str;
     }
     
-    return names[item];    
+    return *name;    
 }
 
 const char *st_name(SectionType sec_type)
 {
-    static const char *names[NUM_SEC_TYPES] = SECTIONTYPE_NAMES;
+    static const struct {const char *name; bool strip;} abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
     
     if (sec_type == SEC_EOF) return "SEC_EOF";
     
-    return type_name (sec_type, names, sizeof(names)/sizeof(names[0]));
+    return type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
 }
 
 const char *dt_name (unsigned data_type)
 {
     static const char *names[NUM_DATATYPES] = DATATYPE_NAMES;
-    return type_name (data_type, names, sizeof(names)/sizeof(names[0]));
+    return type_name (data_type, &names[data_type], sizeof(names)/sizeof(names[0]));
 }
 
 const char *encryption_name (unsigned encryption_type)
 {
     static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
-    return type_name (encryption_type, names, sizeof(names)/sizeof(names[0]));
+    return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));
 }
 
 // called by PIZ I/O

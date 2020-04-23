@@ -33,6 +33,11 @@ mac/scripts/*
 *.vcf*
 *.sam*
 *.bam
+*.fastq*
+*.fq*
+*.fa
+*.fa.gz
+*.fasta*
 !test-file.vcf
 !minimal.vcf
 *stackdump

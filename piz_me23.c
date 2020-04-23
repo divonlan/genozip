@@ -21,7 +21,7 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
 {
     START_TIMER;
 
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "piz_me23_reconstruct_vb", vb->vblock_i);
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
     buf_alloc (vb, &vb->reconstructed_line, vb->longest_line_len, 1, "reconstructed_line", vb->vblock_i);
 
     const char *snip;
@@ -32,7 +32,7 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
         vb->reconstructed_line.len = 0; // initialize for a new line
         uint32_t txt_line_i = vb->first_line + vb_line_i;
 
-        LOAD_SNIP_FROM_BUF (vb->rsid_data, vb->next_rsid, "RSID");
+        LOAD_SNIP_FROM_BUF (vb->rsid_data, vb->next_rsid, "RSID", '\t');
 
         bool has_13 = snip[snip_len-1] != '#'; // we added a # if line has NO \r (usually 23andMe files have it)
 
