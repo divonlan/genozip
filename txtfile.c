@@ -170,9 +170,9 @@ static inline bool txtfile_fastq_is_end_of_line (VBlock *vb,
 
     // if we're at the end of the line, we scan back to the previous \n and check if it is at the +
     for (int32_t i=txt_i-1; i >= 0; i--) 
-        if (txt[i] == '\n')
-            return i > 3 && ((txt[i-2] == '\n' && txt[i-2] == '+') || // \n line ending case
-                             (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r')); // \r\n line ending case;
+        if (txt[i] == '\n') 
+            return (i > 3) && ((txt[i-2] == '\n' && txt[i-1] == '+') || // \n line ending case
+                               (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r')); // \r\n line ending case;
 
     // we can't find a complete FASTQ block in the entire vb data
     ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);

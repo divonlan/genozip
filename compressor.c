@@ -52,6 +52,12 @@ static void comp_free (VBlock *vb, void *addr)
            vb->vblock_i, str_pointer (addr, addr_str));
 }
 
+static void comp_free_all (VBlock *vb)
+{
+    for (unsigned i=0; i < NUM_COMPRESS_BUFS ; i++) 
+        buf_free (&vb->compress_bufs[i]);
+}
+
 static void *comp_bzalloc (void *vb_, int items, int size)
 {
     return comp_alloc ((VBlock *)vb_, items * size, 1); // all bzlib buffers are constant in size between subsequent compressions
@@ -441,6 +447,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                                                       callback,  
                                                       &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
                                                       true);
+        comp_free_all (vb); // just in case
 
         // if output buffer is too small, increase it, and try again
         if (!success) {
@@ -454,6 +461,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                                                       callback,  
                                                       &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
                                                       false);
+            comp_free_all (vb); // just in case
         }
         
         // get encryption related lengths
@@ -557,4 +565,6 @@ void comp_uncompress (VBlock *vb, CompressorAlg alg,
     default:
         ABORT ("Error in comp_uncompress: invalid compression algorithm %u", alg);
     }
+
+    comp_free_all (vb); // just in case
 }
