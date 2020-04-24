@@ -194,6 +194,37 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int did_i, SectionType sec_
     return this_pos;
 }
 
+// Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
+// - We store the final digits, if any exist, and up to 9 digits, as an integer in SEC_ID_DATA, which is
+//   compressed with LZMA
+// - In the dictionary we store the prefix up to this number, and \1 if there is a number and a \2 
+//   if the caller (as in seg_me23) wants us to store an extra bit.
+// example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_ID_DATA we store 17030902.
+//          1423       : in the dictionary we store "\1" and 1423 SEC_ID_DATA
+//          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_ID_DATA
+void seg_id_field (VBlock *vb, Buffer *id_buf, int id_field, char *id_snip, unsigned id_snip_len, bool extra_bit)
+{
+    int i=id_snip_len-1; for (; i >= 0; i--) 
+        if (!IS_DIGIT (id_snip[i])) break;
+    
+    unsigned num_digits = MIN (id_snip_len - (i+1), 9);
+
+    // added to SEC_ID_DATA if we have a trailing number
+    if (num_digits) {
+        uint32_t id_num = BGEN32 (atoi (&id_snip[id_snip_len - num_digits]));
+        seg_add_to_data_buf (vb, id_buf, SEC_ID_DATA, (char*)&id_num, sizeof (id_num), 0, num_digits); // account for the digits
+    }
+
+    // append the textual part with \1 and \2 as needed - we have enough space - we have a tab following the field
+    // and if we need to add \1 we also know that we have at least one digit
+    unsigned new_len = id_snip_len - num_digits;
+    if (num_digits) id_snip[new_len++] = 1;
+    if (extra_bit)  id_snip[new_len++] = 2;
+
+    seg_one_field (vb, id_snip, new_len, id_field); // acounts for the length and \t
+    vb->txt_section_bytes[FIELD_TO_B250_SECTION (vb->data_type, id_field)] -= (!!num_digits) + extra_bit; // we don't account for the \1 and \2 that were not in the txt file
+}
+
 // We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : -
 // these are vendor-defined strings.
 // Up to MAX_COMPOUND_COMPONENTS subfields are permitted - if there are more, then all the trailing part is just

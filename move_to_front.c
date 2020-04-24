@@ -86,7 +86,7 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
                       const char **snip_in_dict, uint32_t *snip_len,  // optional outs
                       const char *func, uint32_t code_line)
 {
-    ASSERT0 (ctx->dict_id.num, "Error: this ctx is not initialized");
+    ASSERT0 (ctx->dict_id.num, "Error: this ctx is not initialized (dict_id.num=0)");
     
     ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
             err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),

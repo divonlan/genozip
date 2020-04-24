@@ -38,6 +38,7 @@ mac/scripts/*
 *.fa
 *.fa.gz
 *.fasta*
+*.23andme*
 !test-file.vcf
 !minimal.vcf
 *stackdump

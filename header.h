@@ -17,7 +17,7 @@ typedef enum { DT_VCF_V1=-2, DT_NONE=-1, // these values are used in the code lo
                DT_ME23=4 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
 #define DATATYPE_NAMES { "VCF", "SAM", "FASTQ", "FASTA", "23ANDME" } // index in array matches values in DataType
 
-#define DATATYPE_LAST_FIELD { VCF_FORMAT, SAM_OPTIONAL, FAST_LINEMETA, FAST_LINEMETA, ME23_POS }
+#define DATATYPE_LAST_FIELD { VCF_FORMAT, SAM_OPTIONAL, FAST_LINEMETA, FAST_LINEMETA, ME23_ID }
 extern const unsigned datatype_last_field[NUM_DATATYPES];
 
 #define CHROM_DID_I_BY_DT   { VCF_CHROM, SAM_RNAME, -1, -1, ME23_CHROM } // -1 if DATATYPE_HAS_RANDOM_ACCESS is false
@@ -91,8 +91,8 @@ typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM
 typedef enum { FAST_DESC, FAST_LINEMETA } FastqFields;
 
 // 23ANDME fields
-#define NUM_ME23_FIELDS 2
-typedef enum { ME23_CHROM, ME23_POS } Me23Fields; // same order as VCF
+#define NUM_ME23_FIELDS 3
+typedef enum { ME23_CHROM, ME23_POS, ME23_ID } Me23Fields; // same order as VCF
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE 9 // maximum between NUM_*_FIELDS
 
@@ -101,7 +101,7 @@ typedef enum { ME23_CHROM, ME23_POS } Me23Fields; // same order as VCF
       { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" },\
       { "DESC", "LINEMETA" },\
       { "DESC", "LINEMETA" },\
-      { "CHROM", "POS" }\
+      { "CHROM", "POS", "ID" }\
     };
 extern const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE];
 
@@ -109,11 +109,12 @@ extern void header_initialize(void);
 extern bool header_txt_to_genozip (uint32_t *vcf_line_i);
 extern bool header_genozip_to_txt (Md5Hash *digest);
 
+extern const char *dt_name (DataType data_type);
+
 // v1 compatibility (VCF only)
 extern bool v1_header_genozip_to_vcf (Md5Hash *digest);
 extern bool v1_vcf_header_get_vcf_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,uint64_t *num_items_concat,
                                           Md5Hash  *md5_hash_concat, char *created, unsigned created_len);
 
-extern const char *dt_name (DataType data_type);
 
 #endif

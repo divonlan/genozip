@@ -11,6 +11,7 @@
 #include "file.h"
 #include "random_access.h"
 #include "endianness.h"
+#include "strings.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineME23, vb->lines, i)
 
@@ -66,11 +67,19 @@ const char *seg_me23_data_line (VBlock *vb_,
     
     seg_add_to_data_buf (vb_, &vb->genotype_data, SEC_GT_DATA, field_start, 2, 0, field_len + 1 + has_13); 
     
-    // Now, finalize RSID - if we DON'T have a \r (unexpected), then we tag a # to the end of the rsid. this overwrite the following \t - no harm 
-    if (!has_13) ((char*)rsid_field_start)[rsid_field_len] = '#';
+    // Now, finalize RSID - if we DON'T have a \r (unexpected), then we add an extra bit.
+    seg_id_field (vb_, &vb->rsid_data, ME23_ID, (char*)rsid_field_start, rsid_field_len, !has_13);
+    //if (!has_13) ((char*)rsid_field_start)[rsid_field_len] = '#';
     
-    seg_add_to_data_buf (vb_, &vb->rsid_data, SEC_ID_DATA, rsid_field_start, rsid_field_len + !has_13, 
-                         '\t', rsid_field_len+1 /* for the \t */); 
-
+    //seg_add_to_data_buf (vb_, &vb->rsid_data, SEC_ID_DATA, rsid_field_start, rsid_field_len + !has_13, 
+    //                     '\t', rsid_field_len+1 /* for the \t */); 
+/*
+    for (unsigned i=0; i < rsid_field_len; i++)
+        if (IS_DIGIT (rsid_field_start[i])) { // first digit
+            uint32_t id_num = BGEN32 (atoi (&rsid_field_start[i]));
+            seg_add_to_data_buf (vb_, &vb->rsid_data, SEC_ID_DATA, (char*)&id_num, sizeof (id_num), 0, rsid_field_len+1);
+            break;
+        }
+*/
     return next_field;
 }

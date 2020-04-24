@@ -34,7 +34,7 @@ typedef enum {
 
     SEC_CHROM_DICT         = 8,   SEC_CHROM_B250         = 9,  // used by VCF, ME23
     SEC_POS_DICT           = 10,  SEC_POS_B250           = 11, // used by VCF, ME23
-    SEC_VCF_ID_DICT        = 12,  SEC_VCF_ID_B250        = 13, // used by VCF until v4 (VCF's ID moved to SEC_ID_DATA in v5)
+    SEC_ID_DICT            = 12,  SEC_ID_B250            = 13, // used by VCF until v4 (VCF's ID moved to SEC_ID_DATA in v5)
     SEC_VCF_REFALT_DICT    = 14,  SEC_VCF_REFALT_B250    = 15,  
     SEC_VCF_QUAL_DICT      = 16,  SEC_VCF_QUAL_B250      = 17, 
     SEC_VCF_FILTER_DICT    = 18,  SEC_VCF_FILTER_B250    = 19, 
@@ -84,7 +84,7 @@ typedef enum {
     \
     {"SEC_CHROM_DICT",          0},  {"SEC_CHROM_B250",         0},\
     {"SEC_POS_DICT",            0},  {"SEC_POS_B250",           0},\
-    {"SEC_VCF_ID_DICT",         1},  {"SEC_VCF_ID_B250",        1},\
+    {"SEC_ID_DICT",             1},  {"SEC_ID_B250",            1},\
     {"SEC_VCF_REFALT_DICT",     0},  {"SEC_VCF_REFALT_B250",    0},\
     {"SEC_VCF_QUAL_DICT",       1},  {"SEC_VCF_QUAL_B250",      1},\
     {"SEC_VCF_FILTER_DICT",     1},  {"SEC_VCF_FILTER_B250",    1},\
