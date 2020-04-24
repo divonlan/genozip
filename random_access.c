@@ -27,7 +27,7 @@ void random_access_initialize(void)
 
 // ZIP only: called from seg_chrom_field when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
-void random_access_update_chrom (VBlock *vb, uint32_t vb_line_i, int32_t chrom_node_index)
+void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
 {
     ASSERT (chrom_node_index >= 0, "Error in random_access_update_chrom: chrom_node_index=%d in vb_i=%u", 
             chrom_node_index, vb->vblock_i);

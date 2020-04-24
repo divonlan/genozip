@@ -24,8 +24,7 @@ void seg_me23_initialize (VBlock *vb_)
 }             
              
 const char *seg_me23_data_line (VBlock *vb_,   
-                                const char *field_start_line,     // index in vb->txt_data where this line starts
-                                uint32_t vb_line_i) // line within this vb (starting from 0)
+                                const char *field_start_line)     // index in vb->txt_data where this line starts
 {
     VBlockME23 *vb = (VBlockME23 *)vb_;
 
@@ -38,26 +37,26 @@ const char *seg_me23_data_line (VBlock *vb_,
 
     // RSID
     rsid_field_start = field_start_line;
-    next_field = seg_get_next_item (rsid_field_start, &len, false, true, false, vb_line_i, &rsid_field_len, &separator, &has_13, "RSID");
+    next_field = seg_get_next_item (vb, rsid_field_start, &len, false, true, false, &rsid_field_len, &separator, &has_13, "RSID");
     // wait before adding - we will tag a # to the ID if the row does not have a \r (it normally does)
 
     // CHROM
     field_start = next_field;
-    next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "CHROM");
-    uint32_t chrom_node_index = seg_one_field (vb, field_start, field_len, vb_line_i, ME23_CHROM);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "CHROM");
+    uint32_t chrom_node_index = seg_one_field (vb, field_start, field_len, ME23_CHROM);
 
-    random_access_update_chrom (vb_, vb_line_i, chrom_node_index);
+    random_access_update_chrom (vb_, chrom_node_index);
 
     // POS - store delta vs previous line
     field_start = next_field;
-    next_field = seg_get_next_item (field_start, &len, false, true, false, vb_line_i, &field_len, &separator, &has_13, "POS");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, ME23_POS, SEC_POS_B250, field_start, field_len, vb_line_i, "POS");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
+    vb->last_pos = seg_pos_field (vb_, vb->last_pos, ME23_POS, SEC_POS_B250, field_start, field_len, "POS");
 
     random_access_update_pos (vb_, vb->last_pos);
 
     // Genotype (a combination of two bases or "--")
     field_start = next_field;
-    next_field = seg_get_next_item (field_start, &len, true, false, false, vb_line_i, &field_len, &separator, &has_13, "GENOTYPE");
+    next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, "GENOTYPE");
     
     ASSERT (field_len == 1 || field_len == 2, "%s: Error in %s: expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
             global_cmd, txt_name, field_len, field_len, field_start);

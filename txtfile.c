@@ -217,7 +217,8 @@ void txtfile_read_vblock (VBlock *vb)
     txt_file->txt_data_so_far_single += vb->txt_data.len;
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
     vb->vb_data_read_size = file_tell (txt_file) - pos_before; // plain or gz/bz2 compressed bytes read
-
+    vb->vb_position_txt_file = pos_before;
+    
     COPY_TIMER (vb->profile.txtfile_read_vblock);
 }
 

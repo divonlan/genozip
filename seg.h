@@ -10,14 +10,14 @@
 #include "genozip.h"
 #include "sections.h"
 
-typedef const char *SegDataLineFuncType (VBlockP vb, const char *field_start_line, uint32_t vb_line_i);
+typedef const char *SegDataLineFuncType (VBlockP vb, const char *field_start_line);
 typedef void SegInitializer (VBlockP vb);
 
 extern void seg_all_data_lines (VBlockP vb, SegDataLineFuncType seg_data_line, SegInitializer seg_initialize, unsigned sizeof_line); 
 
-extern DictIdType seg_get_format_subfield (const char **data, uint32_t *len, unsigned line_i);
+extern DictIdType seg_get_format_subfield (const char **data, uint32_t *len);
 
-extern const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, unsigned vb_line_i, // line in vcf file,
+extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
                                       unsigned *len, char *separator, bool *has_13, // out
                                       const char *item_name);
 
@@ -27,24 +27,24 @@ extern void seg_store (VBlockP vb,
                        const char *limit_txt_data, // we cannot store in txt starting here. if NULL always allocates in txt_data_spillover
                        bool align32); // does start address need to be 32bit aligned to prevent aliasing issues
 
-extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len, unsigned vb_line_i,
+extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len,
                                   DictIdType dict_id, SectionType sec_b250, int accounts_for_chars);
 
-extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, unsigned vb_line_i, int did_i, SectionType sec_b250,
+extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did_i, SectionType sec_b250,
                               bool *is_new); // optional out
 
-#define seg_one_field(vb,str,len,vb_line_i,f) seg_one_snip ((VBlockP)(vb), (str), (len), (vb_line_i), (f), FIELD_TO_B250_SECTION(f), NULL)
+#define seg_one_field(vb,str,len,f) seg_one_snip ((VBlockP)(vb), (str), (len), (f), FIELD_TO_B250_SECTION(f), NULL)
 
-extern int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i, const char *field_name);
+extern int32_t seg_pos_snip_to_int (VBlockP vb, const char *pos_str, const char *field_name);
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int pos_field, SectionType sec_pos_b250,
-                              const char *pos_str, unsigned pos_len, unsigned vb_line_i, const char *field_name);
+                              const char *pos_str, unsigned pos_len, const char *field_name);
 
 extern void seg_add_to_data_buf (VBlockP vb, BufferP buf, SectionType sec, 
                                  const char *snip, unsigned snip_len, char add_separator, unsigned add_bytes);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
                                 SubfieldMapperP mapper, DictIdType sf_dict_id, char extra_separator,
-                                SectionType field_b250_sec, SectionType sf_b250_sec, unsigned vb_line_i);
+                                SectionType field_b250_sec, SectionType sf_b250_sec);
                                
 // ---------
 // VCF Stuff
@@ -75,5 +75,34 @@ extern SegInitializer seg_fasta_initialize;
 // ------------------
 extern SegDataLineFuncType seg_me23_data_line;
 extern SegInitializer seg_me23_initialize;
+
+// ------------------
+// Seg utilities
+// ------------------
+
+//#define ASSSEG(condition, p_into_txt, format, ...) ASSERT(condition, format "ext %u", __VA_ARGS__, 6)
+
+#define ASSSEG(condition, p_into_txt, format, ...) \
+    ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIu64\
+                              "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
+                              "\n%u characters before to %u characters after (in quotes): \"%.*s\""\
+                              "\nTo get VB: head -c %"PRIu64" %s | tail -c %"PRIu64, \
+            __VA_ARGS__, txt_name, vb->line_i, vb->vblock_i, \
+            /* pos_in_vb: */         p_into_txt ? (p_into_txt - vb->txt_data.data) : -1, \
+            /* pos_in_file: */       p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1,\
+            /* vb start pos file: */ vb->vb_position_txt_file, \
+            /* vb end pos file: */   vb->vb_position_txt_file + vb->txt_data.len-1, \
+            /* vb length: */         vb->txt_data.len,\
+            /* chars before: */      p_into_txt ? MIN (20, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
+            /* chars after: */       p_into_txt ? MIN (20, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
+            /* snip len: */          p_into_txt ? (unsigned)(MIN (p_into_txt+21, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-20, vb->txt_data.data) /* start_pos */) : -1,\
+            /* snip start: */        (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt < vb->txt_data.data + vb->txt_data.len) ? MAX (p_into_txt-20, vb->txt_data.data) : ""),\
+            /* head, tail params: */ vb->vb_position_txt_file + vb->txt_data.len, txt_name, vb->txt_data.len)
+
+#define ASSSEG0(condition, p_into_txt, err_str) ASSSEG (condition, p_into_txt, err_str "%s", "")
+
+#define ABOSEG(p_into_txt, format, ...) ASSSEG(false, p_into_txt, format, __VA_ARGS__)
+
+#define ABOSEG0(p_into_txt, err_str) ABOSEG(false, p_into_txt, format, err_str "%s", "")
 
 #endif

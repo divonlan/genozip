@@ -25,11 +25,10 @@ void seg_fasta_initialize (VBlock *vb_)
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
 const char *seg_fastq_data_line (VBlock *vb_,   
-                                 const char *field_start_line,     // index in vb->txt_data where this line starts
-                                 uint32_t vb_line_i) // line within this vb (starting from 0)
+                                 const char *field_start_line)     // index in vb->txt_data where this line starts
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
-    ZipDataLineFAST *dl = DATA_LINE (vb, vb_line_i);
+    ZipDataLineFAST *dl = DATA_LINE (vb, vb->line_i);
 
     const char *next_field, *field_start=field_start_line;
     unsigned field_len=0;
@@ -40,34 +39,34 @@ const char *seg_fastq_data_line (VBlock *vb_,
     int32_t len = AFTERENT (char, vb->txt_data) - field_start_line;
 
     // the leading @ - just verify it (it will be included in D0ESC subfield)
-    ASSERT (*field_start == '@', "%s: Invalid FASTQ file format in %s: expecting description line to start with @ but it starts with %c. vb_i=%u vb_line_i=%u",
-            global_cmd, txt_name, *field_start, vb->vblock_i, vb_line_i);
+    ASSSEG (*field_start == '@', field_start, "%s: Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
+            global_cmd, *field_start);
 
     // DESC - the description/id line is vendor-specific. example:
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
     // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
-    next_field = seg_get_next_item (field_start, &len, true, false, false, vb_line_i, &field_len, &separator, &has_13, "DESC");
+    next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, "DESC");
 
     // we segment it using / | : and " " as separators. 
     seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], field_start, field_len, &vb->desc_mapper,
                         dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), ' ', 
-                        SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, vb_line_i);
+                        SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
     metadata[0] = 'X' + has_13;
     vb->txt_section_bytes[SEC_FAST_DESC_B250] += has_13;
 
     // SEQ - just get the whole line
     const char *seq_start = next_field;
     dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (next_field, &len, true, false, false, vb_line_i, &dl->seq_len, &separator, &has_13, "SEQ");
+    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, &has_13, "SEQ");
     vb->txt_section_bytes[SEC_SEQ_DATA] += dl->seq_len + 1 + has_13;
     
     metadata[1] = 'X' + has_13;
 
     // next line is expected to be a "+"
     field_start = next_field;
-    next_field = seg_get_next_item (field_start, &len, true, false, false, vb_line_i, &field_len, &separator, &has_13, "+");
-    ASSERT (*field_start=='+' && field_len==1, "%s: Invalid FASTQ file format in %s: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\". vb_i=%u vb_line_i=%u",
-            global_cmd, txt_name, field_len, field_start, vb->vblock_i, vb_line_i);
+    next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, "+");
+    ASSSEG (*field_start=='+' && field_len==1, field_start, "%s: Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
+            global_cmd, field_len, field_start);
 
     metadata[2] = 'X' + has_13;    
     vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] += 2 + has_13; // + \n and sometimes \r (we account for the + here, but we don't store it)
@@ -76,12 +75,12 @@ const char *seg_fastq_data_line (VBlock *vb_,
     dl->qual_data_start = next_field - vb->txt_data.data;
     unsigned qual_len;
     field_start = next_field;
-    next_field = seg_get_next_item (next_field, &len, true, false, false, vb_line_i, &qual_len, &separator, &has_13, "QUAL");
+    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &qual_len, &separator, &has_13, "QUAL");
     vb->txt_section_bytes[SEC_QUAL_DATA] += dl->seq_len + 1 + has_13;
     metadata[3] = 'X' + has_13;    
 
-    ASSERT (qual_len == dl->seq_len, "%s: Invalid FASTQ file format in %s: sequence_len=%u and quality_len=%u. Expecting them to be the same. vb_i=%u vb_line_i=%u\nSEQ=%.*s\nQUAL==%.*s",
-            global_cmd, txt_name, dl->seq_len, qual_len, vb->vblock_i, vb_line_i, dl->seq_len, seq_start, qual_len, field_start);
+    ASSSEG (qual_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ=%.*s\nQUAL==%.*s",
+            global_cmd, dl->seq_len, qual_len, dl->seq_len, seq_start, qual_len, field_start);
 
     // METADATA - eg XYXX151 - the 4 X,Y characters specify whether each row has a \r (Y=has), and the number is the seq_len=qual_len
     
@@ -89,7 +88,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
     unsigned seq_len_str_len;
     str_uint (dl->seq_len, &metadata[4], &seq_len_str_len);
 
-    seg_one_field (vb, metadata, 4 + seq_len_str_len, vb_line_i, FAST_LINEMETA);
+    seg_one_field (vb, metadata, 4 + seq_len_str_len, FAST_LINEMETA);
     vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] -= 5 + seq_len_str_len; // seg_one_field account for our string and \t - these were all already accounted for
 
     return next_field;
@@ -107,8 +106,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
 // 123 - a sequence line - any line that's not a description of sequence line - store its length
 // these ^ are preceded by a 'Y' if the line has a Windows-style \r\n line ending or 'X' if not
 const char *seg_fasta_data_line (VBlock *vb_,   
-                                 const char *line_start, // index in vb->txt_data where this line starts
-                                 uint32_t vb_line_i) // line within this vb (starting from 0)
+                                 const char *line_start) // index in vb->txt_data where this line starts
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;	
 buf_test_overflows(vb_);
@@ -117,7 +115,7 @@ buf_test_overflows(vb_);
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
     int32_t remaining_vb_txt_len = AFTERENT (char, vb->txt_data) - line_start;
-    const char *next_field = seg_get_next_item (line_start, &remaining_vb_txt_len, true, false, false, vb_line_i, &line_len, &separator, &has_13, "DESC");
+    const char *next_field = seg_get_next_item (vb, line_start, &remaining_vb_txt_len, true, false, false, &line_len, &separator, &has_13, "DESC");
 buf_test_overflows(vb_);
     
     // case: description line - we segment it to its components
@@ -125,10 +123,10 @@ buf_test_overflows(vb_);
         // we segment using / | : and " " as separators. 
         seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], line_start, line_len, &vb->desc_mapper,
                             dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), ' ', 
-                            SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, vb_line_i);
+                            SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
         
         static const char *desc_md[2] = { "X>", "Y>" };
-        seg_one_field (vb, desc_md[has_13], 2, vb_line_i, FAST_LINEMETA);
+        seg_one_field (vb, desc_md[has_13], 2, FAST_LINEMETA);
 buf_test_overflows(vb_);
     }
 
@@ -137,21 +135,21 @@ buf_test_overflows(vb_);
         seg_add_to_data_buf (vb_, &vb->comment_data, SEC_FASTA_COMMENT_DATA, line_start, line_len, '\n', line_len + 1 + has_13); 
 
         static const char *comment_md[2] = { "X;", "Y;" };
-        seg_one_field (vb, comment_md[has_13], 2, vb_line_i, FAST_LINEMETA);
+        seg_one_field (vb, comment_md[has_13], 2, FAST_LINEMETA);
 buf_test_overflows(vb_);
     }
 
     // case: sequence line
     else {
-        DATA_LINE (vb, vb_line_i)->seq_data_start = line_start - vb->txt_data.data;
-        DATA_LINE (vb, vb_line_i)->seq_len        = line_len;
+        DATA_LINE (vb, vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
+        DATA_LINE (vb, vb->line_i)->seq_len        = line_len;
         vb->txt_section_bytes[SEC_SEQ_DATA] += line_len + 1 + has_13;
 
         char seq_md[30];
         unsigned seq_len_len;
         seq_md[0] = 'X' + has_13;
         str_uint (line_len, &seq_md[1], &seq_len_len);
-        seg_one_field (vb, seq_md, seq_len_len + 1, vb_line_i, FAST_LINEMETA);
+        seg_one_field (vb, seq_md, seq_len_len + 1, FAST_LINEMETA);
 buf_test_overflows(vb_);
     }
 

@@ -350,7 +350,7 @@ static void v1_piz_get_line_get_num_subfields (VBlockVCF *vb, unsigned line_i, /
     // count the number of subfields in the line
     for (*num_subfields = 1; *num_subfields <= MAX_SUBFIELDS; (*num_subfields)++) {
         uint32_t len = after - *line;
-        seg_get_format_subfield (line, &len, line_i);
+        seg_get_format_subfield (line, &len);
         if ((*line)[-1] == '\n') break;
     } 
 
@@ -441,7 +441,7 @@ static void v1_piz_get_line_subfields (VBlockVCF *vb, unsigned line_i, // line i
     const char *after = subfields_start + subfields_len;
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) {
         uint32_t len = after - subfields_start;
-        DictIdType subfield = seg_get_format_subfield (&subfields_start, &len, line_i);
+        DictIdType subfield = seg_get_format_subfield (&subfields_start, &len);
 
         // the dictionaries were already read, so all subfields are expected to have a ctx
         unsigned did_i=0 ; for (; did_i < z_file->num_dict_ids; did_i++) 

@@ -277,11 +277,12 @@ void vb_release_vb (VBlock **vb_p)
     *vb_p = NULL;
 
     vb->num_lines = vb->first_line = vb->vblock_i = vb->txt_data_next_offset = 0;
-    vb->vb_data_size = vb->vb_data_read_size = vb->last_pos = vb->longest_line_len = 0;
+    vb->vb_data_size = vb->vb_data_read_size = vb->last_pos = vb->longest_line_len = vb->line_i = 0;
     vb->ready_to_dispatch = vb->is_processed = false;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = 0;
     vb->chrom_node_index = 0; 
+    vb->vb_position_txt_file = 0;
 
     memset(vb->txt_section_bytes, 0, sizeof(vb->txt_section_bytes));
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
@@ -443,3 +444,11 @@ unsigned vb_vcf_num_sections(VBlockVCF *vb)
     return 1 + vb->has_genotype_data + (vb->phase_type == PHASE_MIXED_PHASED) + (vb->num_haplotypes_per_line > 0);
 }
 
+// NOT thread safe, use only in execution-terminating messages
+const char *err_vb_pos (void *vb)
+{
+    static char s[80];
+    sprintf (s, "vb i=%u position in %s file=%"PRIu64, 
+             ((VBlockP)vb)->vblock_i, dt_name (txt_file->data_type), ((VBlockP)vb)->vb_position_txt_file);
+    return s;
+}

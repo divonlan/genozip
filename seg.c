@@ -53,7 +53,7 @@ void seg_store (VBlock *vb,
 }
 
 // returns the node index
-uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, unsigned vb_line_i,
+uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len,
                            DictIdType dict_id, SectionType sec_b250, int accounts_for_chars)
 {
     MtfNode *node;
@@ -78,7 +78,7 @@ uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, unsigned v
 }
 
 // returns the node index
-uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, unsigned vb_line_i, int did_i, SectionType sec_b250,
+uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, int did_i, SectionType sec_b250,
                        bool *is_new) // optional out
 {
     MtfContext *ctx = &vb->mtf_ctx[did_i];
@@ -99,10 +99,12 @@ uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, unsigned vb_li
     return node_index;
 } 
 
-const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, unsigned vb_line_i, // line in vcf file,
+const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
                                unsigned *len, char *separator, bool *has_13, // out
                                const char *item_name)
 {
+    VBlockP vb = (VBlockP)vb_;
+
     unsigned i=0; for (; i < *str_len; i++)
         if ((allow_tab     && str[i] == '\t') ||
             (allow_colon   && str[i] == ':')  ||
@@ -122,14 +124,14 @@ const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline
         else if ((!allow_tab     && str[i] == '\t') ||  // note: a colon with allow_colon=false is not an error, its just part of the string rather than being a separator
                  (!allow_newline && str[i] == '\n')) break;
             
-    ASSERT (*str_len, "Error: missing %s field in vb_line_i=%u", item_name, vb_line_i);
+    ASSSEG (*str_len, str, "Error: missing %s field", item_name);
 
-    ASSERT (str[i] != '\t' || txt_file->data_type != DT_VCF || strcmp (item_name, field_names[DT_VCF][VCF_INFO]), 
-           "Error: while segmenting %s in vb_line_i=%u: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
-            item_name, vb_line_i);
+    ASSSEG (str[i] != '\t' || txt_file->data_type != DT_VCF || strcmp (item_name, field_names[DT_VCF][VCF_INFO]), 
+            str, "Error: while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
+            item_name);
 
-    ABORT ("Error: while segmenting %s in vb_line_i=%u: expecting a %s %s %s after \"%.*s\"", 
-            item_name, vb_line_i, 
+    ABOSEG (str, "Error: while segmenting %s: expecting a %s %s %s after \"%.*s\"", 
+            item_name,
             allow_newline ? "NEWLINE" : "", allow_tab ? "TAB" : "", allow_colon ? "\":\"" : "", 
             MIN (i-1, 1000), str);
 
@@ -139,26 +141,26 @@ const char *seg_get_next_item (const char *str, int *str_len, bool allow_newline
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
 // reads a tab-terminated POS string
-int32_t seg_pos_snip_to_int (const char *pos_str, unsigned vb_line_i, const char *field_name)
+int32_t seg_pos_snip_to_int (VBlock *vb, const char *pos_str, const char *field_name)
 {
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
     const char *s; for (s=pos_str; *s != '\t' && *s != '\n' && *s != '\r'; s++) {
-        ASSERT (IS_DIGIT (*s), "Error: '%s' field in vb_line_i=%u must be an integer number between 0 and %u, seeing: %.*s", 
-                field_name, vb_line_i, MAX_POS, (int)(s-pos_str+1), pos_str);
+        ASSSEG (IS_DIGIT (*s), pos_str, "Error: '%s' field must be an integer number between 0 and %u, seeing: %.*s", 
+                field_name, MAX_POS, (int)(s-pos_str+1), pos_str);
 
         this_pos_64 = this_pos_64 * 10 + (*s - '0');
     }
-    ASSERT (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, 
-            "Error: Invalid '%s' field in vb_line_i=%u - value should be between 0 and %u, but found %"PRIu64, field_name, vb_line_i, MAX_POS, this_pos_64);
+    ASSSEG (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, pos_str,
+            "Error: Invalid '%s' field - value should be between 0 and %u, but found %"PRIu64, field_name, MAX_POS, this_pos_64);
     
     return (int32_t)this_pos_64;
 }
 
 int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int did_i, SectionType sec_pos_b250,
-                       const char *pos_str, unsigned pos_len, unsigned vb_line_i, const char *field_name)
+                       const char *pos_str, unsigned pos_len, const char *field_name)
 {
-    int32_t this_pos = seg_pos_snip_to_int (pos_str, vb_line_i, field_name);
+    int32_t this_pos = seg_pos_snip_to_int (vb, pos_str, field_name);
 
     int32_t pos_delta = this_pos - last_pos;
     
@@ -185,7 +187,7 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int did_i, SectionType sec_
         len = 1;
     }
 
-    seg_one_snip (vb, pos_delta_str, len, vb_line_i, did_i, sec_pos_b250, NULL);
+    seg_one_snip (vb, pos_delta_str, len, did_i, sec_pos_b250, NULL);
 
     vb->txt_section_bytes[sec_pos_b250] += pos_len - len; // re-do the calculation - seg_one_field doesn't do it good in our case
 
@@ -204,8 +206,7 @@ void seg_compound_field (VBlock *vb,
                          MtfContext *field_ctx, const char *field, unsigned field_len, 
                          SubfieldMapper *mapper, DictIdType sf_dict_id,
                          char extra_separator, // a separator other than : / | (or 0 is there isn't one)
-                         SectionType field_b250_sec, SectionType sf_b250_sec, 
-                         unsigned vb_line_i)
+                         SectionType field_b250_sec, SectionType sf_b250_sec)
 {
 #define MAX_COMPOUND_COMPONENTS (10+26)
 
@@ -278,7 +279,7 @@ void seg_add_to_data_buf (VBlock *vb, Buffer *buf, SectionType sec,
     vb->txt_section_bytes[sec] += add_bytes;
 }
 
-static void seg_set_hash_hints (VBlock *vb, uint32_t vb_line_i)
+static void seg_set_hash_hints (VBlock *vb)
 {
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
 
@@ -286,7 +287,7 @@ static void seg_set_hash_hints (VBlock *vb, uint32_t vb_line_i)
         if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
 
         ctx->mtf_len_at_half = ctx->mtf.len;
-        ctx->num_lines_at_half = vb_line_i + 1;
+        ctx->num_lines_at_half = vb->line_i + 1;
     }
 }
 
@@ -366,30 +367,30 @@ void seg_all_data_lines (VBlock *vb,
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set = false;
-    for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+    for (vb->line_i=0; vb->line_i < vb->num_lines; vb->line_i++) {
 
         if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
-            vb->num_lines = vb_line_i; // update to actual number of lines
+            vb->num_lines = vb->line_i; // update to actual number of lines
             break;
         }
 
-        //fprintf (stderr, "vb_line_i=%u\n", vb_line_i);
+        //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
 
-        const char *next_field = seg_data_line (vb, field_start, vb_line_i);
+        const char *next_field = seg_data_line (vb, field_start);
         
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
 
         // if our estimate number of lines was too small, increase it
         if (sizeof_line) {
-            if (vb_line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
+            if (vb->line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
                 seg_allocate_per_line_memory (vb, sizeof_line); // increase number of lines as evidently we need more
         }
 
         // if there is no global_hash yet, and we've past half of the data,
         // collect stats to help mtf_merge create one when we merge
         if (!hash_hints_set && (field_start - vb->txt_data.data) > vb->txt_data.len / 2) {
-            seg_set_hash_hints (vb, vb_line_i);
+            seg_set_hash_hints (vb);
             hash_hints_set = true;
         }
     }
