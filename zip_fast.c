@@ -56,7 +56,7 @@ static void zip_fast_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 
 // this function receives all lines of a variant block and processes them
 // in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
-void zip_fastq_compress_one_vb (VBlockP vb_)
+void zip_fast_compress_one_vb (VBlockP vb_)
 { 
     START_TIMER;
 
@@ -78,7 +78,7 @@ void zip_fastq_compress_one_vb (VBlockP vb_)
     if (is_fastq)
         seg_all_data_lines (vb_, seg_fastq_data_line, NULL, sizeof (ZipDataLineFAST));
     else
-        seg_all_data_lines (vb_, seg_fasta_data_line, seg_fasta_initialize, 0);
+        seg_all_data_lines (vb_, seg_fasta_data_line, seg_fasta_initialize, sizeof (ZipDataLineFAST));
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely

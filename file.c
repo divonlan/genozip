@@ -36,18 +36,27 @@ const char *READ  = "rb";  // use binary mode (b) in read and write so Windows d
 const char *WRITE = "wb";
 
 const char *file_exts[] = FILE_EXTS;
-const FileType input_ft_by_dt [NUM_DATATYPES][20] = INPUT_FT_BY_DT;
-const FileType output_ft_by_dt[NUM_DATATYPES][20] = OUTPUT_FT_BY_DT;
+const struct ft_by_dt ft_by_dt[NUM_DATATYPES][20] = FT_BY_DT;
+const FileType output_ft_by_dt[NUM_DATATYPES][20] = UNZIP_OUTPUT_FT_BY_DT;
 const FileType genozip_ft_by_dt[NUM_DATATYPES] = GENOZIP_TYPE_BY_DT;
 
 // get data type by file type
 static DataType file_get_data_type (FileType ft, bool is_input)
 {
     for (DataType dt=0; dt < NUM_DATATYPES; dt++) 
-        for (unsigned i=0; (is_input ? input_ft_by_dt : output_ft_by_dt)[dt][i]; i++)
-            if ((is_input ? input_ft_by_dt : output_ft_by_dt)[dt][i] == ft) return dt;
+        for (unsigned i=0; (is_input ? ft_by_dt[dt][i].in : output_ft_by_dt[dt][i]); i++)
+            if ((is_input ? ft_by_dt[dt][i].in : output_ft_by_dt[dt][i]) == ft) return dt;
 
     return DT_NONE;
+}
+
+// get genozip file type by txt file type
+FileType file_get_genozip_ft_by_txt_ft (DataType dt, FileType txt_ft)
+{
+    for (unsigned i=0; ft_by_dt[dt][i].in; i++)
+        if (ft_by_dt[dt][i].in == txt_ft) return ft_by_dt[dt][i].out;
+
+    return UNKNOWN_FILE_TYPE;
 }
 
 // possible arguments for --input
@@ -58,8 +67,8 @@ static char *file_compressible_extensions(void)
     for (DataType dt=0; dt < NUM_DATATYPES; dt++) {
         sprintf (&s[strlen (s)], "\n%s: ", dt_name (dt));
 
-        for (unsigned i=0; input_ft_by_dt[dt][i]; i++)
-            sprintf (&s[strlen(s)], "%s ", &file_exts[input_ft_by_dt[dt][i]][1]);
+        for (unsigned i=0; ft_by_dt[dt][i].in; i++)
+            sprintf (&s[strlen(s)], "%s ", &file_exts[ft_by_dt[dt][i].in][1]);
     }
 
     return s;

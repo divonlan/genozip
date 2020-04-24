@@ -9,10 +9,12 @@
 #include "genozip.h"
 #include "md5.h"
 
-// data types genozip can compress
+// IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
 #define NUM_DATATYPES 5
 typedef enum { DT_VCF_V1=-2, DT_NONE=-1, // these values are used in the code logic, they are never written to the file
-               DT_VCF=0, DT_SAM=1, DT_FASTQ=2, DT_FASTA=3, DT_ME23=4 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
+               DT_VCF=0, DT_SAM=1, 
+               DT_FASTQ=2, DT_FASTA=3, 
+               DT_ME23=4 } DataType; // these values go into SectionHeaderGenozipHeader.data_type
 #define DATATYPE_NAMES { "VCF", "SAM", "FASTQ", "FASTA", "23ANDME" } // index in array matches values in DataType
 
 #define DATATYPE_LAST_FIELD { VCF_FORMAT, SAM_OPTIONAL, FAST_LINEMETA, FAST_LINEMETA, ME23_POS }
@@ -26,7 +28,7 @@ extern const bool datatype_has_random_access[NUM_DATATYPES];
 
 typedef void (*ComputeFunc)(VBlockP);
 #define COMPRESS_FUNC_BY_DT { zip_vcf_compress_one_vb, zip_sam_compress_one_vb,  \
-                              zip_fastq_compress_one_vb, zip_fastq_compress_one_vb, zip_me23_compress_one_vb }
+                              zip_fast_compress_one_vb, zip_fast_compress_one_vb, zip_me23_compress_one_vb }
 extern const ComputeFunc compress_func_by_dt[NUM_DATATYPES];
 
 #define UNCOMPRESS_FUNC_BY_DT { piz_vcf_uncompress_one_vb, piz_sam_uncompress_one_vb, \

@@ -23,7 +23,7 @@ ifdef IS_CONDA
 		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
 else
-	CC=gcc
+	CC=gcc -g
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1
 endif 
 

@@ -158,6 +158,27 @@ finish:
     COPY_TIMER (evb->profile.txtfile_read_header);
 }
 
+// returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file)
+static inline bool txtfile_fastq_is_end_of_line (VBlock *vb, 
+                                                 int32_t txt_i) // index of a \n in txt_data
+{
+    ARRAY (char, txt, vb->txt_data);
+
+    // if we're not at the end of the data - we can just look at the next character
+    if (txt_i < vb->txt_data.len-1)
+        return txt[txt_i+1] == '@';
+
+    // if we're at the end of the line, we scan back to the previous \n and check if it is at the +
+    for (int32_t i=txt_i-1; i >= 0; i--) 
+        if (txt[i] == '\n')
+            return i > 3 && ((txt[i-2] == '\n' && txt[i-2] == '+') || // \n line ending case
+                             (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r')); // \r\n line ending case;
+
+    // we can't find a complete FASTQ block in the entire vb data
+    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
+    return 0; // squash compiler warning ; never reaches here
+}
+
 // ZIP
 void txtfile_read_vblock (VBlock *vb) 
 {
@@ -198,7 +219,7 @@ void txtfile_read_vblock (VBlock *vb)
         if (vb->txt_data.data[i] == '\n') {
 
             // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
-            if (txt_file->data_type == DT_FASTQ && i < vb->txt_data.len-1 && vb->txt_data.data[i+1] != '@') continue;
+            if (txt_file->data_type == DT_FASTQ && !txtfile_fastq_is_end_of_line (vb, i)) continue;
 
             // case: still have some unconsumed data, that we wish  to pass to the next vb
             uint32_t unconsumed_len = vb->txt_data.len-1 - i;
@@ -218,7 +239,7 @@ void txtfile_read_vblock (VBlock *vb)
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
     vb->vb_data_read_size = file_tell (txt_file) - pos_before; // plain or gz/bz2 compressed bytes read
     vb->vb_position_txt_file = pos_before;
-    
+
     COPY_TIMER (vb->profile.txtfile_read_vblock);
 }
 

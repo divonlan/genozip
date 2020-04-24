@@ -81,6 +81,13 @@ void exit_on_error(void)
         char *save_name = malloc (strlen (z_file->name)+1);
         strcpy (save_name, z_file->name);
 
+        // if we're not the main thread - cancel the main thread before closing z_file, so that the main 
+        // thread doesn't attempt to access it (eg. z_file->data_type) and get a segmentation fault.
+        if (pthread_self()) {       // i'm not the main thread - the main thread is always 0
+            pthread_cancel (0);     // cancel the main thread
+            pthread_join (0, NULL); // wait for the thread cancelation to complete
+        }
+
         file_close (&z_file, false); // also frees file->name
 
         file_remove (save_name, true);
@@ -431,11 +438,13 @@ static void main_genozip (const char *txt_filename,
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
                 // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
+                const char *genozip_ext = file_exts[file_get_genozip_ft_by_txt_ft (txt_file->data_type, txt_file->type)];
+
                 if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
                     sprintf (z_filename, "%.*s%s", (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename,
-                             file_exts[genozip_ft_by_dt[txt_file->data_type]]); 
+                             genozip_ext); 
                 else 
-                    sprintf (z_filename, "%s%s", local_txt_filename, file_exts[genozip_ft_by_dt[txt_file->data_type]]); 
+                    sprintf (z_filename, "%s%s", local_txt_filename, genozip_ext); 
 
                 if (basename) FREE ((char*)basename);
             }

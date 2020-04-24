@@ -309,6 +309,8 @@ static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line)
     ASSERT (vb->num_lines_alloced >= vb->num_lines, 
             "Error: expecting vb->num_lines_alloced >= vb->num_lines. vb_i=%u", vb->vblock_i);
 
+    ASSERT0 (sizeof_line, "Error in seg_allocate_per_line_memory: sizeof_line=0");
+    
     // first line in this vb.id - we calculate an estimated number of lines
     if (!vb->num_lines) { 
         // get first line length
@@ -361,8 +363,9 @@ void seg_all_data_lines (VBlock *vb,
 {
     START_TIMER;
 
-    mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
+    mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
     seg_allocate_per_line_memory (vb, sizeof_line); // set vb->num_lines to an initial estimate and allocate ctx->mtf_i
+
     if (seg_initialize) seg_initialize (vb); // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;

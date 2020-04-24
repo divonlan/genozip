@@ -73,14 +73,16 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
     fprintf (stderr, "\n");
 }
 
-bool zfile_is_skip_section (SectionType st, DictIdType dict_id)
+bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
 {
+    VBlock *vb = (VBlock *)vb_;
+
     static const struct {char *name; bool strip;} abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
 
     if (flag_strip && abouts[st].strip) return true;
 
     // other situations not covered by abouts.strip
-    switch (z_file->data_type) {
+    switch (vb ? vb->data_type : z_file->data_type) {
         case DT_VCF:
             if ((flag_drop_genotypes || flag_gt_only) && 
                 (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_GT_DATA || st == SEC_VCF_FRMT_SF_DICT))
@@ -119,7 +121,7 @@ void zfile_uncompress_section (VBlock *vb,
     else if (section_type_is_b250 (expected_section_type))
         dict_id = ((SectionHeaderBase250 *)section_header_p)->dict_id;
 
-    if (zfile_is_skip_section (expected_section_type, dict_id)) return; // we skip some sections based on flags
+    if (zfile_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
 
     SectionHeader *section_header = (SectionHeader *)section_header_p;
     
@@ -335,7 +337,7 @@ int zfile_read_section (VBlock *vb,
     ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s",
             st_name (expected_sec_type), st_name(sl->section_type));
 
-    if (sl && zfile_is_skip_section (expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
+    if (sl && zfile_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
 
     if (sb_i != NO_SB_I && ! *ENT(bool, ((VBlockVCFP)vb)->is_sb_included, sb_i)) return 0; // skip section if this sample block is excluded by --samples
 
@@ -411,7 +413,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 {
     SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_dictionary() will reset cursor 
 
-    mtf_initialize_primary_field_ctxs (z_file->mtf_ctx, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
+    mtf_initialize_primary_field_ctxs (z_file->mtf_ctx, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
 
     while (sections_get_next_dictionary (&sl_ent)) {
 
@@ -423,7 +425,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         SectionType st = sl_ent->section_type; 
         if (read_chrom == DICTREAD_CHROM_ONLY   && st != chrom_dict_sec[z_file->data_type]) continue;
         if (read_chrom == DICTREAD_EXCEPT_CHROM && st == chrom_dict_sec[z_file->data_type]) continue;
-        if (zfile_is_skip_section (st, sl_ent->dict_id)) continue;
+        if (zfile_is_skip_section (NULL, st, sl_ent->dict_id)) continue;
         
         zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st, sl_ent);    
 
@@ -937,7 +939,7 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
 
     // read the 8 fields (CHROM to FORMAT)    
     for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
-        READ_SECTION (FIELD_TO_B250_SECTION(f), SectionHeaderBase250);
+        READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250);
 
     // read the info subfield sections into memory (if any)
     vb->num_info_subfields = sections_count_sec_type (vb->vblock_i, SEC_VCF_INFO_SF_B250); // also used later in piz_uncompress_all_sections()
@@ -1029,7 +1031,7 @@ void zfile_sam_read_one_vb (VBlock *vb_)
 
     // read the fields
     for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++) 
-        READ_SECTION (FIELD_TO_B250_SECTION(f), SectionHeaderBase250);
+        READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250);
 
     // read the QNAME subfields sections into memory (if any)
     vb->qname_mapper.num_subfields = sections_count_sec_type (vb->vblock_i, SEC_SAM_QNAME_SF_B250); 

@@ -109,14 +109,13 @@ const char *seg_fasta_data_line (VBlock *vb_,
                                  const char *line_start) // index in vb->txt_data where this line starts
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;	
-buf_test_overflows(vb_);
+
     // get entire line
     unsigned line_len;
     char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
     int32_t remaining_vb_txt_len = AFTERENT (char, vb->txt_data) - line_start;
     const char *next_field = seg_get_next_item (vb, line_start, &remaining_vb_txt_len, true, false, false, &line_len, &separator, &has_13, "DESC");
-buf_test_overflows(vb_);
     
     // case: description line - we segment it to its components
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
@@ -127,7 +126,6 @@ buf_test_overflows(vb_);
         
         static const char *desc_md[2] = { "X>", "Y>" };
         seg_one_field (vb, desc_md[has_13], 2, FAST_LINEMETA);
-buf_test_overflows(vb_);
     }
 
     // case: comment line - stored in the comment buffer
@@ -136,7 +134,6 @@ buf_test_overflows(vb_);
 
         static const char *comment_md[2] = { "X;", "Y;" };
         seg_one_field (vb, comment_md[has_13], 2, FAST_LINEMETA);
-buf_test_overflows(vb_);
     }
 
     // case: sequence line
@@ -150,7 +147,6 @@ buf_test_overflows(vb_);
         seq_md[0] = 'X' + has_13;
         str_uint (line_len, &seq_md[1], &seq_len_len);
         seg_one_field (vb, seq_md, seq_len_len + 1, FAST_LINEMETA);
-buf_test_overflows(vb_);
     }
 
     return next_field;

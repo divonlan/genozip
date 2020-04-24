@@ -86,7 +86,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
 
 extern void dict_id_initialize (void);
 
-extern const char *dict_id_display_type (DictIdType dict_id);
+extern const char *dict_id_display_type (DataType dt, DictIdType dict_id);
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages
 extern const char *err_dict_id (DictIdType dict_id);

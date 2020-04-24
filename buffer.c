@@ -216,9 +216,9 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary)
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it
-void buf_test_overflows (const VBlock *vb)
+void buf_test_overflows (void *vb)
 {
-    buf_test_overflows_do (vb, true);
+    buf_test_overflows_do ((ConstVBlockP)vb, true);
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it
@@ -365,7 +365,7 @@ static void buf_init (Buffer *buf, uint64_t size, uint64_t old_size,
     buf->code_line   = code_line;
 
     if (name) {
-        buf->name = name;
+        buf->name  = name;
         buf->param = param;
     } 
     ASSERT (buf->name, "Error: buffer has no name. func=%s:%u", buf->func, buf->code_line);
@@ -458,7 +458,7 @@ uint64_t buf_alloc_do (VBlock *vb,
         buf->memory = (char *)0x777; // catch a very weird situation that happens sometimes when memory overflows, where the next statement doesn't assign
         buf->memory = (char *)malloc (new_size + overhead_size);
         ASSERT (buf->memory != (char *)0x777, "Error: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
-                 buf_desc(buf), new_size);
+                buf_desc(buf), new_size);
 
         buf->type   = BUF_REGULAR;
 

@@ -70,7 +70,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 void zip_generate_and_compress_fields (VBlock *vb)
 {
     // generate & write b250 data for all primary fields
-    for (int f=0 ; f <= datatype_last_field[z_file->data_type] ; f++) {
+    for (int f=0 ; f <= datatype_last_field[vb->data_type] ; f++) {
         MtfContext *ctx = &vb->mtf_ctx[f];
         zip_generate_b250_section (vb, ctx);
         zfile_compress_b250_data (vb, ctx);
@@ -296,7 +296,6 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
             next_vb = dispatcher_generate_next_vb (dispatcher, 0);
-
             if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);
             
             txtfile_read_vblock (next_vb);

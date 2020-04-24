@@ -483,7 +483,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
         // note: for SEC_VB_HEADER in VCF we will encrypt at the end of calculating this VB when the index data is
         // known, and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (header->section_type != SEC_VB_HEADER || z_file->data_type != DT_VCF || header->vblock_i == 0 /* terminator vb header */)
+        if (header->section_type != SEC_VB_HEADER || vb->data_type != DT_VCF || header->vblock_i == 0 /* terminator vb header */)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, header->section_type, true);
 
         // encrypt the data body 

@@ -42,11 +42,12 @@
 #define FASTQ_GZ_      ".fastq.gz"
 #define FASTQ_BZ2_     ".fastq.bz2"
 #define FASTQ_XZ_      ".fastq.xz"
+#define FASTQ_GENOZIP_ ".fastq" GENOZIP_EXT
 #define FQ_            ".fq"
 #define FQ_GZ_         ".fq.gz"
 #define FQ_BZ2_        ".fq.bz2"
 #define FQ_XZ_         ".fq.xz"
-#define FASTQ_GENOZIP_ ".fastq" GENOZIP_EXT
+#define FQ_GENOZIP_    ".fq" GENOZIP_EXT
 
 // FASTA file variations
 #define FASTA_         ".fasta"
@@ -54,10 +55,11 @@
 #define FASTA_BZ2_     ".fasta.bz2"
 #define FASTA_XZ_      ".fasta.xz"
 #define FA_            ".fa"
+#define FASTA_GENOZIP_ ".fasta" GENOZIP_EXT
 #define FA_GZ_         ".fa.gz"
 #define FA_BZ2_        ".fa.bz2"
 #define FA_XZ_         ".fa.xz"
-#define FASTA_GENOZIP_ ".fasta" GENOZIP_EXT
+#define FA_GENOZIP_    ".fa" GENOZIP_EXT
 
 // 23andMe file variations
 // note: 23andMe files come as a .txt, and therefore the user must specify --input to compress them. we have this
@@ -70,23 +72,32 @@ typedef enum {TXT_FILE, Z_FILE} FileSupertype;
 typedef enum      { UNKNOWN_FILE_TYPE, 
                     VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  
                     SAM,  BAM,  SAM_GENOZIP,
-                    FASTQ,  FASTQ_GZ,  FASTQ_BZ2, FASTQ_XZ,  FQ,  FQ_GZ,  FQ_BZ2,  FQ_XZ,  FASTQ_GENOZIP,
-                    FASTA,  FASTA_GZ,  FASTA_BZ2, FASTA_XZ,  FA,  FA_GZ,  FA_BZ2,  FA_XZ,  FASTA_GENOZIP,
+                    FASTQ,  FASTQ_GZ,  FASTQ_BZ2, FASTQ_XZ,  FQ,  FQ_GZ,  FQ_BZ2,  FQ_XZ,  FASTQ_GENOZIP, FQ_GENOZIP,
+                    FASTA,  FASTA_GZ,  FASTA_BZ2, FASTA_XZ,  FA,  FA_GZ,  FA_BZ2,  FA_XZ,  FASTA_GENOZIP, FA_GENOZIP,
                     ME23, ME23_GENOZIP, 
                     AFTER_LAST_FILE_TYPE } FileType;
 
-#define INPUT_FT_BY_DT   { { VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ, 0 },\
-                           { SAM,  BAM, 0 },\
-                           { FASTQ,  FASTQ_GZ,  FASTQ_BZ2, FASTQ_XZ,  FQ,  FQ_GZ,  FQ_BZ2,  FQ_XZ, 0 },\
-                           { FASTA,  FASTA_GZ,  FASTA_BZ2, FASTA_XZ,  FA,  FA_GZ,  FA_BZ2,  FA_XZ, 0 },\
-                           { ME23, 0 } }                        
-extern const FileType input_ft_by_dt[NUM_DATATYPES][20];                    
+// txt file types and their corresponding genozip file types for each data type
+#define FT_BY_DT  { { { VCF,       VCF_GENOZIP   }, { VCF_GZ,   VCF_GENOZIP   }, { VCF_BGZ, VCF_GENOZIP },\
+                      { VCF_BZ2,   VCF_GENOZIP   }, { VCF_XZ,   VCF_GENOZIP   }, \
+                      { BCF,       VCF_GENOZIP   }, { BCF_GZ,   VCF_GENOZIP   }, { BCF_BGZ, VCF_GENOZIP }, {0 , 0} },\
+                    { { SAM,       SAM_GENOZIP   }, { BAM,      SAM_GENOZIP   }, { 0, 0 }, },\
+                    { { FASTQ,     FASTQ_GENOZIP }, { FASTQ_GZ, FASTQ_GENOZIP }, \
+                      { FASTQ_BZ2, FASTQ_GENOZIP }, { FASTQ_XZ, FASTQ_GENOZIP },\
+                      { FQ,        FQ_GENOZIP    }, { FQ_GZ,    FQ_GENOZIP    },\
+                      { FQ_BZ2,    FQ_GENOZIP    }, { FQ_XZ,    FQ_GENOZIP    }, { 0, 0 } },\
+                    { { FASTA,     FASTA_GENOZIP }, { FASTA_GZ, FASTA_GENOZIP }, \
+                      { FASTA_BZ2, FASTA_GENOZIP }, { FASTA_XZ, FASTA_GENOZIP },\
+                      { FA,        FA_GENOZIP    }, { FA_GZ,    FA_GENOZIP    },\
+                      { FA_BZ2,    FA_GENOZIP    }, { FA_XZ,    FA_GENOZIP    }, { 0, 0 } },\
+                    { { ME23,      ME23_GENOZIP  }, { 0, 0 } } }
+extern const struct ft_by_dt { FileType in, out; } ft_by_dt[NUM_DATATYPES][20];                                                                  
          
-#define OUTPUT_FT_BY_DT  { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   /* plain file MUST appear first on the list - this will be the */\
-                           { SAM,  BAM, 0 },                      /* default output when redirecting */ \
-                           { FASTQ,  FASTQ_GZ,  FQ,  FQ_GZ, 0 },\
-                           { FASTA,  FASTA_GZ,  FA,  FA_GZ, 0 },\
-                           { ME23, 0 } }                        
+#define UNZIP_OUTPUT_FT_BY_DT { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   /* plain file MUST appear first on the list - this will be the */\
+                                { SAM,  BAM, 0 },                      /* default output when redirecting */ \
+                                { FASTQ,  FASTQ_GZ,  FQ,  FQ_GZ, 0 },\
+                                { FASTA,  FASTA_GZ,  FA,  FA_GZ, 0 },\
+                                { ME23, 0 } }                        
 extern const FileType output_ft_by_dt[NUM_DATATYPES][20];                    
 
 #define GENOZIP_TYPE_BY_DT { VCF_GENOZIP, SAM_GENOZIP, FASTQ_GENOZIP, FASTA_GENOZIP, ME23_GENOZIP }
@@ -95,8 +106,8 @@ extern const FileType genozip_ft_by_dt[NUM_DATATYPES];
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
                    SAM_, BAM_, SAM_GENOZIP_, \
-                   FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FQ_, FQ_GZ_, FQ_BZ2_, FQ_XZ_, FASTQ_GENOZIP_, \
-                   FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FA_, FA_GZ_, FA_BZ2_, FA_XZ_, FASTA_GENOZIP_, \
+                   FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FQ_, FQ_GZ_, FQ_BZ2_, FQ_XZ_, FASTQ_GENOZIP_, FQ_GENOZIP_, \
+                   FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FA_, FA_GZ_, FA_BZ2_, FA_XZ_, FASTA_GENOZIP_, FA_GENOZIP_, \
                    ME23_, ME23_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
@@ -256,6 +267,8 @@ extern const char *file_basename (const char *filename, bool remove_exe, const c
 extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
+extern FileType file_get_genozip_ft_by_txt_ft (DataType dt, FileType txt_ft);
+
 extern const char *ft_name (FileType ft);
 
 #define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))

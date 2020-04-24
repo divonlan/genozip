@@ -33,7 +33,7 @@ extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len,
 extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did_i, SectionType sec_b250,
                               bool *is_new); // optional out
 
-#define seg_one_field(vb,str,len,f) seg_one_snip ((VBlockP)(vb), (str), (len), (f), FIELD_TO_B250_SECTION(f), NULL)
+#define seg_one_field(vb,str,len,f) seg_one_snip ((VBlockP)(vb), (str), (len), (f), FIELD_TO_B250_SECTION((vb)->data_type, f), NULL)
 
 extern int32_t seg_pos_snip_to_int (VBlockP vb, const char *pos_str, const char *field_name);
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int pos_field, SectionType sec_pos_b250,
@@ -88,15 +88,16 @@ extern SegInitializer seg_me23_initialize;
                               "\n%u characters before to %u characters after (in quotes): \"%.*s\""\
                               "\nTo get VB: head -c %"PRIu64" %s | tail -c %"PRIu64, \
             __VA_ARGS__, txt_name, vb->line_i, vb->vblock_i, \
-            /* pos_in_vb: */         p_into_txt ? (p_into_txt - vb->txt_data.data) : -1, \
-            /* pos_in_file: */       p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1,\
+            /* pos_in_vb:         */ p_into_txt ? (p_into_txt - vb->txt_data.data) : -1, \
+            /* pos_in_file:       */ p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1,\
             /* vb start pos file: */ vb->vb_position_txt_file, \
-            /* vb end pos file: */   vb->vb_position_txt_file + vb->txt_data.len-1, \
-            /* vb length: */         vb->txt_data.len,\
-            /* chars before: */      p_into_txt ? MIN (20, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
-            /* chars after: */       p_into_txt ? MIN (20, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
-            /* snip len: */          p_into_txt ? (unsigned)(MIN (p_into_txt+21, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-20, vb->txt_data.data) /* start_pos */) : -1,\
-            /* snip start: */        (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt < vb->txt_data.data + vb->txt_data.len) ? MAX (p_into_txt-20, vb->txt_data.data) : ""),\
+            /* vb end pos file:   */ vb->vb_position_txt_file + vb->txt_data.len-1, \
+            /* vb length:         */ vb->txt_data.len,\
+            /* chars before:      */ p_into_txt ? MIN (30, (unsigned)(p_into_txt - vb->txt_data.data)) : -1, \
+            /* chars after:       */ p_into_txt ? MIN (30, (unsigned)(vb->txt_data.data + vb->txt_data.len - p_into_txt)) : -1,\
+            /* snip len:          */ p_into_txt ? (unsigned)(MIN (p_into_txt+31, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX (p_into_txt-30, vb->txt_data.data) /* start_pos */) : -1,\
+            /* condition for snip */ (vb->txt_data.data && p_into_txt && (p_into_txt >= vb->txt_data.data) && (p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
+            /* snip start:        */    MAX (p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),\
             /* head, tail params: */ vb->vb_position_txt_file + vb->txt_data.len, txt_name, vb->txt_data.len)
 
 #define ASSSEG0(condition, p_into_txt, err_str) ASSSEG (condition, p_into_txt, err_str "%s", "")

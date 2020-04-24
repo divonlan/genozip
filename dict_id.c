@@ -106,13 +106,13 @@ void dict_id_initialize (void)
     }
 }
 
-const char *dict_id_display_type (DictIdType dict_id)
+const char *dict_id_display_type (DataType dt, DictIdType dict_id)
 {
     static const char *dict_type_by_data_type[NUM_DATATYPES][3] = STAT_DICT_TYPES;
 
-    if (dict_id_is_field (dict_id))  return dict_type_by_data_type[z_file->data_type][0]; 
-    if (dict_id_is_type_1 (dict_id)) return dict_type_by_data_type[z_file->data_type][1]; 
-    if (dict_id_is_type_2 (dict_id)) return dict_type_by_data_type[z_file->data_type][2]; 
+    if (dict_id_is_field (dict_id))  return dict_type_by_data_type[dt][0]; 
+    if (dict_id_is_type_1 (dict_id)) return dict_type_by_data_type[dt][1]; 
+    if (dict_id_is_type_2 (dict_id)) return dict_type_by_data_type[dt][2]; 
 
     return "Bug!";
 }

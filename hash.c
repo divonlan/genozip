@@ -69,7 +69,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         // 3X the expected number of entries to reduce spill-over
         vb_ctx->local_hash_prime = hash_next_size_up (vb_ctx->num_new_entries_prev_merged_vb * 3);
 
-    else switch (z_file->data_type) {
+    else switch (segging_vb->data_type) {
     
     case DT_VCF:
         // if typically small - use minimal hash table
@@ -170,7 +170,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         break;
 
 
-    default: ABORT ("hash_alloc_local: unknown data_type=%s", dt_name (z_file->data_type));
+    default: ABORT ("hash_alloc_local: unknown data_type=%s", dt_name (segging_vb->data_type));
     }
 
     // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)

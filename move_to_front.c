@@ -225,7 +225,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     segging_vb->z_section_entries[vb_ctx->b250_section_type]++; 
 
     if (!snip_len) 
-        return (!snip || (z_file->data_type == DT_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
+        return (!snip || (segging_vb->data_type == DT_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
 
     uint32_t new_mtf_i_if_no_old_one = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
@@ -620,16 +620,17 @@ done:
 // primary field ctx's. these are not always used (e.g. when some are not read from disk due to --strip)
 // but we maintain their fixed positions anyway as the code relies on it
 void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, 
+                                        DataType dt,
                                         uint8_t *dict_id_to_did_i_map,
                                         unsigned *num_dict_ids)
 {
-    for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) {
+    for (int f=0; f <= datatype_last_field[dt]; f++) {
         
-        const char *fname = field_names[z_file->data_type][f];
+        const char *fname = field_names[dt][f];
         
         mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, 
                                 dict_id_field (dict_id_make (fname, strlen(fname))), 
-                                FIELD_TO_DICT_SECTION(f));
+                                FIELD_TO_DICT_SECTION(dt, f));
     }
 }
 

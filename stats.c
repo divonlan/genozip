@@ -164,7 +164,7 @@ void stats_show_sections (void)
         sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
 
         fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s %9s %9s %9s %5.1f\n", i, -DICT_ID_LEN, DICT_ID_LEN, err_dict_id (ctx->dict_id), 
-                 dict_id_display_type (ctx->dict_id), str_uint_commas (ctx->mtf_i.len, s1), str_uint_commas (ctx->mtf.len, s2), 
+                 dict_id_display_type (z_file->data_type, ctx->dict_id), str_uint_commas (ctx->mtf_i.len, s1), str_uint_commas (ctx->mtf.len, s2), 
                  str_uint_commas (ctx->global_hash_prime, s3), str_size (ctx->dict.len, vsize),
                  str_size (dict_compressed_size, s4), str_size (b250_compressed_size, s5),
                  str_size (dict_compressed_size + b250_compressed_size, s6),

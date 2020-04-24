@@ -107,7 +107,7 @@ extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
 
 extern void buf_print (Buffer *buf, bool add_newline);
 
-extern void buf_test_overflows(ConstVBlockP vb);
+extern void buf_test_overflows (void *vb);
 extern void buf_test_overflows_all_vbs (void);
 
 //extern int64_t buf_vb_memory_consumption (ConstVBlockP vb);

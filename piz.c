@@ -25,12 +25,12 @@ void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
                             unsigned *section_i /* in/out */)
 {
     // uncompress b250 data for all primary fields
-    for (int f=0 ; f <= datatype_last_field[z_file->data_type] ; f++) {
+    for (int f=0 ; f <= datatype_last_field[vb->data_type] ; f++) {
 
-        SectionType b250_sec = FIELD_TO_B250_SECTION(f);
+        SectionType b250_sec = FIELD_TO_B250_SECTION(vb->data_type, f);
 
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
-        if (zfile_is_skip_section (b250_sec, DICT_ID_NONE)) continue;
+        if (zfile_is_skip_section (vb, b250_sec, DICT_ID_NONE)) continue;
 
         zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);
     }
@@ -90,7 +90,7 @@ void piz_uncompress_compound_field (VBlock *vb, SectionType field_b250_sec, Sect
     for (uint8_t sf_i=0; sf_i < mapper->num_subfields ; sf_i++) {
         
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
-        if (zfile_is_skip_section (field_b250_sec, DICT_ID_NONE)) continue;
+        if (zfile_is_skip_section (vb, field_b250_sec, DICT_ID_NONE)) continue;
 
         MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
                                                   header->dict_id, sf_b250_sec-1);
@@ -129,7 +129,7 @@ void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len,
     uint32_t len = (*next >= data->len || data->data[*next] == '*') ? 1 : seq_len;
     ASSERT (*next + len <= data->len, "Error reading txt_line=%u: unexpected end of %s data", txt_line_i, st_name (sec));
 
-    if (!zfile_is_skip_section (sec, DICT_ID_NONE)) 
+    if (!zfile_is_skip_section (vb, sec, DICT_ID_NONE)) 
         buf_add (&vb->txt_data, &data->data[*next], len);
     
     *next += len;

@@ -435,7 +435,7 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
     for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s ; sf_i++) {
         
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-        if (zfile_is_skip_section (SEC_SAM_OPTNL_SF_B250, header->dict_id)) continue;
+        if (zfile_is_skip_section (vb, SEC_SAM_OPTNL_SF_B250, header->dict_id)) continue;
 
         MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_OPTNL_SF_DICT);
 

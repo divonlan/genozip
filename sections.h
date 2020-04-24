@@ -133,8 +133,8 @@ typedef enum {
 
 extern const SectionType first_field_dict_section[NUM_DATATYPES];
 
-#define FIELD_TO_DICT_SECTION(f) (first_field_dict_section[z_file->data_type] + (f)*2)
-#define FIELD_TO_B250_SECTION(f) (FIELD_TO_DICT_SECTION(f) + 1)
+#define FIELD_TO_DICT_SECTION(dt,f) (first_field_dict_section[dt] + (f)*2)
+#define FIELD_TO_B250_SECTION(dt,f) (FIELD_TO_DICT_SECTION((dt), (f)) + 1)
 
 // Section headers - big endian
 

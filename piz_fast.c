@@ -127,7 +127,7 @@ static void piz_fast_uncompress_all_sections (VBlockFAST *vb)
     zfile_uncompress_section ((VBlockP)vb, seq_header, &vb->seq_data, "seq_data", SEC_SEQ_DATA);    
 
     // QUAL (FASTQ only)
-    if (z_file->data_type == DT_FASTQ) {
+    if (vb->data_type == DT_FASTQ) {
         SectionHeader *qual_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
         if (!flag_strip) zfile_uncompress_section ((VBlockP)vb, qual_header, &vb->qual_data, "qual_data", SEC_QUAL_DATA);    
     }
@@ -147,7 +147,7 @@ void piz_fast_uncompress_one_vb (VBlock *vb_)
 
     piz_fast_uncompress_all_sections ((VBlockFASTP)vb);
 
-    if (z_file->data_type == DT_FASTQ)
+    if (vb->data_type == DT_FASTQ)
         piz_fastq_reconstruct_vb ((VBlockFASTP)vb);
     else
         piz_fasta_reconstruct_vb ((VBlockFASTP)vb);
