@@ -29,6 +29,9 @@ extern void piz_reconstruct_compound_field (VBlockP vb, SubfieldMapperP mapper, 
 extern void piz_reconstruct_seq_qual (VBlockP vb, uint32_t seq_len, ConstBufferP data, uint32_t *next, 
                                       SectionType sec, uint32_t txt_line_i);
 
+extern void piz_reconstruct_id (VBlockP vb, BufferP id_buf, uint32_t *next_id, 
+                                const char *id_snip, unsigned id_snip_len, bool *extra_bit);
+
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[(did_i)], NULL, &snip, &snip_len, txt_line_i); 
 
@@ -64,12 +67,12 @@ extern void piz_reconstruct_seq_qual (VBlockP vb, uint32_t seq_len, ConstBufferP
 // reconstructs a fix number of characters from a tab-less buffer
 #define RECONSTRUCT_FROM_TABLESS_BUF(buf,next,fixed_len,add_tab,field_name) { \
     ARRAY (char, data, buf);\
-    ASSERT (next + (fixed_len) <= buf.len, \
+    ASSERT ((next) + (fixed_len) <= buf.len, \
             "Error reconstructing txt_line=%u: unexpected end of " field_name " data (buf.len=%u next=%u fixed_len=%u)", \
-            txt_line_i, (uint32_t)buf.len, next, fixed_len); \
-    buf_add (&vb->txt_data, &data[next], (fixed_len)); \
+            txt_line_i, (uint32_t)buf.len, (next), (fixed_len)); \
+    buf_add (&vb->txt_data, &data[(next)], (fixed_len)); \
     if (add_tab) buf_add (&vb->txt_data, "\t", 1);  \
-    next += fixed_len; }
+    (next) += (fixed_len); }
 
 #endif
 

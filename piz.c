@@ -20,6 +20,7 @@
 #include "regions.h"
 #include "samples.h"
 #include "dict_id.h"
+#include "strings.h"
 
 void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
                             unsigned *section_i /* in/out */)
@@ -80,6 +81,27 @@ int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta
     }
 
     return last_pos;
+}
+
+void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const char *id_snip, unsigned id_snip_len, bool *extra_bit)
+{
+    *extra_bit = (id_snip_len && id_snip[id_snip_len-1] == 2);
+    if (*extra_bit) id_snip_len--;
+
+    bool has_numeric = (id_snip_len && id_snip[id_snip_len-1] == 1);
+    if (has_numeric) id_snip_len--;
+
+    buf_add (&vb->txt_data, id_snip, id_snip_len);
+
+    if (has_numeric) {
+        uint32_t num = BGEN32 (*ENT (uint32_t, *id_buf, (*next_id)++));
+        char num_str[20];
+        unsigned num_str_len;
+        str_uint (num, num_str, &num_str_len);
+        buf_add (&vb->txt_data, num_str, num_str_len);
+    }
+    
+    buf_add (&vb->txt_data, "\t", 1);
 }
 
 void piz_uncompress_compound_field (VBlock *vb, SectionType field_b250_sec, SectionType sf_b250_sec, 

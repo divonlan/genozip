@@ -31,13 +31,18 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
         uint32_t txt_data_start = vb->txt_data.len;
         uint32_t txt_line_i = vb->first_line + vb_line_i;
 
-        LOAD_SNIP_FROM_BUF (vb->rsid_data, vb->next_rsid, "RSID", '\t');
+        //LOAD_SNIP_FROM_BUF (vb->rsid_data, vb->next_rsid, "RSID", '\t');
+        LOAD_SNIP (ME23_ID);
+        
+        bool doesnt_have_13;
+        piz_reconstruct_id ((VBlockP)vb, &vb->rsid_data, &vb->next_rsid, snip, snip_len, &doesnt_have_13);
+/*
 
         bool has_13 = snip[snip_len-1] != '#'; // we added a # if line has NO \r (usually 23andMe files have it)
 
         buf_add (&vb->txt_data, snip, snip_len - !has_13); 
         buf_add (&vb->txt_data, "\t", 1);  
-
+*/
         chrom_word_index = RECONSTRUCT_FROM_DICT (ME23_CHROM);
         RECONSTRUCT_FROM_DICT_POS (ME23_POS, true, true); // reconstruct from delta
         RECONSTRUCT_FROM_TABLESS_BUF (vb->genotype_data, vb->next_genotype, 2, false, "GT_DATA");
@@ -47,7 +52,7 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
             vb->txt_data.len--; 
 
         // add the end-of-line
-        buf_add (&vb->txt_data, has_13 ? "\r\n" : "\n", 1+has_13);
+        buf_add (&vb->txt_data, doesnt_have_13 ? "\n" : "\r\n" , 1 + !doesnt_have_13);
 
         // after consuming sections' data, if this line is not to be outputed - shorten txt_data back to start of line
         if (flag_regions && !regions_is_site_included (chrom_word_index, vb->last_pos))

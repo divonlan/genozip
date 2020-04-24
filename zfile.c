@@ -1139,6 +1139,7 @@ void zfile_me23_read_one_vb (VBlock *vb_)
     // read the sections
     READ_SECTION (SEC_CHROM_B250, SectionHeaderBase250);
     READ_SECTION (SEC_POS_B250, SectionHeaderBase250);
+    READ_SECTION (SEC_ID_B250, SectionHeaderBase250);
     READ_SECTION (SEC_ID_DATA, SectionHeader);
     READ_SECTION (SEC_GT_DATA, SectionHeader);
 
