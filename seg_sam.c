@@ -13,15 +13,15 @@
 #include "endianness.h"
 #include "strings.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)
 
 // called from seg_all_data_lines
 void seg_sam_initialize (VBlock *vb_)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
-    buf_alloc (vb, &vb->md_data, 12 * vb->num_lines, 1, "md_data", vb->vblock_i);
-    buf_alloc (vb, &vb->random_pos_data, vb->num_lines * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->md_data, 12 * vb->lines.len, 1, "md_data", vb->vblock_i);
+    buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 }             
 
 // if this row's tlen is the negative of the previous row - store "*" instead of the tlen - thereby cutting
@@ -476,7 +476,7 @@ const char *seg_sam_data_line (VBlock *vb_,
                                const char *field_start_line)     // index in vb->txt_data where this line starts
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
-    ZipDataLineSAM *dl = DATA_LINE (vb, vb->line_i);
+    ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
 
     const char *next_field, *field_start=field_start_line;
     unsigned field_len=0;

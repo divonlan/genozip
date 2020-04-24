@@ -13,7 +13,7 @@
 #include "seg.h"
 #include "txtfile.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineME23 *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (ZipDataLineME23, vb->lines, i)
 
 // this function receives all lines of a variant block and processes them
 // in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.

@@ -108,6 +108,24 @@
         },
         {
             "type": "shell",
+            "label": "Regression test",
+            "command": "./regression-test.sh",
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+       {
+            "type": "shell",
             "label": "Distribution - conda + windows installer + mac store",
             "command": "make.exe",
             "args": [

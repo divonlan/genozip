@@ -15,15 +15,15 @@
 #include "optimize.h"
 #include "random_access.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineSAM *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)
 
 // get lengths of sequence data (SEQ+E2) and quality data (QUAL+U2)
 static void zip_sam_get_seq_qual_len (VBlockSAM *vb, uint32_t *seq_len, uint32_t *qual_len)
 {
     *seq_len = *qual_len = 0;
 
-    for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
-        ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
+    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
+        ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
         *seq_len  += dl->seq_len * (1 + !!dl->e2_data_start); // length SEQ and E2 - they must be the same per SAM file specification
         *qual_len += dl->seq_len * (1 + !!dl->u2_data_start); // length QUAL and U2 - they must be the same per SAM file specification        
     }
@@ -34,7 +34,7 @@ static void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
                                               char **line_seq_data, uint32_t *line_seq_len,  // out 
                                               char **line_e2_data,  uint32_t *line_e2_len)
 {
-    ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     *line_seq_data = ENT (char, vb->txt_data, dl->seq_data_start);
     *line_seq_len  = dl->seq_data_len;
     *line_e2_data  = dl->e2_data_start ? ENT (char, vb->txt_data, dl->e2_data_start) : NULL;
@@ -46,7 +46,7 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
                                                char **line_qual_data, uint32_t *line_qual_len, // out
                                                char **line_u2_data,   uint32_t *line_u2_len) 
 {
-    ZipDataLineSAM *dl = DATA_LINE (vb, vb_line_i);
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
      
     *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
     *line_qual_len  = dl->qual_data_len;

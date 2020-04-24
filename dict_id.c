@@ -31,8 +31,8 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
 DictIdType DICT_ID_NONE = {0};
 
 void dict_id_initialize (void) 
-{   // note: this uint64_t values will be different in big and little endian machines 
-    // (it's ok, they never get stored in the file)
+{   
+    ASSERT0 (z_file->data_type != DT_NONE, "Error in dict_id_initialize: z_file->data_type is DT_NONE");
 
     for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) {
         const char *field_name = field_names[z_file->data_type][f];

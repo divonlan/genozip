@@ -26,10 +26,6 @@ static void vb_vcf_release_vb (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    // note: vb->data_line is not freed but rather used by subsequent vbs
-    if (vb->data_lines)
-        memset (vb->data_lines, 0, (command==ZIP ? sizeof(ZipDataLineVCF) : sizeof(PizDataLineVCF)) * vb->num_lines_alloced);
-
     for (unsigned i=0; i < vb->num_sample_blocks; i++) {
         if (vb->haplotype_sections_data) buf_free(&vb->haplotype_sections_data[i]);
         if (vb->genotype_sections_data)  buf_free(&vb->genotype_sections_data[i]);
@@ -168,10 +164,6 @@ static void vb_sam_release_vb (VBlock *vb_)
 
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     
-    // note: vb->data_line is not freed but rather used by subsequent vbs
-    if (command == ZIP && vb->data_lines)
-        memset (vb->data_lines, 0, sizeof(ZipDataLineSAM) * vb->num_lines_alloced);
-
     buf_free (&vb->random_pos_data);
     buf_free (&vb->optional_mapper_buf);
     buf_free (&vb->seq_data);
@@ -203,10 +195,6 @@ static void vb_fast_release_vb (VBlock *vb_)
 
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
     
-    // note: vb->data_line is not freed but rather used by subsequent vbs
-    if (command == ZIP && vb->data_lines)
-        memset (vb->data_lines, 0, sizeof(ZipDataLineFAST) * vb->num_lines_alloced);
-
     buf_free (&vb->seq_data);
     buf_free (&vb->qual_data);
     buf_free (&vb->comment_data);
@@ -276,7 +264,7 @@ void vb_release_vb (VBlock **vb_p)
     VBlock *vb = *vb_p;
     *vb_p = NULL;
 
-    vb->num_lines = vb->first_line = vb->vblock_i = vb->txt_data_next_offset = 0;
+    vb->first_line = vb->vblock_i = vb->txt_data_next_offset = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->last_pos = vb->longest_line_len = vb->line_i = 0;
     vb->ready_to_dispatch = vb->is_processed = false;
     vb->z_next_header_i = 0;
@@ -291,6 +279,7 @@ void vb_release_vb (VBlock **vb_p)
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
 
+    buf_free(&vb->lines);
     buf_free(&vb->ra_buf);
     buf_free(&vb->compressed);
     buf_free(&vb->txt_data);

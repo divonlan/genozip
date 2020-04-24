@@ -22,7 +22,7 @@
 #include "random_access.h"
 #include "strings.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
 static uint32_t global_samples_per_block = 0; 
 
@@ -53,21 +53,21 @@ static unsigned zip_vcf_get_genotype_vb_start_len (VBlockVCF *vb)
 
     // offsets into genotype data of individual lines
     buf_alloc (vb, &vb->gt_sb_line_starts_buf, 
-               vb->num_lines * vb->num_sample_blocks * sizeof(uint32_t*), 
+               vb->lines.len * vb->num_sample_blocks * sizeof(uint32_t*), 
                0, "gt_sb_line_starts_buf", vb->vblock_i);
     ARRAY (uint32_t *, gt_sb_line_starts, vb->gt_sb_line_starts_buf);
     
     // each entry is the length of a single line in a sample block
     buf_alloc (vb, &vb->gt_sb_line_lengths_buf, 
-               vb->num_lines * vb->num_sample_blocks * sizeof(unsigned), 
+               vb->lines.len * vb->num_sample_blocks * sizeof(unsigned), 
                0, "gt_sb_line_lengths_buf", vb->vblock_i);
     ARRAY (unsigned, gt_sb_line_lengths, vb->gt_sb_line_lengths_buf);
     
     // calculate offsets and lengths of genotype data of each sample block
-    for (uint32_t line_i=0; line_i < vb->num_lines; line_i++) {
+    for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
 
-        uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, DATA_LINE (vb, line_i));        
-        unsigned format_mtf_i = DATA_LINE (vb, line_i)->format_mtf_i;
+        uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, DATA_LINE (line_i));        
+        unsigned format_mtf_i = DATA_LINE (line_i)->format_mtf_i;
         SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, format_mtf_i);
         
         for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -103,11 +103,11 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
 
         if (flag_show_gt_nodes) fprintf (stderr, "sample=%u (vb_i=%u sb_i=%u):\n", sb_i * global_samples_per_block + sample_i + 1, vb->vblock_i, sb_i);
 
-        for (uint32_t line_i=0; line_i < vb->num_lines; line_i++) {
+        for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
 
             if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i);
 
-            ZipDataLineVCF *dl = DATA_LINE (vb, line_i);
+            ZipDataLineVCF *dl = DATA_LINE (line_i);
 
             SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, dl->format_mtf_i);
 
@@ -171,15 +171,15 @@ static void zip_vcf_generate_phase_sections (VBlockVCF *vb)
         unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i); 
     
         // allocate memory for phase data for each sample block - one character per sample
-        buf_alloc (vb, &vb->phase_sections_data[sb_i], vb->num_lines * num_samples_in_sb, 
+        buf_alloc (vb, &vb->phase_sections_data[sb_i], vb->lines.len * num_samples_in_sb, 
                    0, "phase_sections_data", vb->vblock_i);
 
         // build sample block genetype data
         char *next = vb->phase_sections_data[sb_i].data;
         
-        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+        for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
             
-            ZipDataLineVCF *dl = DATA_LINE (vb, line_i);
+            ZipDataLineVCF *dl = DATA_LINE (line_i);
             if (dl->phase_type == PHASE_MIXED_PHASED) 
                 memcpy (next, &PHASE_DATA(vb,dl)[sb_i * num_samples_in_sb], num_samples_in_sb);
             else
@@ -187,7 +187,7 @@ static void zip_vcf_generate_phase_sections (VBlockVCF *vb)
 
             next += num_samples_in_sb;
         }
-        vb->phase_sections_data[sb_i].len = num_samples_in_sb * vb->num_lines;
+        vb->phase_sections_data[sb_i].len = num_samples_in_sb * (uint32_t)vb->lines.len;
     }
           
     // add back the phase data bytes that weren't actually "saved"
@@ -227,14 +227,13 @@ static HaploTypeSortHelperIndex *zip_vcf_construct_ht_permutation_helper_index (
     for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
         helper_index[ht_i].index_in_original_line = ht_i;
 
-    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+    for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
         for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
 
             // we count as alt alleles : 1 - 99 (ascii 49 to 147)
             //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
-            //char one_ht = vb->data_lines.zip[line_i].haplotype_data.data[ht_i];
-            
-            char *haplotype_data = HAPLOTYPE_DATA (vb, DATA_LINE (vb, line_i));
+
+            char *haplotype_data = HAPLOTYPE_DATA (vb, DATA_LINE (line_i));
             char one_ht = haplotype_data[ht_i];
             if (one_ht >= '1')
                 helper_index[ht_i].num_alt_alleles++;
@@ -263,8 +262,8 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
     HaploTypeSortHelperIndex *helper_index = zip_vcf_construct_ht_permutation_helper_index (vb);
 
     // set dl->haplotype_ptr for all lines (for effeciency in the time loop below)
-    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) 
-        DATA_LINE (vb, line_i)->haplotype_ptr = HAPLOTYPE_DATA (vb, DATA_LINE (vb, line_i));
+    for (unsigned line_i=0; line_i < vb->lines.len; line_i++) 
+        DATA_LINE (line_i)->haplotype_ptr = HAPLOTYPE_DATA (vb, DATA_LINE (line_i));
 
     // now build per-sample-block haplotype array, picking haplotypes by the order of the helper index array
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -279,7 +278,7 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
             qsort (&helper_index[helper_index_sb_i], num_haplotypes_in_sample_block, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
 
         // allocate memory for haplotype data for each sample block - one character per haplotype
-        buf_alloc (vb, &vb->haplotype_sections_data[sb_i], vb->num_lines * num_haplotypes_in_sample_block, 
+        buf_alloc (vb, &vb->haplotype_sections_data[sb_i], vb->lines.len * num_haplotypes_in_sample_block, 
                    0, "haplotype_sections_data", vb->vblock_i);
 
         // build sample block haplptype data - 
@@ -293,14 +292,14 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
             for (unsigned ht_i=0; ht_i < num_haplotypes_in_sample_block; ht_i++) {
                 
                 unsigned haplotype_data_char_i = helper_index[helper_index_sb_i + ht_i].index_in_original_line;
-                const char **ht_data_ptr = &DATA_LINE (vb, 0)->haplotype_ptr; // this pointer moves sizeof(ZipDataLineVCF) bytes each iteration - i.e. to the exact same field in the next line
+                const char **ht_data_ptr = &DATA_LINE (0)->haplotype_ptr; // this pointer moves sizeof(ZipDataLineVCF) bytes each iteration - i.e. to the exact same field in the next line
 
-                for (unsigned line_i=0; line_i < vb->num_lines; line_i++, ht_data_ptr += sizeof(ZipDataLineVCF)/sizeof(char*)) 
+                for (unsigned line_i=0; line_i < vb->lines.len; line_i++, ht_data_ptr += sizeof(ZipDataLineVCF)/sizeof(char*)) 
                     *(next++) = (*ht_data_ptr)[haplotype_data_char_i];
             }
             COPY_TIMER (vb->profile.sample_haplotype_data);
         }
-        vb->haplotype_sections_data[sb_i].len = num_haplotypes_in_sample_block * vb->num_lines;
+        vb->haplotype_sections_data[sb_i].len = num_haplotypes_in_sample_block * (uint32_t)vb->lines.len;
     }
 
     // final step - build the reverse index that will allow access by the original index to the sorted array

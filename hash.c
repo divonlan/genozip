@@ -91,7 +91,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->dict_id.num == dict_id_FORMAT_GL   ||
             vb_ctx->dict_id.num == dict_id_FORMAT_PL)
 
-            vb_ctx->local_hash_prime = hash_next_size_up(segging_vb->num_lines);
+            vb_ctx->local_hash_prime = hash_next_size_up((uint32_t)segging_vb->lines.len);
         break;
 
     case DT_SAM:
@@ -175,7 +175,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 
     // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)
     if (!vb_ctx->local_hash_prime) 
-        vb_ctx->local_hash_prime = hash_next_size_up(segging_vb->num_lines / 10);
+        vb_ctx->local_hash_prime = hash_next_size_up ((uint32_t)segging_vb->lines.len / 10);
 
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
@@ -200,7 +200,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     // note on txt_data_size_single: if its a physical plain VCF file - this is the file size. 
     // if not - its an estimate done after the first VB by txtfile_estimate_txt_data_size
     double estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
-    double estimated_num_lines = estimated_num_vbs * (double)merging_vb->num_lines;
+    double estimated_num_lines = estimated_num_vbs * (double)merging_vb->lines.len;
 
     double n1 = first_merging_vb_ctx->mtf_len_at_half;
     double n2 = (int)first_merging_vb_ctx->ol_mtf.len - (int)first_merging_vb_ctx->mtf_len_at_half;
@@ -235,7 +235,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     // To do - take into account optional fields partial appearance (e.g. if a field appears 1% of the time...)
 
     else if (n_ratio > 0.8 && n_ratio < 1.2)  // looks like almost linear growth
-        estimated_entries = estimated_num_lines * ((n1+n2 )/ merging_vb->num_lines) * 0.75;
+        estimated_entries = estimated_num_lines * ((n1+n2 )/ merging_vb->lines.len) * 0.75;
     
     else {
         if      (n_ratio > 2.5 || !n1) max_growth_plan = 2;

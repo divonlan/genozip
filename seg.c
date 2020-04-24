@@ -60,7 +60,7 @@ uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len,
     MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, sec_b250 - 1);
 
     // allocate memory if needed
-    buf_alloc (vb, &ctx->mtf_i, MAX (vb->num_lines, ctx->mtf_i.len + 1) * sizeof (uint32_t),
+    buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
                CTX_GROWTH, "mtf_ctx->mtf_i", ctx->did_i);
 
     uint32_t node_index = mtf_evaluate_snip_seg (vb, ctx, str, len, &node, NULL);
@@ -126,7 +126,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
             
     ASSSEG (*str_len, str, "Error: missing %s field", item_name);
 
-    ASSSEG (str[i] != '\t' || txt_file->data_type != DT_VCF || strcmp (item_name, field_names[DT_VCF][VCF_INFO]), 
+    ASSSEG (str[i] != '\t' || vb->data_type != DT_VCF || strcmp (item_name, field_names[DT_VCF][VCF_INFO]), 
             str, "Error: while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name);
 
@@ -239,7 +239,7 @@ void seg_compound_field (VBlock *vb,
             ASSERT0 (sf_ctx, "Error in seg_compound_field: sf_ctx is NULL");
 
             // allocate memory if needed
-            buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->num_lines, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
+            buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
                        CTX_GROWTH, "mtf_ctx->mtf_i", sf_ctx->did_i);
 
             NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
@@ -291,68 +291,14 @@ static void seg_set_hash_hints (VBlock *vb)
     }
 }
 
-static void seg_realloc_datalines (VBlock *vb, uint32_t new_num_data_lines, unsigned sizeof_line)
+static uint32_t seg_estimate_num_lines (VBlock *vb)
 {
-    vb->data_lines = REALLOC (vb->data_lines, new_num_data_lines * sizeof_line);
-    
-    memset (&((char*)vb->data_lines)[vb->num_lines_alloced * sizeof_line], 0, 
-            (new_num_data_lines - vb->num_lines_alloced) * sizeof_line);
-    
-    vb->num_lines_alloced = new_num_data_lines;
-}
+    // get first line length
+    uint32_t len=0; for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
 
-static void seg_allocate_per_line_memory (VBlock *vb, unsigned sizeof_line)
-{
-    ASSERT (!!vb->data_lines == !!vb->num_lines_alloced, 
-            "Error: expecting vb->data_lines to be nonzero iff vb->num_lines_alloced is nonzero. vb_i=%u", vb->vblock_i);
+    ASSSEG0 (len < vb->txt_data.len, vb->txt_data.data, "Error: cannot find a newline in the entire vb");
 
-    ASSERT (vb->num_lines_alloced >= vb->num_lines, 
-            "Error: expecting vb->num_lines_alloced >= vb->num_lines. vb_i=%u", vb->vblock_i);
-
-    ASSERT0 (sizeof_line, "Error in seg_allocate_per_line_memory: sizeof_line=0");
-    
-    // first line in this vb.id - we calculate an estimated number of lines
-    if (!vb->num_lines) { 
-        // get first line length
-        uint32_t len=0; for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
-
-        ASSERT (len < vb->txt_data.len, "Error: cannot from a newline in the entire vb. vb_i=%u", vb->vblock_i);
-
-        // set initial number of lines based on an estimate. it might grow during segmentation if it turns out the
-        // estimate is too low, and will be set to its actual real value at the end of segmentation
-        
-        uint32_t lower_end_estimate  = MAX (100, (uint32_t)((double)vb->txt_data.len / (double)len));
-        uint32_t higher_end_estimate = MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
-
-        // if we have enough according to the lower end of the estimate, go for it
-        if (vb->num_lines_alloced >= lower_end_estimate) 
-            vb->num_lines = vb->num_lines_alloced;
-        
-        else if (!vb->num_lines_alloced) {
-            vb->num_lines = vb->num_lines_alloced = higher_end_estimate;
-            vb->data_lines = calloc (vb->num_lines, sizeof_line);
-        }
-        // num_lines_alloced is non-zero, but too low - reallocate 
-        else { 
-            seg_realloc_datalines (vb, higher_end_estimate, sizeof_line); // uses and updates vb->num_lines_alloced       
-            vb->num_lines = vb->num_lines_alloced;
-        }
-    }
-
-    // first line in the VB, but allocation exists from previous reincarnation of this VB structure - keep
-    // what's already allocated
-    else if (vb->num_lines < vb->num_lines_alloced) 
-        vb->num_lines = vb->num_lines_alloced;
-
-    // we already have lines - but we need more. reallocate.
-    else {
-        seg_realloc_datalines (vb, vb->num_lines_alloced * 1.5, sizeof_line);        
-        vb->num_lines = vb->num_lines_alloced;
-    }
-
-    // allocate (or realloc) the mtf_i for the fields which each have num_lines entries
-    for (int f=0; f <= datatype_last_field[txt_file->data_type]; f++) 
-        buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->num_lines * sizeof (uint32_t), 1, "mtf_ctx->mtf_i", f);
+    return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
 }
 
 // split each lines in this variant block to its components
@@ -364,16 +310,26 @@ void seg_all_data_lines (VBlock *vb,
     START_TIMER;
 
     mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
-    seg_allocate_per_line_memory (vb, sizeof_line); // set vb->num_lines to an initial estimate and allocate ctx->mtf_i
+    
+    if (!sizeof_line) sizeof_line=1; // we waste a little bit of memory to avoid making exceptions throughout the code logic
 
+    // allocate lines
+    buf_alloc (vb, &vb->lines, seg_estimate_num_lines(vb) * sizeof_line, 1.2, "lines", vb->vblock_i);
+    buf_zero (&vb->lines);
+    vb->lines.len = vb->lines.size / sizeof_line;
+
+    // allocate the mtf_i for the fields which each have num_lines entries
+    for (int f=0; f <= datatype_last_field[vb->data_type]; f++) 
+        buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len * sizeof (uint32_t), 1, "mtf_ctx->mtf_i", f);
+    
     if (seg_initialize) seg_initialize (vb); // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set = false;
-    for (vb->line_i=0; vb->line_i < vb->num_lines; vb->line_i++) {
+    for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
         if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
-            vb->num_lines = vb->line_i; // update to actual number of lines
+            vb->lines.len = vb->line_i; // update to actual number of lines
             break;
         }
 
@@ -385,9 +341,9 @@ void seg_all_data_lines (VBlock *vb,
         field_start = next_field;
 
         // if our estimate number of lines was too small, increase it
-        if (sizeof_line) {
-            if (vb->line_i == vb->num_lines-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
-                seg_allocate_per_line_memory (vb, sizeof_line); // increase number of lines as evidently we need more
+        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) {
+            buf_alloc_more_zero (vb, &vb->lines, sizeof_line, 0, char, 1.5);
+            vb->lines.len = vb->lines.size / sizeof_line;
         }
 
         // if there is no global_hash yet, and we've past half of the data,

@@ -13,7 +13,7 @@
 #include "file.h"
 #include "strings.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineVCF *)((vb)->data_lines))[(i)])                           
+#define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
                                
 // returns true if this line has the same chrom as this VB, or if it is the first line
 static void seg_chrom_field (VBlockVCF *vb, const char *chrom_str, unsigned chrom_str_len)
@@ -186,7 +186,7 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, u
 
                 // allocate memory if needed
                 Buffer *mtf_i_buf = &ctx->mtf_i;
-                buf_alloc (vb, mtf_i_buf, MIN (vb->num_lines, mtf_i_buf->len + 1) * sizeof (uint32_t),
+                buf_alloc (vb, mtf_i_buf, MIN (vb->lines.len, mtf_i_buf->len + 1) * sizeof (uint32_t),
                            CTX_GROWTH, "mtf_ctx->mtf_i", ctx->dict_section_type);
 
                 MtfNode *sf_node;
@@ -220,8 +220,8 @@ static void seg_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, u
     // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
     // 1. find it's mtf_i (and add to dictionary if a new name)
     // 2. place mtf_i in INFO section of this VB
-    uint32_t *info_field_mtf_i = (uint32_t *)vb->mtf_ctx[VCF_INFO].mtf_i.data;
     MtfContext *info_ctx = &vb->mtf_ctx[VCF_INFO];
+    ARRAY (uint32_t, info_field_mtf_i, info_ctx->mtf_i);
     MtfNode *node;
     bool is_new;
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &node, &is_new);
@@ -264,7 +264,7 @@ static void seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned sa
 {
     // increase ploidy of all previous lines.
     for (unsigned i=0; i < vb->line_i; i++) {
-        ZipDataLineVCF *dl = DATA_LINE (vb, i);
+        ZipDataLineVCF *dl = DATA_LINE (i);
 
         char *old_haplotype_data = HAPLOTYPE_DATA(vb,dl);
         uint32_t old_ht_data_len = dl->haplotype_data_len;
@@ -508,7 +508,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
                                const char *field_start_line)     // index in vb->txt_data where this line starts
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
-    ZipDataLineVCF *dl = DATA_LINE (vb, vb->line_i);
+    ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
 
     dl->phase_type = PHASE_UNKNOWN;
 
@@ -664,9 +664,9 @@ void seg_vcf_complete_missing_lines (VBlockVCF *vb)
     vb->num_haplotypes_per_line = vb->ploidy * global_vcf_num_samples;
     const char *limit_txt_data = vb->txt_data.data + vb->txt_data.len;
 
-    for (vb->line_i=0; vb->line_i < vb->num_lines; vb->line_i++) {
+    for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
 
-        ZipDataLineVCF *dl = DATA_LINE (vb, vb->line_i);
+        ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
 
         if (vb->has_haplotype_data && !dl->has_haplotype_data) {
             seg_store ((VBlockP)vb, &dl->haplotype_data_spillover, &dl->haplotype_data_start, &dl->haplotype_data_len,

@@ -125,7 +125,7 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
         // check stop condition - a line not beginning with a 'first_char'
         for (int i=0; i < bytes_read; i++) { // start from 1 back just in case it is a newline, and end 1 char before bc our test is 2 chars
             if (this_read[i] == '\n') 
-                evb->num_lines++;   
+                evb->lines.len++;   
 
             if (prev_char == '\n' && this_read[i] != first_char) {  
 
@@ -276,7 +276,7 @@ void txtfile_write_one_vblock (VBlockP vb_)
     char s1[20], s2[20];
     ASSERTW (vb->txt_data.len == vb->vb_data_size || exe_type == EXE_GENOCAT, 
             "Warning: vblock %u (num_lines=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-            vb->vblock_i, vb->num_lines, dt_name (txt_file->data_type),
+            vb->vblock_i, (uint32_t)vb->lines.len, dt_name (txt_file->data_type),
             str_uint_commas (vb->vb_data_size, s1), str_uint_commas (vb->txt_data.len, s2), 
             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 

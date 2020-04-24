@@ -11,7 +11,7 @@
 #include "file.h"
 #include "strings.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineFAST *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (ZipDataLineFAST, vb->lines, i)
 
 // called from seg_all_data_lines
 void seg_fasta_initialize (VBlock *vb_)
@@ -28,7 +28,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
                                  const char *field_start_line)     // index in vb->txt_data where this line starts
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
-    ZipDataLineFAST *dl = DATA_LINE (vb, vb->line_i);
+    ZipDataLineFAST *dl = DATA_LINE (vb->line_i);
 
     const char *next_field, *field_start=field_start_line;
     unsigned field_len=0;
@@ -138,8 +138,8 @@ const char *seg_fasta_data_line (VBlock *vb_,
 
     // case: sequence line
     else {
-        DATA_LINE (vb, vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
-        DATA_LINE (vb, vb->line_i)->seq_len        = line_len;
+        DATA_LINE (vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
+        DATA_LINE (vb->line_i)->seq_len        = line_len;
         vb->txt_section_bytes[SEC_SEQ_DATA] += line_len + 1 + has_13;
 
         char seq_md[30];

@@ -152,9 +152,9 @@ bool header_txt_to_genozip (uint32_t *txt_line_i)
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
     if (header_allowed[txt_file->data_type])
-        txtfile_read_header (is_first_txt, header_required[txt_file->data_type], first_char[txt_file->data_type]); // reads into evb->txt_data and evb->num_lines
+        txtfile_read_header (is_first_txt, header_required[txt_file->data_type], first_char[txt_file->data_type]); // reads into evb->txt_data and evb->lines.len
     
-    *txt_line_i += evb->num_lines;
+    *txt_line_i += (uint32_t)evb->lines.len;
 
     // for vcf, we need to check if the samples are the same before approving concatanation.
     // other data types can concatenate without restriction

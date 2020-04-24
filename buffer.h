@@ -66,17 +66,23 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 
 // efficient wrapper
 #define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) \
-  ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (requested_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
+    ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (requested_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
                                                     : (buf)->size) 
 
 #define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor) \
-  buf_alloc ((vb), (buf), MAX(at_least, ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
+    buf_alloc ((vb), (buf), MAX(at_least, ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
+
+#define buf_alloc_more_zero(vb, buf, more, at_least, type, grow_at_least_factor) { \
+    uint64_t size_before = (buf)->size; \
+    buf_alloc_more((vb), (buf), (more), (at_least), type, (grow_at_least_factor)); \
+    if ((buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
+}
 
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 
 extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line, const char *name, uint32_t param);
 #define buf_overlay(vb, overlaid_buf, regular_buf, name, param) \
-     buf_overlay_do(vb, overlaid_buf, regular_buf, __FUNCTION__, __LINE__, name, param) 
+    buf_overlay_do(vb, overlaid_buf, regular_buf, __FUNCTION__, __LINE__, name, param) 
 
 extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
 #define buf_free(buf) buf_free_do (buf, __FUNCTION__, __LINE__);

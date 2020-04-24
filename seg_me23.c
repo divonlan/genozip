@@ -12,15 +12,15 @@
 #include "random_access.h"
 #include "endianness.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineME23 *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (ZipDataLineME23, vb->lines, i)
 
 // called from seg_all_data_lines
 void seg_me23_initialize (VBlock *vb_)
 {
     VBlockME23 *vb = (VBlockME23 *)vb_;
 
-    buf_alloc (vb, &vb->genotype_data, 2 * vb->num_lines, 1, "genotype_data", vb->vblock_i);
-    buf_alloc (vb, &vb->rsid_data, 12 * vb->num_lines, 1, "rsid_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->genotype_data, 2 * vb->lines.len, 1, "genotype_data", vb->vblock_i);
+    buf_alloc (vb, &vb->rsid_data, 12 * vb->lines.len, 1, "rsid_data", vb->vblock_i);    
 }             
              
 const char *seg_me23_data_line (VBlock *vb_,   

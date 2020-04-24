@@ -26,7 +26,7 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
     const char *snip;
     uint32_t snip_len, chrom_word_index;
     
-    for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         uint32_t txt_data_start = vb->txt_data.len;
         uint32_t txt_line_i = vb->first_line + vb_line_i;
@@ -63,7 +63,7 @@ static void piz_me23_uncompress_all_sections (VBlockME23 *vb)
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
     vb->first_line       = BGEN32 (header->first_line);
-    vb->num_lines        = BGEN32 (header->num_lines);
+    vb->lines.len        = BGEN32 (header->num_lines);
     vb->vb_data_size     = BGEN32 (header->vb_data_size);
     vb->longest_line_len = BGEN32 (header->longest_line_len);
 

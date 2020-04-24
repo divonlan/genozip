@@ -24,7 +24,7 @@
 #include "gtshark_vcf.h"
 #include "dict_id.h"
 
-#define DATA_LINE(vb,i) (&((PizDataLineVCF *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (PizDataLineVCF, vb->lines, i)
 
 typedef struct {
     unsigned num_subfields;         // number of subfields this FORMAT has
@@ -33,7 +33,7 @@ typedef struct {
 
 
 // 1. populates vb->format_info_buf with info about each unique format type in this vb (FormatInfo structure)
-// 2. for each line, populates vb->data_lines[line_i].format_mtf_i - an index into vb->format_info_buf
+// 2. for each line, populates vb->lines[line_i].format_mtf_i - an index into vb->format_info_buf
 static void piz_vcf_get_format_info (VBlockVCF *vb)
 {    
     START_TIMER;
@@ -82,8 +82,8 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
     }
 
     // now, get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
-    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) 
-        DATA_LINE (vb, line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
+    for (unsigned line_i=0; line_i < vb->lines.len; line_i++) 
+        DATA_LINE (line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
 
     // reset format_ctx reader iterator fields, as we are going to traverse FORMAT again when reconstructing the lines
     mtf_init_iterator (format_ctx);
@@ -303,9 +303,9 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 
             // now skip all remaining genotypes in this column, arriving at the beginning of the next column
             // (gt data is stored transposed - i.e. column by column)
-            for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+            for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
                 
-                FormatInfo *line_format_info = &format_num_subfields[DATA_LINE (vb, line_i)->format_mtf_i];
+                FormatInfo *line_format_info = &format_num_subfields[DATA_LINE (line_i)->format_mtf_i];
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
@@ -315,10 +315,10 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 
         // sanity checks to see we read the correct amount of genotypes
         ASSERT (sample_i == sample_after, "Error: expected to find %u genotypes in sb_i=%u of vblock_i=%u, but found only %u",
-                vb->num_lines * num_samples_in_sb, sb_i, vb->vblock_i, vb->num_lines * (sample_i - sb_i * vb->num_samples_per_block));
+                (uint32_t)vb->lines.len * num_samples_in_sb, sb_i, vb->vblock_i, (uint32_t)vb->lines.len * (sample_i - sb_i * vb->num_samples_per_block));
 
         ASSERT (next == after, "Error: unused data remains in buffer after processing genotype data for sb_i=%u of vblock_i=%u (%u lines x %u samples)",
-                sb_i, vb->vblock_i, vb->num_lines, num_samples_in_sb);
+                sb_i, vb->vblock_i, (uint32_t)vb->lines.len, num_samples_in_sb);
     }
 
     COPY_TIMER (vb->profile.piz_vcf_initialize_sample_iterators)
@@ -331,7 +331,7 @@ static void piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, b
 {
     START_TIMER;
 
-    PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
+    PizDataLineVCF *dl = DATA_LINE (vb_line_i);
 
     ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
     ARRAY (const FormatInfo, format_num_subfields, vb->format_info_buf);
@@ -452,7 +452,7 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
 
 
             unsigned row     = permuted_ht_i % max_ht_per_block; // get row transposed haplotype sample block. column=line_i
-            unsigned sb_ht_i = row * vb->num_lines;              // index within haplotype block 
+            unsigned sb_ht_i = row * (uint32_t)vb->lines.len;              // index within haplotype block 
 
             ht_columns_data[ht_i] = &vb->haplotype_sections_data[sb_i].data[sb_ht_i];
 
@@ -518,7 +518,7 @@ static void piz_vcf_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, 
     }
 
     // check if this row has no haplotype data (no GT field) despite some other rows in the VB having data
-    PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
+    PizDataLineVCF *dl = DATA_LINE (vb_line_i);
     
     // check to see if this line has any sample with haplotype info (when not using --samples, this loop
     // usually terminates in the first iteration - so not adding a lot of overhead)
@@ -541,7 +541,7 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
 {
     START_TIMER;
 
-    PizDataLineVCF *dl = DATA_LINE (vb, vb_line_i);
+    PizDataLineVCF *dl = DATA_LINE (vb_line_i);
     uint32_t line_start = vb->txt_data.len;
     char *next_gt = vb->line_gt_data.data;
 
@@ -617,30 +617,14 @@ static void piz_vcf_merge_line(VBlockVCF *vb, unsigned vb_line_i, bool has_13)
     COPY_TIMER (vb->profile.piz_vcf_merge_line);
 }
 
-static void piz_vcf_realloc_datalines (VBlockVCF *vb, uint32_t new_num_data_lines)
-{
-    vb->data_lines = REALLOC (vb->data_lines, new_num_data_lines * sizeof (PizDataLineVCF));
-    memset (DATA_LINE (vb, vb->num_lines_alloced), 0, (new_num_data_lines - vb->num_lines_alloced) * sizeof(PizDataLineVCF));
-
-    vb->num_lines_alloced = new_num_data_lines;
-}
-
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block
 static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
 {
     START_TIMER;
 
-    ASSERT (!!vb->data_lines == !!vb->num_lines_alloced, 
-            "Error: expecting vb->data_lines to be nonzero iff vb->num_lines_alloced is nonzero. vb_i=%u", vb->vblock_i);
-
-    if (!vb->data_lines) {
-        vb->num_lines_alloced = vb->num_lines * 1.2; // larger than num_lines so that future VBs are less likely to need to realloc
-        vb->data_lines = calloc (vb->num_lines_alloced, sizeof (PizDataLineVCF));
-    }
-    
-    else if (vb->num_lines_alloced < vb->num_lines) 
-        piz_vcf_realloc_datalines (vb, vb->num_lines * 1.2); // uses and updates vb->num_lines_alloced      
+    buf_alloc (vb, &vb->lines, vb->lines.len * sizeof (PizDataLineVCF), 1.2, "lines", vb->vblock_i);
+    buf_zero (&vb->lines);
 
     // initialize phase data if needed
     if (vb->phase_type == PHASE_MIXED_PHASED && !flag_drop_genotypes) 
@@ -681,7 +665,7 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
 
     buf_alloc (vb, &vb->txt_data, (vb->vb_data_size + 1), 1.1, "txt_data", vb->vblock_i); // +1 bc piz_vcf_merge_line needs room for a temporary redundant '*' in case ht='*'
 
-    for (unsigned vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+    for (unsigned vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->line_variant_data
         bool has_13 = false;
@@ -732,7 +716,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
     SectionHeaderVbHeaderVCF *header = (SectionHeaderVbHeaderVCF *)(vb->z_data.data + section_index[0]);
     vb->first_line              = BGEN32 (header->first_line);
-    vb->num_lines               = BGEN32 (header->num_lines);
+    vb->lines.len               = BGEN32 (header->num_lines);
     vb->phase_type              = (PhaseType)header->phase_type;
     vb->has_genotype_data       = header->has_genotype_data;
     vb->num_haplotypes_per_line = BGEN32 (header->num_haplotypes_per_line);
@@ -834,7 +818,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
             
             zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], &vb->phase_sections_data[sb_i], "phase_sections_data", SEC_VCF_PHASE_DATA);
             
-            unsigned expected_size = vb->num_lines * num_samples_in_sb;
+            unsigned expected_size = vb->lines.len * num_samples_in_sb;
             ASSERT (vb->phase_sections_data[sb_i].len == expected_size, 
                     "Error: unexpected size of phase_sections_data[%u]: expecting %u but got %u", 
                     sb_i, expected_size, (uint32_t)vb->phase_sections_data[sb_i].len)
@@ -869,7 +853,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
                 gtshark_uncompress_haplotype_data (vb, sb_i);
             }
 
-            unsigned expected_size = vb->num_lines * num_samples_in_sb * vb->ploidy;
+            unsigned expected_size = (uint32_t)vb->lines.len * num_samples_in_sb * vb->ploidy;
             ASSERT (vb->haplotype_sections_data[sb_i].len == expected_size, 
                     "Error: unexpected size of haplotype_sections_data[%u]: expecting %u but got %u", 
                     sb_i, expected_size, (uint32_t)vb->haplotype_sections_data[sb_i].len)

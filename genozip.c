@@ -396,7 +396,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
     int exit_code = stream_wait_for_exit (test);
-    ASSERTW (!exit_code, "genozip test exited with status %d\n", exit_code);
+    ASSERT (!exit_code, "genozip test exited with status %d\n", exit_code);
 }
 
 static void main_genozip (const char *txt_filename, 

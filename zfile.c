@@ -465,7 +465,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     SectionFooterGenozipHeader footer;
     int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);
     ASSERTW (ret == 1, "Skipping empty file %s", z_name);
-    if (!ret) return EOF;
+    if (!ret) return DT_NONE;
     
     // case: this is not a valid genozip v2+ file... maybe its v1?
     if (BGEN32 (footer.magic) != GENOZIP_MAGIC) {
@@ -757,7 +757,7 @@ void zfile_compress_generic_vb_header (VBlock *vb)
     vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
     vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
     vb_header.h.data_compression_alg  = COMPRESS_NONE;
-    vb_header.num_lines               = BGEN32 (vb->num_lines);
+    vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.vb_data_size            = BGEN32 (vb->vb_data_size);
     vb_header.longest_line_len        = BGEN32 (vb->longest_line_len);
 
@@ -812,7 +812,7 @@ void zfile_vcf_compress_vb_header (VBlock *vb_)
     vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
     vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
     vb_header.h.data_compression_alg  = COMPRESS_NONE; // in versions 2-4 it was (needlessly) compressed with bzlib
-    vb_header.num_lines               = BGEN32 (vb->num_lines);
+    vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.phase_type              = (char)vb->phase_type; 
     vb_header.has_genotype_data       = vb->has_genotype_data;
     vb_header.num_samples             = BGEN32 (global_vcf_num_samples);

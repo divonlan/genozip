@@ -175,8 +175,8 @@ static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool 
     z_file->disk_so_far += (int64_t)data_buf->len;
     
     if (is_z_data) {
-        if (update_txt_file) txt_file->num_lines += (int64_t)vb->num_lines; // lines in this txt file
-        z_file->num_lines                        += (int64_t)vb->num_lines; // lines in all concatenated files in this z_file
+        if (update_txt_file) txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
+        z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all concatenated files in this z_file
         z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
         z_file->txt_data_so_far_concat           += (int64_t)vb->vb_data_size;
     }
@@ -284,8 +284,8 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
             // update z_data in memory (its not written to disk yet)
             update_header_func_by_dt[z_file->data_type](processed_vb, txt_line_i); 
 
-            max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->num_lines);
-            txt_line_i += processed_vb->num_lines;
+            max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
+            txt_line_i += (uint32_t)processed_vb->lines.len;
 
             zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, true);
 

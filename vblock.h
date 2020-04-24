@@ -39,9 +39,7 @@ typedef struct SubfieldMapper {
     bool is_processed;         /* thread completed processing this VB - it is ready for outputting */\
     bool in_use;               /* this vb is in use */\
     \
-    void *data_lines;          /* if allocated, this array is of length num_lines_alloced of type dependent on data_type and on whether it is Zip or Piz. */\
-    uint32_t num_lines;        /* number of lines in this variant block */\
-    uint32_t num_lines_alloced;/* number of lines allocated in this variant block >= num_lines */\
+    Buffer lines;              /* An array of *DataLine* - the lines in this VB */\
     uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
     \
     /* tracking execution */\

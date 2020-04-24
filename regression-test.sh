@@ -1,25 +1,26 @@
 #!bash
 
-set -e # exit when any command fails
+output=regression-output
+
+files=(test-file.vcf test-file.sam test-file.fq test-file.fa test-file.23andme)
+for file in ${files[@]}; do
+    echo " "
+    echo TESTING $file
+    ./genozip $file -ft -o ${output}.genozip || exit 1
+done
 
 echo " "
-echo "VCF test file"
-./genozip test-file.vcf -ft
-
+echo "Backward compatability tests"
+files=`ls backward-compatibility-test/*.vcf` 
+for file in $files; do
+    ./genounzip ${file}.genozip -fo $output
+    if [[ `md5sum $file | cut -d" " -f1` != `md5sum regression-output | cut -d" " -f1` ]]; then
+        echo FAILED!
+        exit 1
+    fi
+done
+ 
 echo " "
-echo "SAM test file"
-./genozip test-file.sam -ft
-
-echo " "
-echo "FASTQ test file"
-./genozip test-file.fq -ft
-
-echo " "
-echo "FASTA test file"
-./genozip test-file.fa -ft
-
-echo " "
-echo "23andMe test file"
-./genozip test-file.23andme -ft
-
 echo "ALL GOOD!"
+
+rm $output ${output}.genozip

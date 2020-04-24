@@ -289,20 +289,6 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
         }
     }
 
-    // add data_lines that are calloced
-    stats[num_stats].name    = "data_lines";
-    stats[num_stats].bytes   = 0;
-    stats[num_stats].buffers = 0;
-    num_stats++;
-
-    for (int vb_i=0; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
-        VBlockVCF *vb_vcf = (VBlockVCF *)vb_pool->vb[vb_i];
-        if (vb_vcf && vb_vcf->data_type == DT_VCF && vb_vcf->num_lines_alloced) {
-            stats[num_stats-1].bytes += vb_vcf->num_lines_alloced * (command==ZIP ? sizeof (ZipDataLineVCF) : sizeof (PizDataLineVCF));
-            stats[num_stats-1].buffers += 1;
-        }
-    }
-
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);
 

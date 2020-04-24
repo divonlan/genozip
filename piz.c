@@ -136,12 +136,13 @@ void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len,
 }
 
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
-static int16_t piz_read_global_area (Md5Hash *original_file_digest) // out
+static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 {
-    dict_id_initialize(); // needed by V1 too
+    DataType data_type = zfile_read_genozip_header (original_file_digest);
+    
+    dict_id_initialize(); // must run after zfile_read_genozip_header that sets z_file->data_type; needed by V1 too
 
-    int16_t data_type = zfile_read_genozip_header (original_file_digest);
-    if (data_type == DT_VCF_V1 || data_type == EOF) return data_type;
+    if (data_type == DT_VCF_V1 || data_type == DT_NONE) return data_type;
     
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
@@ -224,7 +225,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     Md5Hash original_file_digest;
 
     // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --split, 
-    static int16_t data_type = EOF; 
+    static DataType data_type = DT_NONE; 
     if (is_first_component) {
         data_type = piz_read_global_area (&original_file_digest);
 
@@ -238,7 +239,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     // case: we couldn't open the file because we didn't know what type it is - open it now
     if (!flag_split && !txt_file->file) file_open_txt (txt_file);
 
-    if (data_type == EOF) goto finish;
+    if (data_type == DT_NONE) goto finish;
 
     if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 

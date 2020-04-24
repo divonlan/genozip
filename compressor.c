@@ -159,7 +159,7 @@ bool comp_compress_bzlib (VBlock *vb,
     // option 2 - compress data one line at a time
     else if (callback) {
 
-        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
+        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
 
             ASSERT (!strm.avail_in, "Error in comp_compress_bzlib: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
 
@@ -169,7 +169,7 @@ bool comp_compress_bzlib (VBlock *vb,
 
             if (!strm.avail_in && !strm.avail_out) continue; // this line has no SEQ data - move to next line (this happens eg in FASTA)
 
-            bool final = (line_i == vb->num_lines - 1) && !avail_in_2;
+            bool final = (line_i == vb->lines.len - 1) && !avail_in_2;
 
             ret = BZ2_bzCompress (&strm, final ? BZ_FINISH : BZ_RUN);
 
@@ -182,7 +182,7 @@ bool comp_compress_bzlib (VBlock *vb,
 
             // now the second part, if there is one
             if (avail_in_2) {
-                final = (line_i == vb->num_lines - 1);
+                final = (line_i == vb->lines.len - 1);
 
                 strm.next_in  = next_in_2;
                 strm.avail_in = avail_in_2;
@@ -247,7 +247,7 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
 
     // get next line if we have no data - keep on calling back until there is a line with data 
     // (not all lines must have seq data - for example, in FASTA they don't)
-    while (instream->line_i < ((VBlockP)instream->vb)->num_lines && 
+    while (instream->line_i < ((VBlockP)instream->vb)->lines.len && 
            !instream->avail_in_1 && !instream->avail_in_2) {
 
         instream->callback (instream->vb, instream->line_i, 

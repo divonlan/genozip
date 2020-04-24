@@ -26,7 +26,7 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
     
-    for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         uint32_t snip_len;
         const char *snip;
@@ -65,7 +65,7 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
     
-    for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) {
+    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         uint32_t snip_len;
         const char *snip;
@@ -106,7 +106,7 @@ static void piz_fast_uncompress_all_sections (VBlockFAST *vb)
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
     vb->first_line       = BGEN32 (header->first_line);
-    vb->num_lines        = BGEN32 (header->num_lines);
+    vb->lines.len        = BGEN32 (header->num_lines);
     vb->vb_data_size     = BGEN32 (header->vb_data_size);
     vb->longest_line_len = BGEN32 (header->longest_line_len);
 

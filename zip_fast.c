@@ -14,15 +14,15 @@
 #include "txtfile.h"
 #include "optimize.h"
 
-#define DATA_LINE(vb,i) (&((ZipDataLineFAST *)((vb)->data_lines))[(i)])
+#define DATA_LINE(i) ENT (ZipDataLineFAST, vb->lines, i)
 
 // get lengths of sequence data (SEQ+E2) and quality data (QUAL+U2)
 static void zip_fast_get_seq_len (VBlockFAST *vb, uint32_t *seq_len)
 {
     *seq_len = 0;
 
-    for (uint32_t vb_line_i=0; vb_line_i < vb->num_lines; vb_line_i++) 
-        *seq_len  += DATA_LINE (vb, vb_line_i)->seq_len;
+    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) 
+        *seq_len  += DATA_LINE (vb_line_i)->seq_len;
 }
 
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
@@ -30,7 +30,7 @@ static void zip_fast_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
                                                char **line_seq_data, uint32_t *line_seq_len,  // out 
                                                char **unused_data,  uint32_t *unused_len)
 {
-    ZipDataLineFAST *dl = DATA_LINE (vb, vb_line_i);
+    ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
     *line_seq_data = ENT (char, vb->txt_data, dl->seq_data_start);
     *line_seq_len  = dl->seq_len;
     *unused_data   = NULL;
@@ -42,7 +42,7 @@ static void zip_fast_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
                                                 char **line_qual_data, uint32_t *line_qual_len, // out
                                                 char **unused_data,   uint32_t *unused_len) 
 {
-    ZipDataLineFAST *dl = DATA_LINE (vb, vb_line_i);
+    ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
      
     *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
     *line_qual_len  = dl->seq_len;
