@@ -32,25 +32,25 @@ void stats_show_sections (void)
 {
     // the order in which we want them displayed
     const SectionType secs[] = {
-        SEC_GENOZIP_HEADER,    SEC_RANDOM_ACCESS,      SEC_TXT_HEADER,        SEC_VB_HEADER,
-        SEC_CHROM_B250,        SEC_CHROM_DICT,         SEC_POS_B250,          SEC_POS_DICT, 
-        SEC_ID_B250,       SEC_ID_DICT,        SEC_VCF_REFALT_B250,   SEC_VCF_REFALT_DICT, 
-        SEC_VCF_QUAL_B250,     SEC_VCF_QUAL_DICT,      SEC_VCF_FILTER_B250,   SEC_VCF_FILTER_DICT, 
-        SEC_VCF_INFO_B250,     SEC_VCF_INFO_DICT,      SEC_VCF_INFO_SF_B250,  SEC_VCF_INFO_SF_DICT, 
-        SEC_VCF_FORMAT_B250,   SEC_VCF_FORMAT_DICT,    SEC_GT_DATA,           SEC_VCF_FRMT_SF_DICT,
-        SEC_VCF_HT_DATA,       SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
+        SEC_GENOZIP_HEADER,     SEC_RANDOM_ACCESS,      SEC_TXT_HEADER,        SEC_VB_HEADER,
+        SEC_CHROM_B250,         SEC_CHROM_DICT,         SEC_POS_B250,          SEC_POS_DICT, 
+        SEC_ID_B250,            SEC_ID_DICT,            SEC_VCF_REFALT_B250,   SEC_VCF_REFALT_DICT, 
+        SEC_VCF_QUAL_B250,      SEC_VCF_QUAL_DICT,      SEC_VCF_FILTER_B250,   SEC_VCF_FILTER_DICT, 
+        SEC_VCF_INFO_B250,      SEC_VCF_INFO_DICT,      SEC_VCF_INFO_SF_B250,  SEC_VCF_INFO_SF_DICT, 
+        SEC_VCF_FORMAT_B250,    SEC_VCF_FORMAT_DICT,    SEC_VCF_GT_DATA,       SEC_VCF_FRMT_SF_DICT,
+        SEC_HT_DATA,            SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
 
-        SEC_SEQ_DATA,          SEC_QUAL_DATA,          SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,
-        SEC_ID_DATA,           SEC_FASTA_COMMENT_DATA,
-        SEC_SAM_QNAME_B250,    SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
-        SEC_SAM_FLAG_B250,     SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
-        SEC_SAM_POS_B250,      SEC_SAM_POS_DICT,
-        SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      SEC_SAM_CIGAR_B250,     SEC_SAM_CIGAR_DICT,     
-        SEC_SAM_TLEN_B250,     SEC_SAM_TLEN_DICT,      SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT,      
-        SEC_SAM_OPTIONAL_B250, SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250,  SEC_SAM_OPTNL_SF_DICT,
+        SEC_SEQ_DATA,           SEC_QUAL_DATA,          SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,
+        SEC_NUMERIC_ID_DATA,    SEC_FASTA_COMMENT_DATA,
+        SEC_SAM_QNAME_B250,     SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
+        SEC_SAM_FLAG_B250,      SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
+        SEC_SAM_POS_B250,       SEC_SAM_POS_DICT,
+        SEC_SAM_MAPQ_B250,      SEC_SAM_MAPQ_DICT,      SEC_SAM_CIGAR_B250,     SEC_SAM_CIGAR_DICT,     
+        SEC_SAM_TLEN_B250,      SEC_SAM_TLEN_DICT,      SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT,      
+        SEC_SAM_OPTIONAL_B250,  SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250,  SEC_SAM_OPTNL_SF_DICT,
 
-        SEC_FAST_LINEMETA_B250,SEC_FAST_LINEMETA_DICT,
-        SEC_FAST_DESC_B250,    SEC_FAST_DESC_DICT,     SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT
+        SEC_FAST_LINEMETA_B250, SEC_FAST_LINEMETA_DICT,
+        SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,     SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT
     };
 
     static const char *categories[] = {
@@ -59,10 +59,10 @@ void stats_show_sections (void)
         "ID b250", "ID dict", "REF+ALT b250", "REF+ALT dict", 
         "QUAL b250", "QUAL dict", "FILTER b250", "FILTER dict",
         "INFO names b250", "INFO names dict", "INFO values b250", "INFO values dict", 
-        "FORMAT b250", "FORMAT dict", "Genotype info", "FORMAT subfields dict",
+        "FORMAT b250", "FORMAT dict", "Other sample info", "FORMAT subfields dict",
         "Haplotype data", "HT separator char", "Phasing char",
 
-        "SEQ data", "QUAL data", "RAND_POS data", "MD data", "ID data", "Comment data",
+        "SEQ data", "QUAL data", "RAND_POS data", "MD data", "NUMERIC_ID data", "Comment data",
         "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
         "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
         "POS b250 (delta)", "POS dict (delta)", 
@@ -201,8 +201,8 @@ void stats_show_content (void)
 #define NUM_CATEGORIES 6
 
     int sections_per_category[NUM_CATEGORIES][100] = { 
-        { SEC_VCF_HT_DATA ,  NIL },
-        { SEC_VCF_PHASE_DATA, SEC_GT_DATA, SEC_VCF_FRMT_SF_DICT, SEC_STATS_HT_SEPERATOR, NIL},
+        { SEC_HT_DATA ,  NIL },
+        { SEC_VCF_PHASE_DATA, SEC_VCF_GT_DATA, SEC_VCF_FRMT_SF_DICT, SEC_STATS_HT_SEPERATOR, NIL},
         { SEC_SEQ_DATA,  NIL },
         { SEC_QUAL_DATA, NIL },
         { SEC_TXT_HEADER, SEC_VB_HEADER, 

@@ -280,10 +280,6 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
 
 static void piz_sam_reconstruct_vb (VBlockSAM *vb)
 {
-#   define IFNOTSTRIP(def,len)  if (flag_strip) { \
-                                    buf_add (&vb->txt_data, def, len)  \
-                                    buf_add (&vb->txt_data, "\t", 1) \
-                                } else 
     START_TIMER;
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);

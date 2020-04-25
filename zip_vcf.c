@@ -381,7 +381,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 
     // split each line in this variant block to its components
 
-    seg_all_data_lines (vb_, seg_vcf_data_line, NULL, sizeof (ZipDataLineVCF));
+    seg_all_data_lines (vb_, seg_vcf_data_line, seg_vcf_initialize, sizeof (ZipDataLineVCF));
     
     if (vb->has_haplotype_data)
         seg_vcf_complete_missing_lines (vb);
@@ -440,6 +440,9 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     ASSERT (num_info_subfields <= MAX_SUBFIELDS, "Error: vb_i=%u has %u INFO subfields, which exceeds the maximum of %u",
             vb->vblock_i, num_info_subfields, MAX_SUBFIELDS);
 
+    // compress the numeric part of the ID field
+    zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->id_numeric_data, NULL, 0, COMPRESS_LZMA);
+
     // compress the sample data - genotype, haplotype and phase sections. genotype data is generated here too.
     CompressorAlg gt_data_alg;
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -454,7 +457,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 
             gt_data_alg = zip_vcf_get_best_gt_compressor (vb_, &vb->genotype_one_section_data);
 
-            zfile_compress_section_data_alg (vb_, SEC_GT_DATA, &vb->genotype_one_section_data, NULL, 0, gt_data_alg);
+            zfile_compress_section_data_alg (vb_, SEC_VCF_GT_DATA, &vb->genotype_one_section_data, NULL, 0, gt_data_alg);
 
             buf_free (&vb->genotype_one_section_data);
         }
@@ -464,7 +467,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 
         if (vb->has_haplotype_data) {
             if (!flag_gtshark)
-                zfile_compress_section_data (vb_, SEC_VCF_HT_DATA , &vb->haplotype_sections_data[sb_i]);
+                zfile_compress_section_data (vb_, SEC_HT_DATA , &vb->haplotype_sections_data[sb_i]);
             else 
                 zfile_vcf_compress_haplotype_data_gtshark (vb, &vb->haplotype_sections_data[sb_i], sb_i);
         }

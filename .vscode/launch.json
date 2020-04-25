@@ -8,17 +8,20 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            //"program": "${workspaceFolder}/genozip-debug.exe",
+            "program": "${workspaceFolder}/genozip-debug.exe",
             //"program": "${workspaceFolder}/genozip.exe",
             //"program": "${workspaceFolder}/genocat-debug.exe",
-            "program": "${workspaceFolder}/genounzip-debug.exe",
+            //"program": "${workspaceFolder}/genounzip-debug.exe",
+            //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
 
             //"args":[],
 
-            //"args":["fq.fastq", "-f"],
-            "args":["fq.fastq.genozip", "-t"]
+            "args":["test-file.vcf", "test-file.sam", "file.o", "-f", "-q", "--debug-mem"],
+            //"args":["test-file.fa.genozip", "--strip"],
+            //"args":["-fojunk.vcf", "backward-compatibility-test/test-file.1.1.3.vcf.genozip"]
+            //"args":["regression-output.genozip", "-t"]
             //"args": ["ftp://ftp.ncbi.nlm.nih.gov/1000genomes/ftp/release/20130502/ALL.chrY.phase3_integrated_v1b.20130502.genotypes.vcf.gz", "-f"],
             //"args": ["file:///c:/users/user/projects/genozip/x.bcf.gz", "-f"],
 

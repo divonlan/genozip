@@ -14,7 +14,15 @@
 #include "strings.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
-                               
+
+// called from seg_all_data_lines
+void seg_vcf_initialize (VBlock *vb_)
+{
+    VBlockVCF *vb = (VBlockVCF *)vb_;
+
+    buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);    
+}             
+
 // returns true if this line has the same chrom as this VB, or if it is the first line
 static void seg_chrom_field (VBlockVCF *vb, const char *chrom_str, unsigned chrom_str_len)
 {
@@ -296,7 +304,7 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const char *s
 
     if (is_vcf_string) {
         vb->txt_section_bytes[SEC_VCF_PHASE_DATA]     += ploidy-1;
-        vb->txt_section_bytes[SEC_VCF_HT_DATA ] += ploidy;
+        vb->txt_section_bytes[SEC_HT_DATA ] += ploidy;
     }
 
     ASSSEG (ploidy <= VCF_MAX_PLOIDY, str, "Error: ploidy=%u exceeds the maximum of %u", ploidy, VCF_MAX_PLOIDY);
@@ -341,7 +349,7 @@ static void seg_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const char *s
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
 
-            vb->txt_section_bytes[SEC_VCF_HT_DATA ]++;
+            vb->txt_section_bytes[SEC_HT_DATA ]++;
         }
 
         // get phase
@@ -454,7 +462,7 @@ static int seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
 
     if (is_vcf_string)
         // size including : (if we have both ht and gt), but not including \t which goes into SEC_STATS_HT_SEPERATOR
-        vb->txt_section_bytes[SEC_GT_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
+        vb->txt_section_bytes[SEC_VCF_GT_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
 
     return optimized_cell_gt_data_len;
 }
@@ -536,7 +544,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // ID
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "ID");
-    seg_one_field (vb, field_start, field_len, VCF_ID);
+    seg_id_field (vb_, &vb->id_numeric_data, VCF_ID, (char*)field_start, field_len, false);
 
     // REF + ALT
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:

@@ -78,12 +78,12 @@ static inline void v2v3_piz_vcf_reconstruct_info (VBlockVCF *vb, const SubfieldM
         for (; *snip != '=' && *snip != '\t'; snip++);
         if (*snip == '=') snip++; // move past the '='
 
-        buf_add (&vb->line_variant_data, start, (unsigned)(snip-start)); // name inc. '=' e.g. "Info1="
+        buf_add (&vb->txt_data, start, (unsigned)(snip-start)); // name inc. '=' e.g. "Info1="
 
         if (iname_mapper->did_i[sf_i] != DID_I_NONE)  // some info names can be without values, in which case there will be no ctx
-            buf_add (&vb->line_variant_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
+            buf_add (&vb->txt_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
 
         if (sf_i != iname_mapper->num_subfields-1)
-            buf_add (&vb->line_variant_data, ";", 1); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
+            buf_add (&vb->txt_data, ";", 1); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
     }
 }

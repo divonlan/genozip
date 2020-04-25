@@ -52,6 +52,7 @@ extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *f
 // VCF Stuff
 // ---------
 extern SegDataLineFuncType seg_vcf_data_line;
+extern SegInitializer seg_vcf_initialize;
 extern void seg_vcf_complete_missing_lines (VBlockVCFP vb);
 
 // ---------

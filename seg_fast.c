@@ -126,6 +126,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
         
         static const char *desc_md[2] = { "X>", "Y>" };
         seg_one_field (vb, desc_md[has_13], 2, FAST_LINEMETA);
+        vb->last_line = FASTA_LINE_DESC;
     }
 
     // case: comment line - stored in the comment buffer
@@ -134,6 +135,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
 
         static const char *comment_md[2] = { "X;", "Y;" };
         seg_one_field (vb, comment_md[has_13], 2, FAST_LINEMETA);
+        vb->last_line = FASTA_LINE_COMMENT;
     }
 
     // case: sequence line
@@ -147,6 +149,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
         seq_md[0] = 'X' + has_13;
         str_uint (line_len, &seq_md[1], &seq_len_len);
         seg_one_field (vb, seq_md, seq_len_len + 1, FAST_LINEMETA);
+        vb->last_line = FASTA_LINE_SEQ;
     }
 
     return next_field;

@@ -31,7 +31,7 @@ void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
         SectionType b250_sec = FIELD_TO_B250_SECTION(vb->data_type, f);
 
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
-        if (zfile_is_skip_section (vb, b250_sec, DICT_ID_NONE)) continue;
+        //if (zfile_is_skip_section (vb, b250_sec, DICT_ID_NONE)) continue;
 
         zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);
     }
@@ -85,8 +85,9 @@ int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta
 
 void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const char *id_snip, unsigned id_snip_len, bool *extra_bit)
 {
-    *extra_bit = (id_snip_len && id_snip[id_snip_len-1] == 2);
-    if (*extra_bit) id_snip_len--;
+    bool my_extra_bit = (id_snip_len && id_snip[id_snip_len-1] == 2);
+    if (my_extra_bit) id_snip_len--;
+    if (extra_bit) *extra_bit = my_extra_bit;
 
     bool has_numeric = (id_snip_len && id_snip[id_snip_len-1] == 1);
     if (has_numeric) id_snip_len--;
@@ -112,7 +113,8 @@ void piz_uncompress_compound_field (VBlock *vb, SectionType field_b250_sec, Sect
     for (uint8_t sf_i=0; sf_i < mapper->num_subfields ; sf_i++) {
         
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
-        if (zfile_is_skip_section (vb, field_b250_sec, DICT_ID_NONE)) continue;
+        
+        if (zfile_is_skip_section (vb, field_b250_sec, DICT_ID_NONE)) continue; // don't create ctx if section is skipped
 
         MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
                                                   header->dict_id, sf_b250_sec-1);
@@ -255,7 +257,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
             ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
 
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
-                "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5", z_name);
+                "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5 or --test", z_name);
     }
 
     // case: we couldn't open the file because we didn't know what type it is - open it now

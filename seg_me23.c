@@ -21,7 +21,7 @@ void seg_me23_initialize (VBlock *vb_)
     VBlockME23 *vb = (VBlockME23 *)vb_;
 
     buf_alloc (vb, &vb->genotype_data, 2 * vb->lines.len, 1, "genotype_data", vb->vblock_i);
-    buf_alloc (vb, &vb->rsid_data, 12 * vb->lines.len, 1, "rsid_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);    
 }             
              
 const char *seg_me23_data_line (VBlock *vb_,   
@@ -65,21 +65,10 @@ const char *seg_me23_data_line (VBlock *vb_,
     // for haplotypes (X, Y, MT) add a '*' (override the newline - no harm)
     if (field_len==1) *(char*)(field_start + 1) = '*';
     
-    seg_add_to_data_buf (vb_, &vb->genotype_data, SEC_GT_DATA, field_start, 2, 0, field_len + 1 + has_13); 
+    seg_add_to_data_buf (vb_, &vb->genotype_data, SEC_HT_DATA, field_start, 2, 0, field_len + 1 + has_13); 
     
     // Now, finalize RSID - if we DON'T have a \r (unexpected), then we add an extra bit.
-    seg_id_field (vb_, &vb->rsid_data, ME23_ID, (char*)rsid_field_start, rsid_field_len, !has_13);
-    //if (!has_13) ((char*)rsid_field_start)[rsid_field_len] = '#';
+    seg_id_field (vb_, &vb->id_numeric_data, ME23_ID, (char*)rsid_field_start, rsid_field_len, !has_13);
     
-    //seg_add_to_data_buf (vb_, &vb->rsid_data, SEC_ID_DATA, rsid_field_start, rsid_field_len + !has_13, 
-    //                     '\t', rsid_field_len+1 /* for the \t */); 
-/*
-    for (unsigned i=0; i < rsid_field_len; i++)
-        if (IS_DIGIT (rsid_field_start[i])) { // first digit
-            uint32_t id_num = BGEN32 (atoi (&rsid_field_start[i]));
-            seg_add_to_data_buf (vb_, &vb->rsid_data, SEC_ID_DATA, (char*)&id_num, sizeof (id_num), 0, rsid_field_len+1);
-            break;
-        }
-*/
     return next_field;
 }

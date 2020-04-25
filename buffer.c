@@ -62,7 +62,7 @@ char *buf_display (const Buffer *buf)
 const char *buf_desc (const Buffer *buf)
 {
     static char desc[300];
-    sprintf (desc, "%s:%u allocating in %s:%u", buf->name ? buf->name : "(no name)", buf->param, buf->func, buf->code_line);
+    sprintf (desc, "%s:%u allocated in %s:%u", buf->name ? buf->name : "(no name)", buf->param, buf->func, buf->code_line);
     return desc;
 }
 
@@ -100,6 +100,8 @@ static void buf_find_underflow_culprit (const char *memory)
     for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
         VBlock *vb = (vb_i == -1) ? evb : vb_pool->vb[vb_i]; 
 
+        if (!vb) continue;
+        
         ARRAY (Buffer *, buf_list, vb->buffer_list);
 
         for (unsigned buf_i=0; buf_i < vb->buffer_list.len; buf_i++) {
@@ -150,6 +152,7 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary)
 
     bool corruption = false;
     for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
+
         const Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
 
         if (!buf) continue; // buf was 'buf_destroy'd
@@ -325,7 +328,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 
     if (flag_debug_memory && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER) {
         char s[POINTER_STR_LEN];
-        fprintf (stderr, "Init: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
+        fprintf (stderr, "buf_add_to_buffer_list: %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
                  buf_desc(buf), buf->size, str_pointer(buf,s), vb->id, (uint32_t)vb->buffer_list.len-1);
     }
     

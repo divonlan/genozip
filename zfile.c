@@ -85,7 +85,7 @@ bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
     switch (vb ? vb->data_type : z_file->data_type) {
         case DT_VCF:
             if ((flag_drop_genotypes || flag_gt_only) && 
-                (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_GT_DATA || st == SEC_VCF_FRMT_SF_DICT))
+                (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_VCF_GT_DATA || st == SEC_VCF_FRMT_SF_DICT))
                 return true;
 
             break;
@@ -142,7 +142,7 @@ void zfile_uncompress_section (VBlock *vb,
     }
 
     // sanity checks
-    ASSERT (section_header->section_type == expected_section_type, "Error: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
+    ASSERT (section_header->section_type == expected_section_type, "Error in zfile_uncompress_section: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
     bool expecting_vb_i = !section_type_is_dictionary (expected_section_type) && expected_section_type != SEC_TXT_HEADER;
     ASSERT (vblock_i == vb->vblock_i || !expecting_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
@@ -360,7 +360,7 @@ int zfile_read_section (VBlock *vb,
     // case: we're done! no more concatenated files
     if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
 
-    ASSERT (header, "Error: Failed to read data from file %s while expecting section type %s: %s", 
+    ASSERT (header, "Error in zfile_read_section: Failed to read data from file %s while expecting section type %s: %s", 
             z_name, st_name(expected_sec_type), strerror (errno));
     
     if (flag_show_headers) zfile_show_header (header, NULL);
@@ -794,7 +794,7 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t vcf_first_line_i)
 // VCF stuff
 //------------------------------------------------------------------------------
 
-// ZIP compute thread - called from zip_vcf_compress_one_vb()
+// called by ZIP compute thread - called from zip_vcf_compress_one_vb()
 void zfile_vcf_compress_vb_header (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
@@ -844,7 +844,7 @@ void zfile_vcf_compress_vb_header (VBlock *vb_)
 
     // account for haplotype_index as part of the haplotype_data for compression statistics
     // even though we store it in the variant_data header
-    vb->z_section_bytes[SEC_VCF_HT_DATA]   += my_squeeze_len;
+    vb->z_section_bytes[SEC_HT_DATA]   += my_squeeze_len;
     vb->z_section_bytes[SEC_VB_HEADER] -= my_squeeze_len;
 }
 
@@ -912,9 +912,9 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
     // 2. SEC_VCF_INFO_SF_B250 - Fields 1-9 b250 data
     // 3. SEC_VCF_INFO_SF_B250 - All INFO subfield data
     // 4. All sample data: up 3 sections per sample block:
-    //    4a. SEC_GT_DATA - genotype data
+    //    4a. SEC_VCF_GT_DATA - genotype data
     //    4b. SEC_VCF_PHASE_DATA - phase data
-    //    4c. SEC_VCF_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
+    //    4c. SEC_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
 
     SectionListEntry *sl = sections_vb_first (vb->vblock_i);
 
@@ -939,13 +939,17 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
 
     // read the 8 fields (CHROM to FORMAT)    
     for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
-        READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250);
+        READ_SECTION (FIELD_TO_B250_SECTION(DT_VCF, f), SectionHeaderBase250);
 
     // read the info subfield sections into memory (if any)
     vb->num_info_subfields = sections_count_sec_type (vb->vblock_i, SEC_VCF_INFO_SF_B250); // also used later in piz_uncompress_all_sections()
     for (uint8_t sf_i=0; sf_i < vb->num_info_subfields; sf_i++) 
         READ_SECTION (SEC_VCF_INFO_SF_B250, SectionHeaderBase250);
 
+    // read the numberic data of the ID field (the non-numeric part is in SEC_ID_B250)
+    if (z_file->genozip_version >= 5)
+        READ_SECTION (SEC_NUMERIC_ID_DATA, SectionHeader);
+        
     // read the sample data
     uint32_t num_sample_blocks     = BGEN32 (vb_header->num_sample_blocks);
     uint32_t num_samples_per_block = BGEN32 (vb_header->num_samples_per_block);
@@ -962,13 +966,13 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
         buf_alloc (vb, &vb->z_section_headers, sizeof (uint32_t) * (section_i + 3), 2, "z_section_headers", 2);
 
         if (vb_header->has_genotype_data)
-            READ_SB_SECTION (SEC_GT_DATA,         SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_VCF_GT_DATA,         SectionHeader, sb_i);
 
         if (vb_header->phase_type == PHASE_MIXED_PHASED) 
             READ_SB_SECTION (SEC_VCF_PHASE_DATA,      SectionHeader, sb_i);
 
         if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) 
-            READ_SB_SECTION (SEC_VCF_HT_DATA,         SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_DATA,         SectionHeader, sb_i);
 
         if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
             READ_SB_SECTION (SEC_HT_GTSHARK_X_LINE,   SectionHeader, sb_i);
@@ -1046,8 +1050,8 @@ void zfile_sam_read_one_vb (VBlock *vb_)
     // read the RAND_POS, MD, SEQ and QUAL data
     READ_SECTION (SEC_SAM_RAND_POS_DATA, SectionHeader);
     READ_SECTION (SEC_SAM_MD_DATA,       SectionHeader);
-    READ_SECTION (SEC_SEQ_DATA,      SectionHeader);
-    READ_SECTION (SEC_QUAL_DATA,     SectionHeader);
+    READ_SECTION (SEC_SEQ_DATA,          SectionHeader);
+    READ_SECTION (SEC_QUAL_DATA,         SectionHeader);
 
     COPY_TIMER (vb->profile.zfile_read_one_vb);
 }
@@ -1140,8 +1144,8 @@ void zfile_me23_read_one_vb (VBlock *vb_)
     READ_SECTION (SEC_CHROM_B250, SectionHeaderBase250);
     READ_SECTION (SEC_POS_B250, SectionHeaderBase250);
     READ_SECTION (SEC_ID_B250, SectionHeaderBase250);
-    READ_SECTION (SEC_ID_DATA, SectionHeader);
-    READ_SECTION (SEC_GT_DATA, SectionHeader);
+    READ_SECTION (SEC_NUMERIC_ID_DATA, SectionHeader);
+    READ_SECTION (SEC_HT_DATA, SectionHeader);
 
     COPY_TIMER (vb->profile.zfile_read_one_vb);
 }

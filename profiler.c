@@ -23,7 +23,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->piz_vcf_get_format_info           += src->piz_vcf_get_format_info;
     dst->piz_vcf_initialize_sample_iterators    += src->piz_vcf_initialize_sample_iterators;
     dst->piz_get_line_subfields            += src->piz_get_line_subfields;
-    dst->piz_vcf_merge_line                += src->piz_vcf_merge_line;
+    dst->piz_vcf_reconstruct_samples                += src->piz_vcf_reconstruct_samples;
     dst->zfile_read_one_vb                 += src->zfile_read_one_vb;
     dst->zfile_compress_dictionary_data    += src->zfile_compress_dictionary_data,
     dst->txtfile_read_vblock        += src->txtfile_read_vblock;
@@ -100,7 +100,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "      piz_vcf_initialize_sample_iterators: %u\n", ms(p->piz_vcf_initialize_sample_iterators));
         fprintf (stderr, "      piz_vcf_get_genotype_data_line: %u\n", ms(p->piz_vcf_get_genotype_data_line));
         fprintf (stderr, "      piz_vcf_get_phase_data_line: %u\n", ms(p->piz_vcf_get_phase_data_line));
-        fprintf (stderr, "      piz_vcf_merge_line: %u\n", ms(p->piz_vcf_merge_line));
+        fprintf (stderr, "      piz_vcf_reconstruct_samples: %u\n", ms(p->piz_vcf_reconstruct_samples));
         fprintf (stderr, "   squeeze: %u\n", ms(p->squeeze));
     }
     else { // compress

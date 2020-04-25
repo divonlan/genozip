@@ -170,11 +170,22 @@ bool file_open_txt (File *file)
 
         file->data_type = file_get_data_type (file->type, true);
 
-        ASSERT (file->data_type != DT_NONE || !file_has_ext (file->name, ".genozip"), 
-                "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
+        if (file->data_type == DT_NONE) { // show meaningful error if file is not a supported type
+            if (flag_multiple_files) {
+                RETURNW (!file_has_ext (file->name, ".genozip"), true,
+                        "Skipping %s - it is already compressed", file_printname(file));
 
-        ASSERT (file->data_type != DT_NONE, "%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
-                global_cmd, file_printname (file),  file_compressible_extensions());
+                RETURNW (false, true, "Skipping %s - genozip doesn't know how to compress this file type (use --input to tell it)", 
+                        file_printname (file));
+            }
+            else {
+                ASSERT (file->data_type != DT_NONE || !file_has_ext (file->name, ".genozip"), 
+                        "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
+
+                ASSERT (file->data_type != DT_NONE, "%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
+                        global_cmd, file_printname (file),  file_compressible_extensions());
+            }
+        }
     }
     else { // WRITE - data_type is already set by file_open
 
@@ -334,35 +345,49 @@ bool file_open_txt (File *file)
 // with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
 static void file_initialize_z_file_buffers (File *file)
 {
+#define INIT(buf) file->mtf_ctx[i].buf.name  = #buf; \
+                  file->mtf_ctx[i].buf.param = i;    \
+                  buf_add_to_buffer_list (evb, &file->mtf_ctx[i].buf);
+
     for (unsigned i=0; i < MAX_DICTS; i++) {
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].dict);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].b250);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].mtf);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].mtf_i);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].global_hash);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].ol_dict);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].ol_mtf);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].local_hash);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].sorter);
-        buf_add_to_buffer_list (evb, &file->mtf_ctx[i].word_list);
+        INIT (dict);        
+        INIT (b250);
+        INIT (mtf);
+        INIT (mtf_i);
+        INIT (global_hash);
+        INIT (ol_dict);
+        INIT (ol_mtf);
+        INIT (local_hash);
+        INIT (sorter);
+        INIT (word_list);
     }
 
-    buf_add_to_buffer_list (evb, &file->dict_data);
-    buf_add_to_buffer_list (evb, &file->ra_buf);
-    buf_add_to_buffer_list (evb, &file->section_list_buf);
-    buf_add_to_buffer_list (evb, &file->section_list_dict_buf);
-    buf_add_to_buffer_list (evb, &file->unconsumed_txt);
-    buf_add_to_buffer_list (evb, &file->v1_next_vcf_header);
+#undef INIT
+#define INIT(buf) file->buf.name = #buf; \
+                  buf_add_to_buffer_list (evb, &file->buf);
+    INIT (dict_data);
+    INIT (ra_buf);
+    INIT (section_list_buf);
+    INIT (section_list_dict_buf);
+    INIT (unconsumed_txt);
+    INIT (v1_next_vcf_header);
 }
+#undef INIT
 
 // returns true if successful
 static bool file_open_z (File *file)
 {
-    ASSERT (file_has_ext (file->name, GENOZIP_EXT), "%s: file %s must have a " GENOZIP_EXT " extension", 
-            global_cmd, file->name);
 
     // for READ, set data_type
     if (file->mode == READ) {
+
+        if (!file_has_ext (file->name, GENOZIP_EXT)) {
+            if (flag_multiple_files) 
+                RETURNW (false, true, "Skipping %s - it doesn't have a .genozip extension", file_printname (file))
+            else
+                ABORT ("%s: file %s must have a " GENOZIP_EXT " extension", global_cmd, file_printname (file));
+        }
+
         file->data_type = DT_NONE; // if we don't find it, it will be determined after the genozip header is read
         for (DataType dt=0; dt < NUM_DATATYPES; dt++)
             if (file->type == genozip_ft_by_dt[dt]) {
@@ -371,6 +396,8 @@ static bool file_open_z (File *file)
             }
     }
     else { // WRITE - data_type is already set by file_open
+        ASSERT (file_has_ext (file->name, GENOZIP_EXT), "%s: file %s must have a " GENOZIP_EXT " extension", 
+                              global_cmd, file_printname (file));
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
         file->type = genozip_ft_by_dt[file->data_type];
@@ -507,23 +534,20 @@ void file_close (File **file_p,
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
     // it is faster to just let the process die
     if (cleanup_memory) {
-            
-        if (file->supertype == Z_FILE && !file->redirected) { // reading or writing a .genozip. redirected files are by definition a single file - so cleaned up when process exits
-            for (unsigned i=0; i < file->num_dict_ids; i++)
-                mtf_destroy_context (&file->mtf_ctx[i]);
 
-            if (file->dicts_mutex_initialized) 
-                pthread_mutex_destroy (&file->dicts_mutex);
+        if (file->dicts_mutex_initialized) 
+            pthread_mutex_destroy (&file->dicts_mutex);
 
-            buf_destroy (&file->dict_data);
-            buf_destroy (&file->ra_buf);
-            buf_destroy (&file->section_list_buf);
-            buf_destroy (&file->section_list_dict_buf);
-            buf_destroy (&file->v1_next_vcf_header);
-        }
+        // always destroy all buffers even if unused - for saftey
+        for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_buffers
+            mtf_destroy_context (&file->mtf_ctx[i]);
 
-        if (file_is_zip_read(file))
-            buf_destroy (&file->unconsumed_txt);
+        buf_destroy (&file->dict_data);
+        buf_destroy (&file->ra_buf);
+        buf_destroy (&file->section_list_buf);
+        buf_destroy (&file->section_list_dict_buf);
+        buf_destroy (&file->v1_next_vcf_header);
+        buf_destroy (&file->unconsumed_txt);
 
         if (file->name) FREE (file->name);
         

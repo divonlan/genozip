@@ -30,22 +30,16 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
 
         uint32_t txt_data_start = vb->txt_data.len;
         uint32_t txt_line_i = vb->first_line + vb_line_i;
-
-        //LOAD_SNIP_FROM_BUF (vb->rsid_data, vb->next_rsid, "RSID", '\t');
-        LOAD_SNIP (ME23_ID);
-        
         bool doesnt_have_13;
-        piz_reconstruct_id ((VBlockP)vb, &vb->rsid_data, &vb->next_rsid, snip, snip_len, &doesnt_have_13);
-/*
 
-        bool has_13 = snip[snip_len-1] != '#'; // we added a # if line has NO \r (usually 23andMe files have it)
+        IFNOTSTRIP(".",1) {
+            LOAD_SNIP (ME23_ID);        
+            piz_reconstruct_id ((VBlockP)vb, &vb->id_numeric_data, &vb->next_numeric_id, snip, snip_len, &doesnt_have_13);
+        }
 
-        buf_add (&vb->txt_data, snip, snip_len - !has_13); 
-        buf_add (&vb->txt_data, "\t", 1);  
-*/
         chrom_word_index = RECONSTRUCT_FROM_DICT (ME23_CHROM);
         RECONSTRUCT_FROM_DICT_POS (ME23_POS, true, true); // reconstruct from delta
-        RECONSTRUCT_FROM_TABLESS_BUF (vb->genotype_data, vb->next_genotype, 2, false, "GT_DATA");
+        RECONSTRUCT_FROM_TABLESS_BUF (vb->genotype_data, vb->next_genotype, 2, false, "HT_DATA");
 
         // remove the extra * added for ploidy=1 genotypes
         if (*LASTENT(char, vb->txt_data) == '*') 
@@ -83,10 +77,10 @@ static void piz_me23_uncompress_all_sections (VBlockME23 *vb)
     
     // uncompress the ID and Genotype data
     SectionHeader *id_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, id_header, &vb->rsid_data, "rsid_data", SEC_ID_DATA);    
+    zfile_uncompress_section ((VBlockP)vb, id_header, &vb->id_numeric_data, "id_numeric_data", SEC_NUMERIC_ID_DATA);    
 
     SectionHeader *gt_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, gt_header, &vb->genotype_data, "genotype_data", SEC_GT_DATA);    
+    zfile_uncompress_section ((VBlockP)vb, gt_header, &vb->genotype_data, "genotype_data", SEC_HT_DATA);    
 }
 
 void piz_me23_uncompress_one_vb (VBlock *vb_)

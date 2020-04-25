@@ -138,7 +138,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
-        ASSERT (!ctx || ctx->b250_section_type == SEC_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s (%s)",
+        ASSERT (!ctx || ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s (%s)",
                 txt_line, vb->vblock_i, err_dict_id (ctx->dict_id), st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {

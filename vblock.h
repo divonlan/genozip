@@ -101,7 +101,7 @@ typedef struct VBlock {
 extern void vb_cleanup_memory(void);
 extern VBlock *vb_get_vb (unsigned vblock_i);
 extern void vb_external_vb_initialize(void);
-extern void vb_release_vb (VBlock **vb_p);
+extern void vb_release_vb (VBlock *vb);
 
 typedef struct {
     unsigned num_vbs; // length of array of pointers to VBlock
@@ -170,7 +170,6 @@ typedef struct VBlockVCF {
     
     // working memory for segregate - we segregate a line components into these buffers, and when done
     // we copy it back to DataLine - the buffers overlaying the line field
-    Buffer line_variant_data;  // string terminated by a newline. len includes the newline. (used for decompressing)
     Buffer line_gt_data;       // \t separated genotype data for the line. last one has \t too. no \0. exists if any variant in the variant blck has FORMAT other that "GT"
     Buffer line_ht_data;       // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
@@ -191,6 +190,9 @@ typedef struct VBlockVCF {
     Buffer is_sb_included;            // PIZ only:  array of bool indicating for each sample block whether it is included, based on --samples 
     Buffer genotype_one_section_data; // ZIP only:  for zip we need only one section data
     
+    Buffer id_numeric_data;           // ZIP & PIZ
+    uint32_t next_numeric_id;         // PIZ
+
     Buffer gt_sb_line_starts_buf,     // used by zip_vcf_get_genotype_vb_start_len 
            gt_sb_line_lengths_buf,
            genotype_section_lens_buf; 
@@ -313,11 +315,11 @@ typedef struct VBlockME23 { // for 23andMe
 
     VBLOCK_COMMON_FIELDS
 
-    Buffer rsid_data;             // ZIP & PIZ
+    Buffer id_numeric_data;             // ZIP & PIZ
     Buffer genotype_data;         // ZIP & PIZ
     
     // PIZ-only stuff
-    uint32_t next_rsid;           // PIZ only: used to reconstruct rsid
+    uint32_t next_numeric_id;           // PIZ only: used to reconstruct rsid
     uint32_t next_genotype;       // PIZ only: used to genotype_data rsid
 } VBlockME23;
 

@@ -86,7 +86,8 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
                 break;
 
             case ';': // comment line
-                RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", '\n', eol[has_13], eol_len[has_13]);
+                if (!flag_strip) 
+                    RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", '\n', eol[has_13], eol_len[has_13]);
                 break;
 
             default: { // sequence line

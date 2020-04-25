@@ -279,8 +279,11 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
-    if (!flag_concat && !dd->is_last_file) vb_cleanup_memory(); 
-
+    if (!flag_concat && !dd->is_last_file) {
+        vb_cleanup_memory(); 
+        vb_release_vb (evb);
+    }
+    
     if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent concatented files
 
     free (dd);
@@ -397,7 +400,8 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
         if (flag_show_time) 
             profiler_add (&evb->profile, &dd->processed_vb->profile);
 
-        vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+        vb_release_vb (dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+        dd->processed_vb = NULL;
     }
 
     dispatcher_show_progress (dispatcher);
@@ -408,7 +412,8 @@ void dispatcher_input_exhausted (Dispatcher dispatcher)
     DispatcherData *dd = (DispatcherData *)dispatcher;
     dd->input_exhausted = true;
 
-    vb_release_vb (&dd->next_vb);
+    vb_release_vb (dd->next_vb);
+    dd->next_vb = NULL;
 
     dd->next_vb_i--; // we didn't use this vb_i
 }    

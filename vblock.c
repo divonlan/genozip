@@ -35,9 +35,8 @@ static void vb_vcf_release_vb (VBlock *vb_)
     vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = false;
     vb->phase_type = PHASE_UNKNOWN;
-    vb->max_gt_line_len = 0;
+    vb->max_gt_line_len = vb->next_numeric_id = 0;
 
-    buf_free(&vb->line_variant_data);
     buf_free(&vb->line_gt_data);
     buf_free(&vb->line_ht_data);
     buf_free(&vb->line_phase_data);
@@ -46,6 +45,7 @@ static void vb_vcf_release_vb (VBlock *vb_)
     buf_free(&vb->genotype_one_section_data);
     buf_free(&vb->is_sb_included);
     buf_free(&vb->genotype_section_lens_buf);
+    buf_free(&vb->id_numeric_data);
 
     buf_free (&vb->format_mapper_buf);
     buf_free (&vb->iname_mapper_buf);
@@ -87,7 +87,6 @@ static void vb_vcf_destroy_vb (VBlock **vb_)
         if ((*vb)->phase_sections_data)     buf_destroy (&(*vb)->phase_sections_data[i]);
     }
 
-    buf_destroy (&(*vb)->line_variant_data);
     buf_destroy (&(*vb)->line_gt_data);
     buf_destroy (&(*vb)->line_ht_data);
     buf_destroy (&(*vb)->line_phase_data);
@@ -105,6 +104,7 @@ static void vb_vcf_destroy_vb (VBlock **vb_)
     buf_destroy (&(*vb)->helper_index_buf);
     buf_destroy (&(*vb)->ht_columns_data);
     buf_destroy (&(*vb)->format_info_buf);
+    buf_destroy (&(*vb)->id_numeric_data);
     buf_destroy (&(*vb)->column_of_zeros);
     buf_destroy (&(*vb)->gtshark_db_db_data);
     buf_destroy (&(*vb)->gtshark_db_gt_data);
@@ -218,9 +218,9 @@ static void vb_me23_release_vb (VBlock *vb_)
 {
     VBlockME23 *vb = (VBlockME23 *)vb_;
 
-    vb->next_rsid = vb->next_genotype = 0;
+    vb->next_numeric_id = vb->next_genotype = 0;
 
-    buf_free (&vb->rsid_data);
+    buf_free (&vb->id_numeric_data);
     buf_free (&vb->genotype_data);
 }
 
@@ -229,7 +229,7 @@ static void vb_me23_destroy_vb (VBlock **vb_)
 {
     VBlockME23 **vb = (VBlockME23 **)vb_;
 
-    buf_destroy (&(*vb)->rsid_data);
+    buf_destroy (&(*vb)->id_numeric_data);
     buf_destroy (&(*vb)->genotype_data);
 }
 
@@ -257,12 +257,9 @@ static VbFunc vb_init_by_dt[NUM_DATATYPES] = { donothing, vb_sam_initialize_vb, 
 static VbFunc vb_cleanup_by_dt[NUM_DATATYPES] = { vb_vcf_cleanup_memory, donothing, donothing, donothing, donothing };
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
-void vb_release_vb (VBlock **vb_p) 
+void vb_release_vb (VBlock *vb) 
 {
-    if (! *vb_p) return; // nothing to release
-
-    VBlock *vb = *vb_p;
-    *vb_p = NULL;
+    if (!vb) return; // nothing to release
 
     vb->first_line = vb->vblock_i = vb->txt_data_next_offset = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->last_pos = vb->longest_line_len = vb->line_i = 0;
@@ -302,7 +299,8 @@ void vb_release_vb (VBlock **vb_p)
     vb->in_use = false; // released the VB back into the pool - it may now be reused
 
     // release data_type -specific fields
-    vb_release_by_dt[vb->data_type](vb);
+    if (vb->data_type != DT_NONE)
+        vb_release_by_dt[vb->data_type](vb);
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->num_lines_alloced
@@ -335,7 +333,8 @@ void vb_destroy_vb (VBlockP *vb)
         buf_destroy (&(*vb)->compress_bufs[i]);
 
     // destory data_type -specific buffers
-    vb_destroy_by_dt[(*vb)->data_type](vb);
+    if ((*vb)->data_type != DT_NONE)
+        vb_destroy_by_dt[(*vb)->data_type](vb);
 
     FREE (*vb);
     *vb = NULL;
@@ -402,7 +401,8 @@ VBlock *vb_get_vb (unsigned vblock_i)
     memset (vb->dict_id_to_did_i_map, DID_I_NONE, sizeof(vb->dict_id_to_did_i_map));
 
     // initialize data-type-specific fields
-    vb_init_by_dt[z_file->data_type](vb);
+    if (vb->data_type != DT_NONE)    
+        vb_init_by_dt[z_file->data_type](vb);
 
     return vb;
 }
@@ -412,7 +412,7 @@ void vb_cleanup_memory (void)
 {
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
         VBlock *vb = pool->vb[vb_i];
-        if (vb) vb_cleanup_by_dt[z_file->data_type](vb);
+        if (vb && vb->data_type != DT_NONE) vb_cleanup_by_dt[z_file->data_type](vb);
     }
 
     global_vcf_num_samples = 0;

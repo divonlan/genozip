@@ -248,7 +248,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
 
         if (has_genotype_data) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_GT_DATA, false);
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_GT_DATA, false);
         }
 
         if (phase_type == PHASE_MIXED_PHASED) {
@@ -258,7 +258,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
 
         if (num_haplotypes_per_line) {
             ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
-            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_HT_DATA , false);    
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_DATA , false);    
         }
 
         *ENT (bool, vb->is_sb_included, sb_i) = true;
@@ -277,7 +277,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
 
 // decode the delta-encoded value of the POS field
 static inline void v1_piz_vcf_decode_pos (VBlockVCF *vb, const char *str,
-                                      char *pos_str, const char **delta_pos_start, unsigned *delta_pos_len, int *add_len /* out */)
+                                          char *pos_str, const char **delta_pos_start, unsigned *delta_pos_len, int *add_len /* out */)
 {
     *delta_pos_start = str;
 
@@ -364,10 +364,10 @@ cleanup:
     COPY_TIMER (vb->profile.piz_vcf_get_format_info)
 }
 
-static void v1_piz_vcf_get_variant_data_line (VBlockVCF *vb, 
-                                          unsigned line_i, // line in vcf file
-                                          unsigned *length_remaining, // for safety
-                                          const char **line_start) // out
+static void v1_piz_vcf_reconstruct_fields (VBlockVCF *vb, 
+                                           unsigned line_i, // line in vcf file
+                                           unsigned *length_remaining, // for safety
+                                           const char **line_start) // out
 {
     START_TIMER;
 
@@ -394,19 +394,12 @@ static void v1_piz_vcf_get_variant_data_line (VBlockVCF *vb,
 
         else if (*next == '\n') {
             next++; // past the newline
-            unsigned line_strlen = next - *line_start; // inc. the newline, not including \0
-
-            buf_alloc (vb, &vb->line_variant_data, line_strlen + add_len + 1 /* +1 sprintf adds a \0 */, 
-                       1.2, "line_variant_data", 0);
 
             const char *after_delta = delta_pos_start + delta_pos_len;
 
-            sprintf (vb->line_variant_data.data, "%.*s%s%.*s",
-                     (int)(delta_pos_start - *line_start), *line_start,    // substring until \t preceding delta
-                     pos_str,                           // decoded pos string
-                     (int)(next - after_delta), after_delta);  // substring starting \t after delta
-            
-            vb->line_variant_data.len = line_strlen + add_len;
+            buf_add (&vb->txt_data, *line_start, (int)(delta_pos_start - *line_start)); // substring until \t preceding delta
+            buf_add (&vb->txt_data, pos_str, strlen (pos_str)); // decoded pos string
+            buf_add (&vb->txt_data, after_delta, (int)(next - after_delta)); // substring starting \t after delta
 
             *line_start = next;
             *length_remaining = after - next;
@@ -634,8 +627,8 @@ void v1_piz_vcf_reconstruct_vb (VBlockVCF *vb)
 
     for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
 
-        // de-permute variant data into vb->line_variant_data
-        v1_piz_vcf_get_variant_data_line (vb, vb->first_line + line_i, &variant_data_length_remaining, &variant_data_next_line);
+        // reconstruct fields into vb->txt_data
+        v1_piz_vcf_reconstruct_fields (vb, vb->first_line + line_i, &variant_data_length_remaining, &variant_data_next_line);
 
         // reset len for next line - no need to realloc as we have realloced what is needed already
         vb->line_ht_data.len = vb->line_gt_data.len = vb->line_phase_data.len = 0;
@@ -654,7 +647,7 @@ void v1_piz_vcf_reconstruct_vb (VBlockVCF *vb)
         if (vb->has_haplotype_data) 
             piz_vcf_get_haplotype_data_line (vb, line_i, ht_columns_data);
 
-        piz_vcf_merge_line (vb, line_i, false);
+        piz_vcf_reconstruct_samples (vb, line_i, false);
     }
 
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
@@ -720,7 +713,7 @@ void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) 
             zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], 
-                                      &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_GT_DATA);
+                                      &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_VCF_GT_DATA);
         
         // next, comes phase data
         if (vb->phase_type == PHASE_MIXED_PHASED) {
@@ -738,7 +731,7 @@ void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         if (vb->has_haplotype_data) {
             
             zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], 
-                                      &vb->haplotype_sections_data[sb_i], "haplotype_sections_data", SEC_VCF_HT_DATA );
+                                      &vb->haplotype_sections_data[sb_i], "haplotype_sections_data", SEC_HT_DATA );
             
             uint32_t expected_size = (uint32_t)vb->lines.len * num_samples_in_sb * vb->ploidy;
             ASSERT (vb->haplotype_sections_data[sb_i].len == expected_size, 

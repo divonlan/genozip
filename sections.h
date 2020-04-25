@@ -26,15 +26,15 @@ typedef enum {
     SEC_VB_HEADER          = 1,                                // used by all data types
 
     SEC_VCF_FRMT_SF_DICT   = 2,  
-    SEC_GT_DATA            = 3,                                // SEC_GT_DATA used by VCF, ME23
-    SEC_VCF_PHASE_DATA     = 4,  SEC_VCF_HT_DATA         = 5,
+    SEC_VCF_GT_DATA        = 3,  SEC_VCF_PHASE_DATA     = 4,
+    SEC_HT_DATA            = 5,                                // used by VCF, ME23
 
     // data sections added in v2
     SEC_GENOZIP_HEADER     = 6,   SEC_RANDOM_ACCESS      = 7,
 
     SEC_CHROM_DICT         = 8,   SEC_CHROM_B250         = 9,  // used by VCF, ME23
     SEC_POS_DICT           = 10,  SEC_POS_B250           = 11, // used by VCF, ME23
-    SEC_ID_DICT            = 12,  SEC_ID_B250            = 13, // used by VCF until v4 (VCF's ID moved to SEC_ID_DATA in v5)
+    SEC_ID_DICT            = 12,  SEC_ID_B250            = 13, // used by VCF until v4 (VCF's ID moved to SEC_NUMERIC_ID_DATA in v5)
     SEC_VCF_REFALT_DICT    = 14,  SEC_VCF_REFALT_B250    = 15,  
     SEC_VCF_QUAL_DICT      = 16,  SEC_VCF_QUAL_B250      = 17, 
     SEC_VCF_FILTER_DICT    = 18,  SEC_VCF_FILTER_B250    = 19, 
@@ -51,7 +51,7 @@ typedef enum {
     SEC_SAM_RAND_POS_DATA  = 31,  SEC_SAM_MD_DATA        = 32, 
     SEC_SEQ_DATA           = 33,                               // used by SAM, FASTA, FASTQ 
     SEC_QUAL_DATA          = 34,                               // used by SAM, FASTQ
-    SEC_ID_DATA            = 35,                               // used by VCF (starting v5) and ME23
+    SEC_NUMERIC_ID_DATA            = 35,                               // used by VCF (starting v5) and ME23
     SEC_SAM_QNAME_SF_DICT  = 36,  SEC_SAM_QNAME_SF_B250  = 37,
     SEC_SAM_OPTNL_SF_DICT  = 38,  SEC_SAM_OPTNL_SF_B250  = 39,
     SEC_SAM_QNAME_DICT     = 40,  SEC_SAM_QNAME_B250     = 41,
@@ -77,8 +77,8 @@ typedef enum {
 #define SECTIONTYPE_ABOUT { \
     {"SEC_TXT_HEADER",          0},  {"SEC_VB_HEADER",          0},\
     \
-    {"SEC_VCF_FRMT_SF_DICT",    1},  {"SEC_GT_DATA",            1},\
-    {"SEC_VCF_PHASE_DATA",      0},  {"SEC_VCF_HT_DATA",        0},\
+    {"SEC_VCF_FRMT_SF_DICT",    1},  {"SEC_VCF_GT_DATA",        1},\
+    {"SEC_VCF_PHASE_DATA",      0},  {"SEC_HT_DATA",            0},\
     \
     {"SEC_GENOZIP_HEADER",      0},  {"SEC_RANDOM_ACCESS",      0},\
     \
@@ -99,7 +99,7 @@ typedef enum {
     {"SEC_SAM_RAND_POS_DATA",   0},  {"SEC_SAM_MD_DATA",        1},\
     {"SEC_SEQ_DATA",            0},\
     {"SEC_QUAL_DATA",           1},\
-    {"SEC_ID_DATA",             1},\
+    {"SEC_NUMERIC_ID_DATA",             1},\
     {"SEC_SAM_QNAME_SF_DICT",   1},  {"SEC_SAM_QNAME_SF_B250",  1},\
     {"SEC_SAM_OPTNL_SF_DICT",   0},  {"SEC_SAM_OPTNL_SF_B250",  0},\
     {"SEC_SAM_QNAME_DICT",      1},  {"SEC_SAM_QNAME_B250",     1},\

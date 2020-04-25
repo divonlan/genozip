@@ -120,9 +120,9 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
             uint8_t *numerals     = node->word_index.encoded.numerals;
             
-            bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_GT_DATA) && (i > 0);
+            bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_VCF_GT_DATA) && (i > 0);
 
-            if (one_up) { // note: we can't do SEC_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
+            if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
                 NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
                 if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
             }

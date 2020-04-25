@@ -55,7 +55,7 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file d
 
 // the flags - representing command line options - available globally
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
-    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0,
+    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_strip=0,
@@ -412,6 +412,8 @@ static void main_genozip (const char *txt_filename,
     if (txt_filename) {
         // open the file
         txt_file = file_open (txt_filename, READ, TXT_FILE, 0);
+
+        if (!txt_file->file) return; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
 
         // skip this file if its size is 0
         RETURNW (txt_file,, "Cannot compresss file %s because its size is 0 - skipping it", txt_filename);
@@ -802,7 +804,8 @@ int main (int argc, char **argv)
     if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
 
     unsigned num_files = argc - optind;
-
+    flag_multiple_files = (num_files > 1);
+     
     flag_concat = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
     ASSERT (num_files <= 1 || flag_concat || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);

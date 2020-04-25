@@ -112,12 +112,12 @@
 - bug fixes
 
 5.0.0
-- Added full support for compressing SAM/BAM files
-- Compression improvements for some VCF files with lots of non-GT FORMAT subfields
+- Added full support for compressing SAM/BAM, FASTQ, FASTA and 23andMe files
+- Compression improvements for some VCF files with 1. lots of non-GT FORMAT subfields or 2. ID data
 - Added genounzip output options: --bcf for VCF files and --bam for SAM files
-- Added --input - tell genozip what type of file is being redirected in
+- Added --input - tell genozip what type of file this is - if re-directing or file has non-standard extension
 - Added --stdin-size - tell genozip the size of a redirected input file, for faster execution
 - Added --show-index for genounzip and genocat - see index embedded in a genozip file
-- Added --fast option for faster compression
+- Added --fast option for (a lot) faster compression, with (somewhat) reduced compression ratio
 
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

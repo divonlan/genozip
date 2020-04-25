@@ -115,8 +115,6 @@ extern const char *file_exts[];
 typedef const char *FileMode;
 extern FileMode READ, WRITE; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
-#define file_is_zip_read(file) ((file)->mode == READ && command == ZIP)
-
 #define file_is_read_via_ext_decompressor_type(type) \
     (type == VCF_XZ || type == BCF || type == BCF_GZ  || type == BCF_BGZ || type == BAM)
 
@@ -241,7 +239,7 @@ typedef struct File {
     
     // Used for reading genozip files
     uint32_t z_next_read, z_last_read;     // indices into read_buffer for z_file
-    char read_buffer[];                // only allocated for mode=READ files   
+    char read_buffer[];                  // only allocated for mode=READ files   
 } File;
 
 // globals

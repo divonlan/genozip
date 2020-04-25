@@ -74,5 +74,10 @@ extern void piz_reconstruct_id (VBlockP vb, BufferP id_buf, uint32_t *next_id,
     if (add_tab) buf_add (&vb->txt_data, "\t", 1);  \
     (next) += (fixed_len); }
 
+#define IFNOTSTRIP(def,len) if (flag_strip) { \
+                                buf_add (&vb->txt_data, def, len)  \
+                                buf_add (&vb->txt_data, "\t", 1) \
+                            } else 
+
 #endif
 
