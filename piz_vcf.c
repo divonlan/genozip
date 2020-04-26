@@ -195,8 +195,6 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
     SubfieldMapper *iname_mapper = NULL;
     bool line_included = true;
 
-    uint32_t txt_data_len_before = vb->txt_data.len;
-
     // extract snips and calculate length of variant data
     for (VcfFields f=VCF_CHROM; f <= (flag_drop_genotypes ? VCF_INFO : VCF_FORMAT); f++) {
 
