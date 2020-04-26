@@ -40,7 +40,7 @@ typedef struct {
     int32_t count;             // number of times this snip has been encoutered so far
 } SorterEnt;
 
-typedef struct {
+typedef struct { // initialize with mtf_init_iterator()
     const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
     int32_t prev_word_index;   // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;

@@ -69,10 +69,10 @@ bool piz_fastq_test_grep (VBlockFAST *vb)
         }
     }
 
-    // reset iterators piz_fastq_reconstruct_vb will use them again 
-    memset (&vb->mtf_ctx[FAST_DESC].iterator, 0, sizeof(SnipIterator)); // reset
+    // reset iterators - piz_fastq_reconstruct_vb will use them again 
+    mtf_init_iterator (&vb->mtf_ctx[FAST_DESC]);
     for (unsigned sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++)
-        memset (&vb->mtf_ctx[vb->desc_mapper.did_i[sf_i]].iterator, 0, sizeof(SnipIterator)); // reset
+        mtf_init_iterator (&vb->mtf_ctx[vb->desc_mapper.did_i[sf_i]]);
 
     return found; // no match found
 }
