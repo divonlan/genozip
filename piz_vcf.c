@@ -193,6 +193,7 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
     unsigned line_len = 0;
     char pos_str[50];
     SubfieldMapper *iname_mapper = NULL;
+    bool line_included = true;
 
     uint32_t txt_data_len_before = vb->txt_data.len;
 
@@ -215,10 +216,8 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
                 snip[VCF_POS] = pos_str;
 
                 // in case of --regions - check if this line is needed at all (based on CHROM and POS)
-                if (flag_regions && !regions_is_site_included (word_index[VCF_CHROM], atoi (pos_str))) {
-                    vb->txt_data.len = txt_data_len_before; // roll back
-                    return false;
-                }
+                if (flag_regions && !regions_is_site_included (word_index[VCF_CHROM], atoi (pos_str))) 
+                    line_included = false;
             }
 
             // add the INFO subfield values
@@ -252,6 +251,8 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
         line_len += snip_len[f] + 1; // add \t or \n separator
     }
     
+    if (!line_included) return false; // note that we continue to read all fields even if line is not included - to advance the iterators
+
     // reconstrut the line
     for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++) {
 
