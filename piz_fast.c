@@ -38,9 +38,8 @@ bool piz_fastq_test_grep (VBlockFAST *vb)
     
     unsigned section_i=1;
 
-    // we only need room for one line, but we allocate the whole txt_data here as we don't know the length
-    // of the line. it will stay for the actual reconstruction in the compute thread later
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
+    // we only need room for one line for now 
+    buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data", vb->vblock_i);
 
     // uncompress the fields     
     piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
