@@ -297,7 +297,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         // PRIORITY 1: In input is not exhausted, and a compute thread is available - read a variant block and compute it
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
-            bool compute = false;
+            bool still_more_data = false, grepped_out = false;
             if (z_file->genozip_version > 1) {
                 
                 bool skipped_vb;
@@ -319,9 +319,13 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                         // read one VB's genozip data
                         read_one_vb_func_by_dt[z_file->data_type](next_vb);
 
-                        compute = next_vb->ready_to_dispatch;
+                        still_more_data = true; // not eof yet
 
-                        if (!compute) dispatcher_abandon_next_vb (dispatcher); // we will not proceed with this VB
+                        // if grep found nothing next_vb->ready_to_dispatch is set to false
+                        if (!next_vb->ready_to_dispatch) {
+                            grepped_out = true;
+                            dispatcher_abandon_next_vb (dispatcher); 
+                        }
 
                         break;
                     }
@@ -339,10 +343,12 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                     default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));
                 }
             }
-            else compute = v1_zfile_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
+            else still_more_data = v1_zfile_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
             
-            if (compute) {
-                dispatcher_compute (dispatcher, uncompress_func_by_dt[z_file->data_type]);
+            if (still_more_data) {
+                if (!grepped_out) 
+                    dispatcher_compute (dispatcher, uncompress_func_by_dt[z_file->data_type]);
+                    
                 header_only_file = false;                
             }
             else { // eof
