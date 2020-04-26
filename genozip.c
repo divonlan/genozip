@@ -63,6 +63,7 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_fasta_sequential=0;
 
 uint64_t flag_stdin_size = 0;
+char *flag_grep = NULL;
 
 DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
            dict_id_show_one_dict = { 0 },  // argument of --show-dict-one
@@ -626,6 +627,7 @@ int main (int argc, char **argv)
         #define _r  {"regions",       required_argument, 0, 'r'                }
         #define _tg {"targets",       required_argument, 0, 't'                }
         #define _s  {"samples",       required_argument, 0, 's'                }
+        #define _g  {"grep",          required_argument, 0, 'g'                }
         #define _G  {"drop-genotypes",no_argument,       &flag_drop_genotypes,1}
         #define _H1 {"no-header",     no_argument,       &flag_no_header,    1 }
         #define _H0 {"header-only",   no_argument,       &flag_header_only,  1 }
@@ -657,10 +659,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _fa,      _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si,                   _dm,                         _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm,      _si,                   _dm,                    _fs, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,               _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _9, _9a, _gt, _fa,          _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si,                   _dm,                             _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm,      _si,                   _dm,                    _fs, _g, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                                       _dm,                   _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -668,7 +670,7 @@ int main (int argc, char **argv)
             "i:I:cdfhlLqQt^Vzm@:Oo:p:B:S:9KWF", // genozip
             "czfhLqQt^V@:Oo:p:m",               // genounzip
             "hLVp:qf",                          // genols
-            "hLV@:p:qQ1r:t:s:H1Go:f  "          // genocat
+            "hLV@:p:qQ1r:t:s:H1Go:fg:"          // genocat
         };
 
         int option_index = -1;
@@ -708,6 +710,7 @@ int main (int argc, char **argv)
             case '1' : flag_header_one    = 1      ; break;
             case '@' : threads_str  = optarg       ; break;
             case 'o' : out_filename = optarg       ; break;
+            case 'g' : flag_grep    = optarg       ; break;
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '5' : dict_id_dump_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
@@ -778,6 +781,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
     ASSERT (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
     ASSERT (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
+    ASSERT (!flag_strip       || !flag_grep,                        "%s: option %s is incompatable with %s", global_cmd, "--strip", OT("grep", "g"));
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
 

@@ -254,6 +254,8 @@ static const char *help_genocat[] = {
     "                     Note: sample names are case-sensitive",
     "                     Note: Multiple -s arguments may be specified - this is equivalent to chaining their samples with a comma separator in a single argument",
     "",
+    "   -g --grep         <string> Show only records where <string> is a case-sensitive substring of the description",
+    "",
     "   -G --drop-genotypes Output the data without the individual genotypes and FORMAT column",
     "   VCF",
     "",

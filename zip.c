@@ -20,6 +20,11 @@
 #include "endianness.h"
 #include "random_access.h"
 
+static const UpdateHeaderFunc update_header_func_by_dt[NUM_DATATYPES] = UPDATE_HEADER_FUNC_BY_DT;
+static const ComputeFunc compress_func_by_dt[NUM_DATATYPES] = COMPRESS_FUNC_BY_DT;
+static const bool datatype_has_random_access[NUM_DATATYPES] = DATATYPE_HAS_RANDOM_ACCESS;
+
+
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_file)
 {
     const char *runtime = dispatcher_ellapsed_time (dispatcher, false);

@@ -215,11 +215,11 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
 
         // E2 doesn't have a dictionary - its data is stored in SEQ
         if (dict_id.num == dict_id_OPTION_E2)
-            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
+            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, false);
 
         // U2 doesn't have a dictionary - its data is stored in QUAL
         else if (dict_id.num == dict_id_OPTION_U2) {
-            if (!flag_strip) piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i);
+            if (!flag_strip) piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, false);
         }
 
         else if (dict_id.num == dict_id_OPTION_MD) {
@@ -370,11 +370,11 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         }
         
         // SEQ & QUAL data
-        piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
+        piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, false);
         buf_add (&vb->txt_data, "\t", 1);
 
         IFNOTSTRIP("*",1) {
-            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i);
+            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, false);
         }
 
         // OPTIONAL fields, and Windows-style \r if needed

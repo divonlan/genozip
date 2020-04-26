@@ -286,7 +286,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     
     if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent concatented files
 
-    free (dd);
+    FREE (dd);
 
     *dispatcher = NULL;
 }
@@ -388,6 +388,20 @@ VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
     return dd->next_vb;
 }
 
+void dispatcher_abandon_next_vb (Dispatcher dispatcher)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+
+    if (!dd->next_vb) return;
+
+    buf_test_overflows(dd->next_vb); 
+
+    if (flag_show_time) profiler_add (&evb->profile, &dd->next_vb->profile);
+
+    vb_release_vb (dd->next_vb); 
+    dd->next_vb = NULL;
+}
+
 void dispatcher_finalize_one_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
@@ -397,8 +411,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
         buf_test_overflows(dd->processed_vb); // just to be safe, this isn't very expensive
         buf_test_overflows(evb); 
 
-        if (flag_show_time) 
-            profiler_add (&evb->profile, &dd->processed_vb->profile);
+        if (flag_show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
 
         vb_release_vb (dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
         dd->processed_vb = NULL;

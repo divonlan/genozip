@@ -22,6 +22,9 @@
 #include "dict_id.h"
 #include "strings.h"
 
+static const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES] = READ_ONE_VB_FUNC_BY_DT;
+static const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES] = UNCOMPRESS_FUNC_BY_DT;
+
 void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
                             unsigned *section_i /* in/out */)
 {
@@ -140,20 +143,20 @@ void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const c
         
         if (i < template_len)
             buf_add (&vb->txt_data, &template[i], 1) // add middle-field separator (buf_add is a macro - no semicolon)
-        else
-            buf_add (&vb->txt_data, separator, separator_len); // add end-of-field separator
+        else if (separator_len)
+            buf_add (&vb->txt_data, separator, separator_len); // add end-of-field separator if needed
     }
 }
 
 void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len, 
                                const Buffer *data, uint32_t *next,
-                               SectionType sec, uint32_t txt_line_i)
+                               SectionType sec, uint32_t txt_line_i, bool grepped_out)
 {
     // seq and qual are expected to be either of length seq_len, or "*" 
     uint32_t len = (*next >= data->len || data->data[*next] == '*') ? 1 : seq_len;
     ASSERT (*next + len <= data->len, "Error reading txt_line=%u: unexpected end of %s data", txt_line_i, st_name (sec));
 
-    if (!zfile_is_skip_section (vb, sec, DICT_ID_NONE)) 
+    if (!grepped_out && !zfile_is_skip_section (vb, sec, DICT_ID_NONE)) 
         buf_add (&vb->txt_data, &data->data[*next], len);
     
     *next += len;
@@ -316,7 +319,10 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                         // read one VB's genozip data
                         read_one_vb_func_by_dt[z_file->data_type](next_vb);
 
-                        compute = true;
+                        compute = next_vb->ready_to_dispatch;
+
+                        if (!compute) dispatcher_abandon_next_vb (dispatcher); // we will not proceed with this VB
+
                         break;
                     }
 

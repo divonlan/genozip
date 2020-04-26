@@ -28,11 +28,6 @@ const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE] = FIELD_NAM
 
 const unsigned datatype_last_field[NUM_DATATYPES]      = DATATYPE_LAST_FIELD;
 const unsigned chrom_did_i_by_dt[NUM_DATATYPES]        = CHROM_DID_I_BY_DT; 
-const bool datatype_has_random_access[NUM_DATATYPES]   = DATATYPE_HAS_RANDOM_ACCESS;
-const ComputeFunc compress_func_by_dt[NUM_DATATYPES]   = COMPRESS_FUNC_BY_DT;
-const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES] = UNCOMPRESS_FUNC_BY_DT;
-const UpdateHeaderFunc update_header_func_by_dt[NUM_DATATYPES] = UPDATE_HEADER_FUNC_BY_DT;
-const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES]      = READ_ONE_VB_FUNC_BY_DT;
 
 // -----------
 // VCF stuff

@@ -19,6 +19,8 @@ extern void piz_sam_uncompress_one_vb (VBlockP vb);
 extern void piz_fast_uncompress_one_vb (VBlockP vb);
 extern void piz_me23_uncompress_one_vb (VBlockP vb);
 
+extern bool piz_fastq_test_grep (VBlockFASTP vb);
+
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb
 // ----------------------------------------------
@@ -27,7 +29,7 @@ extern void piz_reconstruct_compound_field (VBlockP vb, SubfieldMapperP mapper, 
                                             const char *template, unsigned template_len, uint32_t txt_line_i);
 
 extern void piz_reconstruct_seq_qual (VBlockP vb, uint32_t seq_len, ConstBufferP data, uint32_t *next, 
-                                      SectionType sec, uint32_t txt_line_i);
+                                      SectionType sec, uint32_t txt_line_i, bool grepped_out);
 
 extern void piz_reconstruct_id (VBlockP vb, BufferP id_buf, uint32_t *next_id, 
                                 const char *id_snip, unsigned id_snip_len, bool *extra_bit);

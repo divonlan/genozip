@@ -131,7 +131,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     SnipIterator *iterator = override_iterator ? override_iterator : &ctx->iterator;
     
     if (!override_iterator && !iterator->next_b250) // INFO and Field1-9 data (GT data uses override_next_b250)
-        iterator->next_b250 = (uint8_t *)ctx->b250.data; // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
+        iterator->next_b250 = FIRSTENT (uint8_t, ctx->b250); // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
 
     uint32_t word_index = z_file->genozip_version >= 2 ? base250_decode (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
                                                        : v1_base250_decode (&iterator->next_b250);

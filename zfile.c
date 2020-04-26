@@ -21,6 +21,7 @@
 #include "header.h"
 #include "gtshark_vcf.h"
 #include "compressor.h"
+#include "piz.h"
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
@@ -968,6 +969,8 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
         }
     }
     
+    vb->ready_to_dispatch = true; // all good
+
     COPY_TIMER (vb->profile.zfile_read_one_vb);
 
     #undef vb_header
@@ -1038,6 +1041,8 @@ void zfile_sam_read_one_vb (VBlock *vb_)
     READ_SECTION (SEC_SEQ_DATA,          SectionHeader);
     READ_SECTION (SEC_QUAL_DATA,         SectionHeader);
 
+    vb->ready_to_dispatch = true; // all good
+
     COPY_TIMER (vb->profile.zfile_read_one_vb);
 }
 
@@ -1050,6 +1055,10 @@ void zfile_fast_read_one_vb (VBlock *vb_)
     START_TIMER;
 
     VBlockFAST *vb = (VBlockFAST *)vb_;
+
+    // note: we cannot easily do grep for FASTA, because records might span multiple VBs - the second+ VB doesn't have
+    // access to the description to compare
+    if (vb->data_type == DT_FASTA) flag_grep = NULL;
 
     // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
     // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
@@ -1073,7 +1082,7 @@ void zfile_fast_read_one_vb (VBlock *vb_)
 
     // read the the data sections (fields, QNAME and OPTIONAL subfields, SEQ and QUAL data)
 
-    // room for section headers (we have at most MAX_DICTS + 3 as all sections are b250 except for VB header, SEQ and QUAL)
+    // room for section headers (we have at most MAX_DICTS + 3 as all sections are b250 except for VB header, SEQ and QUAL/COMMENT)
     buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS + 3)  * sizeof(char*), 0, "z_section_headers", 1);
     
     *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; // vb header is at index 0
@@ -1089,10 +1098,15 @@ void zfile_fast_read_one_vb (VBlock *vb_)
     for (uint8_t sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++) 
         READ_SECTION (SEC_FAST_DESC_SF_B250, SectionHeaderBase250);
 
+    if (flag_grep && !piz_fastq_test_grep (vb)) goto finish; // ususually, we uncompress and reconstruct the DESC from the I/O thread in case of --grep
+
     // read SEQ and QUAL data (FASTQ) or COMMENT data (FASTA)
     READ_SECTION (SEC_SEQ_DATA, SectionHeader);
     READ_SECTION (z_file->data_type == DT_FASTQ ? SEC_QUAL_DATA : SEC_FASTA_COMMENT_DATA, SectionHeader);
 
+    vb->ready_to_dispatch = true; // all good
+
+finish:
     COPY_TIMER (vb->profile.zfile_read_one_vb);
 }
 
@@ -1133,4 +1147,6 @@ void zfile_me23_read_one_vb (VBlock *vb_)
     READ_SECTION (SEC_HT_DATA, SectionHeader);
 
     COPY_TIMER (vb->profile.zfile_read_one_vb);
+
+    vb->ready_to_dispatch = true; // all good
 }

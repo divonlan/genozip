@@ -24,17 +24,14 @@ extern const unsigned datatype_last_field[NUM_DATATYPES];
 extern const unsigned chrom_did_i_by_dt[NUM_DATATYPES];  // used for random access data
 
 #define DATATYPE_HAS_RANDOM_ACCESS { true, true, false, false, true }
-extern const bool datatype_has_random_access[NUM_DATATYPES];
 
 typedef void (*ComputeFunc)(VBlockP);
 #define COMPRESS_FUNC_BY_DT { zip_vcf_compress_one_vb, zip_sam_compress_one_vb,  \
                               zip_fast_compress_one_vb, zip_fast_compress_one_vb, zip_me23_compress_one_vb }
-extern const ComputeFunc compress_func_by_dt[NUM_DATATYPES];
 
 #define UNCOMPRESS_FUNC_BY_DT { piz_vcf_uncompress_one_vb, piz_sam_uncompress_one_vb, \
                                 piz_fast_uncompress_one_vb, piz_fast_uncompress_one_vb, \
                                 piz_me23_uncompress_one_vb }
-extern const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES];
 
 typedef void (*UpdateHeaderFunc) (VBlockP vb, uint32_t vcf_first_line_i);
 #define UPDATE_HEADER_FUNC_BY_DT { zfile_vcf_update_compressed_vb_header,     \
@@ -42,13 +39,11 @@ typedef void (*UpdateHeaderFunc) (VBlockP vb, uint32_t vcf_first_line_i);
                                    zfile_update_compressed_vb_header, \
                                    zfile_update_compressed_vb_header, \
                                    zfile_update_compressed_vb_header  }         
-extern const UpdateHeaderFunc update_header_func_by_dt[NUM_DATATYPES];
 
 typedef void (*IOFunc) (VBlockP vb);
 #define READ_ONE_VB_FUNC_BY_DT { zfile_vcf_read_one_vb,  zfile_sam_read_one_vb,   \
                                  zfile_fast_read_one_vb, zfile_fast_read_one_vb, \
                                  zfile_me23_read_one_vb }
-extern const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES];
 
 #define FIRST_FIELD_DICT_SECTION { SEC_CHROM_DICT, SEC_SAM_QNAME_DICT, \
                                    SEC_FAST_DESC_DICT, SEC_FAST_DESC_DICT, SEC_CHROM_DICT }
