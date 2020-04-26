@@ -32,9 +32,11 @@ typedef struct {
 // get the size of the hash table - a primary number between roughly 0.5K and 8M that is close to size, or a bit bigger
 static uint32_t hash_next_size_up (uint64_t size)
 {
-    // primary numbers just beneath the powers of 2
-    static uint32_t hash_sizes[] = { 509, 1021, 2039, 4039, 8191, 16381, 32749, 65521, 131071, 
-                                     262139, 524287, 1048573, 2097143, 4194301, 8388593, 16777213, 33554393 };
+    // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
+    // minimum ~64K to prevent horrible miscalculations in edge cases that result in dramatic slow down
+    static uint32_t hash_sizes[] = { /* 509, 719, 1021, 1447, 2039, 2887, 4039, 5791, 8191, 11579, 16381, 23167, 32749, 46337,*/ 65521, 92681, 131071, 
+                                     185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
+                                     11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859 };
     #define NUM_HASH_SIZES (sizeof(hash_sizes) / sizeof(hash_sizes[0]))
 
     for (int i=0; i < NUM_HASH_SIZES; i++)
@@ -197,67 +199,76 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 // is less likely to fit into the CPU memory caches
 void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext *first_merging_vb_ctx)
 {
-    // note on txt_data_size_single: if its a physical plain VCF file - this is the file size. 
+    // note on txt_data_size_single: if its a physical plain txt file - this is the file size. 
     // if not - its an estimate done after the first VB by txtfile_estimate_txt_data_size
-    double estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
+    double effective_num_vbs, estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->lines.len;
 
-    double n1 = first_merging_vb_ctx->mtf_len_at_half;
-    double n2 = (int)first_merging_vb_ctx->ol_mtf.len - (int)first_merging_vb_ctx->mtf_len_at_half;
+    // for growth purposes, we discard the first 1/3 of VB1, and compare the growth of the 2nd vs the 3rd 1/3. 
+    // this is because many fields display the charactistics of having a relatively small number of high frequency entries
+    // which mostly show up in n1, and then a long tail of low frequency entries. The comparison of n2 to n3,
+    // assuming that the new snips first introduced in them are mostly low frequency ones, will give us a more accurate predication
+    // of the gradient appearance of new snips
+    double n1 = first_merging_vb_ctx->mtf_len_at_1_3;
+    double n2 = first_merging_vb_ctx->mtf_len_at_2_3 - first_merging_vb_ctx->mtf_len_at_1_3;
+    double n3 = (int)first_merging_vb_ctx->ol_mtf.len - n1 - n2;
 
-    static struct { uint64_t vbs, factor; } growth_plan[] =
-    { 
-        { 0, 1 },
-        { 1, 2 },
-        { 5, 4 },
-        { 9, 8 },
-        { 17, 16 },
-        { 44, 23 },
-        { 114, 32 },
-        { 295, 45 },
-        { 765, 64 },
-        { 1981, 91 },
-        { 5132, 128 },
-        { 13291, 181 },
-        { 34423, 256 },
-        { 89155, 362 },
-        { 230912, 512 },
-        { 598063, 724 },
-        { 1548983, 1024 },
+    double n2_n3_lines = (double)(merging_vb->lines.len - merging_vb->num_lines_at_1_3);
+
+    // my secret formula for arriving at these numbers: https://docs.google.com/spreadsheets/d/1UijOuPgquZ71kEdB7kUf1OYUMs-Xhu2gAOOHgy6QCIQ/edit#gid=0
+    static struct { 
+    uint64_t   vbs,     factor; } growth_plan[] = { 
+    /* 0  */ { 0,       1       },
+    /* 1  */ { 1,       2       },
+    /* 2  */ { 5,       4       },
+    /* 3  */ { 9,       8       },
+    /* 4  */ { 17,      16      },
+    /* 5  */ { 44,      29      },
+    /* 6  */ { 114,     49      },
+    /* 7  */ { 295,     78      },
+    /* 8  */ { 765,     117     },
+    /* 9  */ { 1981,    164     },
+    /* 10 */ { 5132,    230     },
+    /* 11 */ { 13291,   322     },
+    /* 12 */ { 34423,   451     },
+    /* 13 */ { 89155,   631     },
+    /* 14 */ { 230912,  884     },
+    /* 15 */ { 598063,  1238    },
+    /* 16 */ { 1548983, 1744    },
     };
 
     double estimated_entries=0;
-    double n_ratio = n2 ? n1/n2 : 0;    unsigned max_growth_plan=0;
+    double n2n3_ratio = n3 ? n2/n3 : 0;    
+    unsigned gp=0;
 
-    if (n2 == 0) 
-        estimated_entries = zf_ctx->mtf.len;
+    if (n3 == 0) 
+        estimated_entries = zf_ctx->mtf.len; // we don't expect new entries coming from the next VBs
 
-    // To do - take into account optional fields partial appearance (e.g. if a field appears 1% of the time...)
-
-    else if (n_ratio > 0.8 && n_ratio < 1.2)  // looks like almost linear growth
-        estimated_entries = estimated_num_lines * ((n1+n2 )/ merging_vb->lines.len) * 0.75;
+    else if (n2n3_ratio <= 1.05)  // looks like almost linear growth - we expect the same density of new entries as in n2 and n3
+        estimated_entries = estimated_num_lines * ((n2+n3) / n2_n3_lines);
     
     else {
-        if      (n_ratio > 2.5 || !n1) max_growth_plan = 2;
-        else if (n_ratio > 2.1) max_growth_plan = 3;
-        else if (n_ratio > 1.8) max_growth_plan = 4;
-        else if (n_ratio > 1.5) max_growth_plan = 5;
-        else if (n_ratio > 1.2) max_growth_plan = 7;
-        else if (n_ratio > 1.1) max_growth_plan = 9;
-        else                    max_growth_plan = sizeof(growth_plan) / sizeof(growth_plan[0]);
-        
-        for (int i=max_growth_plan; i >= 0 ; i--)
-            if (estimated_num_vbs > growth_plan[i].vbs) {
-                estimated_entries = zf_ctx->mtf.len * growth_plan[i].factor;
+        // depending on the ratio, the number of new entries might drop fast. we cap the number of estimated vbs
+        // at the VB where the expected number of new entries drops to 1 (dropping at a rate of n2n3_ratio every 1/3 VB)
+        // n3 * [ (1/n2n3_ratio) ^ (3*effective_num_vbs)] = 1
+        // which we develop to: effective_num_vbs = log (1/n3) / (3 * log (1/n2n3_ratio) )
+
+        effective_num_vbs = ceil (log (1/n3) / (3 * log (1/n2n3_ratio) )); // note that n2n3_ratio > 1.05 and n3 >= 1 due to the if statements above
+
+        for (gp = sizeof(growth_plan) / sizeof(growth_plan[0]) - 1; gp >= 0 ; gp--)
+            if (MIN (effective_num_vbs + 1 /* +1 for first vb */, estimated_num_vbs) > growth_plan[gp].vbs) {
+                estimated_entries = zf_ctx->mtf.len * ((n2+n3) / n2_n3_lines) * growth_plan[gp].factor;
                 break;
             }
+    
+        if (!estimated_entries) estimated_entries = 100000000000; // very very big - force largest available hash table
     }
 
-    if (!estimated_entries) estimated_entries = 100000000000; // very very big
-
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
-    //printf ("dict=%.8s n1=%2.2lf n2=%2.2lf n1/n2=%2.2lf max_growth_plan=%u vbs=%u num_lines=%u zf_ctx->mtf.len=%u entries=%2.2lf hashsize=%u\n", 
-    //        dict_id_printable(zf_ctx->dict_id).id, n1, n2, n_ratio, max_growth_plan, (unsigned)estimated_num_vbs, (unsigned)estimated_num_lines, (uint32_t)zf_ctx->mtf.len, estimated_entries, zf_ctx->global_hash_prime); 
+    //printf ("dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u est_vbs=%u effc_vbs=%u"
+    //        " est_vb_lines=%u n2_n3_lines=%u zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
+    //        dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)estimated_num_vbs, (unsigned)effective_num_vbs, 
+    //        (unsigned)estimated_num_lines, (unsigned)n2_n3_lines, (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->mtf_ctx->global_hash", zf_ctx->did_i);

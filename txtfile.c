@@ -46,7 +46,7 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
 
         // bytes_read=0 and we're using an external decompressor - it is either EOF or
         // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
-        if (!bytes_read && file_is_read_via_ext_decompressor_type (txt_file->type)) {
+        if (!bytes_read && file_is_read_via_ext_decompressor (txt_file)) {
             file_assert_ext_decompressor();
             goto finish; // all is good - just a normal end-of-file
         }
@@ -70,13 +70,13 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
         }
 #endif
     }
-    else if (file_is_gz_type (txt_file->type)) {
+    else if (txt_file->comp_alg == COMP_GZ) {
         bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
         
         if (bytes_read)
             txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); 
     }
-    else if (file_is_bz2_type (txt_file->type)) { 
+    else if (txt_file->comp_alg == COMP_BZ2) { 
         bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, max_bytes);
 
         if (bytes_read)
@@ -298,28 +298,27 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
     bool is_no_gt_vcf = (txt_file->data_type == DT_VCF && !((VBlockVCFP)vb)->has_genotype_data);
 
-    // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
-    if (file_is_gz_type (txt_file->type) || file_is_bz2_type (txt_file->type))
-        ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size;
+    switch (txt_file->comp_alg) {
+        // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
+        case COMP_GZ:
+        case COMP_BZ2: ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size; break;
 
-    // for compressed files for which we don't have their size (eg streaming from an http server) - we use
-    // estimates based on a benchmark compression ratio of files with and without genotype data
-    else if (file_is_bcf_type (txt_file->type))
+        // for compressed files for which we don't have their size (eg streaming from an http server) - we use
+        // estimates based on a benchmark compression ratio of files with and without genotype data
+
         // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
         // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
         // the bcf is compressed as it normally is.
-        ratio = is_no_gt_vcf ? 55 : 8.5;
+        case COMP_BCF: ratio = is_no_gt_vcf ? 55 : 8.5; break;
 
-    else if (file_is_xz_type (txt_file->type)) 
-        ratio = is_no_gt_vcf ? 171 : 12.7;
+        case COMP_XZ:  ratio = is_no_gt_vcf ? 171 : 12.7; break;
 
-    else if (file_is_bam_type (txt_file->type))
-        ratio = 4;
+        case COMP_BAM: ratio = 4; break;
 
-    else if (file_is_plain_type (txt_file->type))
-        ratio = 1;
+        case COMP_PLN: ratio = 1; break;
 
-    else ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
+        default: ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
+    }
 
     txt_file->txt_data_size_single = disk_size * ratio;
 }

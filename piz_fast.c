@@ -39,21 +39,29 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
         const char *md = snip;
 
         // description line
-        LOAD_SNIP (FAST_DESC);
-        piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[md[0]-'X'], eol_len[md[0]-'X'], 
-                                        snip, snip_len, txt_line_i);
+        if (!flag_strip) {
+            LOAD_SNIP (FAST_DESC);
+            piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[md[0]-'X'], eol_len[md[0]-'X'], 
+                                            snip, snip_len, txt_line_i);
+        }
+
+        if (flag_header_one) continue; // this is invoked by --header-only (re-written to flag_header_one in piz_read_global_area)
 
         // sequence line
         uint32_t seq_len = atoi (&md[4]); // numeric string terminated by dictionary's \t separator
         piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
         buf_add (&vb->txt_data, eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
 
-        // + line
-        buf_add (&vb->txt_data, md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
+        if (!flag_strip) {
+            // + line
+            buf_add (&vb->txt_data, md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
 
-        // quality line
-        piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i);
-        buf_add (&vb->txt_data, eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
+            // quality line
+            piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i);
+            
+            buf_add (&vb->txt_data, eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
+        }
+
     }
 
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
@@ -80,21 +88,35 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
         switch (md[1]) {
             case '>': // description line 
-                LOAD_SNIP (FAST_DESC);
-                piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[has_13], eol_len[has_13], 
-                                                snip, snip_len, txt_line_i);
+                if (!flag_strip) {
+                    LOAD_SNIP (FAST_DESC);
+                    piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[has_13], eol_len[has_13], 
+                                                    snip, snip_len, txt_line_i);
+                    vb->last_line = FASTA_LINE_DESC;
+                }
                 break;
 
             case ';': // comment line
-                if (!flag_strip) 
+                if (!flag_strip && !flag_header_one) 
                     RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", '\n', eol[has_13], eol_len[has_13]);
+
+                //if (flag_header_one && !snip_len)
+                //    vb->txt_data.len -= eol_len[has_13]; // don't show empty lines in --header-only mode
+
+                vb->last_line = FASTA_LINE_COMMENT;
                 break;
 
-            default: { // sequence line
-                uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's \t separator
-                piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
-                buf_add (&vb->txt_data, eol[has_13], eol_len[has_13]); // end of line
-            }
+            default:  // sequence line
+                if (!flag_header_one) { // this is invoked by --header-only (re-written to flag_header_one in piz_read_global_area)
+
+                    if (flag_fasta_sequential && vb->last_line == FASTA_LINE_SEQ && vb->txt_data.len >= 2)
+                        vb->txt_data.len -= 1 + (vb->txt_data.data[vb->txt_data.len-2]=='\r');
+
+                    uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's \t separator
+                    piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i);
+                    buf_add (&vb->txt_data, eol[has_13], eol_len[has_13]); // end of line
+                    vb->last_line = FASTA_LINE_SEQ;
+                }
         }
     }
 
@@ -130,13 +152,13 @@ static void piz_fast_uncompress_all_sections (VBlockFAST *vb)
     // QUAL (FASTQ only)
     if (vb->data_type == DT_FASTQ) {
         SectionHeader *qual_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-        if (!flag_strip) zfile_uncompress_section ((VBlockP)vb, qual_header, &vb->qual_data, "qual_data", SEC_QUAL_DATA);    
+        zfile_uncompress_section ((VBlockP)vb, qual_header, &vb->qual_data, "qual_data", SEC_QUAL_DATA);    
     }
 
     // COMMENT (FASTA only)
     else {
         SectionHeader *comment_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-        if (!flag_strip) zfile_uncompress_section ((VBlockP)vb, comment_header, &vb->comment_data, "comment_data", SEC_FASTA_COMMENT_DATA);    
+        zfile_uncompress_section ((VBlockP)vb, comment_header, &vb->comment_data, "comment_data", SEC_FASTA_COMMENT_DATA);    
     }
 }
 

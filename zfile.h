@@ -19,9 +19,9 @@ extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t
 
 extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
                                              BufferP section_data, CompGetLineCallback callback, uint32_t total_len, 
-                                             CompressorAlg comp_alg);
+                                             CompressionAlg comp_alg);
 #define zfile_compress_section_data(vb, section_type, section_data) \
-    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, COMPRESS_BZLIB)
+    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, COMP_BZ2)
 
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);

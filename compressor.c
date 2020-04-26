@@ -393,6 +393,13 @@ bool comp_compress_none (VBlock *vb,
     return true;
 }
 
+bool comp_error (VBlock *vb, const char *uncompressed, uint32_t uncompressed_len, CompGetLineCallback callback,
+                 char *compressed, uint32_t *compressed_len, bool soft_fail) 
+{
+    ABORT0 ("Error in comp_compress: Unsupported section compression algorithm");
+    return false;
+}
+
 // compresses data - either a conitguous block or one line at a time. If both are NULL that there is no data to compress.
 void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                     SectionHeader *header, 
@@ -402,10 +409,13 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     ASSERT0 (!uncompressed_data || !callback, "Error in comp_compress: expecting either uncompressed_data or callback but not both");
 
     // if the user requested --fast - we always use BZLIB, never LZMA
-    if (flag_fast && header->data_compression_alg == COMPRESS_LZMA)
-        header->data_compression_alg = COMPRESS_BZLIB;
+    if (flag_fast && header->section_compression_alg == COMP_LZMA)
+        header->section_compression_alg = COMP_BZ2;
 
-    static Compressor compressors[NUM_COMPRESSOR_ALGS] = { comp_compress_none, comp_compress_bzlib, comp_compress_lzma };
+    static Compressor compressors[NUM_COMPRESSION_ALGS] = { 
+        comp_compress_none, comp_error, comp_compress_bzlib, comp_error, comp_error, comp_error, comp_error, comp_compress_lzma };
+
+    ASSERT (header->section_compression_alg < NUM_COMPRESSION_ALGS, "Error in comp_compress: unsupported section compressor=%u", header->section_compression_alg);
 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
@@ -423,10 +433,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     }
 
     // if there's no data to compress, set compression to NONE
-    if (!data_uncompressed_len) header->data_compression_alg = COMPRESS_NONE;
+    if (!data_uncompressed_len) header->section_compression_alg = COMP_PLN;
        
     uint32_t est_compressed_len = 
-        (header->data_compression_alg != COMPRESS_NONE) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
+        (header->section_compression_alg != COMP_PLN) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
@@ -435,14 +445,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
-
-        ASSERT ((unsigned)header->data_compression_alg < NUM_COMPRESSOR_ALGS, 
-                "Error in comp_compress: unrecognized data_compression_alg=%d", header->data_compression_alg);
         
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         bool success = 
-            compressors[header->data_compression_alg](vb, 
+            compressors[header->section_compression_alg](vb, 
                                                       uncompressed_data, data_uncompressed_len,
                                                       callback,  
                                                       &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
@@ -456,7 +463,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
 
-            compressors[header->data_compression_alg](vb, 
+            compressors[header->section_compression_alg](vb, 
                                                       uncompressed_data, data_uncompressed_len,
                                                       callback,  
                                                       &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
@@ -516,13 +523,13 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     if (flag_show_headers) zfile_show_header (header, vb->vblock_i ? vb : NULL); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 
-void comp_uncompress (VBlock *vb, CompressorAlg alg, 
+void comp_uncompress (VBlock *vb, CompressionAlg alg, 
                       const char *compressed, uint32_t compressed_len,
                       Buffer *uncompressed)
 {
     switch (alg) {
 
-    case COMPRESS_BZLIB: {
+    case COMP_BZ2: {
         bz_stream strm;
         strm.bzalloc = comp_bzalloc;
         strm.bzfree  = comp_bzfree;
@@ -542,7 +549,7 @@ void comp_uncompress (VBlock *vb, CompressorAlg alg,
         BZ2_bzDecompressEnd (&strm);
         break;
     }
-    case COMPRESS_LZMA: {
+    case COMP_LZMA: {
         ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
         ELzmaStatus status;
         //uint64_t uncompressed_len64 = uncompressed->len;
@@ -558,7 +565,7 @@ void comp_uncompress (VBlock *vb, CompressorAlg alg,
 
         break;
     }
-    case COMPRESS_NONE:
+    case COMP_PLN:
         memcpy (uncompressed->data, compressed, compressed_len);
         break;
 

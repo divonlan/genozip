@@ -44,7 +44,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
         if (is_last_file) {
             double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
 
-            if (file_is_plain_type (txt_file->type) || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+            if (txt_file->comp_alg == COMP_PLN || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
                 fprintf (stderr, "Time: %s, %s compression ratio: %1.1f           \n", 
                             dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio);
             else
@@ -57,7 +57,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
     else {
         double ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-        if (file_is_plain_type (txt_file->type) || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+        if (txt_file->comp_alg == COMP_PLN || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
             fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
         
         else // source was compressed
@@ -215,7 +215,7 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
 
         z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
 
-        zfile_compress_section_data_alg (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf, 0,0, COMPRESS_LZMA); // ra data compresses better with LZMA than BZLIB
+        zfile_compress_section_data_alg (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
     }
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data

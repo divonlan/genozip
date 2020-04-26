@@ -847,8 +847,7 @@ void mtf_free_context (MtfContext *ctx)
     ctx->local_hash_prime = 0;
     ctx->global_hash_prime = 0;
     ctx->merge_num = 0;
-    ctx->num_lines_at_half = 0;
-    ctx->mtf_len_at_half = 0;
+    ctx->mtf_len_at_1_3 = ctx->mtf_len_at_2_3 = 0;
 
     if (ctx->mutex_initialized) {
         pthread_mutex_destroy (&ctx->mutex);

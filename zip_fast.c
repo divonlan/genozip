@@ -108,11 +108,11 @@ void zip_fast_compress_one_vb (VBlockP vb_)
     // SEQ
     uint32_t seq_len;
     zip_fast_get_seq_len (vb, &seq_len);
-    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_fast_get_start_len_line_i_seq,  seq_len, COMPRESS_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_fast_get_start_len_line_i_seq,  seq_len, COMP_LZMA);
 
     // FASTQ only: QUAL
     if (is_fastq) 
-        zfile_compress_section_data_alg (vb_, SEC_QUAL_DATA, NULL, zip_fast_get_start_len_line_i_qual, seq_len, COMPRESS_BZLIB);
+        zfile_compress_section_data_alg (vb_, SEC_QUAL_DATA, NULL, zip_fast_get_start_len_line_i_qual, seq_len, COMP_BZ2);
 
     // FASTA obly: COMMENT
     else 

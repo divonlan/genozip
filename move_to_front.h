@@ -78,8 +78,7 @@ typedef struct MtfContext {
                                // are valid. other entries may be added by later merges and should be ignored.
                                // in zf_ctx: incremented with every merge into this ctx.
     // the next 2 are used in merge to set the size of the global hash table, when the first vb to create a ctx does so
-    uint32_t mtf_len_at_half;  // value of mtf->len after an estimated half of the lines have been segmented
-    uint32_t num_lines_at_half;// the number of lines segmented when mtf_len_at_half was set
+    uint32_t mtf_len_at_1_3, mtf_len_at_2_3;  // value of mtf->len after an estimated 1/3 + 2/3 of the lines have been segmented
 
     Buffer sorter;             // used by the vb_i==1 only of ZIP to sort the dictionary - entries of SorterEnt
 

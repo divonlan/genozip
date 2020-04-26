@@ -41,6 +41,7 @@ typedef struct SubfieldMapper {
     \
     Buffer lines;              /* An array of *DataLine* - the lines in this VB */\
     uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
+    uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\

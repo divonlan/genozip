@@ -73,7 +73,7 @@ typedef enum {
     SEC_STATS_HT_SEPERATOR
 } SectionType;
 
-// this data must be perfectly aligned with SectionType. it contains: 1. name 2. 1 if the section is stripped in --strip 
+// this data must be perfectly aligned with SectionType. it contains: 1. name 2. 1 if the section is stripped out in --strip 
 #define SECTIONTYPE_ABOUT { \
     {"SEC_TXT_HEADER",          0},  {"SEC_VB_HEADER",          0},\
     \
@@ -112,8 +112,8 @@ typedef enum {
     {"SEC_SAM_TLEN_DICT",       1},  {"SEC_SAM_TLEN_B250",      1},\
     {"SEC_SAM_OPTIONAL_DICT",   0},  {"SEC_SAM_OPTIONAL_B250",  0},\
     \
-    {"SEC_FAST_DESC_SF_DICT",   0},  {"SEC_FAST_DESC_SF_B250",  0},\
-    {"SEC_FAST_DESC_DICT",      0},  {"SEC_FAST_DESC_B250",     0},\
+    {"SEC_FAST_DESC_SF_DICT",   1},  {"SEC_FAST_DESC_SF_B250",  1},\
+    {"SEC_FAST_DESC_DICT",      1},  {"SEC_FAST_DESC_B250",     1},\
     {"SEC_FAST_LINEMETA_DICT",  0},  {"SEC_FAST_LINEMETA_B250", 0},\
     {"SEC_FASTA_COMMENT_DATA",  1},\
     \
@@ -161,8 +161,8 @@ typedef struct SectionHeader {
     uint32_t vblock_i;               // VB with in file starting from 1 ; 0 for Txt Header
     uint16_t section_i;              // section within VB - 0 for Variant Data
     uint8_t  section_type;          
-    uint8_t  data_compression_alg : 3; // introduced in genozip v5 (before that it this field was unused)
-    uint8_t  unused               : 5;
+    uint8_t  section_compression_alg : 4; // one of CompressionAlg. introduced in genozip v5 (before that it this field was unused)
+    uint8_t  unused                  : 4;
 } SectionHeader; 
 
 typedef struct {
@@ -190,14 +190,6 @@ typedef struct {
     uint32_t magic;
 } SectionFooterGenozipHeader;
 
-#define COMPRESSION_TYPE_NONE  0
-#define COMPRESSION_TYPE_GZIP  1
-#define COMPRESSION_TYPE_BZIP2 2
-#define COMPRESSION_TYPE_BGZIP 3
-#define COMPRESSION_TYPE_XZ    4
-#define COMPRESSION_TYPE_BCF   5
-#define COMPRESSION_TYPE_BAM   6
-
 // The text file header section appears once in the file (or multiple times in case of concatenation), and includes the VCF file header 
 typedef struct {
     SectionHeader h;
@@ -206,7 +198,7 @@ typedef struct {
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t num_samples;      // VCF only: number of samples in the original VCF file
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
-    uint8_t  compression_type; // compression type of original file, one of COMPRESSION_TYPE_*
+    uint8_t  compression_type; // compression type of original file, one of CompressionAlg 
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single txt file.
 
 #define TXT_FILENAME_LEN 256
@@ -217,14 +209,14 @@ typedef struct {
 // A generic VB header - it will suffice for many of the data types 
 typedef struct {
     SectionHeader h;
-    uint32_t first_line;               // line (starting from 1) of this variant block in the single VCF file
+    uint32_t first_line;               // line (starting from 1) of this vblock in the single VCF file
                                        // new in v2: if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next concatenated file
-    uint32_t num_lines;                // number of variants in this block
+    uint32_t num_lines;                // number of records in this vblock
     
     // features of the data
-    uint32_t vb_data_size;             // size of variant block as it appears in the source file
-    uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
-    uint32_t longest_line_len;         // length of the longest line in this VB
+    uint32_t vb_data_size;             // size of vblock as it appears in the source file
+    uint32_t z_data_bytes;             // total bytes of this vblock in the genozip file including all sections and their headers
+    uint32_t longest_line_len;         // length of the longest line in this vblock
 
     uint32_t ffu;                      // for future use
 } SectionHeaderVbHeader; 

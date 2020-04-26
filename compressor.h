@@ -7,10 +7,7 @@
 #define COMPRESSOR_INCLUDED
 
 #include "genozip.h"
-
-#define NUM_COMPRESSOR_ALGS 3
-typedef enum { COMPRESS_UNKNOWN=-1, // value used internally, never written to disk
-               COMPRESS_NONE=0, COMPRESS_BZLIB=1, COMPRESS_LZMA=2 } CompressorAlg; // goes into SectionHeader.data_compression_alg
+#include "file.h"
 
 typedef void CompGetLineCallback (VBlockP vb, uint32_t vb_line_i, 
                                   char **line_data_1, uint32_t *line_data_len_1,
@@ -21,7 +18,7 @@ extern void comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
                            const char *uncompressed_data, // option 1 - compress contiguous data
                            CompGetLineCallback callback); // option 2 - compress data one line at a time
 
-extern void comp_uncompress (VBlockP vb, CompressorAlg alg, 
+extern void comp_uncompress (VBlockP vb, CompressionAlg alg, 
                              const char *compressed_data, uint32_t compressed_data_len,
                              BufferP uncompressed_data);
 

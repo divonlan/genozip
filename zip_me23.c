@@ -60,8 +60,8 @@ void zip_me23_compress_one_vb (VBlockP vb_)
     zip_generate_and_compress_fields (vb_);
     
     // generate & compress the ID and Genotype data
-    zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->id_numeric_data, NULL, 0, COMPRESS_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_HT_DATA,  &vb->genotype_data, NULL, 0, COMPRESS_BZLIB);
+    zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->id_numeric_data, NULL, 0, COMP_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_HT_DATA,  &vb->genotype_data, NULL, 0, COMP_BZ2);
     
     // tell dispatcher this thread is done and can be joined. 
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true

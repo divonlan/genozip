@@ -268,6 +268,7 @@ void vb_release_vb (VBlock *vb)
     vb->num_dict_ids = 0;
     vb->chrom_node_index = 0; 
     vb->vb_position_txt_file = 0;
+    vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
 
     memset(vb->txt_section_bytes, 0, sizeof(vb->txt_section_bytes));
     memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));

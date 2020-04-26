@@ -54,12 +54,32 @@
 #define FASTA_GZ_      ".fasta.gz"
 #define FASTA_BZ2_     ".fasta.bz2"
 #define FASTA_XZ_      ".fasta.xz"
-#define FA_            ".fa"
 #define FASTA_GENOZIP_ ".fasta" GENOZIP_EXT
+#define FA_            ".fa"
 #define FA_GZ_         ".fa.gz"
 #define FA_BZ2_        ".fa.bz2"
 #define FA_XZ_         ".fa.xz"
 #define FA_GENOZIP_    ".fa" GENOZIP_EXT
+#define FAA_            ".faa"
+#define FAA_GZ_         ".faa.gz"
+#define FAA_BZ2_        ".faa.bz2"
+#define FAA_XZ_         ".faa.xz"
+#define FAA_GENOZIP_    ".faa" GENOZIP_EXT
+#define FFN_            ".ffn"
+#define FFN_GZ_         ".ffn.gz"
+#define FFN_BZ2_        ".ffn.bz2"
+#define FFN_XZ_         ".ffn.xz"
+#define FFN_GENOZIP_    ".ffn" GENOZIP_EXT
+#define FNN_            ".fnn"
+#define FNN_GZ_         ".fnn.gz"
+#define FNN_BZ2_        ".fnn.bz2"
+#define FNN_XZ_         ".fnn.xz"
+#define FNN_GENOZIP_    ".fnn" GENOZIP_EXT
+#define FNA_            ".fna"
+#define FNA_GZ_         ".fna.gz"
+#define FNA_BZ2_        ".fna.bz2"
+#define FNA_XZ_         ".fna.xz"
+#define FNA_GENOZIP_    ".fna" GENOZIP_EXT
 
 // 23andMe file variations
 // note: 23andMe files come as a .txt, and therefore the user must specify --input to compress them. we have this
@@ -70,104 +90,96 @@
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
 
 typedef enum      { UNKNOWN_FILE_TYPE, 
-                    VCF,  VCF_GZ,  VCF_BGZ,  VCF_BZ2,  VCF_XZ,  BCF,  BCF_GZ,  BCF_BGZ,  VCF_GENOZIP,  
-                    SAM,  BAM,  SAM_GENOZIP,
-                    FASTQ,  FASTQ_GZ,  FASTQ_BZ2, FASTQ_XZ,  FQ,  FQ_GZ,  FQ_BZ2,  FQ_XZ,  FASTQ_GENOZIP, FQ_GENOZIP,
-                    FASTA,  FASTA_GZ,  FASTA_BZ2, FASTA_XZ,  FA,  FA_GZ,  FA_BZ2,  FA_XZ,  FASTA_GENOZIP, FA_GENOZIP,
+                    VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, BCF, BCF_GZ, BCF_BGZ, VCF_GENOZIP,  
+                    SAM, BAM, SAM_GENOZIP,
+                    FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
+                    FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,    FQ_GENOZIP,
+                    FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ, FASTA_GENOZIP,
+                    FA,    FA_GZ,    FA_BZ2,    FA_XZ,    FA_GENOZIP,
+                    FAA,   FAA_GZ,   FAA_BZ2,   FAA_XZ,   FAA_GENOZIP,
+                    FFN,   FFN_GZ,   FFN_BZ2,   FFN_XZ,   FFN_GENOZIP,
+                    FNN,   FNN_GZ,   FNN_BZ2,   FNN_XZ,   FNN_GENOZIP,
+                    FNA,   FNA_GZ,   FNA_BZ2,   FNA_XZ,   FNA_GENOZIP,
                     ME23, ME23_GENOZIP, 
                     AFTER_LAST_FILE_TYPE } FileType;
-
-// txt file types and their corresponding genozip file types for each data type
-#define FT_BY_DT  { { { VCF,       VCF_GENOZIP   }, { VCF_GZ,   VCF_GENOZIP   }, { VCF_BGZ, VCF_GENOZIP },\
-                      { VCF_BZ2,   VCF_GENOZIP   }, { VCF_XZ,   VCF_GENOZIP   }, \
-                      { BCF,       VCF_GENOZIP   }, { BCF_GZ,   VCF_GENOZIP   }, { BCF_BGZ, VCF_GENOZIP }, {0 , 0} },\
-                    { { SAM,       SAM_GENOZIP   }, { BAM,      SAM_GENOZIP   }, { 0, 0 }, },\
-                    { { FASTQ,     FASTQ_GENOZIP }, { FASTQ_GZ, FASTQ_GENOZIP }, \
-                      { FASTQ_BZ2, FASTQ_GENOZIP }, { FASTQ_XZ, FASTQ_GENOZIP },\
-                      { FQ,        FQ_GENOZIP    }, { FQ_GZ,    FQ_GENOZIP    },\
-                      { FQ_BZ2,    FQ_GENOZIP    }, { FQ_XZ,    FQ_GENOZIP    }, { 0, 0 } },\
-                    { { FASTA,     FASTA_GENOZIP }, { FASTA_GZ, FASTA_GENOZIP }, \
-                      { FASTA_BZ2, FASTA_GENOZIP }, { FASTA_XZ, FASTA_GENOZIP },\
-                      { FA,        FA_GENOZIP    }, { FA_GZ,    FA_GENOZIP    },\
-                      { FA_BZ2,    FA_GENOZIP    }, { FA_XZ,    FA_GENOZIP    }, { 0, 0 } },\
-                    { { ME23,      ME23_GENOZIP  }, { 0, 0 } } }
-extern const struct ft_by_dt { FileType in, out; } ft_by_dt[NUM_DATATYPES][20];                                                                  
-         
-#define UNZIP_OUTPUT_FT_BY_DT { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   /* plain file MUST appear first on the list - this will be the */\
-                                { SAM,  BAM, 0 },                      /* default output when redirecting */ \
-                                { FASTQ,  FASTQ_GZ,  FQ,  FQ_GZ, 0 },\
-                                { FASTA,  FASTA_GZ,  FA,  FA_GZ, 0 },\
-                                { ME23, 0 } }                        
-extern const FileType output_ft_by_dt[NUM_DATATYPES][20];                    
-
-#define GENOZIP_TYPE_BY_DT { VCF_GENOZIP, SAM_GENOZIP, FASTQ_GENOZIP, FASTA_GENOZIP, ME23_GENOZIP }
-extern const FileType genozip_ft_by_dt[NUM_DATATYPES];                    
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
                    SAM_, BAM_, SAM_GENOZIP_, \
-                   FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FQ_, FQ_GZ_, FQ_BZ2_, FQ_XZ_, FASTQ_GENOZIP_, FQ_GENOZIP_, \
-                   FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FA_, FA_GZ_, FA_BZ2_, FA_XZ_, FASTA_GENOZIP_, FA_GENOZIP_, \
+                   FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_, \
+                   FQ_,    FQ_GZ_,    FQ_BZ2_,    FQ_XZ_,    FQ_GENOZIP_, \
+                   FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FASTA_GENOZIP_,\
+                   FA_,    FA_GZ_,    FA_BZ2_,    FA_XZ_,    FA_GENOZIP_, \
+                   FAA_,   FAA_GZ_,   FAA_BZ2_,   FAA_XZ_,   FAA_GENOZIP_, \
+                   FFN_,   FFN_GZ_,   FFN_BZ2_,   FFN_XZ_,   FFN_GENOZIP_, \
+                   FNN_,   FNN_GZ_,   FNN_BZ2_,   FNN_XZ_,   FNN_GENOZIP_, \
+                   FNA_,   FNA_GZ_,   FNA_BZ2_,   FNA_XZ_,   FNA_GENOZIP_, \
                    ME23_, ME23_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
 
+// IMPORTANT: these values CANNOT BE CHANGED as they are part of the genozip file - 
+// they go in SectionHeader.section_compression_alg and also SectionHeaderTxtHeader.compression_type
+#define NUM_COMPRESSION_ALGS 8
+typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */, 
+               COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7 } CompressionAlg; 
+
+// txt file types and their corresponding genozip file types for each data type
+// first entry of each data type MUST be the default plain file
+#define TXT_IN_FT_BY_DT  { { { VCF,       COMP_PLN, VCF_GENOZIP   }, { VCF_GZ,   COMP_GZ,  VCF_GENOZIP   }, { VCF_BGZ, COMP_GZ,  VCF_GENOZIP },\
+                             { VCF_BZ2,   COMP_BZ2, VCF_GENOZIP   }, { VCF_XZ,   COMP_XZ,  VCF_GENOZIP   },\
+                             { BCF,       COMP_BCF, VCF_GENOZIP   }, { BCF_GZ,   COMP_BCF, VCF_GENOZIP   }, { BCF_BGZ, COMP_BCF, VCF_GENOZIP }, {0, 0, 0} },\
+                           { { SAM,       COMP_PLN, SAM_GENOZIP   }, { BAM,      COMP_BAM, SAM_GENOZIP   }, { 0, 0, 0 }, },\
+                           { { FASTQ,     COMP_PLN, FASTQ_GENOZIP }, { FASTQ_GZ, COMP_GZ,  FASTQ_GENOZIP },\
+                             { FASTQ_BZ2, COMP_BZ2, FASTQ_GENOZIP }, { FASTQ_XZ, COMP_XZ,  FASTQ_GENOZIP },\
+                             { FQ,        COMP_PLN, FQ_GENOZIP    }, { FQ_GZ,    COMP_GZ,  FQ_GENOZIP    },\
+                             { FQ_BZ2,    COMP_BZ2, FQ_GENOZIP    }, { FQ_XZ,    COMP_XZ,  FQ_GENOZIP    }, { 0, 0, 0 } },\
+                           { { FASTA,     COMP_PLN, FASTA_GENOZIP }, { FASTA_GZ, COMP_GZ,  FASTA_GENOZIP },\
+                             { FASTA_BZ2, COMP_BZ2, FASTA_GENOZIP }, { FASTA_XZ, COMP_XZ,  FASTA_GENOZIP },\
+                             { FAA,       COMP_PLN, FAA_GENOZIP   }, { FAA_GZ,   COMP_GZ,  FAA_GENOZIP   },\
+                             { FAA_BZ2,   COMP_BZ2, FAA_GENOZIP   }, { FAA_XZ,   COMP_XZ,  FAA_GENOZIP   },\
+                             { FFN,       COMP_PLN, FFN_GENOZIP   }, { FFN_GZ,   COMP_GZ,  FFN_GENOZIP   },\
+                             { FFN_BZ2,   COMP_BZ2, FFN_GENOZIP   }, { FFN_XZ,   COMP_XZ,  FFN_GENOZIP   },\
+                             { FNN,       COMP_PLN, FNN_GENOZIP   }, { FNN_GZ,   COMP_GZ,  FNN_GENOZIP   },\
+                             { FNN_BZ2,   COMP_BZ2, FNN_GENOZIP   }, { FNN_XZ,   COMP_XZ,  FNN_GENOZIP   },\
+                             { FNA,       COMP_PLN, FNA_GENOZIP   }, { FNA_GZ,   COMP_GZ,  FNA_GENOZIP   },\
+                             { FNA_BZ2,   COMP_BZ2, FNA_GENOZIP   }, { FNA_XZ,   COMP_XZ,  FNA_GENOZIP   },\
+                             { FA,        COMP_PLN, FA_GENOZIP    }, { FA_GZ,    COMP_GZ,  FA_GENOZIP    },\
+                             { FA_BZ2,    COMP_BZ2, FA_GENOZIP    }, { FA_XZ,    COMP_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
+                           { { ME23,      COMP_PLN, ME23_GENOZIP  }, { 0, 0, 0 } } }
+
+// plain file MUST appear first on the list - this will be the default output when redirecting
+// GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
+#define TXT_OUT_FT_BY_DT { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   \
+                           { SAM,  BAM, 0 },                      \
+                           { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },\
+                           { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
+                           { ME23, 0 } }                        
+
+// txt file types and their corresponding genozip file types for each data type
+// first entry of each data type MUST be the default genozip file
+#define Z_FT_BY_DT { { VCF_GENOZIP, 0 }, \
+                     { SAM_GENOZIP, 0 }, \
+                     { FASTQ_GENOZIP, FQ_GENOZIP, 0 }, \
+                     { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, 0 }, \
+                     { ME23_GENOZIP, 0 } } 
+
 typedef const char *FileMode;
 extern FileMode READ, WRITE; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
-#define file_is_read_via_ext_decompressor_type(type) \
-    (type == VCF_XZ || type == BCF || type == BCF_GZ  || type == BCF_BGZ || type == BAM)
-
-#define file_is_written_via_ext_compressor_type(type) \
-     (type == BCF || type == VCF_GZ  || type == VCF_BGZ || type == BAM || type == FASTQ_GZ || type == FASTA_GZ)
-
-// --------------------------
-// tests for data types
-// --------------------------
-#define file_is_vcf_type(type) (type == VCF_GZ || type == VCF_BGZ || type == VCF_BZ2 || type == VCF_XZ || \
-                                type == VCF || type == BCF || type == BCF_GZ || type == BCF_BGZ)
-
-#define file_is_sam_type(type) (type == SAM || type == BAM)
-
-#define file_is_fastq_type(type) (type == FASTQ || type == FASTQ_GZ || type == FASTQ_BZ2 || type == FASTQ_XZ || \
-                                  type == FQ || type == FQ_GZ || type == FQ_GZ || type == FQ_GZ)
-
-#define file_is_fasta_type(type) (type == FASTA || type == FASTA_GZ || type == FASTA_BZ2 || type == FASTA_XZ || \
-                                  type == FA || type == FA_GZ || type == FA_GZ || type == FA_GZ)
-
-#define file_is_me23_type(type) (type == ME23)
-
-// --------------------------
+// ---------------------------
 // tests for compression types
-// --------------------------
-#define file_is_plain_type(type) (type == VCF   || \
-                                  type == SAM   || \
-                                  type == FASTQ || type == FQ || \
-                                  type == FASTA || type == FA || \
-                                  type == ME23)
+// ---------------------------
 
-#define file_is_gz_type(type)  (type == VCF_GZ   || type == VCF_BGZ || \
-                                type == FASTQ_GZ || type == FQ_GZ   || \
-                                type == FASTA_GZ || type == FA_GZ)
+#define file_is_read_via_ext_decompressor(file) \
+  (file->comp_alg == COMP_XZ || file->comp_alg == COMP_BCF || file->comp_alg == COMP_BAM)
 
-#define file_is_bz2_type(type) (type == VCF_BZ2  || \
-                               type == FASTQ_BZ2 || type == FQ_BZ2  || \
-                               type == FASTA_BZ2 || type == FA_BZ2)
+#define file_is_read_via_int_decompressor(file) \
+  (file->comp_alg == COMP_GZ || file->comp_alg == COMP_BGZ || file->comp_alg == COMP_BZ2)
 
-#define file_is_xz_type(type)  (type == VCF_XZ   || \
-                                type == FASTQ_XZ || type == FQ_XZ   || \
-                                type == FASTA_XZ || type == FA_XZ)
+#define file_is_written_via_ext_compressor(file) (file->comp_alg == COMP_BCF || file->comp_alg == COMP_GZ)
 
-#define file_is_bam_type(type) (type == BAM)
-
-#define file_is_bcf_type(type) (type == BCF || type == BCF_GZ || type == BCF_BGZ)
-
-#define file_is_compressible(type) (file_is_vcf_type(type)   || file_is_sam_type(type) || \
-                                    file_is_fastq_type(type) || file_is_fasta_type(type) || \
-                                    file_is_me23_type(type))
-
-#define file_is_plain_or_ext_decompressor(file) (file_is_plain_type (file->type) || \
-                                                 file_is_read_via_ext_decompressor_type(file->type))
+#define file_is_plain_or_ext_decompressor(file) (file->comp_alg == COMP_PLN || file_is_read_via_ext_decompressor(file))
 
 typedef struct File {
     void *file;
@@ -177,9 +189,9 @@ typedef struct File {
     FileType type;
     bool is_remote;                    // true if file is downloaded from a url
     bool redirected;                   // true if this file is redirected from stdin/stdout
-
     DataType data_type;
-    
+    CompressionAlg comp_alg;            // txt_file: compression algorithm used with this file
+
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
                                        // note: this is different from txt_data_size_single as disk_size might be compressed (gz, bz2 etc)
@@ -265,7 +277,7 @@ extern const char *file_basename (const char *filename, bool remove_exe, const c
 extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param, bool add_string_terminator);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
-extern FileType file_get_genozip_ft_by_txt_ft (DataType dt, FileType txt_ft);
+extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);
 
 extern const char *ft_name (FileType ft);
 

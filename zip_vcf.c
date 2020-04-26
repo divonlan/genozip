@@ -320,16 +320,16 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
     COPY_TIMER (vb->profile.zip_vcf_generate_haplotype_sections);
 }
 
-static CompressorAlg zip_vcf_get_best_gt_compressor (VBlock *vb, Buffer *test_data)
+static CompressionAlg zip_vcf_get_best_gt_compressor (VBlock *vb, Buffer *test_data)
 {
-    static CompressorAlg best_gt_data_compressor = COMPRESS_UNKNOWN;
+    static CompressionAlg best_gt_data_compressor = COMP_UNKNOWN;
     static Buffer compressed = EMPTY_BUFFER; // no thread issues as protected my mutex
 
     // get best compression algorithm for gt data - lzma or bzlib - their performance varies considerably with
     // the type of data - with either winning by a big margin
     pthread_mutex_lock (&best_gt_data_compressor_mutex);    
 
-    if (best_gt_data_compressor != COMPRESS_UNKNOWN) goto finish; // answer already known
+    if (best_gt_data_compressor != COMP_UNKNOWN) goto finish; // answer already known
 
     #define TEST_BLOCK_SIZE 100000
     buf_alloc (vb, &compressed, TEST_BLOCK_SIZE+1000, 1, "compressed_data_test", 0);
@@ -342,9 +342,9 @@ static CompressorAlg zip_vcf_get_best_gt_compressor (VBlock *vb, Buffer *test_da
     uint32_t lzma_comp_len = compressed.size;
     comp_compress_lzma (vb, test_data->data, uncompressed_len, NULL, compressed.data, &lzma_comp_len, false);
     
-    if      (bzlib_comp_len < uncompressed_len && bzlib_comp_len < lzma_comp_len) best_gt_data_compressor = COMPRESS_BZLIB;
-    else if (lzma_comp_len  < uncompressed_len && lzma_comp_len < bzlib_comp_len) best_gt_data_compressor = COMPRESS_LZMA;
-    else                                                                          best_gt_data_compressor = COMPRESS_NONE;
+    if      (bzlib_comp_len < uncompressed_len && bzlib_comp_len < lzma_comp_len) best_gt_data_compressor = COMP_BZ2;
+    else if (lzma_comp_len  < uncompressed_len && lzma_comp_len < bzlib_comp_len) best_gt_data_compressor = COMP_LZMA;
+    else                                                                          best_gt_data_compressor = COMP_PLN;
 
     buf_free (&compressed);
 
@@ -441,10 +441,10 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
             vb->vblock_i, num_info_subfields, MAX_SUBFIELDS);
 
     // compress the numeric part of the ID field
-    zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->id_numeric_data, NULL, 0, COMPRESS_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->id_numeric_data, NULL, 0, COMP_LZMA);
 
     // compress the sample data - genotype, haplotype and phase sections. genotype data is generated here too.
-    CompressorAlg gt_data_alg;
+    CompressionAlg gt_data_alg;
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
         
         if (vb->has_genotype_data) {

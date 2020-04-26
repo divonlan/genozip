@@ -146,7 +146,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     // case: UNZIP: always ; ZIP: locally decompressed files - .vcf.gz .vcf.bgz .vcf.bz2 - 
     // we go by the physical disk size and how much has been consumed from it so far
     else if (command == UNZIP || 
-             (command == ZIP && (file_is_gz_type (txt_file->type) || file_is_bz2_type (txt_file->type)))) {
+             (command == ZIP && file_is_read_via_int_decompressor (txt_file))) {
         File *input_file  = (command == ZIP ? txt_file : z_file);
         total = input_file->disk_size; 
         sofar = input_file->disk_so_far; 

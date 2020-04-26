@@ -168,6 +168,12 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
     if (data_type == DT_VCF_V1 || data_type == DT_NONE) return data_type;
     
+    // for FASTA and FASTQ we convert a "header_only" flag to "header_one" for consistency with other formats (header-only implies we don't show any data)
+    if (flag_header_only && (data_type == DT_FASTA || data_type == DT_FASTQ)) {
+        flag_header_only = false;
+        flag_header_one = true;
+    }
+
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
         

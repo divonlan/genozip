@@ -317,15 +317,23 @@ void seg_add_to_data_buf (VBlock *vb, Buffer *buf, SectionType sec,
     vb->txt_section_bytes[sec] += add_bytes;
 }
 
-static void seg_set_hash_hints (VBlock *vb)
+static void seg_set_hash_hints (VBlock *vb, int third_num)
 {
+    if (third_num == 1) 
+        vb->num_lines_at_1_3 = vb->line_i + 1;
+    else 
+        vb->num_lines_at_2_3 = vb->line_i + 1;
+
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
 
         MtfContext *ctx = &vb->mtf_ctx[did_i];
         if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
 
-        ctx->mtf_len_at_half = ctx->mtf.len;
-        ctx->num_lines_at_half = vb->line_i + 1;
+        if (third_num == 1) 
+            ctx->mtf_len_at_1_3 = ctx->mtf.len;
+
+        else 
+            ctx->mtf_len_at_2_3 = ctx->mtf.len;
     }
 }
 
@@ -363,7 +371,7 @@ void seg_all_data_lines (VBlock *vb,
     if (seg_initialize) seg_initialize (vb); // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;
-    bool hash_hints_set = false;
+    bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
         if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
@@ -386,9 +394,15 @@ void seg_all_data_lines (VBlock *vb,
 
         // if there is no global_hash yet, and we've past half of the data,
         // collect stats to help mtf_merge create one when we merge
-        if (!hash_hints_set && (field_start - vb->txt_data.data) > vb->txt_data.len / 2) {
-            seg_set_hash_hints (vb);
-            hash_hints_set = true;
+        if (vb->vblock_i == 1) {
+            if (!hash_hints_set_1_3 && (field_start - vb->txt_data.data) > vb->txt_data.len / 3) {
+                seg_set_hash_hints (vb, 1);
+                hash_hints_set_1_3 = true;
+            }
+            else if (!hash_hints_set_2_3 && (field_start - vb->txt_data.data) > 2 * vb->txt_data.len / 3) {
+                seg_set_hash_hints (vb, 2);
+                hash_hints_set_2_3 = true;
+            }
         }
     }
 

@@ -124,14 +124,14 @@ void zip_sam_compress_one_vb (VBlockP vb_)
 
     // generate & compress the MD and Random POS data
     vb->random_pos_data.len *= sizeof (uint32_t);
-    zfile_compress_section_data_alg (vb_, SEC_SAM_RAND_POS_DATA,  &vb->random_pos_data, NULL, 0, COMPRESS_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_SAM_MD_DATA, &vb->md_data, NULL, 0, COMPRESS_BZLIB);
+    zfile_compress_section_data_alg (vb_, SEC_SAM_RAND_POS_DATA,  &vb->random_pos_data, NULL, 0, COMP_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_SAM_MD_DATA, &vb->md_data, NULL, 0, COMP_BZ2);
 
     // generate & compress the SEQ & QUAL data
     uint32_t seq_len, qual_len;
     zip_sam_get_seq_qual_len (vb, &seq_len, &qual_len);
-    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  seq_len,  COMPRESS_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, qual_len, COMPRESS_BZLIB);
+    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  seq_len,  COMP_LZMA);
+    zfile_compress_section_data_alg (vb_, SEC_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, qual_len, COMP_BZ2);
 
     // tell dispatcher this thread is done and can be joined. 
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
