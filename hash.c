@@ -201,7 +201,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
 {
     // note on txt_data_size_single: if its a physical plain txt file - this is the file size. 
     // if not - its an estimate done after the first VB by txtfile_estimate_txt_data_size
-    double effective_num_vbs, estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
+    double effective_num_vbs=0, estimated_num_vbs = MAX (1, (double)txt_file->txt_data_size_single / (double)merging_vb->txt_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)merging_vb->lines.len;
 
     // for growth purposes, we discard the first 1/3 of VB1, and compare the growth of the 2nd vs the 3rd 1/3. 
@@ -210,8 +210,8 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     // assuming that the new snips first introduced in them are mostly low frequency ones, will give us a more accurate predication
     // of the gradient appearance of new snips
     double n1 = first_merging_vb_ctx->mtf_len_at_1_3;
-    double n2 = first_merging_vb_ctx->mtf_len_at_2_3 - first_merging_vb_ctx->mtf_len_at_1_3;
-    double n3 = (int)first_merging_vb_ctx->ol_mtf.len - n1 - n2;
+    double n2 = first_merging_vb_ctx->mtf_len_at_2_3 ? ((double)first_merging_vb_ctx->mtf_len_at_2_3 - (double)first_merging_vb_ctx->mtf_len_at_1_3) : 0;
+    double n3 = (double)first_merging_vb_ctx->ol_mtf.len - (double)n1 - (double)n2;
 
     double n2_n3_lines = (double)(merging_vb->lines.len - merging_vb->num_lines_at_1_3);
 
@@ -265,11 +265,11 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     }
 
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
-    //printf ("dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u est_vbs=%u effc_vbs=%u"
-    //        " est_vb_lines=%u n2_n3_lines=%u zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
-    //        dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)estimated_num_vbs, (unsigned)effective_num_vbs, 
-    //        (unsigned)estimated_num_lines, (unsigned)n2_n3_lines, (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
-
+   /* printf ("dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u est_vbs=%u effc_vbs=%u"
+            " est_vb_lines=%u n2_n3_lines=%u zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
+            dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)estimated_num_vbs, (unsigned)effective_num_vbs, 
+            (unsigned)estimated_num_lines, (unsigned)n2_n3_lines, (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
+*/
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->mtf_ctx->global_hash", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->global_hash);
