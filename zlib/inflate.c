@@ -1432,8 +1432,8 @@ z_streamp strm;
     len = syncsearch(&(state->have), strm->next_in, strm->avail_in);
     strm->avail_in -= len;
     strm->next_in += len;
-    strm->total_in += (z_off64_t)len;
-    strm->total_ever_in += (z_off64_t)len; // added by Divon
+    strm->total_in += (uLongLong)len;
+    strm->total_ever_in += (uLongLong)len; // added by Divon
 
     /* return no joy or set up to restart inflate() on a new block */
     if (state->have != 4) return Z_DATA_ERROR;

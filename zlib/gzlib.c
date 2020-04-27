@@ -3,6 +3,7 @@
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
+#include <inttypes.h>
 #include "gzguts.h"
 
 #if defined(_WIN32) && !defined(__BORLANDC__) && !defined(__MINGW32__)
@@ -503,7 +504,7 @@ z_off64_t ZEXPORT gzoffset64(file)
 }
 
 /* Added by Divon Lan-- see zlib.h -- */
-z_off64_t ZEXPORT gzconsumed64(file)
+uLongLong ZEXPORT gzconsumed64(file)
     gzFile file;
 {
     gz_statep state;
@@ -514,9 +515,9 @@ z_off64_t ZEXPORT gzconsumed64(file)
     state = (gz_statep)file;
     if (state->mode != GZ_READ && state->mode != GZ_WRITE)
         return -1;
-
+//fprintf(stderr, "state->strm.total_ever_in=%"PRIu64 "\n", state->strm.total_ever_in); // DEBUG
     return state->strm.total_ever_in - 
-           (z_off64_t)state->strm.avail_in /* don't count buffered input */;
+           (uLongLong)state->strm.avail_in /* don't count buffered input */;
 }
 
 /* -- see zlib.h -- */
