@@ -149,6 +149,11 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }
 
+const char *encryption_name (unsigned encryption_type)
+{
+    static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
+    return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));
+}
 
 #define V1_CRYPT
 #include "v1_vcf.c"
