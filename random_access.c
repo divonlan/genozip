@@ -25,7 +25,7 @@ void random_access_initialize(void)
     ra_mutex_initialized = true;
 }
 
-// ZIP only: called from seg_chrom_field when the CHROM changed - this might be a new chrom, or
+// ZIP only: called from seg_vcf_chrom_field when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
 void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
 {

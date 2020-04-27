@@ -145,13 +145,13 @@ static void piz_sam_map_optional_subfields (VBlockSAM *vb)
         for (unsigned i=0; i < optional_mapper->num_subfields; i++) {
                         
             DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&optional[i*5], 4)); // get dict_id from first 4 characters eg "MX:i"
-            optional_mapper->did_i[i] = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, dict_id); 
+            optional_mapper->did_i[i] = mtf_get_existing_did_i_by_dict_id (dict_id); 
         }
     }
 
     // store the did_i of the NM field, if we have it
-    vb->nm_did_i     = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, (DictIdType)dict_id_OPTION_NM); 
-    vb->strand_did_i = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, (DictIdType)dict_id_OPTION_STRAND); 
+    vb->nm_did_i     = mtf_get_existing_did_i_by_dict_id ((DictIdType)dict_id_OPTION_NM); 
+    vb->strand_did_i = mtf_get_existing_did_i_by_dict_id ((DictIdType)dict_id_OPTION_STRAND); 
 }
 
 static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t txt_line_i)

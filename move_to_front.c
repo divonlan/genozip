@@ -407,7 +407,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     MtfContext *vb_ctx = &merging_vb->mtf_ctx[did_i];
 
     // get the ctx or create a new one. note: mtf_add_new_zf_ctx() must be called before mtf_lock() because it locks the z_file mutex (avoid a deadlock)
-    MtfContext *zf_ctx = mtf_get_zf_ctx (vb_ctx->dict_id);
+    MtfContext *zf_ctx  = mtf_get_zf_ctx (vb_ctx->dict_id);
     if (!zf_ctx) zf_ctx = mtf_add_new_zf_ctx (merging_vb, vb_ctx); 
 
     { START_TIMER; 
@@ -557,10 +557,10 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
 
 // PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
 // or returns NIL, if not
-uint8_t mtf_get_existing_did_i_by_dict_id (VBlock *vb, DictIdType dict_id)
+uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
 {
     for (uint8_t did_i=0; did_i < z_file->num_dict_ids; did_i++) 
-        if (dict_id.num == vb->mtf_ctx[did_i].dict_id.num) return did_i;
+        if (dict_id.num == z_file->mtf_ctx[did_i].dict_id.num) return did_i;
 
     return DID_I_NONE; // not found
 }

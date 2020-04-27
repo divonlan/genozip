@@ -13,7 +13,7 @@
 #include "file.h"
 #include "strings.h"
 
-// store src_bug in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from txt_data,
+// store src_buf in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from txt_data,
 // but in the part of txt_data has been already consumed and no longer needed.
 // if there's not enough space in txt_data, we allocate on txt_data_spillover
 void seg_store (VBlock *vb, 

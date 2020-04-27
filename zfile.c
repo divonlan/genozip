@@ -341,8 +341,8 @@ int zfile_read_section (VBlock *vb,
                         unsigned header_size, SectionType expected_sec_type,
                         const SectionListEntry *sl)   // NULL for no seeking
 {
-    ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s",
-            st_name (expected_sec_type), st_name(sl->section_type));
+    ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u, sb_i=%u",
+            st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i, sb_i);
 
     if (sl && zfile_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
 
@@ -914,6 +914,20 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
 
     // overlay all dictionaries (not just those that have fragments in this variant block) to the vb
     mtf_overlay_dictionaries_to_vb ((VBlockP)vb);
+    
+    // iname mapper: first VB, we map all inname subfields to this global mapper, and each VB overlays it on its own map
+    if (!flag_strip) {
+    
+        static Buffer global_iname_mapper_buf = EMPTY_BUFFER;
+    
+        if (vb->vblock_i == 1) {
+            buf_free (&global_iname_mapper_buf); // in case it was used to piz a previous file
+            (z_file->genozip_version >= 4 ? piz_vcf_map_iname_subfields : v2v3_piz_vcf_map_iname_subfields)(&global_iname_mapper_buf);
+            buf_set_overlayable (&global_iname_mapper_buf);
+        }
+        
+        buf_overlay (vb_, &vb->iname_mapper_buf, &global_iname_mapper_buf, "iname_mapper_buf", vb->vblock_i);    
+    }
 
     // read the the data sections (fields, info sub fields, genotype, phase, haplotype)
 

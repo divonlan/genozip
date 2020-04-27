@@ -14,12 +14,28 @@ extern int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigne
 extern void piz_uncompress_fields (VBlockP vb, const unsigned *section_index, unsigned *section_i);
 extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
 
+// ----------------------
+// VCF stuff
+// ----------------------
 extern void piz_vcf_uncompress_one_vb (VBlockP vb);
-extern void piz_sam_uncompress_one_vb (VBlockP vb);
-extern void piz_fast_uncompress_one_vb (VBlockP vb);
-extern void piz_me23_uncompress_one_vb (VBlockP vb);
+extern void v2v3_piz_vcf_map_iname_subfields (BufferP vb);
+extern void piz_vcf_map_iname_subfields (BufferP vb);
 
+// ----------------------
+// SAM stuff
+// ----------------------
+extern void piz_sam_uncompress_one_vb (VBlockP vb);
+
+// ----------------------
+// FASTQ + FASTA stuff
+// ----------------------
+extern void piz_fast_uncompress_one_vb (VBlockP vb);
 extern bool piz_fastq_test_grep (VBlockFASTP vb);
+
+// ----------------------
+// 23andMe stuff
+// ----------------------
+extern void piz_me23_uncompress_one_vb (VBlockP vb);
 
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb

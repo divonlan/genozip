@@ -15,7 +15,7 @@ typedef void SegInitializer (VBlockP vb);
 
 extern void seg_all_data_lines (VBlockP vb, SegDataLineFuncType seg_data_line, SegInitializer seg_initialize, unsigned sizeof_line); 
 
-extern DictIdType seg_get_format_subfield (const char **data, uint32_t *len);
+extern DictIdType seg_vcf_get_format_subfield (const char **data, uint32_t *len);
 
 extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
                                       unsigned *len, char *separator, bool *has_13, // out

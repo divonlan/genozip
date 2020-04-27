@@ -21,24 +21,23 @@
 
 // for each unique type of INFO fields (each one containing multiple names), create a unique mapping
 // info field node index (i.e. in b250) -> list of names, lengths and the context of the subfields
-static void v2v3_piz_vcf_map_iname_subfields (VBlockVCF *vb)
+void v2v3_piz_vcf_map_iname_subfields (Buffer *global_iname_mapper_buf)
 {
     // terminology: we call a list of INFO subfield names, an "iname". An iname looks something like
     // this: "I1=I2=I3=". Each iname consists of info subfields. These fields are not unique to this
     // iname and can appear in other inames. The INFO field contains the iname, and values of the subfields.
     // iname _mapper maps these subfields. This function creates an iname_mapper for every unique iname.
 
-    const MtfContext *info_ctx = &vb->mtf_ctx[VCF_INFO];
-    vb->iname_mapper_buf.len = info_ctx->word_list.len;
-    buf_alloc (vb, &vb->iname_mapper_buf, sizeof (SubfieldMapper) * vb->iname_mapper_buf.len,
-               1, "iname_mapper_buf", 0);
-    buf_zero (&vb->iname_mapper_buf);
+    const MtfContext *info_ctx = &z_file->mtf_ctx[VCF_INFO];
+    global_iname_mapper_buf->len = info_ctx->word_list.len;
+    buf_alloc (evb, global_iname_mapper_buf, sizeof (SubfieldMapper) * global_iname_mapper_buf->len,
+               1, "global_iname_mapper_buf", 0);
+    buf_zero (global_iname_mapper_buf);
 
-    SubfieldMapper *all_iname_mappers = (SubfieldMapper*)vb->iname_mapper_buf.data;
+    ARRAY (SubfieldMapper, all_iname_mappers, *global_iname_mapper_buf);
+    ARRAY (const MtfWord, all_inames, info_ctx->word_list);
 
-    const MtfWord *all_inames = (const MtfWord *)info_ctx->word_list.data;
-
-    for (unsigned iname_i=0; iname_i < vb->iname_mapper_buf.len; iname_i++) {
+    for (unsigned iname_i=0; iname_i < global_iname_mapper_buf->len; iname_i++) {
 
         const char *iname = (const char *)&info_ctx->dict.data[all_inames[iname_i].char_index]; // e.g. "I1=I2=I3=" - pointer into the INFO dictionary
         unsigned iname_len = all_inames[iname_i].snip_len; 
@@ -62,7 +61,7 @@ static void v2v3_piz_vcf_map_iname_subfields (VBlockVCF *vb)
             }
             dict_id = dict_id_vcf_info_sf (dict_id);
 
-            iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, dict_id); // it will be NIL if this is an INFO name without values            
+            iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (dict_id); // it will be NIL if this is an INFO name without values            
             iname_mapper->num_subfields++;
         }
     }

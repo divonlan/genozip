@@ -76,7 +76,7 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
 
             // get the did_i of this subfield. note: did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
-            uint8_t did_i = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, dict_id);
+            uint8_t did_i = mtf_get_existing_did_i_by_dict_id (dict_id);
             format_num_subfields[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &vb->mtf_ctx[did_i] : NULL;
         }
     }
@@ -91,30 +91,31 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
     COPY_TIMER (vb->profile.piz_vcf_get_format_info)
 }
 
+// Called from the I/O thread zfile_vcf_read_one_vb - and later each VB is overlayed with this immutable global buffer
 // for each unique type of INFO fields (each one containing multiple names), create a unique mapping
 // info field node index (i.e. in b250) -> list of names, lengths and the context of the subfields
-static void v2v3_piz_vcf_map_iname_subfields (VBlockVCF *vb); // forward declaration (see v2v3.c)
-static void piz_vcf_map_iname_subfields (VBlockVCF *vb)
+void piz_vcf_map_iname_subfields (Buffer *global_iname_mapper_buf)
 {
     // terminology: we call a list of INFO subfield names, an "iname". An iname looks something like
     // this: "I1=I2=I3=". Each iname consists of info subfields. These fields are not unique to this
     // iname and can appear in other inames. The INFO field contains the iname, and values of the subfields.
     // iname _mapper maps these subfields. This function creates an iname_mapper for every unique iname.
 
-    const MtfContext *info_ctx = &vb->mtf_ctx[VCF_INFO];
-    vb->iname_mapper_buf.len = info_ctx->word_list.len;
-    buf_alloc (vb, &vb->iname_mapper_buf, sizeof (SubfieldMapper) * vb->iname_mapper_buf.len,
-               1, "iname_mapper_buf", 0);
-    buf_zero (&vb->iname_mapper_buf);
+    const MtfContext *info_ctx = &z_file->mtf_ctx[VCF_INFO];
+    global_iname_mapper_buf->len = info_ctx->word_list.len;
+    buf_alloc (evb, global_iname_mapper_buf, sizeof (SubfieldMapper) * global_iname_mapper_buf->len,
+               1, "global_iname_mapper_buf", 0);
+    buf_zero (global_iname_mapper_buf);
 
-    SubfieldMapper *all_iname_mappers = (SubfieldMapper*)vb->iname_mapper_buf.data;
+    ARRAY (SubfieldMapper, all_iname_mappers, *global_iname_mapper_buf);
+    ARRAY (const MtfWord, all_inames, info_ctx->word_list);
 
-    const MtfWord *all_inames = (const MtfWord *)info_ctx->word_list.data;
+    for (unsigned iname_i=0; iname_i < global_iname_mapper_buf->len; iname_i++) {
 
-    for (unsigned iname_i=0; iname_i < vb->iname_mapper_buf.len; iname_i++) {
-
-        char *iname = ENT (char, info_ctx->dict, all_inames[iname_i].char_index); // e.g. "I1=I2=I3=" - pointer into the INFO dictionary
+        // e.g. "I1=I2=I3=" - pointer into the INFO dictionary - immutable - global shared with all threads
+        char *iname = ENT (char, info_ctx->dict, all_inames[iname_i].char_index); 
         unsigned iname_len = all_inames[iname_i].snip_len; 
+
         SubfieldMapper *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
 
         // get INFO subfield snips - which are the values of the INFO subfield, where the names are
@@ -138,13 +139,15 @@ static void piz_vcf_map_iname_subfields (VBlockVCF *vb)
             // case - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
             if (dict_id.num == dict_id_INFO_13) {
                 iname_mapper->did_i[iname_mapper->num_subfields] = DID_I_HAS_13;
+                
+                // we now modify the global dictionary to match the true iname strings, so it can be used for reconstruction
                 if (i>=2 && iname[i-2] == ';')
                     iname[iname_len-2] = '\t'; // chop off the ";#" at the end of the INFO word in the dictionary (happens if previous subfield is value-less)
                 else     
                     iname[iname_len-1] = '\t'; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
             }
             else 
-                iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id ((VBlockP)vb, dict_id); // it will be NIL if this is an INFO name without values            
+                iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (dict_id); // it will be NIL if this is an INFO name without values            
             
             iname_mapper->num_subfields++;
         }
@@ -167,18 +170,21 @@ static inline void piz_vcf_reconstruct_info (VBlockVCF *vb, const SubfieldMapper
         buf_add (&vb->txt_data, start, (unsigned)(snip-start)); // name inc. '=' e.g. "Info1="
 
         uint8_t did_i = iname_mapper->did_i[sf_i];
-        if (did_i != DID_I_NONE && did_i != DID_I_HAS_13)  // some info names can be without values, in which case there will be no ctx
+        if (did_i != DID_I_NONE && did_i != DID_I_HAS_13)   // some info names can be without values, in which case there will be no ctx
             buf_add (&vb->txt_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
 
-        if (sf_i < iname_mapper->num_subfields - 1 - has_13) {
+        if (did_i != DID_I_HAS_13) {
             buf_add (&vb->txt_data, ";", 1); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
             if (*snip == ';') snip++;
         }
     }
+
+    // remove the semicolon for the last field. easier to remove now than calculate the cases involving has_13.
+    vb->txt_data.len -= 1;
 }
 
 static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i, 
-                                           bool *has_13) // out: original vcf line ended with Windows-style \r\n
+                                        bool *has_13) // out: original vcf line ended with Windows-style \r\n
 {
     uint32_t word_index[NUM_VCF_FIELDS];
     const char *snip[NUM_VCF_FIELDS]; // snip (pointer into dictionary) and snip_len of each field in this line
@@ -190,7 +196,7 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
     uint32_t info_sf_value_snip_len[MAX_SUBFIELDS];
 
     // get mtf_i and variant data length
-    unsigned line_len = 0;
+    unsigned line_fields_len = 0;
     char pos_str[50];
     SubfieldMapper *iname_mapper = NULL;
     bool line_included = true;
@@ -237,18 +243,18 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
 
                     mtf_get_next_snip ((VBlockP)vb, MAPPER_CTX (iname_mapper, sf_i), NULL, &info_sf_value_snip[sf_i], &info_sf_value_snip_len[sf_i], vb->first_line + vb_line_i);
 
-                    line_len += info_sf_value_snip_len[sf_i];
+                    line_fields_len += info_sf_value_snip_len[sf_i];
                 }
 
                 // add the ; between name=value pairs in the INFO data (e.g. "name1=info1;name2=info2")
-                line_len += iname_mapper->num_subfields - 1;
+                line_fields_len += (iname_mapper->num_subfields - *has_13) - 1; // don't count the sf that is DID_I_HAS_13 as it not real ; last sf doesn't have a semicolon
             }
         }
         
         // add the field (for INFO - the names, values are added already ^ )
-        line_len += snip_len[f] + 1; // add \t or \n separator
+        line_fields_len += snip_len[f] + 1; // add \t or \n separator
     }
-    
+
     if (!line_included) return false; // note that we continue to read all fields even if line is not included - to advance the iterators
 
     // reconstrut the line
@@ -260,14 +266,14 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
             (z_file->genozip_version >= 4 ? piz_vcf_reconstruct_info : v2v3_piz_vcf_reconstruct_info)
                 (vb, iname_mapper, snip[VCF_INFO], info_sf_value_snip, info_sf_value_snip_len, *has_13);
 
-            if (snip_len[VCF_FORMAT]) // if INFO isn't the last field - add a tab
+            if (snip_len[VCF_FORMAT])  // if INFO isn't the last field - add a tab
                 buf_add (&vb->txt_data, "\t", 1);
         }
 
         else if (f == VCF_ID && !flag_strip)
             piz_reconstruct_id ((VBlockP)vb, &vb->id_numeric_data, &vb->next_numeric_id, snip[f], snip_len[f], NULL);
 
-        // other  fields
+        // other fields
         else if (snip_len[f]) {  // FORMAT can have snip_len=0, in which case its the end of the line and no \t either
             buf_add (&vb->txt_data, snip[f], snip_len[f]);
             buf_add (&vb->txt_data, (f == VCF_FORMAT ? "\n" : "\t"), 1); // \n at end of line, \t between other fields
@@ -657,10 +663,6 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
     // every line, in the for loop, MAY progress the pointer by 1, if that b250 was used for that row (all are used for the 
     // fields, but only those info subfields defined in the INFO names of a particular line are used in that line).
             
-    // create mapping for info subfields
-    if (!flag_strip)        
-        (z_file->genozip_version >= 4 ? piz_vcf_map_iname_subfields : v2v3_piz_vcf_map_iname_subfields)(vb);
-
     // now reconstruct the lines, one line at a time
 
     buf_alloc (vb, &vb->txt_data, (vb->vb_data_size + 1), 1.1, "txt_data", vb->vblock_i); // +1 bc piz_vcf_reconstruct_samples needs room for a temporary redundant '*' in case ht='*'
