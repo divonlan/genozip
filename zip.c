@@ -77,6 +77,10 @@ void zip_generate_and_compress_fields (VBlock *vb)
     // generate & write b250 data for all primary fields
     for (int f=0 ; f <= datatype_last_field[vb->data_type] ; f++) {
         MtfContext *ctx = &vb->mtf_ctx[f];
+
+        ASSERT (FIELD_TO_B250_SECTION(vb->data_type, f) == ctx->b250_section_type, "zip_generate_and_compress_fields: field mismatch with section type: f=%s sec=%s vb_i=%u",
+                (char*)field_names[vb->data_type][f], st_name (ctx->b250_section_type), vb->vblock_i);
+
         zip_generate_b250_section (vb, ctx);
         zfile_compress_b250_data (vb, ctx);
     }

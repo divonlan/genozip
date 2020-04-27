@@ -523,11 +523,18 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
     
     // first, all field dictionaries    
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++) {
-        if (!buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict)) continue;
 
-        SectionType dict_sec_type = merging_vb->mtf_ctx[did_i].dict_section_type;
+        MtfContext *ctx = &merging_vb->mtf_ctx[did_i];
+
+        if (!buf_is_allocated (&ctx->dict)) continue;
+
+        SectionType dict_sec_type = ctx->dict_section_type;
 
         ASSERT (section_type_is_dictionary(dict_sec_type), "Error: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
+
+        ASSERT (did_i > datatype_last_field[merging_vb->data_type] || FIELD_TO_DICT_SECTION(merging_vb->data_type, did_i) == dict_sec_type, 
+                "mtf_merge_in_vb_ctx: field mismatch with section type: did_i=%s sec=%s vb_i=%u",
+                (char*)field_names[merging_vb->data_type][did_i], st_name (ctx->b250_section_type), merging_vb->vblock_i);
 
         if (dict_sec_type != SEC_VCF_INFO_SF_DICT && dict_sec_type != SEC_VCF_FRMT_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
