@@ -329,7 +329,8 @@ bool file_open_txt (File *file)
                                                     "--threads", "8", 
                                                     bam ? "-OSAM" : "-Ov",
                                                     file->is_remote ? SKIP_ARG : file->name,    // local file name 
-                                                    bam ? "-h" : NULL, // include header in SAM output
+                                                    bam ? "-h" : "--no-version", // BAM: include header
+                                                                                 // BCF: do not append version and command line to the header
                                                     NULL);
                 file->file = stream_from_stream_stdout (input_decompressor);
             }
