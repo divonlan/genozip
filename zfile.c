@@ -517,14 +517,19 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
                 "Error: password is wrong for file %s", z_name);
     }
 
-    global_vcf_num_samples        = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
-    z_file->genozip_version    = header->genozip_version;
-    z_file->num_components = BGEN32 (header->num_components);
+    global_vcf_num_samples    = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
+    z_file->genozip_version   = header->genozip_version;
+    z_file->num_components    = BGEN32 (header->num_components);
     *digest                   = header->md5_hash_concat; 
 
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", SEC_GENOZIP_HEADER);
     z_file->section_list_buf.len /= sizeof (SectionListEntry); // fix len
     BGEN_sections_list();
+
+    if (flag_show_gheader) {
+        sections_show_gheader (header);
+        if (exe_type == EXE_GENOCAT) exit(0); // in genocat, exit after showing the requested data
+    }
 
     buf_free (&evb->z_data);
 

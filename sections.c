@@ -205,7 +205,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     fprintf (stderr, "  uncompressed_data_size: %s\n",        str_uint_commas (BGEN64 (header->uncompressed_data_size), size_str));
     fprintf (stderr, "  num_items_concat: %"PRIu64"\n",       BGEN64 (header->num_items_concat));
     fprintf (stderr, "  num_sections: %u\n",                  num_sections);
-    fprintf (stderr, "  num_components: %u\n",            BGEN32 (header->num_components));
+    fprintf (stderr, "  num_components: %u\n",                BGEN32 (header->num_components));
     fprintf (stderr, "  md5_hash_concat: %s\n",               md5_display (&header->md5_hash_concat, false));
     fprintf (stderr, "  created: %*s\n",                      -FILE_METADATA_LEN, header->created);
 
