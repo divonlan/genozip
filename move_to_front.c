@@ -521,6 +521,8 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
         mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", merging_vb->vblock_i);
     }
     
+    mtf_verify_field_ctxs (merging_vb);
+
     // first, all field dictionaries    
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++) {
 
@@ -531,10 +533,6 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
         SectionType dict_sec_type = ctx->dict_section_type;
 
         ASSERT (section_type_is_dictionary(dict_sec_type), "Error: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
-
-        ASSERT (did_i > datatype_last_field[merging_vb->data_type] || FIELD_TO_DICT_SECTION(merging_vb->data_type, did_i) == dict_sec_type, 
-                "mtf_merge_in_vb_ctx: field mismatch with section type: did_i=%s sec=%s vb_i=%u",
-                (char*)field_names[merging_vb->data_type][did_i], st_name (ctx->b250_section_type), merging_vb->vblock_i);
 
         if (dict_sec_type != SEC_VCF_INFO_SF_DICT && dict_sec_type != SEC_VCF_FRMT_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
@@ -633,11 +631,11 @@ void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */,
 {
     for (int f=0; f <= datatype_last_field[dt]; f++) {
         
-        const char *fname = field_names[dt][f];
-        
-        mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, 
-                                dict_id_field (dict_id_make (fname, strlen(fname))), 
-                                FIELD_TO_DICT_SECTION(dt, f));
+        const char *fname    = field_names[dt][f];
+        DictIdType dict_id   = dict_id_field (dict_id_make (fname, strlen(fname)));
+        SectionType dict_sec = FIELD_TO_DICT_SECTION(dt, f);
+
+        mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, dict_id, dict_sec); 
     }
 }
 
@@ -818,6 +816,20 @@ void mtf_zero_all_sorters (VBlock *vb)
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
         MtfContext *ctx = &vb->mtf_ctx[did_i];
         buf_zero (&ctx->sorter);
+    }
+}
+
+// for safety, verify that field ctxs are what they say they are
+void mtf_verify_field_ctxs (VBlock *vb)
+{
+    for (int f=0; f <= datatype_last_field[vb->data_type]; f++) {
+
+            MtfContext *ctx = &vb->mtf_ctx[f];
+
+            ASSERT (FIELD_TO_DICT_SECTION(vb->data_type, f) == ctx->dict_section_type && 
+                    FIELD_TO_B250_SECTION(vb->data_type, f) == ctx->b250_section_type,
+                    "mtf_verify_field_ctxs: field mismatch with section type: f=%s ctx->dict_section_type=%s ctx->b250_section_type=%s vb_i=%u",
+                    (char*)field_names[vb->data_type][f], st_name (ctx->dict_section_type), st_name (ctx->b250_section_type), vb->vblock_i);
     }
 }
 

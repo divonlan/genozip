@@ -112,6 +112,7 @@ extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VBlockP vb);
 extern void mtf_zero_all_sorters (VBlockP vb);
+extern void mtf_verify_field_ctxs (VBlockP vb);
 
 extern void mtf_initialize_for_zip (void);
 extern void mtf_update_stats (VBlockP vb);
