@@ -127,7 +127,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     
-    if (!dd->show_progress) return; 
+    if (!dd->show_progress && !flag_debug_progress) return; 
 
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -136,14 +136,14 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 
     uint64_t total=0, sofar=0;
     
-    // case: genozip of plain vcf files (including if decompressed by an external compressor) 
-    // - we go by the amount of VCF content processed 
+    // case: genozip of plain txt files (including if decompressed by an external compressor) 
+    // - we go by the amount of txt content processed 
     if (command == ZIP && txt_file->disk_size && file_is_plain_or_ext_decompressor (txt_file)) { 
         total = txt_file->txt_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
         sofar = z_file->txt_data_so_far_single;
     } 
     
-    // case: UNZIP: always ; ZIP: locally decompressed files - .vcf.gz .vcf.bgz .vcf.bz2 - 
+    // case: UNZIP: always ; ZIP: locally decompressed files - eg .vcf.gz or .fq.bz2 - 
     // we go by the physical disk size and how much has been consumed from it so far
     else if (command == UNZIP || 
              (command == ZIP && file_is_read_via_int_decompressor (txt_file))) {
@@ -191,11 +191,13 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
             char time_str[70], progress[100];
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             dispatcher_human_time (secs, time_str);
-
             sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
 
             // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
-            fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
+            if (!flag_debug_progress)
+                fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
+            else
+                fprintf (stderr, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d\n", (unsigned)percent, time_str, sofar, total, seconds_so_far);
 
             dd->last_len = strlen (progress);
         }

@@ -138,7 +138,9 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-threads    Show thread dispatcher activity",
     "",
-    "   Z    --debug-memory    Buffer allocations and destructions",
+    "   ZUCL --debug-memory    Buffer allocations and destructions",
+    "",
+    "   ZUC  --debug-progress  See raw numbers that feed into the progress indicator",
 };
 
 static const char *help_genounzip[] = {
