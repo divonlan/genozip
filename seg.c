@@ -423,17 +423,16 @@ void seg_all_data_lines (VBlock *vb,
         if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
             seg_more_lines (vb, sizeof_line);
 
-        // if there is no global_hash yet, and we've past half of the data,
-        // collect stats to help mtf_merge create one when we merge
-        if (vb->vblock_i == 1) {
-            if (!hash_hints_set_1_3 && (field_start - vb->txt_data.data) > vb->txt_data.len / 3) {
-                seg_set_hash_hints (vb, 1);
-                hash_hints_set_1_3 = true;
-            }
-            else if (!hash_hints_set_2_3 && (field_start - vb->txt_data.data) > 2 * vb->txt_data.len / 3) {
-                seg_set_hash_hints (vb, 2);
-                hash_hints_set_2_3 = true;
-            }
+        // collect stats at the approximate 1/3 or 2/3s marks of the file, to help hash_alloc_global create a hash
+        // table. note: we do this for every vb, not just 1, because hash_alloc_global runs in the first
+        // vb a new field/subfield is introduced
+        if (!hash_hints_set_1_3 && (field_start - vb->txt_data.data) > vb->txt_data.len / 3) {
+            seg_set_hash_hints (vb, 1);
+            hash_hints_set_1_3 = true;
+        }
+        else if (!hash_hints_set_2_3 && (field_start - vb->txt_data.data) > 2 * vb->txt_data.len / 3) {
+            seg_set_hash_hints (vb, 2);
+            hash_hints_set_2_3 = true;
         }
     }
 
