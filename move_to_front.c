@@ -832,7 +832,7 @@ void mtf_zero_all_sorters (VBlock *vb)
     }
 }
 
-// for safety, verify that field ctxs are what they say they are. we had bugs were they got mixed up due to
+// for safety, verify that field ctxs are what they say they are. we had bugs in the past where they got mixed up due to
 // delicate thread logic.
 void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 {
