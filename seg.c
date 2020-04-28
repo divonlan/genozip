@@ -390,8 +390,13 @@ void seg_all_data_lines (VBlock *vb,
 
         // if our estimate number of lines was too small, increase it
         if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) {
-            buf_alloc_more_zero (vb, &vb->lines, sizeof_line, 0, char, 1.5);
+            uint32_t num_old_lines = vb->lines.len;
+            buf_alloc_more_zero (vb, &vb->lines, sizeof_line, 0, ZipDataLineSAM, 1.5);
             vb->lines.len = vb->lines.size / sizeof_line;
+
+            // allocate more to the mtf_i buffer of the fields, which each have num_lines entries
+            for (int f=0; f <= datatype_last_field[vb->data_type]; f++) 
+                buf_alloc_more_zero (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
         }
 
         // if there is no global_hash yet, and we've past half of the data,
@@ -407,6 +412,21 @@ void seg_all_data_lines (VBlock *vb,
             }
         }
     }
+
+    // verify sizes
+    uint32_t reconstructed_vb_size = 0;
+    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
+        reconstructed_vb_size += vb->txt_section_bytes[sec_i];
+        //fprintf (stderr, "%s : %u\n", st_name (sec_i), vb->txt_section_bytes[sec_i]);
+    }
+
+    char s1[30], s2[30];
+    ASSSEG (vb->vb_data_size == reconstructed_vb_size, vb->txt_data.data, 
+            "Error while verifying reconstructed file size: size calculated bottoms-up doesn't match size calculated top-down: "
+            "VB has %s bytes in \"reconstructed_vb_size\" file but %s bytes in \"vb->vb_data_size\" (diff=%d)", 
+            str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
+            (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
+
 
     COPY_TIMER(vb->profile.seg_all_data_lines);
 }
