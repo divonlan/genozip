@@ -347,6 +347,21 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
 }
 
+static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
+{
+    uint32_t num_old_lines = vb->lines.len;
+    
+    // note: sadly, we cannot use the normal Buffer macros here because each data_type has its own line type
+    buf_alloc (vb, &vb->lines, vb->lines.size + sizeof_line, 2, "lines", vb->vblock_i);
+    memset (&vb->lines.data[num_old_lines * sizeof_line], 0, vb->lines.size - num_old_lines * sizeof_line);
+    
+    vb->lines.len = vb->lines.size / sizeof_line;
+
+    // allocate more to the mtf_i buffer of the fields, which each have num_lines entries
+    for (int f=0; f <= datatype_last_field[vb->data_type]; f++) 
+        buf_alloc_more_zero (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
+}
+
 // split each lines in this variant block to its components
 void seg_all_data_lines (VBlock *vb,
                          SegDataLineFuncType seg_data_line, 
@@ -389,15 +404,8 @@ void seg_all_data_lines (VBlock *vb,
         field_start = next_field;
 
         // if our estimate number of lines was too small, increase it
-        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) {
-            uint32_t num_old_lines = vb->lines.len;
-            buf_alloc_more_zero (vb, &vb->lines, sizeof_line, 0, ZipDataLineSAM, 2);
-            vb->lines.len = vb->lines.size / sizeof_line;
-
-            // allocate more to the mtf_i buffer of the fields, which each have num_lines entries
-            for (int f=0; f <= datatype_last_field[vb->data_type]; f++) 
-                buf_alloc_more_zero (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
-        }
+        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
+            seg_more_lines (vb, sizeof_line);
 
         // if there is no global_hash yet, and we've past half of the data,
         // collect stats to help mtf_merge create one when we merge
