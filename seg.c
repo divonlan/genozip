@@ -362,6 +362,22 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
         buf_alloc_more_zero (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
 }
 
+static void seg_verify_file_size (VBlock *vb)
+{
+    uint32_t reconstructed_vb_size = 0;
+    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
+        reconstructed_vb_size += vb->txt_section_bytes[sec_i];
+        //fprintf (stderr, "%s : %u\n", st_name (sec_i), vb->txt_section_bytes[sec_i]);
+    }
+
+    char s1[30], s2[30];
+    ASSSEG (vb->vb_data_size == reconstructed_vb_size || flag_optimize, vb->txt_data.data, // TO DO: test with flag_optimize too
+            "Error while verifying reconstructed vblock size: "
+            "reconstructed_vb_size=%s (calculated bottoms-up) but vb->vb_data_size=%s (calculated tops-down) (diff=%d)", 
+            str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
+            (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
+}
+
 // split each lines in this variant block to its components
 void seg_all_data_lines (VBlock *vb,
                          SegDataLineFuncType seg_data_line, 
@@ -421,20 +437,7 @@ void seg_all_data_lines (VBlock *vb,
         }
     }
 
-    // verify sizes
-    uint32_t reconstructed_vb_size = 0;
-    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        reconstructed_vb_size += vb->txt_section_bytes[sec_i];
-        //fprintf (stderr, "%s : %u\n", st_name (sec_i), vb->txt_section_bytes[sec_i]);
-    }
-
-    char s1[30], s2[30];
-    ASSSEG (vb->vb_data_size == reconstructed_vb_size || flag_optimize, vb->txt_data.data, // TO DO: test with flag_optimize too
-            "Error while verifying reconstructed file size: size calculated bottoms-up doesn't match size calculated top-down: "
-            "VB has %s bytes according to \"reconstructed_vb_size\" file but %s bytes according to \"vb->vb_data_size\" (diff=%d)", 
-            str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
-            (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
-
+    seg_verify_file_size (vb);
 
     COPY_TIMER(vb->profile.seg_all_data_lines);
 }

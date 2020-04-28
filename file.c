@@ -763,3 +763,10 @@ const char *ft_name (FileType ft)
 {
     return type_name (ft, &file_exts[ft], sizeof(file_exts)/sizeof(file_exts[0]));
 }
+
+const char *file_viewer (File *file)
+{
+    static const char *viewer[NUM_COMPRESSION_ALGS] = COMPRESSED_FILE_VIEWER;
+
+    return viewer[file->comp_alg];
+}

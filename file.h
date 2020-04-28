@@ -123,6 +123,8 @@ extern const char *file_exts[];
 #define NUM_COMPRESSION_ALGS 8
 typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */, 
                COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7 } CompressionAlg; 
+#define COMPRESSED_FILE_VIEWER { "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
+                                 "bcftools -Ov --version", "samtools view -h -OSAM", "N/A" }
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file
@@ -281,6 +283,7 @@ extern void file_kill_external_compressors (void);
 extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);
 
 extern const char *ft_name (FileType ft);
+extern const char *file_viewer (File *file);
 
 #define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))
 #define txt_name file_printname(txt_file)
