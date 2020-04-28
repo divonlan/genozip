@@ -8,6 +8,7 @@
 #include "crypt.h"
 #include "vblock.h"
 #include "md5.h"
+#include "strings.h"
 
 static char *password = NULL;
 
