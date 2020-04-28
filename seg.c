@@ -391,7 +391,7 @@ void seg_all_data_lines (VBlock *vb,
         // if our estimate number of lines was too small, increase it
         if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) {
             uint32_t num_old_lines = vb->lines.len;
-            buf_alloc_more_zero (vb, &vb->lines, sizeof_line, 0, ZipDataLineSAM, 1.5);
+            buf_alloc_more_zero (vb, &vb->lines, sizeof_line, 0, ZipDataLineSAM, 2);
             vb->lines.len = vb->lines.size / sizeof_line;
 
             // allocate more to the mtf_i buffer of the fields, which each have num_lines entries
