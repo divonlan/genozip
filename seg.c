@@ -429,9 +429,9 @@ void seg_all_data_lines (VBlock *vb,
     }
 
     char s1[30], s2[30];
-    ASSSEG (vb->vb_data_size == reconstructed_vb_size, vb->txt_data.data, 
+    ASSSEG (vb->vb_data_size == reconstructed_vb_size || flag_optimize, vb->txt_data.data, // TO DO: test with flag_optimize too
             "Error while verifying reconstructed file size: size calculated bottoms-up doesn't match size calculated top-down: "
-            "VB has %s bytes in \"reconstructed_vb_size\" file but %s bytes in \"vb->vb_data_size\" (diff=%d)", 
+            "VB has %s bytes according to \"reconstructed_vb_size\" file but %s bytes according to \"vb->vb_data_size\" (diff=%d)", 
             str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
             (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
 
