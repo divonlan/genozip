@@ -11,6 +11,7 @@
 #include "vblock.h"
 #include "hash.h"
 #include "dict_id.h"
+#include "strings.h"
 
 #define NO_NEXT 0xffffffff
 typedef struct {        
@@ -265,11 +266,15 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     }
 
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
-   /* printf ("dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u est_vbs=%u effc_vbs=%u"
-            " est_vb_lines=%u n2_n3_lines=%u zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
-            dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)estimated_num_vbs, (unsigned)effective_num_vbs, 
-            (unsigned)estimated_num_lines, (unsigned)n2_n3_lines, (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
-*/
+
+    if (flag_debug_hash) {
+        char s1[30], s2[30];
+        fprintf (stderr, "dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u est_vbs=%u effc_vbs=%u"
+                 " est_vb_lines=%s n2_n3_lines=%s zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
+                 dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)estimated_num_vbs, (unsigned)effective_num_vbs, 
+                 str_uint_commas ((uint64_t)estimated_num_lines, s1), str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
+    }
+
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->mtf_ctx->global_hash", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->global_hash);

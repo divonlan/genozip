@@ -141,6 +141,8 @@ static const char *help_genozip_developer[] = {
     "   ZUCL --debug-memory    Buffer allocations and destructions",
     "",
     "   ZUC  --debug-progress  See raw numbers that feed into the progress indicator",
+    "",
+    "   Z    --debug-hash      See raw numbers that feed into determining the size of the global hash tables (calculated after the completion of vblock_i=1)",
 };
 
 static const char *help_genounzip[] = {

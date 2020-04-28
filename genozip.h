@@ -98,9 +98,10 @@ extern int command;
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
            flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_show_content, flag_test, flag_regions,
-           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_debug_memory,
+           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads,
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_strip, flag_gt_only,
-           flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_debug_progress;
+           flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, 
+           flag_debug_progress, flag_debug_hash, flag_debug_memory;
 extern char *flag_grep;
 extern uint64_t flag_stdin_size;
 
