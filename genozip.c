@@ -71,7 +71,7 @@ DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
 
 static char *threads_str  = NULL;
 
-static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread)
+static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - despite common wisdom, it is NOT always 0 (on Windows it is 1)
 
 void exit_on_error(void) 
 {
