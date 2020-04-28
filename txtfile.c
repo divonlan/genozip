@@ -184,7 +184,9 @@ void txtfile_read_vblock (VBlock *vb)
 {
     START_TIMER;
 
-    uint64_t pos_before = file_tell (txt_file);
+    uint64_t pos_before = 0;
+    if (file_is_read_via_int_decompressor (txt_file))
+        pos_before = file_tell (txt_file);
 
     buf_alloc (vb, &vb->txt_data, global_max_memory_per_vb, 1, "txt_data", vb->vblock_i);    
 
@@ -235,10 +237,13 @@ void txtfile_read_vblock (VBlock *vb)
         }
     }
 
+    vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
+
     txt_file->txt_data_so_far_single += vb->txt_data.len;
     vb->vb_data_size = vb->txt_data.len; // initial value. it may change if --optimize is used.
-    vb->vb_data_read_size = file_tell (txt_file) - pos_before; // plain or gz/bz2 compressed bytes read
-    vb->vb_position_txt_file = pos_before;
+    
+    if (file_is_read_via_int_decompressor (txt_file))
+        vb->vb_data_read_size = file_tell (txt_file) - pos_before; // gz/bz2 compressed bytes read
 
     COPY_TIMER (vb->profile.txtfile_read_vblock);
 }
