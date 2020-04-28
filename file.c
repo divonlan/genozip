@@ -638,7 +638,7 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
 // returns true if successful. depending on soft_fail, a failure will either emit an error 
 // (and exit) or a warning (and return).
 bool file_seek (File *file, int64_t offset, 
-                int whence, 
+                int whence, // SEEK_SET, SEEK_CUR or SEEK_END
                 bool soft_fail)
 {
     ASSERT0 (file == z_file, "Error: file_seek only works for z_file");
@@ -684,10 +684,10 @@ bool file_seek (File *file, int64_t offset,
 
 uint64_t file_tell (File *file)
 {
-    if (command == ZIP && file->comp_alg == COMP_GZ)
+    if (command == ZIP && file == txt_file && file->comp_alg == COMP_GZ)
         return gzconsumed64 ((gzFile)txt_file->file); 
     
-    if (command == ZIP && file->comp_alg == COMP_BZ2)
+    if (command == ZIP && file == txt_file && file->comp_alg == COMP_BZ2)
         return BZ2_consumed ((BZFILE *)txt_file->file); 
 
 #ifdef __APPLE__

@@ -581,8 +581,6 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
         crypt_do (evb, header.password_test, sizeof(header.password_test), 0, SEC_EOF, true);
     }
 
-    if (flag_show_gheader) sections_show_gheader (&header); // before BGEN_sections_list
-
     Buffer *z_data = &evb->z_data;
 
     uint64_t genozip_header_offset = z_file->disk_so_far + z_data->len; // capture before comp_compress that increases len
@@ -598,6 +596,8 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     // restore
     z_file->section_list_buf.len /= sizeof (SectionListEntry); 
     BGEN_sections_list();
+
+    if (flag_show_gheader) sections_show_gheader (&header); 
 
     // add a footer to this section - this footer appears AFTER the genozip header data, 
     // facilitating reading the genozip header in reverse from the end of the file

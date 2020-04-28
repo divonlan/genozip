@@ -173,7 +173,7 @@ void BGEN_sections_list()
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
         ent[i].vblock_i = BGEN32 (ent[i].vblock_i);
-        ent[i].offset          = BGEN64 (ent[i].offset);
+        ent[i].offset   = BGEN64 (ent[i].offset);
     }
 }
 
@@ -217,7 +217,13 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     for (unsigned i=0; i < num_sections; i++) {
      
         uint64_t this_offset = ents[i].offset;
-        uint64_t next_offset = (i < num_sections-1) ? ents[i+1].offset : z_file->disk_so_far;
+        uint64_t next_offset;
+        
+        if (i < num_sections-1) 
+            next_offset = ents[i+1].offset;
+
+        else // we're at the last section genozip header+footer
+            next_offset = this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader);
 
         fprintf (stderr, "    %3u. %-24.24s %*.*s vb_i=%u offset=%"PRIu64" size=%"PRId64"\n", 
                  i, st_name(ents[i].section_type), 
