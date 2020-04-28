@@ -215,6 +215,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     double n3 = (double)first_merging_vb_ctx->ol_mtf.len - (double)n1 - (double)n2;
 
     double n2_n3_lines = (double)(merging_vb->lines.len - merging_vb->num_lines_at_1_3);
+    double n3_lines    = (double)(merging_vb->lines.len - merging_vb->num_lines_at_2_3);
 
     // my secret formula for arriving at these numbers: https://docs.google.com/spreadsheets/d/1UijOuPgquZ71kEdB7kUf1OYUMs-Xhu2gAOOHgy6QCIQ/edit#gid=0
     static struct { 
@@ -265,14 +266,25 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
         if (!estimated_entries) estimated_entries = 100000000000; // very very big - force largest available hash table
     }
 
+    // add "stochastic noise" - to cover cases where we have a very large file, and new words continue to be introduced
+    // at a low rate throughout. We add words at 10% of what we viewed in r3 - for the entire file
+    if (n3_lines) estimated_entries += (n3 / n3_lines) * estimated_num_lines * 0.10;
+
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
 
     if (flag_debug_hash) {
         char s1[30], s2[30];
-        fprintf (stderr, "dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u est_vbs=%u effc_vbs=%u"
-                 " est_vb_lines=%s n2_n3_lines=%s zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
-                 dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)estimated_num_vbs, (unsigned)effective_num_vbs, 
-                 str_uint_commas ((uint64_t)estimated_num_lines, s1), str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
+ 
+        if (zf_ctx->did_i==0) {
+            fprintf (stderr, "\n\nOutput of --debug-hash:\n");
+            fprintf (stderr, "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
+                     (unsigned)ceil(estimated_num_vbs), str_uint_commas (merging_vb->lines.len, s1), str_uint_commas ((uint64_t)estimated_num_lines, s2));
+        }
+        
+        fprintf (stderr, "dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u"
+                 "n2_n3_lines=%s zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
+                 dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)effective_num_vbs, 
+                 str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
     }
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
