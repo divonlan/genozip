@@ -45,7 +45,7 @@ typedef struct SubfieldMapper {
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
-    int32_t vb_data_size;      /* expected size of decompressed VCF. Might be different than original if --optimize is used. */\
+    int32_t vb_data_size;      /* expected size of decompressed txt. Might be different than original if --optimize is used. */\
     uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
     uint32_t longest_line_len; /* length of longest line of text line in this vb */\
     uint32_t line_i;           /* current line in VB (0-based) being segmented */\
