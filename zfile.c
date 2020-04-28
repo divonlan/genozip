@@ -341,7 +341,7 @@ int zfile_read_section (VBlock *vb,
                         unsigned header_size, SectionType expected_sec_type,
                         const SectionListEntry *sl)   // NULL for no seeking
 {
-    ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u, sb_i=%u",
+    ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u, sb_i=%d",
             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i, sb_i);
 
     if (sl && zfile_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
