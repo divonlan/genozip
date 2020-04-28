@@ -275,9 +275,9 @@ void txtfile_write_one_vblock (VBlockP vb_)
 
     char s1[20], s2[20];
     ASSERTW (vb->txt_data.len == vb->vb_data_size || exe_type == EXE_GENOCAT, 
-            "Warning: vblock %u (num_lines=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-            vb->vblock_i, (uint32_t)vb->lines.len, dt_name (txt_file->data_type),
-            str_uint_commas (vb->vb_data_size, s1), str_uint_commas (vb->txt_data.len, s2), 
+            "Warning: vblock_i=%u (num_lines=%u start_char_in_source_file=%"PRIu64") had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+            vb->vblock_i, (uint32_t)vb->lines.len, vb->vb_position_txt_file,
+            str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 
     COPY_TIMER (vb->profile.write);

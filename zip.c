@@ -297,7 +297,8 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
             txt_line_i += (uint32_t)processed_vb->lines.len;
 
             zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, true);
-
+            z_file->num_vbs++;
+            
             dispatcher_finalize_one_vb (dispatcher);
         }        
         

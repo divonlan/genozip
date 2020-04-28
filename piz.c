@@ -364,7 +364,8 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
 
             txtfile_write_one_vblock (processed_vb);
-
+            z_file->num_vbs++;
+            
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
 
             dispatcher_finalize_one_vb (dispatcher);

@@ -20,12 +20,12 @@ static void stats_show_file_metadata (void)
     
     char ls[30];
     if (z_file->data_type == DT_VCF) 
-        fprintf (stderr, "Individuals: %u   %s: %s   Dictionaries: %u\n", 
+        fprintf (stderr, "Individuals: %u   %s: %s   Dictionaries: %u   Vblocks: %u\n", 
                  global_vcf_num_samples, show_sections_line_name[DT_VCF],  
-                 str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids);
+                 str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, z_file->num_vbs);
     else
-        fprintf (stderr, "%s: %s   Dictionaries: %u\n", 
-                 show_sections_line_name[z_file->data_type], str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids);
+        fprintf (stderr, "%s: %s   Dictionaries: %u   Vblocks: %u\n", 
+                 show_sections_line_name[z_file->data_type], str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, z_file->num_vbs);
 }
 
 void stats_show_sections (void)
@@ -91,7 +91,7 @@ void stats_show_sections (void)
     uint32_t total_sections=0;
 
     for (unsigned sec_i=0; sec_i < num_secs; sec_i++) {
-        int64_t txtbytes    = txt_file->section_bytes[secs[sec_i]];
+        int64_t txtbytes  = txt_file->section_bytes[secs[sec_i]];
         int64_t zbytes    = z_file->section_bytes[secs[sec_i]];
         int64_t zentries  = z_file->section_entries[secs[sec_i]];
         int32_t zsections = z_file->num_sections[secs[sec_i]];
