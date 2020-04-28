@@ -112,7 +112,8 @@ extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VBlockP vb);
 extern void mtf_zero_all_sorters (VBlockP vb);
-extern void mtf_verify_field_ctxs (VBlockP vb);
+extern void mtf_verify_field_ctxs_do (VBlockP vb, const char *func, uint32_t code_line);
+#define mtf_verify_field_ctxs(vb) mtf_verify_field_ctxs_do(vb, __FUNCTION__, __LINE__);
 
 extern void mtf_initialize_for_zip (void);
 extern void mtf_update_stats (VBlockP vb);
@@ -121,6 +122,6 @@ extern void mtf_destroy_context (MtfContext *ctx);
 
 extern void mtf_vb_1_lock (VBlockP vb);
 extern MtfNode *mtf_get_node_by_word_index (MtfContext *ctx, uint32_t word_index);
-extern void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids);
+extern void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, DataType dt, uint32_t vblock_i, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids);
 
 #endif

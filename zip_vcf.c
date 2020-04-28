@@ -379,8 +379,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     // clone global dictionaries while granted exclusive access to the global dictionaries
     mtf_clone_ctx (vb_);
 
-    // split each line in this variant block to its components
-
+    // segment each line in this vblock to its components
     seg_all_data_lines (vb_, seg_vcf_data_line, seg_vcf_initialize, sizeof (ZipDataLineVCF));
     
     if (vb->has_haplotype_data)

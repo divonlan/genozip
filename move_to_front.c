@@ -294,6 +294,11 @@ void mtf_clone_ctx (VBlock *vb)
 
     START_TIMER; // including mutex wait time
 
+    // note: because each dictionary has its own mutex, it is possible that we will see only a partial set
+    // of dictionaries (eg some but not all of the fields) when we are arrive here while another thread is mid-way 
+    // through merging and adding a bunch of dictionaries.
+    // however z_num_dict_ids will always correctly state the number of dictionaries that are available.
+
     for (unsigned did_i=0; did_i < z_num_dict_ids; did_i++) {
         MtfContext *vb_ctx = &vb->mtf_ctx[did_i];
         MtfContext *zf_ctx = &z_file->mtf_ctx[did_i];
@@ -320,6 +325,9 @@ void mtf_clone_ctx (VBlock *vb)
         vb_ctx->dict_id           = zf_ctx->dict_id;
         vb_ctx->dict_section_type = zf_ctx->dict_section_type;
         vb_ctx->b250_section_type = zf_ctx->b250_section_type;
+        
+        vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
+        
         mtf_init_iterator (vb_ctx);
 
         mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx", did_i);
@@ -521,7 +529,7 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
         mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", merging_vb->vblock_i);
     }
     
-    mtf_verify_field_ctxs (merging_vb);
+    mtf_verify_field_ctxs (merging_vb); // this was useful in the past to catch nasty thread issues
 
     // first, all field dictionaries    
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++) {
@@ -591,7 +599,7 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
 
     did_i = *num_dict_ids; // note: *num_dict_ids cannot be updated until ctx is initialized, see comment below
     
-    MtfContext *ctx = &mtf_ctx[did_i]; // existing or new
+    MtfContext *ctx = &mtf_ctx[did_i]; 
 
     //fprintf (stderr, "New context: dict_id=%.8s in did_i=%u \n", dict_id_printable (dict_id).id, did_i);
     ASSERT (*num_dict_ids+1 < MAX_DICTS, 
@@ -626,6 +634,7 @@ done:
 // but we maintain their fixed positions anyway as the code relies on it
 void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, 
                                         DataType dt,
+                                        uint32_t vblock_i,
                                         uint8_t *dict_id_to_did_i_map,
                                         unsigned *num_dict_ids)
 {
@@ -635,7 +644,11 @@ void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */,
         DictIdType dict_id   = dict_id_field (dict_id_make (fname, strlen(fname)));
         SectionType dict_sec = FIELD_TO_DICT_SECTION(dt, f);
 
-        mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, dict_id, dict_sec); 
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, dict_id, dict_sec); 
+
+        // verify that the ctx is at its correct place
+        ASSERT (ctx - mtf_ctx == f, "Error in mtf_initialize_primary_field_ctxs: f=%u (%s) but ctx is at mtf_ctx[%u]. vb_i=%u",
+                f, fname, (unsigned)(ctx - mtf_ctx), vblock_i);
     }
 }
 
@@ -819,8 +832,9 @@ void mtf_zero_all_sorters (VBlock *vb)
     }
 }
 
-// for safety, verify that field ctxs are what they say they are
-void mtf_verify_field_ctxs (VBlock *vb)
+// for safety, verify that field ctxs are what they say they are. we had bugs were they got mixed up due to
+// delicate thread logic.
+void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 {
     for (int f=0; f <= datatype_last_field[vb->data_type]; f++) {
 
@@ -828,7 +842,8 @@ void mtf_verify_field_ctxs (VBlock *vb)
 
             ASSERT (FIELD_TO_DICT_SECTION(vb->data_type, f) == ctx->dict_section_type && 
                     FIELD_TO_B250_SECTION(vb->data_type, f) == ctx->b250_section_type,
-                    "mtf_verify_field_ctxs: field mismatch with section type: f=%s ctx->dict_section_type=%s ctx->b250_section_type=%s vb_i=%u",
+                    "mtf_verify_field_ctxs called from %s:%u: field mismatch with section type: f=%s ctx->dict_section_type=%s ctx->b250_section_type=%s vb_i=%u",
+                    func, code_line,
                     (char*)field_names[vb->data_type][f], st_name (ctx->dict_section_type), st_name (ctx->b250_section_type), vb->vblock_i);
     }
 }
