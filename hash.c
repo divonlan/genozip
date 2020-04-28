@@ -269,7 +269,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     // add "stochastic noise" - to cover cases where we have a very large file, and new words continue to be introduced
     // at a low rate throughout. We add words at 10% of what we viewed in r3 - for the entire file
     if (n3_lines) estimated_entries += (n3 / n3_lines) * estimated_num_lines * 0.10;
-
+//fprintf (stderr, "n3_lines=%2.2lf n3=%2.2lf (n3 / n3_lines)=%2.2lf =%2.2lf\n",n3_lines, n3, (n3 / n3_lines), (n3 / n3_lines) * estimated_num_lines  * 0.10);
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
 
     if (flag_debug_hash) {
@@ -281,7 +281,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
                      (unsigned)ceil(estimated_num_vbs), str_uint_commas (merging_vb->lines.len, s1), str_uint_commas ((uint64_t)estimated_num_lines, s2));
         }
         
-        fprintf (stderr, "dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u"
+        fprintf (stderr, "dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u "
                  "n2_n3_lines=%s zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
                  dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)effective_num_vbs, 
                  str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
