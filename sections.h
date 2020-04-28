@@ -120,7 +120,7 @@ typedef enum {
     {"SEC_STATS_HT_SEPERATOR",  0} \
 }
 
-#define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) // put this here and not in sections.h as its used in vb.h that is widely used
+#define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) 
 
 #define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_VCF_FORMAT_DICT && (s) % 2 == SEC_CHROM_DICT % 2) ||       \
                                         (s) == SEC_VCF_INFO_SF_DICT || \
