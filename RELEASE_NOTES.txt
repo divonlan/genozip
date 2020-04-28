@@ -120,5 +120,6 @@
 - Added --show-index for genounzip and genocat - see index embedded in a genozip file
 - Added --fast option for (a lot) faster compression, with (somewhat) reduced compression ratio
 - Added --grep for genocat FASTQ
+- Reduce default vblock from 128MB to 16MB
 
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

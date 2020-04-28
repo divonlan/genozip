@@ -129,9 +129,9 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     fprintf (stderr, "buf_alloc: %u\n", ms(p->buf_alloc));
     fprintf (stderr, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
 
-    fprintf (stderr, "\nVariant Block stats:\n");
-    fprintf (stderr, "  Variant blocks: %u\n", num_vbs);
-    fprintf (stderr, "  Maximum variant block size: %u MB\n", global_max_memory_per_vb / (1024 * 1024));
+    fprintf (stderr, "\nVblock stats:\n");
+    fprintf (stderr, "  Vblocks: %u\n", num_vbs);
+    fprintf (stderr, "  Maximum vblock size: %u MB\n", global_max_memory_per_vb / (1024 * 1024));
     fprintf (stderr, "  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
     fprintf (stderr, "  Average read time: %u\n", ms(p->read) / num_vbs);
     fprintf (stderr, "  Average compute time: %u\n", ms(p->compute) / num_vbs);

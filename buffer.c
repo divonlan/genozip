@@ -338,18 +338,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 static void buf_init (Buffer *buf, uint64_t size, uint64_t old_size, 
                       const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
-    if (!buf->memory) {
-#ifdef DEBUG
-        buf_display_memory_usage (true, 0, 0);
-#endif 
-        ABORT ("%s: Out of memroy. %sDetails: failed to allocate %"PRIu64" bytes. Buffer: %s", 
-               global_cmd, (command==ZIP ? "Try running with a lower variant block size using --vblock. " : ""), 
-                size + overhead_size, buf_desc(buf));
-    }
-
-    buf->data        = buf->memory + sizeof (uint64_t);
-    buf->size        = size;
-    buf->overlayable = false;
+    // set some parameters before allocation so they can go into the error message in case of failure
     buf->func        = func;
     buf->code_line   = code_line;
 
@@ -358,6 +347,20 @@ static void buf_init (Buffer *buf, uint64_t size, uint64_t old_size,
         buf->param = param;
     } 
     ASSERT (buf->name, "Error: buffer has no name. func=%s:%u", buf->func, buf->code_line);
+
+    if (!buf->memory) {
+#ifdef DEBUG
+        buf_display_memory_usage (true, 0, 0);
+#endif 
+        char s[30];
+        ABORT ("%s: Out of memroy. %sDetails: failed to allocate %s bytes. Buffer: %s", 
+               global_cmd, (command==ZIP ? "Try running with a lower vblock size using --vblock. " : ""), 
+               str_uint_commas (size + overhead_size, s), buf_desc(buf));
+    }
+
+    buf->data        = buf->memory + sizeof (uint64_t);
+    buf->size        = size;
+    buf->overlayable = false;
 
     *(uint64_t *)buf->memory        = UNDERFLOW_TRAP;        // underflow protection
     *(uint64_t *)(buf->data + size) = OVERFLOW_TRAP;         // overflow prortection (underflow protection was copied with realloc)

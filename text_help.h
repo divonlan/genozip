@@ -91,7 +91,7 @@ static const char *help_genozip[] = {
     "",
     "                     Note: due to these data modifications, files compressed with --optimize are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5",    
     "",
-    "   -B --vblock       <number between 1 and 2048>. Set the maximum size of data (in megabytes) of the source textual (VCF, SAM, FASTQ etc) data that can go into one vblock. By default, this is set to "TXT_DATA_PER_VB_DEFAULT" MB ("TXT_DATA_PER_VB_FAST" with --fast). The vblock is the basic unit of data on which genozip and genounzip operate. This value affects a number of things: 1. Memory consumption of both compression and decompression are linear with the vblock size. 2. Compression is usually better with larger vblock sizes. 3. Smaller vblocks will result in faster 'genocat --regions' lookups. 4. For smaller files, smaller vblocks will result in faster compression and decompression",    
+    "   -B --vblock       <number between 1 and 2048>. Set the maximum size of data (in megabytes) of the source textual (VCF, SAM, FASTQ etc) data that can go into one vblock. By default, this is set to "TXT_DATA_PER_VB_DEFAULT" MB. Smaller values will result in faster subsetting with --regions and --grep, while larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression",
     "",
     "",
     "VCF-specific options (ignored for other file types):",
