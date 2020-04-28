@@ -71,6 +71,8 @@ DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
 
 static char *threads_str  = NULL;
 
+static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread)
+
 void exit_on_error(void) 
 {
     buf_test_overflows_all_vbs();
@@ -85,9 +87,10 @@ void exit_on_error(void)
 
         // if we're not the main thread - cancel the main thread before closing z_file, so that the main 
         // thread doesn't attempt to access it (eg. z_file->data_type) and get a segmentation fault.
-        if (pthread_self()) {       // i'm not the main thread - the main thread is always 0
-            pthread_cancel (0);     // cancel the main thread
-            pthread_join (0, NULL); // wait for the thread cancelation to complete
+        if (pthread_self() != io_thread_id) {  // i'm not the main thread
+            pthread_cancel (io_thread_id);     // cancel the main thread
+            usleep (100000);                   // wait 100ms for the main thread to die. pthread_join here hangs on Windows (not tested on others)
+            //pthread_join (io_thread_id, NULL); // wait for the thread cancelation to complete
         }
 
         file_close (&z_file, false); // also frees file->name
@@ -573,6 +576,8 @@ void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 
 int main (int argc, char **argv)
 {
+    io_thread_id = pthread_self();
+
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows
     str_to_lowercase (argv[0]);
