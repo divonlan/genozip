@@ -149,7 +149,7 @@ static void vb_sam_initialize_vb (VBlock *vb_)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
-    vb->last_rname_node_index = (uint32_t)-1;
+    vb->rname_index_minus_1 = vb->rname_index_minus_2 = vb->rname_index_minus_3 = (uint32_t)-1;
 }
 
 static void vb_sam_release_vb (VBlock *vb_)
@@ -158,7 +158,7 @@ static void vb_sam_release_vb (VBlock *vb_)
 
     vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = vb->next_random_pos = vb->next_md = 0;
     vb->nm_did_i = vb->strand_did_i = vb->last_tlen_abs_len = 0;
-    vb->last_rname_node_index = 0;
+    vb->rname_index_minus_1 = vb->rname_index_minus_2 = vb->rname_index_minus_3 = 0;
     vb->last_tlen_abs = 0;
     vb->last_tlen_is_positive = 0;
 

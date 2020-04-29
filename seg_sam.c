@@ -508,12 +508,22 @@ const char *seg_sam_data_line (VBlock *vb_,
     random_access_update_chrom (vb_, rname_node_index);
 
     // POS - two options:
-    // 1. if RNAME is the same as the previous line - store the delta in SAM_POS dictionary
+    // 1. if RNAME is the same as the two previous lines - store the delta in SAM_POS dictionary
     // 2. If its a different RNAME - add to vb->random_pos_data (not a dictionary)
+    // issue we're trying to solve: unsorted SAM files where lines appear in pairs - sometimes 2 consecutive
+    // pairs can randomly have the same rname, but they are not close in POS, thereby creating a random 
+    // large delta and inflating our POS dictionary: example:
+    // chr5 5000000   rname_minus_2=chr5          rname_minus_3=chr5
+    // chr1 1000001   rname_minus_1=chr1          rname_minus_2=chr1
+    // chr1 1000002   rname_minus_1=chr1          rname=chr1 <--- DO delta
+    // chr1 2000001   rname=chr1 <-- DONT delta
+    // chr1 2000002
+    // solution: if rname != rname_minus_3 then we don't delta rname, EXCEPT if rname != rname_minus_2
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
     
-    if (rname_node_index != vb->last_rname_node_index)  // different rname than prev line - store full pos in random
+    if (rname_node_index != vb->rname_index_minus_1 ||   // different rname than the 2 previous lines - store full pos in random
+        (rname_node_index == vb->rname_index_minus_2 && rname_node_index != vb->rname_index_minus_3))
         vb->last_pos = seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1, "POS");
 
     else // same rname - do a delta
@@ -521,7 +531,9 @@ const char *seg_sam_data_line (VBlock *vb_,
 
     random_access_update_pos (vb_, vb->last_pos);
 
-    vb->last_rname_node_index = rname_node_index;
+    vb->rname_index_minus_3 = vb->rname_index_minus_2;
+    vb->rname_index_minus_2 = vb->rname_index_minus_1;
+    vb->rname_index_minus_1 = rname_node_index;
 
     // MAPQ
     field_start = next_field;

@@ -286,7 +286,6 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
 
     uint32_t cigar_seq_len=0, snip_len;
     const char *snip;
-    uint32_t last_rname_word_index = (uint32_t)-1;
     
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
@@ -302,16 +301,24 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         // FLAG, RNAME - from their dictionaries
         IFNOTSTRIP("0",1) { RECONSTRUCT_FROM_DICT (SAM_FLAG);}
 
-        uint32_t this_rname_word_index = RECONSTRUCT_FROM_DICT (SAM_RNAME);
+        uint32_t rname_word_index = RECONSTRUCT_FROM_DICT (SAM_RNAME);
 
         // POS - reconstruct from pos_data
-        if (this_rname_word_index == last_rname_word_index) {
+        // chr5 5000000   rname_minus_2=chr5          rname_minus_3=chr5
+        // chr1 1000001   rname_minus_1=chr1          rname_minus_2=chr1
+        // chr1 1000002   rname_minus_1=chr1          rname=chr1 <--- DO delta
+        // chr1 2000001   rname=chr1 <-- DONT delta
+        // chr1 2000002
+        if (rname_word_index == vb->rname_index_minus_1 && 
+            (rname_word_index != vb->rname_index_minus_2 || rname_word_index == vb->rname_index_minus_3)) {
             RECONSTRUCT_FROM_DICT_POS (SAM_POS, true, true); // same rname - reconstruct from delta 
         }
         else  // different rname - get from random_pos
             vb->last_pos = piz_sam_reconstruct_random_pos (vb, txt_line_i, '\t', false);
 
-        last_rname_word_index = this_rname_word_index;
+        vb->rname_index_minus_3 = vb->rname_index_minus_2;
+        vb->rname_index_minus_2 = vb->rname_index_minus_1;
+        vb->rname_index_minus_1 = rname_word_index;
 
         // MAPQ - from its dictionary
         IFNOTSTRIP("255",3) { RECONSTRUCT_FROM_DICT (SAM_MAPQ); }
@@ -342,7 +349,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         //    we decode the delta from the RNEXT b250
         //    1A. If 1, but PNEXT is "*" we recover the "0"
         // 2. If RNEXT and RNAME are different - get the pos data from from vb->random_pos_data 
-        bool get_from_dictionary = (this_rnext_word_index == this_rname_word_index) ||
+        bool get_from_dictionary = (this_rnext_word_index == rname_word_index) ||
                                    (snip_len == 1 && snip[0] == '=') || // this refers to the RNEXT snip
                                    (snip_len == 1 && snip[0] == '*');
 
@@ -386,7 +393,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         buf_add (&vb->txt_data, "\n", 1);
 
         // after consuming sections' data, if this line is not to be outputed - shorten txt_data back to start of line
-        if (flag_regions && !regions_is_site_included (last_rname_word_index, vb->last_pos))
+        if (flag_regions && !regions_is_site_included (vb->rname_index_minus_1, vb->last_pos))
             vb->txt_data.len = txt_data_start; // remove excluded line
     }
 
