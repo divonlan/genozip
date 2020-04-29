@@ -124,8 +124,8 @@ const char *seg_fasta_data_line (VBlock *vb_,
                             dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), ' ', 
                             SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
         
-        static const char *desc_md[2] = { "X>", "Y>" };
-        seg_one_field (vb, desc_md[has_13], 2, FAST_LINEMETA);
+        static const char *desc_metadata[2] = { "X>", "Y>" };
+        seg_one_field (vb, desc_metadata[has_13], 2, FAST_LINEMETA);
         vb->last_line = FASTA_LINE_DESC;
     }
 
@@ -133,8 +133,8 @@ const char *seg_fasta_data_line (VBlock *vb_,
     else if (*line_start == ';' || !line_len) {
         seg_add_to_data_buf (vb_, &vb->comment_data, SEC_FASTA_COMMENT_DATA, line_start, line_len, '\n', line_len + 1 + has_13); 
 
-        static const char *comment_md[2] = { "X;", "Y;" };
-        seg_one_field (vb, comment_md[has_13], 2, FAST_LINEMETA);
+        static const char *comment_metadata[2] = { "X;", "Y;" };
+        seg_one_field (vb, comment_metadata[has_13], 2, FAST_LINEMETA);
         vb->last_line = FASTA_LINE_COMMENT;
     }
 
@@ -144,13 +144,15 @@ const char *seg_fasta_data_line (VBlock *vb_,
         DATA_LINE (vb->line_i)->seq_len        = line_len;
         vb->txt_section_bytes[SEC_SEQ_DATA] += line_len + 1 + has_13;
 
-        char seq_md[30];
+        char seq_meta_data[30];
         unsigned seq_len_len;
-        seq_md[0] = 'X' + has_13;
-        str_uint (line_len, &seq_md[1], &seq_len_len);
-        seg_one_field (vb, seq_md, seq_len_len + 1, FAST_LINEMETA);
+        seq_meta_data[0] = 'X' + has_13;
+        str_uint (line_len, &seq_meta_data[1], &seq_len_len);
+        seg_one_field (vb, seq_meta_data, seq_len_len + 1, FAST_LINEMETA);
         vb->last_line = FASTA_LINE_SEQ;
     }
+
+    vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] = 0; // cancel the seg_one_field additions here, they are already accounted for 
 
     return next_field;
 }
