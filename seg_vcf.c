@@ -567,7 +567,8 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // INFO
     char *info_field_start = (char *)next_field; // we break the const bc seg_vcf_info_field might add a :#
     unsigned info_field_len=0;
-    next_field = seg_get_next_item (vb, info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, false, &info_field_len, &separator, &has_13, "INFO");
+    next_field = seg_get_next_item (vb, info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, 
+                 false, &info_field_len, &separator, &has_13, field_names[DT_VCF][VCF_INFO] /* pointer to string to allow pointer comparison */); 
     // note: we delay seg_vcf_info_field() until the end of the line - we might be adding a Windows \r subfield
 
     if (separator != '\n') {

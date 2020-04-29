@@ -142,7 +142,8 @@ void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const c
         buf_add (&vb->txt_data, snip, snip_len);
         
         if (i < template_len)
-            buf_add (&vb->txt_data, &template[i], 1) // add middle-field separator (buf_add is a macro - no semicolon)
+            // add middle-field separator. note: in seg_compound_field we re-wrote \t at 1, now we re-write back
+            buf_add (&vb->txt_data, template[i]==1 ? "\t" : &template[i], 1) // buf_add is a macro - no semicolon
         else if (separator_len)
             buf_add (&vb->txt_data, separator, separator_len); // add end-of-field separator if needed
     }

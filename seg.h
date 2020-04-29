@@ -20,6 +20,7 @@ extern DictIdType seg_vcf_get_format_subfield (const char **data, uint32_t *len)
 extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
                                       unsigned *len, char *separator, bool *has_13, // out
                                       const char *item_name);
+extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
 
 extern void seg_store (VBlockP vb, 
                        bool *dst_is_spillover, uint32_t *dst_start, uint32_t *dst_len, // out
@@ -45,7 +46,7 @@ extern void seg_add_to_data_buf (VBlockP vb, BufferP buf, SectionType sec,
                                  const char *snip, unsigned snip_len, char add_separator, unsigned add_bytes);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
-                                SubfieldMapperP mapper, DictIdType sf_dict_id, char extra_separator,
+                                SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep,
                                 SectionType field_b250_sec, SectionType sf_b250_sec);
                                
 // ---------

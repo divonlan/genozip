@@ -49,7 +49,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
 
     // we segment it using / | : and " " as separators. 
     seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], field_start, field_len, &vb->desc_mapper,
-                        dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), ' ', 
+                        dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, 
                         SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
     metadata[0] = 'X' + has_13;
     vb->txt_section_bytes[SEC_FAST_DESC_B250] += has_13;
@@ -112,16 +112,15 @@ const char *seg_fasta_data_line (VBlock *vb_,
 
     // get entire line
     unsigned line_len;
-    char separator;
     bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
     int32_t remaining_vb_txt_len = AFTERENT (char, vb->txt_data) - line_start;
-    const char *next_field = seg_get_next_item (vb, line_start, &remaining_vb_txt_len, true, false, false, &line_len, &separator, &has_13, "DESC");
+    const char *next_field = seg_get_next_line (vb, line_start, &remaining_vb_txt_len, &line_len, &has_13, "FASTA line");
     
     // case: description line - we segment it to its components
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
         // we segment using / | : and " " as separators. 
         seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], line_start, line_len, &vb->desc_mapper,
-                            dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), ' ', 
+                            dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, 
                             SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
         
         static const char *desc_metadata[2] = { "X>", "Y>" };

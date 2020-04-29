@@ -126,7 +126,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
             
     ASSSEG (*str_len, str, "Error: missing %s field", item_name);
 
-    ASSSEG (str[i] != '\t' || vb->data_type != DT_VCF || strcmp (item_name, field_names[DT_VCF][VCF_INFO]), 
+    ASSSEG (str[i] != '\t' || vb->data_type != DT_VCF || (item_name == field_names[DT_VCF][VCF_INFO] /* pointer, not string, comparison */), 
             str, "Error: while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name);
 
@@ -134,6 +134,32 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
             item_name,
             allow_newline ? "NEWLINE" : "", allow_tab ? "TAB" : "", allow_colon ? "\":\"" : "", 
             MIN (i-1, 1000), str);
+
+    return 0; // avoid compiler warning - never reaches here
+}
+
+const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name)
+{
+    VBlockP vb = (VBlockP)vb_;
+
+    unsigned i=0; for (; i < *str_len; i++)
+        if (str[i] == '\n') {
+                *len = i;
+                *str_len -= i+1;
+
+                // check for Windows-style '\r\n' end of line 
+                if (i && str[i-1] == '\r') {
+                    (*len)--;
+                    *has_13 = true;
+                }
+
+                return str + i+1; // beyond the separator
+        }
+    
+    ASSSEG (*str_len, str, "Error: missing %s field", item_name);
+
+    ABOSEG (str, "Error: while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
+            item_name, MIN (i-1, 1000), str);
 
     return 0; // avoid compiler warning - never reaches here
 }
@@ -232,7 +258,7 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, int id_field, char *id_snip, unsi
     vb->txt_section_bytes[FIELD_TO_B250_SECTION (vb->data_type, id_field)] -= (!!num_digits) + extra_bit; // we don't account for the \1 and \2 that were not in the txt file
 }
 
-// We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : -
+// We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
 // these are vendor-defined strings.
 // Up to MAX_COMPOUND_COMPONENTS subfields are permitted - if there are more, then all the trailing part is just
 // consider part of the last component.
@@ -243,7 +269,7 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, int id_field, char *id_snip, unsi
 void seg_compound_field (VBlock *vb, 
                          MtfContext *field_ctx, const char *field, unsigned field_len, 
                          SubfieldMapper *mapper, DictIdType sf_dict_id,
-                         char extra_separator, // a separator other than : / | (or 0 is there isn't one)
+                         bool ws_is_sep, // whitespace is separator - separate by ' ' at '\t'
                          SectionType field_b250_sec, SectionType sf_b250_sec)
 {
 #define MAX_COMPOUND_COMPONENTS (10+26)
@@ -253,13 +279,22 @@ void seg_compound_field (VBlock *vb,
     unsigned sf_i = 0;
     char template[MAX_COMPOUND_COMPONENTS-1]; // separators is one less than the subfields
     MtfNode *node;
+    bool rewritten_tab=false;
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
+    
+        char sep = (i==field_len) ? 0 : field[i];
 
-        if (i==field_len || 
-            ((field[i]==':' || field[i]=='/' || field[i]=='|' || field[i]==extra_separator) && sf_i < MAX_COMPOUND_COMPONENTS-1)) { // a subfield ended - separator between subfields
-            
+        // re-write \t as 1 so that they can go into a dictionary (\t is reserved for the dictionary internal separator)
+        if (sep=='\t') {
+            sep = ((char*)field)[i] = 1;
+            rewritten_tab = true;
+        }
+
+        if (!sep || 
+            ((sf_i < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || (ws_is_sep && (sep==' ' || sep==1))))) {
+        
             // process the subfield that just ended
             MtfContext *sf_ctx;
 
@@ -292,6 +327,11 @@ void seg_compound_field (VBlock *vb,
         }
         else snip_len++;
     }
+
+    // un-re-write tabs, for safety
+    if (rewritten_tab)
+        for (unsigned i=0; i < field_len; i++) 
+            if (field[i] == 1) ((char*)field)[i] = '\t';
 
     // if template is empty, make it "*"
     if (sf_i==1) template[0] = '*';
