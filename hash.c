@@ -212,10 +212,19 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     // of the gradient appearance of new snips
     double n1 = first_merging_vb_ctx->mtf_len_at_1_3;
     double n2 = first_merging_vb_ctx->mtf_len_at_2_3 ? ((double)first_merging_vb_ctx->mtf_len_at_2_3 - (double)first_merging_vb_ctx->mtf_len_at_1_3) : 0;
-    double n3 = (double)first_merging_vb_ctx->ol_mtf.len - (double)n1 - (double)n2;
+    double n3 = (double)first_merging_vb_ctx->ol_mtf.len - n1 - n2;
 
-    double n2_n3_lines = (double)(merging_vb->lines.len - merging_vb->num_lines_at_1_3);
-    double n3_lines    = (double)(merging_vb->lines.len - merging_vb->num_lines_at_2_3);
+    double n1_lines      = (double)merging_vb->num_lines_at_1_3;
+    double n2_lines      = (double)merging_vb->num_lines_at_2_3 - n1_lines;
+    double n2_n3_lines   = (double)merging_vb->lines.len - n1_lines;
+    double n3_lines      = (double)merging_vb->lines.len - n1_lines - n2_lines;
+
+    double n1_density    = n1_lines    ? (n1 / n1_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
+    double n2_density    = n2_lines    ? (n2 / n2_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
+    double n2_n3_density = n2_n3_lines ? ((n2+n3) / n2_n3_lines) : 0;  
+    double n3_density    = n3_lines    ? (n3 / n3_lines)         : 0;
+
+    double n2n3_density_ratio = n3_density ? n2_density/n3_density : 0;    
 
     // my secret formula for arriving at these numbers: https://docs.google.com/spreadsheets/d/1UijOuPgquZ71kEdB7kUf1OYUMs-Xhu2gAOOHgy6QCIQ/edit#gid=0
     static struct { 
@@ -240,26 +249,37 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     };
 
     double estimated_entries=0;
-    double n2n3_ratio = n3 ? n2/n3 : 0;    
     unsigned gp=0;
 
     if (n3 == 0) 
         estimated_entries = zf_ctx->mtf.len; // we don't expect new entries coming from the next VBs
 
-    else if (n2n3_ratio <= 1.05)  // looks like almost linear growth - we expect the same density of new entries as in n2 and n3
-        estimated_entries = estimated_num_lines * ((n2+n3) / n2_n3_lines);
+    // case: growth from n2 to n3 looks like is almost linear growth. we distiguish between 2 cases
+    // 1. this is truly a uniform introduction of new entries (for example, an ID per line) - in which case the
+    //    density in n1 should be about the same
+    // 2. the density of n2 and n3 being so similar is a fluke - we can see a big decrease in densify from n1 - 
+    //    we artificially update them to be a bit less similar
+#   define UNIFORM_THREASHOLD 1.05    
+    else if (n2n3_density_ratio <= UNIFORM_THREASHOLD) {
+        if (n2_n3_density * 1.2 < n1_density) // case 2 
+            n2n3_density_ratio = 1.06; // density in n2/n3 fell more than 20% from n1 - this is not a uniform case. arbitrarily set to 1.06
+        
+        else // case 1
+            estimated_entries = estimated_num_lines * n2_n3_density; // growth is going to be uniform - very large hash table
+    }
     
-    else {
-        // depending on the ratio, the number of new entries might drop fast. we cap the number of estimated vbs
-        // at the VB where the expected number of new entries drops to 1 (dropping at a rate of n2n3_ratio every 1/3 VB)
-        // n3 * [ (1/n2n3_ratio) ^ (3*effective_num_vbs)] = 1
-        // which we develop to: effective_num_vbs = log (1/n3) / (3 * log (1/n2n3_ratio) )
+    if (n3 && n2n3_density_ratio > UNIFORM_THREASHOLD) { // if statement, not "else", because we might have updated n2n3_density_ratio
 
-        effective_num_vbs = ceil (log (1/n3) / (3 * log (1/n2n3_ratio) )); // note that n2n3_ratio > 1.05 and n3 >= 1 due to the if statements above
+        // depending on the ratio, the number of new entries might drop fast. we cap the number of estimated vbs
+        // at the VB where the expected number of new entries drops to 1 (dropping at a rate of n2n3_density_ratio every 1/3 VB)
+        // n3 * [ (1/n2n3_density_ratio) ^ (3*effective_num_vbs)] = 1
+        // which we develop to: effective_num_vbs = log (1/n3) / (3 * log (1/n2n3_density_ratio) )
+
+        effective_num_vbs = ceil (log (1/n3) / (3 * log (1/n2n3_density_ratio) )); // note that n2n3_density_ratio > 1.05 and n3 >= 1 due to the if statements above
 
         for (gp = sizeof(growth_plan) / sizeof(growth_plan[0]) - 1; gp >= 0 ; gp--)
             if (MIN (effective_num_vbs + 1 /* +1 for first vb */, estimated_num_vbs) > growth_plan[gp].vbs) {
-                estimated_entries = zf_ctx->mtf.len * ((n2+n3) / n2_n3_lines) * growth_plan[gp].factor;
+                estimated_entries = zf_ctx->mtf.len * n2_n3_density * growth_plan[gp].factor;
                 break;
             }
     
@@ -267,9 +287,9 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     }
 
     // add "stochastic noise" - to cover cases where we have a very large file, and new words continue to be introduced
-    // at a low rate throughout. We add words at 10% of what we viewed in r3 - for the entire file
-    if (n3_lines) estimated_entries += (n3 / n3_lines) * estimated_num_lines * 0.10;
-//fprintf (stderr, "n3_lines=%2.2lf n3=%2.2lf (n3 / n3_lines)=%2.2lf =%2.2lf\n",n3_lines, n3, (n3 / n3_lines), (n3 / n3_lines) * estimated_num_lines  * 0.10);
+    // at a low rate throughout. We add words at 10% of what we viewed in n3 - for the entire file
+    if (n3_lines) estimated_entries += n3_density * estimated_num_lines * 0.10;
+
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
 
     if (flag_debug_hash) {
@@ -282,9 +302,10 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
         }
         
         fprintf (stderr, "dict=%.8s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u "
-                 "n2_n3_lines=%s zf_ctx->mtf.len=%u est_entries=%d hashsize=%u\n", 
-                 dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_ratio, gp, (unsigned)effective_num_vbs, 
-                 str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, zf_ctx->global_hash_prime); 
+                 "n2_n3_lines=%s zf_ctx->mtf.len=%u est_entries=%d hashsize=%s\n", 
+                 dict_id_printable(zf_ctx->dict_id).id, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
+                 str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, 
+                 str_uint_commas (zf_ctx->global_hash_prime, s1)); 
     }
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
