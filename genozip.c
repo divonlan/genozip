@@ -60,7 +60,7 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_strip=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
-    flag_debug_memory=0, flag_debug_progress=0, flag_debug_hash;
+    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash;
 
 uint64_t flag_stdin_size = 0;
 char *flag_grep = NULL;
@@ -662,7 +662,7 @@ int main (int argc, char **argv)
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks, 1 }  
         #define _dm {"debug-memory",  no_argument,       &flag_debug_memory, 1 }  
         #define _dp {"debug-progress",no_argument,       &flag_debug_progress, 1 }  
-        #define _dh {"debug-hash",    no_argument,       &flag_debug_hash,   1 }  
+        #define _dh {"show-hash",    no_argument,       &flag_show_hash,   1 }  
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;

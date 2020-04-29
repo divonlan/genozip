@@ -292,11 +292,11 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
 
     zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
 
-    if (flag_debug_hash) {
+    if (flag_show_hash) {
         char s1[30], s2[30];
  
         if (zf_ctx->did_i==0) {
-            fprintf (stderr, "\n\nOutput of --debug-hash:\n");
+            fprintf (stderr, "\n\nOutput of --show-hash:\n");
             fprintf (stderr, "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
                      (unsigned)ceil(estimated_num_vbs), str_uint_commas (merging_vb->lines.len, s1), str_uint_commas ((uint64_t)estimated_num_lines, s2));
         }
