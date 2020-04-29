@@ -365,10 +365,17 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 static void seg_verify_file_size (VBlock *vb)
 {
     uint32_t reconstructed_vb_size = 0;
-    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
+    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) 
         reconstructed_vb_size += vb->txt_section_bytes[sec_i];
-        //fprintf (stderr, "%s : %u\n", st_name (sec_i), vb->txt_section_bytes[sec_i]);
+
+    // if --show-sections is specified, and we have an mismatch, we show the sections
+    if (flag_show_sections && vb->vb_data_size != reconstructed_vb_size) {
+        fprintf (stderr, "\n\nNon-zero sections:\n");
+        for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) 
+            if (vb->txt_section_bytes[sec_i]) // not 0
+                fprintf (stderr, "%s : %u\n", st_name (sec_i), vb->txt_section_bytes[sec_i]);
     }
+        
 
     char s1[30], s2[30];
     ASSSEG (vb->vb_data_size == reconstructed_vb_size || flag_optimize, vb->txt_data.data, // TO DO: test with flag_optimize too
