@@ -492,7 +492,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "QNAME");
     
     seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[SAM_QNAME], field_start, field_len, &vb->qname_mapper,
-                        dict_id_sam_qname_sf (dict_id_make ("Q0NAME", 6)), false, 
+                        dict_id_sam_qname_sf (dict_id_make ("Q0NAME", 6)), false, false,
                         SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250);
 
     // FLAG

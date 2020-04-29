@@ -45,11 +45,11 @@ const char *seg_fastq_data_line (VBlock *vb_,
     // DESC - the description/id line is vendor-specific. example:
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
     // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
-    next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, "DESC");
+    next_field = seg_get_next_line (vb, field_start, &len, &field_len, &has_13, "DESC");
 
     // we segment it using / | : and " " as separators. 
     seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], field_start, field_len, &vb->desc_mapper,
-                        dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, 
+                        dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, has_13,
                         SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
     metadata[0] = 'X' + has_13;
     vb->txt_section_bytes[SEC_FAST_DESC_B250] += has_13;
@@ -120,7 +120,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
         // we segment using / | : and " " as separators. 
         seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], line_start, line_len, &vb->desc_mapper,
-                            dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, 
+                            dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, has_13,
                             SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
         
         static const char *desc_metadata[2] = { "X>", "Y>" };

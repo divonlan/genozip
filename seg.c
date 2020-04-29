@@ -270,6 +270,7 @@ void seg_compound_field (VBlock *vb,
                          MtfContext *field_ctx, const char *field, unsigned field_len, 
                          SubfieldMapper *mapper, DictIdType sf_dict_id,
                          bool ws_is_sep, // whitespace is separator - separate by ' ' at '\t'
+                         bool account_for_13,
                          SectionType field_b250_sec, SectionType sf_b250_sec)
 {
 #define MAX_COMPOUND_COMPONENTS (10+26)
@@ -340,7 +341,7 @@ void seg_compound_field (VBlock *vb,
     NEXTENT (uint32_t, field_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, field_ctx, template, MAX (1, sf_i-1), &node, NULL);
 
     // byte counts for --show-sections 
-    vb->txt_section_bytes[field_b250_sec] += sf_i; // sf_i has 1 for each separator including the terminating \t or \n
+    vb->txt_section_bytes[field_b250_sec] += sf_i + account_for_13; // sf_i has 1 for each separator including the terminating \t or \n / \r\n
     vb->txt_section_bytes[sf_b250_sec]    += field_len - (sf_i-1); // the entire field except for the / and : separators
 }
 

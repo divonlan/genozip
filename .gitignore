@@ -40,7 +40,15 @@ mac/scripts/*
 *.fasta*
 *.23andme*
 !test-file.vcf
+!test-file.sam
+!test-file.fa
+!test-file.fq
+!test-file.23andme
 !minimal.vcf
+!minimal.sam
+!minimal.fa
+!minimal.fq
+!minimal.23andme
 *stackdump
 .altool_app_specifc_password
 mac/.mac_username

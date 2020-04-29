@@ -46,7 +46,7 @@ extern void seg_add_to_data_buf (VBlockP vb, BufferP buf, SectionType sec,
                                  const char *snip, unsigned snip_len, char add_separator, unsigned add_bytes);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
-                                SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep,
+                                SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep, bool account_for_13,
                                 SectionType field_b250_sec, SectionType sf_b250_sec);
                                
 // ---------
