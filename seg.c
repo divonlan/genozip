@@ -306,7 +306,7 @@ void seg_compound_field (VBlock *vb,
 
         // re-write \t as 1 so that they can go into a dictionary (\t is reserved for the dictionary internal separator)
         if (sep=='\t') {
-            sep = ((char*)field)[i] = 1;
+            sep = ((char*)field)[i] = DICT_TAB_REWRITE_CHAR;
             rewritten_tab = true;
         }
 
@@ -349,7 +349,7 @@ void seg_compound_field (VBlock *vb,
     // un-re-write tabs, for safety
     if (rewritten_tab)
         for (unsigned i=0; i < field_len; i++) 
-            if (field[i] == 1) ((char*)field)[i] = '\t';
+            if (field[i] == DICT_TAB_REWRITE_CHAR) ((char*)field)[i] = '\t';
 
     // if template is empty, make it "*"
     if (sf_i==1) template[0] = '*';

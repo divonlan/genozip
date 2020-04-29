@@ -97,6 +97,8 @@ typedef struct MtfContext {
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75
 
+#define DICT_TAB_REWRITE_CHAR 1 // in case we need to write a tab in the dictionary, we re-write it to ASCII 1 as tab is used as the separator between words in the dictionary
+
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
 extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
