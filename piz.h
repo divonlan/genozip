@@ -10,7 +10,8 @@
 
 extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool is_first_vcf_component, bool is_last_file);
 
-extern int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, char *pos_str, unsigned *pos_len);
+extern int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
+                               int32_t *last_delta, char *pos_str, unsigned *pos_len);
 extern void piz_uncompress_fields (VBlockP vb, const unsigned *section_index, unsigned *section_i);
 extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
 
@@ -58,10 +59,10 @@ extern void piz_reconstruct_id (VBlockP vb, BufferP id_buf, uint32_t *next_id,
     buf_add (&vb->txt_data, snip, snip_len); \
     buf_add (&vb->txt_data, "\t", 1); 
 
-#define RECONSTRUCT_FROM_DICT_POS(did_i,update_last_pos,add_tab) { \
+#define RECONSTRUCT_FROM_DICT_POS(did_i,update_last_pos,last_delta,add_tab) { \
     if ((did_i) != DID_I_NONE) LOAD_SNIP(did_i);\
     char pos_str[30];\
-    uint32_t new_pos = piz_decode_pos (vb->last_pos, snip, snip_len, pos_str, &snip_len); \
+    uint32_t new_pos = piz_decode_pos (vb->last_pos, snip, snip_len, last_delta, pos_str, &snip_len); \
     if (update_last_pos) vb->last_pos = new_pos;\
     buf_add (&vb->txt_data, pos_str, snip_len);\
     if (add_tab) buf_add (&vb->txt_data, "\t", 1); }

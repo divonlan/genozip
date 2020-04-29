@@ -51,7 +51,7 @@ const char *seg_me23_data_line (VBlock *vb_,
     // POS - store delta vs previous line
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, ME23_POS, SEC_POS_B250, field_start, field_len, "POS");
+    vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, ME23_POS, SEC_POS_B250, field_start, field_len, "POS");
 
     random_access_update_pos (vb_, vb->last_pos);
 

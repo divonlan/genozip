@@ -245,7 +245,7 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
 
         else if (dict_id.num == dict_id_OPTION_mc) {
             if (!flag_strip) 
-                RECONSTRUCT_FROM_DICT_POS (did_i, false, false);
+                RECONSTRUCT_FROM_DICT_POS (did_i, false, NULL, false);
         }
         
         // SA, XA and OA have subsubfields IF snip starts with ascii 255
@@ -311,7 +311,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         // chr1 2000002
         if (rname_word_index == vb->rname_index_minus_1 && 
             (rname_word_index != vb->rname_index_minus_2 || rname_word_index == vb->rname_index_minus_3)) {
-            RECONSTRUCT_FROM_DICT_POS (SAM_POS, true, true); // same rname - reconstruct from delta 
+            RECONSTRUCT_FROM_DICT_POS (SAM_POS, true, NULL, true); // same rname - reconstruct from delta 
         }
         else  // different rname - get from random_pos
             vb->last_pos = piz_sam_reconstruct_random_pos (vb, txt_line_i, '\t', false);
@@ -361,7 +361,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
                     buf_add (&vb->txt_data, "0\t", 2);
                 }
                 else { 
-                    RECONSTRUCT_FROM_DICT_POS (DID_I_NONE, false, true);
+                    RECONSTRUCT_FROM_DICT_POS (DID_I_NONE, false, &vb->last_pnext_delta, true);
                 }
             }
         }

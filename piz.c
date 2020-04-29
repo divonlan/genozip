@@ -42,25 +42,30 @@ void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len,
+                        int32_t *last_delta, // optional in/out
                         char *pos_str, unsigned *pos_len) // out
 {
     int32_t delta=0;
 
-    // we parse the string ourselves - this is hugely faster than sscanf.
-    unsigned negative = *delta_snip == '-'; // 1 or 0
+    if (!delta_snip_len && last_delta)
+        delta = -(*last_delta); // negated delta of last line - happens every other line in unsorted BAMs
 
-    const char *s; for (s=(delta_snip + negative); *s != '\t' ; s++)
-        delta = delta*10 + (*s - '0');
+    else {
+        // we parse the string ourselves - this is hugely faster than sscanf.
+        unsigned negative = *delta_snip == '-'; // 1 or 0
 
-    if (negative) delta = -delta;
+        const char *s; for (s=(delta_snip + negative); *s != '\t' ; s++)
+            delta = delta*10 + (*s - '0');
 
-    last_pos += delta;
-    
+        if (negative) delta = -delta;
+    }
+
+    last_pos += delta;    
     ASSERT (last_pos >= 0, "Error: last_pos=%d is negative", last_pos);
 
-    // create number string without calling slow sprintf
+    if (last_delta) *last_delta = delta;
 
-    // create reverse string
+    // create number string without calling slow sprintf - start with creating the reverse string
     char reverse_pos_str[50];
     uint32_t n = last_pos;
 

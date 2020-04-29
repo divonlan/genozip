@@ -38,7 +38,7 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
         }
 
         chrom_word_index = RECONSTRUCT_FROM_DICT (ME23_CHROM);
-        RECONSTRUCT_FROM_DICT_POS (ME23_POS, true, true); // reconstruct from delta
+        RECONSTRUCT_FROM_DICT_POS (ME23_POS, true, NULL, true); // reconstruct from delta
         RECONSTRUCT_FROM_TABLESS_BUF (vb->genotype_data, vb->next_genotype, 2, false, "HT_DATA");
 
         // remove the extra * added for ploidy=1 genotypes

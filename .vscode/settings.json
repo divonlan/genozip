@@ -38,7 +38,8 @@
         "regex": "c",
         "memory": "cpp",
         "random": "c",
-        "strings.h": "c"
+        "strings.h": "c",
+        "stdint.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

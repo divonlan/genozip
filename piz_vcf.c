@@ -216,7 +216,7 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
 
             // reconstruct pos from delta
             if (f == VCF_POS) {
-                vb->last_pos = piz_decode_pos (vb->last_pos, snip[VCF_POS], snip_len[VCF_POS], pos_str, &snip_len[VCF_POS]); 
+                vb->last_pos = piz_decode_pos (vb->last_pos, snip[VCF_POS], snip_len[VCF_POS], NULL, pos_str, &snip_len[VCF_POS]); 
                 snip[VCF_POS] = pos_str;
 
                 // in case of --regions - check if this line is needed at all (based on CHROM and POS)

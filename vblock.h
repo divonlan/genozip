@@ -260,6 +260,8 @@ typedef struct VBlockSAM {
     uint32_t last_tlen_abs_len;          // absolute value of last tlen, its sign, and the string length of last_tlen_abs
     bool last_tlen_is_positive;
 
+    int32_t last_pnext_delta;            // last delta calculated for PNEXT
+
     Buffer random_pos_data;              // POS data - data from : 
                                          // 1. POS if RNAME differs from prev line RNAME
                                          // 2. PNEXT where RNEXT is not ('=' or equal to RNAME) 

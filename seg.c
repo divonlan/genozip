@@ -183,7 +183,8 @@ int32_t seg_pos_snip_to_int (VBlock *vb, const char *pos_str, const char *field_
     return (int32_t)this_pos_64;
 }
 
-int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int did_i, SectionType sec_pos_b250,
+int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*in /out */,
+                       int did_i, SectionType sec_pos_b250,
                        const char *pos_str, unsigned pos_len, const char *field_name)
 {
     int32_t this_pos = seg_pos_snip_to_int (vb, pos_str, field_name);
@@ -193,30 +194,46 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int did_i, SectionType sec_
     // print our string without expensive sprintf
     char pos_delta_str[50], reverse_pos_delta_str[50];
     
-    bool negative = (pos_delta < 0);
-    if (negative) pos_delta = -pos_delta;
+    // if the delta is the negative of the previous delta (as happens in unsorted BAM files with the second line in
+    // each pair of lines) - we just store an empty snippet
+    bool is_negated_last = (last_pos_delta && *last_pos_delta && (*last_pos_delta == -pos_delta));
 
-    // create reverse string
-    unsigned len=0; 
-    if (pos_delta) { 
-        while (pos_delta) {
-            reverse_pos_delta_str[len++] = '0' + (pos_delta % 10);
-            pos_delta /= 10;
+    if (!is_negated_last) {
+
+        if (last_pos_delta) *last_pos_delta = pos_delta;
+
+        bool negative = (pos_delta < 0);
+        if (negative) pos_delta = -pos_delta;
+
+        // create reverse string
+        unsigned delta_len=0; 
+        if (pos_delta) { 
+            while (pos_delta) {
+                reverse_pos_delta_str[delta_len++] = '0' + (pos_delta % 10);
+                pos_delta /= 10;
+            }
+            if (negative) reverse_pos_delta_str[delta_len++] = '-';
+
+            // reverse it
+            for (unsigned i=0; i < delta_len; i++) pos_delta_str[i] = reverse_pos_delta_str[delta_len-i-1];
         }
-        if (negative) reverse_pos_delta_str[len++] = '-';
+        else { //pos_delta==0
+            pos_delta_str[0] = '0';
+            delta_len = 1;
+        }
+        
+        seg_one_snip (vb, pos_delta_str, delta_len, did_i, sec_pos_b250, NULL);
 
-        // reverse it
-        for (unsigned i=0; i < len; i++) pos_delta_str[i] = reverse_pos_delta_str[len-i-1];
+        vb->txt_section_bytes[sec_pos_b250] += pos_len - delta_len; // re-do the calculation - seg_one_field doesn't do it good in our case
     }
-    else { //pos_delta==0
-        pos_delta_str[0] = '0';
-        len = 1;
+    else {
+        seg_one_snip (vb, "", 0, did_i, sec_pos_b250, NULL);
+        
+        vb->txt_section_bytes[sec_pos_b250] += pos_len; // re-do the calculation - seg_one_field doesn't do it good in our case
+    
+        *last_pos_delta = 0; // no negated delta next time
     }
-
-    seg_one_snip (vb, pos_delta_str, len, did_i, sec_pos_b250, NULL);
-
-    vb->txt_section_bytes[sec_pos_b250] += pos_len - len; // re-do the calculation - seg_one_field doesn't do it good in our case
-
+    
     return this_pos;
 }
 
