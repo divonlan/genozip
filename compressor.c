@@ -409,13 +409,13 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     ASSERT0 (!uncompressed_data || !callback, "Error in comp_compress: expecting either uncompressed_data or callback but not both");
 
     // if the user requested --fast - we always use BZLIB, never LZMA
-    if (flag_fast && header->section_compression_alg == COMP_LZMA)
-        header->section_compression_alg = COMP_BZ2;
+    if (flag_fast && header->sec_compression_alg == COMP_LZMA)
+        header->sec_compression_alg = COMP_BZ2;
 
     static Compressor compressors[NUM_COMPRESSION_ALGS] = { 
         comp_compress_none, comp_error, comp_compress_bzlib, comp_error, comp_error, comp_error, comp_error, comp_compress_lzma };
 
-    ASSERT (header->section_compression_alg < NUM_COMPRESSION_ALGS, "Error in comp_compress: unsupported section compressor=%u", header->section_compression_alg);
+    ASSERT (header->sec_compression_alg < NUM_COMPRESSION_ALGS, "Error in comp_compress: unsupported section compressor=%u", header->sec_compression_alg);
 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
@@ -433,10 +433,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     }
 
     // if there's no data to compress, set compression to NONE
-    if (!data_uncompressed_len) header->section_compression_alg = COMP_PLN;
+    if (!data_uncompressed_len) header->sec_compression_alg = COMP_PLN;
        
     uint32_t est_compressed_len = 
-        (header->section_compression_alg != COMP_PLN) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
+        (header->sec_compression_alg != COMP_PLN) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
@@ -449,11 +449,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         bool success = 
-            compressors[header->section_compression_alg](vb, 
-                                                      uncompressed_data, data_uncompressed_len,
-                                                      callback,  
-                                                      &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                                      true);
+            compressors[header->sec_compression_alg](vb, uncompressed_data, data_uncompressed_len,
+                                                     callback,  
+                                                     &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                                     true);
         comp_free_all (vb); // just in case
 
         // if output buffer is too small, increase it, and try again
@@ -463,7 +462,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
 
-            compressors[header->section_compression_alg](vb, 
+            compressors[header->sec_compression_alg](vb, 
                                                       uncompressed_data, data_uncompressed_len,
                                                       callback,  
                                                       &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
@@ -496,9 +495,9 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         // encrypt the header - we use vb_i and section_i to generate a different AES key for each section
         uint32_t vb_i  = BGEN32 (header->vblock_i);
 
-        // note: for SEC_VB_HEADER in VCF we will encrypt at the end of calculating this VB when the index data is
-        // known, and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (header->section_type != SEC_VB_HEADER || vb->data_type != DT_VCF || header->vblock_i == 0 /* terminator vb header */)
+        // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB in zfile_update_compressed_vb_header() 
+        // and we will then update z_data in memory prior to writing the encrypted data to disk
+        if (header->section_type != SEC_VB_HEADER || header->vblock_i == 0 /* terminator vb header */)
             crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, header->section_type, true);
 
         // encrypt the data body 

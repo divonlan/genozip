@@ -138,7 +138,7 @@ void zfile_uncompress_section (VBlock *vb,
     uint32_t data_uncompressed_len = BGEN32 (section_header->data_uncompressed_len);
     uint32_t vblock_i              = BGEN32 (section_header->vblock_i);
     uint16_t section_i             = BGEN16 (section_header->section_i);
-    CompressionAlg comp_alg        = (CompressionAlg)section_header->section_compression_alg;
+    CompressionAlg comp_alg        = (CompressionAlg)section_header->sec_compression_alg;
 
     // prior to version 5, the algorithm was hard coded, and this field was called "unused"
     if (z_file->genozip_version < 5) {
@@ -216,7 +216,7 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     header.h.section_type          = ctx->dict_section_type;
     header.h.data_uncompressed_len = BGEN32 (num_chars);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary));
-    header.h.section_compression_alg  = COMP_BZ2;
+    header.h.sec_compression_alg  = COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.num_snips               = BGEN32 (num_words);
@@ -246,7 +246,7 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx)
     header.h.section_type          = ctx->b250_section_type;
     header.h.data_uncompressed_len = BGEN32 (ctx->b250.len);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderBase250));
-    header.h.section_compression_alg  = COMP_BZ2;
+    header.h.sec_compression_alg  = COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;
@@ -270,7 +270,7 @@ void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type,
     header.section_type            = section_type;
     header.data_uncompressed_len   = BGEN32 (section_data ? section_data->len : total_len);
     header.compressed_offset       = BGEN32 (sizeof(header));
-    header.section_compression_alg = comp_alg;
+    header.sec_compression_alg = comp_alg;
     header.vblock_i                = BGEN32 (vb->vblock_i);
     header.section_i               = BGEN16 (vb->z_next_header_i++);
     
@@ -377,7 +377,7 @@ int zfile_read_section (VBlock *vb,
     // decrypt header (note: except for SEC_GENOZIP_HEADER - this header is never encrypted)
     if (is_encrypted) {
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
-                "Error: password provided, but file  %s is not encrypted", z_name);
+                "Error: password provided, but file %s is not encrypted", z_name);
 
         crypt_do (vb, (uint8_t*)header, header_size, original_vb_i, expected_sec_type, true); // negative section_i for a header
     
@@ -555,7 +555,7 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     header.h.magic                      = BGEN32 (GENOZIP_MAGIC);
     header.h.compressed_offset          = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len      = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
-    header.h.section_compression_alg       = COMP_BZ2;
+    header.h.sec_compression_alg       = COMP_BZ2;
     header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type                    = BGEN16 ((uint16_t)z_file->data_type);
     header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
@@ -665,7 +665,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
     header.h.section_type          = SEC_TXT_HEADER;
     header.h.data_uncompressed_len = BGEN32 (txt_header_text->len);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader));
-    header.h.section_compression_alg  = COMP_BZ2;
+    header.h.sec_compression_alg  = COMP_BZ2;
     header.num_samples             = BGEN32 (global_vcf_num_samples);
     header.num_lines               = NUM_LINES_UNKNOWN; 
     header.compression_type        = (uint8_t)txt_file->comp_alg; 
@@ -701,7 +701,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
 // the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
 // when we're done. num_lines can only be known after we're done with this VCF component.
 // if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
-bool zfile_update_txt_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb,
+bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb,
                                              Md5Hash *md5 /* out */)
 {
     // rewind to beginning of current (latest) vcf header - nothing to do if we can't
@@ -742,15 +742,15 @@ void zfile_compress_generic_vb_header (VBlock *vb)
     SectionHeaderVbHeader vb_header;
     memset (&vb_header, 0, sizeof(vb_header)); // safety
     
-    vb_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    vb_header.h.section_type          = SEC_VB_HEADER;
-    vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
-    vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
-    vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
-    vb_header.h.section_compression_alg  = COMP_PLN;
-    vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
-    vb_header.vb_data_size            = BGEN32 (vb->vb_data_size);
-    vb_header.longest_line_len        = BGEN32 (vb->longest_line_len);
+    vb_header.h.magic               = BGEN32 (GENOZIP_MAGIC);
+    vb_header.h.section_type        = SEC_VB_HEADER;
+    vb_header.h.compressed_offset   = BGEN32 (sizeof_header);
+    vb_header.h.vblock_i            = BGEN32 (vb->vblock_i);
+    vb_header.h.section_i           = BGEN16 (vb->z_next_header_i++); // always 0
+    vb_header.h.sec_compression_alg = COMP_PLN;
+    vb_header.num_lines             = BGEN32 ((uint32_t)vb->lines.len);
+    vb_header.vb_data_size          = BGEN32 (vb->vb_data_size);
+    vb_header.longest_line_len      = BGEN32 (vb->longest_line_len);
 
     // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.
     vb->z_data.name  = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
@@ -763,9 +763,7 @@ void zfile_compress_generic_vb_header (VBlock *vb)
 // note: this updates the z_data in memory (not on disk)
 void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
 {
-    uint32_t pos=0;
-
-    SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)&vb->z_data.data[pos];
+    SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)vb->z_data.data;
     vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
@@ -776,7 +774,7 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
                  BGEN32 (vb_header->longest_line_len));
     }
     // now we can finally encrypt the header - if needed
-    if (vb_header->h.data_encrypted_len)  // non-zero if encrypted
+    if (crypt_have_password())  
         crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
                   BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
 }
@@ -802,7 +800,7 @@ void zfile_vcf_compress_vb_header (VBlock *vb_)
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
     vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
     vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
-    vb_header.h.section_compression_alg  = COMP_PLN; // in versions 2-4 it was (needlessly) compressed with bzlib
+    vb_header.h.sec_compression_alg  = COMP_PLN; // in versions 2-4 it was (needlessly) compressed with bzlib
     vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.phase_type              = (char)vb->phase_type; 
     vb_header.has_genotype_data       = vb->has_genotype_data;
@@ -844,9 +842,7 @@ void zfile_vcf_compress_vb_header (VBlock *vb_)
 // note: this updates the z_data in memory (not on disk)
 void zfile_vcf_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
 {
-    uint32_t pos=0;
-
-    SectionHeaderVbHeaderVCF *vb_header = (SectionHeaderVbHeaderVCF *)&vb->z_data.data[pos];
+    SectionHeaderVbHeaderVCF *vb_header = (SectionHeaderVbHeaderVCF *)vb->z_data.data;
     vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
     vb_header->first_line   = BGEN32 (txt_first_line_i);
 
@@ -858,7 +854,7 @@ void zfile_vcf_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_
                  BGEN32 (vb_header->max_gt_line_len));
     }
     // now we can finally encrypt the header - if needed
-    if (vb_header->h.data_encrypted_len)  // non-zero if encrypted
+    if (crypt_have_password())  
         crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
                   BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
 }
