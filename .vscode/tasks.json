@@ -108,8 +108,8 @@
         },
         {
             "type": "shell",
-            "label": "Regression test",
-            "command": "./regression-test.sh",
+            "label": "Test",
+            "command": "./test.sh",
             "options": {
                 "cwd": "${workspaceRoot}"
             },
