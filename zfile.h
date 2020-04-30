@@ -47,15 +47,15 @@ extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* option
 extern bool zfile_is_skip_section (void *vb, SectionType st, DictIdType dict_id);
 
 extern void zfile_write_txt_header (BufferP vcf_header_text, bool is_first_vcf);
-extern bool zfile_update_txt_header_section_header (off64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
+extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
 
-// -----------------------------
-// VCF stuff
-// -----------------------------
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
 
+// -----------------------------
+// VCF stuff
+// -----------------------------
 extern void zfile_vcf_compress_vb_header (VBlockP vb);
 extern void zfile_vcf_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 extern void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCFP vb, ConstBufferP haplotype_sections_data, unsigned sb_i);
