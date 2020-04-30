@@ -424,7 +424,7 @@ static void main_genozip (const char *txt_filename,
         RETURNW (txt_file,, "Cannot compresss file %s because its size is 0 - skipping it", txt_filename);
     }
     else {  // stdin
-        txt_file = file_open_redirect (READ, TXT_FILE, UNKNOWN_FILE_TYPE);
+        txt_file = file_open_redirect (READ, TXT_FILE, DT_NONE);
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
  
