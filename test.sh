@@ -28,6 +28,12 @@ for file in ${files[@]}; do
     ./genounzip ${output}.genozip -O -t
     ls  cop*
     rm $file1 $file2
+
+    printf "\nTESTING $file --optimize - NOT checking correctness, just that it doesn't crash\n"
+    ./genozip $file -f --optimize -o ${output}.genozip || exit 1
+
+    printf "\nTESTING $file --strip - NOT checking correctness, just that it doesn't crash\n"
+    ./genocat ${output}.genozip --strip > /dev/null || exit 1
 done
 
 if `command -v md5 >& /dev/null`; then

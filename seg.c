@@ -436,7 +436,7 @@ static void seg_verify_file_size (VBlock *vb)
         
 
     char s1[30], s2[30];
-    ASSSEG (vb->vb_data_size == reconstructed_vb_size || flag_optimize, vb->txt_data.data, // TO DO: test with flag_optimize too
+    ASSSEG (vb->vb_data_size == reconstructed_vb_size, vb->txt_data.data, 
             "Error while verifying reconstructed vblock size: "
             "reconstructed_vb_size=%s (calculated bottoms-up) but vb->vb_data_size=%s (calculated tops-down) (diff=%d)", 
             str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
