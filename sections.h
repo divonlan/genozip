@@ -161,8 +161,8 @@ typedef struct SectionHeader {
     uint32_t vblock_i;               // VB with in file starting from 1 ; 0 for Txt Header
     uint16_t section_i;              // section within VB - 0 for Variant Data
     uint8_t  section_type;          
-    uint8_t  section_compression_alg : 4; // one of CompressionAlg. introduced in genozip v5 (before that it this field was unused)
-    uint8_t  unused                  : 4;
+    uint8_t  sec_compression_alg : 4; // one of CompressionAlg. introduced in genozip v5 (before that it this field was unused)
+    uint8_t  unused              : 4;
 } SectionHeader; 
 
 typedef struct {
