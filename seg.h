@@ -87,13 +87,13 @@ extern SegInitializer seg_me23_initialize;
 //#define ASSSEG(condition, p_into_txt, format, ...) ASSERT(condition, format "ext %u", __VA_ARGS__, 6)
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIu64\
+    ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
                               "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
-                              "\n%u characters before to %u characters after (in quotes): \"%.*s\""\
+                              "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                               "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %"PRIu64 " > vb", \
             __VA_ARGS__, txt_name, vb->line_i, vb->vblock_i, \
-            /* pos_in_vb:         */ p_into_txt ? (p_into_txt - vb->txt_data.data) : -1, \
-            /* pos_in_file:       */ p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1,\
+            /* pos_in_vb:         */ p_into_txt ? (p_into_txt - vb->txt_data.data) : -1LL, \
+            /* pos_in_file:       */ p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1LL,\
             /* vb start pos file: */ vb->vb_position_txt_file, \
             /* vb end pos file:   */ vb->vb_position_txt_file + vb->txt_data.len-1, \
             /* vb length:         */ vb->txt_data.len,\
