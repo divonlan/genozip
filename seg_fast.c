@@ -52,7 +52,6 @@ const char *seg_fastq_data_line (VBlock *vb_,
                         dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, has_13,
                         SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
     metadata[0] = 'X' + has_13;
-    vb->txt_section_bytes[SEC_FAST_DESC_B250] += has_13;
 
     // SEQ - just get the whole line
     const char *seq_start = next_field;
