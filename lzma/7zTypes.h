@@ -97,11 +97,15 @@ typedef unsigned long long int UInt64;
 
 #endif
 
+typedef UInt64 SizeT; // Divon change - always 64bit
+/*
 #ifdef _LZMA_NO_SYSTEM_SIZE_T
 typedef UInt32 SizeT;
+typedef UInt64 SizeT; // Divon change - default to 64bit
 #else
 typedef size_t SizeT;
 #endif
+*/
 
 typedef int BoolInt;
 /* typedef BoolInt Bool; */
