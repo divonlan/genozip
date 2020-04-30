@@ -30,7 +30,7 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
 
         uint32_t txt_data_start = vb->txt_data.len;
         uint32_t txt_line_i = vb->first_line + vb_line_i;
-        bool doesnt_have_13;
+        bool doesnt_have_13=true; // note: for simplicity, we don't recover \r in case of --strip
 
         IFNOTSTRIP(".",1) {
             LOAD_SNIP (ME23_ID);        
