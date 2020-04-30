@@ -350,6 +350,9 @@ mac/.from_remote_timestamp: mac/genozip_installer.pkg
 
 endif # Darwin
 
+test:
+	@cat test.sh | tr -d "\r" | bash -
+
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) *.debug-o
