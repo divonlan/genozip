@@ -119,7 +119,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
 extern const char *file_exts[];
 
 // IMPORTANT: these values CANNOT BE CHANGED as they are part of the genozip file - 
-// they go in SectionHeader.section_compression_alg and also SectionHeaderTxtHeader.compression_type
+// they go in SectionHeader.sec_compression_alg and also SectionHeaderTxtHeader.compression_type
 #define NUM_COMPRESSION_ALGS 8
 typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */, 
                COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7 } CompressionAlg; 
