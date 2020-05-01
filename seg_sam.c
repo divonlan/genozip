@@ -507,18 +507,27 @@ const char *seg_sam_data_line (VBlock *vb_,
 
     random_access_update_chrom (vb_, rname_node_index);
 
-    // POS - two options:
-    // 1. if RNAME is the same as the two previous lines - store the delta in SAM_POS dictionary
-    // 2. If its a different RNAME - add to vb->random_pos_data (not a dictionary)
-    // issue we're trying to solve: unsorted SAM files where lines appear in pairs - sometimes 2 consecutive
-    // pairs can randomly have the same rname, but they are not close in POS, thereby creating a random 
-    // large delta and inflating our POS dictionary: example:
-    // chr5 5000000   rname_minus_2=chr5          rname_minus_3=chr5
-    // chr1 1000001   rname_minus_1=chr1          rname_minus_2=chr1
-    // chr1 1000002   rname_minus_1=chr1          rname=chr1 <--- DO delta
-    // chr1 2000001   rname=chr1 <-- DONT delta
+    // POS - 4 cases for deciding whether to store a delta of this line's POS vs the previous line
+    // in the POS dictionary/b250, or instead to store the entire POS in RAND_POS.
+    //
+    //                CASE 4:                     CASE 3:                     CASE 2:                    CASE 1:        
+    // chr5 5000000   rname_minus_3=chr1          rname_minus_3=chr5          rname_minus_2=chr5         rname_minus_1=chr5
+    // chr1 1000001   rname_minus_2=chr1          rname_minus_2=chr1          rname_minus_1=chr1         rname=chr1 <--- DON'T delta
+    // chr1 1000002   rname_minus_1=chr1          rname_minus_1=chr1          rname=chr1 <--- DO delta
+    // chr1 2000001   rname=chr1 <-- DO delta     rname=chr1 <-- DON'T delta
     // chr1 2000002
-    // solution: if rname != rname_minus_3 then we don't delta rname, EXCEPT if rname != rname_minus_2
+    //
+    // case 1: RNAME is differnet than previous line - don't delta (i.e. store in RAND_POS)
+    // case 2: RNAME is the same as the previous line but not the line before. This can be a pair
+    //         of related lines in a unsorted BAM, or it is just a sorted BAM. Either way, store the delta.
+    // case 3: RNAME is the same as the 2 previous lines, but different than the minus_3 line. Likely, this is an unsorted
+    //         BAM and this is the first line of a new pair of lines, coming after a pair of lines that randomly
+    //         have the same rname. The POS is therefore likely to be very different and hence we DONT store a delta.
+    //         In a sorted BAM, we will miss calculating the delta in this case once in every rname switch - i.e. very few times.
+    // case 4: RNAME is the same as the previous 3 lines - either it is a sorted BAM or the 2nd line in a second consecutive
+    //         pair of lines which randomly both pairs have the same rname in a unsorted BAM. Either way, the line is likely
+    //         related to the previous line, and hence we calculate a delta.
+
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
     
