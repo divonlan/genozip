@@ -510,12 +510,12 @@ const char *seg_sam_data_line (VBlock *vb_,
     // POS - 4 cases for deciding whether to store a delta of this line's POS vs the previous line
     // in the POS dictionary/b250, or instead to store the entire POS in RAND_POS.
     //
-    //                CASE 4:                     CASE 3:                     CASE 2:                    CASE 1:        
-    // chr5 5000000   rname_minus_3=chr1          rname_minus_3=chr5          rname_minus_2=chr5         rname_minus_1=chr5
-    // chr1 1000001   rname_minus_2=chr1          rname_minus_2=chr1          rname_minus_1=chr1         rname=chr1 <--- DON'T delta
-    // chr1 1000002   rname_minus_1=chr1          rname_minus_1=chr1          rname=chr1 <--- DO delta
-    // chr1 2000001   rname=chr1 <-- DO delta     rname=chr1 <-- DON'T delta
-    // chr1 2000002
+    // CASE 4:                     CASE 3:                                    CASE 2:                    CASE 1:        
+    // rname_minus_3=chr1          chr5 5000000   rname_minus_3=chr5          rname_minus_2=chr5         rname_minus_1=chr5
+    // rname_minus_2=chr1          chr1 1000001   rname_minus_2=chr1          rname_minus_1=chr1         rname=chr1 <--- DON'T delta
+    // rname_minus_1=chr1          chr1 1000002   rname_minus_1=chr1          rname=chr1 <--- DO delta
+    // rname=chr1 <-- DO delta     chr1 2000001   rname=chr1 <-- DON'T delta
+    //                             chr1 2000002
     //
     // case 1: RNAME is differnet than previous line - don't delta (i.e. store in RAND_POS)
     // case 2: RNAME is the same as the previous line but not the line before. This can be a pair
