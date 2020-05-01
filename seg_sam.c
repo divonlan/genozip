@@ -517,7 +517,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     // rname=chr1 <-- DO delta     chr1 2000001   rname=chr1 <-- DON'T delta
     //                             chr1 2000002
     //
-    // case 1: RNAME is differnet than previous line - don't delta (i.e. store in RAND_POS)
+    // case 1: RNAME is different than previous line - don't delta (i.e. store in RAND_POS)
     // case 2: RNAME is the same as the previous line but not the line before. This can be a pair
     //         of related lines in a unsorted BAM, or it is just a sorted BAM. Either way, store the delta.
     // case 3: RNAME is the same as the 2 previous lines, but different than the minus_3 line. Likely, this is an unsorted
@@ -526,7 +526,9 @@ const char *seg_sam_data_line (VBlock *vb_,
     //         In a sorted BAM, we will miss calculating the delta in this case once in every rname switch - i.e. very few times.
     // case 4: RNAME is the same as the previous 3 lines - either it is a sorted BAM or the 2nd line in a second consecutive
     //         pair of lines which randomly both pairs have the same rname in a unsorted BAM. Either way, the line is likely
-    //         related to the previous line, and hence we calculate a delta.
+    //         related to the previous line, and hence we calculate a delta. There's a small chance that this is an
+    //         unsorted BAM, with 3 or more consecutive pairs with the same rname, and this is the first line in the 3rd+ pair - 
+    //         the POS being unrelated to the previous line and hence causing an ineffecient delta. This is a rather rare occurance.
 
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
