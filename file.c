@@ -94,13 +94,13 @@ static char *file_compressible_extensions(void)
     return s;
 }
 
-static FileType file_get_type (const char *filename)
+static FileType file_get_type (const char *filename, bool enforce_23andme_name_format)
 {
     // 23andme files have the format "genome_Firstname_Lastname_optionalversion_timestamp.txt" or .zip
-    if (file_has_ext (filename, ".txt")) 
+    if (enforce_23andme_name_format && file_has_ext (filename, ".txt")) 
         return (strstr (filename, "genome_") && strstr (filename, "_Full_")) ? ME23 : UNKNOWN_FILE_TYPE;
     
-    if (file_has_ext (filename, ".zip")) 
+    if (enforce_23andme_name_format && file_has_ext (filename, ".zip")) 
         return (strstr (filename, "genome_") && strstr (filename, "_Full_")) ? ME23_ZIP : UNKNOWN_FILE_TYPE;
     
     for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < AFTER_LAST_FILE_TYPE; ft++)
@@ -128,7 +128,7 @@ void file_set_input_type (const char *type_str)
 
     str_to_lowercase (ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
 
-    stdin_type = file_get_type (ext);
+    stdin_type = file_get_type (ext, false); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
 
     if (file_get_data_type (stdin_type, true) != DT_NONE) {
         free (ext);
@@ -500,7 +500,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     file->mode = mode;
 
     if (mode==READ || data_type != DT_NONE) // if its NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
-        file->type = file_get_type (file->name);
+        file->type = file_get_type (file->name, true);
 
     if (file->mode == WRITE) 
         file->data_type = data_type; // for WRITE, data_type is set by file_open_*
