@@ -38,12 +38,11 @@ mac/scripts/*
 *.fa
 *.fa.gz
 *.fasta*
-*.23andme*
 !test-file.vcf
 !test-file.sam
 !test-file.fa
 !test-file.fq
-!test-file.23andme
+!genome_*Full*
 !minimal.vcf
 !minimal.sam
 !minimal.fa

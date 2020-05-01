@@ -26,7 +26,7 @@
 File *z_file   = NULL;
 File *txt_file = NULL;
 
-static StreamP input_decompressor  = NULL; // bcftools or xz or samtools - only one at a time
+static StreamP input_decompressor  = NULL; // bcftools or xz, unzip or samtools - only one at a time
 static StreamP output_compressor   = NULL; // bgzip, samtools, bcftools
 
 static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --input command line option
@@ -96,6 +96,13 @@ static char *file_compressible_extensions(void)
 
 static FileType file_get_type (const char *filename)
 {
+    // 23andme files have the format "genome_Firstname_Lastname_optionalversion_timestamp.txt" or .zip
+    if (file_has_ext (filename, ".txt")) 
+        return (strstr (filename, "genome_") && strstr (filename, "_Full_")) ? ME23 : UNKNOWN_FILE_TYPE;
+    
+    if (file_has_ext (filename, ".zip")) 
+        return (strstr (filename, "genome_") && strstr (filename, "_Full_")) ? ME23_ZIP : UNKNOWN_FILE_TYPE;
+    
     for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < AFTER_LAST_FILE_TYPE; ft++)
         if (file_has_ext (filename, file_exts[ft])) 
             return ft;
@@ -306,9 +313,20 @@ bool file_open_txt (File *file)
         case COMP_XZ:
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
-                                                "To compress an .xz file", "xz",         // reason, exec_name
+                                                "To uncompress an .xz file", "xz",       // reason, exec_name
                                                 file->is_remote ? SKIP_ARG : file->name, // local file name 
                                                 "--threads=8", "--decompress", "--keep", "--stdout", 
+                                                flag_quiet ? "--quiet" : SKIP_ARG, 
+                                                NULL);            
+            file->file = stream_from_stream_stdout (input_decompressor);
+            break;
+
+        case COMP_ZIP:
+            input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
+                                                file->is_remote ? file->name : NULL,     // url
+                                                "To uncompress a .zip file", "unzip",    // reason, exec_name
+                                                "-p", // must be before file name
+                                                file->is_remote ? SKIP_ARG : file->name, // local file name 
                                                 flag_quiet ? "--quiet" : SKIP_ARG, 
                                                 NULL);            
             file->file = stream_from_stream_stdout (input_decompressor);

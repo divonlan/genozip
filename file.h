@@ -84,14 +84,15 @@
 // 23andMe file variations
 // note: 23andMe files come as a .txt, and therefore the user must specify --input to compress them. we have this
 // made-up file extension here to avoid needing special cases throughout the code
-#define ME23_          ".23andme" // *maybe* 23andMe file - needs to be verified by the header
-#define ME23_GENOZIP_  ".23andme" GENOZIP_EXT
+#define ME23_          ".txt" // our made up extension - natively, 23andMe files come as a zip container containing a txt file
+#define ME23_ZIP_      ".zip" 
+#define ME23_GENOZIP_  ".txt" GENOZIP_EXT
 
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
 
 typedef enum      { UNKNOWN_FILE_TYPE, 
                     VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, BCF, BCF_GZ, BCF_BGZ, VCF_GENOZIP,  
-                    SAM, BAM, SAM_GENOZIP,
+                    SAM, BAM,                             SAM_GENOZIP,
                     FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
                     FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,    FQ_GENOZIP,
                     FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ, FASTA_GENOZIP,
@@ -100,12 +101,12 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     FFN,   FFN_GZ,   FFN_BZ2,   FFN_XZ,   FFN_GENOZIP,
                     FNN,   FNN_GZ,   FNN_BZ2,   FNN_XZ,   FNN_GENOZIP,
                     FNA,   FNA_GZ,   FNA_BZ2,   FNA_XZ,   FNA_GENOZIP,
-                    ME23, ME23_GENOZIP, 
+                    ME23,  ME23_ZIP,                      ME23_GENOZIP, 
                     AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
-                   SAM_, BAM_, SAM_GENOZIP_, \
+                   SAM_, BAM_,                               SAM_GENOZIP_, \
                    FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_, \
                    FQ_,    FQ_GZ_,    FQ_BZ2_,    FQ_XZ_,    FQ_GENOZIP_, \
                    FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FASTA_GENOZIP_,\
@@ -114,17 +115,17 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    FFN_,   FFN_GZ_,   FFN_BZ2_,   FFN_XZ_,   FFN_GENOZIP_, \
                    FNN_,   FNN_GZ_,   FNN_BZ2_,   FNN_XZ_,   FNN_GENOZIP_, \
                    FNA_,   FNA_GZ_,   FNA_BZ2_,   FNA_XZ_,   FNA_GENOZIP_, \
-                   ME23_, ME23_GENOZIP_,\
+                   ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
 
 // IMPORTANT: these values CANNOT BE CHANGED as they are part of the genozip file - 
 // they go in SectionHeader.sec_compression_alg and also SectionHeaderTxtHeader.compression_type
-#define NUM_COMPRESSION_ALGS 8
+#define NUM_COMPRESSION_ALGS 9
 typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */, 
-               COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7 } CompressionAlg; 
+               COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8 } CompressionAlg; 
 #define COMPRESSED_FILE_VIEWER { "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
-                                 "bcftools -Ov --version", "samtools view -h -OSAM", "N/A" }
+                                 "bcftools -Ov --version", "samtools view -h -OSAM", "N/A", "unzip -p" }
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file
@@ -148,7 +149,7 @@ typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */,
                              { FNA_BZ2,   COMP_BZ2, FNA_GENOZIP   }, { FNA_XZ,   COMP_XZ,  FNA_GENOZIP   },\
                              { FA,        COMP_PLN, FA_GENOZIP    }, { FA_GZ,    COMP_GZ,  FA_GENOZIP    },\
                              { FA_BZ2,    COMP_BZ2, FA_GENOZIP    }, { FA_XZ,    COMP_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
-                           { { ME23,      COMP_PLN, ME23_GENOZIP  }, { 0, 0, 0 } } }
+                           { { ME23,      COMP_PLN, ME23_GENOZIP  }, { ME23_ZIP, COMP_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
 
 // plain file MUST appear first on the list - this will be the default output when redirecting
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
@@ -156,7 +157,7 @@ typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */,
                            { SAM,  BAM, 0 },                      \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },\
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
-                           { ME23, 0 } }                        
+                           { ME23, ME23_ZIP, 0 } }                        
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default genozip file
@@ -174,7 +175,7 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 // ---------------------------
 
 #define file_is_read_via_ext_decompressor(file) \
-  (file->comp_alg == COMP_XZ || file->comp_alg == COMP_BCF || file->comp_alg == COMP_BAM)
+  (file->comp_alg == COMP_XZ || file->comp_alg == COMP_ZIP || file->comp_alg == COMP_BCF || file->comp_alg == COMP_BAM)
 
 #define file_is_read_via_int_decompressor(file) \
   (file->comp_alg == COMP_GZ || file->comp_alg == COMP_BGZ || file->comp_alg == COMP_BZ2)

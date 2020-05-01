@@ -2,7 +2,7 @@
 
 output=test-output
 
-files=(test-file.vcf test-file.sam test-file.fq test-file.fa test-file.23andme)
+files=(test-file.vcf test-file.sam test-file.fq test-file.fa genome_23andme_Full_test-file.txt)
 for file in ${files[@]}; do
     printf "\nTESTING $file - basic test - Unix-style end-of-line\n"
     cat $file | tr -d "\r" > unix-nl.$file

@@ -320,6 +320,8 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
         case COMP_BAM: ratio = 4; break;
 
+        case COMP_ZIP: ratio = 3; break;
+
         case COMP_PLN: ratio = 1; break;
 
         default: ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
