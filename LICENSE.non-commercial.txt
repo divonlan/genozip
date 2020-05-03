@@ -1,9 +1,12 @@
 This program, "genozip", and all associated, source code, object code, documentation and other files, are copyright (C)
 2019-2020 Divon M Lan. All rights reserved.
 
-This license limited in scope, and covers NON-COMMERCIAL and some other limited use cases as described below.
+This license is limited in scope, and covers NON-COMMERCIAL and some other limited use cases as described below.
 
 For a commercial license, please contact sales@genozip.com
+
+Acknowledgement: portions of the text of this license are based on Apache License 2.0, however it differs from it
+substantially
 
 TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
@@ -60,26 +63,28 @@ Object based on modified Source
 
    b. This license does NOT permit Using the features of the Work intended for compressing data, including the genozip
 Executable, for any purpose except c,d,e hereinafter if (i). you are a commercial entity or working on behalf or for
-the benefit of a commercial entity. (ii). the use of the Work is in the context of a project that has ultimate
+the benefit of a commercial entity; and/or (ii). the use of the Work is in the context of a project that has ultimate
 commerical goals. 
 
-   c. This license DOES permit Using the Work for educational and training purposes, including by a commerical entity.
+   c. This license DOES permit Using the Work for educational or training purposes, including by a commerical entity.
 
    d. This license DOES permit Using the Work for the purpose of distributing it to others in unmodified Source form or
 Object derived from unmodified Source, and including this License via a platform that is both publicly accessible and
 free of charge, including but not limited to an Internet website
 
    e. This license DOES permit Using, including reproducing and distributing, the three Executables genounzip, genocat
-and genols for any purpose including commericial.
+and genols for any purpose including commercial.
+
+   f. This license DOES NOT permit compressing a file, unless the uncompressed file is also kept or the potential loss
+of data due to genozip not being able to uncompress the compressed file would not cause any harm.
 
 3. Submission of Contributions. Unless You explicitly state otherwise, any Contribution intentionally submitted for
 inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any
 additional terms or conditions. Notwithstanding the above, nothing herein shall supersede or modify the terms of any
 separate license agreement you may have executed with Licensor regarding such Contributions.
 
-4. Trademarks and pantents. This License does not grant permission to use the patents, trade names, trademarks, service
-marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin
-of the Work
+4. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product
+names of the Licensor, except as required for reasonable and customary use in describing the origin of the Work
 
 5. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor provides the Work (and
 each Contributor provides its Contributions) on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
@@ -104,6 +109,4 @@ and hold each Contributor harmless for any liability incurred by, or claims asse
 reason of your accepting any such warranty or additional liability.
 
 END OF TERMS AND CONDITIONS
-
-Acknowledgement: portions of the text of this license are based on Apache License 2.0
 

@@ -3,29 +3,18 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <fcntl.h>
+#include <dirent.h>
+#include <errno.h>
+#include <sys/types.h>
 #ifndef _MSC_VER // Microsoft compiler
 #include <getopt.h>
 #else
 #include "compatibility/visual_c_getopt.h"
 #endif
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <sys/types.h>
-#ifndef WIN32
-#include <sys/ioctl.h>
-#include <termios.h>
-#ifdef __APPLE__
-#include <sys/sysctl.h>
-#else // LINUX
-#include <sched.h>
-#include <sys/sysinfo.h>
-#endif
-#endif
 
 #include "genozip.h"
 #include "header.h"
-#include "text_license.h"
 #include "text_help.h"
 #include "version.h" // automatically incremented by the make when we create a new distribution
 #include "txtfile.h"
@@ -44,6 +33,8 @@
 #include "url.h"
 #include "strings.h"
 #include "stats.h"
+#include "arch.h"
+#include "license.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -60,7 +51,7 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_strip=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
-    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash;
+    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0;
 
 uint64_t flag_stdin_size = 0;
 char *flag_grep = NULL;
@@ -101,52 +92,16 @@ void exit_on_error(void)
     exit(1);
 } 
 
-static int main_print (const char **text, unsigned num_lines,
-                       const char *wrapped_line_prefix, 
-                       const char *newline_separator, 
-                       unsigned line_width /* 0=calcuate optimal */)
-{                       
-    if (!line_width) {
-#ifdef _WIN32
-        line_width = 120; // default width of cmd window in Windows 10
-#else
-        // in Linux and Mac, we can get the actual terminal width
-        struct winsize w;
-        ioctl(0, TIOCGWINSZ, &w);
-        line_width = MAX (40, w.ws_col); // our wrapper cannot work with to small line widths 
-#endif
-    }
-
-    for (unsigned i=0; i < num_lines; i++)  {
-        const char *line = text[i];
-        unsigned line_len = strlen (line);
-        
-        // print line with line wraps
-        bool wrapped = false;
-        while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
-            int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
-                        c>=0 && (IS_LETTER(line[c]) || IS_DIGIT (line[c])); // wrap lines at - and | too, so we can break very long regex strings like in genocat
-                        c--); // find 
-            printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
-            line += c + (line[c]==' '); // skip space too
-            line_len -= c + (line[c]==' ');
-            wrapped = true;
-        }
-        printf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
-    }
-    return 0;
-}
-
-static int main_print_help (bool explicit)
+static void main_print_help (bool explicit)
 {
     static const char **texts[] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
     static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
     
     if (flag_force) exe_type = (ExeType)4; // -h -f shows developer help
 
-    main_print (texts[exe_type], sizes[exe_type] / sizeof(char*), 
-                flag_force ? "                          " : "                     ",  "\n", 0);
-    main_print (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
+    str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
+                    flag_force ? "                          " : "                     ",  "\n", 0);
+    str_print_text (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
 
 // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
 // from Windows Explorer - the terminal will open and he will see the help
@@ -156,57 +111,11 @@ static int main_print_help (bool explicit)
         getc(stdin);
     }
 #endif
-
-    return 0;
 }
 
-int main_print_version()
+static void main_print_version()
 {
     printf ("version=%s\n", GENOZIP_CODE_VERSION);  
-    return 0;
-}
-
-static unsigned main_get_num_cores()
-{
-#ifdef _WIN32
-    char *env = getenv ("NUMBER_OF_PROCESSORS");
-    if (!env) return DEFAULT_MAX_THREADS;
-
-    unsigned num_cores;
-    int ret = sscanf (env, "%u", &num_cores);
-    return ret==1 ? num_cores : DEFAULT_MAX_THREADS; 
-
-#elif defined __APPLE__
-    int num_cores;
-    size_t len = sizeof(num_cores);
-    if (sysctlbyname("hw.activecpu", &num_cores, &len, NULL, 0) &&  
-        sysctlbyname("hw.ncpu", &num_cores, &len, NULL, 0))
-            return DEFAULT_MAX_THREADS; // if both failed
-
-    return (unsigned)num_cores;
- 
-#else // Linux etc
-    // this works correctly with slurm too (get_nprocs doesn't account for slurm core allocation)
-    cpu_set_t cpu_set_mask;
-    extern int sched_getaffinity (__pid_t __pid, size_t __cpusetsize, cpu_set_t *__cpuset);
-    sched_getaffinity(0, sizeof(cpu_set_t), &cpu_set_mask);
-    unsigned cpu_count = __sched_cpucount (sizeof (cpu_set_t), &cpu_set_mask);
-    // TODO - sort out include files so we don't need this extern
-
-    // if failed to get a number - fall back on good ol' get_nprocs
-    if (!cpu_count) cpu_count = get_nprocs();
-
-    return cpu_count;
-#endif
-}
-
-static bool main_am_i_in_docker (void)
-{
-    FILE *fp = fopen ("/.dockerenv", "r");
-    if (!fp) return false;
-
-    FCLOSE (fp, "/.dockerenv");
-    return true;
 }
 
 static void main_list_dir(); // forward declaration
@@ -274,10 +183,10 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
     uint64_t txt_data_size, num_lines;
     uint32_t num_samples;
-    Md5Hash md5_hash_concat;
+    Md5Hash md5_hash_concat, license_hash;
     char created[FILE_METADATA_LEN];
     bool success = zfile_get_genozip_header (&txt_data_size, &num_samples, &num_lines, 
-                                             &md5_hash_concat, created, FILE_METADATA_LEN);
+                                             &md5_hash_concat, created, FILE_METADATA_LEN, &license_hash);
     if (!success) goto finish;
 
     double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
@@ -410,6 +319,8 @@ static void main_genozip (const char *txt_filename,
                           bool is_first_file, bool is_last_file,
                           char *exec_name)
 {
+    license_get(); // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
+
     ASSERT (!z_filename || !url_is_url (z_filename), 
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
 
@@ -512,30 +423,6 @@ static void main_list_dir(const char *dirname)
     ASSERT0 (!ret, "Error: failed to chdir(..)");
 }
 
-void verify_architecture()
-{
-    // verify CPU architecture and compiler is supported
-    ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
-             "Error: Unsupported C type lengths, check compiler options");
-    
-    // verify endianity is as expected
-    uint16_t test_endianity = 0x0102;
-#if defined __LITTLE_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x02, "Error: expected CPU to be Little Endian but it is not");
-#elif defined __BIG_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x01, "Error: expected CPU to be Big Endian but it is not");
-#else
-#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
-#endif
-
-// Verify that this Windows is 64 bit
-#ifdef _WIN32
-#ifndef _WIN64
-#error Compilation error - on Windows, genozip must be compiled as a 64 bit application
-#endif
-#endif
-}
-
 void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
 {
     int num_files = argc - optind;
@@ -588,7 +475,7 @@ int main (int argc, char **argv)
     else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
     else                                    exe_type = EXE_GENOZIP; // default
     
-    verify_architecture();
+    arch_verify();
 
     buf_initialize();
 
@@ -641,6 +528,7 @@ int main (int argc, char **argv)
         #define _GT {"GT-only",       no_argument,       &flag_gt_only,      1 }
         #define _Gt {"gt-only",       no_argument,       &flag_gt_only,      1 }
         #define _fs {"sequential",    no_argument,       &flag_fasta_sequential, 1 }  
+        #define _rg {"register",      no_argument,       &flag_register,     1 }
         #define _sc {"show-content",  no_argument,       &flag_show_content, 1 } 
         #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
@@ -666,10 +554,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh, _9, _9a, _gt, _fa,          _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                  _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm,      _si, _sr,              _dm, _dp,                         _fs, _g, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                             _dm,                                       _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh, _9, _9a, _gt, _fa,          _rg, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                       _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm,      _si, _sr,              _dm, _dp,                         _fs, _g,      _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                             _dm,                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -759,12 +647,17 @@ int main (int argc, char **argv)
 
         if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
         
-        // genozip with no input filename, no output filename, and no output or input redirection - show help
+        // genozip with no input filename, no output filename, and no output or input redirection - show help (unless --register)
         // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
         // coming from a pipe. the user must use "-" to redirect from stdin
         else if (command == -1 && optind == argc && !out_filename && 
-                 (isatty(0) || main_am_i_in_docker()) && isatty(1)) 
-            return main_print_help (false);
+                 (isatty(0) || arch_am_i_in_docker()) && isatty(1)) {
+            if (flag_register) 
+                license_get();
+            else
+                main_print_help (false);
+            return 0;
+        }
 
         else if (exe_type == EXE_GENOUNZIP) command = UNZIP;
         else if (exe_type == EXE_GENOCAT) { command = UNZIP; flag_stdout = !out_filename ; }
@@ -829,18 +722,12 @@ int main (int argc, char **argv)
         int ret = sscanf (threads_str, "%u", &global_max_threads);
         ASSERT (ret == 1 && global_max_threads >= 1, "%s: %s requires an integer value of at least 1", global_cmd, OT("threads", "@"));
     }
-    else global_max_threads = main_get_num_cores();
+    else global_max_threads = arch_get_num_cores();
     
     // take action, depending on the command selected
-    if (command == VERSION) 
-        return main_print_version();
-
-    if (command == LICENSE) 
-        return main_print (license, sizeof(license) / sizeof(char*), "", "\n\n", 
-                           flag_force ? 60 : 0); // --license --force means output license in Windows installer format (used by Makefile) - 60 is width of InstallForge license text field
-
-    if (command == HELP) 
-        return main_print_help (true);
+    if (command == VERSION) { main_print_version();   return 0; }
+    if (command == LICENSE) { license_display();      return 0; }
+    if (command == HELP)    { main_print_help (true); return 0; }
 
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
@@ -870,4 +757,3 @@ int main (int argc, char **argv)
 
     return 0;
 }
-

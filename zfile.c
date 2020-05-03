@@ -22,6 +22,7 @@
 #include "gtshark_vcf.h"
 #include "compressor.h"
 #include "piz.h"
+#include "license.h"
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
@@ -321,7 +322,7 @@ static void *zfile_read_from_disk (VBlock *vb, Buffer *buf, unsigned len, bool f
         unsigned memcpy_len = MIN (len, z_file->z_last_read - z_file->z_next_read);
 
         buf_add (buf, z_file->read_buffer + z_file->z_next_read, memcpy_len);
-        len             -= memcpy_len;
+        len                 -= memcpy_len;
         z_file->z_next_read += memcpy_len;
 
         memcpyied += memcpy_len;
@@ -363,6 +364,13 @@ int zfile_read_section (VBlock *vb,
     if (sl) file_seek (z_file, sl->offset, SEEK_SET, false);
 
     SectionHeader *header = zfile_read_from_disk (vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
+
+    // case: this is a v5+ genozip header - read the extra field
+    if (header->section_type == SEC_GENOZIP_HEADER &&
+        ((v2v3v4_SectionHeaderGenozipHeader *)header)->genozip_version >= 5) {
+        zfile_read_from_disk (vb, data, sizeof (Md5Hash), false);
+        header_size += sizeof (Md5Hash);
+    }
 
     // case: we're done! no more concatenated files
     if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
@@ -486,7 +494,8 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     SectionListEntry dummy_sl = { .section_type = SEC_GENOZIP_HEADER,
                                   .offset       = BGEN64 (footer.genozip_header_offset) };
 
-    ret = zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "genozip_header", sizeof(SectionHeaderGenozipHeader), 
+    // first, read the older section len, if its version 5+, read the extra field
+    ret = zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "genozip_header", sizeof(v2v3v4_SectionHeaderGenozipHeader), 
                               SEC_GENOZIP_HEADER, &dummy_sl);
 
     ASSERT0 (ret != EOF, "Error: unexpected EOF when reading genozip header");
@@ -552,18 +561,21 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
 
     uint32_t num_sections = z_file->section_list_buf.len;
 
-    header.h.magic                      = BGEN32 (GENOZIP_MAGIC);
-    header.h.compressed_offset          = BGEN32 (sizeof (SectionHeaderGenozipHeader));
-    header.h.data_uncompressed_len      = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
-    header.h.sec_compression_alg       = COMP_BZ2;
-    header.genozip_version              = GENOZIP_FILE_FORMAT_VERSION;
-    header.data_type                    = BGEN16 ((uint16_t)z_file->data_type);
-    header.encryption_type              = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
-    header.uncompressed_data_size       = BGEN64 (z_file->txt_data_so_far_concat);
-    header.num_samples                  = BGEN32 (global_vcf_num_samples);
-    header.num_items_concat             = BGEN64 (z_file->num_lines);
-    header.num_sections                 = BGEN32 (num_sections); 
-    header.num_components           = BGEN32 (z_file->num_txt_components_so_far);
+    header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
+    header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
+    header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
+    header.h.sec_compression_alg   = COMP_BZ2;
+    header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
+    header.data_type               = BGEN16 ((uint16_t)z_file->data_type);
+    header.encryption_type         = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
+    header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_concat);
+    header.num_samples             = BGEN32 (global_vcf_num_samples);
+    header.num_items_concat        = BGEN64 (z_file->num_lines);
+    header.num_sections            = BGEN32 (num_sections); 
+    header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
+
+    uint32_t license_num_bgen = BGEN32 (license_get());
+    md5_do (&license_num_bgen, sizeof (int32_t), &header.license_hash);
 
     if (flag_md5) {
         if (flag_concat) {
@@ -616,7 +628,8 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
                                uint32_t *num_samples,
                                uint64_t *num_items_concat,
                                Md5Hash  *md5_hash_concat,
-                               char *created, unsigned created_len /* caller allocates space */)
+                               char *created, unsigned created_len /* caller allocates space */,
+                               Md5Hash  *license_hash)
 {
     // read the footer from the end of the file
     if (!file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, true))
@@ -650,6 +663,12 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
     *num_samples            = BGEN32 (header.num_samples);
     *num_items_concat       = BGEN64 (header.num_items_concat);
     *md5_hash_concat        = header.md5_hash_concat;
+
+    if (header.genozip_version >= 5)
+        *license_hash = header.license_hash;
+    else
+        license_hash->ulls[0] = license_hash->ulls[1] = 0;
+
     memcpy (created, header.created, MIN (FILE_METADATA_LEN, created_len));
 
     return true;

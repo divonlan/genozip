@@ -37,7 +37,7 @@ const char *WRITE = "wb";
 
 const char *file_exts[] = FILE_EXTS;
 
-static const struct { FileType in, comp_alg, out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
+static const struct { FileType in; CompressionAlg comp_alg; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 
@@ -150,15 +150,12 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
     
     if (!isatty(0) || !isatty(2)) exit_on_error(); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
     
-    fprintf (stderr, "Do you wish to overwrite it now? (y or [n]) ");
-
     // read all chars available on stdin, so that if we're processing multiple files - and we ask this question
     // for a subsequent file later - we don't get left overs of this response
     char read_buf[1000];
-    read_buf[0] = 0;
-    read (STDIN_FILENO, read_buf, 1000);
+    str_query_user ("Do you wish to overwrite it now? (y or [n]) ", read_buf, sizeof(read_buf), str_verify_y_n, "N");
 
-    if (read_buf[0] != 'y' && read_buf[0] != 'Y') {
+    if (read_buf[0] == 'N') {
         fprintf (stderr, "No worries, I'm stopping here - no damage done!\n");
         exit(0);
     }

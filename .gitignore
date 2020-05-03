@@ -62,3 +62,4 @@ fastq/*
 lzma/unused
 !backward-compatibility-test/*.genozip
 !backward-compatibility-test/*.vcf
+genome_*Full*

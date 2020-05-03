@@ -15,7 +15,8 @@
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (const Md5Hash *single_component_md5);
 extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,
-                                      uint64_t *num_items_concat, Md5Hash *md5_hash_concat, char *created, unsigned created_len);
+                                      uint64_t *num_items_concat, Md5Hash *md5_hash_concat, 
+                                      char *created, unsigned created_len, Md5Hash *license_hash);
 
 extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
                                              BufferP section_data, CompGetLineCallback callback, uint32_t total_len, 

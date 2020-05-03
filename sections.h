@@ -174,15 +174,15 @@ typedef struct {
     uint64_t uncompressed_data_size;  // data size of uncompressed file, if uncompressed as a single file
     uint64_t num_items_concat;        // number of items in a concatenated file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
-    uint32_t num_components;      // number of vcf concatenated components in this file (1 if no concatenation)
+    uint32_t num_components;          // number of vcf concatenated components in this file (1 if no concatenation)
 
     Md5Hash  md5_hash_concat;         // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
 
     uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
-} 
-SectionHeaderGenozipHeader;
+    Md5Hash  license_hash;            // added in genozip v5. MD5(license_num)
+} SectionHeaderGenozipHeader;
 
 // this footer appears AFTER the genozip header data, facilitating reading the genozip header in reverse from the end of the file
 typedef struct {
@@ -322,16 +322,30 @@ typedef struct {
     uint16_t num_dict_ids;            // number of subfields used in this VB. the actual fields are deduced from the FORMAT column on each line
     uint16_t num_dictionary_sections;  // we have a dictionary for each dict_id, in which new words were introduced in this VB that weren't already in the dictionary. so num_dictionary_sections <= num_dict_ids
     uint32_t max_gt_line_len;
-
 #define v1_MAX_CHROM_LEN      64       // maximum length of chromosome (contig) name
     char chrom[v1_MAX_CHROM_LEN];      // a null-terminated ID of the chromosome
     int64_t min_pos, max_pos;          // minimum and maximum POS values in this VB. -1 if unknown. Note: our format support 64bit POS, but VCF specification as well as the POS dictionary supports 32bit (values 0 to 2M-1)
-
     uint32_t vb_data_size;             // size of variant block as it appears in the source file
     uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
     uint8_t haplotype_index[];         // length is num_haplotypes. e.g. the first entry shows for the first haplotype in the original file, its index into the permuted block. # of bits per entry is roundup(log2(num_samples*ploidy)).
 } v1_SectionHeaderVariantData; 
+
+typedef struct {
+    SectionHeader h;
+    uint8_t  genozip_version;
+    uint8_t  encryption_type;         // one of ENC_TYPE_*
+    uint16_t data_type;               // one of DATA_TYPE_*
+    uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
+    uint64_t uncompressed_data_size;  // data size of uncompressed file, if uncompressed as a single file
+    uint64_t num_items_concat;        // number of items in a concatenated file. "item" is data_type-dependent. For VCF, it is lines.
+    uint32_t num_sections;            // number sections in this file (including this one)
+    uint32_t num_components;          // number of vcf concatenated components in this file (1 if no concatenation)
+    Md5Hash  md5_hash_concat;         // md5 of original VCF file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
+    uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
+#define v2v3v4_FILE_METADATA_LEN 72
+    char created[v2v3v4_FILE_METADATA_LEN];    
+} v2v3v4_SectionHeaderGenozipHeader;
 
 #pragma pack(pop)
 

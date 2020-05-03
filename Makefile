@@ -33,7 +33,7 @@ else
 	CFLAGS += -O2
 endif
 
-MY_SRCS = genozip.c base250.c move_to_front.c header.c strings.c stats.c \
+MY_SRCS = genozip.c base250.c move_to_front.c header.c strings.c stats.c arch.c license.c \
           zip.c zip_vcf.c zip_sam.c zip_fast.c zip_me23.c \
 		  piz.c piz_vcf.c piz_sam.c piz_fast.c piz_me23.c \
 		  seg.c seg_vcf.c seg_sam.c seg_fast.c seg_me23.c \
@@ -57,6 +57,7 @@ CONDA_INCS = aes.h dispatcher.h gloptimize_vcf.h optimize.h profiler.h dict_id.h
              base250.h endianness.h md5.h sections.h text_help.h header.h strings.h hash.h stream.h url.h \
              buffer.h file.h move_to_front.h seg.h text_license.h version.h gtshark_vcf.h compressor.h stats.h \
              crypt.h genozip.h piz.h squeeze_vcf.h vblock.h zfile.h random_access.h regions.h samples.h \
+			 arch.h license.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
              compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \
              compatibility/visual_c_pthread.h \

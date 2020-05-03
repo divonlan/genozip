@@ -6,6 +6,9 @@
 #include "genozip.h"
 #include "strings.h"
 #include "dict_id.h"
+#ifndef WIN32
+#include <sys/ioctl.h>
+#endif
 
 void str_to_lowercase (char *s)
 {
@@ -97,3 +100,80 @@ const char *type_name (unsigned item,
     return *name;    
 }
 
+int str_print_text (const char **text, unsigned num_lines,
+                    const char *wrapped_line_prefix, 
+                    const char *newline_separator, 
+                    unsigned line_width /* 0=calcuate optimal */)
+{                       
+    if (!line_width) {
+#ifdef _WIN32
+        line_width = 120; // default width of cmd window in Windows 10
+#else
+        // in Linux and Mac, we can get the actual terminal width
+        struct winsize w;
+        ioctl(0, TIOCGWINSZ, &w);
+        line_width = MAX (40, w.ws_col); // our wrapper cannot work with to small line widths 
+#endif
+    }
+
+    for (unsigned i=0; i < num_lines; i++)  {
+        const char *line = text[i];
+        unsigned line_len = strlen (line);
+        
+        // print line with line wraps
+        bool wrapped = false;
+        while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
+            int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
+                        c>=0 && (IS_LETTER(line[c]) || IS_DIGIT (line[c])); // wrap lines at - and | too, so we can break very long regex strings like in genocat
+                        c--); // find 
+            printf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
+            line += c + (line[c]==' '); // skip space too
+            line_len -= c + (line[c]==' ');
+            wrapped = true;
+        }
+        printf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);
+    }
+    return 0;
+}
+
+// receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
+bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n)
+{
+    ASSERT0 (!y_or_n || (strlen (y_or_n)==1 && (y_or_n[0]=='Y' || y_or_n[0]=='N')), 
+             "Error: y_or_n needs to be NULL, \"Y\" or \"N\"");
+
+    // default is N (or no default) and first character of the user's response is y or Y
+    if ((!y_or_n || y_or_n[0] == 'N') && (response[0] == 'y' || response[0] == 'Y')) response[0] = 'Y'; 
+    
+    // default is Y (or no default) and first character of the user's response is n or N
+    else if ((!y_or_n || y_or_n[0] == 'Y') && (response[0] == 'n' || response[0] == 'N')) response[0] = 'N';
+
+    // we have a default, and the response of user is not opposite of the default - return default
+    else if (y_or_n) response[0] = y_or_n[0]; 
+
+    // we don't have a default - we request the user to respond again
+    else return false;
+
+    response[1] = 0;
+
+    return true; // always accept the response
+}
+
+bool str_verify_not_empty (char *response, unsigned response_size, const char *unused)
+{ 
+    unsigned len = strlen (response);
+
+    return !(len==0 || (len==1 && response[0]=='\r')); // not \n or \r\n only
+}
+
+void str_query_user (const char *query, char *response, unsigned response_size, 
+                     ResponseVerifier verifier, const char *verifier_param)
+{
+    do {
+        fprintf (stderr, "%s", query);
+
+        unsigned bytes = read (STDIN_FILENO, response, response_size); 
+        response[bytes-1] = '\0'; // string terminator instead of the newline
+
+    } while (verifier && !verifier (response, response_size, verifier_param));
+}

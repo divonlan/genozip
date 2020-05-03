@@ -49,7 +49,7 @@ static const char *help_genozip[] = {
     "",
     "   -o --output       <output-filename>. This option can also be used to concatenate multiple input files with the same individuals, into a single concatenated output file",
     "",
-    "   -F --fast         Compress (a lot) faster, at the expense of a somewhat lower compression ratio. Files compressed with this option also uncompress faster",
+    "   -F --fast         Compress (a lot) faster, at the expense of a lower compression ratio. Files compressed with this option also uncompress faster. Compressing with this option also consumes substantially less memory.",
     "",
     "   -p --password     <password>. Password-protected - encrypted with 256-bit AES",
     "",
@@ -64,7 +64,10 @@ static const char *help_genozip[] = {
     "",
     "   -t --test         After compressing normally, decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual (vcf, sam) decompressed file to that of the original textual file. This option also activates --md5",
     "",
-    "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O.",
+    "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+    "",
+    "   --register        Register (or re-register) a non-commericial license to use genozip",
+
 #if !defined _WIN32 && !defined __APPLE__ // not relevant for personal computers
     "                     Tip: if you're concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
 #endif

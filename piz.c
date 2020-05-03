@@ -284,7 +284,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
     // read and write txt header. in split mode this also opens txt_file
     piz_successful = (data_type != DT_VCF_V1) ? header_genozip_to_txt (&original_file_digest)
-                                                     : v1_header_genozip_to_vcf (&original_file_digest);
+                                              : v1_header_genozip_to_vcf (&original_file_digest);
     
     ASSERT (piz_successful || !is_first_component, "Error: failed to read %s header in %s", 
             dt_name (z_file->data_type), z_name);
