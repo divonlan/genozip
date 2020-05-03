@@ -133,7 +133,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   Z    --dump-one-b250   <field-name>. Dump the binary content of this field, exactly as they appear in the genozip format, to stdout - may be one of the fields 1-9 (CHROM to FORMAT) or an INFO tag",
     "",
-    "   ZU   --show-headers    Show the sections headers (works for genounzip too)",
+    "   ZUC  --show-headers    Show the sections headers",
     "",
     "   ZUC  --show-index      Show the content of the random access index. When used with genocat, only the index is shown, not the file contents",
     "",

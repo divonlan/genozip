@@ -550,13 +550,13 @@ int main (int argc, char **argv)
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks, 1 }  
         #define _dm {"debug-memory",  no_argument,       &flag_debug_memory, 1 }  
         #define _dp {"debug-progress",no_argument,       &flag_debug_progress, 1 }  
-        #define _dh {"show-hash",    no_argument,       &flag_show_hash,   1 }  
+        #define _dh {"show-hash",    no_argument,        &flag_show_hash,   1 }  
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                               _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh, _9, _9a, _gt, _fa,          _rg, _00 };
         static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                         _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                       _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm,      _si, _sr,              _dm, _dp,                         _fs, _g,      _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _sp, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm, _sh, _si, _sr,              _dm, _dp,                         _fs, _g,      _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                                _st, _sm,                             _dm,                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 

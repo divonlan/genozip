@@ -133,6 +133,10 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     if (!override_iterator && !iterator->next_b250) // INFO and Field1-9 data (GT data uses override_next_b250)
         iterator->next_b250 = FIRSTENT (uint8_t, ctx->b250); // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
 
+    // an imperfect test for overflow, but this should never happen anyway 
+    ASSERT (iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), "Error while reconstrucing line %u vb_i=%u: iterator for %s reached end of data",
+            txt_line, vb->vblock_i, err_dict_id (ctx->dict_id));
+            
     uint32_t word_index = z_file->genozip_version >= 2 ? base250_decode (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
                                                        : v1_base250_decode (&iterator->next_b250);
 

@@ -48,13 +48,16 @@ bool piz_fast_test_grep (VBlockFAST *vb)
     piz_uncompress_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
 
     // reconstruct each description line and check for string matching with flag_grep
-    bool found = false, match;
-    uint32_t num_words =  vb->mtf_ctx[FAST_DESC].b250.len;
-    for (uint32_t vb_line_i=0; vb_line_i < num_words; vb_line_i++) {
+    bool found = false, match = false;
+
+    MtfContext *desc_ctx = &vb->mtf_ctx[FAST_DESC];
+    desc_ctx->iterator.next_b250 = FIRSTENT (uint8_t, desc_ctx->b250); 
+
+    uint32_t txt_line_i = vb->data_type == DT_FASTQ ? 4 * vb->first_line : vb->first_line;
+
+    while (desc_ctx->iterator.next_b250 < AFTERENT (uint8_t, desc_ctx->b250)) {
         const char *snip;
         unsigned snip_len;
-        uint32_t txt_line_i = 4 * (vb->first_line + vb_line_i);
-
         LOAD_SNIP (FAST_DESC);
         piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, 0, 0, snip, snip_len, txt_line_i);
 
@@ -69,6 +72,7 @@ bool piz_fast_test_grep (VBlockFAST *vb)
             if (vb->data_type == DT_FASTQ) break; // for FASTA, we need to go until the last line, for FASTQ, we can break here
         }
 
+        if (vb->data_type == DT_FASTQ) txt_line_i += 4; // note: for FASTA we have no idea what txt line we're on, because we're only tracking DESC lines
     }
 
     // last FASTA - carry over whether its grepped to the next VB - in case next VB starts not from the description line
@@ -81,11 +85,11 @@ bool piz_fast_test_grep (VBlockFAST *vb)
         if (!found) found = fasta_prev_vb_last_line_was_grepped;
 
         vb->fasta_prev_vb_last_line_was_grepped = fasta_prev_vb_last_line_was_grepped;
-        if (num_words) fasta_prev_vb_last_line_was_grepped = match; // update to the last description, IF this VB contained any description
+        if (desc_ctx->b250.len) fasta_prev_vb_last_line_was_grepped = match; // update to the last description, IF this VB contained any description
     }
 
     // reset iterators - piz_fastq_reconstruct_vb will use them again 
-    mtf_init_iterator (&vb->mtf_ctx[FAST_DESC]);
+    mtf_init_iterator (desc_ctx);
     for (unsigned sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++)
         mtf_init_iterator (&vb->mtf_ctx[vb->desc_mapper.did_i[sf_i]]);
 
