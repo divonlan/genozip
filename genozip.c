@@ -484,6 +484,7 @@ int main (int argc, char **argv)
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     bool is_short[256]; // indexed by character of short option.
+    memset (is_short, 0, sizeof(is_short));
 
     // process command line options
     while (1) {
@@ -666,16 +667,15 @@ int main (int argc, char **argv)
 
     // check for incompatabilities between flags
     #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
-    
+
     ASSERT (!flag_stdout      || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
     ASSERT (!flag_stdout      || !flag_split,                       "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
     ASSERT (!flag_split       || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
     ASSERT (!flag_stdout      || !flag_replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
-    ASSERT (!flag_stdout      || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
     ASSERT (!flag_test        || !out_filename || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
     ASSERT (!flag_test        || !flag_replace || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSERT (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
-    ASSERT (!flag_header_only || !flag_no_header,              "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
+    ASSERT (!flag_header_only || !flag_no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
     ASSERT (!flag_quiet       || !flag_noisy,                       "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
     ASSERT (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
     ASSERT (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
