@@ -329,10 +329,10 @@ static void main_genozip (const char *txt_filename,
         // open the file
         txt_file = file_open (txt_filename, READ, TXT_FILE, 0);
 
-        if (!txt_file->file) return; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
-
         // skip this file if its size is 0
         RETURNW (txt_file,, "Cannot compresss file %s because its size is 0 - skipping it", txt_filename);
+
+        if (!txt_file->file) return; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
     }
     else {  // stdin
         txt_file = file_open_redirect (READ, TXT_FILE, DT_NONE);

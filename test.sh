@@ -9,7 +9,7 @@ for file in ${files[@]}; do
     ./genozip unix-nl.$file -ft -o ${output}.genozip || exit 1
 
     printf "\nTESTING $file - Window-style end-of-line\n"
-    sed.exe 's/$/\r/g' unix-nl.$file > windows-nl.$file
+    sed 's/$/\r/g' unix-nl.$file > windows-nl.$file
     ./genozip windows-nl.$file -ft -o ${output}.genozip || exit 1
     rm unix-nl.$file windows-nl.$file
 
