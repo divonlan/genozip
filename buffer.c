@@ -62,7 +62,8 @@ char *buf_display (const Buffer *buf)
 const char *buf_desc (const Buffer *buf)
 {
     static char desc[300];
-    sprintf (desc, "%s:%u allocated in %s:%u", buf->name ? buf->name : "(no name)", buf->param, buf->func, buf->code_line);
+    sprintf (desc, "%s:%u allocated in %s:%u by vb_i=%d", 
+             buf->name ? buf->name : "(no name)", buf->param, buf->func, buf->code_line, (buf->vb ? buf->vb->vblock_i : -999));
     return desc;
 }
 
@@ -643,8 +644,8 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 
     ASSERT (src_vb==dst_vb || dst->vb==dst_vb, "Error in buf_move: to move a buffer between VBs, the dst buffer needs to be added"
                                                " to the dst_vb buffer_list in advance. If dst_vb=evb the dst buffer must be added to"
-                                               " the buffer_list by the I/O thread only. src: %s dst: %s",
-            buf_desc (src), buf_desc (dst));
+                                               " the buffer_list by the I/O thread only. src: %s dst: %s src_vb->vb_i=%d dst_vb->vb_i=%d",
+            buf_desc (src), buf_desc (dst), (src_vb ? src_vb->vblock_i : -999), (dst_vb ? dst_vb->vblock_i : -999));
 
     if (!dst->vb) buf_add_to_buffer_list (dst_vb, dst); // this can only happen if src_vb==dst_vb 
 
