@@ -22,7 +22,7 @@ static const unsigned eol_len[2] = { 1, 2 };
 
 // called by I/O thread in zfile_fast_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
-bool piz_fastq_test_grep (VBlockFAST *vb)
+bool piz_fast_test_grep (VBlockFAST *vb)
 {
     ARRAY (const unsigned, section_index, vb->z_section_headers);
 
@@ -48,8 +48,9 @@ bool piz_fastq_test_grep (VBlockFAST *vb)
     piz_uncompress_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
 
     // reconstruct each description line and check for string matching with flag_grep
-    bool found = false;
-    for (uint32_t vb_line_i=0; vb_line_i < vb->mtf_ctx[FAST_DESC].b250.len; vb_line_i++) {
+    bool found = false, match;
+    uint32_t num_words =  vb->mtf_ctx[FAST_DESC].b250.len;
+    for (uint32_t vb_line_i=0; vb_line_i < num_words; vb_line_i++) {
         const char *snip;
         unsigned snip_len;
         uint32_t txt_line_i = 4 * (vb->first_line + vb_line_i);
@@ -59,14 +60,28 @@ bool piz_fastq_test_grep (VBlockFAST *vb)
 
         *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string
 
-        bool match = !!strstr (vb->txt_data.data, flag_grep);
+        match = !!strstr (vb->txt_data.data, flag_grep);
 
         vb->txt_data.len = 0; // reset
 
-        if (match) { 
+        if (match) { // 
             found = true; // we've found a match to the grepped string
-            break;
+            if (vb->data_type == DT_FASTQ) break; // for FASTA, we need to go until the last line, for FASTQ, we can break here
         }
+
+    }
+
+    // last FASTA - carry over whether its grepped to the next VB - in case next VB starts not from the description line
+    // similarly, note whether the previous VB ended with a grepped sequence. If previous VB didn't have any description
+    // i.e the entire VB was a sequence that started in an earlier VB - the grep status of the easier VB is carried forward
+    if (vb->data_type == DT_FASTA) {
+        static bool fasta_prev_vb_last_line_was_grepped = false;
+
+        // if no match was found for this VB, but we have one carried over from previous VB then include this VB anyway
+        if (!found) found = fasta_prev_vb_last_line_was_grepped;
+
+        vb->fasta_prev_vb_last_line_was_grepped = fasta_prev_vb_last_line_was_grepped;
+        if (num_words) fasta_prev_vb_last_line_was_grepped = match; // update to the last description, IF this VB contained any description
     }
 
     // reset iterators - piz_fastq_reconstruct_vb will use them again 
@@ -142,7 +157,9 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
     START_TIMER;
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
-    
+
+    bool grepped_out = flag_grep && !vb->fasta_prev_vb_last_line_was_grepped; // if we're continuing the previous VB's sequence, we obey its grep status
+
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         uint32_t snip_len;
@@ -156,18 +173,30 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
         const char *md = snip;
         bool has_13 = md[0] - 'X';
 
+        uint32_t txt_data_start_line = vb->txt_data.len;
+
         switch (md[1]) {
             case '>': // description line 
                 if (!flag_strip) {
                     LOAD_SNIP (FAST_DESC);
                     piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[has_13], eol_len[has_13], 
                                                     snip, snip_len, txt_line_i);
+                    *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string - for strstr below
+
                     vb->last_line = FASTA_LINE_DESC;
+
+                    // case: we're grepping, and this line doesn't match
+                    if (flag_grep && !strstr (&vb->txt_data.data[txt_data_start_line], flag_grep)) { 
+                        vb->txt_data.len = txt_data_start_line; // rollback
+                        grepped_out = true;
+                    }
+                    else grepped_out = false;
+
                 }
                 break;
 
             case ';': // comment line
-                if (!flag_strip && !flag_header_one) 
+                if (!flag_strip && !flag_header_one && !flag_grep) 
                     RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", '\n', eol[has_13], eol_len[has_13]);
 
                 //if (flag_header_one && !snip_len)
@@ -183,8 +212,8 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
                         vb->txt_data.len -= 1 + (vb->txt_data.data[vb->txt_data.len-2]=='\r');
 
                     uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's \t separator
-                    piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, false);
-                    buf_add (&vb->txt_data, eol[has_13], eol_len[has_13]); // end of line
+                    piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, grepped_out);
+                    if (!grepped_out) buf_add (&vb->txt_data, eol[has_13], eol_len[has_13]); // end of line
                     vb->last_line = FASTA_LINE_SEQ;
                 }
         }

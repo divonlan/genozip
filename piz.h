@@ -31,7 +31,7 @@ extern void piz_sam_uncompress_one_vb (VBlockP vb);
 // FASTQ + FASTA stuff
 // ----------------------
 extern void piz_fast_uncompress_one_vb (VBlockP vb);
-extern bool piz_fastq_test_grep (VBlockFASTP vb);
+extern bool piz_fast_test_grep (VBlockFASTP vb);
 
 // ----------------------
 // 23andMe stuff

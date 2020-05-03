@@ -184,7 +184,7 @@ static void vb_sam_destroy_vb (VBlock **vb_)
 }
 
 //--------------------------------
-// FASTQ stuff
+// FASTQ & FASTA stuff
 //--------------------------------
 
 static void vb_fast_release_vb (VBlock *vb_)
@@ -192,7 +192,8 @@ static void vb_fast_release_vb (VBlock *vb_)
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
     vb->next_seq = vb->next_qual = vb->next_comment = vb->last_line = 0;
-
+    vb->fasta_prev_vb_last_line_was_grepped = 0;
+    
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
     
     buf_free (&vb->seq_data);

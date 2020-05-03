@@ -305,6 +305,8 @@ typedef struct VBlockFAST { // for FASTA and FASTQ
     // FASTA-only fields
     Buffer comment_data;        // ZIP & PIZ
     uint32_t next_comment;
+    bool fasta_prev_vb_last_line_was_grepped; // PIZ: whether previous VB's last line was grepped successfully. 
+
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB
     // is interpreted as a description, not a comment
     enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP

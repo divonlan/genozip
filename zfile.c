@@ -1090,10 +1090,6 @@ void zfile_fast_read_one_vb (VBlock *vb_)
 
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
-    // note: we cannot easily do grep for FASTA, because records might span multiple VBs - the second+ VB doesn't have
-    // access to the description to compare
-    if (vb->data_type == DT_FASTA) flag_grep = NULL;
-
     // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
     // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
     // integrated into the global dictionaries.
@@ -1132,7 +1128,7 @@ void zfile_fast_read_one_vb (VBlock *vb_)
     for (uint8_t sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++) 
         READ_SECTION (SEC_FAST_DESC_SF_B250, SectionHeaderBase250);
 
-    if (flag_grep && !piz_fastq_test_grep (vb)) goto finish; // ususually, we uncompress and reconstruct the DESC from the I/O thread in case of --grep
+    if (flag_grep && !piz_fast_test_grep (vb)) goto finish; // ususually, we uncompress and reconstruct the DESC from the I/O thread in case of --grep
 
     // read SEQ and QUAL data (FASTQ) or COMMENT data (FASTA)
     READ_SECTION (SEC_SEQ_DATA, SectionHeader);
