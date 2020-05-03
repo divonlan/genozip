@@ -56,7 +56,7 @@ typedef void (*IOFunc) (VBlockP vb);
 #define TXT_HEADER_IS_REQUIRED     { true, false , false , false , false } // should we error if the header is missing
 #define TXT_HEADER_LINE_FIRST_CHAR { '#', '@', -1, -1, '#' }; // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
 
-#define STAT_SHOW_SECTIONS_LINE_NAME { "Variants", "Alignment lines", "Entries", "Sequences", "SNPs" }
+#define STAT_SHOW_SECTIONS_LINE_NAME { "Variants", "Alignment lines", "Entries", "Lines", "SNPs" }
 
 #define STAT_DICT_TYPES { { "FIELD", "INFO",   "FORMAT" }, \
                           { "FIELD", "QNAME",  "OPTION" }, \
