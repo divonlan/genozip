@@ -47,6 +47,15 @@ int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta
 {
     int32_t delta=0;
 
+    if (delta_snip_len && delta_snip[0] == '.') { // this is not a delta 
+
+        ASSERT0 (!last_delta, "Error: piz_decode_pos requires last_delta==NULL in delta fields that might be nonsense");
+        
+        memcpy (pos_str, delta_snip+1, delta_snip_len-1);
+        *pos_len = delta_snip_len - 1;
+        return last_pos; // unchanged
+    }
+    
     if (!delta_snip_len && last_delta)
         delta = -(*last_delta); // negated delta of last line - happens every other line in unsorted BAMs
 

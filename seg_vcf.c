@@ -213,7 +213,7 @@ static void seg_vcf_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_st
                 // END - we always store it has a diff vs. vb->last_pos (POS and END share the same delta stream -
                 // the next POS will be a delta vs this END)
                 if (ctx->dict_id.num == dict_id_INFO_END) {
-                    vb->last_pos = seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, ctx->did_i, SEC_VCF_INFO_SF_B250, this_value, this_value_len, "END");
+                    vb->last_pos = seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, ctx->did_i, SEC_VCF_INFO_SF_B250, this_value, this_value_len, "END");
                     vb->txt_section_bytes[SEC_VCF_INFO_SF_B250]--; // exclude the separator included by default by seg_pos_field
                 }
 
@@ -547,7 +547,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // POS
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, VCF_POS, SEC_POS_B250, field_start, field_len, "POS");
+    vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, VCF_POS, SEC_POS_B250, field_start, field_len, "POS");
     random_access_update_pos (vb_, vb->last_pos);
 
     // ID

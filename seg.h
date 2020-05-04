@@ -36,8 +36,8 @@ extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did
 
 #define seg_one_field(vb,str,len,f) seg_one_snip ((VBlockP)(vb), (str), (len), (f), FIELD_TO_B250_SECTION((vb)->data_type, f), NULL)
 
-extern int32_t seg_pos_snip_to_int (VBlockP vb, const char *pos_str, const char *field_name);
-extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_delta, int pos_field, SectionType sec_pos_b250,
+extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_delta, bool allow_non_number, 
+                              int pos_field, SectionType sec_pos_b250,
                               const char *pos_str, unsigned pos_len, const char *field_name);
 
 extern void seg_id_field (VBlockP vb, BufferP id_buf, int id_field, char *id_snip, unsigned id_snip_len, bool extra_bit);

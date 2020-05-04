@@ -167,28 +167,52 @@ const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigne
 #define MAX_POS 0x7fffffff // maximum allowed value for POS
 
 // reads a tab-terminated POS string
-int32_t seg_pos_snip_to_int (VBlock *vb, const char *pos_str, const char *field_name)
+static int32_t seg_pos_snip_to_int (VBlock *vb, const char *pos_str, const char *field_name,
+                                    bool *is_nonsense /* optional out */)
 {
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
+    bool all_digits = true;
     const char *s; for (s=pos_str; *s != '\t' && *s != '\n' && *s != '\r'; s++) {
-        ASSSEG (IS_DIGIT (*s), pos_str, "Error: '%s' field must be an integer number between 0 and %u, seeing: %.*s", 
-                field_name, MAX_POS, (int)(s-pos_str+1), pos_str);
+        if (!IS_DIGIT (*s)) all_digits=false;
 
-        this_pos_64 = this_pos_64 * 10 + (*s - '0');
+        if (all_digits)
+            this_pos_64 = this_pos_64 * 10 + (*s - '0');
     }
-    ASSSEG (this_pos_64 >= 0 && this_pos_64 <= 0x7fffffff, pos_str,
-            "Error: Invalid '%s' field - value should be between 0 and %u, but found %"PRIu64, field_name, MAX_POS, this_pos_64);
-    
+
+    if (s == pos_str || !all_digits || this_pos_64 < 0 || this_pos_64 > 0x7fffffff) {
+        ASSSEG (is_nonsense, pos_str, "Error: '%s' field must be an integer number between 0 and %u, seeing: %.*s", 
+                field_name, MAX_POS, (int32_t)(s-pos_str), pos_str);
+
+        *is_nonsense = true;
+        return (int32_t)(s-pos_str);
+    }
+    else if (is_nonsense) *is_nonsense = false;
+
     return (int32_t)this_pos_64;
 }
 
-int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*in /out */,
+int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*in /out */, 
+                       bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                        int did_i, SectionType sec_pos_b250,
                        const char *pos_str, unsigned pos_len, const char *field_name)
 {
-    int32_t this_pos = seg_pos_snip_to_int (vb, pos_str, field_name);
+    bool is_nonsense = false;
+    
+    int32_t this_pos = seg_pos_snip_to_int (vb, pos_str, field_name, allow_non_number ? &is_nonsense : NULL);
 
+    // if caller allows a non-valid-number and this is indeed a non-valid-number, just store the string, prefixed by .
+    if (is_nonsense) { 
+        int32_t nonsense_len = this_pos; 
+        char save = *(pos_str-1);
+        *(char*)(pos_str-1) = '.'; // note: even if its the very first character in txt_data, we're fine - it will temporarily overwrite the buffer underflow
+
+        seg_one_snip (vb, pos_str-1, nonsense_len+1, did_i, sec_pos_b250, NULL);
+        vb->txt_section_bytes[sec_pos_b250]--; // don't account for the .
+        
+        *(char*)(pos_str-1) = save; // restore
+        return last_pos; // unchanged last_pos
+    }
     int32_t pos_delta = this_pos - last_pos;
     
     // print our string without expensive sprintf

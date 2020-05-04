@@ -360,7 +360,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         else if (dict_id.num == dict_id_OPTION_mc) {
             uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
 
-            seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, mc_did_i, SEC_SAM_OPTNL_SF_B250, value, value_len, "mc:i");
+            seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, mc_did_i, SEC_SAM_OPTNL_SF_B250, value, value_len, "mc:i");
         }
 
         // E2 - SEQ data (note: E2 doesn't have a dictionary)
@@ -538,7 +538,7 @@ const char *seg_sam_data_line (VBlock *vb_,
         vb->last_pos = seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1, "POS");
 
     else // same rname - do a delta
-        vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, "POS");
+        vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, "POS");
 
     random_access_update_pos (vb_, vb->last_pos);
 
@@ -576,7 +576,7 @@ const char *seg_sam_data_line (VBlock *vb_,
         if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable"
             seg_one_field (vb, "*", 1, SAM_PNEXT); 
         else
-            seg_pos_field (vb_, vb->last_pos, &vb->last_pnext_delta, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, "PNEXT");
+            seg_pos_field (vb_, vb->last_pos, &vb->last_pnext_delta, false, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, "PNEXT");
     }
 
     else  // RNAME and RNEXT differ - store in random_pos
