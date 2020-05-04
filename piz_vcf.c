@@ -440,7 +440,8 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
     const unsigned max_ht_per_block = vb->num_samples_per_block * vb->ploidy; // last sample block may have less, but that's ok for our div/mod calculations below
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
-    buf_alloc (vb, &vb->column_of_zeros, txt_file->max_lines_per_vb, 1, "column_of_zeros", 0);
+    // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output
+    buf_alloc (vb, &vb->column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "column_of_zeros", 0);
     buf_zero (&vb->column_of_zeros);
 
     for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
