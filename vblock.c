@@ -50,7 +50,7 @@ static void vb_vcf_release_vb (VBlock *vb_)
     buf_free (&vb->format_mapper_buf);
     buf_free (&vb->iname_mapper_buf);
 
-    vb->num_info_subfields = vb->num_format_subfields = 0;
+    vb->num_info_subfields = vb->num_format_subfields = vb->end_did_i = 0;
 
     buf_free(&vb->optimized_gl_dict);
     buf_free(&vb->haplotype_permutation_index);

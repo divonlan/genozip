@@ -199,9 +199,7 @@ static void seg_vcf_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_st
 
                 MtfNode *sf_node;
 
-                vb->txt_section_bytes[SEC_VCF_INFO_SF_B250] += this_value_len; 
-                vb->txt_section_bytes[SEC_VCF_INFO_B250]++; // account for the separator (; or \t or \n) 
-
+                // VQSLOD - we can optimize it, if we're requested
                 unsigned optimized_snip_len;
                 char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
                 if (flag_optimize && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
@@ -212,8 +210,21 @@ static void seg_vcf_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_st
                     this_value_len = optimized_snip_len;
                 }
 
-                NEXTENT (uint32_t, *mtf_i_buf) = 
-                    mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, &sf_node, NULL);
+                // END - we always store it has a diff vs. vb->last_pos (POS and END share the same delta stream -
+                // the next POS will be a delta vs this END)
+                if (ctx->dict_id.num == dict_id_INFO_END) {
+                    vb->last_pos = seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, ctx->did_i, SEC_VCF_INFO_SF_B250, this_value, this_value_len, "END");
+                    vb->txt_section_bytes[SEC_VCF_INFO_SF_B250]--; // exclude the separator included by default by seg_pos_field
+                }
+
+                else {
+                    NEXTENT (uint32_t, *mtf_i_buf) = 
+                        mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, &sf_node, NULL);
+
+                    vb->txt_section_bytes[SEC_VCF_INFO_SF_B250] += this_value_len; 
+                }
+
+                vb->txt_section_bytes[SEC_VCF_INFO_B250]++; // account for the separator (; or \t or \n) 
 
                 reading_name = true;  // end of value - move to the next time
                 this_name = &info_str[i+1]; // move to next field in info string

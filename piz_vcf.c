@@ -170,9 +170,19 @@ static inline void piz_vcf_reconstruct_info (VBlockVCF *vb, const SubfieldMapper
         buf_add (&vb->txt_data, start, (unsigned)(snip-start)); // name inc. '=' e.g. "Info1="
 
         uint8_t did_i = iname_mapper->did_i[sf_i];
-        if (did_i != DID_I_NONE && did_i != DID_I_HAS_13)   // some info names can be without values, in which case there will be no ctx
-            buf_add (&vb->txt_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
+        if (did_i != DID_I_NONE && did_i != DID_I_HAS_13) {  // some info names can be without values, in which case there will be no ctx
+            
+            // starting v5, END is encoded as a delta vs. POS (sharing the POS/END delta stream)
+            char end_str[50];
+            if (z_file->genozip_version >= 5 && did_i == vb->end_did_i) {
+                vb->last_pos = piz_decode_pos (vb->last_pos, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i], 
+                                               NULL, end_str, &info_sf_value_snip_len[sf_i]); 
+                info_sf_value_snip[sf_i] = end_str;
+            }
 
+            buf_add (&vb->txt_data, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i]); // value e.g "value1"
+        }
+        
         if (did_i != DID_I_HAS_13) {
             buf_add (&vb->txt_data, ";", 1); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
             if (*snip == ';') snip++;

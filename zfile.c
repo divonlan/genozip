@@ -950,6 +950,8 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
         }
         
         buf_overlay (vb_, &vb->iname_mapper_buf, &global_iname_mapper_buf, "iname_mapper_buf", vb->vblock_i);    
+
+        vb->end_did_i = mtf_get_existing_did_i_by_dict_id ((DictIdType)dict_id_INFO_END); 
     }
 
     // read the the data sections (fields, info sub fields, genotype, phase, haplotype)

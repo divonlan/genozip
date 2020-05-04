@@ -39,7 +39,8 @@
         "memory": "cpp",
         "random": "c",
         "strings.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "text_license.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

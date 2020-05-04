@@ -15,7 +15,7 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, 
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
-         dict_id_INFO_13=0;
+         dict_id_INFO_END=0, dict_id_INFO_13=0;
 
 // SAM stuff
 uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
@@ -50,6 +50,7 @@ void dict_id_initialize (void)
         dict_id_INFO_AN     = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
         dict_id_INFO_DP     = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
         dict_id_INFO_VQSLOD = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
+        dict_id_INFO_END    = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;
 
         dict_id_INFO_13     = dict_id_vcf_info_sf   (dict_id_make ("#", 1)).num; // This appears if the VCF line has a Windows-style \r\n line ending
         break;

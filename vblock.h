@@ -212,6 +212,7 @@ typedef struct VBlockVCF {
     uint8_t num_info_subfields;       // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                       // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     Buffer iname_mapper_buf;          // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
+    uint8_t end_did_i;                // PIZ: did_i of dict_id_INFO_END if it exists
     uint8_t num_format_subfields;     // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
     Buffer format_mapper_buf;         // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_FORMAT].mtf   
 
