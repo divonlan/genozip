@@ -1,6 +1,12 @@
 #!/bin/bash
 
-output=test-output
+is_windows=`uname|grep -i mingw`
+
+if [ -n "$is_windows" ]; then
+    path=`pwd| cut -c3-|tr / '\\\\'`\\
+else
+    path=$PWD/
+fi
 
 files=(test-file.vcf test-file.sam test-file.fq test-file.fa genome_23andme_Full_test-file.txt)
 for file in ${files[@]}; do
@@ -13,11 +19,20 @@ for file in ${files[@]}; do
     ./genozip windows-nl.$file -ft -o ${output}.genozip || exit 1
     rm unix-nl.$file windows-nl.$file
 
+    printf "\nTESTING $file - as URL\n"
+    ./genozip file://${path}$file -ft -o ${output}.genozip || exit 1
+
     printf "\nTESTING $file - encrypted\n"
     ./genozip $file --password abc -ft -o ${output}.genozip || exit 1
 
     printf "\nTESTING $file - redirected from stdin\n"
     cat $file | ./genozip --test --force --output ${output}.genozip --input-type ${file#*.} - || exit 1
+
+    if [ -z "$is_windows" ]; then # windows can't redirect binary data
+        printf "\nTESTING $file - redirecting stdout\n"
+        ./genozip --md5 ${file} --stdout > ${output}.genozip || exit 1
+        ./genounzip --test ${file}.genozip || exit 1
+    fi
 
     printf "\nTESTING $file - concat & split\n"
     file1=copy1.$file
