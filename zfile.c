@@ -580,7 +580,8 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     if (flag_md5) {
         if (flag_concat) {
             md5_finalize (&z_file->md5_ctx_concat, &header.md5_hash_concat);
-            if (flag_md5 && z_file->num_txt_components_so_far > 1) fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
+            if (flag_md5 && z_file->num_txt_components_so_far > 1 && !flag_quiet) 
+                fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
         } 
         else 
             header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file
@@ -736,7 +737,8 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
 
     md5_finalize (&z_file->md5_ctx_single, &curr_header->md5_hash_single);
     *md5 = curr_header->md5_hash_single;
-    if (flag_md5) fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
+    if (flag_md5 && !flag_quiet) 
+        fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
 
     if (pos_of_current_vcf_header == 0) 
         z_file->txt_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 

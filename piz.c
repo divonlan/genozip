@@ -384,15 +384,16 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         Md5Hash decompressed_file_digest;
         md5_finalize (&txt_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
 
-        if (md5_is_zero (original_file_digest)) 
+        if (md5_is_zero (original_file_digest) && !flag_quiet) 
             fprintf (stderr, "MD5 = %s Note: unable to compare this to the original file as file was not originally compressed with --md5\n", md5_display (&decompressed_file_digest, false));
         
         else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
             if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
 
-            if (flag_md5) fprintf (stderr, "MD5 = %s verified as identical to the original %s\n", 
-                                   md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type));
+            if (flag_md5 && !flag_quiet) 
+                fprintf (stderr, "MD5 = %s verified as identical to the original %s\n", 
+                         md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type));
         }
         else if (flag_test) 
             fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
