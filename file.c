@@ -385,8 +385,10 @@ bool file_open_txt (File *file)
 // resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
 // of the execution.
 // with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
-static void file_initialize_z_file_buffers (File *file)
+static void file_initialize_z_file_data (File *file)
 {
+    memset (file->dict_id_to_did_i_map, DID_I_NONE, sizeof(file->dict_id_to_did_i_map));
+
 #define INIT(buf) file->mtf_ctx[i].buf.name  = #buf; \
                   file->mtf_ctx[i].buf.param = i;    \
                   buf_add_to_buffer_list (evb, &file->mtf_ctx[i].buf);
@@ -446,9 +448,7 @@ static bool file_open_z (File *file)
     if (file->mode == READ) 
         file->z_last_read = file->z_next_read = READ_BUFFER_SIZE;
 
-    memset (file->dict_id_to_did_i_map, DID_I_NONE, sizeof(file->dict_id_to_did_i_map));
-
-    file_initialize_z_file_buffers (file);
+    file_initialize_z_file_data (file);
 
     return file->file != 0;
 }
@@ -537,6 +537,9 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
         file->type = txt_out_ft_by_dt[data_type][0];
     }
 
+    if (supertype == Z_FILE)
+        file_initialize_z_file_data (file);
+
     file->redirected = true;
     
     return file;
@@ -575,7 +578,7 @@ void file_close (File **file_p,
             pthread_mutex_destroy (&file->dicts_mutex);
 
         // always destroy all buffers even if unused - for saftey
-        for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_buffers
+        for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
             mtf_destroy_context (&file->mtf_ctx[i]);
 
         buf_destroy (&file->dict_data);
