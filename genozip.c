@@ -80,7 +80,7 @@ void exit_on_error(void)
         // thread doesn't attempt to access it (eg. z_file->data_type) and get a segmentation fault.
         if (pthread_self() != io_thread_id) {  // i'm not the main thread
             pthread_cancel (io_thread_id);     // cancel the main thread
-            usleep (100000);                   // wait 100ms for the main thread to die. pthread_join here hangs on Windows (not tested on others)
+            usleep (200000);                   // wait 200ms for the main thread to die. pthread_join here hangs on Windows (not tested on others)
             //pthread_join (io_thread_id, NULL); // wait for the thread cancelation to complete
         }
 
@@ -672,6 +672,9 @@ int main (int argc, char **argv)
     ASSERT (!flag_stdout      || !flag_split,                       "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
     ASSERT (!flag_split       || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
     ASSERT (!flag_stdout      || !flag_replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
+
+    // if flag_md5 we need to seek back and update the md5 in the txt header section - this is not possible with flag_stdout
+    ASSERT (!flag_stdout      || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
     ASSERT (!flag_test        || !out_filename || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
     ASSERT (!flag_test        || !flag_replace || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSERT (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
