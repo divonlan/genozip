@@ -1,17 +1,22 @@
-@ Test cases:
-@ SA, XA, OA fields
-@ OA with empty NM
-@ XA with unexpected (but valid) format
-@ E2, U2 alternative SEQ, QUAL data
-@ no optional
-@ POS - same rname, postive and negative delta, different rname
-@ PNEXT - =, same rname, different rname, 0
-@ mc - positive, negative delta vs POS
-@ MD - A. numeric only - matches CIGAR, B. complex - matches CIGAR C. doesn't match CIGAR
-@ TLEN - negative-to-positive, positive-to-negative, and neither
-@ AS - valid and invalid values
-@ QNAME - over 36 separators
-@ for reference - QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUALITY, OPTIONAL
+@CO	Test cases:
+@CO	SA, XA, OA fields
+@CO	OA with empty NM
+@CO	XA with unexpected (but valid) format
+@CO	E2, U2 alternative SEQ, QUAL data
+@CO	no optional
+@CO	POS - same rname, postive and negative delta, different rname
+@CO	PNEXT - =, same rname, different rname, 0
+@CO	mc - positive, negative delta vs POS
+@CO	MD - A. numeric only - matches CIGAR, B. complex - matches CIGAR C. doesn't match CIGAR
+@CO	TLEN - negative-to-positive, positive-to-negative, and neither
+@CO	AS - valid and invalid values
+@CO	QNAME - over 36 separators
+@CO	for reference - QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUALITY, OPTIONAL
+@SQ	SN:chr1	LN:10000000
+@SQ	SN:chr2	LN:10000000
+@SQ	SN:chr3	LN:10000000
+@SQ	SN:chr4	LN:10000000
+@SQ	SN:chr5	LN:10000000
 SOL:7:266:787:209	0	chr2	23641567	25	1M	=	23641560	5	T	[
 SOL:7:266:787:209	0	chr2	23641577	25	2M	chr2	23641580	500	TG	[H	mc:i:23641564	X0:i:1	MD:Z:2	AS:i:1
 SOL:7:266:787:209	0	chr2	23641567	25	3M	chr3	23641580	-500	TGG	[HQ	mc:i:23641570	MD:Z:A2	SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
