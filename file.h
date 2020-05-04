@@ -290,7 +290,7 @@ extern const char *file_viewer (File *file);
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 
-#define CLOSE(fd,name)  { ASSERTW (!close (fd),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));}
+#define CLOSE(fd,name,quiet)  { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));}
 #define FCLOSE(fp,name) { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } }
  
 // Windows compatibility stuff

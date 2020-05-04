@@ -174,10 +174,10 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
  
     else if (genozip_to_stream_stdin) { // redirect child stdin from a pipe to genozip
         dup2 (genozip_to_stream_stdin[0], STDIN_FILENO);
-        CLOSE (genozip_to_stream_stdin[1], "genozip_to_stream_stdin[1]"); // child closes writing side of the pipe  
+        CLOSE (genozip_to_stream_stdin[1], "genozip_to_stream_stdin[1]", false); // child closes writing side of the pipe  
     }
 
-    else CLOSE (STDIN_FILENO, "STDIN_FILENO"); // no stdin for child
+    else CLOSE (STDIN_FILENO, "STDIN_FILENO", true); // no stdin for child. quiet bc stdin may already be closed - if we just finished reading txt input from redirected stdin
 
     // determine what happens to the child's stdout
 
@@ -186,7 +186,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
  
     else if (stream_stdout_to_genozip) {   // redirect child stdout to a pipe to genozip
         dup2 (stream_stdout_to_genozip[1], STDOUT_FILENO);
-        CLOSE (stream_stdout_to_genozip[0], "stream_stdout_to_genozip[0]"); // child closes reading side of the pipe  
+        CLOSE (stream_stdout_to_genozip[0], "stream_stdout_to_genozip[0]", false); // child closes reading side of the pipe  
     }
     else {
         // stdout continues to go to be shared with genozip (e.g. the terminal)
@@ -197,7 +197,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
     if (stream_stderr_to_genozip) { // redirect child stdout to a pipe to genozip
         dup2 (STDERR_FILENO, 3); // keep the original stderr in fd=3 in case we can't execute and need to report an error
         dup2 (stream_stderr_to_genozip[1], STDERR_FILENO);
-        CLOSE (stream_stderr_to_genozip[0], "stream_stderr_to_genozip[0]"); // child closes reading side of the pipe
+        CLOSE (stream_stderr_to_genozip[0], "stream_stderr_to_genozip[0]", false); // child closes reading side of the pipe
     } 
     else {
         // stderr continues to go to be shared with genozip (e.g. the terminal)
@@ -272,17 +272,17 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     // store our side of the pipe, and close the side used by the child
     if (from_stream_stdout) {
         stream->from_stream_stdout = fdopen (stream_stdout_to_genozip[0], READ);
-        CLOSE (stream_stdout_to_genozip[1], "stream_stdout_to_genozip[1]");
+        CLOSE (stream_stdout_to_genozip[1], "stream_stdout_to_genozip[1]", false);
     }
 
     if (from_stream_stderr) {
         stream->from_stream_stderr = fdopen (stream_stderr_to_genozip[0], READ);
-        CLOSE (stream_stderr_to_genozip[1], "stream_stderr_to_genozip[1]");
+        CLOSE (stream_stderr_to_genozip[1], "stream_stderr_to_genozip[1]", false);
     }
 
     if (to_stream_stdin) {
         stream->to_stream_stdin    = fdopen (genozip_to_stream_stdin[1], WRITE);
-        CLOSE (genozip_to_stream_stdin[0], "genozip_to_stream_stdin[0]");
+        CLOSE (genozip_to_stream_stdin[0], "genozip_to_stream_stdin[0]", false);
     }
 
     return stream;

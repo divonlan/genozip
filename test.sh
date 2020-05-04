@@ -27,9 +27,8 @@ cmp_2_files() {
 }
 
 test_header() {
-    printf "\n=================================================================\n"
-    printf   "TESTING $1 \n"
-    printf   "=================================================================\n"
+    sep="=======================================================================================================\n"
+    printf "\n${sep}TESTING $1 \n${sep}"
 }
 
 files=(test-file.vcf test-file.sam test-file.fq test-file.fa genome_23andme_Full_test-file.txt)
@@ -76,15 +75,18 @@ for file in ${files[@]}; do
     ./genocat ${output}.genozip --strip > /dev/null || exit 1
 done
 
-echo "Backward compatability tests"
 files=`ls backward-compatibility-test/*.vcf` 
 for file in $files; do
+    test_header "$file - backward compatability test"
     ./genounzip ${file}.genozip -fo $output || exit 1
     cmp_2_files $file $output
-    
 done
- 
-echo " "
-echo "ALL GOOD!"
+
+if `command -v gtshark >& /dev/null`; then
+    test_header "test-file.vcf --gtshark"
+    ./genozip $file --gtshark -ft -o ${output}.genozip || exit 1
+fi
+
+printf "\nALL GOOD!\n"
 
 rm -f $output ${output}.genozip
