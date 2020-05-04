@@ -51,6 +51,36 @@ for file in ${files[@]}; do
     test_header "$file - redirected from stdin"
     cat $file | ./genozip --test --force --output ${output}.genozip --input-type ${file#*.} - || exit 1
 
+    if [ $file != test-file.sam ] && [ $file != genome_23andme_Full_test-file.txt ]; then
+        allow_compressed=1;
+    else 
+        allow_compressed=0;
+    fi
+
+    if `command -v gzip >& /dev/null` && [ $allow_compressed == 1 ]; then
+        test_header "${file} - with gzip"
+        cp $file copy.$file
+        gzip copy.$file
+        ./genozip copy.${file}.gz -ft -o ${output}.genozip || exit 1
+        rm copy.${file}.gz
+    fi
+    
+    if `command -v bzip2 >& /dev/null` && [ $allow_compressed == 1 ]; then
+        test_header "${file} - with bzip2"
+        cp $file copy.$file
+        bzip2 copy.$file
+        ./genozip copy.${file}.bz2 -ft -o ${output}.genozip || exit 1
+        rm copy.${file}.bz2
+    fi
+    
+    if `command -v xz >& /dev/null` && [ $allow_compressed == 1 ]; then
+        test_header "${file} - with xz"
+        cp $file copy.$file
+        xz copy.$file
+        ./genozip copy.${file}.xz -ft -o ${output}.genozip || exit 1
+        rm copy.${file}.xz
+    fi
+        
     if [ -z "$is_windows" ]; then # windows can't redirect binary data
         test_header "$file - redirecting stdout"
         ./genozip ${file} --stdout > ${output}.genozip || exit 1
@@ -85,6 +115,15 @@ done
 if `command -v gtshark >& /dev/null`; then
     test_header "test-file.vcf --gtshark"
     ./genozip $file --gtshark -ft -o ${output}.genozip || exit 1
+fi
+
+if `command -v samtools >& /dev/null`; then
+    test_header "test_file.sam - input and output as BAM"
+    samtools view test-file.sam -OBAM -h > bam-test.input.bam    
+    ./genozip bam-test.input.bam -fto ${output}.genozip || exit 1
+    ./genounzip ${output}.genozip --force --output bam-test.output.bam
+    cmp_2_files bam-test.input.bam bam-test.output.bam.fake-extension
+    rm bam-test.input.bam bam-test.output.bam
 fi
 
 printf "\nALL GOOD!\n"
