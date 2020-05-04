@@ -442,7 +442,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
         // first data for this dict (usually, but not always, vb_i=1) - move to zf_ctx and leave overlay
         zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->mtf.len; // number of new words in this dict from this VB
 
-        // thread safety note: zf_ctx buffers are already added to evb's buffer list by file_initialize_z_file_buffers
+        // thread safety note: zf_ctx buffers are already added to evb's buffer list by file_initialize_z_file_data
         // so these buf_move calls don't touch buf_lists and hence there is no possibility of conflict with the I/O thread
         // that might be concurently writing to its buffer list
 
