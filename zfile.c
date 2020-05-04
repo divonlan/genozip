@@ -504,7 +504,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
-    z_file->data_type = data_type; // this we set by file_open_z but only if extension was .[datatype].genozip 
+    z_file->data_type = txt_file->data_type = data_type; // update in case type was not know from file extension
 
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
             "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"

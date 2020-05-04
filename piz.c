@@ -400,9 +400,9 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                     md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
             
         else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
-                    "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
-                    txt_file->name, md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type), 
-                    md5_display (&original_file_digest, false));
+                     "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
+                     txt_file->name, md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type), 
+                     md5_display (&original_file_digest, false));
     }
 
     if (flag_split) file_close (&txt_file, true); // close this component file

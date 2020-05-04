@@ -93,7 +93,7 @@ const char *type_name (unsigned item,
 {
     if (item > num_names) {
         static char str[50];
-        sprintf (str, "%u (out of range)", item);
+        sprintf (str, "%d (out of range)", item);
         return str;
     }
     
