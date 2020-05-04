@@ -200,7 +200,7 @@ bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this 
     if (flag_split) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode");
         txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
-        txt_file->txt_data_size_single = BGEN64 (header->txt_data_size);
+        txt_file->txt_data_size_single = BGEN64 (header->txt_data_size);       
     }
 
     txt_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
