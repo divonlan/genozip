@@ -445,7 +445,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
         // END and POS share the same delta sequence (POS is the delta from the previous END). stripping away
         // END would causes POS values to be incorrect. 
-        ASSERT0 (!flag_strip || sl_ent->dict_id.num != dict_id_INFO_END.num, 
+        ASSERT0 (!flag_strip || z_file->data_type != DT_VCF || sl_ent->dict_id.num != dict_id_INFO_END.num, 
                  "--strip is not supported for VCF files that contain an END subfield in INFO");
 
         if (zfile_is_skip_section (NULL, st, sl_ent->dict_id)) continue;
