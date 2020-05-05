@@ -283,7 +283,6 @@ static const char *help_genocat[] = {
     "   FASTA",
     "",
     "   --strip           Display only genotype / sequence data and minimal additional information",
-    "                     Limitation: should not be used with a VCF file that has an END subfield in INFO",
     "",
     "   -o --output       <output -filename>. Output to this filename instead of stdout",
     "",
