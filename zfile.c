@@ -430,8 +430,6 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
     mtf_initialize_primary_field_ctxs (z_file->mtf_ctx, z_file->data_type, 0, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
 
-    DictIdType dict_id_INFO_END = dict_id_vcf_info_sf (dict_id_make ("END", 3));
-
     while (sections_get_next_dictionary (&sl_ent)) {
 
         static SectionType chrom_dict_sec[NUM_DATATYPES] = CHROM_FIELD_DICT_SECTION;
@@ -445,7 +443,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
         // END and POS share the same delta sequence (POS is the delta from the previous END). stripping away
         // END would causes POS values to be incorrect. 
-        ASSERT0 (!flag_strip || z_file->data_type != DT_VCF || sl_ent->dict_id.num != dict_id_INFO_END.num, 
+        ASSERT0 (!flag_strip || z_file->data_type != DT_VCF || sl_ent->dict_id.num != dict_id_INFO_END, 
                  "--strip is not supported for VCF files that contain an END subfield in INFO");
 
         if (zfile_is_skip_section (NULL, st, sl_ent->dict_id)) continue;
