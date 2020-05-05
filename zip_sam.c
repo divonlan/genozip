@@ -39,6 +39,10 @@ static void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
     *line_seq_len  = dl->seq_data_len;
     *line_e2_data  = dl->e2_data_start ? ENT (char, vb->txt_data, dl->e2_data_start) : NULL;
     *line_e2_len   = dl->e2_data_len;
+
+    // if SEQ is just "*" (i.e. unavailable) replace it by " " for consistency with QUAL (= simplify PIZ code)
+    if (dl->seq_data_len == 1 && (*line_seq_data)[0] == '*') 
+        *line_seq_data = " "; // pointer to static string
 }   
 
 // callback function for compress to get data of one line (called by comp_compress_bzlib)
@@ -53,9 +57,13 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
     *line_u2_data   = dl->u2_data_start ? ENT (char, vb->txt_data, dl->u2_data_start) : NULL;
     *line_u2_len    = dl->u2_data_len;
 
+    // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
+    if (dl->qual_data_len == 1 && (*line_qual_data)[0] == '*') 
+        *line_qual_data = " "; // pointer to static string
+
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
-    if (flag_optimize) {
+    else if (flag_optimize) {
         optimize_phred_quality_string (*line_qual_data, *line_qual_len);
         if (*line_u2_data) optimize_phred_quality_string (*line_u2_data, *line_u2_len);
     }

@@ -51,7 +51,7 @@ typedef enum {
     SEC_SAM_RAND_POS_DATA  = 31,  SEC_SAM_MD_DATA        = 32, 
     SEC_SEQ_DATA           = 33,                               // used by SAM, FASTA, FASTQ 
     SEC_QUAL_DATA          = 34,                               // used by SAM, FASTQ
-    SEC_NUMERIC_ID_DATA            = 35,                               // used by VCF (starting v5) and ME23
+    SEC_NUMERIC_ID_DATA    = 35,                               // used by VCF (starting v5) and ME23
     SEC_SAM_QNAME_SF_DICT  = 36,  SEC_SAM_QNAME_SF_B250  = 37,
     SEC_SAM_OPTNL_SF_DICT  = 38,  SEC_SAM_OPTNL_SF_B250  = 39,
     SEC_SAM_QNAME_DICT     = 40,  SEC_SAM_QNAME_B250     = 41,

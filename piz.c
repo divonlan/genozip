@@ -167,9 +167,12 @@ void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len,
                                const Buffer *data, uint32_t *next,
                                SectionType sec, uint32_t txt_line_i, bool grepped_out)
 {
-    // seq and qual are expected to be either of length seq_len, or "*" 
-    uint32_t len = (*next >= data->len || data->data[*next] == '*') ? 1 : seq_len;
+    // seq and qual are expected to be either of length seq_len, or " " (unavailable)
+    uint32_t len = (*next >= data->len || data->data[*next] == ' ') ? 1 : seq_len;
     ASSERT (*next + len <= data->len, "Error reading txt_line=%u: unexpected end of %s data", txt_line_i, st_name (sec));
+
+    // rewrite unavailable back to "*"
+    if (data->data[*next] == ' ') data->data[*next] = '*';
 
     if (!grepped_out && !zfile_is_skip_section (vb, sec, DICT_ID_NONE)) 
         buf_add (&vb->txt_data, &data->data[*next], len);

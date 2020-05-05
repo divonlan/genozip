@@ -50,9 +50,12 @@ void dict_id_initialize (void)
         dict_id_INFO_AN     = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
         dict_id_INFO_DP     = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
         dict_id_INFO_VQSLOD = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
+
+        // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
         dict_id_INFO_END    = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;
 
-        dict_id_INFO_13     = dict_id_vcf_info_sf   (dict_id_make ("#", 1)).num; // This appears if the VCF line has a Windows-style \r\n line ending
+        // This appears if the VCF line has a Windows-style \r\n line ending
+        dict_id_INFO_13     = dict_id_vcf_info_sf   (dict_id_make ("#", 1)).num; 
         break;
 
     case DT_SAM:

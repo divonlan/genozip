@@ -173,7 +173,7 @@ static int32_t seg_pos_snip_to_int (VBlock *vb, const char *pos_str, const char 
     // scan by ourselves - hugely faster the sscanf
     int64_t this_pos_64=0; // int64_t so we can test for overflow
     bool all_digits = true;
-    const char *s; for (s=pos_str; *s != '\t' && *s != '\n' && *s != '\r'; s++) {
+    const char *s; for (s=pos_str; *s != '\t' && *s != '\n' && *s != '\r' && *s != ';'; s++) {
         if (!IS_DIGIT (*s)) all_digits=false;
 
         if (all_digits)
@@ -209,7 +209,7 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
 
         seg_one_snip (vb, pos_str-1, nonsense_len+1, did_i, sec_pos_b250, NULL);
         vb->txt_section_bytes[sec_pos_b250]--; // don't account for the .
-        
+
         *(char*)(pos_str-1) = save; // restore
         return last_pos; // unchanged last_pos
     }
