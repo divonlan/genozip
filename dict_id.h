@@ -82,6 +82,9 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 // biobambam tags 
                 dict_id_OPTION_mc, dict_id_OPTION_ms,
 
+                // GATK tags
+                dict_id_OPTION_BD, dict_id_OPTION_BI,
+                
                 dict_id_OPTION_STRAND;
 
 extern void dict_id_initialize (void);

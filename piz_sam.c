@@ -220,6 +220,7 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
             opt_map->num_subfields, oname_len, oname, oname_len/5, txt_line_i);
 
     const char *snip; unsigned snip_len;
+    char *this_bi=NULL, *this_bd=NULL;
     for (unsigned sf_i=0; sf_i < opt_map->num_subfields; sf_i++) {
 
         if (!flag_strip) buf_add (&vb->txt_data, &oname[sf_i*5], 5)
@@ -240,6 +241,20 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
         else if (dict_id.num == dict_id_OPTION_MD) {
             if (!flag_strip) 
                 piz_sam_reconstruct_MD (vb, txt_line_i, cigar_seq_len);
+        }
+
+        else if (dict_id.num == dict_id_OPTION_BD) {
+            if (!flag_strip) {
+                this_bd = AFTERENT (char, vb->txt_data);
+                piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->bd_data, &vb->next_bd, SEC_SAM_BD_DATA, txt_line_i, false);
+            }
+        }
+
+        else if (dict_id.num == dict_id_OPTION_BI) {
+            if (!flag_strip) {
+                this_bi = AFTERENT (char, vb->txt_data);
+                piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->bi_data, &vb->next_bi, SEC_SAM_BI_DATA, txt_line_i, false);
+            }
         }
 
         // AS is normally stored as a delta vs seq_len
@@ -291,6 +306,11 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
     
     if (oname_len % 5 == 1 && oname[oname_len-1] == '#') // Windows style end-of-line \r\n
         buf_add (&vb->txt_data, "\r", 1);
+
+    // if this line has both BD and BI data, then the BI was calculated as a delta vs. the BD. We apply the delta now
+    if (this_bd && this_bi)
+        for (uint32_t i=0; i < cigar_seq_len; i++) 
+            *(this_bi++) += *(this_bd++);
 }
 
 static void piz_sam_reconstruct_vb (VBlockSAM *vb)
@@ -467,14 +487,29 @@ static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
     zfile_uncompress_section ((VBlockP)vb, pos_header, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA);    
     vb->random_pos_data.len /= 4; // its an array of uint32_t
 
-    SectionHeader *md_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, md_header, &vb->md_data, "md_data", SEC_SAM_MD_DATA);    
+    SectionHeader *data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
     
-    SectionHeader *seq_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, seq_header, &vb->seq_data, "seq_data", SEC_SEQ_DATA);    
+    // uncompress the optional data sections MD, BD, BI - if they exist
 
-    SectionHeader *qual_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    if (!flag_strip) zfile_uncompress_section ((VBlockP)vb, qual_header, &vb->qual_data, "qual_data", SEC_QUAL_DATA);    
+    if (data_header->section_type == SEC_SAM_MD_DATA) {
+        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->md_data, "md_data", SEC_SAM_MD_DATA);    
+        data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
+    }
+    
+    if (data_header->section_type == SEC_SAM_BD_DATA) {
+        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->bd_data, "bd_data", SEC_SAM_BD_DATA);    
+        data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
+    }
+    
+    if (data_header->section_type == SEC_SAM_BI_DATA) {
+        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->bi_data, "bi_data", SEC_SAM_BI_DATA);    
+        data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
+    }
+    
+    zfile_uncompress_section ((VBlockP)vb, data_header, &vb->seq_data, "seq_data", SEC_SEQ_DATA);    
+
+    data_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
+    if (!flag_strip) zfile_uncompress_section ((VBlockP)vb, data_header, &vb->qual_data, "qual_data", SEC_QUAL_DATA);    
 }
 
 void piz_sam_uncompress_one_vb (VBlock *vb_)

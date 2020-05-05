@@ -366,6 +366,27 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
                                  '\t', value_len+1);
         }
 
+        // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
+        else if (dict_id.num == dict_id_OPTION_BD) { 
+            ASSERT (value_len == dl->seq_len, 
+                    "Error in %s: Expecting BD data to be of length %u as indicated by CIGAR, but it is %u. BD=%.*s",
+                    txt_name, dl->seq_len, value_len, value_len, value);
+
+            dl->bd_data_start = value - vb->txt_data.data;
+            dl->bd_data_len   = value_len;
+            vb->txt_section_bytes[SEC_SAM_BD_DATA] += dl->seq_len + 1; // +1 for \t
+        }
+
+        else if (dict_id.num == dict_id_OPTION_BI) { 
+            ASSERT (value_len == dl->seq_len, 
+                    "Error in %s: Expecting BI data to be of length %u as indicated by CIGAR, but it is %u. BI=%.*s",
+                    txt_name, dl->seq_len, value_len, value_len, value);
+
+            dl->bi_data_start = value - vb->txt_data.data;
+            dl->bi_data_len   = value_len;
+            vb->txt_section_bytes[SEC_SAM_BI_DATA] += dl->seq_len + 1; // +1 for \t
+        }
+
         // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
         // it to be new_AS=(AS-seq_len) 
         else if (dict_id.num == dict_id_OPTION_AS) 
@@ -389,6 +410,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             dl->e2_data_len   = value_len;
             vb->txt_section_bytes[SEC_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
         }
+
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
         else if (dict_id.num == dict_id_OPTION_U2) {
             ASSERT (value_len == dl->seq_len, 

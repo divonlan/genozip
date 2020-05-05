@@ -1045,9 +1045,11 @@ void zfile_sam_read_one_vb (VBlock *vb_)
     // 3. SEC_SAM_QNAME_SF_B250 - QNAME subfields
     // 4. SEC_SAM_OPTNL_SF_B250 - OPTIONAL subfields
     // 5. SEC_SAM_RAND_POS_DATA - Random POS data - for non-delta pos data from POS, PNEXT, SA, OA, XA
-    // 6. SEC_SAM_MD_DATA       - Data for the optional MD field
-    // 7. SEC_SEQ_DATA      - Sequences data from SEQ, E2
-    // 8. SEC_QUAL_DATA     - Quality data from QUAL, U2    
+    // 6. SEC_SAM_MD_DATA       - (optional) Data for the optional MD field
+    // 6. SEC_SAM_BD_DATA       - (optional) Data for the optional BD field
+    // 6. SEC_SAM_BI_DATA       - (optional) Data for the optional BI field
+    // 7. SEC_SEQ_DATA          - Sequences data from SEQ, E2
+    // 8. SEC_QUAL_DATA         - Quality data from QUAL, U2    
 
     SectionListEntry *sl = sections_vb_first (vb->vblock_i);
     
@@ -1082,11 +1084,15 @@ void zfile_sam_read_one_vb (VBlock *vb_)
     for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s; sf_i++) 
         READ_SECTION (SEC_SAM_OPTNL_SF_B250, SectionHeaderBase250);
 
-    // read the RAND_POS, MD, SEQ and QUAL data
+    // read the RAND_POS, MD, BD, BI SEQ and QUAL data
     READ_SECTION (SEC_SAM_RAND_POS_DATA, SectionHeader);
-    READ_SECTION (SEC_SAM_MD_DATA,       SectionHeader);
-    READ_SECTION (SEC_SEQ_DATA,          SectionHeader);
-    READ_SECTION (SEC_QUAL_DATA,         SectionHeader);
+
+    if (sl->section_type == SEC_SAM_MD_DATA) READ_SECTION (SEC_SAM_MD_DATA, SectionHeader);
+    if (sl->section_type == SEC_SAM_BD_DATA) READ_SECTION (SEC_SAM_BD_DATA, SectionHeader);
+    if (sl->section_type == SEC_SAM_BI_DATA) READ_SECTION (SEC_SAM_BI_DATA, SectionHeader);
+
+    READ_SECTION (SEC_SEQ_DATA,  SectionHeader);
+    READ_SECTION (SEC_QUAL_DATA, SectionHeader);
 
     vb->ready_to_dispatch = true; // all good
 

@@ -49,25 +49,27 @@ typedef enum {
 
     // added SAM, FASTQ, FASTA, 23andMe support in file version 5
     SEC_SAM_RAND_POS_DATA  = 31,  SEC_SAM_MD_DATA        = 32, 
-    SEC_SEQ_DATA           = 33,                               // used by SAM, FASTA, FASTQ 
-    SEC_QUAL_DATA          = 34,                               // used by SAM, FASTQ
-    SEC_NUMERIC_ID_DATA    = 35,                               // used by VCF (starting v5) and ME23
-    SEC_SAM_QNAME_SF_DICT  = 36,  SEC_SAM_QNAME_SF_B250  = 37,
-    SEC_SAM_OPTNL_SF_DICT  = 38,  SEC_SAM_OPTNL_SF_B250  = 39,
-    SEC_SAM_QNAME_DICT     = 40,  SEC_SAM_QNAME_B250     = 41,
-    SEC_SAM_FLAG_DICT      = 42,  SEC_SAM_FLAG_B250      = 43,
-    SEC_SAM_RNAME_DICT     = 44,  SEC_SAM_RNAME_B250     = 45, 
-    SEC_SAM_POS_DICT       = 46,  SEC_SAM_POS_B250       = 47, 
-    SEC_SAM_MAPQ_DICT      = 48,  SEC_SAM_MAPQ_B250      = 49, 
-    SEC_SAM_CIGAR_DICT     = 50,  SEC_SAM_CIGAR_B250     = 51, 
-    SEC_SAM_PNEXT_DICT     = 52,  SEC_SAM_PNEXT_B250     = 53, 
-    SEC_SAM_TLEN_DICT      = 54,  SEC_SAM_TLEN_B250      = 55, 
-    SEC_SAM_OPTIONAL_DICT  = 56,  SEC_SAM_OPTIONAL_B250  = 57, 
+    SEC_SAM_BD_DATA        = 33,  SEC_SAM_BI_DATA        = 34,
+    SEC_SEQ_DATA           = 35,                               // used by SAM, FASTA, FASTQ 
+    SEC_QUAL_DATA          = 36,                               // used by SAM, FASTQ
+    SEC_NUMERIC_ID_DATA    = 37,                               // used by VCF (starting v5) and ME23
+    SEC_SAM_QNAME_SF_DICT  = 38,  SEC_SAM_QNAME_SF_B250  = 39,
+    SEC_SAM_OPTNL_SF_DICT  = 40,  SEC_SAM_OPTNL_SF_B250  = 41,
+    SEC_SAM_QNAME_DICT     = 42,  SEC_SAM_QNAME_B250     = 43,
+    SEC_SAM_FLAG_DICT      = 44,  SEC_SAM_FLAG_B250      = 45,
+    SEC_SAM_RNAME_DICT     = 46,  SEC_SAM_RNAME_B250     = 47, 
+    SEC_SAM_POS_DICT       = 48,  SEC_SAM_POS_B250       = 49, 
+    SEC_SAM_MAPQ_DICT      = 50,  SEC_SAM_MAPQ_B250      = 51, 
+    SEC_SAM_CIGAR_DICT     = 52,  SEC_SAM_CIGAR_B250     = 53, 
+    SEC_SAM_PNEXT_DICT     = 54,  SEC_SAM_PNEXT_B250     = 55, 
+    SEC_SAM_TLEN_DICT      = 56,  SEC_SAM_TLEN_B250      = 57, 
+    SEC_SAM_OPTIONAL_DICT  = 58,  SEC_SAM_OPTIONAL_B250  = 59, 
 
-    SEC_FAST_DESC_SF_DICT  = 58,  SEC_FAST_DESC_SF_B250  = 59, // used by FASTQ & FASTA
-    SEC_FAST_DESC_DICT     = 60,  SEC_FAST_DESC_B250     = 61, // used by FASTQ & FASTA
-    SEC_FAST_LINEMETA_DICT = 62,  SEC_FAST_LINEMETA_B250 = 63, // used by FASTQ & FASTA
-    SEC_FASTA_COMMENT_DATA = 64,
+
+    SEC_FAST_DESC_SF_DICT  = 60,  SEC_FAST_DESC_SF_B250  = 61, // used by FASTQ & FASTA
+    SEC_FAST_DESC_DICT     = 62,  SEC_FAST_DESC_B250     = 63, // used by FASTQ & FASTA
+    SEC_FAST_LINEMETA_DICT = 64,  SEC_FAST_LINEMETA_B250 = 65, // used by FASTQ & FASTA
+    SEC_FASTA_COMMENT_DATA = 66,
 
     // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR
@@ -97,9 +99,10 @@ typedef enum {
     {"SEC_HT_GTSHARK_X_ALLELE", 0},\
     \
     {"SEC_SAM_RAND_POS_DATA",   0},  {"SEC_SAM_MD_DATA",        1},\
+    {"SEC_SAM_BD_DATA",         1},  {"SEC_SAM_BI_DATA",        1},\
     {"SEC_SEQ_DATA",            0},\
     {"SEC_QUAL_DATA",           1},\
-    {"SEC_NUMERIC_ID_DATA",             1},\
+    {"SEC_NUMERIC_ID_DATA",     1},\
     {"SEC_SAM_QNAME_SF_DICT",   1},  {"SEC_SAM_QNAME_SF_B250",  1},\
     {"SEC_SAM_OPTNL_SF_DICT",   0},  {"SEC_SAM_OPTNL_SF_B250",  0},\
     {"SEC_SAM_QNAME_DICT",      1},  {"SEC_SAM_QNAME_B250",     1},\
@@ -206,7 +209,7 @@ typedef struct {
 
 } SectionHeaderTxtHeader; 
 
-// A generic VB header - it will suffice for many of the data types 
+// A generic VB header - it will suffice for all data types but VCF. introduced in v5.
 typedef struct {
     SectionHeader h;
     uint32_t first_line;               // line (starting from 1) of this vblock in the single VCF file

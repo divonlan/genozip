@@ -26,6 +26,7 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_X0=0, dict_id_OPTION_X1=0, dict_id_OPTION_XA=0, dict_id_OPTION_XN=0, dict_id_OPTION_XM=0, dict_id_OPTION_XO=0,
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
          dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
+         dict_id_OPTION_BD=0, dict_id_OPTION_BI=0,
          dict_id_OPTION_STRAND=0;
 
 DictIdType DICT_ID_NONE = {0};
@@ -101,6 +102,11 @@ void dict_id_initialize (void)
         dict_id_OPTION_mc = dict_id_sam_optnl_sf (dict_id_make ("mc:i", 4)).num;
         dict_id_OPTION_ms = dict_id_sam_optnl_sf (dict_id_make ("ms:i", 4)).num;
 
+        // added by GATK's BQSR (Base Quality Score Recalibration)
+        dict_id_OPTION_BD = dict_id_sam_optnl_sf (dict_id_make ("BD:Z", 4)).num; // not used in newer versions of GATK
+        dict_id_OPTION_BI = dict_id_sam_optnl_sf (dict_id_make ("BI:Z", 4)).num; // not used in newer versions of GATK
+
+        // our private dictionary for + or 0 strands
         dict_id_OPTION_STRAND = dict_id_sam_optnl_sf (dict_id_make ("STRAND", 6)).num;
 
         break;

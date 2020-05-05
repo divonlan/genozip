@@ -241,8 +241,8 @@ extern unsigned vb_vcf_num_sections (VBlockVCF *vb);
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
     // the following 4 are indeces, lens into txt_data 
-    uint32_t seq_data_start, qual_data_start, e2_data_start, u2_data_start; // start within vb->txt_data
-    uint32_t seq_data_len, qual_data_len, e2_data_len, u2_data_len;         // length within vb->txt_data
+    uint32_t seq_data_start, qual_data_start, e2_data_start, u2_data_start, bd_data_start, bi_data_start; // start within vb->txt_data
+    uint32_t seq_data_len, qual_data_len, e2_data_len, u2_data_len, bd_data_len, bi_data_len;             // length within vb->txt_data
     uint32_t seq_len;        // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 } ZipDataLineSAM;
 
@@ -267,15 +267,15 @@ typedef struct VBlockSAM {
                                          // 1. POS if RNAME differs from prev line RNAME
                                          // 2. PNEXT where RNEXT is not ('=' or equal to RNAME) 
                                          // 3. POS data in SA, OA and XA
-    Buffer md_data;                      // MD data - from optional field MD;
-    
+    Buffer md_data, bd_data, bi_data;    // data for optional field MD, BD, BI;
+
     // PIZ-only stuff
     int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
     Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
     Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
     Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
     uint32_t next_seq, next_qual;        // PIZ only: indeces into seq_data, qual_data
-    uint32_t next_random_pos, next_md;   // PIZ only: indeces into random_pos_data, md_data
+    uint32_t next_random_pos, next_md, next_bd, next_bi;   // PIZ only: indeces into random_pos_data, md_data, bd_data, bi_data
     uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
 

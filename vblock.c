@@ -156,12 +156,13 @@ static void vb_sam_release_vb (VBlock *vb_)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
-    vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = vb->next_random_pos = vb->next_md = 0;
+    vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = vb->next_random_pos = 
+    vb->next_md = vb->next_bd = vb->next_bi = 0;
     vb->nm_did_i = vb->strand_did_i = vb->last_tlen_abs_len = vb->last_pnext_delta = 0;
     vb->rname_index_minus_1 = vb->rname_index_minus_2 = vb->rname_index_minus_3 = 0;
     vb->last_tlen_abs = 0;
     vb->last_tlen_is_positive = 0;
-
+    
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     
     buf_free (&vb->random_pos_data);
@@ -169,6 +170,8 @@ static void vb_sam_release_vb (VBlock *vb_)
     buf_free (&vb->seq_data);
     buf_free (&vb->qual_data);
     buf_free (&vb->md_data);
+    buf_free (&vb->bd_data);
+    buf_free (&vb->bi_data);
 }
 
 // free all memory of a VB
@@ -181,6 +184,8 @@ static void vb_sam_destroy_vb (VBlock **vb_)
     buf_destroy (&(*vb)->seq_data);
     buf_destroy (&(*vb)->qual_data);    
     buf_destroy (&(*vb)->md_data);    
+    buf_destroy (&(*vb)->bd_data);    
+    buf_destroy (&(*vb)->bi_data);    
 }
 
 //--------------------------------

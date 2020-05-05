@@ -18,14 +18,18 @@
 #define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)
 
 // get lengths of sequence data (SEQ+E2) and quality data (QUAL+U2)
-static void zip_sam_get_seq_qual_len (VBlockSAM *vb, uint32_t *seq_len, uint32_t *qual_len)
+static void zip_sam_get_data_lengths (VBlockSAM *vb, 
+                                      uint32_t *seq_len, uint32_t *qual_len, 
+                                      uint32_t *bd_len, uint32_t *bi_len)
 {
-    *seq_len = *qual_len = 0;
+    *seq_len = *qual_len = *bi_len = *bd_len = 0;
 
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
         ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
         *seq_len  += dl->seq_len * (1 + !!dl->e2_data_start); // length SEQ and E2 - they must be the same per SAM file specification
         *qual_len += dl->seq_len * (1 + !!dl->u2_data_start); // length QUAL and U2 - they must be the same per SAM file specification        
+        *bd_len   += dl->bd_data_len;
+        *bi_len   += dl->bi_data_len;
     }
 }
 
@@ -68,6 +72,46 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
         if (*line_u2_data) optimize_phred_quality_string (*line_u2_data, *line_u2_len);
     }
 }
+
+// callback function for compress to get data of one line
+static void zip_sam_get_start_len_line_i_bd (VBlock *vb, uint32_t vb_line_i, 
+                                             char **line_bd_data, uint32_t *line_bd_len,  // out 
+                                             char **unused1,  uint32_t *unused2)
+{
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+
+    *line_bd_data = dl->bd_data_len ? ENT (char, vb->txt_data, dl->bd_data_start) : NULL;
+    *line_bd_len  = dl->bd_data_len;
+    *unused1 = NULL;
+    *unused2 = 0;
+}   
+
+// callback function for compress to get BI data of one line
+// if BD data is available for this line too - we output the character-wise delta as they are correlated
+// we expect the length of BI and BD to be the same, the length of the sequence. this is enforced by seg_sam_optional_field.
+static void zip_sam_get_start_len_line_i_bi (VBlock *vb, uint32_t vb_line_i, 
+                                             char **line_bi_data, uint32_t *line_bi_len,  // out 
+                                             char **unused1,  uint32_t *unused2)
+{
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+
+    if (dl->bi_data_len && dl->bd_data_len) {
+
+        ASSERT (dl->bi_data_len == dl->bd_data_len, "Error: expecting dl->bi_data_len=%u to be equal to dl->bd_data_len=%u",
+                dl->bi_data_len, dl->bd_data_len);
+
+        char *bi       = ENT (char, vb->txt_data, dl->bi_data_start);
+        const char *bd = ENT (char, vb->txt_data, dl->bd_data_start);
+
+        // calculate character-wise delta
+        for (unsigned i=0; i < dl->bi_data_len; i++) *(bi++) -= *(bd++);
+    }
+
+    *line_bi_data = dl->bi_data_len ? ENT (char, vb->txt_data, dl->bi_data_start) : NULL;
+    *line_bi_len  = dl->bi_data_len;
+    *unused1 = NULL;
+    *unused2 = 0;
+}   
 
 // this function receives all lines of a variant block and processes them
 // in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
@@ -130,14 +174,24 @@ void zip_sam_compress_one_vb (VBlockP vb_)
         }
     }
 
-    // generate & compress the MD and Random POS data
+    // generate & compress Random POS data
     vb->random_pos_data.len *= sizeof (uint32_t);
     zfile_compress_section_data_alg (vb_, SEC_SAM_RAND_POS_DATA,  &vb->random_pos_data, NULL, 0, COMP_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_SAM_MD_DATA, &vb->md_data, NULL, 0, COMP_BZ2);
+        
+    // generate & compress the MD, BD, BI data
+    if (vb->md_data.len)
+        zfile_compress_section_data_alg (vb_, SEC_SAM_MD_DATA, &vb->md_data, NULL, 0, COMP_BZ2);
 
-    // generate & compress the SEQ & QUAL data
-    uint32_t seq_len, qual_len;
-    zip_sam_get_seq_qual_len (vb, &seq_len, &qual_len);
+    // generate & compress the BD, BI, SEQ & QUAL data
+    uint32_t seq_len, qual_len, bd_len, bi_len;
+    zip_sam_get_data_lengths (vb, &seq_len, &qual_len, &bd_len, &bi_len);
+
+    if (bd_len)
+        zfile_compress_section_data_alg (vb_, SEC_SAM_BD_DATA, NULL, zip_sam_get_start_len_line_i_bd, bd_len, COMP_LZMA);
+    
+    if (bi_len)
+        zfile_compress_section_data_alg (vb_, SEC_SAM_BI_DATA, NULL, zip_sam_get_start_len_line_i_bi, bi_len, COMP_LZMA);
+    
     zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  NULL, zip_sam_get_start_len_line_i_seq,  seq_len,  COMP_LZMA);
     zfile_compress_section_data_alg (vb_, SEC_QUAL_DATA, NULL, zip_sam_get_start_len_line_i_qual, qual_len, COMP_BZ2);
 
