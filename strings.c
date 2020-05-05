@@ -29,7 +29,7 @@ char *str_size (int64_t size, char *str /* out */)
     return str; // for convenience so caller can use in printf directly
 }
 
-char *str_uint (int64_t n, char *str /* out */, unsigned *len)
+char *str_int (int64_t n, char *str /* out */, unsigned *len)
 {
     *len=0;
 
@@ -39,13 +39,21 @@ char *str_uint (int64_t n, char *str /* out */, unsigned *len)
     }
 
     else {
+        bool is_negative = (n<0);
+        if (is_negative) n = -n;
+
         char rev[50] = {}; // "initialize" to avoid compiler warning
         while (n) {
             rev[(*len)++] = '0' + n % 10;
             n /= 10;
         }
         // now reverse it
-        for (int i=0; i < (*len); i++) str[i] = rev[(*len)-i-1];
+        for (int i=0; i < (*len); i++) str[i + is_negative] = rev[(*len)-i-1];
+
+        if (is_negative) {
+            str[0] = '-';
+            (*len)++;
+        }
     }
 
     str[(*len)] = '\0'; // string terminator

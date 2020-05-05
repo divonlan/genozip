@@ -24,13 +24,16 @@ void seg_sam_initialize (VBlock *vb_)
     buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 }             
 
-// if this row's tlen is the negative of the previous row - store "*" instead of the tlen - thereby cutting
-// the number of dictionary words by half and improving compression
-static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len)
+// TLEN - 3 cases: 
+// 1. if a value that is the negative of the previous line with "*"
+// 2. else, tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as "." & tlen-pnext_pos_delta-seq_len
+// 3. else, stored verbatim
+static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, int32_t pnext_pos_delta, int32_t cigar_seq_len)
 {
     ASSSEG (tlen_len, tlen, "%s: empty TLEN", global_cmd);
 
-    bool tlen_is_positive = (tlen[0] != '-');
+    bool tlen_is_zero = (tlen_len == 1 && tlen[0] == '0');
+    bool tlen_is_positive = (tlen[0] != '-' && !tlen_is_zero);
 
     // case: tlen is a negative number, with absolute value the same as positive vb->tlen_snip
     // e.g. tlen="-1000" ; previous line="1000"
@@ -47,16 +50,29 @@ static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
     // case: tlen is the negative of previous line - replace it with "*"
     if (this_neg_prev_pos || this_pos_prev_neg) {
         seg_one_field (vb, "*", 1, SAM_TLEN);
-        vb->txt_section_bytes[SEC_SAM_QNAME_B250] += tlen_len - 1; // seg_one_field only added 2 (1 for \t), we should add the rest
+        vb->txt_section_bytes[SEC_SAM_TLEN_B250] += tlen_len - 1; // seg_one_field only added 2 (1 for \t), we should add the rest
     }
 
-    // case: tlen is not negative of previous line - add as is
+    // case: tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as "." & tlen-pnext_pos_delta-seq_len
+    else if (tlen_is_positive && pnext_pos_delta > 0 && cigar_seq_len > 0) {
+        int32_t tlen_val = atoi(tlen);
+
+        char tlen_by_calc[50];
+        unsigned tlen_by_calc_len;
+        tlen_by_calc[0] = '.';
+        str_int (tlen_val - pnext_pos_delta - cigar_seq_len, &tlen_by_calc[1], &tlen_by_calc_len);
+        tlen_by_calc_len++;
+        seg_one_field ((VBlockP)vb, tlen_by_calc, tlen_by_calc_len, SAM_TLEN);
+        vb->txt_section_bytes[SEC_SAM_TLEN_B250] += tlen_len - tlen_by_calc_len; 
+    }
+    // case default: add as is
     else 
         seg_one_field ((VBlockP)vb, tlen, tlen_len, SAM_TLEN);
 
-    vb->last_tlen_abs         = &tlen[!tlen_is_positive]; // store absolute value
+    unsigned has_sign_char    = !tlen_is_positive && !tlen_is_zero;
+    vb->last_tlen_abs         = &tlen[has_sign_char]; // store absolute value
     vb->last_tlen_is_positive = tlen_is_positive;
-    vb->last_tlen_abs_len     = tlen_len - !tlen_is_positive;
+    vb->last_tlen_abs_len     = tlen_len - has_sign_char;
 }
 
 // returns length of string ending with separator, or -1 if separator was not found
@@ -287,7 +303,7 @@ static inline void seg_sam_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictIdTy
         char new_snip[20];    
         unsigned delta_len;
         new_snip[0] = '*'; 
-        str_uint (dl->seq_len-as, &new_snip[1], &delta_len);
+        str_int (dl->seq_len-as, &new_snip[1], &delta_len);
 
         seg_one_subfield ((VBlock *)vb, new_snip, delta_len+1, dict_id, SEC_SAM_OPTNL_SF_B250, snip_len + 1); 
     }
@@ -572,20 +588,26 @@ const char *seg_sam_data_line (VBlock *vb_,
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "PNEXT");
         
+    int32_t pnext_pos_delta = 0;   
     if (rnext_same_as_rname) { // RNAME and RNEXT are the same - store delta in dictionary
         if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable"
             seg_one_field (vb, "*", 1, SAM_PNEXT); 
-        else
-            seg_pos_field (vb_, vb->last_pos, &vb->last_pnext_delta, false, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, "PNEXT");
+        else {
+            int32_t pnext = seg_pos_field (vb_, vb->last_pos, &vb->last_pnext_delta, false, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, "PNEXT");
+            pnext_pos_delta = pnext - vb->last_pos;
+        }
     }
 
     else  // RNAME and RNEXT differ - store in random_pos
         seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1, "PNEXT");
 
-    // TLEN - replace a value that is the negative of the previous line with "*"
+    // TLEN - 3 cases: 
+    // 1. if a value that is the negative of the previous line with "*"
+    // 2. else, tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as "." & tlen-pnext_pos_delta-seq_len
+    // 3. else, stored verbatim
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "TLEN");
-    seg_sam_tlen_field (vb, field_start, field_len);
+    seg_sam_tlen_field (vb, field_start, field_len, pnext_pos_delta, dl->seq_len);
 
     // SEQ & QUAL
     dl->seq_data_start = next_field - vb->txt_data.data;

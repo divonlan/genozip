@@ -115,7 +115,7 @@ void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const ch
         uint32_t num = BGEN32 (*ENT (uint32_t, *id_buf, (*next_id)++));
         char num_str[20];
         unsigned num_str_len;
-        str_uint (num, num_str, &num_str_len);
+        str_int (num, num_str, &num_str_len);
         buf_add (&vb->txt_data, num_str, num_str_len);
     }
     

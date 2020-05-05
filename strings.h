@@ -18,7 +18,7 @@ extern void str_to_lowercase (char *s);
 
 extern char *str_size (int64_t size, char *str /* out */);
 extern char *str_uint_commas (int64_t n, char *str /* out */);
-extern char *str_uint (int64_t n, char *str /* out */, unsigned *len);
+extern char *str_int (int64_t n, char *str /* out */, unsigned *len);
 
 #define POINTER_STR_LEN 19
 extern char *str_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/);

@@ -30,7 +30,7 @@ static uint32_t piz_sam_reconstruct_random_pos (VBlockSAM *vb, uint32_t txt_line
     if (!skip) {
         char pos_str[20];
         unsigned pos_str_len;
-        str_uint (pos, pos_str, &pos_str_len);
+        str_int (pos, pos_str, &pos_str_len);
 
         buf_add (&vb->txt_data, pos_str, pos_str_len);
         buf_add (&vb->txt_data, &separator, 1);
@@ -39,7 +39,7 @@ static uint32_t piz_sam_reconstruct_random_pos (VBlockSAM *vb, uint32_t txt_line
     return pos;
 }
 
-static void piz_sam_reconstruct_tlen (VBlockSAM *vb, const char *tlen, unsigned tlen_len)
+static void piz_sam_reconstruct_tlen (VBlockSAM *vb, const char *tlen, unsigned tlen_len, int32_t pnext_pos_delta, int32_t cigar_seq_len)
 {
     ASSERT0 (tlen, "Error in piz_sam_reconstruct_tlen: tlen=NULL");
     ASSERT0 (tlen_len, "Error in piz_sam_reconstruct_tlen: tlen_len=0");
@@ -56,6 +56,21 @@ static void piz_sam_reconstruct_tlen (VBlockSAM *vb, const char *tlen, unsigned 
 
         // flip the sign of last_tlen
         vb->last_tlen_is_positive = !vb->last_tlen_is_positive;
+    }
+
+    else if ((tlen_len > 1) && (tlen[0] == '.')) {
+        int32_t tlen_by_calc = atoi (&tlen[1]);
+        int32_t tlen_val = tlen_by_calc + pnext_pos_delta + cigar_seq_len;
+
+        // update last_tlen_*
+        vb->last_tlen_is_positive = tlen_val >= 0;
+        vb->last_tlen_abs = AFTERENT (char, vb->txt_data) + !vb->last_tlen_is_positive;
+
+        unsigned reconstructed_tlen_len;
+        str_int (tlen_val, AFTERENT (char, vb->txt_data), &reconstructed_tlen_len);
+        vb->txt_data.len += reconstructed_tlen_len;
+        
+        vb->last_tlen_abs_len = reconstructed_tlen_len - !vb->last_tlen_is_positive;
     }
 
     // case - tlen is not a negative of previous line - output as-is
@@ -78,7 +93,7 @@ static inline void piz_sam_reconstruct_AS (VBlockSAM *vb, const char *snip, unsi
         unsigned value = cigar_seq_len - atoi (&snip[1]);
         char value_str[20];
         unsigned value_str_len;
-        str_uint (value, value_str, &value_str_len);
+        str_int (value, value_str, &value_str_len);
         buf_add (&vb->txt_data, value_str, value_str_len);
     }
     else // not delta encoded
@@ -96,7 +111,7 @@ static inline void piz_sam_reconstruct_MD (VBlockSAM *vb, uint32_t txt_line_i, u
 
     // case: MD is an empty string - reconstruct the original MD that is the sequence length
     if (!snip_len) {
-        str_uint (cigar_seq_len, reconstruced_md_str, &reconstruced_md_str_len);
+        str_int (cigar_seq_len, reconstruced_md_str, &reconstruced_md_str_len);
         buf_add (&vb->txt_data, reconstruced_md_str, reconstruced_md_str_len);
     }
     
@@ -105,7 +120,7 @@ static inline void piz_sam_reconstruct_MD (VBlockSAM *vb, uint32_t txt_line_i, u
         unsigned partial_seq_len_by_md_field = seg_sam_get_seq_len_by_MD_field (snip, snip_len-1, NULL);
 
         memcpy (reconstruced_md_str, snip, snip_len-1);
-        str_uint (cigar_seq_len - partial_seq_len_by_md_field, 
+        str_int (cigar_seq_len - partial_seq_len_by_md_field, 
                                     &reconstruced_md_str[snip_len-1], &reconstruced_md_str_len);
         buf_add (&vb->txt_data, reconstruced_md_str, snip_len-1 + reconstruced_md_str_len);
     }
@@ -373,7 +388,7 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         // TLEN - from its dictionary
         IFNOTSTRIP("0",1) {         
             LOAD_SNIP (SAM_TLEN);
-            piz_sam_reconstruct_tlen (vb, snip, snip_len);
+            piz_sam_reconstruct_tlen (vb, snip, snip_len, vb->last_pnext_delta, cigar_seq_len);
         }
         
         // SEQ & QUAL data

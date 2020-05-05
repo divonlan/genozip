@@ -253,9 +253,9 @@ typedef struct VBlockSAM {
 
     SubfieldMapper qname_mapper;         // ZIP & PIZ
 
-    uint32_t rname_index_minus_1;           // ZIP & PIZ: RNAME node index of previous line
-    uint32_t rname_index_minus_2;           // ZIP & PIZ: RNAME node index of line before the previous line
-    uint32_t rname_index_minus_3;           // ZIP & PIZ: RNAME node index of line before that
+    uint32_t rname_index_minus_1;        // ZIP & PIZ: RNAME node index of previous line
+    uint32_t rname_index_minus_2;        // ZIP & PIZ: RNAME node index of line before the previous line
+    uint32_t rname_index_minus_3;        // ZIP & PIZ: RNAME node index of line before that
 
     const char *last_tlen_abs;           // ZIP & PIZ: last tlen segmented - pointer into vb->txt_data.data (ZIP) or TLEN dictionary (PIZ)        
     uint32_t last_tlen_abs_len;          // absolute value of last tlen, its sign, and the string length of last_tlen_abs

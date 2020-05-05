@@ -85,7 +85,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
     
     // add the seq_len to the end of the metadata
     unsigned seq_len_str_len;
-    str_uint (dl->seq_len, &metadata[4], &seq_len_str_len);
+    str_int (dl->seq_len, &metadata[4], &seq_len_str_len);
 
     seg_one_field (vb, metadata, 4 + seq_len_str_len, FAST_LINEMETA);
     vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] -= 5 + seq_len_str_len; // seg_one_field account for our string and \t - these were all already accounted for
@@ -145,7 +145,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
         char seq_meta_data[30];
         unsigned seq_len_len;
         seq_meta_data[0] = 'X' + has_13;
-        str_uint (line_len, &seq_meta_data[1], &seq_len_len);
+        str_int (line_len, &seq_meta_data[1], &seq_len_len);
         seg_one_field (vb, seq_meta_data, seq_len_len + 1, FAST_LINEMETA);
         vb->last_line = FASTA_LINE_SEQ;
     }
