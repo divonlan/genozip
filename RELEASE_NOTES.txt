@@ -112,6 +112,8 @@
 - bug fixes
 
 5.0.0
+- Updated license
+- Added user registration
 - Added full support for compressing SAM/BAM, FASTQ, FASTA and 23andMe files
 - Compression improvements for some VCF files with 1. lots of non-GT FORMAT subfields or 2. ID data 3. END INFO subfield
 - Added genounzip output options: --bcf for VCF files and --bam for SAM files
