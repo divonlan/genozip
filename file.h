@@ -282,6 +282,7 @@ extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const 
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
 extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);
+extern const char *file_plain_ext_by_dt (DataType dt);
 
 extern const char *ft_name (FileType ft);
 extern const char *file_viewer (File *file);

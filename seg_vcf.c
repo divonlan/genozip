@@ -467,11 +467,11 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
                 "Error in seg_vcf_genotype_area - end_of_cell and yet separator is %c (ASCII %u) is not \\t or \\n",
                 cell_gt_data[-1], cell_gt_data[-1]);
     }
-    ASSERT0 (end_of_cell, "Error: invalid reading of genotype data");
+    ASSSEG0 (end_of_cell, cell_gt_data, "Error: More FORMAT subfields data than expected by the specification in the FORMAT field");
 
     if (is_vcf_string)
         // size including : (if we have both ht and gt), but not including \t which goes into SEC_STATS_HT_SEPERATOR
-        vb->txt_section_bytes[SEC_VCF_GT_DATA] += cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
+        vb->txt_section_bytes[SEC_VCF_GT_DATA] += optimized_cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
 
     return optimized_cell_gt_data_len;
 }

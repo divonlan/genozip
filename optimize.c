@@ -139,8 +139,7 @@ static inline bool optimize_vcf_pl (const char *snip, unsigned len, char *optimi
 bool optimize_vcf_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (dict_id.num == dict_id_FORMAT_GL) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
-    if (dict_id.num == dict_id_FORMAT_GP) return 
-    optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
+    if (dict_id.num == dict_id_FORMAT_GP) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
     if (dict_id.num == dict_id_FORMAT_PL) return optimize_vcf_pl (snip, len, optimized_snip, optimized_snip_len);
     
     ABORT ("Error in optimize: unsupport dict %s", err_dict_id (dict_id));

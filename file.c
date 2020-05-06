@@ -788,3 +788,10 @@ const char *file_viewer (File *file)
 
     return viewer[file->comp_alg];
 }
+
+const char *file_plain_ext_by_dt (DataType dt)
+{
+    FileType plain_ft = txt_in_ft_by_dt[dt][0].in;
+
+    return file_exts[plain_ft];
+}
