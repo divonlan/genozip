@@ -137,8 +137,8 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), "Error while reconstrucing line %u vb_i=%u: iterator for %s reached end of data",
             txt_line, vb->vblock_i, err_dict_id (ctx->dict_id));
             
-    uint32_t word_index = z_file->genozip_version >= 2 ? base250_decode (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
-                                                       : v1_base250_decode (&iterator->next_b250);
+    uint32_t word_index = is_v2_or_above ? base250_decode    (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
+                                         : v1_base250_decode (&iterator->next_b250);
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {

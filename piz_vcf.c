@@ -23,6 +23,7 @@
 #include "samples.h"
 #include "gtshark_vcf.h"
 #include "dict_id.h"
+#include "strings.h"
 
 #define DATA_LINE(i) ENT (PizDataLineVCF, vb->lines, i)
 
@@ -174,7 +175,7 @@ static inline void piz_vcf_reconstruct_info (VBlockVCF *vb, const SubfieldMapper
             
             // starting v5, END is encoded as a delta vs. POS (sharing the POS/END delta stream)
             char end_str[50];
-            if (z_file->genozip_version >= 5 && did_i == vb->end_did_i) {
+            if (is_v5_or_above && did_i == vb->end_did_i) {
                 vb->last_pos = piz_decode_pos (vb->last_pos, info_sf_value_snip[sf_i], info_sf_value_snip_len[sf_i], 
                                                NULL, end_str, &info_sf_value_snip_len[sf_i]); 
                 info_sf_value_snip[sf_i] = end_str;
@@ -273,7 +274,7 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
         // info subfield eg "info1=value1;info2=value2" - "info1=", "info2=" are the name snips
         // while "value1" and "value2" are the value snips - we merge them here
         if (f == VCF_INFO && !flag_strip) {
-            (z_file->genozip_version >= 4 ? piz_vcf_reconstruct_info : v2v3_piz_vcf_reconstruct_info)
+            (is_v4_or_above ? piz_vcf_reconstruct_info : v2v3_piz_vcf_reconstruct_info)
                 (vb, iname_mapper, snip[VCF_INFO], info_sf_value_snip, info_sf_value_snip_len, *has_13);
 
             if (snip_len[VCF_FORMAT])  // if INFO isn't the last field - add a tab
@@ -371,7 +372,7 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
 
             const char *snip = NULL; // will be set to a pointer into a dictionary
             
-            const char *dp_snip=NULL; unsigned dp_snip_len=0;  // used for copying DP to MIN_DP, if MIN_DP is empty
+            uint32_t dp_value=0;  // used for calculating MIN_DP = dp_value + delta.
 
             for (unsigned sf_i=0; sf_i < line_format_info->num_subfields; sf_i++) {
 
@@ -388,14 +389,14 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
                 mtf_get_next_snip ((VBlockP)vb, sf_ctx, &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + vb_line_i);
 
                 // handle MIN_DP : if its a DP, store it...
-                if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_DP) {
-                    dp_snip = snip;
-                    dp_snip_len = snip_len;
-                }
-                // ...and if its an empty MIN_DP, copy the DP instead
-                else if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_MIN_DP && !snip_len && dp_snip_len) {
-                    snip = dp_snip;
-                    snip_len = dp_snip_len;
+                char min_dp[30];
+                if (sf_ctx && snip_len && sf_ctx->dict_id.num == dict_id_FORMAT_DP) 
+                    dp_value = atoi (snip);
+                // ...and if its an MIN_DP - calculate it 
+                else if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_MIN_DP && snip_len && is_v5_or_above) {
+                    int32_t delta = atoi (snip);
+                    str_int (dp_value - delta, min_dp, &snip_len); // note: we dp_value==0 if no DP subfield preceeds DP_MIN, that's fine
+                    snip = min_dp;
                 }
 
                 if (snip && snip_len && is_line_included) { // it can be a valid empty subfield if snip="" and snip_len=0
@@ -801,7 +802,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_VCF_INFO_SF_B250);    
     }
 
-    if (z_file->genozip_version >= 5) {
+    if (is_v5_or_above) {
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
         
         zfile_uncompress_section ((VBlockP)vb, header, &vb->id_numeric_data, "id_numeric_data", SEC_NUMERIC_ID_DATA);
@@ -898,7 +899,7 @@ void piz_vcf_uncompress_one_vb (VBlock *vb_)
 
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    if (z_file->genozip_version > 1) {
+    if (is_v2_or_above) {
         piz_vcf_uncompress_all_sections (vb);
 
         // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,

@@ -24,6 +24,8 @@
 #include "piz.h"
 #include "license.h"
 
+bool is_v2_or_above=0, is_v3_or_above=0, is_v4_or_above=0, is_v5_or_above=0;
+
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
@@ -142,7 +144,7 @@ void zfile_uncompress_section (VBlock *vb,
     CompressionAlg comp_alg        = (CompressionAlg)section_header->sec_compression_alg;
 
     // prior to version 5, the algorithm was hard coded, and this field was called "unused"
-    if (z_file->genozip_version < 5) {
+    if (!is_v5_or_above) {
         if (expected_section_type == SEC_HT_GTSHARK_DB_DB || expected_section_type == SEC_HT_GTSHARK_DB_GT)
             comp_alg = COMP_PLN;
         else
@@ -158,7 +160,7 @@ void zfile_uncompress_section (VBlock *vb,
 
     // decrypt data (in-place) if needed
     if (data_encrypted_len) {
-        if (z_file->genozip_version > 1)
+        if (is_v2_or_above)
             crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_header->section_type, false);
         else
             v1_crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_i);
@@ -352,7 +354,7 @@ int zfile_read_section (VBlock *vb,
     // note: the first section is always read by zfile_read_section(). if it is a v1, or
     // if it is not readable (perhaps v1 encrypted) - we assume its a v1 VCF header
     // in v2+ the first section is always an unencrypted SectionHeaderGenozipHeader
-    ASSERT0 (z_file->genozip_version != 1, "Error: zfile_read_section cannot read v1 data");
+    ASSERT0 (is_v2_or_above || expected_sec_type==SEC_GENOZIP_HEADER, "Error: zfile_read_section cannot read v1 data");
 
     bool is_encrypted = (expected_sec_type != SEC_GENOZIP_HEADER) &&
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
@@ -538,6 +540,12 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     z_file->num_components    = BGEN32 (header->num_components);
     *digest                   = header->md5_hash_concat; 
 
+    // global bools to help testing
+    is_v2_or_above = (z_file->genozip_version >= 2);
+    is_v3_or_above = (z_file->genozip_version >= 3);
+    is_v4_or_above = (z_file->genozip_version >= 4);
+    is_v5_or_above = (z_file->genozip_version >= 5);
+    
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", SEC_GENOZIP_HEADER);
     z_file->section_list_buf.len /= sizeof (SectionListEntry); // fix len
     BGEN_sections_list();
@@ -672,7 +680,7 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
     *num_items_concat       = BGEN64 (header.num_items_concat);
     *md5_hash_concat        = header.md5_hash_concat;
 
-    if (header.genozip_version >= 5)
+    if (header.genozip_version >= 5) // is_v5_or_above is for genols
         *license_hash = header.license_hash;
     else
         license_hash->ulls[0] = license_hash->ulls[1] = 0;
@@ -951,7 +959,7 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
     
         if (vb->vblock_i == 1) {
             buf_free (&global_iname_mapper_buf); // in case it was used to piz a previous file
-            (z_file->genozip_version >= 4 ? piz_vcf_map_iname_subfields : v2v3_piz_vcf_map_iname_subfields)(&global_iname_mapper_buf);
+            (is_v4_or_above ? piz_vcf_map_iname_subfields : v2v3_piz_vcf_map_iname_subfields)(&global_iname_mapper_buf);
             buf_set_overlayable (&global_iname_mapper_buf);
         }
         
@@ -978,7 +986,7 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
         READ_SECTION (SEC_VCF_INFO_SF_B250, SectionHeaderBase250);
 
     // read the numberic data of the ID field (the non-numeric part is in SEC_ID_B250)
-    if (z_file->genozip_version >= 5)
+    if (is_v5_or_above)
         READ_SECTION (SEC_NUMERIC_ID_DATA, SectionHeader);
         
     // read the sample data

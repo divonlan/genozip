@@ -292,7 +292,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
     if (data_type == DT_NONE) goto finish;
 
-    if (z_file->genozip_version < 2) enforce_v1_limitations (is_first_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
+    if (!is_v2_or_above) enforce_v1_limitations (is_first_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 
     // read and write txt header. in split mode this also opens txt_file
     piz_successful = (data_type != DT_VCF_V1) ? header_genozip_to_txt (&original_file_digest)
@@ -316,7 +316,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
             bool still_more_data = false, grepped_out = false;
-            if (z_file->genozip_version > 1) {
+            if (is_v2_or_above) {
                 
                 bool skipped_vb;
                 static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it

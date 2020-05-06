@@ -93,4 +93,6 @@ extern void zfile_me23_read_one_vb (VBlockP vb);
 extern void zfile_me23_compress_vb_header (VBlockP vb);
 extern void zfile_me23_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 
+extern bool is_v2_or_above, is_v3_or_above, is_v4_or_above, is_v5_or_above;
+
 #endif
