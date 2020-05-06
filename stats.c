@@ -11,6 +11,19 @@
 #include "sections.h"
 #include "file.h"
 
+#define stats_verify_all_covered(covered) stats_verify_all_covered_do (covered, __FUNCTION__)
+static void stats_verify_all_covered_do (const unsigned *covered, const char *caller)
+{
+    for (unsigned sec_i=0; sec_i < NUM_SEC_TYPES; sec_i++) {
+
+        ASSERTW (covered[sec_i]==1 || !txt_file->section_bytes[sec_i], 
+                 "Warning: section %s has bytes in txt_file, but covered=%u in %s", st_name (sec_i), covered[sec_i], caller);
+
+        ASSERTW (covered[sec_i]==1 || !z_file->section_bytes[sec_i], 
+                 "Warning: section %s has bytes in z_file, but covered=%u in %s", st_name (sec_i), covered[sec_i], caller);
+    }
+}
+
 static void stats_show_file_metadata (void)
 {
     static char *show_sections_line_name[NUM_DATATYPES] = STAT_SHOW_SECTIONS_LINE_NAME;
@@ -91,12 +104,15 @@ void stats_show_sections (void)
 
     int64_t total_txt=0, total_z=0, total_entries=0;
     uint32_t total_sections=0;
+    
+    unsigned covered[NUM_SEC_TYPES]; memset (covered, 0, sizeof(covered));
 
     for (unsigned sec_i=0; sec_i < num_secs; sec_i++) {
         int64_t txtbytes  = txt_file->section_bytes[secs[sec_i]];
         int64_t zbytes    = z_file->section_bytes[secs[sec_i]];
         int64_t zentries  = z_file->section_entries[secs[sec_i]];
         int32_t zsections = z_file->num_sections[secs[sec_i]];
+        covered[secs[sec_i]]++;;
 
         if (!txtbytes && !zbytes) continue;
 
@@ -173,13 +189,15 @@ void stats_show_sections (void)
                  100.0 * (double)(dict_compressed_size + b250_compressed_size) / (double)total_z);
     }
 
+    stats_verify_all_covered (covered);
+
     char s1[20], s2[20];
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
              str_uint_commas (total_z, s1), str_uint_commas (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
 
     // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_size is 
     // missing, while txt_data_so_far_single is what was actually processed
-    ASSERTW (total_txt == txt_file->txt_data_so_far_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
+    ASSERTW (total_txt == txt_file->txt_data_so_far_single || flag_optimize, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_uint_commas (total_txt, s1), str_uint_commas (txt_file->txt_data_size_single, s2), 
              (int32_t)(txt_file->txt_data_so_far_single - total_txt)); 
 
@@ -212,7 +230,9 @@ void stats_show_content (void)
           SEC_CHROM_B250, SEC_POS_B250, SEC_ID_B250, SEC_VCF_REFALT_B250, 
           SEC_VCF_QUAL_B250, SEC_VCF_FILTER_B250, SEC_VCF_INFO_B250, SEC_VCF_FORMAT_B250, SEC_VCF_INFO_SF_B250, 
           SEC_CHROM_DICT, SEC_POS_DICT, SEC_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
-          SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,           
+          SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,       
+
+          SEC_NUMERIC_ID_DATA,    
           
           SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,        SEC_SAM_BD_DATA,       SEC_SAM_BI_DATA, 
           SEC_SAM_QNAME_B250,     SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
@@ -229,12 +249,15 @@ void stats_show_content (void)
         { SEC_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }
     };
 
+    unsigned covered[NUM_SEC_TYPES]; memset (covered, 0, sizeof(covered));
+
     for (unsigned i=0; i < NUM_CATEGORIES; i++) {
 
         int64_t txtbytes=0, zbytes=0;
         for (int *sec_i = sections_per_category[i]; *sec_i != NIL; sec_i++) {
             txtbytes += txt_file->section_bytes[*sec_i];
             zbytes += z_file->section_bytes[*sec_i];
+            covered[*sec_i]++;
         }
 
         if (!txtbytes && !zbytes) continue;
@@ -254,10 +277,12 @@ void stats_show_content (void)
              str_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_txt / (double)total_z, "");
 
+    stats_verify_all_covered (covered);
+
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              total_z, z_file->disk_size, z_file->disk_size - total_z);
 
-    ASSERTW (total_txt == txt_file->txt_data_size_single, "Hmm... incorrect calculation for %s sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
+    ASSERTW (total_txt == txt_file->txt_data_size_single || flag_optimize, "Hmm... incorrect calculation for %s sizes: total section sizes=%"PRId64" but file size is %"PRId64" (diff=%"PRId64")", 
              dt_name (z_file->data_type), total_txt, txt_file->txt_data_size_single, txt_file->txt_data_size_single - total_txt);
 
 }
