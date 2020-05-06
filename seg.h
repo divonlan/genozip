@@ -92,8 +92,8 @@ extern SegInitializer seg_me23_initialize;
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                               "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %"PRIu64 " > vb", \
             __VA_ARGS__, txt_name, vb->line_i, vb->vblock_i, \
-            /* pos_in_vb:         */ p_into_txt ? (p_into_txt - vb->txt_data.data) : -1LL, \
-            /* pos_in_file:       */ p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1LL,\
+            /* pos_in_vb:         */ (int64_t)(p_into_txt ? (p_into_txt - vb->txt_data.data) : -1), \
+            /* pos_in_file:       */ (int64_t)(p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1),\
             /* vb start pos file: */ vb->vb_position_txt_file, \
             /* vb end pos file:   */ vb->vb_position_txt_file + vb->txt_data.len-1, \
             /* vb length:         */ vb->txt_data.len,\
