@@ -16,7 +16,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->piz_vcf_get_variant_data_line     += src->piz_vcf_get_variant_data_line;
     dst->piz_vcf_get_haplotype_data_line   += src->piz_vcf_get_haplotype_data_line;
     dst->piz_vcf_get_phase_data_line       += src->piz_vcf_get_phase_data_line;
-    dst->piz_vcf_get_genotype_data_line    += src->piz_vcf_get_genotype_data_line;
+    dst->piz_vcf_reconstruct_genotype_data_line    += src->piz_vcf_reconstruct_genotype_data_line;
     dst->zfile_uncompress_section          += src->zfile_uncompress_section;
     dst->squeeze                           += src->squeeze;
     dst->buf_alloc                         += src->buf_alloc;
@@ -98,7 +98,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "      piz_get_line_subfields: %u\n", ms(p->piz_get_line_subfields));
         fprintf (stderr, "      piz_vcf_get_haplotype_data_line: %u\n", ms(p->piz_vcf_get_haplotype_data_line));
         fprintf (stderr, "      piz_vcf_initialize_sample_iterators: %u\n", ms(p->piz_vcf_initialize_sample_iterators));
-        fprintf (stderr, "      piz_vcf_get_genotype_data_line: %u\n", ms(p->piz_vcf_get_genotype_data_line));
+        fprintf (stderr, "      piz_vcf_reconstruct_genotype_data_line: %u\n", ms(p->piz_vcf_reconstruct_genotype_data_line));
         fprintf (stderr, "      piz_vcf_get_phase_data_line: %u\n", ms(p->piz_vcf_get_phase_data_line));
         fprintf (stderr, "      piz_vcf_reconstruct_samples: %u\n", ms(p->piz_vcf_reconstruct_samples));
         fprintf (stderr, "   squeeze: %u\n", ms(p->squeeze));

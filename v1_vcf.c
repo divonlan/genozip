@@ -521,7 +521,7 @@ static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
 
     DATA_LINE (line_i)->has_genotype_data = vb->line_gt_data.len > global_vcf_num_samples; // not all just \t
 
-    COPY_TIMER(vb->profile.piz_vcf_get_genotype_data_line);
+    COPY_TIMER(vb->profile.piz_vcf_reconstruct_genotype_data_line);
 }
 
 static void v1_piz_initialize_next_gt_in_sample (VBlockVCF *vb, int *num_subfields)

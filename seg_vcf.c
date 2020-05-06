@@ -434,11 +434,20 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
     int optimized_cell_gt_data_len = cell_gt_data_len;
 
     bool end_of_cell = !cell_gt_data_len;
+
+    const char *dp_sf = NULL;
+    unsigned dp_sf_len = 0;
+
     for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
 
         // move next to the beginning of the subfield data, if there is any
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data, has_13);
         MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
+
+        if (ctx->dict_id.num == dict_id_FORMAT_DP) {
+            dp_sf = cell_gt_data;
+            dp_sf_len = len;
+        }
 
         MtfNode *node;
         uint32_t node_index;
@@ -453,7 +462,13 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
             vb->vb_data_size -= (int)len - (int)optimized_snip_len;
             optimized_cell_gt_data_len -= (int)len - (int)optimized_snip_len;
         }
-        else 
+
+        // if case MIN_DP subfield is the same as DP (very common) - we store MIN_DP as WORD_INDEX_EMPTY_SF 
+        // note: we count on GATK never actually having an empty MIN_DP word, as it would PIZ incorrectly to be a copy of DP
+        else if (cell_gt_data && ctx->dict_id.num == dict_id_FORMAT_MIN_DP && dp_sf_len == len && !memcmp (cell_gt_data, dp_sf, len)) 
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, ":", 0, &node, NULL); // force a WORD_INDEX_EMPTY_SF
+
+        else
             node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, cell_gt_data, len, &node, NULL);
 
         NEXTENT (uint32_t, vb->line_gt_data) = node_index;

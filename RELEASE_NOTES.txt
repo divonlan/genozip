@@ -115,7 +115,11 @@
 - Updated license
 - Added user registration
 - Added full support for compressing SAM/BAM, FASTQ, FASTA and 23andMe files
-- Compression improvements for some VCF files with 1. lots of non-GT FORMAT subfields or 2. ID data 3. END INFO subfield
+- Compression improvements for VCF files with any of these:
+    1. lots of non-GT FORMAT subfields 
+    2. ID data 
+    3. END INFO subfield 
+    4. MIN_DP FORMAT subfield
 - Added genounzip output options: --bcf for VCF files and --bam for SAM files
 - Added --input-type - tell genozip what type of file this is - if re-directing or file has non-standard extension
 - Added --stdin-size - tell genozip the size of a redirected input file, for faster execution

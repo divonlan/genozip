@@ -13,7 +13,7 @@
 uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 
 // VCF stuff
-uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, 
+uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_13=0;
 
@@ -42,21 +42,23 @@ void dict_id_initialize (void)
 
     switch (z_file->data_type) { 
     case DT_VCF:
-        dict_id_FORMAT_PL   = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
-        dict_id_FORMAT_GP   = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
-        dict_id_FORMAT_GL   = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
+        dict_id_FORMAT_PL     = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
+        dict_id_FORMAT_GP     = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
+        dict_id_FORMAT_GL     = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
+        dict_id_FORMAT_DP     = dict_id_vcf_format_sf (dict_id_make ("DP", 2)).num;
         
-        dict_id_INFO_AC     = dict_id_vcf_info_sf   (dict_id_make ("AC", 2)).num;
-        dict_id_INFO_AF     = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;
-        dict_id_INFO_AN     = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
-        dict_id_INFO_DP     = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
-        dict_id_INFO_VQSLOD = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
+        dict_id_INFO_AC       = dict_id_vcf_info_sf   (dict_id_make ("AC", 2)).num;
+        dict_id_INFO_AF       = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;
+        dict_id_INFO_AN       = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
+        dict_id_INFO_DP       = dict_id_vcf_info_sf   (dict_id_make ("DP", 2)).num;
+        dict_id_INFO_VQSLOD   = dict_id_vcf_info_sf   (dict_id_make ("VQSLOD", 6)).num;
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
-        dict_id_INFO_END    = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;
+        dict_id_INFO_END      = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;
+        dict_id_FORMAT_MIN_DP = dict_id_vcf_format_sf (dict_id_make ("MIN_DP", 6)).num;
 
         // This appears if the VCF line has a Windows-style \r\n line ending
-        dict_id_INFO_13     = dict_id_vcf_info_sf   (dict_id_make ("#", 1)).num; 
+        dict_id_INFO_13       = dict_id_vcf_info_sf   (dict_id_make ("#", 1)).num; 
         break;
 
     case DT_SAM:

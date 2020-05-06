@@ -43,7 +43,7 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
     // get number of subfields for each FORMAT item in dictionary, by traversing the FORMAT dectionary mtf array
 
     buf_alloc (vb, &vb->format_info_buf, sizeof(FormatInfo) * format_ctx->word_list.len, 1.5, "format_info_buf", 0);
-    ARRAY (FormatInfo, format_num_subfields, vb->format_info_buf);
+    ARRAY (FormatInfo, formats, vb->format_info_buf);
 
     ARRAY (const MtfWord, snip_list, format_ctx->word_list);
 
@@ -63,9 +63,9 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
         bool format_has_gt_subfield = format_snip_len >= 2 && format_snip[0] == 'G' && format_snip[1] == 'T' && 
                                       (format_snip_len == 2 || format_snip[2] == ':');
 
-        format_num_subfields[format_i].num_subfields = num_colons - 1 - format_has_gt_subfield; // if FORMAT has a GT subfield - don't count it
+        formats[format_i].num_subfields = num_colons - 1 - format_has_gt_subfield; // if FORMAT has a GT subfield - don't count it
         
-        for (unsigned sf_i=0; sf_i < format_num_subfields[format_i].num_subfields; sf_i++) {
+        for (unsigned sf_i=0; sf_i < formats[format_i].num_subfields; sf_i++) {
             
             // construct dict_id for this format subfield
             
@@ -77,7 +77,7 @@ static void piz_vcf_get_format_info (VBlockVCF *vb)
             // get the did_i of this subfield. note: did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
             uint8_t did_i = mtf_get_existing_did_i_by_dict_id (dict_id);
-            format_num_subfields[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &vb->mtf_ctx[did_i] : NULL;
+            formats[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &vb->mtf_ctx[did_i] : NULL;
         }
     }
 
@@ -301,7 +301,7 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
     buf_alloc (vb, &vb->sample_iterator, sizeof(SnipIterator) * global_vcf_num_samples, 1, "sample_iterator", 0);
     
     ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
-    ARRAY (FormatInfo, format_num_subfields, vb->format_info_buf);
+    ARRAY (FormatInfo, formats, vb->format_info_buf);
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
@@ -324,7 +324,7 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
             // (gt data is stored transposed - i.e. column by column)
             for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
                 
-                FormatInfo *line_format_info = &format_num_subfields[DATA_LINE (line_i)->format_mtf_i];
+                FormatInfo *line_format_info = &formats[DATA_LINE (line_i)->format_mtf_i];
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
@@ -346,16 +346,16 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 // convert genotype data from sample block format of indices in base-250 to line format
 // of tab-separated genotype data string, each string being a colon-seperated list of subfields, 
 // the subfields being defined in the FORMAT of this line
-static void piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, bool is_line_included)
+static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, bool is_line_included)
 {
     START_TIMER;
 
     PizDataLineVCF *dl = DATA_LINE (vb_line_i);
 
     ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
-    ARRAY (const FormatInfo, format_num_subfields, vb->format_info_buf);
+    ARRAY (const FormatInfo, formats, vb->format_info_buf);
 
-    const FormatInfo *line_format_info = &format_num_subfields[dl->format_mtf_i];
+    const FormatInfo *line_format_info = &formats[dl->format_mtf_i];
 
     char *next = vb->line_gt_data.data;
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -371,6 +371,8 @@ static void piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, b
 
             const char *snip = NULL; // will be set to a pointer into a dictionary
             
+            const char *dp_snip=NULL; unsigned dp_snip_len=0;  // used for copying DP to MIN_DP, if MIN_DP is empty
+
             for (unsigned sf_i=0; sf_i < line_format_info->num_subfields; sf_i++) {
 
                 MtfContext *sf_ctx = line_format_info->ctx[sf_i];
@@ -384,6 +386,17 @@ static void piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, b
 
                 unsigned snip_len;
                 mtf_get_next_snip ((VBlockP)vb, sf_ctx, &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + vb_line_i);
+
+                // handle MIN_DP : if its a DP, store it...
+                if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_DP) {
+                    dp_snip = snip;
+                    dp_snip_len = snip_len;
+                }
+                // ...and if its an empty MIN_DP, copy the DP instead
+                else if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_MIN_DP && !snip_len && dp_snip_len) {
+                    snip = dp_snip;
+                    snip_len = dp_snip_len;
+                }
 
                 if (snip && snip_len && is_line_included) { // it can be a valid empty subfield if snip="" and snip_len=0
                     memcpy (next, snip, snip_len); 
@@ -413,7 +426,7 @@ static void piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, b
 
     dl->has_genotype_data = (vb->line_gt_data.len > global_vcf_num_displayed_samples); // not all just \t
 
-    COPY_TIMER(vb->profile.piz_vcf_get_genotype_data_line);
+    COPY_TIMER(vb->profile.piz_vcf_reconstruct_genotype_data_line);
 }
 
 static void piz_vcf_get_phase_data_line (VBlockVCF *vb, unsigned vb_line_i)
@@ -686,9 +699,9 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
-            // note: we always call piz_vcf_get_genotype_data_line even if !is_line_included, bc we need to advance the iterators
+            // note: we always call piz_vcf_reconstruct_genotype_data_line even if !is_line_included, bc we need to advance the iterators
             if (vb->has_genotype_data && !flag_strip && !flag_gt_only)  
-                piz_vcf_get_genotype_data_line (vb, vb_line_i, is_line_included);
+                piz_vcf_reconstruct_genotype_data_line (vb, vb_line_i, is_line_included);
 
             if (is_line_included)  {
                 if (vb->phase_type == PHASE_MIXED_PHASED) 
