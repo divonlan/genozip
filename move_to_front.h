@@ -124,6 +124,6 @@ extern void mtf_destroy_context (MtfContext *ctx);
 
 extern void mtf_vb_1_lock (VBlockP vb);
 extern MtfNode *mtf_get_node_by_word_index (MtfContext *ctx, uint32_t word_index);
-extern void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, DataType dt, uint32_t vblock_i, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids);
+extern void mtf_initialize_primary_field_ctxs (VBlockP vb, MtfContext *mtf_ctx /* an array */, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids);
 
 #endif

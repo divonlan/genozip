@@ -430,7 +430,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 {
     SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_dictionary() will reset cursor 
 
-    mtf_initialize_primary_field_ctxs (z_file->mtf_ctx, z_file->data_type, 0, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
+    mtf_initialize_primary_field_ctxs (NULL, z_file->mtf_ctx, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
 
     while (sections_get_next_dictionary (&sl_ent)) {
 

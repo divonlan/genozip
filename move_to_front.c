@@ -535,12 +535,10 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
     
     mtf_verify_field_ctxs (merging_vb); // this was useful in the past to catch nasty thread issues
 
-    // first, all field dictionaries    
+    // first, all field dictionaries (note: even if the dictionary is not allocated - eg FORMAT in a FORMATless VCF)  
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++) {
 
         MtfContext *ctx = &merging_vb->mtf_ctx[did_i];
-
-        if (!buf_is_allocated (&ctx->dict)) continue;
 
         SectionType dict_sec_type = ctx->dict_section_type;
 
@@ -636,9 +634,9 @@ done:
 // called from seg_all_data_lines (ZIP) and zfile_read_all_dictionaries (PIZ) to initialize all
 // primary field ctx's. these are not always used (e.g. when some are not read from disk due to --strip)
 // but we maintain their fixed positions anyway as the code relies on it
-void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, 
+void mtf_initialize_primary_field_ctxs (VBlock *vb, // NULL if called by zfile_read_all_dictionaries
+                                        MtfContext *mtf_ctx /* an array */, 
                                         DataType dt,
-                                        uint32_t vblock_i,
                                         uint8_t *dict_id_to_did_i_map,
                                         unsigned *num_dict_ids)
 {
@@ -651,8 +649,8 @@ void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */,
         MtfContext *ctx = mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, dict_id, dict_sec); 
 
         // verify that the ctx is at its correct place
-        ASSERT (ctx - mtf_ctx == f, "Error in mtf_initialize_primary_field_ctxs: f=%u (%s) but ctx is at mtf_ctx[%u]. vb_i=%u",
-                f, fname, (unsigned)(ctx - mtf_ctx), vblock_i);
+        ASSERT (ctx - mtf_ctx == f, "Error in mtf_initialize_primary_field_ctxs: f=%u (%s) but ctx is at mtf_ctx[%u]. vb_i=%u vb.first_line=%u",
+                f, fname, (unsigned)(ctx - mtf_ctx), vb ? vb->vblock_i : 0, vb ? vb->first_line : 0);
     }
 }
 

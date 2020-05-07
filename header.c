@@ -73,10 +73,11 @@ static bool header_vcf_set_globals(const char *filename, Buffer *vcf_header)
             }
 
             //count samples
-            global_vcf_num_samples = (tab_count >= 9) ? tab_count-8 : 0; // note: a VCF file without samples would have tab_count==7 (8 fields) and is perfectly legal
+            global_vcf_num_samples = (tab_count >= 9) ? tab_count-8 : 0; 
+            // note: a VCF file without samples may or may not have a "FORMAT" in the header, i.e. tab_count==7 or 8 (8 or 9 fields).
+            // however, even if it has a FORMAT in the header, it won't have a FORMAT column in the data
+            
             global_vcf_num_displayed_samples = global_vcf_num_samples;
-
-            ASSERT0 (tab_count != 8, "Error: invalid VCF file - field header line contains a FORMAT field but no samples");
 
             ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 

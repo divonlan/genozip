@@ -475,7 +475,7 @@ void seg_all_data_lines (VBlock *vb,
 {
     START_TIMER;
 
-    mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->data_type, vb->vblock_i, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
+    mtf_initialize_primary_field_ctxs (vb, vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
 
     mtf_verify_field_ctxs (vb);
     
