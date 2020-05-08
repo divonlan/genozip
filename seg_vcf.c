@@ -23,16 +23,6 @@ void seg_vcf_initialize (VBlock *vb_)
     buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);    
 }             
 
-// returns true if this line has the same chrom as this VB, or if it is the first line
-static void seg_vcf_chrom_field (VBlockVCF *vb, const char *chrom_str, unsigned chrom_str_len)
-{
-    ASSERT0 (chrom_str_len, "Error in seg_vcf_chrom_field: chrom_str_len=0");
-
-    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, VCF_CHROM);
-
-    random_access_update_chrom ((VBlockP)vb, chrom_node_index);
-}
-
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
 DictIdType seg_vcf_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
 {
@@ -115,152 +105,31 @@ static void seg_vcf_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
     *ENT (SubfieldMapper, vb->format_mapper_buf, node_index) = format_mapper;
 }
 
-static void seg_vcf_info_field (VBlockVCF *vb, ZipDataLineVCF *dl, char *info_str, unsigned info_len, 
-                                bool has_13) // this VCF file line ends with a Windows-style \r\n
+static bool seg_vcf_special_info_subfields(VBlockP vb_, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
-    #define MAX_INFO_NAMES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
-    char iname[MAX_INFO_NAMES_LEN];
-    unsigned iname_len = 0;
-    const char *this_name = info_str;
-    unsigned this_name_len = 0;
-    const char *this_value = NULL;
-    unsigned this_value_len=0;
-    unsigned sf_i=0;
+    VBlockVCF *vb = (VBlockVCF *)vb_;
+    unsigned optimized_snip_len;
 
-    // if the VCF file line ends with \r\n when we add an artificial additional info subfield "#"
-    // we know we have space for adding ":#" because the line as at least a "\r\n" appearing somewhere after the INFO field
-    if (has_13) {
-        if (info_len && info_str[info_len-1] != '=') // last subfield is has no value (and hence no '=') - add a ';'
-            info_str[info_len++] = ';';
-        info_str[info_len++] = '#';
-    }
-    
-    // count infos
-    SubfieldMapper iname_mapper;
-    memset (&iname_mapper, 0, sizeof (iname_mapper));
-
-    for (unsigned i=0; i < info_len; i++) 
-        if (info_str[i] == '=') iname_mapper.num_subfields++;
-    
-    // get name / value pairs - and insert values to the "name" dictionary
-    bool reading_name = true;
-    for (unsigned i=0; i < info_len + 1; i++) {
-        char c = (i==info_len) ? ';' : info_str[i]; // add an artificial ; at the end of the INFO data
-
-        if (reading_name) {
-            iname[iname_len++] = c; // info names inc. the =. the = terminats each name
-            ASSSEG0 (iname_len <= MAX_INFO_NAMES_LEN, info_str, "Error: INFO field too long");
-
-            if (c == '=') {  // end of name
-
-                ASSSEG0 (this_name_len > 0, info_str, "Error: INFO field contains a = without a preceding subfield name");
-
-                ASSSEG (this_name[0] >= 64 && this_name[0] <= 127, info_str,
-                        "Error: INFO field contains a name %.*s starting with an illegal character", this_name_len, this_name);
-
-                reading_name = false; 
-                this_value = &info_str[i+1]; 
-                this_value_len = 0;
-            }
-
-            // name without value - valid in VCF format
-            else if (c == ';') {
-                if (i==info_len) { // our artificial ; terminator
-                    iname_len--; // remove ;
-                    vb->txt_section_bytes[SEC_VCF_INFO_B250]++; // account for the separator (; or \t or \n)
-                }
-                else {
-                    this_name = &info_str[i+1]; // skip the value-less name
-                    this_name_len = 0;
-                }
-                continue;
-            }
-            
-            else this_name_len++; // don't count the = or ; in the len
-        }
-        else {
-            if (c == ';') { // end of value
-
-                ASSSEG (this_value_len > 0, info_str,
-                        "Error: INFO field subfield %.*s, does not contain a value", this_name_len, this_name);
-
-                // find (or create) an MTF context (= a dictionary) for this name
-                DictIdType dict_id = dict_id_vcf_info_sf (dict_id_make (this_name, this_name_len));
-
-                // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
-                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, 
-                                                          &vb->num_info_subfields, dict_id, SEC_VCF_INFO_SF_DICT);
-                iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
-
-                // allocate memory if needed
-                Buffer *mtf_i_buf = &ctx->mtf_i;
-                buf_alloc (vb, mtf_i_buf, MIN (vb->lines.len, mtf_i_buf->len + 1) * sizeof (uint32_t),
-                           CTX_GROWTH, "mtf_ctx->mtf_i", ctx->dict_section_type);
-
-                MtfNode *sf_node;
-
-                // VQSLOD - we can optimize it, if we're requested
-                unsigned optimized_snip_len;
-                char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
-                if (flag_optimize && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
-                    optimize_vcf_info (ctx->dict_id, this_value, this_value_len, optimized_snip, &optimized_snip_len)) {
-                 
-                    vb->vb_data_size -= (int)this_value_len - (int)optimized_snip_len;
-                    this_value = optimized_snip;
-                    this_value_len = optimized_snip_len;
-                }
-
-                // END - we always store it has a diff vs. vb->last_pos (POS and END share the same delta stream -
-                // the next POS will be a delta vs this END)
-                if (ctx->dict_id.num == dict_id_INFO_END) {
-                    vb->last_pos = seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, ctx->did_i, SEC_VCF_INFO_SF_B250, this_value, this_value_len, "END");
-                    vb->txt_section_bytes[SEC_VCF_INFO_SF_B250]--; // exclude the separator included by default by seg_pos_field
-                }
-
-                else {
-                    NEXTENT (uint32_t, *mtf_i_buf) = 
-                        mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, &sf_node, NULL);
-
-                    vb->txt_section_bytes[SEC_VCF_INFO_SF_B250] += this_value_len; 
-                }
-
-                vb->txt_section_bytes[SEC_VCF_INFO_B250]++; // account for the separator (; or \t or \n) 
-
-                reading_name = true;  // end of value - move to the next time
-                this_name = &info_str[i+1]; // move to next field in info string
-                this_name_len = 0;
-                sf_i++;
-            }
-            else  
-                this_value_len++;
-        }
+    // Optimize VQSLOD
+    if (flag_optimize && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
+        optimize_vcf_info (ctx->dict_id, *this_value, *this_value_len, optimized_snip, &optimized_snip_len)) {
+        
+        vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
+        *this_value = optimized_snip;
+        *this_value_len = optimized_snip_len;
+        return true; // procedue with adding to dictionary/b250
     }
 
-    // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
-    // 1. find it's mtf_i (and add to dictionary if a new name)
-    // 2. place mtf_i in INFO section of this VB
-    MtfContext *info_ctx = &vb->mtf_ctx[VCF_INFO];
-    ARRAY (uint32_t, info_field_mtf_i, info_ctx->mtf_i);
-    MtfNode *node;
-    bool is_new;
-    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &node, &is_new);
-    info_field_mtf_i[vb->mtf_ctx[VCF_INFO].mtf_i.len++] = node_index;
+    // END - we always store it has a diff vs. vb->last_pos (POS and END share the same delta stream -
+    // the next POS will be a delta vs this END)
+    if (ctx->dict_id.num == dict_id_INFO_END) {
+        vb->last_pos = seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, ctx->did_i, SEC_VCF_INFO_SF_B250, *this_value, *this_value_len, "END");
+        vb->txt_section_bytes[SEC_VCF_INFO_SF_B250]--; // exclude the separator included by default by seg_pos_field
 
-    // if this is a totally new subfield (first time in this file) - make a new SubfieldMapper for it.
-    if (is_new) {   
-        ASSERT (node_index == vb->iname_mapper_buf.len, "Error: node_index=%u different than vb->iname_mapper_buf.len=%u", node_index, (uint32_t)vb->iname_mapper_buf.len);
-    
-        vb->iname_mapper_buf.len++;
-        buf_alloc (vb, &vb->iname_mapper_buf, MAX (100, vb->iname_mapper_buf.len) * sizeof (SubfieldMapper), 1.5, "iname_mapper_buf", 0);
+        return false; // do not add to dictionary/b250 - we already did it
     }
 
-    // it is possible that the iname_mapper is not set yet even though not new - if the node is from a previous VB and
-    // we have not yet encountered in node in this VB
-    *ENT (SubfieldMapper, vb->iname_mapper_buf, node_index) = iname_mapper;
-
-    dl->info_mtf_i = node_index;
-
-    vb->txt_section_bytes[SEC_VCF_INFO_B250] += iname_len; // this includes all the =
+    return true; // all other cases -  procedue with adding to dictionary/b250
 }
 
 static void seg_vcf_increase_ploidy_one_line (VBlockVCF *vb, char *line_ht_data, unsigned new_ploidy, unsigned num_samples)
@@ -559,7 +428,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // CHROM
     field_start = field_start_line;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "CHROM");
-    seg_vcf_chrom_field (vb, field_start, field_len);
+    seg_chrom_field (vb_, field_start, field_len);
 
     // POS
     field_start = next_field;
@@ -570,7 +439,8 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // ID
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "ID");
-    seg_id_field (vb_, &vb->id_numeric_data, VCF_ID, (char*)field_start, field_len, false);
+    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[VCF_ID], SEC_ID_B250, 
+                  field_start, field_len, false, true);
 
     // REF + ALT
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
@@ -593,7 +463,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     seg_one_field (vb, field_start, field_len, VCF_FILTER);
 
     // INFO
-    char *info_field_start = (char *)next_field; // we break the const bc seg_vcf_info_field might add a :#
+    char *info_field_start = (char *)next_field; // we break the const bc seg_info_field might add a :#
     unsigned info_field_len=0;
     next_field = seg_get_next_item (vb, info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, 
                  false, &info_field_len, &separator, &has_13, field_names[DT_VCF][VCF_INFO] /* pointer to string to allow pointer comparison */); 
@@ -668,7 +538,8 @@ const char *seg_vcf_data_line (VBlock *vb_,
     vb->max_gt_line_len = MAX (vb->max_gt_line_len, gt_line_len);
 
     // now do the info field - possibly with the added \r for Windows 
-    seg_vcf_info_field (vb, dl, info_field_start, info_field_len, has_13);
+    seg_info_field (vb_, &dl->info_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, seg_vcf_special_info_subfields,
+                    info_field_start, info_field_len, has_13);
 
     // we don't need txt_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate use txt_data_spillover
     if (dl->has_genotype_data) {
@@ -692,7 +563,6 @@ const char *seg_vcf_data_line (VBlock *vb_,
 
     return next_field;
 }
-
 
 // complete haplotype and genotypes of lines that don't have them, if we found out that some
 // other line has them, and hence all lines in the vb must have them

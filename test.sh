@@ -31,7 +31,7 @@ test_header() {
     printf "\n${sep}TESTING $1 \n${sep}"
 }
 
-files=(test-file.vcf test-file.sam test-file.fq test-file.fa genome_23andme_Full_test-file.txt)
+files=(test-file.vcf test-file.sam test-file.fq test-file.fa test-file.gvf genome_23andme_Full_test-file.txt)
 for file in ${files[@]}; do
     test_header "$file - basic test - Unix-style end-of-line"
     cat $file | tr -d "\r" > unix-nl.$file

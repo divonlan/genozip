@@ -166,6 +166,19 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->local_hash_prime = hash_next_size_up(500);
         break;
 
+    case DT_GFF3:
+        if (vb_ctx->dict_id.num == dict_id_fields[GFF3_SEQID] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_SOURCE] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_TYPE] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_END] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_SCORE] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_STRAND] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_PHASE] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_ATTRS])
+            
+            vb_ctx->local_hash_prime = hash_next_size_up(500);
+        break;
+
     case DT_ME23:
         if (vb_ctx->dict_id.num == dict_id_fields[ME23_CHROM])
             

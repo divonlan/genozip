@@ -541,9 +541,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     // RNAME
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "RNAME");
-    uint32_t rname_node_index = seg_one_field (vb, field_start, field_len, SAM_RNAME);
-
-    random_access_update_chrom (vb_, rname_node_index);
+    uint32_t rname_node_index = seg_chrom_field (vb_, field_start, field_len);
 
     // POS - 4 cases for deciding whether to store a delta of this line's POS vs the previous line
     // in the POS dictionary/b250, or instead to store the entire POS in RAND_POS.

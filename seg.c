@@ -12,6 +12,8 @@
 #include "endianness.h"
 #include "file.h"
 #include "strings.h"
+#include "optimize.h"
+#include "random_access.h"
 
 // store src_buf in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from txt_data,
 // but in the part of txt_data has been already consumed and no longer needed.
@@ -192,6 +194,17 @@ static int32_t seg_pos_snip_to_int (VBlock *vb, const char *pos_str, const char 
     return (int32_t)this_pos_64;
 }
 
+uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
+{
+    ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
+
+    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, chrom_did_i_by_dt[vb->data_type]);
+
+    random_access_update_chrom ((VBlockP)vb, chrom_node_index);
+
+    return chrom_node_index;
+}
+
 int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*in /out */, 
                        bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                        int did_i, SectionType sec_pos_b250,
@@ -269,7 +282,9 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field (VBlock *vb, Buffer *id_buf, int id_field, char *id_snip, unsigned id_snip_len, bool extra_bit)
+void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType sec_b250,
+                   const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator)
+//void seg_id_field (VBlock *vb, Buffer *id_buf, int id_field, char *id_snip, unsigned id_snip_len, bool extra_bit)
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
@@ -292,11 +307,175 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, int id_field, char *id_snip, unsi
     // append the textual part with \1 and \2 as needed - we have enough space - we have a tab following the field
     // and if we need to add \1 we also know that we have at least one digit
     unsigned new_len = id_snip_len - num_digits;
-    if (num_digits) id_snip[new_len++] = 1;
-    if (extra_bit)  id_snip[new_len++] = 2;
+    char save_1=0, save_2=0;
+    if (num_digits) {
+        save_1 = id_snip[new_len]; 
+        ((char*)id_snip)[new_len++] = 1;
+    }
+    if (extra_bit) {
+        save_2 = id_snip[new_len]; 
+        ((char*)id_snip)[new_len++] = 2;
+    }
 
-    seg_one_field (vb, id_snip, new_len, id_field); // acounts for the length and \t
-    vb->txt_section_bytes[FIELD_TO_B250_SECTION (vb->data_type, id_field)] -= (!!num_digits) + extra_bit; // we don't account for the \1 and \2 that were not in the txt file
+    seg_one_subfield (vb, id_snip, new_len, dict_id, sec_b250, id_snip_len - num_digits + !!account_for_separator); // account for the length without the digits, and sometimes with \t
+
+    // restore
+    if (extra_bit)  ((char*)id_snip)[--new_len] = save_2;
+    if (num_digits) ((char*)id_snip)[--new_len] = save_1;
+
+//    seg_one_field (vb, id_snip, new_len, id_field); // accounts for the length and \t
+//    vb->txt_section_bytes[FIELD_TO_B250_SECTION (vb->data_type, id_field)] -= (!!num_digits) + extra_bit; // we don't account for the \1 and \2 that were not in the txt file
+}
+
+// segments fields that look like INFO in VCF or ATTRIBUTES in GFF3
+void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_buf, uint8_t *num_info_subfields,
+                     SegSpecialInfoSubfields seg_special_subfields,
+                     char *info_str, unsigned info_len, 
+                     bool has_13) // this GFF3 file line ends with a Windows-style \r\n
+{
+    // data type de-multiplexors
+    static uint8_t info_fields[NUM_DATATYPES] = INFO_DID_I_BY_DT;
+    #define info_field info_fields[vb->data_type]
+    #define field_name field_names[vb->data_type][info_field]
+
+    static int sec_info_dicts[NUM_DATATYPES] = INFO_FIELD_DICT_SECTION;
+    #define sec_info_dict sec_info_dicts[vb->data_type]
+    #define sec_info_b250 (sec_info_dict + 1) 
+
+    static int sec_info_dict_sfs[NUM_DATATYPES] = INFO_SF_DICT_SECTION;
+    #define sec_info_sf_dict sec_info_dict_sfs[vb->data_type]
+    #define sec_info_sf_b250 (sec_info_sf_dict + 1) 
+
+    #define MAX_INFO_NAMES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
+    char iname[MAX_INFO_NAMES_LEN];
+    unsigned iname_len = 0;
+    const char *this_name = info_str;
+    unsigned this_name_len = 0;
+    const char *this_value = NULL;
+    unsigned this_value_len=0;
+    unsigned sf_i=0;
+
+    // if the txt file line ends with \r\n when we add an artificial additional info subfield "#"
+    // we know we have space for adding ":#" because the line as at least a "\r\n" appearing somewhere after the INFO field
+    if (has_13) {
+        if (info_len && info_str[info_len-1] != '=') // last subfield is has no value (and hence no '=') - add a ';'
+            info_str[info_len++] = ';';
+        info_str[info_len++] = '#';
+    }
+    
+    // count infos
+    SubfieldMapper iname_mapper;
+    memset (&iname_mapper, 0, sizeof (iname_mapper));
+
+    for (unsigned i=0; i < info_len; i++) 
+        if (info_str[i] == '=') iname_mapper.num_subfields++;
+    
+    // get name / value pairs - and insert values to the "name" dictionary
+    bool reading_name = true;
+    for (unsigned i=0; i < info_len + 1; i++) {
+        char c = (i==info_len) ? ';' : info_str[i]; // add an artificial ; at the end of the INFO data
+
+        if (reading_name) {
+            iname[iname_len++] = c; // info names inc. the =. the = terminats each name
+            ASSSEG (iname_len <= MAX_INFO_NAMES_LEN, info_str, "Error: %s field too long", field_name);
+
+            if (c == '=') {  // end of name
+
+                ASSSEG (this_name_len > 0, info_str, "Error: %s field contains a = without a preceding subfield name", field_name);
+
+                ASSSEG (this_name[0] >= 64 && this_name[0] <= 127, info_str,
+                        "Error: %s field contains a name %.*s starting with an illegal character", field_name, this_name_len, this_name);
+
+                reading_name = false; 
+                this_value = &info_str[i+1]; 
+                this_value_len = 0;
+            }
+
+            // name without value - valid in GFF3 format
+            else if (c == ';') {
+                if (i==info_len) { // our artificial ; terminator
+                    iname_len--; // remove ;
+                    vb->txt_section_bytes[sec_info_b250]++; // account for the separator (; or \t or \n)
+                }
+                else {
+                    this_name = &info_str[i+1]; // skip the value-less name
+                    this_name_len = 0;
+                }
+                continue;
+            }
+            
+            else this_name_len++; // don't count the = or ; in the len
+        }
+        else {
+            if (c == ';') { // end of value
+
+                ASSSEG (this_value_len > 0, info_str,
+                        "Error: %s field subfield %.*s, does not contain a value", field_name, this_name_len, this_name);
+
+                // find (or create) an MTF context (= a dictionary) for this name
+                DictIdType dict_id = dict_id_vcf_info_sf (dict_id_make (this_name, this_name_len));
+
+                // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
+                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, 
+                                                          num_info_subfields, dict_id, sec_info_sf_dict);
+                iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
+
+                // allocate memory if needed
+                Buffer *mtf_i_buf = &ctx->mtf_i;
+                buf_alloc (vb, mtf_i_buf, MIN (vb->lines.len, mtf_i_buf->len + 1) * sizeof (uint32_t),
+                           CTX_GROWTH, "mtf_ctx->mtf_i", ctx->dict_section_type);
+
+                MtfNode *sf_node;
+
+                // Call back to handle special subfields
+                char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
+                bool needs_evaluate = seg_special_subfields (vb, ctx, &this_value, &this_value_len, optimized_snip);
+                    
+                if (needs_evaluate) {
+                    NEXTENT (uint32_t, *mtf_i_buf) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, &sf_node, NULL);
+                    vb->txt_section_bytes[sec_info_sf_b250] += this_value_len; 
+                }
+
+                vb->txt_section_bytes[sec_info_b250]++; // account for the separator (; or \t or \n) 
+
+                reading_name = true;  // end of value - move to the next time
+                this_name = &info_str[i+1]; // move to next field in info string
+                this_name_len = 0;
+                sf_i++;
+            }
+            else  
+                this_value_len++;
+        }
+    }
+
+    // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
+    // 1. find it's mtf_i (and add to dictionary if a new name)
+    // 2. place mtf_i in INFO section of this VB
+    MtfContext *info_ctx = &vb->mtf_ctx[info_field];
+    ARRAY (uint32_t, info_field_mtf_i, info_ctx->mtf_i);
+    MtfNode *node;
+    bool is_new;
+    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &node, &is_new);
+    info_field_mtf_i[vb->mtf_ctx[info_field].mtf_i.len++] = node_index;
+
+    // if this is a totally new iname (first time in this file) - make a new SubfieldMapper for it.
+    if (is_new) {   
+        ASSERT (node_index == iname_mapper_buf->len, "Error: node_index=%u different than iname_mapper_buf->len=%u", 
+                node_index, (uint32_t)iname_mapper_buf->len);
+    
+        iname_mapper_buf->len++;
+    }
+
+    // iname_mapper_buf may need to grow if we encountered a new iname, or allocated if never alloced in this VB
+    buf_alloc (vb, iname_mapper_buf, MAX (100, iname_mapper_buf->len) * sizeof (SubfieldMapper), 1.5, "iname_mapper_buf", 0);
+
+    // it is possible that the iname_mapper is not set yet even though not new - if the node is from a previous VB and
+    // we have not yet encountered in node in this VB
+    *ENT (SubfieldMapper, *iname_mapper_buf, node_index) = iname_mapper;
+
+    *dl_info_mtf_i = node_index;
+
+    vb->txt_section_bytes[sec_info_b250] += iname_len; // this includes all the =
 }
 
 // We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 

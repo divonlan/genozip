@@ -54,8 +54,11 @@ static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } 
 
 // FASTQ/FASTA field types 
 #define dict_id_is_fast_desc_sf dict_id_is_type_2
-
 #define dict_id_fast_desc_sf dict_id_type_2
+
+// GFF3 field types
+#define dict_id_is_gff3_attr_sf dict_id_is_type_1
+#define dict_id_gff3_attr_sf dict_id_type_1
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 
@@ -64,9 +67,10 @@ extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of 
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
 
 extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
+                
                 dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, dict_id_FORMAT_DP, dict_id_FORMAT_MIN_DP, // some VCF FORMAT subfields
                 dict_id_INFO_AC, dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
-                dict_id_INFO_END, dict_id_INFO_13,
+                dict_id_INFO_END, dict_id_WindowsEOL,
 
                 // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
                 dict_id_OPTION_AM, dict_id_OPTION_AS, dict_id_OPTION_CM, dict_id_OPTION_E2, dict_id_OPTION_LB, dict_id_OPTION_FI, 
@@ -85,7 +89,18 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 // GATK tags
                 dict_id_OPTION_BD, dict_id_OPTION_BI,
                 
-                dict_id_OPTION_STRAND;
+                // our own
+                dict_id_OPTION_STRAND,
+
+                // GVF attributes - standard
+                dict_id_ATTR_ID, dict_id_ATTR_Variant_seq, dict_id_ATTR_Reference_seq,
+
+                // GVF attributes - from GRCh37/38 etc
+                dict_id_ATTR_Dbxref, // example: "dbSNP_151:rs1282280967"
+                dict_id_ATTR_ancestral_allele,
+
+                dict_id_ATTR_SEQ; // private genozip dict
+
 
 extern void dict_id_initialize (void);
 

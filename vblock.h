@@ -192,7 +192,7 @@ typedef struct VBlockVCF {
     Buffer genotype_one_section_data; // ZIP only:  for zip we need only one section data
     
     Buffer id_numeric_data;           // ZIP & PIZ
-    uint32_t next_numeric_id;         // PIZ
+    uint32_t next_id_numeric;         // PIZ
 
     Buffer gt_sb_line_starts_buf,     // used by zip_vcf_get_genotype_vb_start_len 
            gt_sb_line_lengths_buf,
@@ -211,8 +211,7 @@ typedef struct VBlockVCF {
     // dictionaries stuff 
     uint8_t num_info_subfields;       // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                       // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
-    Buffer iname_mapper_buf;          // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
-    uint8_t end_did_i;                // PIZ: did_i of dict_id_INFO_END if it exists
+    Buffer iname_mapper_buf;          // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
     uint8_t num_format_subfields;     // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
     Buffer format_mapper_buf;         // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_FORMAT].mtf   
 
@@ -315,6 +314,33 @@ typedef struct VBlockFAST { // for FASTA and FASTQ
 } VBlockFAST;
 
 //-----------------------------------------
+// GFF3 STUFF
+//-----------------------------------------
+
+// IMPORTANT: if changing fields in DataLine, also update vb_release_vb
+typedef struct {
+    uint32_t attrs_mtf_i;     // the mtf_i into mtx_ctx[VCF_INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
+} ZipDataLineGFF3;
+
+// IMPORTANT: if changing fields in VBlockFASTQQ, also update vb_fastq_release_vb and vb_fastq_destroy_vb
+typedef struct VBlockGFF3 {
+
+    VBLOCK_COMMON_FIELDS
+
+    uint32_t last_id;             // used for detla'ing the ID subfield
+
+    Buffer dbxref_numeric_data;   // ZIP & PIZ
+
+    uint8_t num_info_subfields;   // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
+                                  // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
+    Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
+
+    // PIZ-only stuff
+    uint32_t next_dbxref_numeric_data;  // PIZ only: used to reconstruct Dbxref
+
+} VBlockGFF3;
+
+//-----------------------------------------
 // ME23 STUFF
 //-----------------------------------------
 
@@ -323,11 +349,11 @@ typedef struct VBlockME23 { // for 23andMe
 
     VBLOCK_COMMON_FIELDS
 
-    Buffer id_numeric_data;             // ZIP & PIZ
+    Buffer id_numeric_data;       // ZIP & PIZ
     Buffer genotype_data;         // ZIP & PIZ
     
     // PIZ-only stuff
-    uint32_t next_numeric_id;           // PIZ only: used to reconstruct rsid
+    uint32_t next_id_numeric;     // PIZ only: used to reconstruct rsid
     uint32_t next_genotype;       // PIZ only: used to genotype_data rsid
 } VBlockME23;
 

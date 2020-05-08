@@ -63,6 +63,13 @@ void stats_show_sections (void)
         SEC_SAM_TLEN_B250,      SEC_SAM_TLEN_DICT,      SEC_SAM_PNEXT_B250,     SEC_SAM_PNEXT_DICT,      
         SEC_SAM_OPTIONAL_B250,  SEC_SAM_OPTIONAL_DICT,  SEC_SAM_OPTNL_SF_B250,  SEC_SAM_OPTNL_SF_DICT,
 
+        SEC_GFF3_SEQID_B250,    SEC_GFF3_SEQID_DICT,    SEC_GFF3_SOURCE_B250,   SEC_GFF3_SOURCE_DICT,
+        SEC_GFF3_TYPE_B250,     SEC_GFF3_TYPE_DICT,     SEC_GFF3_START_B250,    SEC_GFF3_START_DICT,
+        SEC_GFF3_END_B250,      SEC_GFF3_END_DICT,      SEC_GFF3_SCORE_B250,    SEC_GFF3_SCORE_DICT,
+        SEC_GFF3_STRAND_B250,   SEC_GFF3_STRAND_DICT,   SEC_GFF3_PHASE_B250,    SEC_GFF3_PHASE_DICT,
+        SEC_GFF3_ATTRS_B250,    SEC_GFF3_ATTRS_DICT,    SEC_GFF3_ATTRS_SF_B250, SEC_GFF3_ATTRS_SF_DICT, 
+        SEC_GVF_SEQ_B250,       SEC_GVF_SEQ_DICT,
+        
         SEC_FAST_LINEMETA_B250, SEC_FAST_LINEMETA_DICT,
         SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,     SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT
     };
@@ -85,13 +92,18 @@ void stats_show_sections (void)
         "TLEN b250", "TLEN dict", "PNEXT b250 (delta)", "PNEXT dict (delta)",
         "OPTIONAL names b250", "OPTIONAL names dict", "OPTIONAL values b250", "OPTIONAL values dict",
 
+        "SEQID b250", "SEQID dict", "SOURCE b250", "SOURCE dict", "TYPE b250", "TYPE dict", 
+        "START b250", "START dict", "END b250", "END dict", "SCORE b250", "SCORE dict", "STRAND b250", "STRAND dict", 
+        "PHASE b250", "PHASE dict", "SEQ b250", "SEQ dict",
+        "ATTRS names b250", "ATTRS names dict", "ATTRS values b250", "ATTRS values dict",  
+
         "Line metadata b250", "Line metadata dict",
         "DESC b250", "DESC dict", "DESC subfields b250", "DESC subfields dict"
     };
 
     unsigned num_secs       = sizeof(secs)/sizeof(secs[0]);
     unsigned num_categories = sizeof(categories)/sizeof(categories[0]);
-    ASSERT (num_categories == num_secs, "Error: num_categories=%u but num_secs=%u, expecting them to be equal", num_categories, num_secs);
+    ASSERT (num_categories == num_secs, "Error in stats_show_sections: num_categories=%u but num_secs=%u, expecting them to be equal", num_categories, num_secs);
 
     stats_show_file_metadata();
 
@@ -122,14 +134,16 @@ void stats_show_sections (void)
         int64_t ratio_zbytes;
         if (secs[sec_i] == SEC_VCF_INFO_B250  || 
             secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250 ||
-            secs[sec_i] == SEC_FAST_DESC_B250) 
+            secs[sec_i] == SEC_FAST_DESC_B250 ||
+            secs[sec_i] == SEC_GFF3_ATTRS_B250) 
             ratio_zbytes = zbytes + z_file->section_bytes[secs[sec_i+1]] + z_file->section_bytes[secs[sec_i+2]] 
                                   + z_file->section_bytes[secs[sec_i+3]];
         
         else if (is_dict || 
                  secs[sec_i] == SEC_VCF_INFO_SF_B250  || 
                  secs[sec_i] == SEC_SAM_QNAME_SF_B250 || secs[sec_i] == SEC_SAM_OPTNL_SF_B250 ||
-                 secs[sec_i] == SEC_FAST_DESC_SF_B250)
+                 secs[sec_i] == SEC_FAST_DESC_SF_B250 ||
+                 secs[sec_i] == SEC_GFF3_ATTRS_SF_B250)
             ratio_zbytes = 0;
         
         else if (is_b250) 
@@ -141,7 +155,8 @@ void stats_show_sections (void)
         int64_t ratio_txtbytes;
         if (secs[sec_i] == SEC_VCF_INFO_B250  || 
             secs[sec_i] == SEC_SAM_QNAME_B250 || secs[sec_i] == SEC_SAM_OPTIONAL_B250 ||
-            secs[sec_i] == SEC_FAST_DESC_B250) 
+            secs[sec_i] == SEC_FAST_DESC_B250 ||
+            secs[sec_i] == SEC_GFF3_ATTRS_B250) 
             ratio_txtbytes = txtbytes + txt_file->section_bytes[secs[sec_i+1]] + txt_file->section_bytes[secs[sec_i+2]] 
                                       + txt_file->section_bytes[secs[sec_i+3]];
         else
@@ -154,9 +169,10 @@ void stats_show_sections (void)
                  str_size(zbytes, zsize), 
                  100.0 * (double)zbytes / (double)z_file->disk_size,
                  ratio_zbytes ? (double)ratio_txtbytes / (double)ratio_zbytes : 0,
-                 !ratio_zbytes ? (ratio_txtbytes && secs[sec_i] != SEC_FAST_DESC_SF_B250 && 
-                                                    secs[sec_i] != SEC_VCF_INFO_SF_B250  && 
-                                                    secs[sec_i] != SEC_SAM_QNAME_SF_B250 && 
+                 !ratio_zbytes ? (ratio_txtbytes && secs[sec_i] != SEC_FAST_DESC_SF_B250  && 
+                                                    secs[sec_i] != SEC_VCF_INFO_SF_B250   && 
+                                                    secs[sec_i] != SEC_GFF3_ATTRS_SF_B250 && 
+                                                    secs[sec_i] != SEC_SAM_QNAME_SF_B250  && 
                                                     secs[sec_i] != SEC_SAM_OPTNL_SF_B250 ? "\b\b\bInf" : "\b\b\b---") : "");
 
         total_sections += zsections;
@@ -178,7 +194,9 @@ void stats_show_sections (void)
         uint32_t dict_compressed_size, b250_compressed_size;
 
         const MtfContext *ctx = &z_file->mtf_ctx[i];
-    
+
+        if (!ctx->mtf_i.len) continue;
+        
         sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
 
         fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s %9s %9s %9s %5.1f\n", i, -DICT_ID_LEN, DICT_ID_LEN, err_dict_id (ctx->dict_id), 
@@ -244,6 +262,13 @@ void stats_show_content (void)
           
           SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,     SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT,  
           SEC_FAST_LINEMETA_B250, SEC_FAST_LINEMETA_DICT, SEC_FASTA_COMMENT_DATA,
+
+          SEC_GFF3_SEQID_B250,    SEC_GFF3_SEQID_DICT,    SEC_GFF3_SOURCE_B250,   SEC_GFF3_SOURCE_DICT,
+          SEC_GFF3_TYPE_B250,     SEC_GFF3_TYPE_DICT,     SEC_GFF3_START_B250,    SEC_GFF3_START_DICT,
+          SEC_GFF3_END_B250,      SEC_GFF3_END_DICT,      SEC_GFF3_SCORE_B250,    SEC_GFF3_SCORE_DICT,
+          SEC_GFF3_STRAND_B250,   SEC_GFF3_STRAND_DICT,   SEC_GFF3_PHASE_B250,    SEC_GFF3_PHASE_DICT,
+          SEC_GFF3_ATTRS_B250,    SEC_GFF3_ATTRS_DICT,    SEC_GFF3_ATTRS_SF_B250, SEC_GFF3_ATTRS_SF_DICT, 
+          SEC_GVF_SEQ_B250,       SEC_GVF_SEQ_DICT,
 
           NIL },
         { SEC_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }

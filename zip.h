@@ -18,9 +18,10 @@ extern void zip_generate_and_compress_subfields (VBlockP vb, ConstSubfieldMapper
 
 extern void zip_vcf_initialize (void);
 
-extern void zip_vcf_compress_one_vb (VBlockP vb_);
-extern void zip_sam_compress_one_vb (VBlockP vb_);
+extern void zip_vcf_compress_one_vb  (VBlockP vb_);
+extern void zip_sam_compress_one_vb  (VBlockP vb_);
 extern void zip_fast_compress_one_vb (VBlockP vb_);
+extern void zip_gff3_compress_one_vb (VBlockP vb_);
 extern void zip_me23_compress_one_vb (VBlockP vb_);
 
 #endif

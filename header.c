@@ -26,8 +26,8 @@ static bool is_first_txt = true;
 // (names are not longer than 8=DICT_ID_LEN as the code assumes it)
 const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE] = FIELD_NAMES;
 
-const unsigned datatype_last_field[NUM_DATATYPES]      = DATATYPE_LAST_FIELD;
-const unsigned chrom_did_i_by_dt[NUM_DATATYPES]        = CHROM_DID_I_BY_DT; 
+const unsigned datatype_last_field[NUM_DATATYPES] = DATATYPE_LAST_FIELD;
+const uint8_t chrom_did_i_by_dt[NUM_DATATYPES]    = CHROM_DID_I_BY_DT; 
 
 // -----------
 // VCF stuff

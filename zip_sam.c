@@ -113,7 +113,7 @@ static void zip_sam_get_start_len_line_i_bi (VBlock *vb, uint32_t vb_line_i,
     *unused2 = 0;
 }   
 
-// this function receives all lines of a variant block and processes them
+// this function receives all lines of a vblock and processes them
 // in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
 void zip_sam_compress_one_vb (VBlockP vb_)
 { 

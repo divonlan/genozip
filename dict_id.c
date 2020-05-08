@@ -15,7 +15,7 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
-         dict_id_INFO_END=0, dict_id_INFO_13=0;
+         dict_id_INFO_END=0;
 
 // SAM stuff
 uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
@@ -27,7 +27,16 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
          dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
          dict_id_OPTION_BD=0, dict_id_OPTION_BI=0,
-         dict_id_OPTION_STRAND=0;
+         dict_id_OPTION_STRAND=0; // private genozip dict
+
+// GVF stuff
+uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_seq=0,
+         dict_id_ATTR_Dbxref=0, // from from GRCh37/38 - example: "dbSNP_151:rs1282280967"
+         dict_id_ATTR_ancestral_allele=0, // from from GRCh37/38 - example ancestral_allele=GTTA
+         dict_id_ATTR_SEQ=0; // private genozip dict
+
+// our stuff used in multiple data types
+uint64_t dict_id_WindowsEOL=0;         
 
 DictIdType DICT_ID_NONE = {0};
 
@@ -39,6 +48,8 @@ void dict_id_initialize (void)
         const char *field_name = field_names[z_file->data_type][f];
         dict_id_fields[f] = dict_id_field (dict_id_make (field_name, strlen (field_name))).num; 
     }
+
+    dict_id_WindowsEOL = dict_id_type_1 (dict_id_make ("#", 1)).num; 
 
     switch (z_file->data_type) { 
     case DT_VCF:
@@ -58,7 +69,6 @@ void dict_id_initialize (void)
         dict_id_FORMAT_MIN_DP = dict_id_vcf_format_sf (dict_id_make ("MIN_DP", 6)).num;
 
         // This appears if the VCF line has a Windows-style \r\n line ending
-        dict_id_INFO_13       = dict_id_vcf_info_sf   (dict_id_make ("#", 1)).num; 
         break;
 
     case DT_SAM:
@@ -111,6 +121,20 @@ void dict_id_initialize (void)
         // our private dictionary for + or 0 strands
         dict_id_OPTION_STRAND = dict_id_sam_optnl_sf (dict_id_make ("STRAND", 6)).num;
 
+        break;
+
+    case DT_GFF3:
+        // standard GVF fields (ID is also a standard GFF3 field)
+        dict_id_ATTR_ID               = dict_id_gff3_attr_sf (dict_id_make ("ID", 2)).num;
+        dict_id_ATTR_Variant_seq      = dict_id_gff3_attr_sf (dict_id_make ("Variant_", 8)).num;
+        dict_id_ATTR_Reference_seq    = dict_id_gff3_attr_sf (dict_id_make ("Referenc", 8)).num;
+
+        // fields added in the GVFs of GRCh37/38
+        dict_id_ATTR_Dbxref           = dict_id_gff3_attr_sf (dict_id_make ("Dbxref", 6)).num;
+        dict_id_ATTR_ancestral_allele = dict_id_gff3_attr_sf (dict_id_make ("ancestra", 8)).num;
+
+        // our own dictionary where we store Variant_seq, Reference_seq and ancestral_allele together
+        dict_id_ATTR_SEQ              = dict_id_gff3_attr_sf (dict_id_make ("SEQ", 3)).num;
         break;
 
     default:

@@ -36,11 +36,21 @@ extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did
 
 #define seg_one_field(vb,str,len,f) seg_one_snip ((VBlockP)(vb), (str), (len), (f), FIELD_TO_B250_SECTION((vb)->data_type, f), NULL)
 
+extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
+
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_delta, bool allow_non_number, 
                               int pos_field, SectionType sec_pos_b250,
                               const char *pos_str, unsigned pos_len, const char *field_name);
 
-extern void seg_id_field (VBlockP vb, BufferP id_buf, int id_field, char *id_snip, unsigned id_snip_len, bool extra_bit);
+extern void seg_id_field (VBlockP vb, BufferP id_buf, DictIdType dict_id, SectionType sec_b250, 
+                          const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator);
+
+typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip);
+
+extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_mapper_buf, uint8_t *num_info_subfields,
+                            SegSpecialInfoSubfields seg_special_subfields,
+                            char *info_str, unsigned info_len, 
+                            bool has_13); // this GFF3 file line ends with a Windows-style \r\n
 
 extern void seg_add_to_data_buf (VBlockP vb, BufferP buf, SectionType sec, 
                                  const char *snip, unsigned snip_len, char add_separator, unsigned add_bytes);
@@ -73,6 +83,12 @@ extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md
 extern SegDataLineFuncType seg_fastq_data_line;
 extern SegDataLineFuncType seg_fasta_data_line;
 extern SegInitializer seg_fasta_initialize;
+
+// ------------------
+// GFF3 Stuff
+// ------------------
+extern SegDataLineFuncType seg_gff3_data_line;
+extern SegInitializer seg_gff3_initialize;
 
 // ------------------
 // ME23 Stuff

@@ -916,17 +916,39 @@ void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCF *vb, const Buffer *hap
     buf_free (&vb->gtshark_db_gt_data);
 }
 
+#define PREPARE_TO_READ(vbblock_type,max_sections,sec_type_vb_header)  \
+    START_TIMER; \
+    vbblock_type *vb = (vbblock_type *)vb_; \
+    SectionListEntry *sl = sections_vb_first (vb->vblock_i); \
+    int vb_header_offset = zfile_read_section (vb_, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", \
+                                               sizeof(sec_type_vb_header), SEC_VB_HEADER, sl++); \
+    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);\
+    mtf_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ \
+    buf_alloc (vb, &vb->z_section_headers, (max_sections) * sizeof(char*), 0, "z_section_headers", 1); /* room for section headers */ \
+    *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; /* vb header is at index 0 */ \
+    unsigned section_i=1;
+
 #define READ_SB_SECTION(sec,header_type,sb_i) \
     { *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len; \
       zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
 
 #define READ_SECTION(sec,header_type) READ_SB_SECTION(sec, header_type, NO_SB_I)
 
+#define READ_FIELDS { for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) \
+                          READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250); }
+
+#define READ_SUBFIELDS(num,sec_b250) { \
+    num = sections_count_sec_type (vb->vblock_i, (sec_b250)); \
+    for (uint8_t sf_i=0; sf_i < (num); sf_i++) \
+        READ_SECTION (sec_b250, SectionHeaderBase250);  \
+}
+
+#define READ_DONE \
+    COPY_TIMER (vb->profile.zfile_read_one_vb); \
+    vb->ready_to_dispatch = true; /* all good */ 
+
 void zfile_vcf_read_one_vb (VBlock *vb_)
 { 
-    START_TIMER;
-
-    VBlockVCF *vb = (VBlockVCF *)vb_;
     // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
     // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
     // integrated into the global dictionaries.
@@ -939,51 +961,17 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
     //    4b. SEC_VCF_PHASE_DATA - phase data
     //    4c. SEC_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
 
-    SectionListEntry *sl = sections_vb_first (vb->vblock_i);
-
-    int vb_header_offset = zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data",
-                                               sizeof(SectionHeaderVbHeaderVCF), SEC_VB_HEADER, sl++);
+    PREPARE_TO_READ (VBlockVCF, 100000, SectionHeaderVbHeaderVCF); // an arbitrary large number of sections - we need room for all the HT/GT sections 
 
     // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
     #define vb_header ((SectionHeaderVbHeaderVCF *)&vb->z_data.data[vb_header_offset])
-
-    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
-
-    // overlay all dictionaries (not just those that have fragments in this variant block) to the vb
-    mtf_overlay_dictionaries_to_vb ((VBlockP)vb);
     
     // iname mapper: first VB, we map all inname subfields to this global mapper, and each VB overlays it on its own map
-    if (!flag_strip) {
-    
-        static Buffer global_iname_mapper_buf = EMPTY_BUFFER;
-    
-        if (vb->vblock_i == 1) {
-            buf_free (&global_iname_mapper_buf); // in case it was used to piz a previous file
-            (is_v4_or_above ? piz_vcf_map_iname_subfields : v2v3_piz_vcf_map_iname_subfields)(&global_iname_mapper_buf);
-            buf_set_overlayable (&global_iname_mapper_buf);
-        }
-        
-        buf_overlay (vb_, &vb->iname_mapper_buf, &global_iname_mapper_buf, "iname_mapper_buf", vb->vblock_i);    
+    if (!flag_strip && vb->vblock_i == 1) 
+        piz_map_iname_subfields();
 
-        vb->end_did_i = mtf_get_existing_did_i_by_dict_id ((DictIdType)dict_id_INFO_END); 
-    }
-
-    // read the the data sections (fields, info sub fields, genotype, phase, haplotype)
-
-    buf_alloc (vb, &vb->z_section_headers, 1000 /* arbitrary initial value */ * sizeof(char*), 0, "z_section_headers", 1);
-    
-    ((unsigned *)vb->z_section_headers.data)[0] = vb_header_offset; // variant data header is at index 0
-
-    unsigned section_i=1;
-
-    // read the 8 fields (CHROM to FORMAT)    
-    for (VcfFields f=VCF_CHROM; f <= VCF_FORMAT; f++)
-        READ_SECTION (FIELD_TO_B250_SECTION(DT_VCF, f), SectionHeaderBase250);
-
-    // read the info subfield sections into memory (if any)
-    vb->num_info_subfields = sections_count_sec_type (vb->vblock_i, SEC_VCF_INFO_SF_B250); // also used later in piz_uncompress_all_sections()
-    for (uint8_t sf_i=0; sf_i < vb->num_info_subfields; sf_i++) 
-        READ_SECTION (SEC_VCF_INFO_SF_B250, SectionHeaderBase250);
+    READ_FIELDS; // CHROM to FORMAT
+    READ_SUBFIELDS (vb->num_info_subfields, SEC_VCF_INFO_SF_B250); // INFO subfields
 
     // read the numberic data of the ID field (the non-numeric part is in SEC_ID_B250)
     if (is_v5_or_above)
@@ -1022,9 +1010,7 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
         }
     }
     
-    vb->ready_to_dispatch = true; // all good
-
-    COPY_TIMER (vb->profile.zfile_read_one_vb);
+    READ_DONE;
 
     #undef vb_header
 }
@@ -1038,10 +1024,6 @@ void zfile_vcf_read_one_vb (VBlock *vb_)
 
 void zfile_sam_read_one_vb (VBlock *vb_)
 { 
-    START_TIMER;
-
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-
     // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
     // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
     // integrated into the global dictionaries.
@@ -1057,40 +1039,10 @@ void zfile_sam_read_one_vb (VBlock *vb_)
     // 7. SEC_SEQ_DATA          - Sequences data from SEQ, E2
     // 8. SEC_QUAL_DATA         - Quality data from QUAL, U2    
 
-    SectionListEntry *sl = sections_vb_first (vb->vblock_i);
-    
-    int vb_header_offset = zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data",
-                                               sizeof(SectionHeaderVbHeader), SEC_VB_HEADER, sl++);
-
-    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
-
-    // overlay all dictionaries (not just those that have fragments in this vblock) to the vb
-    mtf_overlay_dictionaries_to_vb ((VBlockP)vb);
-
-    // read the the data sections (fields, QNAME and OPTIONAL subfields, SEQ and QUAL data)
-
-    // room for section headers (we have at most MAX_DICTS + 5 as all sections are b250 except for VB header, SEQ,QUAL,MD,RAND_POS)
-    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS + 5)  * sizeof(char*), 0, "z_section_headers", 1);
-    
-    *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; // vb header is at index 0
-
-    unsigned section_i=1;
-
-    // read the fields
-    for (SamFields f=SAM_QNAME; f <= SAM_OPTIONAL; f++) 
-        READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250);
-
-    // read the QNAME subfields sections into memory (if any)
-    vb->qname_mapper.num_subfields = sections_count_sec_type (vb->vblock_i, SEC_SAM_QNAME_SF_B250); 
-    for (uint8_t sf_i=0; sf_i < vb->qname_mapper.num_subfields; sf_i++) 
-        READ_SECTION (SEC_SAM_QNAME_SF_B250, SectionHeaderBase250);
-
-    // read the OPTIONAL subfields sections into memory (if any)
-    vb->num_optional_subfield_b250s = sections_count_sec_type (vb->vblock_i, SEC_SAM_OPTNL_SF_B250);
-    for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s; sf_i++) 
-        READ_SECTION (SEC_SAM_OPTNL_SF_B250, SectionHeaderBase250);
-
-    // read the RAND_POS, MD, BD, BI SEQ and QUAL data
+    PREPARE_TO_READ (VBlockSAM, MAX_DICTS + 5, SectionHeaderVbHeader);
+    READ_FIELDS; // primary fields
+    READ_SUBFIELDS (vb->qname_mapper.num_subfields, SEC_SAM_QNAME_SF_B250); // QNAME subfields
+    READ_SUBFIELDS (vb->num_optional_subfield_b250s, SEC_SAM_OPTNL_SF_B250); // OPTIONAL subfields
     READ_SECTION (SEC_SAM_RAND_POS_DATA, SectionHeader);
 
     if (sl->section_type == SEC_SAM_MD_DATA) READ_SECTION (SEC_SAM_MD_DATA, SectionHeader);
@@ -1100,9 +1052,7 @@ void zfile_sam_read_one_vb (VBlock *vb_)
     READ_SECTION (SEC_SEQ_DATA,  SectionHeader);
     READ_SECTION (SEC_QUAL_DATA, SectionHeader);
 
-    vb->ready_to_dispatch = true; // all good
-
-    COPY_TIMER (vb->profile.zfile_read_one_vb);
+    READ_DONE;
 }
 
 //------------------------------------------------------------------------------
@@ -1111,10 +1061,6 @@ void zfile_sam_read_one_vb (VBlock *vb_)
 
 void zfile_fast_read_one_vb (VBlock *vb_)
 { 
-    START_TIMER;
-
-    VBlockFAST *vb = (VBlockFAST *)vb_;
-
     // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
     // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
     // integrated into the global dictionaries.
@@ -1125,33 +1071,9 @@ void zfile_fast_read_one_vb (VBlock *vb_)
     // 7. SEC_SEQ_DATA      - Sequences data 
     // 8. SEC_QUAL_DATA     - Quality data (FASTQ only)    
 
-    SectionListEntry *sl = sections_vb_first (vb->vblock_i);
-    
-    int vb_header_offset = zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data",
-                                               sizeof(SectionHeaderVbHeader), SEC_VB_HEADER, sl++);
-
-    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
-
-    // overlay all dictionaries (not just those that have fragments in this vblock) to the vb
-    mtf_overlay_dictionaries_to_vb ((VBlockP)vb);
-
-    // read the the data sections (fields, QNAME and OPTIONAL subfields, SEQ and QUAL data)
-
-    // room for section headers (we have at most MAX_DICTS + 3 as all sections are b250 except for VB header, SEQ and QUAL/COMMENT)
-    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS + 3)  * sizeof(char*), 0, "z_section_headers", 1);
-    
-    *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; // vb header is at index 0
-
-    unsigned section_i=1;
-
-    // read the field sections
-    READ_SECTION (SEC_FAST_DESC_B250, SectionHeaderBase250);
-    READ_SECTION (SEC_FAST_LINEMETA_B250, SectionHeaderBase250);
-    
-    // read the DESC subfields sections into memory (if any)
-    vb->desc_mapper.num_subfields = sections_count_sec_type (vb->vblock_i, SEC_FAST_DESC_SF_B250); 
-    for (uint8_t sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++) 
-        READ_SECTION (SEC_FAST_DESC_SF_B250, SectionHeaderBase250);
+    PREPARE_TO_READ (VBlockFAST, MAX_DICTS + 3, SectionHeaderVbHeader);
+    READ_FIELDS;
+    READ_SUBFIELDS (vb->desc_mapper.num_subfields, SEC_FAST_DESC_SF_B250); // DESC subfields
 
     if (flag_grep && !piz_fast_test_grep (vb)) goto finish; // ususually, we uncompress and reconstruct the DESC from the I/O thread in case of --grep
 
@@ -1166,42 +1088,30 @@ finish:
 }
 
 //------------------------------------------------------------------------------
+// GFF3 stuff
+//------------------------------------------------------------------------------
+
+void zfile_gff3_read_one_vb (VBlock *vb_)
+{ 
+    PREPARE_TO_READ (VBlockGFF3, MAX_DICTS + 2, SectionHeaderVbHeader);
+
+    if (vb->vblock_i == 1) piz_map_iname_subfields();
+    
+    READ_FIELDS; // primary fields
+    READ_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250); // ATTRIBUTES subfields
+    READ_SECTION (SEC_NUMERIC_ID_DATA, SectionHeader);
+    READ_DONE;
+}
+
+//------------------------------------------------------------------------------
 // ME23 stuff
 //------------------------------------------------------------------------------
 
 void zfile_me23_read_one_vb (VBlock *vb_)
 { 
-    START_TIMER;
-
-    VBlockME23 *vb = (VBlockME23 *)vb_;
-
-    SectionListEntry *sl = sections_vb_first (vb->vblock_i);
-    
-    int vb_header_offset = zfile_read_section ((VBlockP)vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data",
-                                               sizeof(SectionHeaderVbHeader), SEC_VB_HEADER, sl++);
-
-    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
-
-    // overlay all dictionaries (not just those that have fragments in this vblock) to the vb
-    mtf_overlay_dictionaries_to_vb ((VBlockP)vb);
-
-    // read the the data sections (fields, QNAME and OPTIONAL subfields, SEQ and QUAL data)
-
-    // room for section headers - we have 5 sections (inc. the VB header)
-    buf_alloc (vb, &vb->z_section_headers, 5 * sizeof(char*), 0, "z_section_headers", 1);
-    
-    *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; // vb header is at index 0
-
-    unsigned section_i=1;
-
-    // read the sections
-    READ_SECTION (SEC_CHROM_B250, SectionHeaderBase250);
-    READ_SECTION (SEC_POS_B250, SectionHeaderBase250);
-    READ_SECTION (SEC_ID_B250, SectionHeaderBase250);
+    PREPARE_TO_READ (VBlockME23, 5, SectionHeaderVbHeader);
+    READ_FIELDS;
     READ_SECTION (SEC_NUMERIC_ID_DATA, SectionHeader);
     READ_SECTION (SEC_HT_DATA, SectionHeader);
-
-    COPY_TIMER (vb->profile.zfile_read_one_vb);
-
-    vb->ready_to_dispatch = true; // all good
+    READ_DONE;
 }

@@ -64,6 +64,8 @@ typedef struct VBlockSAM *VBlockSAMP;
 typedef const struct VBlockSAM *ConstVBlockSAMP;
 typedef struct VBlockFAST *VBlockFASTP;
 typedef const struct VBlockFAST *ConstVBlockFASTP;
+typedef struct VBlockGFF3 *VBlockGFF3P;
+typedef const struct VBlockGFF3 *ConstVBlockGFF3P;
 typedef struct VBlockME23 *VBlockME23P;
 typedef const struct VBlockME23 *ConstVBlockME23P;
 

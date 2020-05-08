@@ -10,6 +10,29 @@
 #include "move_to_front.h"
 #include "vblock.h"
 #include "file.h"
+static void donothing() {}
+
+// data type multiplexors
+typedef void (*VbFunc) (VBlock *vb);
+typedef void (*VbFuncP) (VBlock **vb);
+
+static size_t vb_size_by_dt[NUM_DATATYPES] = { sizeof (VBlockVCF), sizeof (VBlockSAM), 
+                                               sizeof (VBlockFAST), sizeof (VBlockFAST), 
+                                               sizeof (VBlockGFF3), sizeof (VBlockME23) };
+
+static void vb_vcf_release_vb(), vb_sam_release_vb(), vb_fast_release_vb(), vb_gff3_release_vb(), vb_me23_release_vb(); 
+static VbFunc vb_release_by_dt[NUM_DATATYPES] = { vb_vcf_release_vb, vb_sam_release_vb, 
+                                                  vb_fast_release_vb, vb_fast_release_vb, vb_gff3_release_vb, vb_me23_release_vb };
+
+static void vb_vcf_destroy_vb(), vb_sam_destroy_vb(), vb_fast_destroy_vb(), vb_gff3_destroy_vb(), vb_me23_destroy_vb();
+static VbFuncP vb_destroy_by_dt[NUM_DATATYPES] = { vb_vcf_destroy_vb, vb_sam_destroy_vb, 
+                                                   vb_fast_destroy_vb, vb_fast_destroy_vb, vb_gff3_destroy_vb, vb_me23_destroy_vb };
+
+static void vb_sam_initialize_vb();
+static VbFunc vb_init_by_dt[NUM_DATATYPES] = { donothing, vb_sam_initialize_vb, donothing, donothing, donothing, donothing };
+
+static void vb_vcf_cleanup_memory();
+static VbFunc vb_cleanup_by_dt[NUM_DATATYPES] = { vb_vcf_cleanup_memory, donothing, donothing, donothing, donothing, donothing };
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;
@@ -35,7 +58,7 @@ static void vb_vcf_release_vb (VBlock *vb_)
     vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = false;
     vb->phase_type = PHASE_UNKNOWN;
-    vb->max_gt_line_len = vb->next_numeric_id = 0;
+    vb->max_gt_line_len = vb->next_id_numeric = 0;
 
     buf_free(&vb->line_gt_data);
     buf_free(&vb->line_ht_data);
@@ -50,7 +73,7 @@ static void vb_vcf_release_vb (VBlock *vb_)
     buf_free (&vb->format_mapper_buf);
     buf_free (&vb->iname_mapper_buf);
 
-    vb->num_info_subfields = vb->num_format_subfields = vb->end_did_i = 0;
+    vb->num_info_subfields = vb->num_format_subfields = 0;
 
     buf_free(&vb->optimized_gl_dict);
     buf_free(&vb->haplotype_permutation_index);
@@ -217,6 +240,31 @@ static void vb_fast_destroy_vb (VBlock **vb_)
 }
 
 //--------------------------------
+// GFF3 stuff
+//--------------------------------
+
+static void vb_gff3_release_vb (VBlock *vb_)
+{
+    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
+
+    vb->next_dbxref_numeric_data = 0;
+    vb->num_info_subfields = 0;
+    vb->last_id = 0;
+    
+    buf_free (&vb->dbxref_numeric_data);
+    buf_free (&vb->iname_mapper_buf);
+}
+
+// free all memory of a VB
+static void vb_gff3_destroy_vb (VBlock **vb_)
+{
+    VBlockGFF3 **vb = (VBlockGFF3 **)vb_;
+
+    buf_destroy (&(*vb)->dbxref_numeric_data);
+    buf_destroy (&(*vb)->iname_mapper_buf);
+}
+
+//--------------------------------
 // ME23 stuff
 //--------------------------------
 
@@ -224,7 +272,7 @@ static void vb_me23_release_vb (VBlock *vb_)
 {
     VBlockME23 *vb = (VBlockME23 *)vb_;
 
-    vb->next_numeric_id = vb->next_genotype = 0;
+    vb->next_id_numeric = vb->next_genotype = 0;
 
     buf_free (&vb->id_numeric_data);
     buf_free (&vb->genotype_data);
@@ -242,25 +290,6 @@ static void vb_me23_destroy_vb (VBlock **vb_)
 //--------------------------------
 // Non-type-specific stuff
 //--------------------------------
-
-static void donothing() {}
-
-// data type multiplexors
-typedef void (*VbFunc) (VBlock *vb);
-typedef void (*VbFuncP) (VBlock **vb);
-
-static size_t vb_size_by_dt[NUM_DATATYPES] = { sizeof (VBlockVCF), sizeof (VBlockSAM), 
-                                               sizeof (VBlockFAST), sizeof (VBlockFAST), sizeof (VBlockME23) };
-
-static VbFunc vb_release_by_dt[NUM_DATATYPES] = { vb_vcf_release_vb, vb_sam_release_vb, 
-                                                  vb_fast_release_vb, vb_fast_release_vb, vb_me23_release_vb };
-
-static VbFuncP vb_destroy_by_dt[NUM_DATATYPES] = { vb_vcf_destroy_vb, vb_sam_destroy_vb, 
-                                                   vb_fast_destroy_vb, vb_fast_destroy_vb, vb_me23_destroy_vb };
-
-static VbFunc vb_init_by_dt[NUM_DATATYPES] = { donothing, vb_sam_initialize_vb, donothing, donothing, donothing };
-
-static VbFunc vb_cleanup_by_dt[NUM_DATATYPES] = { vb_vcf_cleanup_memory, donothing, donothing, donothing, donothing };
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
 void vb_release_vb (VBlock *vb) 

@@ -56,8 +56,7 @@ bool piz_fast_test_grep (VBlockFAST *vb)
     uint32_t txt_line_i = vb->data_type == DT_FASTQ ? 4 * vb->first_line : vb->first_line;
 
     while (desc_ctx->iterator.next_b250 < AFTERENT (uint8_t, desc_ctx->b250)) {
-        const char *snip;
-        unsigned snip_len;
+        DECLARE_SNIP;
         LOAD_SNIP (FAST_DESC);
         piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, 0, 0, snip, snip_len, txt_line_i);
 
@@ -104,15 +103,13 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
     
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
-        uint32_t snip_len;
-        const char *snip;
-
         uint32_t txt_line_i = 4 * (vb->first_line + vb_line_i); // each vb line is a fastq record which is 4 txt lines
         
         uint32_t txt_data_start_line = vb->txt_data.len;
 
         // metadata looks like this - "X151YXX" - the 4 X,Y characters specify whether each row has a \r (Y=has)
         // and the number is the seq_len=qual_len
+        DECLARE_SNIP;
         LOAD_SNIP (FAST_LINEMETA);
         const char *md = snip;
 
@@ -136,16 +133,16 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
         // sequence line
         uint32_t seq_len = atoi (&md[4]); // numeric string terminated by dictionary's \t separator
         piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, grepped_out);
-        if (!grepped_out) buf_add (&vb->txt_data, eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
+        if (!grepped_out) RECONSTRUCT (eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
 
         if (!flag_strip) {
             // + line
-            if (!grepped_out) buf_add (&vb->txt_data, md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
+            if (!grepped_out) RECONSTRUCT (md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
 
             // quality line
             piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, grepped_out);
             
-            if (!grepped_out) buf_add (&vb->txt_data, eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
+            if (!grepped_out) RECONSTRUCT (eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
         }
 
     }
@@ -166,13 +163,11 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
-        uint32_t snip_len;
-        const char *snip;
-
         uint32_t txt_line_i = vb->first_line + vb_line_i;
 
         // metadata looks like this - "X>" (desc line), "X;" (comment line) "X123" (sequence line)
         // X, Y characters specify whether each row has a \r (Y=has)
+        DECLARE_SNIP;
         LOAD_SNIP (FAST_LINEMETA);
         const char *md = snip;
         bool has_13 = md[0] - 'X';
@@ -217,7 +212,7 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
                     uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's \t separator
                     piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, grepped_out);
-                    if (!grepped_out) buf_add (&vb->txt_data, eol[has_13], eol_len[has_13]); // end of line
+                    if (!grepped_out) RECONSTRUCT (eol[has_13], eol_len[has_13]); // end of line
                     vb->last_line = FASTA_LINE_SEQ;
                 }
         }

@@ -54,7 +54,7 @@ static void zip_fast_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
     if (flag_optimize) optimize_phred_quality_string (*line_qual_data, *line_qual_len);
 }
 
-// this function receives all lines of a variant block and processes them
+// this function receives all lines of a vblock and processes them
 // in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
 void zip_fast_compress_one_vb (VBlockP vb_)
 { 

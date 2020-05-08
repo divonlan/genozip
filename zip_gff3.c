@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   zip_me23.c
+//   zip_gff3.c
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
@@ -12,16 +12,17 @@
 #include "zip.h"
 #include "seg.h"
 #include "txtfile.h"
+#include "random_access.h"
 
-#define DATA_LINE(i) ENT (ZipDataLineME23, vb->lines, i)
+#define DATA_LINE(i) ENT (ZipDataLineGFF3, vb->lines, i)
 
 // this function receives all lines of a vblock and processes them
 // in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
-void zip_me23_compress_one_vb (VBlockP vb_)
+void zip_gff3_compress_one_vb (VBlockP vb_)
 { 
     START_TIMER;
 
-    VBlockME23 *vb = (VBlockME23 *)vb_;
+    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
     // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need
     // to wait for our merge. that is because our dictionaries are sorted
@@ -35,7 +36,7 @@ void zip_me23_compress_one_vb (VBlockP vb_)
     mtf_clone_ctx (vb_);
 
     // split each line in this variant block to its components
-    seg_all_data_lines (vb_, seg_me23_data_line, seg_me23_initialize, 0);
+    seg_all_data_lines (vb_, seg_gff3_data_line, seg_gff3_initialize, sizeof (ZipDataLineGFF3));
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
@@ -56,12 +57,29 @@ void zip_me23_compress_one_vb (VBlockP vb_)
     // all this is done while holding exclusive access to the z_file dictionaries.
     mtf_merge_in_vb_ctx(vb_);
 
+    // now, we merge vb->ra_buf into z_file->ra_buf
+    random_access_merge_in_vb (vb_);
+
     // generate & write b250 data for all fields 
     zip_generate_and_compress_fields (vb_);
-    
+
+    // generate & write b250 data for all ATTRIBUTES subfields
+    uint8_t num_info_subfields=0;
+    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
+                
+        MtfContext *ctx = &vb->mtf_ctx[did_i];
+        
+        if (ctx->dict_section_type == SEC_GFF3_ATTRS_SF_DICT && ctx->mtf_i.len) {
+            zip_generate_b250_section (vb_, ctx);
+            zfile_compress_b250_data (vb_, ctx);
+            num_info_subfields++;
+        }
+    }
+    ASSERT (num_info_subfields <= MAX_SUBFIELDS, "Error: vb_i=%u has %u ATTRIBUTES subfields, which exceeds the maximum of %u",
+            vb->vblock_i, num_info_subfields, MAX_SUBFIELDS);
+
     // generate & compress the ID and Genotype data
-    zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->id_numeric_data, NULL, 0, COMP_LZMA);
-    zfile_compress_section_data_alg (vb_, SEC_HT_DATA,  &vb->genotype_data, NULL, 0, COMP_BZ2);
+    zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->dbxref_numeric_data, NULL, 0, COMP_LZMA);
     
     // tell dispatcher this thread is done and can be joined. 
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
@@ -69,4 +87,4 @@ void zip_me23_compress_one_vb (VBlockP vb_)
     vb->is_processed = true; 
 
     COPY_TIMER (vb->profile.compute);
-  }
+}

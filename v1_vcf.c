@@ -247,17 +247,17 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
         buf_alloc (vb, &vb->z_section_headers, sizeof (unsigned) * (section_i + 3), 2, "z_section_headers", 2);
 
         if (has_genotype_data) {
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
             v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_GT_DATA, false);
         }
 
         if (phase_type == PHASE_MIXED_PHASED) {
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
             v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_PHASE_DATA, false);
         }
 
         if (num_haplotypes_per_line) {
-            ((unsigned *)vb->z_section_headers.data)[section_i++] = vb->z_data.len;
+            *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
             v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_DATA , false);    
         }
 
@@ -397,9 +397,9 @@ static void v1_piz_vcf_reconstruct_fields (VBlockVCF *vb,
 
             const char *after_delta = delta_pos_start + delta_pos_len;
 
-            buf_add (&vb->txt_data, *line_start, (int)(delta_pos_start - *line_start)); // substring until \t preceding delta
-            buf_add (&vb->txt_data, pos_str, strlen (pos_str)); // decoded pos string
-            buf_add (&vb->txt_data, after_delta, (int)(next - after_delta)); // substring starting \t after delta
+            RECONSTRUCT (*line_start, (int)(delta_pos_start - *line_start)); // substring until \t preceding delta
+            RECONSTRUCT (pos_str, strlen (pos_str)); // decoded pos string
+            RECONSTRUCT (after_delta, (int)(next - after_delta)); // substring starting \t after delta
 
             *line_start = next;
             *length_remaining = after - next;

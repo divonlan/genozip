@@ -1,3 +1,4 @@
+
 // ------------------------------------------------------------------
 //   piz.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
@@ -24,6 +25,8 @@
 
 static const IOFunc read_one_vb_func_by_dt[NUM_DATATYPES] = READ_ONE_VB_FUNC_BY_DT;
 static const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES] = UNCOMPRESS_FUNC_BY_DT;
+
+static Buffer piz_iname_mapper_buf = EMPTY_BUFFER;
 
 void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
                             unsigned *section_i /* in/out */)
@@ -100,7 +103,8 @@ int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta
     return last_pos;
 }
 
-void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const char *id_snip, unsigned id_snip_len, bool *extra_bit)
+void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const char *id_snip, unsigned id_snip_len, 
+                         bool *extra_bit, bool add_tab)
 {
     bool my_extra_bit = (id_snip_len && id_snip[id_snip_len-1] == 2);
     if (my_extra_bit) id_snip_len--;
@@ -109,17 +113,17 @@ void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const ch
     bool has_numeric = (id_snip_len && id_snip[id_snip_len-1] == 1);
     if (has_numeric) id_snip_len--;
 
-    buf_add (&vb->txt_data, id_snip, id_snip_len);
+    RECONSTRUCT (id_snip, id_snip_len);
 
     if (has_numeric) {
         uint32_t num = BGEN32 (*ENT (uint32_t, *id_buf, (*next_id)++));
         char num_str[20];
         unsigned num_str_len;
         str_int (num, num_str, &num_str_len);
-        buf_add (&vb->txt_data, num_str, num_str_len);
+        RECONSTRUCT (num_str, num_str_len);
     }
     
-    buf_add (&vb->txt_data, "\t", 1);
+    if (add_tab) RECONSTRUCT1 ("\t");
 }
 
 void piz_uncompress_compound_field (VBlock *vb, SectionType field_b250_sec, SectionType sf_b250_sec, 
@@ -149,18 +153,141 @@ void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const c
 
     for (unsigned i=0; i <= template_len; i++) { // for template_len, we have template_len+1 elements
         
-        const char *snip;
-        unsigned snip_len;
+        DECLARE_SNIP;
         mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[mapper->did_i[i]], NULL, &snip, &snip_len, txt_line_i);
 
-        buf_add (&vb->txt_data, snip, snip_len);
+        RECONSTRUCT (snip, snip_len);
         
         if (i < template_len)
             // add middle-field separator. note: in seg_compound_field we re-wrote \t at 1, now we re-write back
-            buf_add (&vb->txt_data, template[i]==DICT_TAB_REWRITE_CHAR ? "\t" : &template[i], 1) // buf_add is a macro - no semicolon
+            RECONSTRUCT (template[i]==DICT_TAB_REWRITE_CHAR ? "\t" : &template[i], 1) // buf_add is a macro - no semicolon
         else if (separator_len)
-            buf_add (&vb->txt_data, separator, separator_len); // add end-of-field separator if needed
+            RECONSTRUCT (separator, separator_len); // add end-of-field separator if needed
     }
+}
+
+// Called from the I/O thread zfile_*_read_one_vb - and immutable thereafter
+// Constructs the iname mapper - mapping an iname word like "I1=I2=I3" to its subfields
+// This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries
+void piz_map_iname_subfields (void)
+{
+    // terminology: we call a list of INFO subfield names, an "iname". An iname looks something like
+    // this: "I1=I2=I3=". Each iname consists of info subfields. These fields are not unique to this
+    // iname and can appear in other inames. The INFO field contains the iname, and values of the subfields.
+    // iname_mapper maps these subfields. This function creates an iname_mapper for every unique iname.
+
+    // in genozip genozip v2 and v3 we had a bug where when there was an INFO subfield with a value following one or more
+    // subfields without a value, then the dictionary name of included the names of the valueless subfields
+    // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
+    bool v2v3_bug = !is_v4_or_above; // recover from a bug we had in v2/v3 VCF (we had only VCF in v2/3). See details in v2v3.c.
+
+    static uint8_t info_fields[NUM_DATATYPES] = INFO_DID_I_BY_DT;
+
+    const MtfContext *info_ctx = &z_file->mtf_ctx[info_fields[z_file->data_type]];
+    
+    buf_free (&piz_iname_mapper_buf); // in case it was allocated by a previous file
+    piz_iname_mapper_buf.len = info_ctx->word_list.len;
+    buf_alloc (evb, &piz_iname_mapper_buf, sizeof (PizSubfieldMapper) * piz_iname_mapper_buf.len,
+               1, "piz_iname_mapper_buf", 0);
+    buf_zero (&piz_iname_mapper_buf);
+
+    ARRAY (PizSubfieldMapper, all_iname_mappers, piz_iname_mapper_buf);
+    ARRAY (const MtfWord, all_inames, info_ctx->word_list);
+
+    for (unsigned iname_i=0; iname_i < piz_iname_mapper_buf.len; iname_i++) {
+
+        // e.g. "I1=I2=I3=" - pointer into the INFO dictionary - immutable - global shared with all threads
+        char *iname = ENT (char, info_ctx->dict, all_inames[iname_i].char_index); 
+        unsigned iname_len = all_inames[iname_i].snip_len; 
+
+        PizSubfieldMapper *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
+
+        // get INFO subfield snips - which are the values of the INFO subfield, where the names are
+        // in the INFO snip in the format "info1=info2=info3="). 
+        iname_mapper->num_subfields = 0;
+
+        // traverse the subfields of one iname. E.g. if the iname is "I1=I2=I3=" then we traverse I1, I2, I3
+        for (unsigned i=0; i < iname_len; i++) {
+            
+            DictIdType *dict_id = &iname_mapper->dict_id[iname_mapper->num_subfields];
+
+            // traverse the iname, and get the dict_id for each subfield name (using only the first 8 characers)
+            dict_id->num = 0;
+            unsigned j=0; 
+            while (iname[i] != '=' && (v2v3_bug || iname[i] != ';') && iname[i] != '\t') { // value-less INFO names can be terminated by the end-of-word \t in the dictionary
+                if (j < DICT_ID_LEN) 
+                    dict_id->id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
+                i++, j++;
+            }
+            *dict_id = dict_id_type_1 (*dict_id);
+
+            // case - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
+            if (dict_id->num == dict_id_WindowsEOL) {
+                iname_mapper->did_i[iname_mapper->num_subfields] = DID_I_HAS_13;
+                
+                // we now modify the global dictionary to match the true iname strings, so it can be used for reconstruction
+                if (i>=2 && iname[i-2] == ';')
+                    iname[iname_len-2] = '\t'; // chop off the ";#" at the end of the INFO word in the dictionary (happens if previous subfield is value-less)
+                else     
+                    iname[iname_len-1] = '\t'; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
+            }
+            else 
+                iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (*dict_id); // it will be NIL if this is an INFO name without values            
+            
+            iname_mapper->num_subfields++;
+        }
+    }
+}
+
+// used for VCF INFO and GFF3 ATTRIBUTES 
+void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index, 
+                           const char *iname_snip, unsigned iname_snip_len, 
+                           PizReconstructSpecialInfoSubfields reconstruct_special_info_subfields,
+                           uint32_t txt_line_i, bool *has_13)
+{
+    *has_13 = false; // false unless proven true
+
+    // in genozip genozip v2 and v3 we had a bug where when there was an INFO subfield with a value following one or more
+    // subfields without a value, then the dictionary name of included the names of the valueless subfields
+    // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
+    bool v2v3_bug = !is_v4_or_above; 
+
+    ASSERT (iname_word_index < piz_iname_mapper_buf.len, "Error: expected iname_word_index=%d < piz_iname_mapper_buf.len=%u", 
+            iname_word_index, (uint32_t)piz_iname_mapper_buf.len);
+
+    const PizSubfieldMapper *iname_mapper = ENT (PizSubfieldMapper, piz_iname_mapper_buf, iname_word_index);
+
+    for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
+
+        uint8_t did_i = iname_mapper->did_i[sf_i]; // DID_I_NONE for fields that have no ctx (either because they have no values or because the values are stored elsewhere)
+        
+        if (did_i == DID_I_HAS_13) {
+            *has_13 = true; // line needs to end with a \r\n
+            continue;
+        }
+        
+        // get the name eg "AF="
+        const char *start = iname_snip;
+        for (; *iname_snip != '=' && (*iname_snip != ';' || v2v3_bug) && *iname_snip != '\t'; iname_snip++);
+        if (*iname_snip == '=') iname_snip++; // move past the '=' 
+
+        RECONSTRUCT (start, (unsigned)(iname_snip-start)); // name inc. '=' e.g. "Info1="
+
+        // callback to reconstruct in case this is special subfield
+        if (reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i], txt_line_i) // special cases sometimes apply even if DID_I_NONE
+            && did_i != DID_I_NONE) {
+            // no special treatment - we proceed with the default
+            DECLARE_SNIP;
+            LOAD_SNIP (did_i);
+            RECONSTRUCT (snip, snip_len); // value e.g "value1"
+        }
+        
+        RECONSTRUCT1 (";"); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
+        if (*iname_snip == ';') iname_snip++;
+    }
+
+    // remove the semicolon for the last field. easier to remove now than calculate the cases involving has_13.
+    vb->txt_data.len -= 1;
 }
 
 void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len, 
@@ -175,7 +302,7 @@ void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len,
     if (data->data[*next] == ' ') data->data[*next] = '*';
 
     if (!grepped_out && !zfile_is_skip_section (vb, sec, DICT_ID_NONE)) 
-        buf_add (&vb->txt_data, &data->data[*next], len);
+        RECONSTRUCT (&data->data[*next], len);
     
     *next += len;
 }

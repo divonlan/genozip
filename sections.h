@@ -65,11 +65,22 @@ typedef enum {
     SEC_SAM_TLEN_DICT      = 56,  SEC_SAM_TLEN_B250      = 57, 
     SEC_SAM_OPTIONAL_DICT  = 58,  SEC_SAM_OPTIONAL_B250  = 59, 
 
-
     SEC_FAST_DESC_SF_DICT  = 60,  SEC_FAST_DESC_SF_B250  = 61, // used by FASTQ & FASTA
     SEC_FAST_DESC_DICT     = 62,  SEC_FAST_DESC_B250     = 63, // used by FASTQ & FASTA
     SEC_FAST_LINEMETA_DICT = 64,  SEC_FAST_LINEMETA_B250 = 65, // used by FASTQ & FASTA
     SEC_FASTA_COMMENT_DATA = 66,
+
+    SEC_GFF3_SEQID_DICT    = 67,  SEC_GFF3_SEQID_B250    = 68, 
+    SEC_GFF3_SOURCE_DICT   = 69,  SEC_GFF3_SOURCE_B250   = 70,
+    SEC_GFF3_TYPE_DICT     = 71,  SEC_GFF3_TYPE_B250     = 72, 
+    SEC_GFF3_START_DICT    = 73,  SEC_GFF3_START_B250    = 74,
+    SEC_GFF3_END_DICT      = 75,  SEC_GFF3_END_B250      = 76, 
+    SEC_GFF3_SCORE_DICT    = 77,  SEC_GFF3_SCORE_B250    = 78,
+    SEC_GFF3_STRAND_DICT   = 79,  SEC_GFF3_STRAND_B250   = 80, 
+    SEC_GFF3_PHASE_DICT    = 81,  SEC_GFF3_PHASE_B250    = 82,
+    SEC_GVF_SEQ_DICT       = 83,  SEC_GVF_SEQ_B250       = 84,
+    SEC_GFF3_ATTRS_DICT    = 85,  SEC_GFF3_ATTRS_B250    = 86, 
+    SEC_GFF3_ATTRS_SF_DICT = 87,  SEC_GFF3_ATTRS_SF_B250 = 88, 
 
     // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR
@@ -120,19 +131,29 @@ typedef enum {
     {"SEC_FAST_LINEMETA_DICT",  0},  {"SEC_FAST_LINEMETA_B250", 0},\
     {"SEC_FASTA_COMMENT_DATA",  1},\
     \
+    {"SEC_GFF3_SEQID_DICT",     0}, {"SEC_GFF3_SEQID_B250",     0},\
+    {"SEC_GFF3_SOURCE_DICT",    0}, {"SEC_GFF3_SOURCE_B250",    0},\
+    {"SEC_GFF3_TYPE_DICT",      0}, {"SEC_GFF3_TYPE_B250",      0},\
+    {"SEC_GFF3_START_DICT",     0}, {"SEC_GFF3_START_B250",     0},\
+    {"SEC_GFF3_END_DICT",       0}, {"SEC_GFF3_END_B250",       0},\
+    {"SEC_GFF3_SCORE_DICT",     0}, {"SEC_GFF3_SCORE_B250",     0},\
+    {"SEC_GFF3_STRAND_DICT",    0}, {"SEC_GFF3_STRAND_B250",    0},\
+    {"SEC_GFF3_PHASE_DICT",     0}, {"SEC_GFF3_PHASE_B250",     0},\
+    {"SEC_GVF_SEQ_DICT",        0}, {"SEC_GVF_SEQ_B250",        0},\
+    {"SEC_GFF3_ATTRS_DICT",     0}, {"SEC_GFF3_ATTRS_B250",     0},\
+    {"SEC_GFF3_ATTRS_SF_DICT",  0}, {"SEC_GFF3_ATTRS_SF_B250",  0},\
+    \
     {"SEC_STATS_HT_SEPERATOR",  0} \
 }
 
 #define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) 
 
-#define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT && (s) <= SEC_VCF_FORMAT_DICT && (s) % 2 == SEC_CHROM_DICT % 2) ||       \
-                                        (s) == SEC_VCF_INFO_SF_DICT || \
+#define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT        && (s) <= SEC_VCF_INFO_SF_DICT   && ((s)%2) == (SEC_CHROM_DICT % 2)) ||       \
                                         (s) == SEC_VCF_FRMT_SF_DICT || \
-                                        ((s) >= SEC_SAM_QNAME_SF_DICT && (s) <= SEC_FAST_LINEMETA_DICT && (s) % 2 == SEC_SAM_QNAME_SF_DICT % 2))
+                                       ((s) >= SEC_SAM_QNAME_SF_DICT && (s) <= SEC_FAST_LINEMETA_DICT && ((s)%2) == (SEC_SAM_QNAME_SF_DICT % 2)) ||\
+                                       ((s) >= SEC_GFF3_SEQID_DICT   && (s) <= SEC_GFF3_ATTRS_SF_DICT && ((s)%2) == (SEC_GFF3_SEQID_DICT % 2)))
 
-#define section_type_is_b250(s)       (((s) >= SEC_CHROM_B250 && (s) <= SEC_VCF_FORMAT_B250 && (s) % 2 == SEC_CHROM_B250 % 2) ||       \
-                                        (s) == SEC_VCF_INFO_SF_B250 || \
-                                       ((s) >= SEC_SAM_QNAME_SF_B250 && (s) <= SEC_FAST_LINEMETA_B250 && (s) % 2 == SEC_SAM_QNAME_SF_B250 % 2))
+#define section_type_is_b250(s)       (section_type_is_dictionary((s)-1) && (s) != SEC_VCF_GT_DATA /* one exception */)
 
 extern const SectionType first_field_dict_section[NUM_DATATYPES];
 

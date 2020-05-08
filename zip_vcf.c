@@ -353,7 +353,7 @@ finish:
     return best_gt_data_compressor;
 }
 
-// this function receives all lines of a variant block and processes them
+// this function receives all lines of a vblock and processes them
 // in memory to the compressed format. This thread then terminates the I/O thread writes the output.
 void zip_vcf_compress_one_vb (VBlockP vb_)
 { 
