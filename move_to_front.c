@@ -339,10 +339,13 @@ void mtf_clone_ctx (VBlock *vb)
 
     vb->num_dict_ids = z_num_dict_ids;
 
-    // For VCF: initialize mappers for VCF_FORMAT and VCF_INFO
+    // Initialize mappers
     if (vb->data_type == DT_VCF) {    
         mtf_init_mapper (vb, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
         mtf_init_mapper (vb, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf, "iname_mapper_buf");    
+    }
+    else if (vb->data_type == DT_GFF3) {
+        mtf_init_mapper (vb, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");    
     }
 
     COPY_TIMER (vb->profile.mtf_clone_ctx)

@@ -460,14 +460,12 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
 
     // if this is a totally new iname (first time in this file) - make a new SubfieldMapper for it.
     if (is_new) {   
-        ASSERT (node_index == iname_mapper_buf->len, "Error: node_index=%u different than iname_mapper_buf->len=%u", 
+        ASSSEG (node_index == iname_mapper_buf->len, info_str, "Error: node_index=%u different than iname_mapper_buf->len=%u", 
                 node_index, (uint32_t)iname_mapper_buf->len);
     
         iname_mapper_buf->len++;
+        buf_alloc (vb, iname_mapper_buf, MAX (100, iname_mapper_buf->len) * sizeof (SubfieldMapper), 1.5, "iname_mapper_buf", 0);
     }
-
-    // iname_mapper_buf may need to grow if we encountered a new iname, or allocated if never alloced in this VB
-    buf_alloc (vb, iname_mapper_buf, MAX (100, iname_mapper_buf->len) * sizeof (SubfieldMapper), 1.5, "iname_mapper_buf", 0);
 
     // it is possible that the iname_mapper is not set yet even though not new - if the node is from a previous VB and
     // we have not yet encountered in node in this VB

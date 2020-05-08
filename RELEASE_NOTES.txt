@@ -114,7 +114,7 @@
 5.0.0
 - Updated license
 - Added user registration
-- Added full support for compressing SAM/BAM, FASTQ, FASTA and 23andMe files
+- Added full support for compressing SAM/BAM, FASTQ, FASTA, GVF and 23andMe files
 - Compression improvements for VCF files with any of these:
     1. lots of non-GT FORMAT subfields 
     2. ID data 
