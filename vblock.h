@@ -330,13 +330,14 @@ typedef struct VBlockGFF3 {
     uint32_t last_id;             // used for detla'ing the ID subfield
 
     Buffer dbxref_numeric_data;   // ZIP & PIZ
+    Buffer seq_data;              // ZIP & PIZ: data from the Variant_seq, Reference_seq and ancestral_allele subfields
 
     uint8_t num_info_subfields;   // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                   // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
 
     // PIZ-only stuff
-    uint32_t next_dbxref_numeric_data;  // PIZ only: used to reconstruct Dbxref
+    uint32_t next_seq, next_dbxref_numeric_data;  // PIZ only: used to reconstruct Dbxref
 
 } VBlockGFF3;
 

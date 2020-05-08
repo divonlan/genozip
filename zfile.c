@@ -1099,6 +1099,7 @@ void zfile_gff3_read_one_vb (VBlock *vb_)
     
     READ_FIELDS; // primary fields
     READ_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250); // ATTRIBUTES subfields
+    READ_SECTION (SEC_SEQ_DATA, SectionHeader);
     READ_SECTION (SEC_NUMERIC_ID_DATA, SectionHeader);
     READ_DONE;
 }

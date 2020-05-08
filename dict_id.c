@@ -40,6 +40,26 @@ uint64_t dict_id_WindowsEOL=0;
 
 DictIdType DICT_ID_NONE = {0};
 
+DictIdType dict_id_make(const char *str, unsigned str_len) 
+{ 
+    DictIdType dict_id = {0}; 
+
+    if (!str_len) str_len = strlen (str);
+
+    if (str_len <= DICT_ID_LEN) 
+        memcpy (dict_id.id, str, str_len);
+    
+    else { 
+        #define half1_len (DICT_ID_LEN/2)
+        #define half2_len (DICT_ID_LEN - DICT_ID_LEN/2)
+
+        memcpy (dict_id.id, str, half1_len); // take 1/2 from the start and 1/2 from then end
+        memcpy (dict_id.id + half1_len, str+str_len-half2_len, half2_len);
+    }
+
+    return dict_id;
+}
+
 void dict_id_initialize (void) 
 {   
     ASSERT0 (z_file->data_type != DT_NONE, "Error in dict_id_initialize: z_file->data_type is DT_NONE");
@@ -126,12 +146,12 @@ void dict_id_initialize (void)
     case DT_GFF3:
         // standard GVF fields (ID is also a standard GFF3 field)
         dict_id_ATTR_ID               = dict_id_gff3_attr_sf (dict_id_make ("ID", 2)).num;
-        dict_id_ATTR_Variant_seq      = dict_id_gff3_attr_sf (dict_id_make ("Variant_", 8)).num;
-        dict_id_ATTR_Reference_seq    = dict_id_gff3_attr_sf (dict_id_make ("Referenc", 8)).num;
+        dict_id_ATTR_Variant_seq      = dict_id_gff3_attr_sf (dict_id_make ("Variant_seq", 0)).num;
+        dict_id_ATTR_Reference_seq    = dict_id_gff3_attr_sf (dict_id_make ("Reference_seq", 0)).num;
 
         // fields added in the GVFs of GRCh37/38
         dict_id_ATTR_Dbxref           = dict_id_gff3_attr_sf (dict_id_make ("Dbxref", 6)).num;
-        dict_id_ATTR_ancestral_allele = dict_id_gff3_attr_sf (dict_id_make ("ancestra", 8)).num;
+        dict_id_ATTR_ancestral_allele = dict_id_gff3_attr_sf (dict_id_make ("ancestral_allele", 0)).num;
 
         // our own dictionary where we store Variant_seq, Reference_seq and ancestral_allele together
         dict_id_ATTR_SEQ              = dict_id_gff3_attr_sf (dict_id_make ("SEQ", 3)).num;

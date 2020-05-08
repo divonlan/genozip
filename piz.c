@@ -219,7 +219,14 @@ void piz_map_iname_subfields (void)
                     dict_id->id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
                 i++, j++;
             }
-            *dict_id = dict_id_type_1 (*dict_id);
+            
+            if (is_v5_or_above) 
+                *dict_id = dict_id_type_1 (dict_id_make (&iname[i-j], j));
+            else {
+                // up to version 4 the dict_id was the (up to) 8 first characters
+                memcpy (dict_id->id, &iname[i-j], MIN (j, DICT_ID_LEN)); 
+                *dict_id = dict_id_type_1 (*dict_id);
+            }
 
             // case - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
             if (dict_id->num == dict_id_WindowsEOL) {

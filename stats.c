@@ -68,7 +68,6 @@ void stats_show_sections (void)
         SEC_GFF3_END_B250,      SEC_GFF3_END_DICT,      SEC_GFF3_SCORE_B250,    SEC_GFF3_SCORE_DICT,
         SEC_GFF3_STRAND_B250,   SEC_GFF3_STRAND_DICT,   SEC_GFF3_PHASE_B250,    SEC_GFF3_PHASE_DICT,
         SEC_GFF3_ATTRS_B250,    SEC_GFF3_ATTRS_DICT,    SEC_GFF3_ATTRS_SF_B250, SEC_GFF3_ATTRS_SF_DICT, 
-        SEC_GVF_SEQ_B250,       SEC_GVF_SEQ_DICT,
         
         SEC_FAST_LINEMETA_B250, SEC_FAST_LINEMETA_DICT,
         SEC_FAST_DESC_B250,     SEC_FAST_DESC_DICT,     SEC_FAST_DESC_SF_B250,  SEC_FAST_DESC_SF_DICT
@@ -94,7 +93,7 @@ void stats_show_sections (void)
 
         "SEQID b250", "SEQID dict", "SOURCE b250", "SOURCE dict", "TYPE b250", "TYPE dict", 
         "START b250", "START dict", "END b250", "END dict", "SCORE b250", "SCORE dict", "STRAND b250", "STRAND dict", 
-        "PHASE b250", "PHASE dict", "SEQ b250", "SEQ dict",
+        "PHASE b250", "PHASE dict",
         "ATTRS names b250", "ATTRS names dict", "ATTRS values b250", "ATTRS values dict",  
 
         "Line metadata b250", "Line metadata dict",
@@ -268,7 +267,6 @@ void stats_show_content (void)
           SEC_GFF3_END_B250,      SEC_GFF3_END_DICT,      SEC_GFF3_SCORE_B250,    SEC_GFF3_SCORE_DICT,
           SEC_GFF3_STRAND_B250,   SEC_GFF3_STRAND_DICT,   SEC_GFF3_PHASE_B250,    SEC_GFF3_PHASE_DICT,
           SEC_GFF3_ATTRS_B250,    SEC_GFF3_ATTRS_DICT,    SEC_GFF3_ATTRS_SF_B250, SEC_GFF3_ATTRS_SF_DICT, 
-          SEC_GVF_SEQ_B250,       SEC_GVF_SEQ_DICT,
 
           NIL },
         { SEC_RANDOM_ACCESS, SEC_GENOZIP_HEADER, NIL }

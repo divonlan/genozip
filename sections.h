@@ -78,9 +78,8 @@ typedef enum {
     SEC_GFF3_SCORE_DICT    = 77,  SEC_GFF3_SCORE_B250    = 78,
     SEC_GFF3_STRAND_DICT   = 79,  SEC_GFF3_STRAND_B250   = 80, 
     SEC_GFF3_PHASE_DICT    = 81,  SEC_GFF3_PHASE_B250    = 82,
-    SEC_GVF_SEQ_DICT       = 83,  SEC_GVF_SEQ_B250       = 84,
-    SEC_GFF3_ATTRS_DICT    = 85,  SEC_GFF3_ATTRS_B250    = 86, 
-    SEC_GFF3_ATTRS_SF_DICT = 87,  SEC_GFF3_ATTRS_SF_B250 = 88, 
+    SEC_GFF3_ATTRS_DICT    = 83,  SEC_GFF3_ATTRS_B250    = 84, 
+    SEC_GFF3_ATTRS_SF_DICT = 85,  SEC_GFF3_ATTRS_SF_B250 = 86, 
 
     // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR
@@ -139,7 +138,6 @@ typedef enum {
     {"SEC_GFF3_SCORE_DICT",     0}, {"SEC_GFF3_SCORE_B250",     0},\
     {"SEC_GFF3_STRAND_DICT",    0}, {"SEC_GFF3_STRAND_B250",    0},\
     {"SEC_GFF3_PHASE_DICT",     0}, {"SEC_GFF3_PHASE_B250",     0},\
-    {"SEC_GVF_SEQ_DICT",        0}, {"SEC_GVF_SEQ_B250",        0},\
     {"SEC_GFF3_ATTRS_DICT",     0}, {"SEC_GFF3_ATTRS_B250",     0},\
     {"SEC_GFF3_ATTRS_SF_DICT",  0}, {"SEC_GFF3_ATTRS_SF_B250",  0},\
     \

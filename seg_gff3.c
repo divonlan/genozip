@@ -21,6 +21,7 @@ void seg_gff3_initialize (VBlock *vb_)
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
     buf_alloc (vb, &vb->dbxref_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "dbxref_numeric_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->seq_data, 20 * vb->lines.len, 1, "seq_data", vb->vblock_i); // should normally be more than enough, but if not, seg_add_to_data_buf will realloc
 }
 
 static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip)
@@ -50,8 +51,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         ctx->dict_id.num == dict_id_ATTR_Reference_seq ||
         ctx->dict_id.num == dict_id_ATTR_ancestral_allele) {
 
-        seg_one_field (vb, *this_value, *this_value_len, GVF_SEQ);
-        vb->txt_section_bytes[SEC_GVF_SEQ_B250]--; // don't account for the separator 
+        seg_add_to_data_buf (vb_, &vb->seq_data, SEC_SEQ_DATA, *this_value, *this_value_len, '\t', *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 

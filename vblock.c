@@ -247,10 +247,11 @@ static void vb_gff3_release_vb (VBlock *vb_)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
-    vb->next_dbxref_numeric_data = 0;
+    vb->next_seq = vb->next_dbxref_numeric_data = 0;
     vb->num_info_subfields = 0;
     vb->last_id = 0;
     
+    buf_free (&vb->seq_data);
     buf_free (&vb->dbxref_numeric_data);
     buf_free (&vb->iname_mapper_buf);
 }
@@ -260,6 +261,7 @@ static void vb_gff3_destroy_vb (VBlock **vb_)
 {
     VBlockGFF3 **vb = (VBlockGFF3 **)vb_;
 
+    buf_destroy (&(*vb)->seq_data);
     buf_destroy (&(*vb)->dbxref_numeric_data);
     buf_destroy (&(*vb)->iname_mapper_buf);
 }

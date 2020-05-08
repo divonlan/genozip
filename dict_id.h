@@ -25,10 +25,10 @@ typedef union {
 
 #pragma pack(pop)
 
-static inline DictIdType dict_id_make(const char *str, unsigned str_len) { DictIdType dict_id = {0}; memcpy (dict_id.id, str, MIN (str_len, DICT_ID_LEN)); return dict_id;}
-static inline DictIdType dict_id_field(    DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
+extern DictIdType dict_id_make (const char *str, unsigned str_len);
+static inline DictIdType dict_id_field (DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
 
-#define dict_id_is(dict_id, str) (dict_id_make(str, strlen(str)).num == dict_id_printable (dict_id).num)
+#define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_printable (dict_id).num)
 #define dict_id_is_field(dict_id)  ((dict_id.id[0] >> 6) == 0) // 2 MSb of first byte determine dictionary type
 
 // VCF field types

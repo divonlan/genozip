@@ -78,7 +78,8 @@ void zip_gff3_compress_one_vb (VBlockP vb_)
     ASSERT (num_info_subfields <= MAX_SUBFIELDS, "Error: vb_i=%u has %u ATTRIBUTES subfields, which exceeds the maximum of %u",
             vb->vblock_i, num_info_subfields, MAX_SUBFIELDS);
 
-    // generate & compress the ID and Genotype data
+    // generate & compress the seq (Variant_seq, Reference_seq and ancestral_allele) and Dbxref data
+    zfile_compress_section_data_alg (vb_, SEC_SEQ_DATA,  &vb->seq_data, NULL, 0, COMP_LZMA);
     zfile_compress_section_data_alg (vb_, SEC_NUMERIC_ID_DATA,  &vb->dbxref_numeric_data, NULL, 0, COMP_LZMA);
     
     // tell dispatcher this thread is done and can be joined. 

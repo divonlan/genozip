@@ -103,9 +103,10 @@ typedef struct PizSubfieldMapper {
 
 // reconstructs from the buffer up to a tab    
 #define RECONSTRUCT_FROM_BUF(buf,next,field_name,buf_separator_char,reconst_sep_str,reconst_sep_str_len) { \
+    DECLARE_SNIP;\
     LOAD_SNIP_FROM_BUF(buf,next,field_name,buf_separator_char) \
     RECONSTRUCT (snip, snip_len); \
-    RECONSTRUCT (reconst_sep_str, reconst_sep_str_len);  }
+    if (reconst_sep_str_len) RECONSTRUCT (reconst_sep_str, reconst_sep_str_len);  }
 
 // reconstructs a fix number of characters from a tab-less buffer
 #define RECONSTRUCT_FROM_TABLESS_BUF(buf,next,fixed_len,add_tab,field_name) { \

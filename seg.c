@@ -413,7 +413,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                         "Error: %s field subfield %.*s, does not contain a value", field_name, this_name_len, this_name);
 
                 // find (or create) an MTF context (= a dictionary) for this name
-                DictIdType dict_id = dict_id_vcf_info_sf (dict_id_make (this_name, this_name_len));
+                DictIdType dict_id = dict_id_type_1 (dict_id_make (this_name, this_name_len));
 
                 // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
                 MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, 

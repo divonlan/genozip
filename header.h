@@ -78,14 +78,14 @@ typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM
 #define NUM_FAST_FIELDS 2
 typedef enum { FAST_DESC, FAST_LINEMETA } FastqFields;
 
-#define NUM_GFF3_FIELDS 10 // https://m.ensembl.org/info/website/upload/gff3.html
-typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GVF_SEQ, GFF3_ATTRS } Gff3Fields;
+#define NUM_GFF3_FIELDS 9 // https://m.ensembl.org/info/website/upload/gff3.html
+typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS } Gff3Fields;
 
 // 23ANDME fields
 #define NUM_ME23_FIELDS 3
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID } Me23Fields; // same order as VCF
 
-#define MAX_NUM_FIELDS_PER_DATA_TYPE 10 // maximum between NUM_*_FIELDS
+#define MAX_NUM_FIELDS_PER_DATA_TYPE 9 // maximum between NUM_*_FIELDS
 
 #define DATATYPE_LAST_FIELD { NUM_VCF_FIELDS-1, NUM_SAM_FIELDS-1, NUM_FAST_FIELDS-1, NUM_FAST_FIELDS-1, NUM_GFF3_FIELDS-1, NUM_ME23_FIELDS-1 }
 extern const unsigned datatype_last_field[NUM_DATATYPES];
@@ -108,7 +108,7 @@ extern const uint8_t chrom_did_i_by_dt[NUM_DATATYPES];  // used for random acces
       { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" },\
       { "DESC", "LINEMETA" },\
       { "DESC", "LINEMETA" },\
-      { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "SEQ", "ATTRS" },\
+      { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS" },\
       { "CHROM", "POS", "ID" }\
     };
 extern const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE];

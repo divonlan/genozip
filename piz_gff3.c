@@ -39,8 +39,7 @@ static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t di
     if (dict_id.num == dict_id_ATTR_Variant_seq   ||
         dict_id.num == dict_id_ATTR_Reference_seq ||
         dict_id.num == dict_id_ATTR_ancestral_allele) {
-        DECLARE_SNIP;
-        RECONSTRUCT_FROM_DICT (GVF_SEQ, false);
+        RECONSTRUCT_FROM_BUF (vb->seq_data, vb->next_seq, "SEQ", '\t', "", 0);
         return false;
     }
 
@@ -112,6 +111,10 @@ static void piz_gff3_uncompress_all_sections (VBlockGFF3 *vb)
 
         zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_GFF3_ATTRS_SF_B250);    
     }
+
+    // uncompress the seq data
+    SectionHeader *seq_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
+    zfile_uncompress_section ((VBlockP)vb, seq_header, &vb->seq_data, "seq_data", SEC_SEQ_DATA);    
 
     // uncompress the Dbxref data
     SectionHeader *dbxref_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
