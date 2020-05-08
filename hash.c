@@ -63,8 +63,6 @@ static void hash_populate_from_mtf (MtfContext *zf_ctx)
 // 2. If not - use either num_lines for the size, or the smallest size for dicts that are typically small
 void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
 {
-    ASSERT0 (z_file, "Error in hash_alloc_local: z_file is NULL");
-
     vb_ctx->local_hash_prime = 0; // initialize
 
     // if known from previously merged vb - use those values
