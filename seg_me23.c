@@ -66,7 +66,7 @@ const char *seg_me23_data_line (VBlock *vb_,
     seg_add_to_data_buf (vb_, &vb->genotype_data, SEC_HT_DATA, field_start, 2, 0, field_len + 1 + has_13); 
     
     // Now, finalize RSID - if we DON'T have a \r (unexpected), then we add an extra bit.
-    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[ME23_ID], SEC_ID_B250, 
+    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[ME23_ID], SEC_ID_B250, SEC_NUMERIC_ID_DATA,
                   rsid_field_start, rsid_field_len, !has_13, true);
     
     return next_field;

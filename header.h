@@ -37,9 +37,9 @@ typedef void (*UpdateHeaderFunc) (VBlockP vb, uint32_t vcf_first_line_i);
                                    zfile_update_compressed_vb_header  }         
 
 typedef void (*IOFunc) (VBlockP vb);
-#define READ_ONE_VB_FUNC_BY_DT { zfile_vcf_read_one_vb,  zfile_sam_read_one_vb,   \
-                                 zfile_fast_read_one_vb, zfile_fast_read_one_vb, \
-                                 zfile_gff3_read_one_vb, zfile_me23_read_one_vb  }
+#define READ_ONE_VB_FUNC_BY_DT { piz_vcf_read_one_vb,  piz_sam_read_one_vb,   \
+                                 piz_fast_read_one_vb, piz_fast_read_one_vb, \
+                                 piz_gff3_read_one_vb, piz_me23_read_one_vb  }
 
 // by data type - related to the header of the txt file of each data type
 #define TXT_HEADER_IS_ALLOWED      { true, true, false, false, true, true } // is it possible to have a header in this data_type

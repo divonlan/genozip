@@ -15,6 +15,18 @@
 #include "optimize.h"
 #include "random_access.h"
 
+void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *name)
+{
+    if (!buf_is_allocated (&vb->mtf_ctx[field_i].ol_mtf)) return;
+        
+    mapper_buf->len = vb->mtf_ctx[field_i].ol_mtf.len;
+    
+    buf_alloc (vb, mapper_buf, mapper_buf->len * sizeof (SubfieldMapper), 2, name, 0);
+    
+    for (unsigned i=0; i < mapper_buf->len; i++) 
+        ((SubfieldMapper *)mapper_buf->data)[i].num_subfields = (uint8_t)NIL;
+}
+
 // store src_buf in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from txt_data,
 // but in the part of txt_data has been already consumed and no longer needed.
 // if there's not enough space in txt_data, we allocate on txt_data_spillover
@@ -282,9 +294,8 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType sec_b250,
+void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType sec_b250, SectionType sec_buf,
                    const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator)
-//void seg_id_field (VBlock *vb, Buffer *id_buf, int id_field, char *id_snip, unsigned id_snip_len, bool extra_bit)
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
@@ -298,10 +309,10 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType s
         else 
             break;
 
-    // added to SEC_NUMERIC_ID_DATA if we have a trailing number
+    // added to sec_buf if we have a trailing number
     if (num_digits) {
         uint32_t id_num = BGEN32 (atoi (&id_snip[id_snip_len - num_digits]));
-        seg_add_to_data_buf (vb, id_buf, SEC_NUMERIC_ID_DATA, (char*)&id_num, sizeof (id_num), 0, num_digits); // account for the digits
+        seg_add_to_data_buf (vb, id_buf, sec_buf, (char*)&id_num, sizeof (id_num), 0, num_digits); // account for the digits
     }
 
     // append the textual part with \1 and \2 as needed - we have enough space - we have a tab following the field
@@ -322,9 +333,6 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType s
     // restore
     if (extra_bit)  ((char*)id_snip)[--new_len] = save_2;
     if (num_digits) ((char*)id_snip)[--new_len] = save_1;
-
-//    seg_one_field (vb, id_snip, new_len, id_field); // accounts for the length and \t
-//    vb->txt_section_bytes[FIELD_TO_B250_SECTION (vb->data_type, id_field)] -= (!!num_digits) + extra_bit; // we don't account for the \1 and \2 that were not in the txt file
 }
 
 // segments fields that look like INFO in VCF or ATTRIBUTES in GFF3
@@ -391,7 +399,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                 this_value_len = 0;
             }
 
-            // name without value - valid in GFF3 format
+            // name without value - valid in GFF3/VCF format
             else if (c == ';') {
                 if (i==info_len) { // our artificial ; terminator
                     iname_len--; // remove ;

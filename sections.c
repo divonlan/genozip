@@ -87,7 +87,7 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
     buf_free (section_list_buf);
 }
 
-// called by PIZ I/O thread: zfile_read_one_vb
+// called by PIZ I/O thread: piz_read_one_vb
 uint8_t sections_count_sec_type (unsigned vb_i, SectionType sec)
 {
     ARRAY (SectionListEntry, sl, z_file->section_list_buf);    

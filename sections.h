@@ -81,6 +81,7 @@ typedef enum {
     SEC_GFF3_ATTRS_DICT    = 83,  SEC_GFF3_ATTRS_B250    = 84, 
     SEC_GFF3_ATTRS_SF_DICT = 85,  SEC_GFF3_ATTRS_SF_B250 = 86, 
 
+    SEC_ENST_DATA          = 87,
     // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
     SEC_STATS_HT_SEPERATOR
 } SectionType;
@@ -140,6 +141,8 @@ typedef enum {
     {"SEC_GFF3_PHASE_DICT",     0}, {"SEC_GFF3_PHASE_B250",     0},\
     {"SEC_GFF3_ATTRS_DICT",     0}, {"SEC_GFF3_ATTRS_B250",     0},\
     {"SEC_GFF3_ATTRS_SF_DICT",  0}, {"SEC_GFF3_ATTRS_SF_B250",  0},\
+    \
+    {"SEC_ENST_DATA",           0},\
     \
     {"SEC_STATS_HT_SEPERATOR",  0} \
 }

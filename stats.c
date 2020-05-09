@@ -55,7 +55,7 @@ void stats_show_sections (void)
 
         SEC_SEQ_DATA,           SEC_QUAL_DATA,          SEC_SAM_MD_DATA,
         SEC_SAM_BD_DATA,        SEC_SAM_BI_DATA,        SEC_SAM_RAND_POS_DATA,  
-        SEC_NUMERIC_ID_DATA,    SEC_FASTA_COMMENT_DATA,
+        SEC_NUMERIC_ID_DATA,    SEC_ENST_DATA,          SEC_FASTA_COMMENT_DATA,
         SEC_SAM_QNAME_B250,     SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
         SEC_SAM_FLAG_B250,      SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
         SEC_SAM_POS_B250,       SEC_SAM_POS_DICT,
@@ -83,7 +83,7 @@ void stats_show_sections (void)
         "Haplotype data", "HT separator char", "Phasing char",
 
         "SEQ data", "QUAL data", "MD data", "BD data", "BI data", "RAND_POS data", 
-        "NUMERIC_ID data", "Comment data",
+        "NUMERIC_ID data", "ENST numeric ids", "Comment data",
         "QNAME b250", "QNAME dict", "QNAME subfields b250", "QNAME subfields dict", 
         "FLAG b250", "FLAG dict", "RNAME b250", "RNAME dict", 
         "POS b250 (delta)", "POS dict (delta)", 
@@ -249,7 +249,7 @@ void stats_show_content (void)
           SEC_CHROM_DICT, SEC_POS_DICT, SEC_ID_DICT, SEC_VCF_REFALT_DICT, SEC_VCF_QUAL_DICT,
           SEC_VCF_FILTER_DICT, SEC_VCF_INFO_DICT, SEC_VCF_INFO_SF_DICT, SEC_VCF_FORMAT_DICT,       
 
-          SEC_NUMERIC_ID_DATA,    
+          SEC_NUMERIC_ID_DATA,    SEC_ENST_DATA,
           
           SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,        SEC_SAM_BD_DATA,       SEC_SAM_BI_DATA, 
           SEC_SAM_QNAME_B250,     SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,

@@ -15,8 +15,8 @@
 #endif
 
 typedef struct {
-    int64_t wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_vcf_get_variant_data_line, 
-        piz_vcf_get_haplotype_data_line, piz_vcf_get_format_info,
+    int64_t wallclock, read, compute, compressor, write, piz_read_one_vb, piz_vcf_get_variant_data_line, 
+        piz_vcf_get_haplotype_data_line,
         piz_vcf_initialize_sample_iterators, piz_get_line_subfields, piz_vcf_reconstruct_samples, 
         piz_vcf_get_phase_data_line, piz_vcf_reconstruct_genotype_data_line, zfile_uncompress_section,
         piz_reconstruct_vb, squeeze, buf_alloc, txtfile_read_header, txtfile_read_vblock,

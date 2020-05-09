@@ -86,7 +86,7 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
                       const char **snip_in_dict, uint32_t *snip_len,  // optional outs
                       const char *func, uint32_t code_line)
 {
-    ASSERT0 (ctx->dict_id.num, "Error: this ctx is not initialized (dict_id.num=0)");
+    ASSERT (ctx->dict_id.num, "Error in mtf_node_do: this ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
     ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
             err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),
@@ -279,18 +279,6 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     return new_mtf_i_if_no_old_one;
 }
 
-static void mtf_init_mapper (VBlock *vb, VcfFields field_i, Buffer *mapper_buf, const char *name)
-{
-    if (!buf_is_allocated (&vb->mtf_ctx[field_i].ol_mtf)) return;
-        
-    mapper_buf->len = vb->mtf_ctx[field_i].ol_mtf.len;
-    
-    buf_alloc (vb, mapper_buf,  mapper_buf->len * sizeof (SubfieldMapper), 2, name, 0);
-    
-    for (unsigned i=0; i < mapper_buf->len; i++) 
-        ((SubfieldMapper *)mapper_buf->data)[i].num_subfields = (uint8_t)NIL;
-}
-
 // ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.
 void mtf_clone_ctx (VBlock *vb)
 {
@@ -338,15 +326,6 @@ void mtf_clone_ctx (VBlock *vb)
     }
 
     vb->num_dict_ids = z_num_dict_ids;
-
-    // Initialize mappers
-    if (vb->data_type == DT_VCF) {    
-        mtf_init_mapper (vb, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
-        mtf_init_mapper (vb, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf, "iname_mapper_buf");    
-    }
-    else if (vb->data_type == DT_GFF3) {
-        mtf_init_mapper (vb, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");    
-    }
 
     COPY_TIMER (vb->profile.mtf_clone_ctx)
 }

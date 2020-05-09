@@ -15,7 +15,7 @@ typedef void SegInitializer (VBlockP vb);
 
 extern void seg_all_data_lines (VBlockP vb, SegDataLineFuncType seg_data_line, SegInitializer seg_initialize, unsigned sizeof_line); 
 
-extern DictIdType seg_vcf_get_format_subfield (const char **data, uint32_t *len);
+extern void seg_init_mapper (VBlockP vb, int field_i, BufferP mapper_buf, const char *name);
 
 extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
                                       unsigned *len, char *separator, bool *has_13, // out
@@ -42,7 +42,7 @@ extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_de
                               int pos_field, SectionType sec_pos_b250,
                               const char *pos_str, unsigned pos_len, const char *field_name);
 
-extern void seg_id_field (VBlockP vb, BufferP id_buf, DictIdType dict_id, SectionType sec_b250, 
+extern void seg_id_field (VBlockP vb, BufferP id_buf, DictIdType dict_id, SectionType sec_b250, SectionType sec_buf,
                           const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator);
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip);
@@ -89,6 +89,8 @@ extern SegInitializer seg_fasta_initialize;
 // ------------------
 extern SegDataLineFuncType seg_gff3_data_line;
 extern SegInitializer seg_gff3_initialize;
+extern void seg_gff3_array_of_struct_ctxs (VBlockGFF3P vb, DictIdType dict_id, unsigned num_items, 
+                                           MtfContextP *ctx_array, MtfContextP *enst_ctx); // out
 
 // ------------------
 // ME23 Stuff

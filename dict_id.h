@@ -98,9 +98,12 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 // GVF attributes - from GRCh37/38 etc
                 dict_id_ATTR_Dbxref, // example: "dbSNP_151:rs1282280967"
                 dict_id_ATTR_ancestral_allele,
+                dict_id_ATTR_Variant_effect, // example: "Variant_effect=non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
+                dict_id_ATTR_sift_prediction,
+                dict_id_ATTR_polyphen_prediction,
+                dict_id_ATTR_variant_peptide,
 
-                dict_id_ATTR_SEQ; // private genozip dict
-
+                dict_id_ATTR_SEQ, dict_id_ENSTid;  // private genozip dict
 
 extern void dict_id_initialize (void);
 

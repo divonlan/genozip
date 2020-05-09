@@ -32,65 +32,7 @@ typedef struct {
     MtfContext *ctx[MAX_SUBFIELDS]; // pointer to the ctx of each format subfield
 } FormatInfo;
 
-
-// 1. populates vb->format_info_buf with info about each unique format type in this vb (FormatInfo structure)
-// 2. for each line, populates vb->lines[line_i].format_mtf_i - an index into vb->format_info_buf
-static void piz_vcf_get_format_info (VBlockVCF *vb)
-{    
-    START_TIMER;
-
-    MtfContext *format_ctx = &vb->mtf_ctx[VCF_FORMAT];
-
-    // get number of subfields for each FORMAT item in dictionary, by traversing the FORMAT dectionary mtf array
-
-    buf_alloc (vb, &vb->format_info_buf, sizeof(FormatInfo) * format_ctx->word_list.len, 1.5, "format_info_buf", 0);
-    ARRAY (FormatInfo, formats, vb->format_info_buf);
-
-    ARRAY (const MtfWord, snip_list, format_ctx->word_list);
-
-    for (unsigned format_i=0; format_i < format_ctx->word_list.len; format_i++)
-    {
-        const char *format_snip = ENT (const char, format_ctx->dict, snip_list[format_i].char_index);
-        uint32_t format_snip_len = snip_list[format_i].snip_len;
-        
-        // count colons in FORMAT snip
-        unsigned num_colons = 0;
-        int colons[MAX_SUBFIELDS+1];
-        colons[num_colons++] = -1;
-        for (unsigned i=0; i < format_snip_len; i++)
-            if (format_snip[i] == ':') colons[num_colons++] = i;
-        colons[num_colons++] = format_snip_len;
-
-        bool format_has_gt_subfield = format_snip_len >= 2 && format_snip[0] == 'G' && format_snip[1] == 'T' && 
-                                      (format_snip_len == 2 || format_snip[2] == ':');
-
-        formats[format_i].num_subfields = num_colons - 1 - format_has_gt_subfield; // if FORMAT has a GT subfield - don't count it
-        
-        for (unsigned sf_i=0; sf_i < formats[format_i].num_subfields; sf_i++) {
-            
-            // construct dict_id for this format subfield
-            
-            const char *start = &format_snip[colons[sf_i + format_has_gt_subfield] + 1];
-            unsigned len = colons[sf_i + format_has_gt_subfield + 1] - colons[sf_i + format_has_gt_subfield] - 1;
-
-            DictIdType dict_id = dict_id_make (start, len);
-
-            // get the did_i of this subfield. note: did_i can be NIL if the subfield appeared in a FORMAT field
-            // in this VB, but never had any value in any sample on any line in this VB
-            uint8_t did_i = mtf_get_existing_did_i_by_dict_id (dict_id);
-            formats[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &vb->mtf_ctx[did_i] : NULL;
-        }
-    }
-
-    // now, get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
-    for (unsigned line_i=0; line_i < vb->lines.len; line_i++) 
-        DATA_LINE (line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
-
-    // reset format_ctx reader iterator fields, as we are going to traverse FORMAT again when reconstructing the lines
-    mtf_init_iterator (format_ctx);
-
-    COPY_TIMER (vb->profile.piz_vcf_get_format_info)
-}
+static Buffer piz_format_mapper_buf = EMPTY_BUFFER; //global array, initialized by I/O thread and immitable thereafter
 
 static bool piz_vcf_reconstruct_special_info_subfields (VBlock *vb, uint8_t did_i, DictIdType dict_id, uint32_t txt_line_i)
 {
@@ -143,6 +85,59 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
     return line_included;
 }
 
+// Called from the I/O thread piz_vcf_read_one_vb - and immutable thereafter
+// This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries.
+// It populates piz_format_mapper_buf with info about each unique format type in this vb (FormatInfo structure)
+static void piz_vcf_map_format_subfields (void)
+{    
+    MtfContext *format_ctx = &z_file->mtf_ctx[VCF_FORMAT];
+
+    // initialize
+    buf_free (&piz_format_mapper_buf); // in case it was allocated by a previous file
+    piz_format_mapper_buf.len = format_ctx->word_list.len;
+    buf_alloc (evb, &piz_format_mapper_buf, sizeof (FormatInfo) * piz_format_mapper_buf.len,
+               1, "piz_format_mapper_buf", 0);
+    buf_zero (&piz_format_mapper_buf);
+
+    // get number of subfields for each FORMAT item in dictionary, by traversing the FORMAT dectionary mtf array
+    ARRAY (FormatInfo, formats, piz_format_mapper_buf);
+    ARRAY (const MtfWord, snip_list, format_ctx->word_list);
+
+    for (unsigned format_i=0; format_i < format_ctx->word_list.len; format_i++)
+    {
+        const char *format_snip = ENT (const char, format_ctx->dict, snip_list[format_i].char_index);
+        uint32_t format_snip_len = snip_list[format_i].snip_len;
+        
+        // count colons in FORMAT snip
+        unsigned num_colons = 0;
+        int colons[MAX_SUBFIELDS+1];
+        colons[num_colons++] = -1;
+        for (unsigned i=0; i < format_snip_len; i++)
+            if (format_snip[i] == ':') colons[num_colons++] = i;
+        colons[num_colons++] = format_snip_len;
+
+        bool format_has_gt_subfield = format_snip_len >= 2 && format_snip[0] == 'G' && format_snip[1] == 'T' && 
+                                      (format_snip_len == 2 || format_snip[2] == ':');
+
+        formats[format_i].num_subfields = num_colons - 1 - format_has_gt_subfield; // if FORMAT has a GT subfield - don't count it
+        
+        for (unsigned sf_i=0; sf_i < formats[format_i].num_subfields; sf_i++) {
+            
+            // construct dict_id for this format subfield
+            
+            const char *start = &format_snip[colons[sf_i + format_has_gt_subfield] + 1];
+            unsigned len = colons[sf_i + format_has_gt_subfield + 1] - colons[sf_i + format_has_gt_subfield] - 1;
+
+            DictIdType dict_id = dict_id_vcf_format_sf (dict_id_make (start, is_v5_or_above ? len : MIN (len, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
+
+            // get the did_i of this subfield. note: did_i can be NIL if the subfield appeared in a FORMAT field
+            // in this VB, but never had any value in any sample on any line in this VB
+            uint8_t did_i = mtf_get_existing_did_i_by_dict_id (dict_id);
+            formats[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &z_file->mtf_ctx[did_i] : NULL;
+        }
+    }
+}
+
 // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
 static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 {
@@ -151,7 +146,14 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
     buf_alloc (vb, &vb->sample_iterator, sizeof(SnipIterator) * global_vcf_num_samples, 1, "sample_iterator", 0);
     
     ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
-    ARRAY (FormatInfo, formats, vb->format_info_buf);
+    ARRAY (FormatInfo, formats, piz_format_mapper_buf);
+
+    // Get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
+    MtfContext *format_ctx = &vb->mtf_ctx[VCF_FORMAT];
+    for (unsigned line_i=0; line_i < vb->lines.len; line_i++) 
+        DATA_LINE (line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
+
+    mtf_init_iterator (format_ctx); // reset iterator as FORMAT data will be consumed again when reconstructing the fields
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
@@ -203,7 +205,7 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
     PizDataLineVCF *dl = DATA_LINE (vb_line_i);
 
     ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
-    ARRAY (const FormatInfo, formats, vb->format_info_buf);
+    ARRAY (const FormatInfo, formats, piz_format_mapper_buf);
 
     const FormatInfo *line_format_info = &formats[dl->format_mtf_i];
 
@@ -523,10 +525,6 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
     // initialize genotype stuff
     if (vb->has_genotype_data && !flag_drop_genotypes && !flag_strip && !flag_gt_only) {
         
-        // get info about the different types of FORMAT in this vb (vb->format_info_buf)
-        // as well as which is used for each line (dl->format_mtf_i)
-        piz_vcf_get_format_info (vb);
-
         // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
         piz_vcf_initialize_sample_iterators(vb);
 
@@ -573,7 +571,7 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
 
 static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 {
-    // The VB is read from disk in zfile_vcf_read_one_vb(), in the I/O thread, and is decompressed here in the 
+    // The VB is read from disk in piz_vcf_read_one_vb(), in the I/O thread, and is decompressed here in the 
     // Compute thread, with the exception of dictionaries that are processed by the I/O thread
     // Order of sections in a V2 VB:
     // 1. SEC_VB_HEADER - its data is the haplotype index
@@ -637,8 +635,9 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     unsigned section_i=1;
 
     // uncompress the 8 fields (CHROM to FORMAT)    
-    piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
-
+    UNCOMPRESS_FIELDS;
+    UNCOMPRESS_SUBFIELDS(vb->num_info_subfields, SEC_VCF_INFO_SF_B250);
+    /*
     for (uint8_t sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
         
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
@@ -650,12 +649,13 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
         zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_VCF_INFO_SF_B250);    
     }
-
-    if (is_v5_or_above) {
+*/
+    if (is_v5_or_above) UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, false);
+    /*{
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
         
         zfile_uncompress_section ((VBlockP)vb, header, &vb->id_numeric_data, "id_numeric_data", SEC_NUMERIC_ID_DATA);
-    }
+    }*/
 
     if (flag_drop_genotypes) return; // if --drop-genotypes was requested - no need to uncompress the following sections
 
@@ -751,7 +751,7 @@ void piz_vcf_uncompress_one_vb (VBlock *vb_)
     if (is_v2_or_above) {
         piz_vcf_uncompress_all_sections (vb);
 
-        // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
+        // combine all the sections of a variant block to regenerate the fields, haplotype_data,
         // genotype_data and phase_data for each row of the variant block
         piz_vcf_reconstruct_vb (vb);
     }
@@ -765,9 +765,80 @@ void piz_vcf_uncompress_one_vb (VBlock *vb_)
         v1_piz_vcf_reconstruct_vb (vb);
     }
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
+    UNCOMPRESS_DONE;
+}
 
-    COPY_TIMER (vb->profile.compute);
+
+void piz_vcf_read_one_vb (VBlock *vb_)
+{ 
+    // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
+    // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
+    // integrated into the global dictionaries.
+    // Order of sections in a V2 VB:
+    // 1. SEC_VB_HEADER - its data is the haplotype index
+    // 2. SEC_VCF_INFO_SF_B250 - Fields 1-9 b250 data
+    // 3. SEC_VCF_INFO_SF_B250 - All INFO subfield data
+    // 4. All sample data: up 3 sections per sample block:
+    //    4a. SEC_VCF_GT_DATA - genotype data
+    //    4b. SEC_VCF_PHASE_DATA - phase data
+    //    4c. SEC_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
+
+    PREPARE_TO_READ (VBlockVCF, 100000, SectionHeaderVbHeaderVCF); // an arbitrary large number of sections - we need room for all the HT/GT sections 
+
+    // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
+    #define vb_header ((SectionHeaderVbHeaderVCF *)&vb->z_data.data[vb_header_offset])
+    
+    // iname mapper: first VB, we map all iname and format subfields to a global mapper. this uses
+    // dictionary info only, not b250
+    if (!flag_strip && vb->vblock_i == 1) {
+        piz_vcf_map_format_subfields();
+        piz_map_iname_subfields();
+    }
+
+    READ_FIELDS; // CHROM to FORMAT
+    READ_SUBFIELDS (vb->num_info_subfields, SEC_VCF_INFO_SF_B250); // INFO subfields
+
+    // read the numberic data of the ID field (the non-numeric part is in SEC_ID_B250)
+    if (is_v5_or_above)
+        READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, false);
+        
+    // read the sample data
+    uint32_t num_sample_blocks     = BGEN32 (vb_header->num_sample_blocks);
+    uint32_t num_samples_per_block = BGEN32 (vb_header->num_samples_per_block);
+
+    buf_alloc (vb, &vb->is_sb_included, num_sample_blocks * sizeof(bool), 1, "is_sb_included", vb->vblock_i);
+
+    for (unsigned sb_i=0; sb_i < num_sample_blocks; sb_i++) {
+
+        // calculate whether this block is included. zfile_read_section will skip reading and piz_uncompress_all_sections
+        // will skip uncompressing based on this value
+        NEXTENT (bool, vb->is_sb_included) = samples_is_sb_included (num_samples_per_block, sb_i);
+ 
+        // make sure we have enough space for the section pointers
+        buf_alloc_more (vb, &vb->z_section_headers, 3, 0, uint32_t, 2);
+//buf_alloc(vb, &vb->z_section_headers, sizeof (uint32_t) * (vb->z_section_headers.len + 3), 2, "z_section_headers", 2);
+
+        if (vb_header->has_genotype_data)
+            READ_SB_SECTION (SEC_VCF_GT_DATA,         SectionHeader, sb_i);
+
+        if (vb_header->phase_type == PHASE_MIXED_PHASED) 
+            READ_SB_SECTION (SEC_VCF_PHASE_DATA,      SectionHeader, sb_i);
+
+        if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) 
+            READ_SB_SECTION (SEC_HT_DATA,             SectionHeader, sb_i);
+
+        if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
+            READ_SB_SECTION (SEC_HT_GTSHARK_X_LINE,   SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_X_HTI,    SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_X_ALLELE, SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_DB_DB,    SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_HT_GTSHARK_DB_GT,    SectionHeader, sb_i);
+        }
+    }
+    
+    READ_DONE;
+
+    #undef vb_header
 }
 
 #define V1_PIZ // select the piz functions of v1.c

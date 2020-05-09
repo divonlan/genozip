@@ -51,44 +51,21 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
-static void piz_me23_uncompress_all_sections (VBlockME23 *vb)
-{
-     ARRAY (const unsigned, section_index, vb->z_section_headers);
-
-    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-    vb->first_line       = BGEN32 (header->first_line);
-    vb->lines.len        = BGEN32 (header->num_lines);
-    vb->vb_data_size     = BGEN32 (header->vb_data_size);
-    vb->longest_line_len = BGEN32 (header->longest_line_len);
-
-    // in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
-    // because the dispatcher is re-initialized for every sam component
-    if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i);
-    
-    unsigned section_i=1;
-
-    // uncompress the fields     
-    piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
-    
-    // uncompress the ID and Genotype data
-    SectionHeader *id_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, id_header, &vb->id_numeric_data, "id_numeric_data", SEC_NUMERIC_ID_DATA);    
-
-    SectionHeader *gt_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, gt_header, &vb->genotype_data, "genotype_data", SEC_HT_DATA);    
-}
-
 void piz_me23_uncompress_one_vb (VBlock *vb_)
 {
-    START_TIMER;
-
-    VBlockME23 *vb = (VBlockME23 *)vb_;
-
-    piz_me23_uncompress_all_sections (vb);
+    UNCOMPRESS_HEADER_AND_FIELDS (VBlockME23, true);  
+    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, false);    
+    UNCOMPRESS_DATA_SECTION (SEC_HT_DATA, genotype_data, false);    
 
     piz_me23_reconstruct_vb (vb);
+    UNCOMPRESS_DONE;
+}
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
-    
-    COPY_TIMER (vb->profile.compute);
+void piz_me23_read_one_vb (VBlock *vb_)
+{ 
+    PREPARE_TO_READ (VBlockME23, 5, SectionHeaderVbHeader);
+    READ_FIELDS;
+    READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, false);
+    READ_DATA_SECTION (SEC_HT_DATA, false);
+    READ_DONE;
 }

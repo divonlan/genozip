@@ -430,94 +430,41 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
-static void piz_sam_uncompress_all_sections (VBlockSAM *vb)
+void piz_sam_uncompress_one_vb (VBlock *vb_)
 {
-    // The VB is read from disk in zfile_sam_read_one_vb(), in the I/O thread, and is decompressed here in the 
-    // Compute thread, with the exception of dictionaries that are processed by the I/O thread
-    // Order of sections in a V2 VB:
-    // 1. SEC_VB_HEADER - no data, header only
-    // 2. (the dictionaries were here in the file, but they are omitted from vb->z_data)
-    // 3. b250 of SAM_QNAME to SAM_OPTIONAL
-    // 4. b250 of all QNAME subfields
-    // 5. b250 of all OPTIONAL subfields
-    // 6. RANDOM POS data
-    // 7. SEQ data
-    // 8. QUAL data
+    UNCOMPRESS_HEADER_AND_FIELDS (VBlockSAM, true);
 
-    ARRAY (const unsigned, section_index, vb->z_section_headers);
-
-    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-    vb->first_line       = BGEN32 (header->first_line);
-    vb->lines.len        = BGEN32 (header->num_lines);
-    vb->vb_data_size     = BGEN32 (header->vb_data_size);
-    vb->longest_line_len = BGEN32 (header->longest_line_len);
-
-    // in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
-    // because the dispatcher is re-initialized for every sam component
-    if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i);
-    
-    unsigned section_i=1;
-
-    // uncompress the fields     
-    piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
-    
     // QNAME subfields
     piz_uncompress_compound_field ((VBlockP)vb, SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250, &vb->qname_mapper, &section_i);
 
     // OPTIONAL subfields
-    for (uint8_t sf_i=0; sf_i < vb->num_optional_subfield_b250s ; sf_i++) {
-        
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-        if (zfile_is_skip_section (vb, SEC_SAM_OPTNL_SF_B250, header->dict_id)) continue;
-
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, SEC_SAM_OPTNL_SF_DICT);
-
-        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_SAM_OPTNL_SF_B250);    
-    }
-
+    UNCOMPRESS_SUBFIELDS (vb->num_optional_subfield_b250s, SEC_SAM_OPTNL_SF_B250);
     piz_sam_map_optional_subfields (vb);
 
-    // RAND_POS, MD, SEQ and QUAL (data also contains E2 and U2 respectively, if they exist)
-    SectionHeader *pos_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, pos_header, &vb->random_pos_data, "random_pos_data", SEC_SAM_RAND_POS_DATA);    
+    UNCOMPRESS_DATA_SECTION (SEC_SAM_RAND_POS_DATA, random_pos_data, false);
     vb->random_pos_data.len /= 4; // its an array of uint32_t
 
-    SectionHeader *data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    
-    // uncompress the optional data sections MD, BD, BI - if they exist
-
-    if (data_header->section_type == SEC_SAM_MD_DATA) {
-        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->md_data, "md_data", SEC_SAM_MD_DATA);    
-        data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    }
-    
-    if (data_header->section_type == SEC_SAM_BD_DATA) {
-        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->bd_data, "bd_data", SEC_SAM_BD_DATA);    
-        data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    }
-    
-    if (data_header->section_type == SEC_SAM_BI_DATA) {
-        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->bi_data, "bi_data", SEC_SAM_BI_DATA);    
-        data_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    }
-    
-    zfile_uncompress_section ((VBlockP)vb, data_header, &vb->seq_data, "seq_data", SEC_SEQ_DATA);    
-
-    data_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    if (!flag_strip) zfile_uncompress_section ((VBlockP)vb, data_header, &vb->qual_data, "qual_data", SEC_QUAL_DATA);    
-}
-
-void piz_sam_uncompress_one_vb (VBlock *vb_)
-{
-    START_TIMER;
-
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-
-    piz_sam_uncompress_all_sections (vb);
+    UNCOMPRESS_DATA_SECTION (SEC_SAM_MD_DATA, md_data,  true);
+    UNCOMPRESS_DATA_SECTION (SEC_SAM_BD_DATA, bd_data,  true);    
+    UNCOMPRESS_DATA_SECTION (SEC_SAM_BI_DATA, bi_data,  true);    
+    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA,    seq_data, false);    // data also contains E2, if it exists
+    if (!flag_strip) UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, false);    // data also contains U2, if it exists
 
     piz_sam_reconstruct_vb (vb);
+    UNCOMPRESS_DONE;
+}
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
-    
-    COPY_TIMER (vb->profile.compute);
+void piz_sam_read_one_vb (VBlock *vb_)
+{ 
+    PREPARE_TO_READ (VBlockSAM, MAX_DICTS + 5, SectionHeaderVbHeader);
+    READ_FIELDS; // primary fields
+    READ_SUBFIELDS (vb->qname_mapper.num_subfields,  SEC_SAM_QNAME_SF_B250); // QNAME subfields
+    READ_SUBFIELDS (vb->num_optional_subfield_b250s, SEC_SAM_OPTNL_SF_B250); // OPTIONAL subfields
+    READ_DATA_SECTION (SEC_SAM_RAND_POS_DATA, false);
+    READ_DATA_SECTION (SEC_SAM_MD_DATA, true); // optional
+    READ_DATA_SECTION (SEC_SAM_BD_DATA, true); // optional
+    READ_DATA_SECTION (SEC_SAM_BI_DATA, true); // optional
+    READ_DATA_SECTION (SEC_SEQ_DATA, false);
+    READ_DATA_SECTION (SEC_QUAL_DATA, false);
+    READ_DONE;
 }

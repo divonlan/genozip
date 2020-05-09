@@ -8,6 +8,7 @@
 
 #include "vblock.h"
 #include "piz.h"
+#include "seg.h"
 #include "profiler.h"
 #include "endianness.h"
 #include "zfile.h"
@@ -16,6 +17,36 @@
 #include "move_to_front.h"
 #include "regions.h"
 #include "file.h"
+
+static void piz_gff3_reconstruct_array_of_struct (VBlockGFF3 *vb, uint8_t did_i, DictIdType dict_id, 
+                                                  unsigned num_items_in_struct, uint32_t txt_line_i)
+{
+    DECLARE_SNIP;
+    LOAD_SNIP (did_i);
+
+    if (snip_len <= 1 || snip[0] != 1) { // not struct - just copy
+        RECONSTRUCT (snip, snip_len);
+        return;
+    }
+
+    unsigned num_entries = atoi (snip+1);
+
+    MtfContext *ctxs; // an array of length num_items_in_struct (pointer to start of sub-array in vb->mtf_ctx)
+    MtfContext *enst_ctx;
+    seg_gff3_array_of_struct_ctxs (vb, dict_id, num_items_in_struct, &ctxs, &enst_ctx);
+
+    for (unsigned entry_i=0; entry_i < num_entries; entry_i++) {
+
+        for (unsigned item_i=0; item_i < num_items_in_struct; item_i++) {
+            RECONSTRUCT_FROM_DICT (ctxs[item_i].did_i, false);
+            RECONSTRUCT1 (" ");
+        }
+
+        RECONSTRUCT_ID (enst_ctx->did_i, &vb->enst_data, &vb->next_enst, NULL, false);
+
+        if (entry_i < num_entries-1) RECONSTRUCT1 (",");
+    }
+}
 
 static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t did_i, DictIdType dict_id, uint32_t txt_line_i)
 {
@@ -40,6 +71,15 @@ static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t di
         dict_id.num == dict_id_ATTR_Reference_seq ||
         dict_id.num == dict_id_ATTR_ancestral_allele) {
         RECONSTRUCT_FROM_BUF (vb->seq_data, vb->next_seq, "SEQ", '\t', "", 0);
+        return false;
+    }
+
+    if (dict_id.num == dict_id_ATTR_Variant_effect      ||
+        dict_id.num == dict_id_ATTR_sift_prediction     ||
+        dict_id.num == dict_id_ATTR_polyphen_prediction ||
+        dict_id.num == dict_id_ATTR_variant_peptide) {
+        unsigned num_item_in_struct = (dict_id.num == dict_id_ATTR_variant_peptide ? 2 : 3); // num items excluding ENST Id
+        piz_gff3_reconstruct_array_of_struct (vb, did_i, dict_id, num_item_in_struct, txt_line_i);
         return false;
     }
 
@@ -82,56 +122,28 @@ static void piz_gff3_reconstruct_vb (VBlockGFF3 *vb)
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
-static void piz_gff3_uncompress_all_sections (VBlockGFF3 *vb)
-{
-    ARRAY (const unsigned, section_index, vb->z_section_headers);
-
-    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-    vb->first_line       = BGEN32 (header->first_line);
-    vb->lines.len        = BGEN32 (header->num_lines);
-    vb->vb_data_size     = BGEN32 (header->vb_data_size);
-    vb->longest_line_len = BGEN32 (header->longest_line_len);
-
-    // in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
-    // because the dispatcher is re-initialized for every sam component
-    if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i);
-    
-    unsigned section_i=1;
-
-    // uncompress the fields     
-    piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
-
-    // uncompress ATTRIBUTE subfields
-    for (uint8_t sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
-        
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, &vb->num_info_subfields, 
-                                                  header->dict_id, SEC_GFF3_ATTRS_SF_DICT);
-
-        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_GFF3_ATTRS_SF_B250);    
-    }
-
-    // uncompress the seq data
-    SectionHeader *seq_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, seq_header, &vb->seq_data, "seq_data", SEC_SEQ_DATA);    
-
-    // uncompress the Dbxref data
-    SectionHeader *dbxref_header  = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, dbxref_header, &vb->dbxref_numeric_data, "dbxref_numeric_data", SEC_NUMERIC_ID_DATA);    
-}
-
 void piz_gff3_uncompress_one_vb (VBlock *vb_)
 {
-    START_TIMER;
-
-    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
-
-    piz_gff3_uncompress_all_sections (vb);
+    UNCOMPRESS_HEADER_AND_FIELDS (VBlockGFF3, true);
+    UNCOMPRESS_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250);
+    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, dbxref_numeric_data, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_ENST_DATA, enst_data, true);    
 
     piz_gff3_reconstruct_vb (vb);
+    UNCOMPRESS_DONE;
+}
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
+void piz_gff3_read_one_vb (VBlock *vb_)
+{ 
+    PREPARE_TO_READ (VBlockGFF3, MAX_DICTS + 2, SectionHeaderVbHeader);
+
+    if (vb->vblock_i == 1) piz_map_iname_subfields();
     
-    COPY_TIMER (vb->profile.compute);
+    READ_FIELDS; // primary fields
+    READ_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250); // ATTRIBUTES subfields
+    READ_DATA_SECTION (SEC_SEQ_DATA, true); // Data of Variant_seq, Reference_seq and ancestral_allele
+    READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // Data of Dbxref
+    READ_DATA_SECTION (SEC_ENST_DATA, true); // Data of ENST IDs coming from Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
+    READ_DONE;
 }

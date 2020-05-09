@@ -183,8 +183,11 @@ int v1_zfile_read_section (VBlock *vb,
     return header_offset;
 }
 
+#endif // V1_ZFILE
 
-bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
+#ifdef V1_PIZ
+
+bool v1_piz_vcf_read_one_vb (VBlockVCF *vb)
 { 
     START_TIMER;
 
@@ -196,7 +199,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
         if (!z_file->disk_size) 
             z_file->disk_size = z_file->disk_so_far;
             
-        COPY_TIMER (vb->profile.zfile_read_one_vb);
+        COPY_TIMER (vb->profile.piz_read_one_vb);
         return false; // end of file
     }
 
@@ -234,7 +237,7 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
 
     buf_alloc (vb, &vb->z_section_headers, 1000 /* arbitrary initial value */ * sizeof(char*), 0, "z_section_headers", 1);
     
-    ((unsigned *)vb->z_section_headers.data)[0] = vardata_header_offset; // variant data header is at index 0
+    *FIRSTENT (unsigned, vb->z_section_headers) = vardata_header_offset; // variant data header is at index 0
 
     // is_sb_included was introduced in version 4.0.x, we just set it "all included" for v1
     buf_alloc (vb, &vb->is_sb_included, num_sample_blocks * sizeof(bool), 1, "is_sb_included", vb->vblock_i);
@@ -264,14 +267,10 @@ bool v1_zfile_vcf_read_one_vb (VBlockVCF *vb)
         *ENT (bool, vb->is_sb_included, sb_i) = true;
     }
     
-    COPY_TIMER (vb->profile.zfile_read_one_vb);
+    COPY_TIMER (vb->profile.piz_read_one_vb);
 
     return true; 
 }
-
-#endif // V1_ZFILE
-
-#ifdef V1_PIZ
 
 #define V1_SAMPLES_PER_BLOCK 4096
 
@@ -314,12 +313,21 @@ static inline void v1_piz_vcf_decode_pos (VBlockVCF *vb, const char *str,
     *add_len = len - *delta_pos_len;
 }
 
+// traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
+static DictIdType v1_piz_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
+{
+    unsigned i=0; for (; i < *len && (*str)[i] != ':' && (*str)[i] != '\n'; i++);
+
+    DictIdType dict_id = dict_id_vcf_format_sf (dict_id_make (*str, MIN (i, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
+
+    *str += i+1;
+    *len -= i+1;
+    return dict_id; 
+}
 static void v1_piz_get_line_get_num_subfields (VBlockVCF *vb, unsigned line_i, // line in vcf file
                                                const char **line, unsigned *remaining_len,
                                                const char **subfields_start, unsigned *subfields_len, int *num_subfields)
 {    
-    START_TIMER;
-
     const char *after = *line + *remaining_len;
 
     unsigned column=1, i=0; for (; i < *remaining_len && column < 9; i++)
@@ -350,7 +358,7 @@ static void v1_piz_get_line_get_num_subfields (VBlockVCF *vb, unsigned line_i, /
     // count the number of subfields in the line
     for (*num_subfields = 1; *num_subfields <= MAX_SUBFIELDS; (*num_subfields)++) {
         uint32_t len = after - *line;
-        seg_vcf_get_format_subfield (line, &len);
+        v1_piz_get_format_subfield (line, &len);
         if ((*line)[-1] == '\n') break;
     } 
 
@@ -360,8 +368,6 @@ static void v1_piz_get_line_get_num_subfields (VBlockVCF *vb, unsigned line_i, /
 
 cleanup:
     *remaining_len = after - *line;
-
-    COPY_TIMER (vb->profile.piz_vcf_get_format_info)
 }
 
 static void v1_piz_vcf_reconstruct_fields (VBlockVCF *vb, 
@@ -434,7 +440,7 @@ static void v1_piz_get_line_subfields (VBlockVCF *vb, unsigned line_i, // line i
     const char *after = subfields_start + subfields_len;
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) {
         uint32_t len = after - subfields_start;
-        DictIdType subfield = seg_vcf_get_format_subfield (&subfields_start, &len);
+        DictIdType subfield = v1_piz_get_format_subfield (&subfields_start, &len);
 
         // the dictionaries were already read, so all subfields are expected to have a ctx
         unsigned did_i=0 ; for (; did_i < z_file->num_dict_ids; did_i++) 
@@ -491,7 +497,7 @@ static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
 
                         unsigned snip_len;
                         mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case sample_iterator[sample_i] will be a control character
-                                        &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + line_i);
+                                           &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + line_i);
 
                         if (snip && snip_len) { // it can be a valid empty subfield if snip="" and snip_len=0
                             memcpy (next, snip, snip_len);
@@ -535,8 +541,8 @@ static void v1_piz_initialize_next_gt_in_sample (VBlockVCF *vb, int *num_subfiel
 
         unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
         
-        const uint8_t *next = (const uint8_t *)vb->genotype_sections_data[sb_i].data;
-        const uint8_t *after = next + vb->genotype_sections_data[sb_i].len;
+        const uint8_t *next  = FIRSTENT (const uint8_t, vb->genotype_sections_data[sb_i]);
+        const uint8_t *after = AFTERENT (const uint8_t, vb->genotype_sections_data[sb_i]);
 
         unsigned sample_after = sb_i * V1_SAMPLES_PER_BLOCK + num_samples_in_sb;
         

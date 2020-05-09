@@ -20,26 +20,22 @@ void seg_vcf_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
-    buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);   
+
+    seg_init_mapper (vb_, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
+    seg_init_mapper (vb_, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf,  "iname_mapper_buf");    
 }             
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
-DictIdType seg_vcf_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
+static DictIdType seg_vcf_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
 {
-    DictIdType subfield = { 0 };
+    unsigned i=0; for (; i < *len && (*str)[i] != ':' && (*str)[i] != '\t' && (*str)[i] != '\n'; i++);
 
-    unsigned i=0; for (; i < *len; i++) {
-        if ((*str)[i] != ':' && (*str)[i] != '\t' && (*str)[i] != '\n') { // note: in vcf files, we will see \t at end of FORMAT, but in variant data sections of piz files, we will see a \n
-            
-            if (i < DICT_ID_LEN) // note, a subfield might be longer that DICT_ID_LEN, but we copy only the first DICT_ID_LEN characters
-                subfield.id[i] = (*str)[i];
-        } 
-        else break;
-    }
+    DictIdType dict_id = dict_id_vcf_format_sf (dict_id_make (*str, i));
 
     *str += i+1;
     *len -= i+1;
-    return subfield; 
+    return dict_id; 
 }
 
 static void seg_vcf_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, 
@@ -439,7 +435,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // ID
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "ID");
-    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[VCF_ID], SEC_ID_B250, 
+    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[VCF_ID], SEC_ID_B250, SEC_NUMERIC_ID_DATA,
                   field_start, field_len, false, true);
 
     // REF + ALT

@@ -204,8 +204,6 @@ typedef struct VBlockVCF {
 
     Buffer sample_iterator;           // an array of SnipIterator - one for each sample. used for iterate on gt samples to get one snip at a time 
      
-    Buffer format_info_buf;           // used by piz, contains a FormatInfo entry for each unique FORMAT snip in a vb 
-
     Buffer column_of_zeros;           // used by piz_vcf_get_ht_columns_data
 
     // dictionaries stuff 
@@ -213,7 +211,7 @@ typedef struct VBlockVCF {
                                       // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     Buffer iname_mapper_buf;          // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
     uint8_t num_format_subfields;     // number of format subfields in this VB. num_subfields <= num_dict_ids-9.
-    Buffer format_mapper_buf;         // an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_FORMAT].mtf   
+    Buffer format_mapper_buf;         // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_FORMAT].mtf   
 
     // stuff related to compressing haplotype data with gtshark
     Buffer gtshark_db_db_data;        // ZIP & PIZ
@@ -331,13 +329,14 @@ typedef struct VBlockGFF3 {
 
     Buffer dbxref_numeric_data;   // ZIP & PIZ
     Buffer seq_data;              // ZIP & PIZ: data from the Variant_seq, Reference_seq and ancestral_allele subfields
+    Buffer enst_data; 
 
     uint8_t num_info_subfields;   // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                   // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
 
     // PIZ-only stuff
-    uint32_t next_seq, next_dbxref_numeric_data;  // PIZ only: used to reconstruct Dbxref
+    uint32_t next_seq, next_dbxref_numeric_data, next_enst;  // PIZ only: used to reconstruct data from buffers
 
 } VBlockGFF3;
 

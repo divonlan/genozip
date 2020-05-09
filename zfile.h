@@ -58,12 +58,6 @@ extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_li
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
 
-extern void zfile_vcf_read_one_vb  (VBlockP vb);
-extern void zfile_sam_read_one_vb  (VBlockP vb);
-extern void zfile_fast_read_one_vb (VBlockP vb);
-extern void zfile_gff3_read_one_vb (VBlockP vb);
-extern void zfile_me23_read_one_vb (VBlockP vb);
-
 // -----------------------------
 // VCF stuff
 // -----------------------------
@@ -72,7 +66,7 @@ extern void zfile_vcf_update_compressed_vb_header (VBlockP vb, uint32_t vcf_firs
 extern void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCFP vb, ConstBufferP haplotype_sections_data, unsigned sb_i);
 
 // v1 compatibility (VCF only)
-extern bool v1_zfile_vcf_read_one_vb (VBlockVCFP vb);
+extern bool v1_piz_vcf_read_one_vb (VBlockVCFP vb);
 extern int v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name, unsigned header_size, SectionType expected_sec_type, bool allow_eof);
 
 extern bool is_v2_or_above, is_v3_or_above, is_v4_or_above, is_v5_or_above;

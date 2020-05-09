@@ -33,7 +33,10 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
 uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_seq=0,
          dict_id_ATTR_Dbxref=0, // from from GRCh37/38 - example: "dbSNP_151:rs1282280967"
          dict_id_ATTR_ancestral_allele=0, // from from GRCh37/38 - example ancestral_allele=GTTA
-         dict_id_ATTR_SEQ=0; // private genozip dict
+         dict_id_ATTR_Variant_effect=0, // example: "Variant_effect=non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
+         dict_id_ATTR_sift_prediction=0, dict_id_ATTR_polyphen_prediction=0, dict_id_ATTR_variant_peptide=0,
+
+         dict_id_ATTR_SEQ=0, dict_id_ENSTid=0; // private genozip dict
 
 // our stuff used in multiple data types
 uint64_t dict_id_WindowsEOL=0;         
@@ -152,9 +155,14 @@ void dict_id_initialize (void)
         // fields added in the GVFs of GRCh37/38
         dict_id_ATTR_Dbxref           = dict_id_gff3_attr_sf (dict_id_make ("Dbxref", 6)).num;
         dict_id_ATTR_ancestral_allele = dict_id_gff3_attr_sf (dict_id_make ("ancestral_allele", 0)).num;
+        dict_id_ATTR_Variant_effect   = dict_id_gff3_attr_sf (dict_id_make ("Variant_effect", 0)).num;
+        dict_id_ATTR_sift_prediction  = dict_id_gff3_attr_sf (dict_id_make ("sift_prediction", 0)).num;
+        dict_id_ATTR_polyphen_prediction = dict_id_gff3_attr_sf (dict_id_make ("polyphen_prediction", 0)).num;
+        dict_id_ATTR_variant_peptide  = dict_id_gff3_attr_sf (dict_id_make ("variant_peptide", 0)).num;
 
         // our own dictionary where we store Variant_seq, Reference_seq and ancestral_allele together
         dict_id_ATTR_SEQ              = dict_id_gff3_attr_sf (dict_id_make ("SEQ", 3)).num;
+        dict_id_ENSTid                = dict_id_gff3_attr_sf (dict_id_make ("ENSTid", 0)).num;
         break;
 
     default:

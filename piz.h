@@ -12,36 +12,128 @@ extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool i
 
 extern int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);
-extern void piz_uncompress_fields (VBlockP vb, const unsigned *section_index, unsigned *section_i);
-extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
 extern void piz_map_iname_subfields (void);
 
 // ----------------------
 // VCF stuff
 // ----------------------
+extern void piz_vcf_read_one_vb  (VBlockP vb);
 extern void piz_vcf_uncompress_one_vb (VBlockP vb);
 extern void v2v3_piz_vcf_map_iname_subfields (BufferP vb);
 
 // ----------------------
 // SAM stuff
 // ----------------------
+extern void piz_sam_read_one_vb  (VBlockP vb);
 extern void piz_sam_uncompress_one_vb (VBlockP vb);
 
 // ----------------------
 // FASTQ + FASTA stuff
 // ----------------------
+extern void piz_fast_read_one_vb (VBlockP vb);
 extern void piz_fast_uncompress_one_vb (VBlockP vb);
 extern bool piz_fast_test_grep (VBlockFASTP vb);
 
 // ----------------------
 // GFF3 stuff
 // ----------------------
-extern void piz_gff3_uncompress_one_vb (VBlockP vb);
+extern void piz_gff3_read_one_vb (VBlockP vb);
+extern void piz_gff3_uncompress_one_vb
+ (VBlockP vb);
 
 // ----------------------
 // 23andMe stuff
 // ----------------------
+extern void piz_me23_read_one_vb (VBlockP vb);
 extern void piz_me23_uncompress_one_vb (VBlockP vb);
+
+// ----------------------------------------------
+// utilities for use by piz_*_read_one_vb
+// ----------------------------------------------
+
+#define PREPARE_TO_READ(vbblock_type,max_sections,sec_type_vb_header)  \
+    START_TIMER; \
+    vbblock_type *vb = (vbblock_type *)vb_; \
+    SectionListEntry *sl = sections_vb_first (vb->vblock_i); \
+    int vb_header_offset = zfile_read_section (vb_, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", \
+                                               sizeof(sec_type_vb_header), SEC_VB_HEADER, sl++); \
+    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);\
+    mtf_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ \
+    buf_alloc (vb, &vb->z_section_headers, (max_sections) * sizeof(char*), 0, "z_section_headers", 1); /* room for section headers */ \
+    *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; /* vb header is at index 0 */ \
+    vb->z_section_headers.len =1;
+
+#define READ_SB_SECTION(sec,header_type,sb_i) \
+    { *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len++) = vb->z_data.len; \
+      zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
+
+#define READ_SECTION(sec,header_type,is_optional) {  \
+    if (!(is_optional) || sl->section_type == (sec)) \
+        READ_SB_SECTION(sec, header_type, NO_SB_I);  \
+}
+#define READ_DATA_SECTION(sec,is_optional) READ_SECTION((sec), SectionHeader, (is_optional))
+
+#define READ_FIELDS { for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) \
+                          READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250, false); }
+
+#define READ_SUBFIELDS(num,sec_b250) { \
+    num = sections_count_sec_type (vb->vblock_i, (sec_b250)); \
+    for (uint8_t sf_i=0; sf_i < (num); sf_i++) \
+        READ_SECTION (sec_b250, SectionHeaderBase250, false);  \
+}
+
+#define READ_DONE \
+    COPY_TIMER (vb->profile.piz_read_one_vb); \
+    vb->ready_to_dispatch = true; /* all good */ 
+
+// --------------------------------------------------
+// utilities for use by piz_*_uncompress_all_sections
+// --------------------------------------------------
+
+extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
+
+#define UNCOMPRESS_HEADER_AND_FIELDS(vb_block_type,also_uncompress_fields) \
+    START_TIMER;\
+    vb_block_type *vb = (vb_block_type *)vb_; \
+    ARRAY (const unsigned, section_index, vb->z_section_headers); \
+    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);\
+    vb->first_line       = BGEN32 (header->first_line);      \
+    vb->lines.len        = BGEN32 (header->num_lines);       \
+    vb->vb_data_size     = BGEN32 (header->vb_data_size);    \
+    vb->longest_line_len = BGEN32 (header->longest_line_len);\
+    if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ \
+    unsigned section_i=1;\
+    if (also_uncompress_fields) UNCOMPRESS_FIELDS;
+
+#define UNCOMPRESS_FIELDS { \
+    for (int f=0 ; f <= datatype_last_field[vb->data_type] ; f++) { \
+        SectionType b250_sec = FIELD_TO_B250_SECTION(vb->data_type, f); \
+        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]); \
+        zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);\
+    }\
+}
+
+#define UNCOMPRESS_SUBFIELDS(num_subfields,sec_b250) {\
+    for (uint8_t sf_i=0; sf_i < num_subfields ; sf_i++) {\
+        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]); \
+        if (zfile_is_skip_section (vb, (sec_b250), header->dict_id)) continue; \
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, (sec_b250)-1); \
+        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", (sec_b250)); \
+    } \
+}
+
+#define UNCOMPRESS_DATA_SECTION(sec, vb_buf_name, is_optional) { \
+    SectionHeader *data_header = (SectionHeader *)(vb->z_data.data + section_index[section_i]); \
+    if (!(is_optional) || (section_i < vb->z_section_headers.len && data_header->section_type == (sec))) { \
+        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->vb_buf_name, #vb_buf_name, (sec)); \
+        section_i++;\
+    }\
+}
+
+#define UNCOMPRESS_DONE \
+    vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ \
+    COPY_TIMER (vb->profile.compute);
+
 
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb

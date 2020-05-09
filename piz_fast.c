@@ -20,7 +20,7 @@
 static const char *eol[2] = { "\n", "\r\n"};
 static const unsigned eol_len[2] = { 1, 2 };
 
-// called by I/O thread in zfile_fast_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
+// called by I/O thread in piz_fast_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
 bool piz_fast_test_grep (VBlockFAST *vb)
 {
@@ -42,7 +42,7 @@ bool piz_fast_test_grep (VBlockFAST *vb)
     buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data", vb->vblock_i);
 
     // uncompress the fields     
-    piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
+    UNCOMPRESS_FIELDS;
     
     // uncompress DESC subfields
     piz_uncompress_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
@@ -221,65 +221,55 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
-static void piz_fast_uncompress_all_sections (VBlockFAST *vb)
+void piz_fast_uncompress_one_vb (VBlock *vb_)
 {
-    ARRAY (const unsigned, section_index, vb->z_section_headers);
-
-    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-    vb->first_line       = BGEN32 (header->first_line);
-    vb->lines.len        = BGEN32 (header->num_lines);
-    vb->vb_data_size     = BGEN32 (header->vb_data_size);
-    vb->longest_line_len = BGEN32 (header->longest_line_len);
-
-    // in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
-    // because the dispatcher is re-initialized for every sam component
-    if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i);
-    
-    unsigned section_i=1;
-
-    // uncompress the fields     
-    if (!flag_grep) // if flag_grep - the DESC fields were already uncompressed by the I/O thread
-        piz_uncompress_fields ((VBlockP)vb, section_index, &section_i);
-    else 
-        section_i += NUM_FAST_FIELDS;
+    UNCOMPRESS_HEADER_AND_FIELDS (VBlockFAST, !flag_grep); // if flag_grep - the DESC fields were already uncompressed by the I/O thread
     
     // DESC subfields
     if (!flag_grep) // if flag_grep - the DESC subfields were already uncompressed by the I/O thread
         piz_uncompress_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
-    else
-        section_i += vb->desc_mapper.num_subfields;
+    else 
+        section_i += vb->desc_mapper.num_subfields + NUM_FAST_FIELDS; // we didn't compress the fields - just skip them
 
-    // SEQ    
-    SectionHeader *seq_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-    zfile_uncompress_section ((VBlockP)vb, seq_header, &vb->seq_data, "seq_data", SEC_SEQ_DATA);    
+    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, false); // SEQ    
 
-    // QUAL (FASTQ only)
     if (vb->data_type == DT_FASTQ) {
-        SectionHeader *qual_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-        zfile_uncompress_section ((VBlockP)vb, qual_header, &vb->qual_data, "qual_data", SEC_QUAL_DATA);    
+        UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, false) // QUAL (FASTQ only)
+        piz_fastq_reconstruct_vb ((VBlockFASTP)vb);
+    }
+    else {
+        UNCOMPRESS_DATA_SECTION (SEC_FASTA_COMMENT_DATA, comment_data, false); // COMMENT (FASTA only)
+        piz_fasta_reconstruct_vb ((VBlockFASTP)vb);
     }
 
-    // COMMENT (FASTA only)
-    else {
-        SectionHeader *comment_header = (SectionHeader *)(vb->z_data.data + section_index[section_i++]);
-        zfile_uncompress_section ((VBlockP)vb, comment_header, &vb->comment_data, "comment_data", SEC_FASTA_COMMENT_DATA);    
-    }
+    UNCOMPRESS_DONE;
 }
 
-void piz_fast_uncompress_one_vb (VBlock *vb_)
-{
-    START_TIMER;
 
-    VBlockFAST *vb = (VBlockFAST *)vb_;
+void piz_fast_read_one_vb (VBlock *vb_)
+{ 
+    // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
+    // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
+    // integrated into the global dictionaries.
+    // Order of sections in a VB:
+    // 1. SEC_VB_HEADER - its data is the haplotype index
+    // 2. SEC_FAST_DESC_B250 and SEC_FAST_LINEMETA_B250
+    // 3. SEC_FAST_DESC_SF_B250 - Description subfields
+    // 7. SEC_SEQ_DATA      - Sequences data 
+    // 8. SEC_QUAL_DATA     - Quality data (FASTQ only)    
 
-    piz_fast_uncompress_all_sections ((VBlockFASTP)vb);
+    PREPARE_TO_READ (VBlockFAST, MAX_DICTS + 3, SectionHeaderVbHeader);
+    READ_FIELDS;
+    READ_SUBFIELDS (vb->desc_mapper.num_subfields, SEC_FAST_DESC_SF_B250); // DESC subfields
 
-    if (vb->data_type == DT_FASTQ)
-        piz_fastq_reconstruct_vb ((VBlockFASTP)vb);
-    else
-        piz_fasta_reconstruct_vb ((VBlockFASTP)vb);
+    if (flag_grep && !piz_fast_test_grep (vb)) goto finish; // ususually, we uncompress and reconstruct the DESC from the I/O thread in case of --grep
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway
-    
-    COPY_TIMER (vb->profile.compute);
+    // read SEQ and QUAL data (FASTQ) or COMMENT data (FASTA)
+    READ_DATA_SECTION (SEC_SEQ_DATA, false);
+    READ_DATA_SECTION (z_file->data_type == DT_FASTQ ? SEC_QUAL_DATA : SEC_FASTA_COMMENT_DATA, false);
+
+    vb->ready_to_dispatch = true; // all good
+
+finish:
+    COPY_TIMER (vb->profile.piz_read_one_vb);
 }

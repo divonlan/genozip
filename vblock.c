@@ -83,7 +83,6 @@ static void vb_vcf_release_vb (VBlock *vb_)
     buf_free(&vb->gt_sb_line_lengths_buf);
     buf_free(&vb->helper_index_buf);
     buf_free(&vb->ht_columns_data);
-    buf_free(&vb->format_info_buf);
     buf_free(&vb->column_of_zeros);
 
     buf_free(&vb->gtshark_db_db_data);
@@ -126,7 +125,7 @@ static void vb_vcf_destroy_vb (VBlock **vb_)
     buf_destroy (&(*vb)->gt_sb_line_lengths_buf);
     buf_destroy (&(*vb)->helper_index_buf);
     buf_destroy (&(*vb)->ht_columns_data);
-    buf_destroy (&(*vb)->format_info_buf);
+    buf_destroy (&(*vb)->format_mapper_buf);
     buf_destroy (&(*vb)->id_numeric_data);
     buf_destroy (&(*vb)->column_of_zeros);
     buf_destroy (&(*vb)->gtshark_db_db_data);
@@ -247,13 +246,14 @@ static void vb_gff3_release_vb (VBlock *vb_)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
-    vb->next_seq = vb->next_dbxref_numeric_data = 0;
+    vb->next_seq = vb->next_dbxref_numeric_data = vb->next_enst = 0;
     vb->num_info_subfields = 0;
     vb->last_id = 0;
     
     buf_free (&vb->seq_data);
     buf_free (&vb->dbxref_numeric_data);
     buf_free (&vb->iname_mapper_buf);
+    buf_free (&vb->enst_data);
 }
 
 // free all memory of a VB
@@ -264,6 +264,7 @@ static void vb_gff3_destroy_vb (VBlock **vb_)
     buf_destroy (&(*vb)->seq_data);
     buf_destroy (&(*vb)->dbxref_numeric_data);
     buf_destroy (&(*vb)->iname_mapper_buf);
+    buf_destroy (&(*vb)->enst_data);
 }
 
 //--------------------------------

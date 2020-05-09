@@ -28,21 +28,6 @@ static const ComputeFunc uncompress_func_by_dt[NUM_DATATYPES] = UNCOMPRESS_FUNC_
 
 static Buffer piz_iname_mapper_buf = EMPTY_BUFFER;
 
-void piz_uncompress_fields (VBlock *vb, const unsigned *section_index,
-                            unsigned *section_i /* in/out */)
-{
-    // uncompress b250 data for all primary fields
-    for (int f=0 ; f <= datatype_last_field[vb->data_type] ; f++) {
-
-        SectionType b250_sec = FIELD_TO_B250_SECTION(vb->data_type, f);
-
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
-        //if (zfile_is_skip_section (vb, b250_sec, DICT_ID_NONE)) continue;
-
-        zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);
-    }
-}
-
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len,
                         int32_t *last_delta, // optional in/out
@@ -166,7 +151,7 @@ void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const c
     }
 }
 
-// Called from the I/O thread zfile_*_read_one_vb - and immutable thereafter
+// Called from the I/O thread piz_*_read_one_vb - and immutable thereafter
 // Constructs the iname mapper - mapping an iname word like "I1=I2=I3" to its subfields
 // This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries
 void piz_map_iname_subfields (void)
@@ -276,19 +261,24 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
         // get the name eg "AF="
         const char *start = iname_snip;
         for (; *iname_snip != '=' && (*iname_snip != ';' || v2v3_bug) && *iname_snip != '\t'; iname_snip++);
-        if (*iname_snip == '=') iname_snip++; // move past the '=' 
-
+        bool has_value = (*iname_snip == '=');
+        
+        if (has_value) iname_snip++; // move past the '=', if one exists
         RECONSTRUCT (start, (unsigned)(iname_snip-start)); // name inc. '=' e.g. "Info1="
 
-        // callback to reconstruct in case this is special subfield
-        if (reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i], txt_line_i) // special cases sometimes apply even if DID_I_NONE
-            && did_i != DID_I_NONE) {
-            // no special treatment - we proceed with the default
-            DECLARE_SNIP;
-            LOAD_SNIP (did_i);
-            RECONSTRUCT (snip, snip_len); // value e.g "value1"
-        }
+        // handle the value part of "name=value", if there is one
+        if (has_value) {
         
+            bool regular = reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i], txt_line_i);
+            
+            if (regular) { // no special treatment - we proceed with the regular treatment
+                ASSERT (did_i != DID_I_NONE, "Error in piz_reconstruct_info: did_i=DID_I_NONE for dict_id=%s", err_dict_id (iname_mapper->dict_id[sf_i]));
+                DECLARE_SNIP;
+                LOAD_SNIP (did_i);
+                RECONSTRUCT (snip, snip_len); // value e.g "value1"
+            }
+        }
+
         RECONSTRUCT1 (";"); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
         if (*iname_snip == ';') iname_snip++;
     }
@@ -495,7 +485,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                     default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));
                 }
             }
-            else still_more_data = v1_zfile_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
+            else still_more_data = v1_piz_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
             
             if (still_more_data) {
                 if (!grepped_out) 

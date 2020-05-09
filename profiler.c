@@ -20,11 +20,10 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     dst->zfile_uncompress_section          += src->zfile_uncompress_section;
     dst->squeeze                           += src->squeeze;
     dst->buf_alloc                         += src->buf_alloc;
-    dst->piz_vcf_get_format_info           += src->piz_vcf_get_format_info;
     dst->piz_vcf_initialize_sample_iterators    += src->piz_vcf_initialize_sample_iterators;
     dst->piz_get_line_subfields            += src->piz_get_line_subfields;
     dst->piz_vcf_reconstruct_samples                += src->piz_vcf_reconstruct_samples;
-    dst->zfile_read_one_vb                 += src->zfile_read_one_vb;
+    dst->piz_read_one_vb                 += src->piz_read_one_vb;
     dst->zfile_compress_dictionary_data    += src->zfile_compress_dictionary_data,
     dst->txtfile_read_vblock        += src->txtfile_read_vblock;
     dst->txtfile_read_header               += src->txtfile_read_header;
@@ -86,7 +85,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     if (command != ZIP) { // this is a uncompress operation
 
         fprintf (stderr, "GENOUNZIP I/O thread (piz_dispatcher):\n");
-        fprintf (stderr, "   zfile_read_one_vb: %u\n", ms(p->zfile_read_one_vb));
+        fprintf (stderr, "   piz_read_one_vb: %u\n", ms(p->piz_read_one_vb));
         fprintf (stderr, "      read: %u\n", ms(p->read));
         fprintf (stderr, "      mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
         fprintf (stderr, "   write: %u\n", ms(p->write));
@@ -94,7 +93,6 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "   zfile_uncompress_section: %u\n", ms(p->zfile_uncompress_section));
         fprintf (stderr, "   piz_reconstruct_vb: %u\n", ms(p->piz_reconstruct_vb));
         fprintf (stderr, "      piz_vcf_get_variant_data_line: %u\n", ms(p->piz_vcf_get_variant_data_line));
-        fprintf (stderr, "      piz_vcf_get_format_info: %u\n", ms(p->piz_vcf_get_format_info));
         fprintf (stderr, "      piz_get_line_subfields: %u\n", ms(p->piz_get_line_subfields));
         fprintf (stderr, "      piz_vcf_get_haplotype_data_line: %u\n", ms(p->piz_vcf_get_haplotype_data_line));
         fprintf (stderr, "      piz_vcf_initialize_sample_iterators: %u\n", ms(p->piz_vcf_initialize_sample_iterators));
