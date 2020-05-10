@@ -130,8 +130,11 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 {
     SnipIterator *iterator = override_iterator ? override_iterator : &ctx->iterator;
     
-    if (!override_iterator && !iterator->next_b250) // INFO and Field1-9 data (GT data uses override_next_b250)
+    if (!override_iterator && !iterator->next_b250) { // INFO and Field1-9 data (GT data uses override_next_b250)
+        ASSERT (buf_is_allocated (&ctx->b250), "Error in mtf_get_next_snip: b250 is unallocated. dict_id=%s", err_dict_id(ctx->dict_id));
+        
         iterator->next_b250 = FIRSTENT (uint8_t, ctx->b250); // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
+    }
 
     // an imperfect test for overflow, but this should never happen anyway 
     ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), "Error while reconstrucing line %u vb_i=%u: iterator for %s reached end of data",

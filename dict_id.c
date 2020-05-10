@@ -189,6 +189,6 @@ const char *dict_id_display_type (DataType dt, DictIdType dict_id)
 const char *err_dict_id (DictIdType dict_id)
 {
     static char s[DICT_ID_LEN+1];
-    sprintf (s, "%.*s", DICT_ID_LEN, dict_id_printable(dict_id).id);
+    sprintf (s, "%.*s", DICT_ID_LEN, dict_id.num ? (char*)dict_id_printable(dict_id).id : "<null>");
     return s;
 }

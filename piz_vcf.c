@@ -71,11 +71,10 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
                             txt_line_i, has_13);
     RECONSTRUCT1 ("\t");
 
-    if (flag_gt_only) {
-        if (global_vcf_num_samples) RECONSTRUCT ("GT\t", 3);
+    if (vb->has_genotype_data || vb->has_genotype_data) {
+        if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
+        else              RECONSTRUCT_FROM_DICT (VCF_FORMAT, true);
     }
-    else
-        RECONSTRUCT_FROM_DICT (VCF_FORMAT, true);
 
     // after consuming sections' data, if this line is not to be outputed - shorten txt_data back to start of line
     if (!line_included) vb->txt_data.len = txt_data_start; 

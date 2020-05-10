@@ -29,6 +29,8 @@ Base250 base250_encode (uint32_t n) // number to encode
 
 uint32_t base250_decode (const uint8_t **str)
 {
+    ASSERT0 (*str, "Error in base250_decode: *str is NULL");
+
     switch ((*str)[0]) {
         case BASE250_MOST_FREQ0: (*str)++; return 0;
         case BASE250_MOST_FREQ1: (*str)++; return 1;

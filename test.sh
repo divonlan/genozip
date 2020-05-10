@@ -112,8 +112,13 @@ done
 
 if `command -v gtshark >& /dev/null`; then
     test_header "test-file.vcf --gtshark"
-    ./genozip $file --gtshark -ft -o ${output}.genozip || exit 1
+    ./genozip test-file.vcf --gtshark -ft -o ${output}.genozip || exit 1
 fi
+
+test_header "test-file.vcf without FORMAT or samples"
+cut -f1-8 test-file.vcf > test-input.vcf
+./genozip test-input.vcf -ft -o ${output}.genozip || exit 1
+rm test-input.vcf
 
 if `command -v samtools >& /dev/null`; then
     test_header "test_file.sam - input and output as BAM"
