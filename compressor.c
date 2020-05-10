@@ -400,6 +400,8 @@ bool comp_error (VBlock *vb, const char *uncompressed, uint32_t uncompressed_len
     return false;
 }
 
+#define MIN_LEN_FOR_COMPRESSION 30 // less that this size its not worth compressing
+
 // compresses data - either a conitguous block or one line at a time. If both are NULL that there is no data to compress.
 void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                     SectionHeader *header, 
@@ -432,9 +434,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         encryption_padding_reserve = crypt_max_padding_len(); // padding for the body
     }
 
-    // if there's no data to compress, set compression to NONE
-    if (!data_uncompressed_len) header->sec_compression_alg = COMP_PLN;
-       
+    // if there's no data to compress, or its too small, don't compress
+    if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION) 
+        header->sec_compression_alg = COMP_PLN;
+
     uint32_t est_compressed_len = 
         (header->sec_compression_alg != COMP_PLN) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
 

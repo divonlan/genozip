@@ -13,8 +13,8 @@
 #include "strings.h"
 
 // optimize numbers in the range (-99.5,99.5) to 2 significant digits
-static inline bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_at /* 0 if no cap */,
-                                             char *optimized_snip, unsigned *optimized_snip_len)
+bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_at /* 0 if no cap */,
+                               char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (!IS_DIGIT(snip[0]) && snip[0] != '.' && snip[0] != '-') return false; // not a number
 
@@ -141,15 +141,6 @@ bool optimize_vcf_format (DictIdType dict_id, const char *snip, unsigned len, ch
     if (dict_id.num == dict_id_FORMAT_GL) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
     if (dict_id.num == dict_id_FORMAT_GP) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
     if (dict_id.num == dict_id_FORMAT_PL) return optimize_vcf_pl (snip, len, optimized_snip, optimized_snip_len);
-    
-    ABORT ("Error in optimize: unsupport dict %s", err_dict_id (dict_id));
-    return 0; // never reaches here, avoid compiler warning
-}
-
-bool optimize_vcf_info (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
-{
-    if (dict_id.num == dict_id_INFO_VQSLOD) 
-        return optimize_float_2_sig_dig (snip, len, 0, optimized_snip, optimized_snip_len);
     
     ABORT ("Error in optimize: unsupport dict %s", err_dict_id (dict_id));
     return 0; // never reaches here, avoid compiler warning

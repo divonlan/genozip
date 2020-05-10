@@ -93,7 +93,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_OPTION_STRAND,
 
                 // GVF attributes - standard
-                dict_id_ATTR_ID, dict_id_ATTR_Variant_seq, dict_id_ATTR_Reference_seq,
+                dict_id_ATTR_ID, dict_id_ATTR_Variant_seq, dict_id_ATTR_Reference_seq, dict_id_ATTR_Variant_freq,
 
                 // GVF attributes - from GRCh37/38 etc
                 dict_id_ATTR_Dbxref, // example: "dbSNP_151:rs1282280967"
@@ -105,7 +105,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
 
                 dict_id_ATTR_SEQ, dict_id_ENSTid;  // private genozip dict
 
-extern void dict_id_initialize (void);
+extern void dict_id_initialize (DataType data_type);
 
 extern const char *dict_id_display_type (DataType dt, DictIdType dict_id);
 

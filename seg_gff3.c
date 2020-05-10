@@ -12,6 +12,7 @@
 #include "file.h"
 #include "strings.h"
 #include "dict_id.h"
+#include "optimize.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineGFF3, vb->lines, i)
 
@@ -180,6 +181,17 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
 
         seg_add_to_data_buf (vb_, &vb->seq_data, SEC_SEQ_DATA, *this_value, *this_value_len, '\t', *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
+    }
+
+    // Optimize Variant_freq
+    unsigned optimized_snip_len;
+    if (flag_optimize && (ctx->dict_id.num == dict_id_ATTR_Variant_freq) &&
+        optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
+        
+        vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
+        *this_value = optimized_snip;
+        *this_value_len = optimized_snip_len;
+        return true; // procedue with adding to dictionary/b250
     }
 
     return true; // all other cases -  procedue with adding to dictionary/b250

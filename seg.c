@@ -280,7 +280,9 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
     int32_t pos_delta = this_pos - last_pos;
     
     // if the delta is too big, add the POS to RANDOM_POS and put \5 in the b250
-    if (pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) {
+    // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
+    // section in every VB just for a single entry in case of a nicely sorted file
+    if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && last_pos) {
         seg_add_to_random_pos_data (vb, SEC_RANDOM_POS_DATA, pos_str, pos_len, pos_len+1, field_name);
         static const char pos_lookup[1] = {POS_LOOKUP};
         seg_one_snip (vb, pos_lookup, 1, did_i, sec_pos_b250, NULL);

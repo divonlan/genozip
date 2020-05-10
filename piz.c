@@ -316,7 +316,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 {
     DataType data_type = zfile_read_genozip_header (original_file_digest);
     
-    dict_id_initialize(); // must run after zfile_read_genozip_header that sets z_file->data_type; needed by V1 too
+    dict_id_initialize (data_type); // must run after zfile_read_genozip_header that sets z_file->data_type; needed by V1 too
 
     if (data_type == DT_VCF_V1 || data_type == DT_NONE) return data_type;
     

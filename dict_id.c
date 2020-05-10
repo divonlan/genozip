@@ -30,7 +30,7 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_STRAND=0; // private genozip dict
 
 // GVF stuff
-uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_seq=0,
+uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_seq=0, dict_id_ATTR_Variant_freq=0,
          dict_id_ATTR_Dbxref=0, // from from GRCh37/38 - example: "dbSNP_151:rs1282280967"
          dict_id_ATTR_ancestral_allele=0, // from from GRCh37/38 - example ancestral_allele=GTTA
          dict_id_ATTR_Variant_effect=0, // example: "Variant_effect=non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
@@ -63,18 +63,22 @@ DictIdType dict_id_make(const char *str, unsigned str_len)
     return dict_id;
 }
 
-void dict_id_initialize (void) 
+void dict_id_initialize (DataType data_type) 
 {   
-    ASSERT0 (z_file->data_type != DT_NONE, "Error in dict_id_initialize: z_file->data_type is DT_NONE");
+    ASSERT0 (data_type != DT_NONE, "Error in dict_id_initialize: data_type is DT_NONE");
 
-    for (int f=0; f < DTFZ(num_fields); f++) {
-        const char *field_name = DTFZ(names)[f];
+    // note: data_type can be DT_VCF_V1 when coming from PIZ if the file is truly a v1,
+    // or if it is a truncated genozip file or not a genozip file at all.
+    if (data_type == DT_VCF_V1) data_type = DT_VCF;
+
+    for (int f=0; f < dt_fields[data_type].num_fields; f++) {
+        const char *field_name = dt_fields[data_type].names[f];
         dict_id_fields[f] = dict_id_field (dict_id_make (field_name, strlen (field_name))).num; 
     }
 
     dict_id_WindowsEOL = dict_id_type_1 (dict_id_make ("#", 1)).num; 
 
-    switch (z_file->data_type) { 
+    switch (data_type) { 
     case DT_VCF:
         dict_id_FORMAT_PL     = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
         dict_id_FORMAT_GP     = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
@@ -151,6 +155,7 @@ void dict_id_initialize (void)
         dict_id_ATTR_ID               = dict_id_gff3_attr_sf (dict_id_make ("ID", 2)).num;
         dict_id_ATTR_Variant_seq      = dict_id_gff3_attr_sf (dict_id_make ("Variant_seq", 0)).num;
         dict_id_ATTR_Reference_seq    = dict_id_gff3_attr_sf (dict_id_make ("Reference_seq", 0)).num;
+        dict_id_ATTR_Variant_freq     = dict_id_gff3_attr_sf (dict_id_make ("Variant_freq", 0)).num;
 
         // fields added in the GVFs of GRCh37/38
         dict_id_ATTR_Dbxref           = dict_id_gff3_attr_sf (dict_id_make ("Dbxref", 6)).num;
