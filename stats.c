@@ -183,11 +183,13 @@ void stats_show_sections (void)
              str_size(total_z, zsize),   100.0 * (double)total_z   / (double)z_file->disk_size,
              (double)total_txt / (double)total_z, "");
 
+    uint64_t all_dicts_comp_len=0, all_dicts_uncomp_len=0;
+    char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
+
     fprintf (stderr, "\nDictionaries:\n");
     fprintf (stderr, "did_i Name     Type            #Words        #Uniq         Hash    uncomp      comp      comp     comp     %% of \n");
     fprintf (stderr, "                                                                   dict        dict      b250     TOTAL    file \n");
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
-        char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
         uint32_t dict_compressed_size, b250_compressed_size;
 
         const MtfContext *ctx = &z_file->mtf_ctx[i];
@@ -195,6 +197,9 @@ void stats_show_sections (void)
         if (!ctx->mtf_i.len) continue;
         
         sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
+
+        all_dicts_uncomp_len += ctx->dict.len;
+        all_dicts_comp_len   += (uint64_t)dict_compressed_size;
 
         fprintf (stderr, "%-2u    %*.*s %-6.6s %15s %12s %12s %9s %9s %9s %9s %5.1f\n", i, -DICT_ID_LEN, DICT_ID_LEN, err_dict_id (ctx->dict_id), 
                  dict_id_display_type (z_file->data_type, ctx->dict_id), str_uint_commas (ctx->mtf_i.len, s1), str_uint_commas (ctx->mtf.len, s2), 
@@ -204,9 +209,11 @@ void stats_show_sections (void)
                  100.0 * (double)(dict_compressed_size + b250_compressed_size) / (double)total_z);
     }
 
+    fprintf (stderr, "\nTotal dictionaries size: On disk: %s ; In memory: %s\n", 
+             str_size (all_dicts_comp_len, s1), str_size (all_dicts_uncomp_len, s2));
+
     stats_verify_all_covered (covered);
 
-    char s1[20], s2[20];
     ASSERTW (total_z == z_file->disk_size, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
              str_uint_commas (total_z, s1), str_uint_commas (z_file->disk_size, s2), (int32_t)(z_file->disk_size - total_z));
 
@@ -215,7 +222,6 @@ void stats_show_sections (void)
     ASSERTW (total_txt == txt_file->txt_data_so_far_single || flag_optimize, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_uint_commas (total_txt, s1), str_uint_commas (txt_file->txt_data_size_single, s2), 
              (int32_t)(txt_file->txt_data_so_far_single - total_txt)); 
-
 }
 
 void stats_show_content (void)
