@@ -618,7 +618,7 @@ done:
 }
 
 // called from seg_all_data_lines (ZIP) and zfile_read_all_dictionaries (PIZ) to initialize all
-// primary field ctx's. these are not always used (e.g. when some are not read from disk due to --strip)
+// primary field ctx's. these are not always used (e.g. when some are not read from disk due to genocat options)
 // but we maintain their fixed positions anyway as the code relies on it
 void mtf_initialize_primary_field_ctxs (VBlock *vb, // NULL if called by zfile_read_all_dictionaries
                                         MtfContext *mtf_ctx /* an array */, 

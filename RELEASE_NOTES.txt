@@ -128,5 +128,6 @@
 - Added --grep for genocat FASTQ
 - Added --debug-progress and --show-hash, useful mostly for genozip developers
 - Reduce default vblock from 128MB to 16MB
+- Cancel option --strip
 
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

@@ -233,7 +233,7 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
 
 const char *st_name(SectionType sec_type)
 {
-    static const struct {const char *name; bool strip;} abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
+    static const struct {const char *name; } abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
     
     if (sec_type == SEC_EOF) return "SEC_EOF";
     

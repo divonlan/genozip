@@ -101,10 +101,6 @@ for file in ${files[@]}; do
     test_header "$file --optimize - NOT checking correctness, just that it doesn't crash"
     ./genozip $file -f --optimize -o ${output}.genozip || exit 1
 
-    # test --strip - but we need to remove first the END from the vcf test file (not supported with strip)
-    test_header "$file --strip - NOT checking correctness, just that it doesn't crash"
-    cat $file | sed 's/END/NOEND/g' | ./genozip -f -i ${file#*.} -o ${output}.genozip
-    ./genocat ${output}.genozip --strip > /dev/null || exit 1
 done
 
 files=`ls backward-compatibility-test/*.vcf` 

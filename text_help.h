@@ -288,8 +288,6 @@ static const char *help_genocat[] = {
     "   --sequential      Output in sequential format - each sequence in a single line",
     "   FASTA",
     "",
-    "   --strip           Display only genotype / sequence data and minimal additional information",
-    "",
     "   -o --output       <output -filename>. Output to this filename instead of stdout",
     "",
     "   -p --password     Provide password to access file(s) that were compressed with --password",

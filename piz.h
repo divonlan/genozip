@@ -218,7 +218,5 @@ typedef struct PizSubfieldMapper {
     piz_reconstruct_id ((VBlockP)vb, id_data, next_id, snip, snip_len, extra_bit,add_tab);\
 }
 
-#define IFNOTSTRIP(def,len) if (flag_strip) RECONSTRUCT_TABBED (def, len) else 
-
 #endif
 

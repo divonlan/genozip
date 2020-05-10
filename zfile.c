@@ -81,24 +81,10 @@ bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
 {
     VBlock *vb = (VBlock *)vb_;
 
-    static const struct {char *name; bool strip;} abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
-
-    if (flag_strip && abouts[st].strip) return true;
-
-    // other situations not covered by abouts.strip
     switch (vb ? vb->data_type : z_file->data_type) {
         case DT_VCF:
             if ((flag_drop_genotypes || flag_gt_only) && 
                 (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_VCF_GT_DATA || st == SEC_VCF_FRMT_SF_DICT))
-                return true;
-
-            break;
-
-        case DT_SAM:
-            // note: we need OPTIONAL to check for E2 that consumes SEQ, and we need OPTNL_SF for OA, SA, and XA only
-            if (flag_strip && 
-                (st == SEC_SAM_OPTNL_SF_DICT || st == SEC_SAM_OPTNL_SF_B250) && 
-                (dict_id.num != dict_id_OPTION_SA && dict_id.num != dict_id_OPTION_OA && dict_id.num != dict_id_OPTION_XA))
                 return true;
 
             break;
@@ -440,11 +426,6 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         SectionType st = sl_ent->section_type; 
         if (read_chrom == DICTREAD_CHROM_ONLY   && st != DTFZ(chrom_dict_sec)) continue;
         if (read_chrom == DICTREAD_EXCEPT_CHROM && st == DTFZ(chrom_dict_sec)) continue;
-
-        // END and POS share the same delta sequence (POS is the delta from the previous END). stripping away
-        // END would causes POS values to be incorrect. 
-        ASSERT0 (!flag_strip || z_file->data_type != DT_VCF || sl_ent->dict_id.num != dict_id_INFO_END, 
-                 "--strip is not supported for VCF files that contain an END subfield in INFO");
 
         if (zfile_is_skip_section (NULL, st, sl_ent->dict_id)) continue;
         

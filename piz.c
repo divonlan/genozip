@@ -386,7 +386,6 @@ static void enforce_v1_limitations (bool is_first_component)
     ENFORCE(flag_show_headers, "--show-headers");
     ENFORCE(flag_drop_genotypes, "--drop-genotypes");
     ENFORCE(flag_gt_only, "--flag_gt_only");
-    ENFORCE(flag_strip, "--flag_strip");
 }
 
 // returns true is successfully outputted a txt file

@@ -61,19 +61,17 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
     if (flag_regions && !regions_is_site_included (chrom_word_index, vb->last_pos)) // test here bc vb->last_pos might change if INFO has END
         line_included = false;
 
-    IFNOTSTRIP(".",1) { RECONSTRUCT_ID (VCF_ID, &vb->id_numeric_data, &vb->next_id_numeric, NULL, true); }
+    RECONSTRUCT_ID (VCF_ID, &vb->id_numeric_data, &vb->next_id_numeric, NULL, true); 
     RECONSTRUCT_FROM_DICT (VCF_REFALT, true);
-    IFNOTSTRIP(".",1) { RECONSTRUCT_FROM_DICT (VCF_QUAL, true);}
-    IFNOTSTRIP(".",1) { RECONSTRUCT_FROM_DICT (VCF_FILTER, true);}
+    RECONSTRUCT_FROM_DICT (VCF_QUAL, true);
+    RECONSTRUCT_FROM_DICT (VCF_FILTER, true);
 
-    IFNOTSTRIP(".",1) { 
-        uint32_t iname_word_index = LOAD_SNIP (VCF_INFO);        
-        piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, piz_vcf_reconstruct_special_info_subfields, 
-                              txt_line_i, has_13);
-        RECONSTRUCT1 ("\t");
-    }
+    uint32_t iname_word_index = LOAD_SNIP (VCF_INFO);        
+    piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, piz_vcf_reconstruct_special_info_subfields, 
+                            txt_line_i, has_13);
+    RECONSTRUCT1 ("\t");
 
-    if (flag_gt_only || flag_strip) {
+    if (flag_gt_only) {
         if (global_vcf_num_samples) RECONSTRUCT ("GT\t", 3);
     }
     else
@@ -523,7 +521,7 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
     }
     
     // initialize genotype stuff
-    if (vb->has_genotype_data && !flag_drop_genotypes && !flag_strip && !flag_gt_only) {
+    if (vb->has_genotype_data && !flag_drop_genotypes && !flag_gt_only) {
         
         // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
         piz_vcf_initialize_sample_iterators(vb);
@@ -548,7 +546,7 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
             // note: we always call piz_vcf_reconstruct_genotype_data_line even if !is_line_included, bc we need to advance the iterators
-            if (vb->has_genotype_data && !flag_strip && !flag_gt_only)  
+            if (vb->has_genotype_data && !flag_gt_only)  
                 piz_vcf_reconstruct_genotype_data_line (vb, vb_line_i, is_line_included);
 
             if (is_line_included)  {
@@ -639,26 +637,6 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
     UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, char, true);
 
-    /*
-    for (uint8_t sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
-        
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-
-        if (flag_strip) continue; // we don't need to create INFO subfield ctx if --strip
-
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, &vb->num_info_subfields, 
-                                                  header->dict_id, SEC_VCF_INFO_SF_DICT);
-
-        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_VCF_INFO_SF_B250);    
-    }
-*/
-
-    /*{
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
-        
-        zfile_uncompress_section ((VBlockP)vb, header, &vb->id_numeric_data, "id_numeric_data", SEC_NUMERIC_ID_DATA);
-    }*/
-
     if (flag_drop_genotypes) return; // if --drop-genotypes was requested - no need to uncompress the following sections
 
     // we allocate memory for the Buffer arrays only once the first time this VBlockVCF
@@ -689,7 +667,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) {
-            if (!flag_strip && !flag_gt_only) 
+            if (!flag_gt_only) 
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i], &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_VCF_GT_DATA);
             section_i++;
         }                
@@ -792,7 +770,7 @@ void piz_vcf_read_one_vb (VBlock *vb_)
     
     // iname mapper: first VB, we map all iname and format subfields to a global mapper. this uses
     // dictionary info only, not b250
-    if (!flag_strip && vb->vblock_i == 1) {
+    if (vb->vblock_i == 1) {
         piz_vcf_map_format_subfields();
         piz_map_iname_subfields();
     }

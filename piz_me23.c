@@ -27,10 +27,10 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
 
         uint32_t txt_data_start = vb->txt_data.len;
         uint32_t txt_line_i = vb->first_line + vb_line_i;
-        bool doesnt_have_13=true; // note: for simplicity, we don't recover \r in case of --strip
+        bool doesnt_have_13=true; 
 
         DECLARE_SNIP;
-        IFNOTSTRIP(".",1) { RECONSTRUCT_ID (ME23_ID, &vb->id_numeric_data, &vb->next_id_numeric, &doesnt_have_13, true); }
+        RECONSTRUCT_ID (ME23_ID, &vb->id_numeric_data, &vb->next_id_numeric, &doesnt_have_13, true); 
 
         uint32_t chrom_word_index = RECONSTRUCT_FROM_DICT (ME23_CHROM, true);
         RECONSTRUCT_FROM_DICT_POS (ME23_POS, vb->last_pos, true, NULL, true); // reconstruct from delta

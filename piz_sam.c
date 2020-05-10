@@ -173,11 +173,9 @@ static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t tx
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
 
-#   define ADD_SNIP(start,sep) { if (!flag_strip) { \
-                                    RECONSTRUCT (&snip[start], snip_len-start); \
-                                    RECONSTRUCT1 (sep); \
-                                 }\
-                               }
+#   define ADD_SNIP(start,sep) { RECONSTRUCT (&snip[start], snip_len-start); \
+                                 RECONSTRUCT1 (sep); } 
+                               
 
 #   define GET_ADD_SNIP(did_i, sep) { mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[did_i], NULL, &snip, &snip_len, txt_line_i);\
                                       ADD_SNIP(0, sep); }
@@ -186,25 +184,21 @@ static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t tx
     GET_ADD_SNIP (SAM_RNAME, ","); // rname - consume but don't output - shares the same dictionary as main RNAME
 
     // strand
-    if (!flag_strip) {
-        mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[vb->strand_did_i], NULL, &snip, &snip_len, txt_line_i);\
+    mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[vb->strand_did_i], NULL, &snip, &snip_len, txt_line_i);\
 
-        if (is_xa) RECONSTRUCT (snip, 1); // XA: add strand concatenated with pos
-    }
+    if (is_xa) RECONSTRUCT (snip, 1); // XA: add strand concatenated with pos
 
     // pos
-    piz_sam_reconstruct_random_pos (vb, txt_line_i, ',', flag_strip); // if flag_strip - consume but don't output
+    piz_sam_reconstruct_random_pos (vb, txt_line_i, ',', false); 
     
     if (!is_xa) ADD_SNIP(0, ","); // SA and OA: add strand now
 
     GET_ADD_SNIP (SAM_CIGAR, ","); // cigar (read even if flag_snip because consumes same CIGAR as main)
 
-    if (!flag_strip) {
-        if (!is_xa) GET_ADD_SNIP (SAM_MAPQ, ","); // SA and OA only: mapq
+    if (!is_xa) GET_ADD_SNIP (SAM_MAPQ, ","); // SA and OA only: mapq
 
-        // nm
-        GET_ADD_SNIP (vb->nm_did_i, ";");
-    }
+    // nm
+    GET_ADD_SNIP (vb->nm_did_i, ";");
 }
 
 static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_seq_len, 
@@ -221,7 +215,7 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
     char *this_bi=NULL, *this_bd=NULL;
     for (unsigned sf_i=0; sf_i < opt_map->num_subfields; sf_i++) {
 
-        if (!flag_strip) RECONSTRUCT (&oname[sf_i*5], 5)
+        RECONSTRUCT (&oname[sf_i*5], 5)
 
         DictIdType dict_id = dict_id_sam_optnl_sf (dict_id_make (&oname[sf_i*5], 4));
         uint8_t did_i = opt_map->did_i[sf_i];
@@ -232,49 +226,36 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
             piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, false);
 
         // U2 doesn't have a dictionary - its data is stored in QUAL
-        else if (dict_id.num == dict_id_OPTION_U2) {
-            if (!flag_strip) piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, false);
-        }
+        else if (dict_id.num == dict_id_OPTION_U2) 
+            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, false);
 
-        else if (dict_id.num == dict_id_OPTION_MD) {
-            if (!flag_strip) 
-                piz_sam_reconstruct_MD (vb, txt_line_i, cigar_seq_len);
-        }
+        else if (dict_id.num == dict_id_OPTION_MD) 
+            piz_sam_reconstruct_MD (vb, txt_line_i, cigar_seq_len);
 
         else if (dict_id.num == dict_id_OPTION_BD) {
-            if (!flag_strip) {
-                this_bd = AFTERENT (char, vb->txt_data);
-                piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->bd_data, &vb->next_bd, SEC_SAM_BD_DATA, txt_line_i, false);
-            }
+            this_bd = AFTERENT (char, vb->txt_data);
+            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->bd_data, &vb->next_bd, SEC_SAM_BD_DATA, txt_line_i, false);
         }
 
         else if (dict_id.num == dict_id_OPTION_BI) {
-            if (!flag_strip) {
-                this_bi = AFTERENT (char, vb->txt_data);
-                piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->bi_data, &vb->next_bi, SEC_SAM_BI_DATA, txt_line_i, false);
-            }
+            this_bi = AFTERENT (char, vb->txt_data);
+            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->bi_data, &vb->next_bi, SEC_SAM_BI_DATA, txt_line_i, false);
         }
 
         // AS is normally stored as a delta vs seq_len
         else if (dict_id.num == dict_id_OPTION_AS) {
-            if (!flag_strip) {
-                LOAD_SNIP (did_i);
-                piz_sam_reconstruct_AS (vb, snip, snip_len, txt_line_i, cigar_seq_len);
-            }
+            LOAD_SNIP (did_i);
+            piz_sam_reconstruct_AS (vb, snip, snip_len, txt_line_i, cigar_seq_len);
         }
 
         // MC and OC are stored in the CIGAR dictionary
         else if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) {
-            if (!flag_strip) {
-                mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[SAM_CIGAR], NULL, &snip, &snip_len, txt_line_i);
-                RECONSTRUCT (snip, snip_len);
-            }
+            mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[SAM_CIGAR], NULL, &snip, &snip_len, txt_line_i);
+            RECONSTRUCT (snip, snip_len);
         }
 
-        else if (dict_id.num == dict_id_OPTION_mc) {
-            if (!flag_strip) 
-                RECONSTRUCT_FROM_DICT_POS (did_i, vb->last_pos, false, NULL, false);
-        }
+        else if (dict_id.num == dict_id_OPTION_mc)
+            RECONSTRUCT_FROM_DICT_POS (did_i, vb->last_pos, false, NULL, false)
         
         // SA, XA and OA have subsubfields IF snip starts with ascii 255
         else if (dict_id.num == dict_id_OPTION_SA || dict_id.num == dict_id_OPTION_OA || dict_id.num == dict_id_OPTION_XA) {
@@ -286,19 +267,17 @@ static void piz_sam_reconstruct_optional_fields (VBlockSAM *vb, uint32_t cigar_s
                 for (unsigned r=0; r < repeats; r++)             
                     piz_sam_reconstruct_SA_OA_XA (vb, (dict_id.num == dict_id_OPTION_XA), txt_line_i);
             }
-            else if (!flag_strip)
+            else 
                 RECONSTRUCT (snip, snip_len);
         }
 
         // other optional fields - get each for its own dictionary
         else {        
-            if (!flag_strip) {
-                mtf_get_next_snip ((VBlockP)vb, ctx, NULL, &snip, &snip_len, txt_line_i);
-                RECONSTRUCT (snip, snip_len);
-            }
+            mtf_get_next_snip ((VBlockP)vb, ctx, NULL, &snip, &snip_len, txt_line_i);
+            RECONSTRUCT (snip, snip_len);
         }
 
-        if (!flag_strip && sf_i != opt_map->num_subfields-1)
+        if (sf_i != opt_map->num_subfields-1)
             RECONSTRUCT1 ("\t");
     }
     
@@ -325,13 +304,11 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         uint32_t txt_line_i     = vb->first_line + vb_line_i;
 
         // QNAME - reconstruct from its subfield components
-        IFNOTSTRIP("*",1) {
-            LOAD_SNIP (SAM_QNAME);
-            piz_reconstruct_compound_field ((VBlockP)vb, &vb->qname_mapper, "\t", 1, snip, snip_len, txt_line_i);
-        }
+        LOAD_SNIP (SAM_QNAME);
+        piz_reconstruct_compound_field ((VBlockP)vb, &vb->qname_mapper, "\t", 1, snip, snip_len, txt_line_i);
 
         // FLAG, RNAME - from their dictionaries
-        IFNOTSTRIP("0",1) { RECONSTRUCT_FROM_DICT (SAM_FLAG, true);}
+        RECONSTRUCT_FROM_DICT (SAM_FLAG, true);
 
         uint32_t rname_word_index = RECONSTRUCT_FROM_DICT (SAM_RNAME, true);
 
@@ -353,26 +330,21 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
         vb->rname_index_minus_1 = rname_word_index;
 
         // MAPQ - from its dictionary
-        IFNOTSTRIP("255",3) { RECONSTRUCT_FROM_DICT (SAM_MAPQ, true); }
+        RECONSTRUCT_FROM_DICT (SAM_MAPQ, true); 
 
         // CIGAR - get length of SEQ and QUAL, and if original CIGAR was "*" - recover it
         LOAD_SNIP (SAM_CIGAR);
         cigar_seq_len = seg_sam_seq_len_from_cigar (snip, snip_len);
 
-        IFNOTSTRIP("*",1) {         
-            if (snip[snip_len-1] == '*') {  // if its something like "151*" make it "*"
-                RECONSTRUCT ("*\t", 2);
-            }
-            else {
-                RECONSTRUCT_TABBED (snip, snip_len); 
-            }
-        }
+        if (snip[snip_len-1] == '*')   // if its something like "151*" make it "*"
+            RECONSTRUCT ("*\t", 2)
+        else 
+            RECONSTRUCT_TABBED (snip, snip_len); 
+        
         
         // RNEXT - from RNAME dictionary
         uint32_t this_rnext_word_index = LOAD_SNIP (SAM_RNAME) // always read, because it consumes the same b250 as RNAME
-        IFNOTSTRIP("*",1) {         
-            RECONSTRUCT_TABBED (snip, snip_len); 
-        }
+        RECONSTRUCT_TABBED (snip, snip_len); 
         
         // PNEXT - 2.5 options:
         // 1. if RNEXT is the same as RNAME or unknown (i.e. either it is "=" or "*" or the word index is the same) - 
@@ -384,35 +356,25 @@ static void piz_sam_reconstruct_vb (VBlockSAM *vb)
                                    (snip_len == 1 && snip[0] == '*');
 
         if (get_from_dictionary) {
-            IFNOTSTRIP("0",1) {         
-                LOAD_SNIP (SAM_PNEXT);
+            LOAD_SNIP (SAM_PNEXT);
 
-                if (snip_len == 1 && snip[0] == '*') {  // this refers to the PNEXT snip
-                    RECONSTRUCT ("0\t", 2);
-                }
-                else { 
-                    RECONSTRUCT_FROM_DICT_POS (DID_I_NONE, vb->last_pos, false, &vb->last_pnext_delta, true);
-                }
-            }
+            if (snip_len == 1 && snip[0] == '*')   // this refers to the PNEXT snip
+                RECONSTRUCT ("0\t", 2)
+            else 
+                RECONSTRUCT_FROM_DICT_POS (DID_I_NONE, vb->last_pos, false, &vb->last_pnext_delta, true);
         }
         else {
-            // note: we always consume (but possible skip outputting), even if flag_strip because it consumes the same random_pos as POS
-            piz_sam_reconstruct_random_pos (vb, txt_line_i, '\t', flag_strip);
-            IFNOTSTRIP("0",1) {}; // add the default if we're stripping
+            piz_sam_reconstruct_random_pos (vb, txt_line_i, '\t', false);
         }
         // TLEN - from its dictionary
-        IFNOTSTRIP("0",1) {         
-            LOAD_SNIP (SAM_TLEN);
-            piz_sam_reconstruct_tlen (vb, snip, snip_len, vb->last_pnext_delta, cigar_seq_len);
-        }
+        LOAD_SNIP (SAM_TLEN);
+        piz_sam_reconstruct_tlen (vb, snip, snip_len, vb->last_pnext_delta, cigar_seq_len);
         
         // SEQ & QUAL data
         piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, false);
         RECONSTRUCT1 ("\t");
 
-        IFNOTSTRIP("*",1) {
-            piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, false);
-        }
+        piz_reconstruct_seq_qual ((VBlockP)vb, cigar_seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, false);
 
         // OPTIONAL fields, and Windows-style \r if needed
         uint32_t word_index = LOAD_SNIP (SAM_OPTIONAL);
@@ -446,7 +408,7 @@ void piz_sam_uncompress_one_vb (VBlock *vb_)
     UNCOMPRESS_DATA_SECTION (SEC_SAM_BD_DATA, bd_data,  char, true);    
     UNCOMPRESS_DATA_SECTION (SEC_SAM_BI_DATA, bi_data,  char, true);    
     UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA,    seq_data, char, false);    // data also contains E2, if it exists
-    if (!flag_strip) UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, char, false);    // data also contains U2, if it exists
+    UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, char, false);    // data also contains U2, if it exists
 
     piz_sam_reconstruct_vb (vb);
     UNCOMPRESS_DONE;

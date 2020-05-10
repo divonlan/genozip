@@ -114,12 +114,10 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
         const char *md = snip;
 
         // description line
-        if (!flag_strip) {
-            LOAD_SNIP (FAST_DESC);
-            piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[md[0]-'X'], eol_len[md[0]-'X'], 
-                                            snip, snip_len, txt_line_i);
-            *AFTERENT (char, vb->txt_data) = 0; // null-terminate for sec, in case of grep
-        }
+        LOAD_SNIP (FAST_DESC);
+        piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[md[0]-'X'], eol_len[md[0]-'X'], 
+                                        snip, snip_len, txt_line_i);
+        *AFTERENT (char, vb->txt_data) = 0; // null-terminate for sec, in case of grep
 
         bool grepped_out = false;
         // case: we're grepping, and this line doesn't match
@@ -135,16 +133,13 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
         piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, grepped_out);
         if (!grepped_out) RECONSTRUCT (eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
 
-        if (!flag_strip) {
-            // + line
-            if (!grepped_out) RECONSTRUCT (md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
+        // + line
+        if (!grepped_out) RECONSTRUCT (md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
 
-            // quality line
-            piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, grepped_out);
-            
-            if (!grepped_out) RECONSTRUCT (eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
-        }
-
+        // quality line
+        piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, grepped_out);
+        
+        if (!grepped_out) RECONSTRUCT (eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
     }
 
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
@@ -176,26 +171,23 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
         switch (md[1]) {
             case '>': // description line 
-                if (!flag_strip) {
-                    LOAD_SNIP (FAST_DESC);
-                    piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[has_13], eol_len[has_13], 
-                                                    snip, snip_len, txt_line_i);
-                    *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string - for strstr below
+                LOAD_SNIP (FAST_DESC);
+                piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[has_13], eol_len[has_13], 
+                                                snip, snip_len, txt_line_i);
+                *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string - for strstr below
 
-                    vb->last_line = FASTA_LINE_DESC;
+                vb->last_line = FASTA_LINE_DESC;
 
-                    // case: we're grepping, and this line doesn't match
-                    if (flag_grep && !strstr (&vb->txt_data.data[txt_data_start_line], flag_grep)) { 
-                        vb->txt_data.len = txt_data_start_line; // rollback
-                        grepped_out = true;
-                    }
-                    else grepped_out = false;
-
+                // case: we're grepping, and this line doesn't match
+                if (flag_grep && !strstr (&vb->txt_data.data[txt_data_start_line], flag_grep)) { 
+                    vb->txt_data.len = txt_data_start_line; // rollback
+                    grepped_out = true;
                 }
+                else grepped_out = false;
                 break;
 
             case ';': // comment line
-                if (!flag_strip && !flag_header_one && !flag_grep) 
+                if (!flag_header_one && !flag_grep) 
                     RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", '\n', eol[has_13], eol_len[has_13]);
 
                 //if (flag_header_one && !snip_len)

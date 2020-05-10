@@ -59,11 +59,7 @@ static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t di
     }
 
     if (dict_id.num == dict_id_ATTR_Dbxref) {
-        if (!flag_strip) 
-            RECONSTRUCT_ID (did_i, &vb->dbxref_numeric_data, &vb->next_dbxref_numeric_data, NULL, false)
-        else 
-            RECONSTRUCT1 (".");
-
+        RECONSTRUCT_ID (did_i, &vb->dbxref_numeric_data, &vb->next_dbxref_numeric_data, NULL, false)
         return false;
     }
 
