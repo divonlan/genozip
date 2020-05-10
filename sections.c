@@ -13,8 +13,6 @@
 #include "strings.h"
 #include "crypt.h"
 
-const SectionType first_field_dict_section[NUM_DATATYPES] = FIRST_FIELD_DICT_SECTION;
-
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {

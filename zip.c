@@ -16,14 +16,10 @@
 #include "dispatcher.h"
 #include "move_to_front.h"
 #include "zip.h"
+#include "seg.h"
 #include "base250.h"
 #include "endianness.h"
 #include "random_access.h"
-
-static const UpdateHeaderFunc update_header_func_by_dt[NUM_DATATYPES] = UPDATE_HEADER_FUNC_BY_DT;
-static const ComputeFunc compress_func_by_dt[NUM_DATATYPES] = COMPRESS_FUNC_BY_DT;
-static const bool datatype_has_random_access[NUM_DATATYPES] = DATATYPE_HAS_RANDOM_ACCESS;
-
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_file)
 {
@@ -75,11 +71,11 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 void zip_generate_and_compress_fields (VBlock *vb)
 {
     // generate & write b250 data for all primary fields
-    for (int f=0 ; f <= datatype_last_field[vb->data_type] ; f++) {
+    for (int f=0 ; f < DTF(num_fields) ; f++) {
         MtfContext *ctx = &vb->mtf_ctx[f];
 
         ASSERT (FIELD_TO_B250_SECTION(vb->data_type, f) == ctx->b250_section_type, "zip_generate_and_compress_fields: field mismatch with section type: f=%s sec=%s vb_i=%u",
-                (char*)field_names[vb->data_type][f], st_name (ctx->b250_section_type), vb->vblock_i);
+                (char*)DTF(names)[f], st_name (ctx->b250_section_type), vb->vblock_i);
 
         zip_generate_b250_section (vb, ctx);
         zfile_compress_b250_data (vb, ctx);
@@ -98,6 +94,26 @@ void zip_generate_and_compress_subfields (VBlock *vb, const SubfieldMapper *mapp
             zfile_compress_b250_data  (vb, ctx);
         }
     }
+}
+
+void zip_generate_and_compress_subfields2 (VBlock *vb, SectionType sec_dict)
+{
+    uint8_t num_subfields=0;
+    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
+                
+        MtfContext *ctx = &vb->mtf_ctx[did_i];
+        
+        if (ctx->dict_section_type == sec_dict) {
+            if (ctx->mtf_i.len) {
+                zip_generate_b250_section (vb, ctx);
+                zfile_compress_b250_data (vb, ctx);
+            }
+            num_subfields++;
+        }
+    }
+    ASSERT (num_subfields <= MAX_SUBFIELDS,
+            "Error: vb_i=%u has %u subfields of sec=%s exceeding the maximum of %u",
+            vb->vblock_i, num_subfields, st_name(sec_dict), MAX_SUBFIELDS);
 }
 
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
@@ -216,7 +232,7 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, false);  
    
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
-    if (datatype_has_random_access[z_file->data_type]) {
+    if (DTPZ(has_random_access)) {
 
         if (flag_show_index) random_access_show_index(true);
         
@@ -232,6 +248,65 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
 
     // output to disk random access and genozip header sections to disk
     zip_output_processed_vb (evb, NULL, false, true);  
+}
+
+// entry point for compute thread
+static void zip_compress_one_vb (VBlock *vb)
+{
+    START_TIMER; 
+
+    // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need  
+    // to wait for our merge. that is because our dictionaries are sorted 
+    if (vb->vblock_i == 1) mtf_vb_1_lock(vb); 
+
+    // allocate memory for the final compressed data of this vb. allocate 20% of the
+    // vb size on the original file - this is normally enough. if not, we will realloc downstream
+    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
+
+    // clone global dictionaries while granted exclusive access to the global dictionaries
+    mtf_clone_ctx (vb);
+
+    // split each line in this variant block to its components
+    seg_all_data_lines (vb);
+
+    // for the first vb only - sort dictionaries so that the most frequent entries get single digit
+    // base-250 indices. This can be done only before any dictionary is written to disk, but likely
+    // beneficial to all vbs as they are likely to more-or-less have the same frequent entries
+    if (vb->vblock_i == 1) {
+        mtf_sort_dictionaries_vb_1(vb);
+
+        // for a file that's compressed (and hence we don't know the size of content a-priori) AND we know the
+        // compressed file size (eg a local gz/bz2 file or a compressed file on a ftp server) - we now estimate the 
+        // txt_data_size_single that will be used for the global_hash and the progress indicator
+        txtfile_estimate_txt_data_size (vb);
+    }
+
+    if (vb->data_type == DT_VCF)
+        zip_vcf_generate_ht_gt_compress_vb_header (vb);
+    else
+        zfile_compress_generic_vb_header (vb); // vblock header
+
+    // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
+    // zip_vcf_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
+    // all this is done while holding exclusive access to the z_file dictionaries.
+    mtf_merge_in_vb_ctx(vb);
+
+    // merge in random access - IF it is used
+    if (DTP(has_random_access)) 
+        random_access_merge_in_vb (vb);
+
+    // generate & compress b250 data for all fields 
+    zip_generate_and_compress_fields (vb);
+
+    // compress data-type specific sections
+    DTP(compress)(vb);
+
+    // tell dispatcher this thread is done and can be joined.
+    // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
+    // this this operation needn't be atomic, but it likely is anyway
+    vb->is_processed = true; 
+
+    COPY_TIMER (vb->profile.compute);
 }
 
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 
@@ -281,7 +356,7 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
 
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
         if (has_vb_ready_to_compute && has_free_thread) 
-            dispatcher_compute (dispatcher, compress_func_by_dt[z_file->data_type]);
+            dispatcher_compute (dispatcher, zip_compress_one_vb);
         
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
@@ -291,7 +366,7 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
             if (!processed_vb) continue; // no running compute threads 
 
             // update z_data in memory (its not written to disk yet)
-            update_header_func_by_dt[z_file->data_type](processed_vb, txt_line_i); 
+            DTPZ(update_header)(processed_vb, txt_line_i); 
 
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;

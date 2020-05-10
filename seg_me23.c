@@ -22,6 +22,7 @@ void seg_me23_initialize (VBlock *vb_)
 
     buf_alloc (vb, &vb->genotype_data, 2 * vb->lines.len, 1, "genotype_data", vb->vblock_i);
     buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 }             
              
 const char *seg_me23_data_line (VBlock *vb_,   

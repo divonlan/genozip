@@ -67,8 +67,8 @@ void dict_id_initialize (void)
 {   
     ASSERT0 (z_file->data_type != DT_NONE, "Error in dict_id_initialize: z_file->data_type is DT_NONE");
 
-    for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) {
-        const char *field_name = field_names[z_file->data_type][f];
+    for (int f=0; f < DTFZ(num_fields); f++) {
+        const char *field_name = DTFZ(names)[f];
         dict_id_fields[f] = dict_id_field (dict_id_make (field_name, strlen (field_name))).num; 
     }
 
@@ -172,13 +172,12 @@ void dict_id_initialize (void)
 
 const char *dict_id_display_type (DataType dt, DictIdType dict_id)
 {
-    static const char *dict_type_by_data_type[NUM_DATATYPES][3] = STAT_DICT_TYPES;
+    if (dict_id_is_field  (dict_id)) return dt_props[dt].stat_dict_types[0];
+    if (dict_id_is_type_1 (dict_id)) return dt_props[dt].stat_dict_types[1]; 
+    if (dict_id_is_type_2 (dict_id)) return dt_props[dt].stat_dict_types[2]; 
 
-    if (dict_id_is_field (dict_id))  return dict_type_by_data_type[dt][0]; 
-    if (dict_id_is_type_1 (dict_id)) return dict_type_by_data_type[dt][1]; 
-    if (dict_id_is_type_2 (dict_id)) return dict_type_by_data_type[dt][2]; 
-
-    return "Bug!";
+    ABORT0 ("Error in dict_id_display_type");
+    return 0;    
 }
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages

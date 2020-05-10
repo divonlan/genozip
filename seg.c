@@ -140,7 +140,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
             
     ASSSEG (*str_len, str, "Error: missing %s field", item_name);
 
-    ASSSEG (str[i] != '\t' || vb->data_type != DT_VCF || (item_name == field_names[DT_VCF][VCF_INFO] /* pointer, not string, comparison */), 
+    ASSSEG (str[i] != '\t' || vb->data_type != DT_VCF || (item_name == DTF(names)[VCF_INFO] /* pointer, not string, comparison */), 
             str, "Error: while segmenting %s: expecting a NEWLINE after the INFO field, because this VCF file has no samples (individuals) declared in the header line",
             item_name);
 
@@ -210,11 +210,50 @@ uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, chrom_did_i_by_dt[vb->data_type]);
+    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, DTF(chrom));
 
     random_access_update_chrom ((VBlockP)vb, chrom_node_index);
 
     return chrom_node_index;
+}
+
+// get number for storage in RANDOM_POS and check if it is a valid number
+uint32_t seg_add_to_random_pos_data (VBlock *vb, SectionType sec, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name)
+{
+    bool standard_random_pos_encoding = true;
+
+    // it is eligable for standard encoding only if the length is within the range
+    if (!snip_len || snip_len > 10) standard_random_pos_encoding = false; // more than 10 digits is for sure bigger than 4GB=32bits
+
+    // a multi-digit number cannot have a leading zero
+    if (snip_len > 1 && snip[0] == '0') standard_random_pos_encoding = false;
+
+    // it is eligable for standard encoding only if all the characters are digits
+    uint64_t n64=0; // 64 bit just in case we go above 32 bit
+    if (standard_random_pos_encoding)
+        for (unsigned i=0; i < snip_len; i++) {
+            if (!IS_DIGIT (snip[i])) {
+                standard_random_pos_encoding = false;
+                break;
+            }
+            n64 = n64 * 10 + (snip[i] - '0');
+        }
+
+    // it is eligable for standard encoding only if it fits in 32 bit (0xffffffff is reserved for a future escape, if needed)
+    if (n64 > 0xfffffffe) standard_random_pos_encoding = false;
+
+    ASSSEG (standard_random_pos_encoding, snip, "%s: Error: Bad position data in field %s - expecting an integer between 0 and %u without leading zeros, but instead seeing \"%.*s\"",
+            global_cmd, field_name, 0xfffffffe, snip_len, snip);
+
+    buf_alloc_more (vb, &vb->random_pos_data, 1, 0, uint32_t, 2);
+
+    // 32 bit number - this compresses better than textual numbers with LZMA
+    uint32_t n32 = (uint32_t)n64;
+    NEXTENT (uint32_t, vb->random_pos_data) = BGEN32 (n32);
+
+    vb->txt_section_bytes[sec] += add_bytes;
+
+    return n32;
 }
 
 int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*in /out */, 
@@ -226,11 +265,11 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
     
     int32_t this_pos = seg_pos_snip_to_int (vb, pos_str, field_name, allow_non_number ? &is_nonsense : NULL);
 
-    // if caller allows a non-valid-number and this is indeed a non-valid-number, just store the string, prefixed by .
+    // if caller allows a non-valid-number and this is indeed a non-valid-number, just store the string, prefixed by POS_NONSENSE
     if (is_nonsense) { 
         int32_t nonsense_len = this_pos; 
         char save = *(pos_str-1);
-        *(char*)(pos_str-1) = '.'; // note: even if its the very first character in txt_data, we're fine - it will temporarily overwrite the buffer underflow
+        *(char*)(pos_str-1) = POS_NONSENSE; // note: even if its the very first character in txt_data, we're fine - it will temporarily overwrite the buffer underflow
 
         seg_one_snip (vb, pos_str-1, nonsense_len+1, did_i, sec_pos_b250, NULL);
         vb->txt_section_bytes[sec_pos_b250]--; // don't account for the .
@@ -240,6 +279,15 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
     }
     int32_t pos_delta = this_pos - last_pos;
     
+    // if the delta is too big, add the POS to RANDOM_POS and put \5 in the b250
+    if (pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) {
+        seg_add_to_random_pos_data (vb, SEC_RANDOM_POS_DATA, pos_str, pos_len, pos_len+1, field_name);
+        static const char pos_lookup[1] = {POS_LOOKUP};
+        seg_one_snip (vb, pos_lookup, 1, did_i, sec_pos_b250, NULL);
+        vb->txt_section_bytes[sec_pos_b250] -= 2;
+        return this_pos;
+    }
+
     // print our string without expensive sprintf
     char pos_delta_str[50], reverse_pos_delta_str[50];
     
@@ -342,16 +390,13 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                      bool has_13) // this GFF3 file line ends with a Windows-style \r\n
 {
     // data type de-multiplexors
-    static uint8_t info_fields[NUM_DATATYPES] = INFO_DID_I_BY_DT;
-    #define info_field info_fields[vb->data_type]
-    #define field_name field_names[vb->data_type][info_field]
+    #define info_field DTF(info)
+    #define field_name DTF(names)[info_field]
 
-    static int sec_info_dicts[NUM_DATATYPES] = INFO_FIELD_DICT_SECTION;
-    #define sec_info_dict sec_info_dicts[vb->data_type]
+    #define sec_info_dict DTF(info_dict_sec)
     #define sec_info_b250 (sec_info_dict + 1) 
 
-    static int sec_info_dict_sfs[NUM_DATATYPES] = INFO_SF_DICT_SECTION;
-    #define sec_info_sf_dict sec_info_dict_sfs[vb->data_type]
+    #define sec_info_sf_dict DTF(info_sf_dict_sec)
     #define sec_info_sf_b250 (sec_info_sf_dict + 1) 
 
     #define MAX_INFO_NAMES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
@@ -625,7 +670,7 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
     vb->lines.len = vb->lines.size / sizeof_line;
 
     // allocate more to the mtf_i buffer of the fields, which each have num_lines entries
-    for (int f=0; f <= datatype_last_field[vb->data_type]; f++) 
+    for (int f=0; f < DTF(num_fields); f++) 
         buf_alloc_more_zero (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
 }
 
@@ -653,10 +698,7 @@ static void seg_verify_file_size (VBlock *vb)
 }
 
 // split each lines in this variant block to its components
-void seg_all_data_lines (VBlock *vb,
-                         SegDataLineFuncType seg_data_line, 
-                         SegInitializer seg_initialize, 
-                         unsigned sizeof_line)
+void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
 
@@ -664,18 +706,20 @@ void seg_all_data_lines (VBlock *vb,
 
     mtf_verify_field_ctxs (vb);
     
-    if (!sizeof_line) sizeof_line=1; // we waste a little bit of memory to avoid making exceptions throughout the code logic
+    uint32_t sizeof_line = (uint32_t)DTP(sizeof_zip_dataline);
 
+    if (!sizeof_line) sizeof_line=1; // we waste a little bit of memory to avoid making exceptions throughout the code logic
+ 
     // allocate lines
     buf_alloc (vb, &vb->lines, seg_estimate_num_lines(vb) * sizeof_line, 1.2, "lines", vb->vblock_i);
     buf_zero (&vb->lines);
     vb->lines.len = vb->lines.size / sizeof_line;
 
     // allocate the mtf_i for the fields which each have num_lines entries
-    for (int f=0; f <= datatype_last_field[vb->data_type]; f++) 
+    for (int f=0; f < DTF(num_fields); f++) 
         buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len * sizeof (uint32_t), 1, "mtf_ctx->mtf_i", f);
     
-    if (seg_initialize) seg_initialize (vb); // data-type specific initialization
+    if (DTP(seg_initialize)) DTP(seg_initialize) (vb); // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
@@ -688,7 +732,7 @@ void seg_all_data_lines (VBlock *vb,
 
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
 
-        const char *next_field = seg_data_line (vb, field_start);
+        const char *next_field = DTP(seg_data_line) (vb, field_start);
         
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
         field_start = next_field;

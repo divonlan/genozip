@@ -16,18 +16,15 @@
 #include "dispatcher.h"
 #include "zip.h"
 #include "piz.h"
+#include "seg.h"
 #include "zfile.h"
 #include "txtfile.h"
 #include "strings.h"
 
 static bool is_first_txt = true; 
 
-// these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed.
-// (names are not longer than 8=DICT_ID_LEN as the code assumes it)
-const char *field_names[NUM_DATATYPES][MAX_NUM_FIELDS_PER_DATA_TYPE] = FIELD_NAMES;
-
-const unsigned datatype_last_field[NUM_DATATYPES] = DATATYPE_LAST_FIELD;
-const uint8_t chrom_did_i_by_dt[NUM_DATATYPES]    = CHROM_DID_I_BY_DT; 
+DataTypeProperties dt_props [NUM_DATATYPES] = DATA_TYPE_PROPERTIES;
+DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
 // -----------
 // VCF stuff
@@ -140,15 +137,10 @@ void header_initialize(void)
 // ZIP: reads VCF or SAM header and writes its compressed form to the GENOZIP file
 bool header_txt_to_genozip (uint32_t *txt_line_i)
 {    
-    // data type muliplexors
-    static const char first_char     [NUM_DATATYPES] = TXT_HEADER_LINE_FIRST_CHAR;
-    static const bool header_allowed [NUM_DATATYPES] = TXT_HEADER_IS_ALLOWED;
-    static const bool header_required[NUM_DATATYPES] = TXT_HEADER_IS_REQUIRED;
-    
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
-    if (header_allowed[txt_file->data_type])
-        txtfile_read_header (is_first_txt, header_required[txt_file->data_type], first_char[txt_file->data_type]); // reads into evb->txt_data and evb->lines.len
+    if (DTPT(txt_header_required) == HDR_MUST || DTPT(txt_header_required) == HDR_OK)
+        txtfile_read_header (is_first_txt, DTPT(txt_header_required) == HDR_MUST, DTPT(txt_header_1st_char)); // reads into evb->txt_data and evb->lines.len
     
     *txt_line_i += (uint32_t)evb->lines.len;
 
@@ -243,6 +235,5 @@ bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this 
 
 const char *dt_name (DataType dt)
 {
-    static const char *names[NUM_DATATYPES] = DATATYPE_NAMES;
-    return type_name (dt, &names[dt], sizeof(names)/sizeof(names[0]));
+    return type_name (dt, &dt_props[dt].name, NUM_DATATYPES);
 }

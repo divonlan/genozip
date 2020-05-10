@@ -30,15 +30,11 @@
 #define TXT_DATA_PER_VB_DEFAULT "16" // MB in default mode
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
 
-#define MAX_SUBFIELDS      63   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME and SAM_OPTIONAL subfield types that is supported in one GENOZIP file.
-
-#define MAX_DICTS          (MAX_SUBFIELDS + MAX_SUBFIELDS + 8)   // dictionaries of subfields, infos and the 9 first fields (tabs) of the VCF file (+8 because REF and ALT are combined). 
-#if MAX_DICTS > 253 // 254 and 255 are used for special purpose
-#error "MAX_DICTS cannot go beyond 255 as SubfieldMapper and SubfieldInfoMapperPiz represent did_i as uint8_t, and NIL=255"
-#endif
+#define MAX_SUBFIELDS 100   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME, SAM_OPTIONAL, GFF3_ATTRS subfield types that is supported in one GENOZIP file.
+#define MAX_DICTS     253   // 254 and 255 are used for DID_I_HAS_13 and DID_I_NONE
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
- 
+
 // ------------------------
 // VCF stuff
 // ------------------------

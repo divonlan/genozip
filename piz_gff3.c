@@ -24,7 +24,7 @@ static void piz_gff3_reconstruct_array_of_struct (VBlockGFF3 *vb, uint8_t did_i,
     DECLARE_SNIP;
     LOAD_SNIP (did_i);
 
-    if (snip_len <= 1 || snip[0] != 1) { // not struct - just copy
+    if (snip_len <= 1 || snip[0] != AOS_NUM_ENTRIES) { // not AoS - just copy
         RECONSTRUCT (snip, snip_len);
         return;
     }
@@ -126,9 +126,10 @@ void piz_gff3_uncompress_one_vb (VBlock *vb_)
 {
     UNCOMPRESS_HEADER_AND_FIELDS (VBlockGFF3, true);
     UNCOMPRESS_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250);
-    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, true);    
-    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, dbxref_numeric_data, true);    
-    UNCOMPRESS_DATA_SECTION (SEC_ENST_DATA, enst_data, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, dbxref_numeric_data, char, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_ENST_DATA, enst_data, char, true);    
 
     piz_gff3_reconstruct_vb (vb);
     UNCOMPRESS_DONE;
@@ -142,6 +143,7 @@ void piz_gff3_read_one_vb (VBlock *vb_)
     
     READ_FIELDS; // primary fields
     READ_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250); // ATTRIBUTES subfields
+    READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // POS data that failed delta
     READ_DATA_SECTION (SEC_SEQ_DATA, true); // Data of Variant_seq, Reference_seq and ancestral_allele
     READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // Data of Dbxref
     READ_DATA_SECTION (SEC_ENST_DATA, true); // Data of ENST IDs coming from Variant_effect, sift_prediction, polyphen_prediction, variant_peptide

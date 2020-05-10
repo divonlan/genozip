@@ -434,14 +434,12 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
     while (sections_get_next_dictionary (&sl_ent)) {
 
-        static SectionType chrom_dict_sec[NUM_DATATYPES] = CHROM_FIELD_DICT_SECTION;
-
         if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
 
         // cases where we can skip reading these dictionaries because we don't be using them
         SectionType st = sl_ent->section_type; 
-        if (read_chrom == DICTREAD_CHROM_ONLY   && st != chrom_dict_sec[z_file->data_type]) continue;
-        if (read_chrom == DICTREAD_EXCEPT_CHROM && st == chrom_dict_sec[z_file->data_type]) continue;
+        if (read_chrom == DICTREAD_CHROM_ONLY   && st != DTFZ(chrom_dict_sec)) continue;
+        if (read_chrom == DICTREAD_EXCEPT_CHROM && st == DTFZ(chrom_dict_sec)) continue;
 
         // END and POS share the same delta sequence (POS is the delta from the previous END). stripping away
         // END would causes POS values to be incorrect. 

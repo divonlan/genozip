@@ -54,7 +54,7 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
 CONDA_INCS = aes.h dispatcher.h gloptimize_vcf.h optimize.h profiler.h dict_id.h txtfile.h zip.h v1_vcf.c \
-             base250.h endianness.h md5.h sections.h text_help.h header.h strings.h hash.h stream.h url.h \
+             base250.h endianness.h md5.h sections.h section_types.h text_help.h header.h strings.h hash.h stream.h url.h \
              buffer.h file.h move_to_front.h seg.h text_license.h version.h gtshark_vcf.h compressor.h stats.h \
              crypt.h genozip.h piz.h squeeze_vcf.h vblock.h zfile.h random_access.h regions.h samples.h \
 			 arch.h license.h \

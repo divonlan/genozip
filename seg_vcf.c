@@ -3,6 +3,7 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <math.h>
 #include "genozip.h"
 #include "seg.h"
 #include "vblock.h"
@@ -12,6 +13,7 @@
 #include "optimize.h"
 #include "file.h"
 #include "strings.h"
+#include "zip.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
@@ -20,7 +22,13 @@ void seg_vcf_initialize (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
+    // initalize variant block data (everything else is initialzed to 0 via calloc)
+    vb->phase_type = PHASE_UNKNOWN;  // phase type of this block
+    vb->num_samples_per_block = global_vcf_samples_per_block;
+    vb->num_sample_blocks = ceil((float)global_vcf_num_samples / (float)vb->num_samples_per_block);
+
     buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);   
+    buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 
     seg_init_mapper (vb_, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
     seg_init_mapper (vb_, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf,  "iname_mapper_buf");    
@@ -462,7 +470,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     char *info_field_start = (char *)next_field; // we break the const bc seg_info_field might add a :#
     unsigned info_field_len=0;
     next_field = seg_get_next_item (vb, info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, 
-                 false, &info_field_len, &separator, &has_13, field_names[DT_VCF][VCF_INFO] /* pointer to string to allow pointer comparison */); 
+                 false, &info_field_len, &separator, &has_13, DTF(names)[VCF_INFO] /* pointer to string to allow pointer comparison */); 
     // note: we delay seg_vcf_info_field() until the end of the line - we might be adding a Windows \r subfield
 
     if (separator != '\n') {

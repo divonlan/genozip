@@ -602,7 +602,11 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
     (*num_dict_ids) = did_i + 1; 
 
-    if (num_subfields) (*num_subfields)++;
+    if (num_subfields) { 
+        (*num_subfields)++;
+        ASSERT (*num_subfields+1 <= MAX_SUBFIELDS, 
+                "Error: number of %s dictionaries is greater than MAX_SUBFIELDS=%u", st_name (dict_section_type), MAX_SUBFIELDS);
+    }
 
 done:
     ctx = &mtf_ctx[did_i];
@@ -622,9 +626,9 @@ void mtf_initialize_primary_field_ctxs (VBlock *vb, // NULL if called by zfile_r
                                         uint8_t *dict_id_to_did_i_map,
                                         unsigned *num_dict_ids)
 {
-    for (int f=0; f <= datatype_last_field[dt]; f++) {
+    for (int f=0; f < dt_fields[dt].num_fields; f++) {
         
-        const char *fname    = field_names[dt][f];
+        const char *fname    = dt_fields[dt].names[f];
         DictIdType dict_id   = dict_id_field (dict_id_make (fname, strlen(fname)));
         SectionType dict_sec = FIELD_TO_DICT_SECTION(dt, f);
 
@@ -684,7 +688,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
                "z_file->mtf_ctx->word_list", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->word_list);
 
-    bool is_ref_alt = !strncmp ((char*)dict_id_printable (header->dict_id).id, field_names[DT_VCF][VCF_REFALT], MIN (strlen(field_names[DT_VCF][VCF_REFALT]+1), DICT_ID_LEN)); // compare inc. \0 terminator
+    bool is_ref_alt = (z_file->data_type == DT_VCF && header->dict_id.num == dict_id_fields[VCF_REFALT]);
 
     char *start = fragment.data;
     for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
@@ -820,7 +824,7 @@ void mtf_zero_all_sorters (VBlock *vb)
 // delicate thread logic.
 void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 {
-    for (int f=0; f <= datatype_last_field[vb->data_type]; f++) {
+    for (int f=0; f < DTF(num_fields); f++) {
 
             MtfContext *ctx = &vb->mtf_ctx[f];
 
@@ -828,7 +832,7 @@ void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
                     FIELD_TO_B250_SECTION(vb->data_type, f) == ctx->b250_section_type,
                     "mtf_verify_field_ctxs called from %s:%u: field mismatch with section type: f=%s ctx->dict_section_type=%s ctx->b250_section_type=%s vb_i=%u",
                     func, code_line,
-                    (char*)field_names[vb->data_type][f], st_name (ctx->dict_section_type), st_name (ctx->b250_section_type), vb->vblock_i);
+                    (char*)DTF(names)[f], st_name (ctx->dict_section_type), st_name (ctx->b250_section_type), vb->vblock_i);
     }
 }
 

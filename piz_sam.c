@@ -441,14 +441,12 @@ void piz_sam_uncompress_one_vb (VBlock *vb_)
     UNCOMPRESS_SUBFIELDS (vb->num_optional_subfield_b250s, SEC_SAM_OPTNL_SF_B250);
     piz_sam_map_optional_subfields (vb);
 
-    UNCOMPRESS_DATA_SECTION (SEC_SAM_RAND_POS_DATA, random_pos_data, false);
-    vb->random_pos_data.len /= 4; // its an array of uint32_t
-
-    UNCOMPRESS_DATA_SECTION (SEC_SAM_MD_DATA, md_data,  true);
-    UNCOMPRESS_DATA_SECTION (SEC_SAM_BD_DATA, bd_data,  true);    
-    UNCOMPRESS_DATA_SECTION (SEC_SAM_BI_DATA, bi_data,  true);    
-    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA,    seq_data, false);    // data also contains E2, if it exists
-    if (!flag_strip) UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, false);    // data also contains U2, if it exists
+    UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, false);
+    UNCOMPRESS_DATA_SECTION (SEC_SAM_MD_DATA, md_data,  char, true);
+    UNCOMPRESS_DATA_SECTION (SEC_SAM_BD_DATA, bd_data,  char, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_SAM_BI_DATA, bi_data,  char, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA,    seq_data, char, false);    // data also contains E2, if it exists
+    if (!flag_strip) UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, char, false);    // data also contains U2, if it exists
 
     piz_sam_reconstruct_vb (vb);
     UNCOMPRESS_DONE;
@@ -460,7 +458,7 @@ void piz_sam_read_one_vb (VBlock *vb_)
     READ_FIELDS; // primary fields
     READ_SUBFIELDS (vb->qname_mapper.num_subfields,  SEC_SAM_QNAME_SF_B250); // QNAME subfields
     READ_SUBFIELDS (vb->num_optional_subfield_b250s, SEC_SAM_OPTNL_SF_B250); // OPTIONAL subfields
-    READ_DATA_SECTION (SEC_SAM_RAND_POS_DATA, false);
+    READ_DATA_SECTION (SEC_RANDOM_POS_DATA, false);
     READ_DATA_SECTION (SEC_SAM_MD_DATA, true); // optional
     READ_DATA_SECTION (SEC_SAM_BD_DATA, true); // optional
     READ_DATA_SECTION (SEC_SAM_BI_DATA, true); // optional

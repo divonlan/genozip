@@ -75,7 +75,7 @@ void random_access_merge_in_vb (VBlock *vb)
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
-    MtfContext *chrom_ctx = &vb->mtf_ctx[chrom_did_i_by_dt[vb->data_type]];
+    MtfContext *chrom_ctx = &vb->mtf_ctx[DTF(chrom)];
     ASSERT0 (chrom_ctx, "Error in random_access_merge_in_vb: cannot find chrom_ctx");
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
@@ -170,7 +170,7 @@ void random_access_show_index (bool from_zip)
     
     ARRAY (RAEntry, ra, z_file->ra_buf);
 
-    MtfContext *ctx = &z_file->mtf_ctx[chrom_did_i_by_dt[z_file->data_type]];
+    MtfContext *ctx = &z_file->mtf_ctx[DTFZ(chrom)];
 
     for (unsigned i=0; i < z_file->ra_buf.len; i++) {
         

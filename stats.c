@@ -26,19 +26,17 @@ static void stats_verify_all_covered_do (const unsigned *covered, const char *ca
 
 static void stats_show_file_metadata (void)
 {
-    static char *show_sections_line_name[NUM_DATATYPES] = STAT_SHOW_SECTIONS_LINE_NAME;
-
     fprintf (stderr, "\n\n");
     if (txt_file->name) fprintf (stderr, "%s file name: %s\n", dt_name (z_file->data_type), txt_file->name);
     
     char ls[30];
     if (z_file->data_type == DT_VCF) 
         fprintf (stderr, "Individuals: %u   %s: %s   Dictionaries: %u   Vblocks: %u\n", 
-                 global_vcf_num_samples, show_sections_line_name[DT_VCF],  
+                 global_vcf_num_samples, DTPZ (show_sections_line_name),  
                  str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, z_file->num_vbs);
     else
         fprintf (stderr, "%s: %s   Dictionaries: %u   Vblocks: %u\n", 
-                 show_sections_line_name[z_file->data_type], str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, z_file->num_vbs);
+                 DTPZ (show_sections_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, z_file->num_vbs);
 }
 
 void stats_show_sections (void)
@@ -54,7 +52,7 @@ void stats_show_sections (void)
         SEC_HT_DATA,            SEC_STATS_HT_SEPERATOR, SEC_VCF_PHASE_DATA,
 
         SEC_SEQ_DATA,           SEC_QUAL_DATA,          SEC_SAM_MD_DATA,
-        SEC_SAM_BD_DATA,        SEC_SAM_BI_DATA,        SEC_SAM_RAND_POS_DATA,  
+        SEC_SAM_BD_DATA,        SEC_SAM_BI_DATA,        SEC_RANDOM_POS_DATA,  
         SEC_NUMERIC_ID_DATA,    SEC_ENST_DATA,          SEC_FASTA_COMMENT_DATA,
         SEC_SAM_QNAME_B250,     SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250,  SEC_SAM_QNAME_SF_DICT,
         SEC_SAM_FLAG_B250,      SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,     SEC_SAM_RNAME_DICT, 
@@ -251,7 +249,7 @@ void stats_show_content (void)
 
           SEC_NUMERIC_ID_DATA,    SEC_ENST_DATA,
           
-          SEC_SAM_RAND_POS_DATA,  SEC_SAM_MD_DATA,        SEC_SAM_BD_DATA,       SEC_SAM_BI_DATA, 
+          SEC_RANDOM_POS_DATA,  SEC_SAM_MD_DATA,        SEC_SAM_BD_DATA,       SEC_SAM_BI_DATA, 
           SEC_SAM_QNAME_B250,     SEC_SAM_QNAME_DICT,     SEC_SAM_QNAME_SF_B250, SEC_SAM_QNAME_SF_DICT,
           SEC_SAM_FLAG_B250,      SEC_SAM_FLAG_DICT,      SEC_SAM_RNAME_B250,    SEC_SAM_RNAME_DICT, 
           SEC_SAM_POS_B250,       SEC_SAM_POS_DICT,       SEC_SAM_MAPQ_B250,     SEC_SAM_MAPQ_DICT,      

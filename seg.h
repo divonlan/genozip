@@ -10,10 +10,7 @@
 #include "genozip.h"
 #include "sections.h"
 
-typedef const char *SegDataLineFuncType (VBlockP vb, const char *field_start_line);
-typedef void SegInitializer (VBlockP vb);
-
-extern void seg_all_data_lines (VBlockP vb, SegDataLineFuncType seg_data_line, SegInitializer seg_initialize, unsigned sizeof_line); 
+extern void seg_all_data_lines (VBlockP vb); 
 
 extern void seg_init_mapper (VBlockP vb, int field_i, BufferP mapper_buf, const char *name);
 
@@ -38,6 +35,11 @@ extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did
 
 extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
+extern uint32_t seg_add_to_random_pos_data (VBlockP vb, SectionType sec, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name);
+
+#define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
+#define POS_LOOKUP   '\1'   // used in dictionary if pos is stored in random_pos because delta is too large. this value is part of the file format so cannot be (easily) changed. Introduced in v5.
+#define POS_NONSENSE '\2'   // used in dictionary if pos is not an unsigned int <= 0x7fffffff. this value is part of the file format so cannot be (easily) changed. Introduced in v5.
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_delta, bool allow_non_number, 
                               int pos_field, SectionType sec_pos_b250,
                               const char *pos_str, unsigned pos_len, const char *field_name);
@@ -62,15 +64,15 @@ extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *f
 // ---------
 // VCF Stuff
 // ---------
-extern SegDataLineFuncType seg_vcf_data_line;
-extern SegInitializer seg_vcf_initialize;
+extern const char *seg_vcf_data_line (VBlockP vb_, const char *field_start_line);
+extern void seg_vcf_initialize  (VBlockP vb_);
 extern void seg_vcf_complete_missing_lines (VBlockVCFP vb);
 
 // ---------
 // SAM Stuff
 // ---------
-extern SegDataLineFuncType seg_sam_data_line;
-extern SegInitializer seg_sam_initialize;
+extern const char *seg_sam_data_line (VBlockP vb_, const char *field_start_line);
+extern void seg_sam_initialize (VBlockP vb_);
 extern uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
 extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len, bool *is_numeric);
 
@@ -80,23 +82,25 @@ extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md
 // ---------------------------
 // FASTA and FASTQ Stuff
 // ---------------------------
-extern SegDataLineFuncType seg_fastq_data_line;
-extern SegDataLineFuncType seg_fasta_data_line;
-extern SegInitializer seg_fasta_initialize;
+extern const char *seg_fastq_data_line (VBlockP vb_, const char *field_start_line);
+extern const char *seg_fasta_data_line (VBlockP vb_, const char *field_start_line);
+extern void seg_fasta_initialize (VBlockP vb_);
 
 // ------------------
 // GFF3 Stuff
 // ------------------
-extern SegDataLineFuncType seg_gff3_data_line;
-extern SegInitializer seg_gff3_initialize;
+extern const char *seg_gff3_data_line (VBlockP vb_, const char *field_start_line);
+extern void seg_gff3_initialize (VBlockP vb_);
+
+#define AOS_NUM_ENTRIES '\1' // first char of dictionary word in case of a valid AoS- followed by the number of entries. this value is part of the file format so cannot be (easily) changed.
 extern void seg_gff3_array_of_struct_ctxs (VBlockGFF3P vb, DictIdType dict_id, unsigned num_items, 
                                            MtfContextP *ctx_array, MtfContextP *enst_ctx); // out
 
 // ------------------
 // ME23 Stuff
 // ------------------
-extern SegDataLineFuncType seg_me23_data_line;
-extern SegInitializer seg_me23_initialize;
+extern const char *seg_me23_data_line (VBlockP vb_, const char *field_start_line);
+extern void seg_me23_initialize (VBlockP vb_);
 
 // ------------------
 // Seg utilities

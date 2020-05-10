@@ -17,7 +17,7 @@
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
 #define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/SAM spec don't limit the ID length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
-typedef union {
+typedef union DictIdType {
     uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN]; // \0-padded IDs 
     uint16_t map_key;        // we use the first two bytes as they key into vb/z_file->dict_id_mapper

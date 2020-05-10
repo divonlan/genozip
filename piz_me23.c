@@ -54,8 +54,9 @@ static void piz_me23_reconstruct_vb (VBlockME23 *vb)
 void piz_me23_uncompress_one_vb (VBlock *vb_)
 {
     UNCOMPRESS_HEADER_AND_FIELDS (VBlockME23, true);  
-    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, false);    
-    UNCOMPRESS_DATA_SECTION (SEC_HT_DATA, genotype_data, false);    
+    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, char, false);    
+    UNCOMPRESS_DATA_SECTION (SEC_HT_DATA, genotype_data, char, false);    
+    UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
 
     piz_me23_reconstruct_vb (vb);
     UNCOMPRESS_DONE;
@@ -67,5 +68,6 @@ void piz_me23_read_one_vb (VBlock *vb_)
     READ_FIELDS;
     READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, false);
     READ_DATA_SECTION (SEC_HT_DATA, false);
+    READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // POS data that failed delta
     READ_DONE;
 }

@@ -94,46 +94,6 @@ static inline int seg_sam_get_next_subitem (const char *str, int str_len, char s
 #define DEC_SSF(ssf) const char *ssf; \
                      int ssf##_len;
 
-static inline uint32_t seg_sam_add_to_random_pos_data (VBlockSAM *vb, SectionType sec, 
-                                                       const char *snip, unsigned snip_len, unsigned add_bytes,
-                                                       const char *field_name)
-{
-    bool standard_random_pos_encoding = true;
-
-    // it is eligable for standard encoding only if the length is within the range
-    if (!snip_len || snip_len > 10) standard_random_pos_encoding = false; // more than 10 digits is for sure bigger than 4GB=32bits
-
-    // a multi-digit number cannot have a leading zero
-    if (snip_len > 1 && snip[0] == '0') standard_random_pos_encoding = false;
-
-    // it is eligable for standard encoding only if all the characters are digits
-    uint64_t n64=0; // 64 bit just in case we go above 32 bit
-    if (standard_random_pos_encoding)
-        for (unsigned i=0; i < snip_len; i++) {
-            if (!IS_DIGIT (snip[i])) {
-                standard_random_pos_encoding = false;
-                break;
-            }
-            n64 = n64 * 10 + (snip[i] - '0');
-        }
-
-    // it is eligable for standard encoding only if it fits in 32 bit (0xffffffff is reserved for a future escape, if needed)
-    if (n64 > 0xfffffffe) standard_random_pos_encoding = false;
-
-    ASSSEG (standard_random_pos_encoding, snip, "%s: Error: Bad position data in field %s - expecting an integer between 0 and %u without leading zeros, but instead seeing \"%.*s\"",
-            global_cmd, field_name, 0xfffffffe, snip_len, snip);
-
-    buf_alloc_more (vb, &vb->random_pos_data, 1, 0, uint32_t, 2);
-
-    // 32 bit number - this compresses better than textual numbers with LZMA
-    uint32_t n32 = (uint32_t)n64;
-    NEXTENT (uint32_t, vb->random_pos_data) = BGEN32 (n32);
-
-    vb->txt_section_bytes[sec] += add_bytes;
-
-    return n32;
-}
-
 static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsigned field_len, const char *field_name)
 {
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
@@ -154,7 +114,7 @@ static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsign
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
 
         // pos - add to the random pos data together with all other random pos data (originating from POS, PNEXT etc).
-        seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, pos, pos_len, pos_len+1, field_name);
+        seg_add_to_random_pos_data ((VBlockP)vb, SEC_RANDOM_POS_DATA, pos, pos_len, pos_len+1, field_name);
 
         // nm : we store in the same dictionary as the Optional subfield NM
         seg_one_subfield ((VBlockP)vb, nm, nm_len, (DictIdType)dict_id_OPTION_NM, 
@@ -201,7 +161,7 @@ static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned fie
         // pos - add to the pos data together with all other pos data (POS, PNEXT etc),
         // strand - add to separate STRAND dictionary, to not adversely affect compression of POS.
         // there is no advantage to storing the strand together with pos as they are not correlated.
-        seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, pos+1, pos_len-1, pos_len, "XA"); // one less for the strand, one more for the ,
+        seg_add_to_random_pos_data ((VBlockP)vb, SEC_RANDOM_POS_DATA, pos+1, pos_len-1, pos_len, "XA"); // one less for the strand, one more for the ,
 
         // strand
         seg_one_subfield ((VBlockP)vb, pos, 1, (DictIdType)dict_id_OPTION_STRAND, 
@@ -510,8 +470,7 @@ static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
     vb->txt_section_bytes[SEC_QUAL_DATA] += dl->qual_data_len + 1; 
 }
 
-const char *seg_sam_data_line (VBlock *vb_,   
-                               const char *field_start_line)     // index in vb->txt_data where this line starts
+const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     // index in vb->txt_data where this line starts
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
@@ -571,7 +530,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     
     if (rname_node_index != vb->rname_index_minus_1 ||   // different rname than the 2 previous lines - store full pos in random
         (rname_node_index == vb->rname_index_minus_2 && rname_node_index != vb->rname_index_minus_3))
-        vb->last_pos = seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1, "POS");
+        vb->last_pos = seg_add_to_random_pos_data (vb_, SEC_RANDOM_POS_DATA, field_start, field_len, field_len+1, "POS");
 
     else // same rname - do a delta
         vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, "POS");
@@ -619,7 +578,7 @@ const char *seg_sam_data_line (VBlock *vb_,
     }
 
     else  // RNAME and RNEXT differ - store in random_pos
-        seg_sam_add_to_random_pos_data (vb, SEC_SAM_RAND_POS_DATA, field_start, field_len, field_len+1, "PNEXT");
+        seg_add_to_random_pos_data (vb_, SEC_RANDOM_POS_DATA, field_start, field_len, field_len+1, "PNEXT");
 
     // TLEN - 3 cases: 
     // 1. if a value that is the negative of the previous line with "*"

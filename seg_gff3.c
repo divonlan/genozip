@@ -23,6 +23,7 @@ void seg_gff3_initialize (VBlock *vb_)
     buf_alloc (vb, &vb->dbxref_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "dbxref_numeric_data", vb->vblock_i);    
     buf_alloc (vb, &vb->seq_data, 20 * vb->lines.len, 1, "seq_data", vb->vblock_i); // should normally be more than enough, but if not, seg_add_to_data_buf will realloc
     buf_alloc (vb, &vb->enst_data, 10000, 1, "seq_data", vb->vblock_i); // symbolic initial allocation
+    buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 
     seg_init_mapper (vb_, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");    
 }
@@ -50,13 +51,13 @@ void seg_gff3_array_of_struct_ctxs (VBlockGFF3 *vb, DictIdType dict_id, unsigned
 {
     ASSERT (num_items <= MAX_AoS_ITEMS, "seg_gff3_create_ctx_sub_array: num_items=%u expected to be at most %u", num_items, MAX_AoS_ITEMS);
 
-    *enst_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
+    *enst_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, &vb->num_info_subfields, 
                                         (DictIdType)dict_id_ENSTid, SEC_GFF3_ATTRS_SF_DICT); 
 
     // create new contexts - they are guaranteed to be sequential in mtf_ctx
     for (unsigned i=0; i < num_items; i++) {
         dict_id.id[1] = '0' + i; // change the 2nd char (the first two chars are used for hashing in dict_id_to_did_i_map)
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, &vb->num_info_subfields, 
                                                   dict_id, SEC_GFF3_ATTRS_SF_DICT); 
 
         if (i==0) *ctx_array = ctx;
@@ -116,10 +117,10 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
         num_entries++;
     }
 
-    // we successfully segged all items of all entries - now we enter into the subfields - the number of entries preceeded by a \1
+    // we successfully segged all items of all entries - now we enter into the subfields - the number of entries preceeded by a AOS_NUM_ENTRIES
     char str[30];
     unsigned str_len;
-    str[0] = 1;
+    str[0] = AOS_NUM_ENTRIES;
     str_int (num_entries, str+1, &str_len);
 
     seg_one_subfield ((VBlockP)vb, str, str_len+1, subfield_ctx->dict_id, SEC_GFF3_ATTRS_SF_B250, 0); 
@@ -241,7 +242,7 @@ const char *seg_gff3_data_line (VBlock *vb_,
     // ATTRIBUTES
     field_start = next_field; 
     next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, 
-                                    field_names[DT_GFF3][GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
+                                    DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
 
     seg_info_field (vb_, &dl->attrs_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, seg_gff3_special_info_subfields,
                     (char*)field_start, field_len, has_13); // we break the const bc seg_vcf_info_field might add a :#

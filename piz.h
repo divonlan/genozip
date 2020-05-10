@@ -10,7 +10,8 @@
 
 extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool is_first_vcf_component, bool is_last_file);
 
-extern int32_t piz_decode_pos (int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
+extern int32_t piz_decode_pos (VBlockP vb, uint32_t txt_line_i,
+                               int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);
 extern void piz_map_iname_subfields (void);
 
@@ -73,7 +74,7 @@ extern void piz_me23_uncompress_one_vb (VBlockP vb);
 }
 #define READ_DATA_SECTION(sec,is_optional) READ_SECTION((sec), SectionHeader, (is_optional))
 
-#define READ_FIELDS { for (int f=0; f <= datatype_last_field[z_file->data_type]; f++) \
+#define READ_FIELDS { for (int f=0; f < DTFZ(num_fields); f++) \
                           READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250, false); }
 
 #define READ_SUBFIELDS(num,sec_b250) { \
@@ -106,7 +107,7 @@ extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_se
     if (also_uncompress_fields) UNCOMPRESS_FIELDS;
 
 #define UNCOMPRESS_FIELDS { \
-    for (int f=0 ; f <= datatype_last_field[vb->data_type] ; f++) { \
+    for (int f=0 ; f < DTF(num_fields) ; f++) { \
         SectionType b250_sec = FIELD_TO_B250_SECTION(vb->data_type, f); \
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]); \
         zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);\
@@ -122,10 +123,11 @@ extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_se
     } \
 }
 
-#define UNCOMPRESS_DATA_SECTION(sec, vb_buf_name, is_optional) { \
+#define UNCOMPRESS_DATA_SECTION(sec, vb_buf_name, type, is_optional) { \
     SectionHeader *data_header = (SectionHeader *)(vb->z_data.data + section_index[section_i]); \
     if (!(is_optional) || (section_i < vb->z_section_headers.len && data_header->section_type == (sec))) { \
         zfile_uncompress_section ((VBlockP)vb, data_header, &vb->vb_buf_name, #vb_buf_name, (sec)); \
+        vb->vb_buf_name.len /= sizeof(type); \
         section_i++;\
     }\
 }
@@ -178,7 +180,7 @@ typedef struct PizSubfieldMapper {
 #define RECONSTRUCT_FROM_DICT_POS(did_i,last_pos,update_last_pos,last_delta,add_tab) { \
     if ((did_i) != DID_I_NONE) LOAD_SNIP(did_i);\
     char pos_str[30];\
-    uint32_t new_pos = piz_decode_pos (last_pos, snip, snip_len, last_delta, pos_str, &snip_len); \
+    uint32_t new_pos = piz_decode_pos ((VBlockP)vb, txt_line_i, last_pos, snip, snip_len, last_delta, pos_str, &snip_len); \
     if (update_last_pos) last_pos = new_pos;\
     RECONSTRUCT (pos_str, snip_len);\
     if (add_tab) RECONSTRUCT ("\t", 1); }

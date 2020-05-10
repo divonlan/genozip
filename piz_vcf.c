@@ -633,10 +633,12 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     }
 
     unsigned section_i=1;
-
-    // uncompress the 8 fields (CHROM to FORMAT)    
-    UNCOMPRESS_FIELDS;
+    
+    UNCOMPRESS_FIELDS; // uncompress the 8 fields (CHROM to FORMAT)    
     UNCOMPRESS_SUBFIELDS(vb->num_info_subfields, SEC_VCF_INFO_SF_B250);
+    UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
+    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, char, true);
+
     /*
     for (uint8_t sf_i=0; sf_i < vb->num_info_subfields ; sf_i++) {
         
@@ -650,7 +652,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", SEC_VCF_INFO_SF_B250);    
     }
 */
-    if (is_v5_or_above) UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, false);
+
     /*{
         SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]);
         
@@ -798,9 +800,8 @@ void piz_vcf_read_one_vb (VBlock *vb_)
     READ_FIELDS; // CHROM to FORMAT
     READ_SUBFIELDS (vb->num_info_subfields, SEC_VCF_INFO_SF_B250); // INFO subfields
 
-    // read the numberic data of the ID field (the non-numeric part is in SEC_ID_B250)
-    if (is_v5_or_above)
-        READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, false);
+    READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // optional - POS data that failed delta (introduced in v5)
+    READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // optional - numeric data of the ID field (the non-numeric part is in SEC_ID_B250) (introduced in v5)
         
     // read the sample data
     uint32_t num_sample_blocks     = BGEN32 (vb_header->num_sample_blocks);
@@ -816,7 +817,6 @@ void piz_vcf_read_one_vb (VBlock *vb_)
  
         // make sure we have enough space for the section pointers
         buf_alloc_more (vb, &vb->z_section_headers, 3, 0, uint32_t, 2);
-//buf_alloc(vb, &vb->z_section_headers, sizeof (uint32_t) * (vb->z_section_headers.len + 3), 2, "z_section_headers", 2);
 
         if (vb_header->has_genotype_data)
             READ_SB_SECTION (SEC_VCF_GT_DATA,         SectionHeader, sb_i);

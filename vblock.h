@@ -13,6 +13,11 @@
 #include "move_to_front.h"
 #include "header.h"
 
+extern void vb_vcf_release_vb(VBlockP), vb_sam_release_vb(VBlockP), vb_fast_release_vb(VBlockP), vb_gff3_release_vb(VBlockP), vb_me23_release_vb(VBlockP); 
+extern void vb_vcf_destroy_vb(VBlockP), vb_sam_destroy_vb(VBlockP), vb_fast_destroy_vb(VBlockP), vb_gff3_destroy_vb(VBlockP), vb_me23_destroy_vb(VBlockP);
+extern void vb_sam_initialize_vb(VBlockP);
+extern void vb_vcf_cleanup_memory(VBlockP);
+
 // PIZ only: can appear in did_i of an INFO subfield mapping, indicating that this INFO has an added
 // ":#" indicating that the original VCF line had a Windows-style \r\n ending
 #define DID_I_HAS_13 254 
@@ -55,6 +60,8 @@ typedef struct SubfieldMapper {
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
     int32_t chrom_node_index;  /* ZIP: index into ra_buf: used by random_access_update_chrom/random_access_update_pos to sync between them */\
+    Buffer random_pos_data;    /* ZIP & PIZ: POS data - data from any POS-like field, where we cannot delta it for any reason */ \
+    uint32_t next_random_pos;  /* PIZ */ \
     int32_t last_pos;          /* value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes */\
     \
     /* regions & filters */ \
@@ -165,6 +172,7 @@ typedef struct VBlockVCF {
     uint32_t num_sample_blocks;
     uint32_t num_samples_per_block; // except last sample block that may have less
     uint32_t num_haplotypes_per_line;
+    uint32_t max_genotype_section_len; // number of b250s in one gt section matrix
     bool has_genotype_data;    // if any variant has genotype data, then the block is considered to have it
     bool has_haplotype_data;   // ditto for haplotype data
     PhaseType phase_type;      // phase type of this variant block
@@ -260,10 +268,6 @@ typedef struct VBlockSAM {
 
     int32_t last_pnext_delta;            // last delta calculated for PNEXT
 
-    Buffer random_pos_data;              // POS data - data from : 
-                                         // 1. POS if RNAME differs from prev line RNAME
-                                         // 2. PNEXT where RNEXT is not ('=' or equal to RNAME) 
-                                         // 3. POS data in SA, OA and XA
     Buffer md_data, bd_data, bi_data;    // data for optional field MD, BD, BI;
 
     // PIZ-only stuff
@@ -272,7 +276,7 @@ typedef struct VBlockSAM {
     Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
     Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
     uint32_t next_seq, next_qual;        // PIZ only: indeces into seq_data, qual_data
-    uint32_t next_random_pos, next_md, next_bd, next_bi;   // PIZ only: indeces into random_pos_data, md_data, bd_data, bi_data
+    uint32_t next_md, next_bd, next_bi;   // PIZ only: indeces into random_pos_data, md_data, bd_data, bi_data
     uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
 

@@ -231,14 +231,14 @@ void piz_fast_uncompress_one_vb (VBlock *vb_)
     else 
         section_i += vb->desc_mapper.num_subfields + NUM_FAST_FIELDS; // we didn't compress the fields - just skip them
 
-    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, false); // SEQ    
+    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, false); // SEQ    
 
     if (vb->data_type == DT_FASTQ) {
-        UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, false) // QUAL (FASTQ only)
+        UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, char, false) // QUAL (FASTQ only)
         piz_fastq_reconstruct_vb ((VBlockFASTP)vb);
     }
     else {
-        UNCOMPRESS_DATA_SECTION (SEC_FASTA_COMMENT_DATA, comment_data, false); // COMMENT (FASTA only)
+        UNCOMPRESS_DATA_SECTION (SEC_FASTA_COMMENT_DATA, comment_data, char, false); // COMMENT (FASTA only)
         piz_fasta_reconstruct_vb ((VBlockFASTP)vb);
     }
 
