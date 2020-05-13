@@ -416,6 +416,10 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, merging_vb->vblock_i, did_i, z_did_i);
 
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
+    
+    // store statistics for use of stats_show_sections() in case of FORMAT in VCF (other dictionaries have mtf_i.len)
+    if (z_file->data_type == DT_VCF && dict_id_is_vcf_format_sf (zf_ctx->dict_id))
+        zf_ctx->mtf_i.len += vb_ctx->mtf_i.len; // seg_vcf_genotype_area stores the word count in vb_ctx->mtf_i.len
 
     if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
 
@@ -865,6 +869,7 @@ void mtf_free_context (MtfContext *ctx)
     buf_free (&ctx->sorter);
     buf_free (&ctx->mtf_i);
     buf_free (&ctx->b250);
+    ctx->mtf_i.len = 0; // VCF stores FORMAT length in here for stats, even if mtf_i is not allocated (and therefore buf_free will not cleanup)
     ctx->dict_id.num = 0;
     ctx->dict_section_type = ctx->b250_section_type = 0;
     ctx->iterator.next_b250 = NULL;

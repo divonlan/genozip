@@ -376,6 +376,7 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
             node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, cell_gt_data, len, &node, NULL);
 
         NEXTENT (uint32_t, vb->line_gt_data) = node_index;
+        ctx->mtf_i.len++; // mtf_i is not used in FORMAT, we just update len for the use of stats_show_sections()
 
         if (node_index != WORD_INDEX_MISSING_SF) 
             cell_gt_data += len + 1 + *has_13; // skip separator too

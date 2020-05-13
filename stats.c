@@ -194,6 +194,7 @@ void stats_show_sections (void)
 
         const MtfContext *ctx = &z_file->mtf_ctx[i];
 
+        // for VCF format, we don't have mtf_i because we store the data in gt_data instead. However we do the accounting b250.len
         if (!ctx->mtf_i.len) continue;
         
         sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
