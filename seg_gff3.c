@@ -23,7 +23,7 @@ void seg_gff3_initialize (VBlock *vb_)
 
     buf_alloc (vb, &vb->dbxref_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "dbxref_numeric_data", vb->vblock_i);    
     buf_alloc (vb, &vb->seq_data, 20 * vb->lines.len, 1, "seq_data", vb->vblock_i); // should normally be more than enough, but if not, seg_add_to_data_buf will realloc
-    buf_alloc (vb, &vb->enst_data, 10000, 1, "seq_data", vb->vblock_i); // symbolic initial allocation
+    buf_alloc (vb, &vb->enst_data, 10000, 1, "enst_data", vb->vblock_i); // symbolic initial allocation
     buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 
     seg_init_mapper (vb_, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");    
