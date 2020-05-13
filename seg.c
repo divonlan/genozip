@@ -385,10 +385,44 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType s
     if (num_digits) ((char*)id_snip)[--new_len] = save_1;
 }
 
+typedef struct { const char *start; unsigned len; } InfoNames;
+
+static int sort_by_subfield_name (const void *a, const void *b)  
+{ 
+    InfoNames *ina = (InfoNames *)a;
+    InfoNames *inb = (InfoNames *)b;
+    
+    return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
+}
+
+#define MAX_INFO_NAMES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
+
+static void seg_sort_iname (InfoNames *names, unsigned num_names, char *iname, unsigned *iname_len)
+{
+    if (! (*iname_len) || ((*iname_len) == 1 && iname[0]=='#')) return ;// nothing to sort
+
+    if (iname[(*iname_len) - 1] == '#') num_names--; // we keep a final ";#" in its place
+
+    qsort (names, num_names, sizeof(InfoNames), sort_by_subfield_name);
+
+    char *next = iname;
+    for (unsigned i=0; i < num_names; i++) {
+        memcpy (next, // pointer into automatic variable iname of seg_info_field
+                names[i].start, // pointer into db->txt_data 
+                names[i].len);
+        next += names[i].len;
+
+        if (next[-1] != '=' && i < num_names-1) 
+            *(next++) = ';'; // add ; after value-less name, except in the end
+    }
+
+    *iname_len = (unsigned)(next - iname);
+}
+
 // segments fields that look like INFO in VCF or ATTRIBUTES in GFF3
 void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_buf, uint8_t *num_info_subfields,
                      SegSpecialInfoSubfields seg_special_subfields,
-                     char *info_str, unsigned info_len, 
+                     const char *info_str, unsigned info_len, 
                      bool has_13) // this GFF3 file line ends with a Windows-style \r\n
 {
     // data type de-multiplexors
@@ -401,7 +435,6 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     #define sec_info_sf_dict DTF(info_sf_dict_sec)
     #define sec_info_sf_b250 (sec_info_sf_dict + 1) 
 
-    #define MAX_INFO_NAMES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
     char iname[MAX_INFO_NAMES_LEN];
     unsigned iname_len = 0;
     const char *this_name = info_str;
@@ -409,13 +442,20 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     const char *this_value = NULL;
     unsigned this_value_len=0;
     unsigned sf_i=0;
+    char save_1, save_2;
+
+    InfoNames names[MAX_SUBFIELDS];
+    unsigned num_names=0;
 
     // if the txt file line ends with \r\n when we add an artificial additional info subfield "#"
     // we know we have space for adding ":#" because the line as at least a "\r\n" appearing somewhere after the INFO field
     if (has_13) {
-        if (info_len && info_str[info_len-1] != '=') // last subfield is has no value (and hence no '=') - add a ';'
-            info_str[info_len++] = ';';
-        info_str[info_len++] = '#';
+        if (info_len) {
+            save_2 = info_str[info_len];
+            ((char*)info_str)[info_len++] = ';';
+        }
+        save_1 = info_str[info_len];
+        ((char*)info_str)[info_len++] = '#';
     }
     
     // count infos
@@ -432,7 +472,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
 
         if (reading_name) {
             iname[iname_len++] = c; // info names inc. the =. the = terminats each name
-            ASSSEG (iname_len <= MAX_INFO_NAMES_LEN, info_str, "Error: %s field too long", field_name);
+            ASSSEG (iname_len <= MAX_INFO_NAMES_LEN, info_str, "Error: %s field too long, MAX_INFO_NAMES_LEN=%u", field_name, MAX_INFO_NAMES_LEN);
 
             if (c == '=') {  // end of name
 
@@ -444,10 +484,17 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                 reading_name = false; 
                 this_value = &info_str[i+1]; 
                 this_value_len = 0;
+
+                names[num_names].start = this_name; 
+                names[num_names++].len = this_name_len + 1; // +1 for the '='
             }
 
             // name without value - valid in GFF3/VCF format
             else if (c == ';') {
+
+                names[num_names].start = this_name; 
+                names[num_names++].len = this_name_len;
+
                 if (i==info_len) { // our artificial ; terminator
                     iname_len--; // remove ;
                     vb->txt_section_bytes[sec_info_b250]++; // account for the separator (; or \t or \n)
@@ -503,6 +550,10 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
         }
     }
 
+    // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
+    // thereby both improving compression and improving --regions speed. 
+    if (flag_optimize) seg_sort_iname (names, num_names, iname, &iname_len);
+
     // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
     // 1. find it's mtf_i (and add to dictionary if a new name)
     // 2. place mtf_i in INFO section of this VB
@@ -529,6 +580,13 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     *dl_info_mtf_i = node_index;
 
     vb->txt_section_bytes[sec_info_b250] += iname_len; // this includes all the =
+
+    // recover characters we temporarily changed
+    if (has_13) {
+        ((char*)info_str)[info_len-1] = save_1;
+        if (info_len > 1)
+            ((char*)info_str)[info_len-2] = save_2;
+    }
 }
 
 // We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 

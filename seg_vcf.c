@@ -499,7 +499,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     seg_one_field (vb, field_start, field_len, VCF_FILTER);
 
     // INFO
-    char *info_field_start = (char *)next_field; // we break the const bc seg_info_field might add a :#
+    const char *info_field_start = next_field;
     unsigned info_field_len=0;
     next_field = seg_get_next_item (vb, info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, 
                  false, &info_field_len, &separator, &has_13, DTF(names)[VCF_INFO] /* pointer to string to allow pointer comparison */); 

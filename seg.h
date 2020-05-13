@@ -51,7 +51,7 @@ typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char 
 
 extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_mapper_buf, uint8_t *num_info_subfields,
                             SegSpecialInfoSubfields seg_special_subfields,
-                            char *info_str, unsigned info_len, 
+                            const char *info_str, unsigned info_len, 
                             bool has_13); // this GFF3 file line ends with a Windows-style \r\n
 
 extern void seg_add_to_data_buf  (VBlockP vb, BufferP buf, SectionType sec, const char *snip, unsigned snip_len, unsigned add_bytes);

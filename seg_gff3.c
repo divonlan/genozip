@@ -257,7 +257,7 @@ const char *seg_gff3_data_line (VBlock *vb_,
                                     DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
 
     seg_info_field (vb_, &dl->attrs_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, seg_gff3_special_info_subfields,
-                    (char*)field_start, field_len, has_13); // we break the const bc seg_vcf_info_field might add a :#
+                    field_start, field_len, has_13); // we break the const bc seg_vcf_info_field might add a :#
 
     vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR] -= has_13; // the \r in case of Windows \r\n line ending (WHY IS THIS?)
 
