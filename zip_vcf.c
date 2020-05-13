@@ -527,7 +527,8 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
             buf_free (&vb->genotype_one_section_data);
         }
 
-        COMPRESS_DATA_SECTION (SEC_VCF_PHASE_DATA, phase_sections_data[sb_i], char, COMP_BZ2, true); // optional - phase data
+        if (vb->phase_type == PHASE_MIXED_PHASED)
+            COMPRESS_DATA_SECTION (SEC_VCF_PHASE_DATA, phase_sections_data[sb_i], char, COMP_BZ2, true); // optional - phase data
 
         if (vb->has_haplotype_data) {
             if (!flag_gtshark)
