@@ -5,7 +5,8 @@
 # Positive and negative ID deltas
 # Dbxref with and without digits, and with very long digits
 # Variant_effect, sift_prediction, polyphen_prediction, variant_peptide - well- and mal-formed
+# Attributes unsorted alphabetically, attributes without value in middle and end of list
 6	dbSNP	SNV	61735	61735	.	+	.	ID=1;Reference_seq=T;Variant_seq=A;ancestral_allele=T;Dbxref=dbSNP_152:rs1357314184;evidence_values=Frequency,TOPMed;Variant_effect=non_coding_transcript_variant 0 ncRNA ENST00000450305,intron_variant 0 primary_transcript ENST00000450305,non_coding_transcript_variant 0 ncRNA ENST00000456328,intron_variant 0 primary_transcript ENST00000456328;sift_prediction=0 deleterious 0 ENST00000335137,0 deleterious 0 ENST00000641515
 6	dbSNP	insertion	61810	61810	.	+	.	ID=7;Variant_seq=AG;evidence_values=Frequency,gnomAD;Dbxref=dbSNP_152:rs1475959417;Reference_seq=-;Variant_effect=test 0 1 ncRNA ENST1,MALFORMED;sift_prediction=0 MALFORMED,0 deleterious 0 ENST00000641515;polyphen_prediction=0 possibly_damaging 0.502 ENST00000335137,0 benign 0.162 ENST00000641515;variant_peptide=0 P ENST00000335137
-6	dbSNP	deletion	200000	300000	.	+	.	ID=3;Reference_seq=C;Variant_seq=-;ancestral_allele=C;Dbxref=dbSNP_152:rs1393814147;evidence_values=Frequency,gnomAD;polyphen_prediction;variant_peptide=0 P MALFORMED TOOMANYITEMS
-6	dbSNP	indel	472706	472706	.	+	.	ID=99991;Reference_seq=A;Variant_seq=AACA;ancestral_allele=A;Dbxref=dbSNP_152:rs1438749371;evidence_values=Frequency,TOPMed
+6	dbSNP	deletion	200000	300000	.	+	.	ID=3;Reference_seq=C;Variant_seq=-;ancestral_allele=C;Dbxref=dbSNP_152:rs1393814147;evidence_values=Frequency,gnomAD;polyphen_prediction;variant_peptide=0 P MALFORMED TOOMANYITEMS;NOVALUE
+6	dbSNP	indel	472706	472706	.	+	.	ID=99991;Reference_seq=A;Variant_seq=AACA;ancestral_allele=A;zerovalue;Dbxref=dbSNP_152:rs1438749371;evidence_values=Frequency,TOPMed
