@@ -417,10 +417,6 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     
-    // store statistics for use of stats_show_sections() in case of FORMAT in VCF (other dictionaries have mtf_i.len)
-    if (z_file->data_type == DT_VCF && dict_id_is_vcf_format_sf (zf_ctx->dict_id))
-        zf_ctx->mtf_i.len += vb_ctx->mtf_i.len; // seg_vcf_genotype_area stores the word count in vb_ctx->mtf_i.len
-
     if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
 
     uint32_t start_dict_len = zf_ctx->dict.len;
