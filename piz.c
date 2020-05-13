@@ -50,6 +50,10 @@ int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
         ASSERT (vb->next_random_pos < vb->random_pos_data.len, "Error reading sam_line=%u: unexpected end of RANDOM_POS data", txt_line_i);
         last_pos = BGEN32 (*ENT (uint32_t, vb->random_pos_data, vb->next_random_pos++));
         str_int (last_pos, pos_str, pos_len);
+
+        if (last_delta) 
+            *last_delta = last_pos - vb->last_pos;
+
         return last_pos;
     }
 
