@@ -50,7 +50,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         vb->show_headers_buf.len += len;
     }
     else 
-        fprintf (stderr, "%s", str);
+        printf ("%s", str);
 }
 
 static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
