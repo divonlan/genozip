@@ -226,7 +226,7 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
 //printf ("End compress dict vb_i=%u did_i=%u\n", vb->vblock_i, ctx->did_i);
 }
 
-void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx)
+void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_alg)
 {
     SectionHeaderBase250 header;
     memset (&header, 0, sizeof(header)); // safety
@@ -235,7 +235,7 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx)
     header.h.section_type          = ctx->b250_section_type;
     header.h.data_uncompressed_len = BGEN32 (ctx->b250.len);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderBase250));
-    header.h.sec_compression_alg  = COMP_BZ2;
+    header.h.sec_compression_alg   = comp_alg;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;

@@ -60,6 +60,8 @@ typedef struct SubfieldMapper {
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
     int32_t chrom_node_index;  /* ZIP: index into ra_buf: used by random_access_update_chrom/random_access_update_pos to sync between them */\
+    Buffer seq_data;           \
+    uint32_t next_seq;         /* PIZ only: indeces into seq_data */ \
     Buffer random_pos_data;    /* ZIP & PIZ: POS data - data from any POS-like field, where we cannot delta it for any reason */ \
     uint32_t next_random_pos;  /* PIZ */ \
     int32_t last_pos;          /* value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes */\
@@ -273,10 +275,8 @@ typedef struct VBlockSAM {
     // PIZ-only stuff
     int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
     Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
-    Buffer seq_data;                     // PIZ only: contains SEQ data and also E2 data for lines for which it exists
     Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
-    uint32_t next_seq, next_qual;        // PIZ only: indeces into seq_data, qual_data
-    uint32_t next_md, next_bd, next_bi;   // PIZ only: indeces into random_pos_data, md_data, bd_data, bi_data
+    uint32_t next_qual, next_md, next_bd, next_bi;   // PIZ only: indeces into random_pos_data, md_data, bd_data, bi_data
     uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
 
@@ -297,12 +297,10 @@ typedef struct VBlockFAST { // for FASTA and FASTQ
 
     // shared fields FASTA and FASTQ
     SubfieldMapper desc_mapper; // ZIP & PIZ
-    Buffer seq_data;            // PIZ only (FASTQ), PIZ&ZIP (FASTA): contains SEQ data and also E2 data for lines for which it exists
-    uint32_t next_seq;
 
     // FASTQ-only fields
     Buffer qual_data;           // PIZ only: contains QUAL data and also U2 data for lines for which it exists
-    uint32_t next_qual;         // PIZ only: indeces into seq_data, qual_data
+    uint32_t next_qual;         // PIZ only: indeces into qual_data
 
     // FASTA-only fields
     Buffer comment_data;        // ZIP & PIZ
@@ -332,7 +330,6 @@ typedef struct VBlockGFF3 {
     uint32_t last_id;             // used for detla'ing the ID subfield
 
     Buffer dbxref_numeric_data;   // ZIP & PIZ
-    Buffer seq_data;              // ZIP & PIZ: data from the Variant_seq, Reference_seq and ancestral_allele subfields
     Buffer enst_data; 
 
     uint8_t num_info_subfields;   // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
@@ -340,7 +337,7 @@ typedef struct VBlockGFF3 {
     Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
 
     // PIZ-only stuff
-    uint32_t next_seq, next_dbxref_numeric_data, next_enst;  // PIZ only: used to reconstruct data from buffers
+    uint32_t next_dbxref_numeric_data, next_enst;  // PIZ only: used to reconstruct data from buffers
 
 } VBlockGFF3;
 

@@ -362,7 +362,7 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType s
     // added to sec_buf if we have a trailing number
     if (num_digits) {
         uint32_t id_num = BGEN32 (atoi (&id_snip[id_snip_len - num_digits]));
-        seg_add_to_data_buf (vb, id_buf, sec_buf, (char*)&id_num, sizeof (id_num), 0, num_digits); // account for the digits
+        seg_add_to_fixed_buf (vb, id_buf, sec_buf, (char*)&id_num, sizeof (id_num), num_digits); // account for the digits
     }
 
     // append the textual part with \1 and \2 as needed - we have enough space - we have a tab following the field
@@ -620,14 +620,24 @@ void seg_compound_field (VBlock *vb,
 
 void seg_add_to_data_buf (VBlock *vb, Buffer *buf, SectionType sec, 
                           const char *snip, unsigned snip_len, 
-                          char add_separator,  // seperator to add to the buffer after the snip. 0 if none.
                           unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
     ASSERT0 (buf_is_allocated (buf), "Error in seg_add_to_data_buf: buf is not allocated");
 
-    buf_alloc_more (vb, buf, snip_len + !!add_separator, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_data_buf
+    buf_alloc_more (vb, buf, snip_len + 1, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_data_buf
     if (snip_len) buf_add (buf, snip, snip_len); 
-    if (add_separator) buf_add (buf, &add_separator, 1); 
+    buf_add (buf, "\n", 1); 
+    vb->txt_section_bytes[sec] += add_bytes;
+}
+
+void seg_add_to_fixed_buf (VBlock *vb, Buffer *buf, SectionType sec, 
+                           const void *data, unsigned data_len, 
+                           unsigned add_bytes)  // bytes in the original text file accounted for by this snip
+{
+    ASSERT0 (buf_is_allocated (buf), "Error in seg_add_to_fixed_buf: buf is not allocated");
+
+    buf_alloc_more (vb, buf, data_len, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_fixed_buf
+    if (data_len) buf_add (buf, data, data_len); 
     vb->txt_section_bytes[sec] += add_bytes;
 }
 

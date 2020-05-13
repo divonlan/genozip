@@ -323,7 +323,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             seg_add_to_data_buf ((VBlockP)vb, &vb->md_data, SEC_SAM_MD_DATA, 
                                  md_is_changeable ? new_md : value, 
                                  md_is_changeable ? new_md_len : value_len,
-                                 '\t', value_len+1);
+                                 value_len+1);
         }
 
         // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)

@@ -78,7 +78,8 @@ void zip_generate_and_compress_fields (VBlock *vb)
                 (char*)DTF(names)[f], st_name (ctx->b250_section_type), vb->vblock_i);
 
         zip_generate_b250_section (vb, ctx);
-        zfile_compress_b250_data (vb, ctx);
+
+        zfile_compress_b250_data (vb, ctx, COMP_BZ2);
     }
 }
 
@@ -91,7 +92,7 @@ void zip_generate_and_compress_subfields (VBlock *vb, const SubfieldMapper *mapp
 
         if (ctx->mtf_i.len) {; // we compress only if this subfield has data this VB
             zip_generate_b250_section (vb, ctx);
-            zfile_compress_b250_data  (vb, ctx);
+            zfile_compress_b250_data  (vb, ctx, COMP_BZ2);
         }
     }
 }
@@ -106,7 +107,7 @@ void zip_generate_and_compress_subfields2 (VBlock *vb, SectionType sec_dict)
         if (ctx->dict_section_type == sec_dict) {
             if (ctx->mtf_i.len) {
                 zip_generate_b250_section (vb, ctx);
-                zfile_compress_b250_data (vb, ctx);
+                zfile_compress_b250_data (vb, ctx, COMP_BZ2);
             }
             num_subfields++;
         }

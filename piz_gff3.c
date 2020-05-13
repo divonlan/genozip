@@ -66,7 +66,7 @@ static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t di
     if (dict_id.num == dict_id_ATTR_Variant_seq   ||
         dict_id.num == dict_id_ATTR_Reference_seq ||
         dict_id.num == dict_id_ATTR_ancestral_allele) {
-        RECONSTRUCT_FROM_BUF (vb->seq_data, vb->next_seq, "SEQ", '\t', "", 0);
+        RECONSTRUCT_FROM_BUF (vb->seq_data, vb->next_seq, "SEQ", "", 0);
         return false;
     }
 

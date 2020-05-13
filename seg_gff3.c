@@ -179,7 +179,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         ctx->dict_id.num == dict_id_ATTR_Reference_seq ||
         ctx->dict_id.num == dict_id_ATTR_ancestral_allele) {
 
-        seg_add_to_data_buf (vb_, &vb->seq_data, SEC_SEQ_DATA, *this_value, *this_value_len, '\t', *this_value_len);
+        seg_add_to_data_buf (vb_, &vb->seq_data, SEC_SEQ_DATA, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 

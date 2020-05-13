@@ -185,20 +185,20 @@ typedef struct PizSubfieldMapper {
     RECONSTRUCT (pos_str, snip_len);\
     if (add_tab) RECONSTRUCT ("\t", 1); }
 
-#define LOAD_SNIP_FROM_BUF(buf,next,field_name,buf_separator_char) { \
+#define LOAD_SNIP_FROM_BUF(buf,next,field_name) { \
     uint32_t start = next; \
     ARRAY (char, data, buf);\
-    for (; next < buf.len && data[next] != buf_separator_char; next++);\
+    for (; next < buf.len && data[next] != '\n'; next++);\
     ASSERT (next < buf.len, \
-            "Error reconstructing txt_line=%u: unexpected end of " field_name " data (len=%u)", txt_line_i, (uint32_t)buf.len); \
+            "Error reconstructing txt_line=%u: unexpected end of %s data (len=%u)", txt_line_i, field_name, (uint32_t)buf.len); \
     snip = &data[start];\
     snip_len = next - start; \
     next++; /* skip the tab */ }
 
 // reconstructs from the buffer up to a tab    
-#define RECONSTRUCT_FROM_BUF(buf,next,field_name,buf_separator_char,reconst_sep_str,reconst_sep_str_len) { \
+#define RECONSTRUCT_FROM_BUF(buf,next,field_name,reconst_sep_str,reconst_sep_str_len) { \
     DECLARE_SNIP;\
-    LOAD_SNIP_FROM_BUF(buf,next,field_name,buf_separator_char) \
+    LOAD_SNIP_FROM_BUF(buf,next,field_name) \
     RECONSTRUCT (snip, snip_len); \
     if (reconst_sep_str_len) RECONSTRUCT (reconst_sep_str, reconst_sep_str_len);  }
 

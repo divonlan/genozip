@@ -466,10 +466,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
 
             compressors[header->sec_compression_alg](vb, 
-                                                      uncompressed_data, data_uncompressed_len,
-                                                      callback,  
-                                                      &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                                      false);
+                                                     uncompressed_data, data_uncompressed_len,
+                                                     callback,  
+                                                     &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                                     false);
+
             comp_free_all (vb); // just in case
         }
         

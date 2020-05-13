@@ -54,8 +54,8 @@ extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_m
                             char *info_str, unsigned info_len, 
                             bool has_13); // this GFF3 file line ends with a Windows-style \r\n
 
-extern void seg_add_to_data_buf (VBlockP vb, BufferP buf, SectionType sec, 
-                                 const char *snip, unsigned snip_len, char add_separator, unsigned add_bytes);
+extern void seg_add_to_data_buf  (VBlockP vb, BufferP buf, SectionType sec, const char *snip, unsigned snip_len, unsigned add_bytes);
+extern void seg_add_to_fixed_buf (VBlockP vb, BufferP buf, SectionType sec, const void *data, unsigned data_len, unsigned add_bytes);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
                                 SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep, bool account_for_13,

@@ -155,7 +155,7 @@ void vb_sam_release_vb (VBlock *vb_)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
-    vb->num_optional_subfield_b250s = vb->next_seq = vb->next_qual = vb->next_random_pos = 
+    vb->num_optional_subfield_b250s = vb->next_qual = vb->next_random_pos = 
     vb->next_md = vb->next_bd = vb->next_bi = 0;
     vb->nm_did_i = vb->strand_did_i = vb->last_tlen_abs_len = vb->last_pnext_delta = 0;
     vb->rname_index_minus_1 = vb->rname_index_minus_2 = vb->rname_index_minus_3 = 0;
@@ -165,7 +165,6 @@ void vb_sam_release_vb (VBlock *vb_)
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     
     buf_free (&vb->optional_mapper_buf);
-    buf_free (&vb->seq_data);
     buf_free (&vb->qual_data);
     buf_free (&vb->md_data);
     buf_free (&vb->bd_data);
@@ -179,7 +178,6 @@ void vb_sam_destroy_vb (VBlock *vb_)
 
     buf_destroy (&vb->random_pos_data);
     buf_destroy (&vb->optional_mapper_buf);
-    buf_destroy (&vb->seq_data);
     buf_destroy (&vb->qual_data);    
     buf_destroy (&vb->md_data);    
     buf_destroy (&vb->bd_data);    
@@ -194,12 +192,11 @@ void vb_fast_release_vb (VBlock *vb_)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
-    vb->next_seq = vb->next_qual = vb->next_comment = vb->last_line = 0;
+    vb->next_qual = vb->next_comment = vb->last_line = 0;
     vb->fasta_prev_vb_last_line_was_grepped = 0;
     
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
     
-    buf_free (&vb->seq_data);
     buf_free (&vb->qual_data);
     buf_free (&vb->comment_data);
 }
@@ -209,7 +206,6 @@ void vb_fast_destroy_vb (VBlock *vb_)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
-    buf_destroy (&vb->seq_data);
     buf_destroy (&vb->qual_data);    
     buf_destroy (&vb->comment_data);
 }
@@ -222,11 +218,10 @@ void vb_gff3_release_vb (VBlock *vb_)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
-    vb->next_seq = vb->next_dbxref_numeric_data = vb->next_enst = 0;
+    vb->next_dbxref_numeric_data = vb->next_enst = 0;
     vb->num_info_subfields = 0;
     vb->last_id = 0;
     
-    buf_free (&vb->seq_data);
     buf_free (&vb->dbxref_numeric_data);
     buf_free (&vb->iname_mapper_buf);
     buf_free (&vb->enst_data);
@@ -237,7 +232,6 @@ void vb_gff3_destroy_vb (VBlock *vb_)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
-    buf_destroy (&vb->seq_data);
     buf_destroy (&vb->dbxref_numeric_data);
     buf_destroy (&vb->iname_mapper_buf);
     buf_destroy (&vb->enst_data);
@@ -280,7 +274,7 @@ void vb_release_vb (VBlock *vb)
     vb->ready_to_dispatch = vb->is_processed = false;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = 0;
-    vb->chrom_node_index = vb->next_random_pos = 0; 
+    vb->chrom_node_index = vb->next_random_pos = vb->next_seq = 0; 
     vb->vb_position_txt_file = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
 
@@ -303,6 +297,7 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
+    buf_free(&vb->seq_data);
     buf_free(&vb->random_pos_data);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
@@ -342,6 +337,7 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->show_b250_buf);
     buf_destroy (&vb->section_list_buf);
     buf_destroy (&vb->region_ra_intersection_matrix);
+    buf_destroy (&vb->seq_data);
     buf_destroy (&vb->random_pos_data);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 

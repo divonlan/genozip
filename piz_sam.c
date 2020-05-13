@@ -103,7 +103,7 @@ static inline void piz_sam_reconstruct_AS (VBlockSAM *vb, const char *snip, unsi
 static inline void piz_sam_reconstruct_MD (VBlockSAM *vb, uint32_t txt_line_i, uint32_t cigar_seq_len)
 {
     DECLARE_SNIP;
-    LOAD_SNIP_FROM_BUF (vb->md_data, vb->next_md, "MD", '\t');
+    LOAD_SNIP_FROM_BUF (vb->md_data, vb->next_md, "MD");
 
     char reconstruced_md_str[MAX_SAM_MD_LEN]; 
     unsigned reconstruced_md_str_len;

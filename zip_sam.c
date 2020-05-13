@@ -127,7 +127,7 @@ void zip_sam_compress_one_vb (VBlockP vb_)
         
         if (ctx->mtf_i.len && ctx->dict_section_type == SEC_SAM_OPTNL_SF_DICT) {
             zip_generate_b250_section (vb_, ctx);
-            zfile_compress_b250_data (vb_, ctx);
+            zfile_compress_b250_data (vb_, ctx, COMP_BZ2);
         }
     }
 

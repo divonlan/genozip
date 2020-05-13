@@ -188,7 +188,7 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
             case ';': // comment line
                 if (!flag_header_one && !flag_grep) 
-                    RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", '\n', eol[has_13], eol_len[has_13]);
+                    RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", eol[has_13], eol_len[has_13]);
 
                 //if (flag_header_one && !snip_len)
                 //    vb->txt_data.len -= eol_len[has_13]; // don't show empty lines in --header-only mode

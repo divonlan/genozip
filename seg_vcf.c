@@ -29,6 +29,7 @@ void seg_vcf_initialize (VBlock *vb_)
 
     buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);   
     buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
+    buf_alloc (vb, &vb->seq_data, 10000, 1, "seq_data", vb->vblock_i); // arbitrary initial allocation
 
     seg_init_mapper (vb_, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
     seg_init_mapper (vb_, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf,  "iname_mapper_buf");    
@@ -107,6 +108,34 @@ static void seg_vcf_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
     // it is possible that the mapper is not set yet even though not new - if the node is from a previous VB and
     // we have not yet encountered in node in this VB
     *ENT (SubfieldMapper, vb->format_mapper_buf, node_index) = format_mapper;
+}
+
+static void seg_vcf_refalt_field (VBlockVCF *vb, 
+                                  const char *ref_start, unsigned ref_len, 
+                                  const char *alt_start, unsigned alt_len)
+{
+    // case: SNP or missing ref or alt ('.', 'N' etc)
+    if (ref_len == 1 && alt_len == 1)
+        seg_one_field (vb, ref_start, ref_len+alt_len+1, VCF_REFALT); // store both, including the tab between them
+
+    // case: ref is short, alt is long
+    else if (ref_len == 1) {
+        seg_one_field (vb, ref_start, ref_len+1, VCF_REFALT); // store just the ref, and the tab between them
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, alt_start, alt_len, alt_len); // store alt in seq_data
+    }
+
+    // case: ref is long, alt is short
+    else if (alt_len == 1) {
+        seg_one_field (vb, alt_start-1, alt_len+1, VCF_REFALT); // store just the alt, and the tab between them
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, ref_start, ref_len, ref_len); // store ref in seq_data
+    }
+
+    // case: both are along
+    else {
+        seg_one_field (vb, "\t", 1, VCF_REFALT); // store just the alt, and the tab between them
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, ref_start, ref_len, ref_len); // store ref in seq_data
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, alt_start, alt_len, alt_len); // store alt in seq_data
+    }
 }
 
 static bool seg_vcf_special_info_subfields(VBlockP vb_, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip)
@@ -453,8 +482,10 @@ const char *seg_vcf_data_line (VBlock *vb_,
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "REF");
 
     unsigned alt_len=0;
-    next_field = seg_get_next_item (vb, next_field, &len, false, true, false, &alt_len, &separator, &has_13, "ALT");
-    seg_one_field (vb, field_start, field_len+alt_len+1, VCF_REFALT);
+    const char *alt_start = next_field;
+    next_field = seg_get_next_item (vb, alt_start, &len, false, true, false, &alt_len, &separator, &has_13, "ALT");
+    seg_vcf_refalt_field (vb, field_start, field_len, alt_start, alt_len);
+//    seg_one_field (vb, field_start, field_len, alt_start, alt_len, VCF_REFALT);
 
     // QUAL
     field_start = next_field;

@@ -129,7 +129,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
 
     // case: comment line - stored in the comment buffer
     else if (*line_start == ';' || !line_len) {
-        seg_add_to_data_buf (vb_, &vb->comment_data, SEC_FASTA_COMMENT_DATA, line_start, line_len, '\n', line_len + 1 + has_13); 
+        seg_add_to_data_buf (vb_, &vb->comment_data, SEC_FASTA_COMMENT_DATA, line_start, line_len, line_len + 1 + has_13); 
 
         static const char *comment_metadata[2] = { "X;", "Y;" };
         seg_one_field (vb, comment_metadata[has_13], 2, FAST_LINEMETA);

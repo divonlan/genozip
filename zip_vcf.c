@@ -506,6 +506,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
     zip_generate_and_compress_subfields2 (vb_, SEC_VCF_INFO_SF_DICT);
 
     COMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, COMP_LZMA, true); // optional - POS data that could not be delta'ed
+    COMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, COMP_LZMA, true);                   // optional - if any REF+ALT exists where not both REF and ALT are length 1
     COMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, char,     COMP_LZMA, true); // optional - numeric part of the ID field
 
     // compress the sample data - genotype, haplotype and phase sections. genotype data is generated here too.
