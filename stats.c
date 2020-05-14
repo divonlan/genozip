@@ -39,6 +39,23 @@ static void stats_show_file_metadata (void)
                  DTPZ (show_sections_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, z_file->num_vbs);
 }
 
+uint64_t stats_total_gt_data_words (DictIdType dict_id)
+{
+    static uint64_t total_words_in_gt_data = 0;
+
+    if (!total_words_in_gt_data) { // we calculate this on the first call to this function
+
+        for (uint32_t i=0; i < z_file->num_dict_ids; i++) { // don't show CHROM-FORMAT as they are already showed above
+            
+            const MtfContext *ctx = &z_file->mtf_ctx[i];
+            if (dict_id_is_vcf_format_sf (ctx->dict_id))
+                total_words_in_gt_data += ctx->mtf_i.len;
+        }
+    }
+
+    return total_words_in_gt_data;
+}
+
 void stats_show_sections (void)
 {
     // the order in which we want them displayed
@@ -197,7 +214,15 @@ void stats_show_sections (void)
         // for VCF format, we don't have mtf_i because we store the data in gt_data instead. However we do the accounting b250.len
         if (!ctx->mtf_i.len) continue;
         
-        sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size);
+        // for FORMAT subfields, we compress all of them together in GT_DATA, because they are often correlated
+        // we allocate their compressed size as the proportion of GT_DATA words that are of this subfield, even
+        // tough the different subfields, should they have been compressed individually, might have different
+        // compression ratios
+        double format_proportion = 0;
+        if (dict_id_is_vcf_format_sf (ctx->dict_id)) 
+            format_proportion = (double)ctx->mtf_i.len / (double)stats_total_gt_data_words (ctx->dict_id);
+        
+        sections_get_sizes (ctx->dict_id, &dict_compressed_size, &b250_compressed_size, format_proportion);
 
         all_dicts_uncomp_len += ctx->dict.len;
         all_dicts_comp_len   += (uint64_t)dict_compressed_size;

@@ -175,7 +175,8 @@ void BGEN_sections_list()
     }
 }
 
-void sections_get_sizes (DictIdType dict_id, uint32_t *dict_compressed_size, uint32_t *b250_compressed_size)
+void sections_get_sizes (DictIdType dict_id, uint32_t *dict_compressed_size, uint32_t *b250_compressed_size,
+                         double format_proportion /* only needed for FORMAT subfields - number of words of this dict_id in gt_data divided by all words in gt_data */)
 {
     *dict_compressed_size = *b250_compressed_size = 0;
     
@@ -188,6 +189,11 @@ void sections_get_sizes (DictIdType dict_id, uint32_t *dict_compressed_size, uin
 
         else if (section->dict_id.num == dict_id.num && section_type_is_b250 (section->section_type))
             *b250_compressed_size += (section+1)->offset - section->offset;
+
+        // we allocate the size of SEC_VCF_GT_DATA by the proportion of words due to this FORMAT dict_id
+        else if (section->section_type == SEC_VCF_GT_DATA && dict_id_is_vcf_format_sf (dict_id)) {
+            *b250_compressed_size += format_proportion * ((section+1)->offset - section->offset);
+        }
     }
 }
 
