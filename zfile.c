@@ -356,7 +356,7 @@ int zfile_read_section (VBlock *vb,
     // case: this is a v5+ genozip header - read the extra field
     if (header->section_type == SEC_GENOZIP_HEADER &&
         ((v2v3v4_SectionHeaderGenozipHeader *)header)->genozip_version >= 5) {
-        zfile_read_from_disk (vb, data, sizeof (Md5Hash), false);
+        zfile_read_from_disk (vb, data, sizeof (SectionHeaderGenozipHeader) - sizeof (v2v3v4_SectionHeaderGenozipHeader), false);
         header_size += sizeof (Md5Hash);
     }
 
