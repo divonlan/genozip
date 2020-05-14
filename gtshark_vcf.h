@@ -7,7 +7,6 @@
 #define GTSHARK_INCLUDED
 
 #include "genozip.h"
-#include "sections.h"
 
 extern void gtshark_compress_haplotype_data (VBlockVCFP vb, ConstBufferP section_data, unsigned sb_i);
 

@@ -25,7 +25,7 @@ unzip:
 
 #include "genozip.h"
 #include "profiler.h"
-#include "sections.h"
+#include "section_types.h"
 #include "gloptimize_vcf.h"
 #include "base250.h"
 #include "vblock.h"

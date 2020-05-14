@@ -8,7 +8,8 @@
 
 #include <stdint.h>
 #include "genozip.h"
-#include "sections.h"
+#include "section_types.h"
+#include "dict_id.h"
 
 extern void seg_all_data_lines (VBlockP vb); 
 

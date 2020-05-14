@@ -10,7 +10,6 @@
 #include "file.h"
 #include "endianness.h"
 #include "regions.h"
-#include "sections.h"
 
 static pthread_mutex_t ra_mutex;
 static bool ra_mutex_initialized = false;

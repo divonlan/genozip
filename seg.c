@@ -14,6 +14,7 @@
 #include "strings.h"
 #include "optimize.h"
 #include "random_access.h"
+#include "dict_id.h"
 
 void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *name)
 {

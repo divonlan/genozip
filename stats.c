@@ -8,7 +8,7 @@
 #include "dict_id.h"
 #include "strings.h"
 #include "stats.h"
-#include "sections.h"
+#include "section_types.h"
 #include "file.h"
 
 #define stats_verify_all_covered(covered) stats_verify_all_covered_do (covered, __FUNCTION__)

@@ -21,12 +21,6 @@
 
 #define GENOZIP_MAGIC 0x27052012
 
-// encryption types
-#define NUM_ENCRYPTION_TYPES   2
-#define ENCRYPTION_TYPE_NONE   0
-#define ENCRYPTION_TYPE_AES256 1
-#define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit" }
-
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
 // section headers are encoded in Big Endian (see https://en.wikipedia.org/wiki/Endianness)

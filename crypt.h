@@ -7,7 +7,13 @@
 #define CRYPT_INCLUDED
 
 #include "genozip.h"
-#include "sections.h"
+#include "section_types.h"
+
+// encryption types - these values are part of the genozip file format and cannot be easily changed
+#define NUM_ENCRYPTION_TYPES   2
+#define ENCRYPTION_TYPE_NONE   0
+#define ENCRYPTION_TYPE_AES256 1
+#define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit" }
 
 extern void crypt_set_password (char *new_password);
 extern const char *crypt_get_password(void);

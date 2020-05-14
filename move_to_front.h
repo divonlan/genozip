@@ -11,8 +11,7 @@
 #include "buffer.h"
 #include "base250.h"
 #include "dict_id.h"
-#include "base250.h"
-#include "sections.h"
+#include "section_types.h"
 
 #define MAX_WORDS_IN_CTX 0x7fffffff // limit on mtf.len, word_list.len - partly because hash uses signed int32_t
 
