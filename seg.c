@@ -278,6 +278,7 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
         return last_pos; // unchanged last_pos
     }
     int32_t pos_delta = this_pos - last_pos;
+    if (last_pos_delta) *last_pos_delta = pos_delta;
     
     // if the delta is too big, add the POS to RANDOM_POS and put \5 in the b250
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
@@ -287,6 +288,7 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
         static const char pos_lookup[1] = {POS_LOOKUP};
         seg_one_snip (vb, pos_lookup, 1, did_i, sec_pos_b250, NULL);
         vb->txt_section_bytes[sec_pos_b250] -= 2;
+
         return this_pos;
     }
 
@@ -298,8 +300,6 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
     bool is_negated_last = (last_pos_delta && *last_pos_delta && (*last_pos_delta == -pos_delta));
 
     if (!is_negated_last) {
-
-        if (last_pos_delta) *last_pos_delta = pos_delta;
 
         bool negative = (pos_delta < 0);
         if (negative) pos_delta = -pos_delta;
@@ -442,7 +442,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     const char *this_value = NULL;
     unsigned this_value_len=0;
     unsigned sf_i=0;
-    char save_1, save_2;
+    char save_1, save_2=0 /* init to avoid compiler warning */;
 
     InfoNames names[MAX_SUBFIELDS];
     unsigned num_names=0;
