@@ -144,7 +144,7 @@ static bool seg_vcf_special_info_subfields(VBlockP vb_, MtfContextP ctx, const c
     unsigned optimized_snip_len;
 
     // Optimize VQSLOD
-    if (flag_optimize && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
+    if (flag_optimize_VQSLOD && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
@@ -353,14 +353,23 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
         unsigned optimized_snip_len;
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
-        if (flag_optimize && cell_gt_data && len && 
-            (ctx->dict_id.num == dict_id_FORMAT_PL || ctx->dict_id.num == dict_id_FORMAT_GL || ctx->dict_id.num == dict_id_FORMAT_GP) && 
-            optimize_vcf_format (ctx->dict_id, cell_gt_data, len, optimized_snip, &optimized_snip_len)) {
-
-            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, optimized_snip, optimized_snip_len, &node, NULL);
-            vb->vb_data_size -= (int)len - (int)optimized_snip_len;
-            optimized_cell_gt_data_len -= (int)len - (int)optimized_snip_len;
+#       define EVAL_OPTIMIZED { \
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, optimized_snip, optimized_snip_len, &node, NULL); \
+            vb->vb_data_size -= (int)len - (int)optimized_snip_len; \
+            optimized_cell_gt_data_len -= (int)len - (int)optimized_snip_len;\
         }
+
+        if      (flag_optimize_PL && cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_PL && 
+            optimize_vcf_pl (cell_gt_data, len, optimized_snip, &optimized_snip_len)) 
+            EVAL_OPTIMIZED
+
+        else if (flag_optimize_GL && cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_GL &&
+            optimize_vector_2_sig_dig (cell_gt_data, len, optimized_snip, &optimized_snip_len))
+            EVAL_OPTIMIZED
+    
+        else if (flag_optimize_GP && cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_GP && 
+            optimize_vector_2_sig_dig (cell_gt_data, len, optimized_snip, &optimized_snip_len))
+            EVAL_OPTIMIZED
 
         // if case MIN_DP subfield - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds

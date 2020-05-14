@@ -65,7 +65,7 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
-    else if (flag_optimize) {
+    else if (flag_optimize_QUAL) {
         optimize_phred_quality_string (*line_qual_data, *line_qual_len);
         if (*line_u2_data) optimize_phred_quality_string (*line_u2_data, *line_u2_len);
     }

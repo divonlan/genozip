@@ -185,7 +185,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
 
     // Optimize Variant_freq
     unsigned optimized_snip_len;
-    if (flag_optimize && (ctx->dict_id.num == dict_id_ATTR_Variant_freq) &&
+    if (flag_optimize_Vf && (ctx->dict_id.num == dict_id_ATTR_Variant_freq) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;

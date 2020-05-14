@@ -552,7 +552,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
 
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
-    if (flag_optimize) seg_sort_iname (names, num_names, iname, &iname_len);
+    if (flag_optimize_sort) seg_sort_iname (names, num_names, iname, &iname_len);
 
     // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
     // 1. find it's mtf_i (and add to dictionary if a new name)

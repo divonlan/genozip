@@ -51,7 +51,11 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_stdout=0, flag_replace=0, flag_show_content=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
-    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0;
+    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0,
+
+    flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
+    flag_optimize_QUAL=0, flag_optimize_Vf=0;
+
 
 uint64_t flag_stdin_size = 0;
 char *flag_grep = NULL;
@@ -509,7 +513,14 @@ int main (int argc, char **argv)
         #define _t  {"test",          no_argument,       &flag_test,         1 }
         #define _fa {"fast",          no_argument,       &flag_fast,         1 }
         #define _9  {"optimize",      no_argument,       &flag_optimize,     1 } // US spelling
-        #define _9a {"optimise",      no_argument,       &flag_optimize,     1 } // British spelling
+        #define _99 {"optimise",      no_argument,       &flag_optimize,     1 } // British spelling
+        #define _9s {"optimize-sort", no_argument,       &flag_optimize_sort,1 }
+        #define _9P {"optimize-PL",   no_argument,       &flag_optimize_PL,  1 }
+        #define _9G {"optimize-GL",   no_argument,       &flag_optimize_GL,  1 }
+        #define _9g {"optimize-GP",   no_argument,       &flag_optimize_GP,  1 }
+        #define _9V {"optimize-VQSLOD", no_argument,     &flag_optimize_VQSLOD, 1 }
+        #define _9Q {"optimize-QUAL", no_argument,       &flag_optimize_QUAL,1 } 
+        #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,  1 }
         #define _gt {"gtshark",       no_argument,       &flag_gtshark,      1 } 
         #define _th {"threads",       required_argument, 0, '@'                }
         #define _O  {"split",         no_argument,       &flag_split,        1 }
@@ -554,10 +565,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                          _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh, _9, _9a, _gt, _fa,          _rg, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                    _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                       _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm, _sh, _si, _sr,              _dm, _dp,                         _fs, _g,      _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                           _st, _sm,                             _dm,                                            _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                          _sc, _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _gt, _fa,          _rg, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                                    _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                                          _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,           _sd, _sT, _d1, _d2,                                    _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                            _fs, _g,      _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                           _st, _sm,                             _dm,                                                                               _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -705,6 +716,16 @@ int main (int argc, char **argv)
     // default values, if not overridden by the user
     if (!flag_vblock) genozip_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
     if (!flag_sblock) zip_vcf_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
+
+    // if --optimize was selected, all optimizations are turned on
+    if (flag_optimize)
+        flag_optimize_sort = flag_optimize_PL = flag_optimize_GL = flag_optimize_GP = flag_optimize_VQSLOD = 
+        flag_optimize_QUAL = flag_optimize_Vf = true;
+    
+    // if any optimization flag is on, we turn on flag_optimize
+    if (flag_optimize_sort || flag_optimize_PL || flag_optimize_GL || flag_optimize_GP || flag_optimize_VQSLOD ||
+        flag_optimize_QUAL || flag_optimize_Vf)
+        flag_optimize = true;
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --split

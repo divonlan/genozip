@@ -71,7 +71,7 @@ bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_
     return true;
 }
 
-static inline bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
 
@@ -100,7 +100,7 @@ static inline bool optimize_vector_2_sig_dig (const char *snip, unsigned len, ch
     return true;
 }
 
-static inline bool optimize_vcf_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
+bool optimize_vcf_pl (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (len > OPTIMIZE_MAX_SNIP_LEN) return false; // too long - we can't optimize - return unchanged
 
@@ -132,18 +132,6 @@ static inline bool optimize_vcf_pl (const char *snip, unsigned len, char *optimi
     
     *optimized_snip_len = writer - optimized_snip;
     return true;
-}
-
-// we separate to too almost identical functions optimize_vcf_format, optimize_vcf_info to gain a bit of performace -
-// less conditions - as the caller knows if he is format or info
-bool optimize_vcf_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len)
-{
-    if (dict_id.num == dict_id_FORMAT_GL) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
-    if (dict_id.num == dict_id_FORMAT_GP) return optimize_vector_2_sig_dig (snip, len, optimized_snip, optimized_snip_len);
-    if (dict_id.num == dict_id_FORMAT_PL) return optimize_vcf_pl (snip, len, optimized_snip, optimized_snip_len);
-    
-    ABORT ("Error in optimize: unsupport dict %s", err_dict_id (dict_id));
-    return 0; // never reaches here, avoid compiler warning
 }
 
 // change the quality scores to be in a small number of bins, similar to Illumina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf

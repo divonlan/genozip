@@ -99,7 +99,11 @@ extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads,
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only,
            flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_register,
-           flag_debug_progress, flag_show_hash, flag_debug_memory;
+           flag_debug_progress, flag_show_hash, flag_debug_memory,
+
+           flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
+           flag_optimize_QUAL, flag_optimize_Vf;
+           
 extern char *flag_grep;
 extern uint64_t flag_stdin_size;
 

@@ -51,7 +51,7 @@ static void zip_fast_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
-    if (flag_optimize) optimize_phred_quality_string (*line_qual_data, *line_qual_len);
+    if (flag_optimize_QUAL) optimize_phred_quality_string (*line_qual_data, *line_qual_len);
 }
 
 // this function receives all lines of a vblock and processes them
