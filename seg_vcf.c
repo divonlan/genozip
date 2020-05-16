@@ -117,8 +117,8 @@ static void seg_vcf_refalt_field (VBlockVCF *vb,
                                   const char *ref_start, unsigned ref_len, 
                                   const char *alt_start, unsigned alt_len)
 {
-    // case: SNP or missing ref or alt ('.', 'N' etc)
-    if (ref_len == 1 && alt_len == 1)
+    // case: SNP or missing ref or alt ('.', 'N' etc) or 2 alternatives 'C,G' etc simple cases
+    if (ref_len == 1 && alt_len <= 3)
         seg_one_field (vb, ref_start, ref_len+alt_len+1, VCF_REFALT, ref_len+alt_len+2); // store both, including the tab between them
 
     // case: ref is short, alt is long
@@ -128,7 +128,7 @@ static void seg_vcf_refalt_field (VBlockVCF *vb,
     }
 
     // case: ref is long, alt is short
-    else if (alt_len == 1) {
+    else if (alt_len <= 3) {
         seg_one_field (vb, alt_start-1, alt_len+1, VCF_REFALT, ref_len+alt_len+2); // store just the alt, and the tab between them, but account for everything
         seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, ref_start, ref_len, DID_I_NONE, 0); // store ref in seq_data
     }
