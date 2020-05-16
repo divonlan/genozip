@@ -38,7 +38,7 @@ for file in ${files[@]}; do
     ./genozip unix-nl.$file -ft -o ${output}.genozip || exit 1
 
     test_header "$file - Window-style end-of-line"
-    sed 's/$/\r/g' unix-nl.$file > windows-nl.$file
+    sed 's/$/\13/g' unix-nl.$file > windows-nl.$file # note: sed on mac doesn't recognize \r
     ./genozip windows-nl.$file -ft -o ${output}.genozip || exit 1
     rm unix-nl.$file windows-nl.$file
 
