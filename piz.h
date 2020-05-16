@@ -163,7 +163,7 @@ typedef struct PizSubfieldMapper {
     DictIdType dict_id[MAX_SUBFIELDS];
 } PizSubfieldMapper;
 
-#define DECLARE_SNIP const char *snip; uint32_t snip_len
+#define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
 
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[(did_i)], NULL, &snip, &snip_len, txt_line_i); 
@@ -188,7 +188,7 @@ typedef struct PizSubfieldMapper {
 #define LOAD_SNIP_FROM_BUF(buf,next,field_name) { \
     uint32_t start = next; \
     ARRAY (char, data, buf);\
-    for (; next < buf.len && data[next] != '\n'; next++);\
+    while (next < buf.len && data[next] != '\n') next++;\
     ASSERT (next < buf.len, \
             "Error reconstructing txt_line=%u: unexpected end of %s data (len=%u)", txt_line_i, field_name, (uint32_t)buf.len); \
     snip = &data[start];\

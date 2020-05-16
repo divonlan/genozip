@@ -324,8 +324,7 @@ static inline unsigned seg_snip_len_tnc (const char *snip, bool *has_13)
 static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, 
                                   const char *cell_gt_data, 
                                   unsigned cell_gt_data_len,  // not including the \t or \n 
-                                  bool is_vcf_string,
-                                  bool *has_13) // out (modified only if found \r) - not needed if cell_gt_data_len=0
+                                  bool is_vcf_string)
 {
     SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, dl->format_mtf_i);
     
@@ -338,7 +337,8 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
     for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
 
         // move next to the beginning of the subfield data, if there is any
-        unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data, has_13);
+        bool has_13 = false;
+        unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data, &has_13);
         MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
 
         if (ctx->dict_id.num == dict_id_FORMAT_DP) 
@@ -383,10 +383,10 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
         ctx->mtf_i.len++; // mtf_i is not used in FORMAT, we just update len for the use of stats_show_sections()
         
         if (is_vcf_string && len)
-            ctx->txt_len += len + 1 + (has_13 ? *has_13 : 0); // acount for : \t or \n or \r\n terminator
+            ctx->txt_len += len + 1 + has_13; // acount for : \t or \n or \r\n terminator
 
         if (node_index != WORD_INDEX_MISSING_SF) 
-            cell_gt_data += len + 1 + (has_13 ? *has_13 : 0); // skip separator too
+            cell_gt_data += len + 1 + has_13; // skip separator too
 
         end_of_cell = end_of_cell || cell_gt_data[-1] != ':'; // a \t or \n encountered
 
@@ -414,7 +414,7 @@ static void seg_vcf_add_samples_missing_in_line (VBlockVCF *vb, ZipDataLineVCF *
         }
 
         if (dl->has_genotype_data) {
-            seg_vcf_genotype_area (vb, dl, NULL, 0, false, NULL);
+            seg_vcf_genotype_area (vb, dl, NULL, 0, false);
             (*gt_line_len)++; // adding the WORD_INDEX_MISSING_SF
         }
     }
@@ -566,7 +566,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
                 if (separator != ':' && has_genotype_data) {
                     // missing genotype data despite being declared in FORMAT - this is permitted by VCF spec
                     has_genotype_data = false;
-                    seg_vcf_genotype_area (vb, dl, NULL, 0, false, NULL);
+                    seg_vcf_genotype_area (vb, dl, NULL, 0, false);
                     gt_line_len++; // adding the WORD_INDEX_MISSING_SF
                 }
             }
@@ -579,7 +579,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
                         sample_i+1);
 
                 // note: length can change as a result of optimize()
-                unsigned updated_field_len = seg_vcf_genotype_area (vb, dl, field_start, field_len, true, &line_has_13);
+                unsigned updated_field_len = seg_vcf_genotype_area (vb, dl, field_start, field_len, true);
                 gt_line_len += updated_field_len + 1; // including the \t or \n
             }
 

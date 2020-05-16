@@ -167,23 +167,23 @@ uint32_t license_get (void)
     license_exit_if_not_confirmed (confirm);
 
     fprintf (stderr, "\nDetails of the person to be granted the license -\n");
-    str_query_user ("Institution / Company name: ", institution, sizeof(institution), str_verify_not_empty, NULL);
+    str_query_user ("\nInstitution / Company name: ", institution, sizeof(institution), str_verify_not_empty, NULL);
     
-    str_query_user ("Your name: ", name, sizeof(name), license_verify_name, NULL);
+    str_query_user ("\nYour name: ", name, sizeof(name), license_verify_name, NULL);
     
-    str_query_user ("Your email address: ", email, sizeof(email), license_verify_email, NULL);
+    str_query_user ("\nYour email address: ", email, sizeof(email), license_verify_email, NULL);
     
-    str_query_user ("Do you require a commercial license? If yes, we will contact you (y or [n]) ", 
+    str_query_user ("\nDo you require a commercial license? If yes, we will contact you (this will not stop the registration now) (y or [n]) ", 
                     commercial, sizeof(commercial), str_verify_y_n, "N");
 
-    str_query_user ("Shall we update you by email when new features are added to genozip? ([y] or n) ", 
+    str_query_user ("\nShall we update you by email when new features are added to genozip? ([y] or n) ", 
                     update, sizeof(update), str_verify_y_n, "Y");
 
     fprintf (stderr, "\n\nPlease read the terms and conditions of the non-commercial license:\n\n"); 
     license_display(); 
     fprintf (stderr, "\n"); 
 
-    str_query_user ("Do you agree to the terms & conditions of the license? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
+    str_query_user ("Do you accept the terms & conditions of the license? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
     license_exit_if_not_confirmed (confirm);
 
     const char *os = arch_get_os();

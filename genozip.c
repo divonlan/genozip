@@ -7,6 +7,10 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
+#ifndef _WIN32
+#include <execinfo.h>
+#include <signal.h>
+#endif
 #ifndef _MSC_VER // Microsoft compiler
 #include <getopt.h>
 #else
@@ -95,6 +99,19 @@ void exit_on_error(void)
 
     exit(1);
 } 
+
+#ifndef _WIN32
+static void main_sigsegv_handler (int sig) 
+{
+#   define STACK_DEPTH 15
+    void *array[STACK_DEPTH];
+    size_t size = backtrace(array, STACK_DEPTH);
+    
+    fprintf (stderr, "\nError: segmentation fault. Call stack:\n");
+    backtrace_symbols_fd (array, size, STDERR_FILENO);
+    exit(1);
+}
+#endif
 
 static void main_print_help (bool explicit)
 {
@@ -471,6 +488,8 @@ int main (int argc, char **argv)
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows
     str_to_lowercase (argv[0]);
+#else
+    signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
 #endif
 
     if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
