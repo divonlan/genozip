@@ -341,7 +341,7 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data, &has_13);
         MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
 
-        if (ctx->dict_id.num == dict_id_FORMAT_DP) 
+        if (cell_gt_data && ctx->dict_id.num == dict_id_FORMAT_DP) 
             dp_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
 
         uint32_t node_index;
