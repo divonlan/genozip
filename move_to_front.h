@@ -85,6 +85,8 @@ typedef struct MtfContext {
     pthread_mutex_t mutex;     // MtfContext in z_file (only) is protected by a mutex 
     bool mutex_initialized;
     
+    uint64_t txt_len;          // How many characters in the txt file are accounted for by snips in this ctx (for stats)
+    
     // ----------------------------
     // UNZIP only fields
     // ----------------------------
@@ -100,7 +102,7 @@ typedef struct MtfContext {
 
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
-extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, MtfNode **node, bool *is_new);
+extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
 extern uint32_t mtf_get_next_snip (VBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
 extern int32_t mtf_search_for_word_index (MtfContext *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VBlockP vb);

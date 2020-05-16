@@ -74,5 +74,5 @@ void zip_fast_compress_one_vb (VBlockP vb_)
 
     // FASTA obly: COMMENT
     else 
-        zfile_compress_section_data (vb_, SEC_FASTA_COMMENT_DATA, &vb->comment_data);
+        COMPRESS_DATA_SECTION (SEC_FASTA_COMMENT_DATA, comment_data, char, COMP_BZ2, true);
   }

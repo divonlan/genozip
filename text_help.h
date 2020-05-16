@@ -78,8 +78,6 @@ static const char *help_genozip[] = {
     "                     Tip: if you're concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
 #endif
     "",
-    "   --show-content    Show the information content of the file and the compression ratios of each component",
-    "",
     "Optimizing:",    
     "   -9 --optimize     Modify the file in ways that are likely insignificant for analytical purposes, but significantly improve compression and somewhat improve the speed of genocat --regions. --optimize activates all these optimizations, or they can be activated individually. These optimizations are:",    
     "",

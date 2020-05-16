@@ -258,9 +258,6 @@ typedef struct File {
 
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;
-    int64_t section_bytes[NUM_SEC_TYPES];   
-    int64_t section_entries[NUM_SEC_TYPES]; // used only for Z files - number of entries of this type (dictionary entries or base250 entries)
-    uint32_t num_sections[NUM_SEC_TYPES];    // used only for Z files - number of sections of this type
 
 #   define READ_BUFFER_SIZE (1<<19)    // 512KB
     // Used for reading txt files

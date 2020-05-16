@@ -225,11 +225,9 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
 
 uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx, 
                                 const char *snip, uint32_t snip_len,
-                                MtfNode **node /* out */, bool *is_new /* out */)
+                                bool *is_new /* out */)
 {
     ASSERT0 (vb_ctx, "Error in mtf_evaluate_snip_seg: vb_ctx is NULL");
-
-    segging_vb->z_section_entries[vb_ctx->b250_section_type]++; 
 
     if (!snip_len) 
         return (!snip || (segging_vb->data_type == DT_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
@@ -241,7 +239,8 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
             err_dict_id (vb_ctx->dict_id), MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
-    int32_t existing_mtf_i = hash_get_entry_for_seg (segging_vb, vb_ctx,snip, snip_len, new_mtf_i_if_no_old_one, node);
+    MtfNode *node;
+    int32_t existing_mtf_i = hash_get_entry_for_seg (segging_vb, vb_ctx, snip, snip_len, new_mtf_i_if_no_old_one, &node);
     if (existing_mtf_i != NIL) {
 
         if (segging_vb->vblock_i == 1) 
@@ -254,18 +253,16 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     // this snip isn't in the hash table - its a new snip
     ASSERT (vb_ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %s", err_dict_id (vb_ctx->dict_id));
 
-    segging_vb->z_section_entries[vb_ctx->dict_section_type]++; 
-
     buf_alloc (segging_vb, &vb_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, 1+vb_ctx->mtf.len), CTX_GROWTH, 
                "mtf_ctx->mtf", vb_ctx->did_i);
 
     vb_ctx->mtf.len++; // new hash entry or extend linked list
 
-    *node = mtf_node (vb_ctx, new_mtf_i_if_no_old_one, NULL, NULL);
-    memset (*node, 0, sizeof(MtfNode)); // safety
-    (*node)->snip_len     = snip_len;
-    (*node)->char_index   = mtf_insert_to_dict (segging_vb, vb_ctx, false, snip, snip_len);
-    (*node)->word_index.n = new_mtf_i_if_no_old_one;
+    node = mtf_node (vb_ctx, new_mtf_i_if_no_old_one, NULL, NULL);
+    memset (node, 0, sizeof(MtfNode)); // safety
+    node->snip_len     = snip_len;
+    node->char_index   = mtf_insert_to_dict (segging_vb, vb_ctx, false, snip, snip_len);
+    node->word_index.n = new_mtf_i_if_no_old_one;
 
     // if this is the first variant block - allocate/grow sorter to contain exactly the same number of entries as mtf
     if (segging_vb->vblock_i == 1) {
@@ -416,7 +413,8 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     //fprintf (stderr,  ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dict_id_printable (vb_ctx->dict_id).id, merging_vb->vblock_i, did_i, z_did_i);
 
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
-    
+    zf_ctx->txt_len += vb_ctx->txt_len; // for stats
+
     if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
 
     uint32_t start_dict_len = zf_ctx->dict.len;
@@ -526,8 +524,8 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
         MtfContext *ctx = &merging_vb->mtf_ctx[did_i];
 
         SectionType dict_sec_type = ctx->dict_section_type;
-
-        ASSERT (section_type_is_dictionary(dict_sec_type), "Error: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
+        ASSERT (section_type_is_dictionary(dict_sec_type) || dict_sec_type == SEC_NONE, // SEC_NONE is a stats-only ctx
+                "Error in mtf_merge_in_vb_ctx: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
 
         if (dict_sec_type != SEC_VCF_INFO_SF_DICT && dict_sec_type != SEC_VCF_FRMT_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
@@ -535,13 +533,13 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
 
     // second, all the info subfield dictionaries
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++)         
-        if (buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
+        if (//buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
             merging_vb->mtf_ctx[did_i].dict_section_type == SEC_VCF_INFO_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
 
     // third, all the genotype subfield dictionaries
     for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++)         
-        if (buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
+        if (//buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
             merging_vb->mtf_ctx[did_i].dict_section_type == SEC_VCF_FRMT_SF_DICT) 
             mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
 
@@ -629,6 +627,7 @@ void mtf_initialize_primary_field_ctxs (VBlock *vb, // NULL if called by zfile_r
                                         uint8_t *dict_id_to_did_i_map,
                                         unsigned *num_dict_ids)
 {
+    // note: we create only the regular ctxs here, not extend, as extended may belong to a different type. extended are created in seg_*_initialize
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         
         const char *fname    = dt_fields[dt].names[f];
@@ -661,7 +660,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
 
     ASSERT (section_type_is_dictionary(header->h.section_type),
-            "Error: header->h.section_type=%s is not a dictionary section", st_name(header->h.section_type));
+            "Error in mtf_integrate_dictionary_fragment: header->h.section_type=%s is not a dictionary section", st_name(header->h.section_type));
 
     uint32_t num_snips = BGEN32 (header->num_snips);
 
@@ -874,6 +873,7 @@ void mtf_free_context (MtfContext *ctx)
     ctx->global_hash_prime = 0;
     ctx->merge_num = 0;
     ctx->mtf_len_at_1_3 = ctx->mtf_len_at_2_3 = 0;
+    ctx->txt_len = 0;
 
     if (ctx->mutex_initialized) {
         pthread_mutex_destroy (&ctx->mutex);

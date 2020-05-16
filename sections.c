@@ -126,7 +126,7 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
         }
     }
 
-    return SEC_EOF; // no more headers
+    return SEC_NONE; // no more headers
 }
 
 // dictionary section iterator. returns true if another dictionary was found.
@@ -175,28 +175,6 @@ void BGEN_sections_list()
     }
 }
 
-void sections_get_sizes (DictIdType dict_id, uint32_t *dict_compressed_size, uint32_t *b250_compressed_size,
-                         double format_proportion /* only needed for FORMAT subfields - number of words of this dict_id in gt_data divided by all words in gt_data */)
-{
-    *dict_compressed_size = *b250_compressed_size = 0;
-    
-    for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
-
-        SectionListEntry *section = ENT (SectionListEntry, z_file->section_list_buf, i);
-
-        if (section->dict_id.num == dict_id.num && section_type_is_dictionary (section->section_type))
-            *dict_compressed_size += (section+1)->offset - section->offset;
-
-        else if (section->dict_id.num == dict_id.num && section_type_is_b250 (section->section_type))
-            *b250_compressed_size += (section+1)->offset - section->offset;
-
-        // we allocate the size of SEC_VCF_GT_DATA by the proportion of words due to this FORMAT dict_id
-        else if (section->section_type == SEC_VCF_GT_DATA && dict_id_is_vcf_format_sf (dict_id)) {
-            *b250_compressed_size += format_proportion * ((section+1)->offset - section->offset);
-        }
-    }
-}
-
 void sections_show_gheader (SectionHeaderGenozipHeader *header)
 {
     unsigned num_sections = BGEN32 (header->num_sections);
@@ -241,7 +219,7 @@ const char *st_name(SectionType sec_type)
 {
     static const struct {const char *name; } abouts[NUM_SEC_TYPES] = SECTIONTYPE_ABOUT;
     
-    if (sec_type == SEC_EOF) return "SEC_EOF";
+    if (sec_type == SEC_NONE) return "SEC_NONE";
     
     return type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
 }

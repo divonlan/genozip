@@ -102,6 +102,8 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_AM = dict_id_sam_optnl_sf (dict_id_make ("AM:i", 4)).num;
         dict_id_OPTION_AS = dict_id_sam_optnl_sf (dict_id_make ("AS:i", 4)).num;
         dict_id_OPTION_CC = dict_id_sam_optnl_sf (dict_id_make ("CC:Z", 4)).num;
+        dict_id_OPTION_BD = dict_id_sam_optnl_sf (dict_id_make ("BD:Z", 4)).num;
+        dict_id_OPTION_BI = dict_id_sam_optnl_sf (dict_id_make ("BI:Z", 4)).num;
         dict_id_OPTION_CM = dict_id_sam_optnl_sf (dict_id_make ("CM:i", 4)).num;
         dict_id_OPTION_E2 = dict_id_sam_optnl_sf (dict_id_make ("E2:Z", 4)).num;
         dict_id_OPTION_FI = dict_id_sam_optnl_sf (dict_id_make ("FI:i", 4)).num;

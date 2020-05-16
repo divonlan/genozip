@@ -27,23 +27,24 @@ extern void seg_store (VBlockP vb,
                        bool align32); // does start address need to be 32bit aligned to prevent aliasing issues
 
 extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len,
-                                  DictIdType dict_id, SectionType sec_b250, int accounts_for_chars);
+                                  DictIdType dict_id, SectionType sec_b250, uint32_t add_bytes);
 
-extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did_i, SectionType sec_b250,
+extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did_i, uint32_t add_bytes,
                               bool *is_new); // optional out
 
-#define seg_one_field(vb,str,len,f) seg_one_snip ((VBlockP)(vb), (str), (len), (f), FIELD_TO_B250_SECTION((vb)->data_type, f), NULL)
+#define seg_one_field(vb,str,len,f, add_bytes) \
+    seg_one_snip ((VBlockP)(vb), (str), (len), (f), add_bytes, NULL)
 
 extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
-extern uint32_t seg_add_to_random_pos_data (VBlockP vb, SectionType sec, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name);
+extern uint32_t seg_add_to_random_pos_data (VBlockP vb, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name);
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define POS_LOOKUP   '\1'   // used in dictionary if pos is stored in random_pos because delta is too large. this value is part of the file format so cannot be (easily) changed. Introduced in v5.
 #define POS_NONSENSE '\2'   // used in dictionary if pos is not an unsigned int <= 0x7fffffff. this value is part of the file format so cannot be (easily) changed. Introduced in v5.
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_delta, bool allow_non_number, 
-                              int pos_field, SectionType sec_pos_b250,
-                              const char *pos_str, unsigned pos_len, const char *field_name);
+                              int pos_field, const char *pos_str, unsigned pos_len, 
+                              const char *field_name, bool account_for_separator);
 
 extern void seg_id_field (VBlockP vb, BufferP id_buf, DictIdType dict_id, SectionType sec_b250, SectionType sec_buf,
                           const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator);
@@ -53,10 +54,11 @@ typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char 
 extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_mapper_buf, uint8_t *num_info_subfields,
                             SegSpecialInfoSubfields seg_special_subfields,
                             const char *info_str, unsigned info_len, 
-                            bool has_13); // this GFF3 file line ends with a Windows-style \r\n
+                            bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
+                            bool this_line_has_13); // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
 
-extern void seg_add_to_data_buf  (VBlockP vb, BufferP buf, SectionType sec, const char *snip, unsigned snip_len, unsigned add_bytes);
-extern void seg_add_to_fixed_buf (VBlockP vb, BufferP buf, SectionType sec, const void *data, unsigned data_len, unsigned add_bytes);
+extern void seg_add_to_data_buf  (VBlockP vb, BufferP buf, const char *snip, unsigned snip_len, uint8_t add_bytes_did_i, unsigned add_bytes);
+extern void seg_add_to_fixed_buf (VBlockP vb, BufferP buf, const void *data, unsigned data_len);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
                                 SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep, bool account_for_13,
@@ -85,6 +87,7 @@ extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md
 // ---------------------------
 extern const char *seg_fastq_data_line (VBlockP vb_, const char *field_start_line);
 extern const char *seg_fasta_data_line (VBlockP vb_, const char *field_start_line);
+extern void seg_fastq_initialize (VBlockP vb_);
 extern void seg_fasta_initialize (VBlockP vb_);
 
 // ------------------
@@ -107,7 +110,12 @@ extern void seg_me23_initialize (VBlockP vb_);
 // Seg utilities
 // ------------------
 
-//#define ASSSEG(condition, p_into_txt, format, ...) ASSERT(condition, format "ext %u", __VA_ARGS__, 6)
+// create extendent field contexts in the correct order of the fields
+#define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
+    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, (DictIdType)dict_id_num, SEC_NONE); \
+    ASSERT (ctx->did_i == extended_field, "Error: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
+    dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
+}
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
     ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\

@@ -50,7 +50,7 @@ typedef struct SubfieldMapper {
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
-    int32_t vb_data_size;      /* expected size of decompressed txt. Might be different than original if --optimize is used. */\
+    int32_t vb_data_size;      /* ZIP: actual size of txt read file file ; PIZ: expected size of decompressed txt. Might be different than original if --optimize is used. */\
     uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
     uint32_t longest_line_len; /* length of longest line of text line in this vb */\
     uint32_t line_i;           /* current line in VB (0-based) being segmented */\
@@ -94,10 +94,6 @@ typedef struct SubfieldMapper {
     uint8_t dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
-    int32_t txt_section_bytes[NUM_SEC_TYPES];  /* how many bytes did each section have in the original vcf file - should add up to the file size */\
-    int32_t z_section_bytes[NUM_SEC_TYPES];    /* how many bytes does each section type have (including headers) in the genozip file - should add up to the file size */\
-    int32_t z_num_sections[NUM_SEC_TYPES];     /* how many sections where written to .genozip of this type */\
-    int32_t z_section_entries[NUM_SEC_TYPES];  /* how many entries (dictionary or base250) where written to .genozip of this type */\
     Buffer show_headers_buf;                   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
     Buffer show_b250_buf;                      /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
     Buffer section_list_buf;                   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
@@ -239,7 +235,6 @@ typedef struct VBlockVCF {
 } VBlockVCF;
 
 extern unsigned vb_vcf_num_samples_in_sb (const VBlockVCF *vb, unsigned sb_i);
-extern unsigned vb_vcf_num_sections (VBlockVCF *vb);
 
 //-------------------------------
 // SAM stuff

@@ -27,6 +27,8 @@ void seg_vcf_initialize (VBlock *vb_)
     vb->num_samples_per_block = global_vcf_samples_per_block;
     vb->num_sample_blocks = ceil((float)global_vcf_num_samples / (float)vb->num_samples_per_block);
 
+    EXTENDED_FIELD_CTX (VCF_GT, dict_id_vcf_format_sf (dict_id_make ("GT", 2)));
+
     buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);   
     buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
     buf_alloc (vb, &vb->seq_data, 10000, 1, "seq_data", vb->vblock_i); // arbitrary initial allocation
@@ -48,7 +50,8 @@ static DictIdType seg_vcf_get_format_subfield (const char **str, uint32_t *len) 
 }
 
 static void seg_vcf_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, 
-                                  const char *field_start, int field_len)
+                                  const char *field_start, int field_len,
+                                  bool has_13) // FORMAT is the last field in this line (i.e. no samples), and it is terminated by \r\n
 {
     const char *str = field_start;
     int len = field_len;
@@ -92,7 +95,7 @@ static void seg_vcf_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
         buf_alloc (vb, &vb->line_gt_data, format_mapper.num_subfields * global_vcf_num_samples * sizeof(uint32_t), 1, "line_gt_data", vb->line_i); 
 
     bool is_new;
-    uint32_t node_index = seg_one_snip ((VBlockP)vb, field_start, field_len, VCF_FORMAT, SEC_VCF_FORMAT_B250, &is_new);
+    uint32_t node_index = seg_one_snip ((VBlockP)vb, field_start, field_len, VCF_FORMAT, field_len + 1 + has_13 /* \t \n or \r\n */, &is_new);
 
     dl->format_mtf_i = node_index;
 
@@ -116,25 +119,25 @@ static void seg_vcf_refalt_field (VBlockVCF *vb,
 {
     // case: SNP or missing ref or alt ('.', 'N' etc)
     if (ref_len == 1 && alt_len == 1)
-        seg_one_field (vb, ref_start, ref_len+alt_len+1, VCF_REFALT); // store both, including the tab between them
+        seg_one_field (vb, ref_start, ref_len+alt_len+1, VCF_REFALT, ref_len+alt_len+2); // store both, including the tab between them
 
     // case: ref is short, alt is long
     else if (ref_len == 1) {
-        seg_one_field (vb, ref_start, ref_len+1, VCF_REFALT); // store just the ref, and the tab between them
-        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, alt_start, alt_len, alt_len); // store alt in seq_data
+        seg_one_field (vb, ref_start, ref_len+1, VCF_REFALT, ref_len+alt_len+2); // store just the ref, and the tab between them, but account for everything
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, alt_start, alt_len, DID_I_NONE, 0); // store alt in seq_data
     }
 
     // case: ref is long, alt is short
     else if (alt_len == 1) {
-        seg_one_field (vb, alt_start-1, alt_len+1, VCF_REFALT); // store just the alt, and the tab between them
-        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, ref_start, ref_len, ref_len); // store ref in seq_data
+        seg_one_field (vb, alt_start-1, alt_len+1, VCF_REFALT, ref_len+alt_len+2); // store just the alt, and the tab between them, but account for everything
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, ref_start, ref_len, DID_I_NONE, 0); // store ref in seq_data
     }
 
     // case: both are along
     else {
-        seg_one_field (vb, "\t", 1, VCF_REFALT); // store just the alt, and the tab between them
-        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, ref_start, ref_len, ref_len); // store ref in seq_data
-        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, SEC_SEQ_DATA, alt_start, alt_len, alt_len); // store alt in seq_data
+        seg_one_field (vb, "\t", 1, VCF_REFALT, ref_len+alt_len+2); // store just the tab between the ref and alt, but account for everything
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, ref_start, ref_len, DID_I_NONE, 0); // store ref in seq_data
+        seg_add_to_data_buf ((VBlockP)vb, &vb->seq_data, alt_start, alt_len, DID_I_NONE, 0); // store alt in seq_data
     }
 }
 
@@ -156,9 +159,7 @@ static bool seg_vcf_special_info_subfields(VBlockP vb_, MtfContextP ctx, const c
     // END - we always store it has a diff vs. vb->last_pos (POS and END share the same delta stream -
     // the next POS will be a delta vs this END)
     if (ctx->dict_id.num == dict_id_INFO_END) {
-        vb->last_pos = seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, ctx->did_i, SEC_VCF_INFO_SF_B250, *this_value, *this_value_len, "END");
-        vb->txt_section_bytes[SEC_VCF_INFO_SF_B250]--; // exclude the separator included by default by seg_pos_field
-
+        vb->last_pos = seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, ctx->did_i, *this_value, *this_value_len, "END", false);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -208,17 +209,14 @@ static void seg_vcf_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
 }
 
 static void seg_vcf_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const char *str, unsigned len, unsigned sample_i,
-                                    bool is_vcf_string)
+                                    uint32_t add_bytes)
 {
     // check ploidy
     unsigned ploidy=1;
     for (unsigned i=1; i<len-1; i++)
         if (str[i] == '|' || str[i] == '/') ploidy++;
 
-    if (is_vcf_string) {
-        vb->txt_section_bytes[SEC_VCF_PHASE_DATA]     += ploidy-1;
-        vb->txt_section_bytes[SEC_HT_DATA ] += ploidy;
-    }
+    if (add_bytes) vb->mtf_ctx[VCF_GT].txt_len += add_bytes; 
 
     ASSSEG (ploidy <= VCF_MAX_PLOIDY, str, "Error: ploidy=%u exceeds the maximum of %u", ploidy, VCF_MAX_PLOIDY);
     
@@ -261,8 +259,6 @@ static void seg_vcf_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const cha
             ASSSEG (!len || !IS_DIGIT (*str), str, "Error: VCF file sample %u - genozip currently supports only alleles up to 99", sample_i+1);
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
-
-            vb->txt_section_bytes[SEC_HT_DATA ]++;
         }
 
         // get phase
@@ -329,7 +325,7 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
                                   const char *cell_gt_data, 
                                   unsigned cell_gt_data_len,  // not including the \t or \n 
                                   bool is_vcf_string,
-                                  bool *has_13) // out (modified only if found \r)
+                                  bool *has_13) // out (modified only if found \r) - not needed if cell_gt_data_len=0
 {
     SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, dl->format_mtf_i);
     
@@ -348,13 +344,12 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
         if (ctx->dict_id.num == dict_id_FORMAT_DP) 
             dp_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
 
-        MtfNode *node;
         uint32_t node_index;
         unsigned optimized_snip_len;
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
 #       define EVAL_OPTIMIZED { \
-            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, optimized_snip, optimized_snip_len, &node, NULL); \
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, optimized_snip, optimized_snip_len, NULL); \
             vb->vb_data_size -= (int)len - (int)optimized_snip_len; \
             optimized_cell_gt_data_len -= (int)len - (int)optimized_snip_len;\
         }
@@ -378,17 +373,20 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
             int32_t delta = dp_value - min_dp_value; // expected to be 0 or positive integer (may be negative if no DP preceeds)
             char delta_str[30]; unsigned delta_str_len;
             str_int (delta, delta_str, &delta_str_len);
-            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, delta_str, delta_str_len, &node, NULL); 
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, delta_str, delta_str_len, NULL); 
         }
 
         else
-            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, cell_gt_data, len, &node, NULL);
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, cell_gt_data, len, NULL);
 
         NEXTENT (uint32_t, vb->line_gt_data) = node_index;
         ctx->mtf_i.len++; // mtf_i is not used in FORMAT, we just update len for the use of stats_show_sections()
+        
+        if (is_vcf_string && len)
+            ctx->txt_len += len + 1 + (has_13 ? *has_13 : 0); // acount for : \t or \n or \r\n terminator
 
         if (node_index != WORD_INDEX_MISSING_SF) 
-            cell_gt_data += len + 1 + *has_13; // skip separator too
+            cell_gt_data += len + 1 + (has_13 ? *has_13 : 0); // skip separator too
 
         end_of_cell = end_of_cell || cell_gt_data[-1] != ':'; // a \t or \n encountered
 
@@ -397,10 +395,6 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
                 cell_gt_data[-1], cell_gt_data[-1]);
     }
     ASSSEG0 (end_of_cell, cell_gt_data, "Error: More FORMAT subfields data than expected by the specification in the FORMAT field");
-
-    if (is_vcf_string)
-        // size including : (if we have both ht and gt), but not including \t which goes into SEC_STATS_HT_SEPERATOR
-        vb->txt_section_bytes[SEC_VCF_GT_DATA] += optimized_cell_gt_data_len + (dl->has_haplotype_data && dl->has_genotype_data);
 
     return optimized_cell_gt_data_len;
 }
@@ -416,12 +410,11 @@ static void seg_vcf_add_samples_missing_in_line (VBlockVCF *vb, ZipDataLineVCF *
 
         if (dl->has_haplotype_data) {
             // '*' (haplotype padding) with ploidy 1
-            seg_vcf_haplotype_area (vb, dl, "*", 1, num_samples, false);
+            seg_vcf_haplotype_area (vb, dl, "*", 1, num_samples, 0);
         }
 
         if (dl->has_genotype_data) {
-            bool has_13;
-            seg_vcf_genotype_area (vb, dl, NULL, 0, false, &has_13);
+            seg_vcf_genotype_area (vb, dl, NULL, 0, false, NULL);
             (*gt_line_len)++; // adding the WORD_INDEX_MISSING_SF
         }
     }
@@ -443,171 +436,6 @@ static void seg_vcf_update_vb_from_dl (VBlockVCF *vb, ZipDataLineVCF *dl)
         vb->phase_type = PHASE_MIXED_PHASED;    
 }
 
-
-/* split the data line into sections - 
-   1. variant data - each of 9 fields (CHROM to FORMAT) is a section
-   2. genotype data (except the GT subfield) - is a section
-   3. haplotype data (the GT subfield) - a string of eg 1 or 0 (no whitespace) - ordered by the permutation order
-   4. phase data - only if MIXED phase - a string of | and / - one per sample
-*/
-const char *seg_vcf_data_line (VBlock *vb_,   
-                               const char *field_start_line)     // index in vb->txt_data where this line starts
-{
-    VBlockVCF *vb = (VBlockVCF *)vb_;
-    ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
-
-    dl->phase_type = PHASE_UNKNOWN;
-
-    unsigned sample_i = 0;
-    unsigned gt_line_len=0;
-
-    const char *next_field, *field_start;
-    unsigned field_len=0;
-    char separator;
-    bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
-
-    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
-
-    // CHROM
-    field_start = field_start_line;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "CHROM");
-    seg_chrom_field (vb_, field_start, field_len);
-
-    // POS
-    field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, VCF_POS, SEC_POS_B250, field_start, field_len, "POS");
-    random_access_update_pos (vb_, vb->last_pos);
-
-    // ID
-    field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "ID");
-    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[VCF_ID], SEC_ID_B250, SEC_NUMERIC_ID_DATA,
-                  field_start, field_len, false, true);
-
-    // REF + ALT
-    // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
-    // e.g. GG has a probability of 0 and GC has a higher probability than GA.
-    field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "REF");
-
-    unsigned alt_len=0;
-    const char *alt_start = next_field;
-    next_field = seg_get_next_item (vb, alt_start, &len, false, true, false, &alt_len, &separator, &has_13, "ALT");
-    seg_vcf_refalt_field (vb, field_start, field_len, alt_start, alt_len);
-//    seg_one_field (vb, field_start, field_len, alt_start, alt_len, VCF_REFALT);
-
-    // QUAL
-    field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "QUAL");
-    seg_one_field (vb, field_start, field_len, VCF_QUAL);
-
-    // FILTER
-    field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "FILTER");
-    seg_one_field (vb, field_start, field_len, VCF_FILTER);
-
-    // INFO
-    const char *info_field_start = next_field;
-    unsigned info_field_len=0;
-    next_field = seg_get_next_item (vb, info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, 
-                 false, &info_field_len, &separator, &has_13, DTF(names)[VCF_INFO] /* pointer to string to allow pointer comparison */); 
-    // note: we delay seg_vcf_info_field() until the end of the line - we might be adding a Windows \r subfield
-
-    if (separator != '\n') {
-
-        // FORMAT
-        field_start = next_field;
-        next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, &has_13, "FORMAT");
-        seg_vcf_format_field (vb, dl, field_start, field_len);
-
-        ASSSEG0 (separator == '\n' || dl->has_genotype_data || dl->has_haplotype_data, field_start,
-                "Error: expecting line to end as it has no genotype or haplotype data, but it is not");
-
-        // 0 or more samples
-        while (separator != '\n') {
-            
-            // get haplotype data
-            bool has_genotype_data = dl->has_genotype_data;
-            if (dl->has_haplotype_data) { // FORMAT declares GT, we may have it or not
-
-                field_start = next_field;
-                next_field = seg_get_next_item (vb, field_start, &len, true, true, dl->has_genotype_data, &field_len, &separator, &has_13, "GT");
-                seg_vcf_haplotype_area (vb, dl, field_start, field_len, sample_i, true);
-
-                if (separator != ':' && has_genotype_data) {
-                    // missing genotype data despite being declared in FORMAT - this is permitted by VCF spec
-                    has_genotype_data = false;
-                    bool has_13;
-                    seg_vcf_genotype_area (vb, dl, NULL, 0, false, &has_13);
-                    gt_line_len++; // adding the WORD_INDEX_MISSING_SF
-                }
-            }
-            if (has_genotype_data) { // FORMAT declares other subfields, we may have them or not
-                field_start = next_field;
-
-                next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, &has_13, "Non-GT");
-
-                ASSSEG (field_len, field_start, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
-                        sample_i+1);
-
-                // note: length can change as a result of optimize()
-                unsigned updated_field_len = seg_vcf_genotype_area (vb, dl, field_start, field_len, true, &has_13);
-                gt_line_len += updated_field_len + 1; // including the \t or \n
-            }
-
-            sample_i++;
-
-            vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR]++; // the \t or \n following a sample
-
-            ASSSEG (sample_i < global_vcf_num_samples || separator == '\n', next_field,
-                    "Error: invalid VCF file - expecting a newline after the last sample (sample #%u)", global_vcf_num_samples);
-        }
-    }
-
-    vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR] -= has_13; // the \r in case of Windows \r\n line ending (WHY IS THIS?)
-
-    // in some real-world files I encountered have too-short lines due to human errors. we pad them
-    if (sample_i < global_vcf_num_samples) 
-        seg_vcf_add_samples_missing_in_line (vb, dl, &gt_line_len, sample_i);
-
-    // update lengths
-    if (dl->has_haplotype_data) {
-        vb->line_ht_data.len = global_vcf_num_samples * vb->ploidy;
-
-        if (dl->phase_type == PHASE_MIXED_PHASED) 
-            vb->line_phase_data.len = global_vcf_num_samples;
-    } else 
-        vb->line_ht_data.len = 0;
-
-    vb->max_gt_line_len = MAX (vb->max_gt_line_len, gt_line_len);
-
-    // now do the info field - possibly with the added \r for Windows 
-    seg_info_field (vb_, &dl->info_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, seg_vcf_special_info_subfields,
-                    info_field_start, info_field_len, has_13);
-
-    // we don't need txt_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate use txt_data_spillover
-    if (dl->has_genotype_data) {
-        vb->line_gt_data.len *= sizeof (uint32_t); // convert len to bytes
-        seg_store (vb_, &dl->genotype_data_spillover, &dl->genotype_data_start, &dl->genotype_data_len,
-                   &vb->line_gt_data, 0, next_field, true);
-    }
-
-    if (dl->has_haplotype_data && dl->phase_type == PHASE_MIXED_PHASED)
-        seg_store (vb_, &dl->phase_data_spillover, &dl->phase_data_start, &dl->phase_data_len,
-                   &vb->line_phase_data, 0, next_field, false);
-
-    if (dl->has_haplotype_data) {
-        seg_store (vb_, &dl->haplotype_data_spillover, &dl->haplotype_data_start, &dl->haplotype_data_len,
-                   &vb->line_ht_data, 0, next_field, false);
-        
-        if (flag_show_alleles) printf ("%.*s\n", dl->haplotype_data_len, HAPLOTYPE_DATA(vb,dl));
-    }
-
-    seg_vcf_update_vb_from_dl (vb, dl);
-
-    return next_field;
-}
 
 // complete haplotype and genotypes of lines that don't have them, if we found out that some
 // other line has them, and hence all lines in the vb must have them
@@ -640,4 +468,166 @@ void seg_vcf_complete_missing_lines (VBlockVCF *vb)
                 genotype_data[i] = WORD_INDEX_MISSING_SF;
         }
     }
+}
+
+/* split the data line into sections - 
+   1. variant data - each of 9 fields (CHROM to FORMAT) is a section
+   2. genotype data (except the GT subfield) - is a section
+   3. haplotype data (the GT subfield) - a string of eg 1 or 0 (no whitespace) - ordered by the permutation order
+   4. phase data - only if MIXED phase - a string of | and / - one per sample
+*/
+const char *seg_vcf_data_line (VBlock *vb_,   
+                               const char *field_start_line)     // index in vb->txt_data where this line starts
+{
+    VBlockVCF *vb = (VBlockVCF *)vb_;
+    ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
+
+    dl->phase_type = PHASE_UNKNOWN;
+
+    unsigned sample_i = 0;
+    unsigned gt_line_len=0;
+
+    const char *next_field, *field_start;
+    unsigned field_len=0;
+    char separator;
+    bool line_has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n. If so, the last seg_get_next_item for this line will change it to true
+
+    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
+
+    // CHROM
+    field_start = field_start_line;
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "CHROM");
+    seg_chrom_field (vb_, field_start, field_len);
+
+    // POS
+    field_start = next_field;
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "POS");
+    vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, VCF_POS, field_start, field_len, "POS", true);
+    random_access_update_pos (vb_, vb->last_pos);
+
+    // ID
+    field_start = next_field;
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "ID");
+    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[VCF_ID], SEC_ID_B250, SEC_NUMERIC_ID_DATA,
+                  field_start, field_len, false, true);
+
+    // REF + ALT
+    // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
+    // e.g. GG has a probability of 0 and GC has a higher probability than GA.
+    field_start = next_field;
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "REF");
+
+    unsigned alt_len=0;
+    const char *alt_start = next_field;
+    next_field = seg_get_next_item (vb, alt_start, &len, false, true, false, &alt_len, &separator, NULL, "ALT");
+    seg_vcf_refalt_field (vb, field_start, field_len, alt_start, alt_len);
+
+    // QUAL
+    field_start = next_field;
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "QUAL");
+    seg_one_field (vb, field_start, field_len, VCF_QUAL, field_len+1);
+
+    // FILTER
+    field_start = next_field;
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "FILTER");
+    seg_one_field (vb, field_start, field_len, VCF_FILTER, field_len+1);
+
+    // INFO
+    const char *info_field_start = next_field;
+    unsigned info_field_len=0;
+    bool info_has_13; // INFO is the last field in the line, and it ends with a Windows-style \r\n
+    next_field = seg_get_next_item (vb, info_field_start, &len, global_vcf_num_samples==0, global_vcf_num_samples>0, 
+                 false, &info_field_len, &separator, &line_has_13, DTF(names)[VCF_INFO] /* pointer to string to allow pointer comparison */); 
+    info_has_13 = line_has_13; // note: info_has_13 is whether the info field is terminated by \r\n and has_13 is whether the whole line is terminated by \r\n (it will be over-written if there are additional fields)
+
+    // note: we delay seg_vcf_info_field() until the end of the line - we might be adding a Windows \r subfield
+
+    if (separator != '\n') {
+
+        // FORMAT
+        field_start = next_field;
+        next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, &line_has_13, "FORMAT");
+        seg_vcf_format_field (vb, dl, field_start, field_len, line_has_13);
+
+        ASSSEG0 (separator == '\n' || dl->has_genotype_data || dl->has_haplotype_data, field_start,
+                "Error: expecting line to end as it has no genotype or haplotype data, but it is not");
+
+        // 0 or more samples
+        while (separator != '\n') {
+            
+            // get haplotype data
+            bool has_genotype_data = dl->has_genotype_data;
+            if (dl->has_haplotype_data) { // FORMAT declares GT, we may have it or not
+
+                field_start = next_field;
+                next_field = seg_get_next_item (vb, field_start, &len, true, true, dl->has_genotype_data, &field_len, &separator, &line_has_13, "GT");
+                seg_vcf_haplotype_area (vb, dl, field_start, field_len, sample_i, field_len + 1 + line_has_13);
+
+                if (separator != ':' && has_genotype_data) {
+                    // missing genotype data despite being declared in FORMAT - this is permitted by VCF spec
+                    has_genotype_data = false;
+                    seg_vcf_genotype_area (vb, dl, NULL, 0, false, NULL);
+                    gt_line_len++; // adding the WORD_INDEX_MISSING_SF
+                }
+            }
+            if (has_genotype_data) { // FORMAT declares other subfields, we may have them or not
+                field_start = next_field;
+
+                next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, &line_has_13, "Non-GT");
+
+                ASSSEG (field_len, field_start, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
+                        sample_i+1);
+
+                // note: length can change as a result of optimize()
+                unsigned updated_field_len = seg_vcf_genotype_area (vb, dl, field_start, field_len, true, &line_has_13);
+                gt_line_len += updated_field_len + 1; // including the \t or \n
+            }
+
+            sample_i++;
+
+            ASSSEG (sample_i < global_vcf_num_samples || separator == '\n', next_field,
+                    "Error: invalid VCF file - expecting a newline after the last sample (sample #%u)", global_vcf_num_samples);
+        }
+    }
+
+    // in some real-world files I encountered have too-short lines due to human errors. we pad them
+    if (sample_i < global_vcf_num_samples) 
+        seg_vcf_add_samples_missing_in_line (vb, dl, &gt_line_len, sample_i);
+
+    // update lengths
+    if (dl->has_haplotype_data) {
+        vb->line_ht_data.len = global_vcf_num_samples * vb->ploidy;
+
+        if (dl->phase_type == PHASE_MIXED_PHASED) 
+            vb->line_phase_data.len = global_vcf_num_samples;
+    } else 
+        vb->line_ht_data.len = 0;
+
+    vb->max_gt_line_len = MAX (vb->max_gt_line_len, gt_line_len);
+
+    // now do the info field - possibly with the added \r for Windows 
+    seg_info_field (vb_, &dl->info_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, seg_vcf_special_info_subfields,
+                    info_field_start, info_field_len, info_has_13, line_has_13);
+
+    // we don't need txt_data anymore, until the point we read - so we can overlay - if we have space. If not, we allocate use txt_data_spillover
+    if (dl->has_genotype_data) {
+        vb->line_gt_data.len *= sizeof (uint32_t); // convert len to bytes
+        seg_store (vb_, &dl->genotype_data_spillover, &dl->genotype_data_start, &dl->genotype_data_len,
+                   &vb->line_gt_data, 0, next_field, true);
+    }
+
+    if (dl->has_haplotype_data && dl->phase_type == PHASE_MIXED_PHASED)
+        seg_store (vb_, &dl->phase_data_spillover, &dl->phase_data_start, &dl->phase_data_len,
+                   &vb->line_phase_data, 0, next_field, false);
+
+    if (dl->has_haplotype_data) {
+        seg_store (vb_, &dl->haplotype_data_spillover, &dl->haplotype_data_start, &dl->haplotype_data_len,
+                   &vb->line_ht_data, 0, next_field, false);
+        
+        if (flag_show_alleles) printf ("%.*s\n", dl->haplotype_data_len, HAPLOTYPE_DATA(vb,dl));
+    }
+
+    seg_vcf_update_vb_from_dl (vb, dl);
+
+    return next_field;
 }

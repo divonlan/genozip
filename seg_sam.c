@@ -20,6 +20,13 @@ void seg_sam_initialize (VBlock *vb_)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
+    // create extendent field contexts in the correct order of the fields
+    EXTENDED_FIELD_CTX (SAM_SEQ,  dict_id_field (dict_id_make ("SEQ", 3)));
+    EXTENDED_FIELD_CTX (SAM_QUAL, dict_id_field (dict_id_make ("QUAL", 4)));
+    EXTENDED_FIELD_CTX (SAM_BD,   dict_id_sam_optnl_sf (dict_id_make ("BD:Z", 4))); // GATK tag
+    EXTENDED_FIELD_CTX (SAM_BI,   dict_id_sam_optnl_sf (dict_id_make ("BI:Z", 4))); // GATK tag
+    EXTENDED_FIELD_CTX (SAM_MD,   dict_id_sam_optnl_sf (dict_id_make ("MD:Z", 4))); 
+
     buf_alloc (vb, &vb->md_data, 12 * vb->lines.len, 1, "md_data", vb->vblock_i);
     buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
 }             
@@ -48,10 +55,8 @@ static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
                              !memcmp (vb->last_tlen_abs, tlen, tlen_len);
 
     // case: tlen is the negative of previous line - replace it with "*"
-    if (this_neg_prev_pos || this_pos_prev_neg) {
-        seg_one_field (vb, "*", 1, SAM_TLEN);
-        vb->txt_section_bytes[SEC_SAM_TLEN_B250] += tlen_len - 1; // seg_one_field only added 2 (1 for \t), we should add the rest
-    }
+    if (this_neg_prev_pos || this_pos_prev_neg) 
+        seg_one_field (vb, "*", 1, SAM_TLEN, tlen_len + 1);
 
     // case: tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as "." & tlen-pnext_pos_delta-seq_len
     else if (tlen_is_positive && pnext_pos_delta > 0 && cigar_seq_len > 0) {
@@ -62,12 +67,11 @@ static inline void seg_sam_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
         tlen_by_calc[0] = '.';
         str_int (tlen_val - pnext_pos_delta - cigar_seq_len, &tlen_by_calc[1], &tlen_by_calc_len);
         tlen_by_calc_len++;
-        seg_one_field ((VBlockP)vb, tlen_by_calc, tlen_by_calc_len, SAM_TLEN);
-        vb->txt_section_bytes[SEC_SAM_TLEN_B250] += tlen_len - tlen_by_calc_len; 
+        seg_one_field ((VBlockP)vb, tlen_by_calc, tlen_by_calc_len, SAM_TLEN, tlen_len+1);
     }
     // case default: add as is
     else 
-        seg_one_field ((VBlockP)vb, tlen, tlen_len, SAM_TLEN);
+        seg_one_field ((VBlockP)vb, tlen, tlen_len, SAM_TLEN, tlen_len+1);
 
     unsigned has_sign_char    = !tlen_is_positive && !tlen_is_zero;
     vb->last_tlen_abs         = &tlen[has_sign_char]; // store absolute value
@@ -114,7 +118,7 @@ static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsign
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
 
         // pos - add to the random pos data together with all other random pos data (originating from POS, PNEXT etc).
-        seg_add_to_random_pos_data ((VBlockP)vb, SEC_RANDOM_POS_DATA, pos, pos_len, pos_len+1, field_name);
+        seg_add_to_random_pos_data ((VBlockP)vb, pos, pos_len, pos_len+1, field_name);
 
         // nm : we store in the same dictionary as the Optional subfield NM
         seg_one_subfield ((VBlockP)vb, nm, nm_len, (DictIdType)dict_id_OPTION_NM, 
@@ -125,9 +129,9 @@ static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsign
                           SEC_SAM_OPTNL_SF_B250, 2);
 
         // rname, cigar and mapq: we store in the same dictionary as the primary fields
-        seg_one_field ((VBlockP)vb, rname, rname_len, SAM_RNAME);
-        seg_one_field ((VBlockP)vb, cigar, cigar_len, SAM_CIGAR);
-        seg_one_field (vb, mapq,  mapq_len, SAM_MAPQ);
+        seg_one_field ((VBlockP)vb, rname, rname_len, SAM_RNAME, rname_len+1);
+        seg_one_field ((VBlockP)vb, cigar, cigar_len, SAM_CIGAR, cigar_len+1);
+        seg_one_field (vb, mapq,  mapq_len, SAM_MAPQ, mapq_len+1);
     }
 
     return repeats;
@@ -161,7 +165,7 @@ static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned fie
         // pos - add to the pos data together with all other pos data (POS, PNEXT etc),
         // strand - add to separate STRAND dictionary, to not adversely affect compression of POS.
         // there is no advantage to storing the strand together with pos as they are not correlated.
-        seg_add_to_random_pos_data ((VBlockP)vb, SEC_RANDOM_POS_DATA, pos+1, pos_len-1, pos_len, "XA"); // one less for the strand, one more for the ,
+        seg_add_to_random_pos_data ((VBlockP)vb, pos+1, pos_len-1, pos_len, "XA"); // one less for the strand, one more for the ,
 
         // strand
         seg_one_subfield ((VBlockP)vb, pos, 1, (DictIdType)dict_id_OPTION_STRAND, 
@@ -172,8 +176,8 @@ static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned fie
                           SEC_SAM_OPTNL_SF_B250, nm_len+1);
 
         // rname and cigar: we store in the same dictionary as the primary fields
-        seg_one_field (vb, rname, rname_len, SAM_RNAME);
-        seg_one_field (vb, cigar, cigar_len, SAM_CIGAR);
+        seg_one_field (vb, rname, rname_len, SAM_RNAME, rname_len+1);
+        seg_one_field (vb, cigar, cigar_len, SAM_CIGAR, cigar_len+1);
     }
 
     return repeats;
@@ -307,7 +311,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
         // fields containing CIGAR format data
         if (dict_id.num == dict_id_OPTION_MC || dict_id.num == dict_id_OPTION_OC) 
-            seg_one_field (vb, value, value_len, SAM_CIGAR);
+            seg_one_field (vb, value, value_len, SAM_CIGAR, value_len+1);
 
         // MD's logical length is normally the same as seq_len, we use this to optimize it.
         // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
@@ -320,10 +324,10 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             if (md_is_changeable) 
                 md_is_changeable = seg_sam_get_shortened_MD (value, value_len, dl->seq_len, new_md, &new_md_len);
 
-            seg_add_to_data_buf ((VBlockP)vb, &vb->md_data, SEC_SAM_MD_DATA, 
+            seg_add_to_data_buf ((VBlockP)vb, &vb->md_data, 
                                  md_is_changeable ? new_md : value, 
                                  md_is_changeable ? new_md_len : value_len,
-                                 value_len+1);
+                                 SAM_MD, value_len+1);
         }
 
         // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
@@ -334,7 +338,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->bd_data_start = value - vb->txt_data.data;
             dl->bd_data_len   = value_len;
-            vb->txt_section_bytes[SEC_SAM_BD_DATA] += dl->seq_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_BD].txt_len += value_len + 1; // +1 for \t
         }
 
         else if (dict_id.num == dict_id_OPTION_BI) { 
@@ -344,7 +348,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->bi_data_start = value - vb->txt_data.data;
             dl->bi_data_len   = value_len;
-            vb->txt_section_bytes[SEC_SAM_BI_DATA] += dl->seq_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_BI].txt_len += value_len + 1; // +1 for \t
         }
 
         // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
@@ -357,7 +361,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         else if (dict_id.num == dict_id_OPTION_mc) {
             uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
 
-            seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, mc_did_i, SEC_SAM_OPTNL_SF_B250, value, value_len, "mc:i");
+            seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, mc_did_i, value, value_len, "mc:i", true);
         }
 
         // E2 - SEQ data (note: E2 doesn't have a dictionary)
@@ -368,7 +372,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->e2_data_start = value - vb->txt_data.data;
             dl->e2_data_len   = value_len;
-            vb->txt_section_bytes[SEC_SEQ_DATA] += dl->seq_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_SEQ].txt_len += value_len + 1; // +1 for \t
         }
 
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
@@ -379,16 +383,13 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->u2_data_start = value - vb->txt_data.data;
             dl->u2_data_len   = value_len;
-            vb->txt_section_bytes[SEC_QUAL_DATA] += dl->seq_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_QUAL].txt_len += value_len + 1; // +1 for \t
         }
         // All other subfields - have their own dictionary
         else        
             seg_one_subfield ((VBlock *)vb, value, value_len, dict_id, SEC_SAM_OPTNL_SF_B250,
                              (value_len) + 1); // +1 for \t
     }
-
-    if (separator == '\n') 
-        vb->txt_section_bytes[SEC_SAM_OPTNL_SF_B250]--; // \n is already accounted for in SEC_SAM_OPTIONAL_B250
 }
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string
@@ -452,8 +453,7 @@ static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
         sprintf (new_cigar, "%u*", dl->seq_len); // eg "151*". if both SEQ and QUAL are unavailable it will be "1*"
         unsigned new_cigar_len = strlen (new_cigar);
 
-        seg_one_field (vb, new_cigar, new_cigar_len, SAM_CIGAR); 
-        vb->txt_section_bytes[SEC_SAM_CIGAR_B250] -= (new_cigar_len-1); // adjust - actual SAM length was only one (seg_one_field added new_cigar_len)
+        seg_one_field (vb, new_cigar, new_cigar_len, SAM_CIGAR, 2 /* "*\t" */); 
     } 
     else { // CIGAR is available - just check the seq and qual lengths
         ASSSEG (!seq_is_available || dl->seq_data_len == dl->seq_len, seq,
@@ -466,8 +466,8 @@ static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
     }
 
     // byte counts for --show-sections 
-    vb->txt_section_bytes[SEC_SEQ_DATA]  += dl->seq_data_len  + 1; // +1 for terminating \t
-    vb->txt_section_bytes[SEC_QUAL_DATA] += dl->qual_data_len + 1; 
+    vb->mtf_ctx[SAM_SEQ] .txt_len += dl->seq_data_len  + 1; // +1 for terminating \t
+    vb->mtf_ctx[SAM_QUAL].txt_len += dl->qual_data_len + 1;
 }
 
 const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     // index in vb->txt_data where this line starts
@@ -486,7 +486,7 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     field_start = field_start_line;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "QNAME");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "QNAME");
     
     seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[SAM_QNAME], field_start, field_len, &vb->qname_mapper,
                         dict_id_sam_qname_sf (dict_id_make ("Q0NAME", 6)), false, false,
@@ -494,12 +494,12 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
 
     // FLAG
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "FLAG");
-    seg_one_field (vb, field_start, field_len, SAM_FLAG);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "FLAG");
+    seg_one_field (vb, field_start, field_len, SAM_FLAG, field_len+1);
 
     // RNAME
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "RNAME");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "RNAME");
     uint32_t rname_node_index = seg_chrom_field (vb_, field_start, field_len);
 
     // POS - 4 cases for deciding whether to store a delta of this line's POS vs the previous line
@@ -526,14 +526,14 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
     //         the POS being unrelated to the previous line and hence causing an ineffecient delta. This is a rather rare occurance.
 
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "POS");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "POS");
     
     if (rname_node_index != vb->rname_index_minus_1 ||   // different rname than the 2 previous lines - store full pos in random
         (rname_node_index == vb->rname_index_minus_2 && rname_node_index != vb->rname_index_minus_3))
-        vb->last_pos = seg_add_to_random_pos_data (vb_, SEC_RANDOM_POS_DATA, field_start, field_len, field_len+1, "POS");
+        vb->last_pos = seg_add_to_random_pos_data (vb_, field_start, field_len, field_len+1, "POS");
 
     else // same rname - do a delta
-        vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, SAM_POS, SEC_SAM_POS_B250, field_start, field_len, "POS");
+        vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, SAM_POS, field_start, field_len, "POS", true);
 
     random_access_update_pos (vb_, vb->last_pos);
 
@@ -543,19 +543,19 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
 
     // MAPQ
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "MAPQ");
-    seg_one_field (vb, field_start, field_len, SAM_MAPQ);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "MAPQ");
+    seg_one_field (vb, field_start, field_len, SAM_MAPQ, field_len+1);
 
     // CIGAR - if CIGAR is "*" and we wait to get the length from SEQ or QUAL
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "CIGAR");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "CIGAR");
     dl->seq_len = seg_sam_seq_len_from_cigar (field_start, field_len);
-    if (dl->seq_len) seg_one_field (vb, field_start, field_len, SAM_CIGAR); // not "*" - all good!
+    if (dl->seq_len) seg_one_field (vb, field_start, field_len, SAM_CIGAR, field_len+1); // not "*" - all good!
 
     // RNEXT - add to RNAME dictionary
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "RNEXT");
-    uint32_t rnext_node_index = seg_one_field (vb, field_start, field_len, SAM_RNAME);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "RNEXT");
+    uint32_t rnext_node_index = seg_one_field (vb, field_start, field_len, SAM_RNAME, field_len+1);
     
     bool rnext_same_as_rname = (field_len == 1 && (field_start[0] == '=' || field_start[0] == '*')) || 
                                 (rnext_node_index == rname_node_index);
@@ -565,32 +565,32 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
     //    1A. If 1, but PNEXT is "0" and hence "unavailable" per SAM specification - store "*" in the SAM_PNEXT dictionary
     // 2. If RNEXT and RNAME are different - add to vb->random_pos_data (not a dictionary)
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "PNEXT");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "PNEXT");
         
     int32_t pnext_pos_delta = 0;   
     if (rnext_same_as_rname) { // RNAME and RNEXT are the same - store delta in dictionary
         if (field_len == 1 && *field_start == '0') // PNEXT is "unavailable"
-            seg_one_field (vb, "*", 1, SAM_PNEXT); 
+            seg_one_field (vb, "*", 1, SAM_PNEXT, 2); 
         else {
-            int32_t pnext = seg_pos_field (vb_, vb->last_pos, &vb->last_pnext_delta, false, SAM_PNEXT, SEC_SAM_PNEXT_B250, field_start, field_len, "PNEXT");
+            int32_t pnext = seg_pos_field (vb_, vb->last_pos, &vb->last_pnext_delta, false, SAM_PNEXT, field_start, field_len, "PNEXT", true);
             pnext_pos_delta = pnext - vb->last_pos;
         }
     }
 
     else  // RNAME and RNEXT differ - store in random_pos
-        seg_add_to_random_pos_data (vb_, SEC_RANDOM_POS_DATA, field_start, field_len, field_len+1, "PNEXT");
+        seg_add_to_random_pos_data (vb_, field_start, field_len, field_len+1, "PNEXT");
 
     // TLEN - 3 cases: 
     // 1. if a value that is the negative of the previous line with "*"
     // 2. else, tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as "." & tlen-pnext_pos_delta-seq_len
     // 3. else, stored verbatim
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "TLEN");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "TLEN");
     seg_sam_tlen_field (vb, field_start, field_len, pnext_pos_delta, dl->seq_len);
 
     // SEQ & QUAL
     dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (vb, next_field, &len, false, true, false, &dl->seq_data_len, &separator, &has_13, "SEQ");
+    next_field = seg_get_next_item (vb, next_field, &len, false, true, false, &dl->seq_data_len, &separator, NULL, "SEQ");
 
     dl->qual_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, true, true, false, &dl->qual_data_len, &separator, &has_13, "QUAL");
@@ -615,11 +615,8 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
     // if oname is empty, we make it "*" (and adjust size accounting)
     if (!oname_len) oname[oname_len++] = '*';
 
-    seg_one_field (vb, oname, oname_len, SAM_OPTIONAL);
-
-    // if we have no real OPTIONAL, seg_one_field adds +1 for the character (correct for '#' as it stands for \r, but incorrect for '*') and +1 for the wrongly presumsed \t
-    if (oname_len == 1) 
-        vb->txt_section_bytes[SEC_SAM_OPTIONAL_B250] -= (1 + (oname[0]=='*'));  
+    seg_one_field (vb, oname, oname_len, SAM_OPTIONAL,
+                   (oname_len == 1) ? (oname[0] == '#' /* \r */) : oname_len /* last subfield accounted for \n */);  
 
     return next_field;
 }

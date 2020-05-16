@@ -27,11 +27,6 @@ else
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1
 endif 
 
-ifeq ($(CC),gcc)
-	CFLAGS += -Ofast -std=gnu99
-else
-	CFLAGS += -O2
-endif
 
 MY_SRCS = genozip.c base250.c move_to_front.c header.c strings.c stats.c arch.c license.c \
           zip.c zip_vcf.c zip_sam.c zip_fast.c zip_gff3.c zip_me23.c \
@@ -99,17 +94,28 @@ endif
 
 OBJS       := $(SRCS:.c=.o)
 DEBUG_OBJS := $(SRCS:.c=.debug-o)
+OPT_OBJS   := $(SRCS:.c=.opt-o) # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 
 DEPS       := $(SRCS:.c=.d)
 
-EXECUTABLES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
-
+EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
+OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
 
-all: $(EXECUTABLES) LICENSE.non-commercial.txt
+ifeq ($(CC),gcc)
+	OPTFLAGS += -Ofast -std=gnu99
+else
+	OPTFLAGS += -O2
+endif
 
-debug : CFLAGS  += -DDEBUG -g -O0
+all   : CFLAGS += $(OPTFLAGS) 
+all   : $(EXECUTABLES) LICENSE.non-commercial.txt
+
+debug : CFLAGS += -DDEBUG -g -O0
 debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
+
+opt   : CFLAGS += -g $(OPTFLAGS)
+opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
 
@@ -125,11 +131,19 @@ debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
+%.opt-o: %.c %.d
+	@echo "Compiling $< (opt)"
+	@$(CC) -c -o $@ $< $(CFLAGS)
+
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
  
 genozip-debug$(EXE): $(DEBUG_OBJS)
+	@echo Linking $@
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+genozip-opt$(EXE): $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -139,6 +153,11 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@ln $^ $@
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
+	@echo Hard linking $@
+	@rm -f $@ 
+	@ln $^ $@
+
+genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
 	@ln $^ $@
@@ -357,6 +376,7 @@ test:
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) *.debug-o
+	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) *.opt-o
 
 clean-optimized:
 	@echo Cleaning up optimized

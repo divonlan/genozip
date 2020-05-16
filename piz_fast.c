@@ -230,7 +230,7 @@ void piz_fast_uncompress_one_vb (VBlock *vb_)
         piz_fastq_reconstruct_vb ((VBlockFASTP)vb);
     }
     else {
-        UNCOMPRESS_DATA_SECTION (SEC_FASTA_COMMENT_DATA, comment_data, char, false); // COMMENT (FASTA only)
+        UNCOMPRESS_DATA_SECTION (SEC_FASTA_COMMENT_DATA, comment_data, char, true); // COMMENT (FASTA only)
         piz_fasta_reconstruct_vb ((VBlockFASTP)vb);
     }
 
@@ -258,7 +258,11 @@ void piz_fast_read_one_vb (VBlock *vb_)
 
     // read SEQ and QUAL data (FASTQ) or COMMENT data (FASTA)
     READ_DATA_SECTION (SEC_SEQ_DATA, false);
-    READ_DATA_SECTION (z_file->data_type == DT_FASTQ ? SEC_QUAL_DATA : SEC_FASTA_COMMENT_DATA, false);
+
+    if (z_file->data_type == DT_FASTQ)
+        READ_DATA_SECTION (SEC_QUAL_DATA, false)
+    else // fasta
+        READ_DATA_SECTION (SEC_FASTA_COMMENT_DATA, true);
 
     vb->ready_to_dispatch = true; // all good
 

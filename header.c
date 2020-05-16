@@ -26,6 +26,8 @@ static bool is_first_txt = true;
 DataTypeProperties dt_props [NUM_DATATYPES] = DATA_TYPE_PROPERTIES;
 DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
+uint32_t last_txt_header_len = 0;
+
 // -----------
 // VCF stuff
 // -----------
@@ -158,10 +160,9 @@ bool header_txt_to_genozip (uint32_t *txt_line_i)
     // header contains the data about the file
     if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
 
-    txt_file->section_bytes[SEC_TXT_HEADER] = evb->txt_data.len;
-    z_file  ->section_bytes[SEC_TXT_HEADER] = evb->z_section_bytes[SEC_TXT_HEADER]; // comes from comp_compress
-    z_file  ->num_sections [SEC_TXT_HEADER]++;
-    z_file  ->num_txt_components_so_far++; // when compressing
+    last_txt_header_len = evb->txt_data.len;
+
+    z_file->num_txt_components_so_far++; // when compressing
 
     buf_free (&evb->txt_data);
     

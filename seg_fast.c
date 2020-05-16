@@ -18,9 +18,20 @@ void seg_fasta_initialize (VBlock *vb_)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
+    EXTENDED_FIELD_CTX (FAST_SEQ,      dict_id_field (dict_id_make ("SEQ", 3)));
+    EXTENDED_FIELD_CTX (FASTA_COMMENT, dict_id_field (dict_id_make ("COMMENT", 7)));
+
     buf_alloc (vb, &vb->comment_data, 10000, 1, "comment_data", vb->vblock_i); // arbitrary initial allocation
 }             
-             
+
+void seg_fastq_initialize (VBlock *vb_)
+{
+    VBlockFAST *vb = (VBlockFAST *)vb_;
+
+    EXTENDED_FIELD_CTX (FAST_SEQ,   dict_id_field (dict_id_make ("SEQ", 3)));
+    EXTENDED_FIELD_CTX (FASTQ_QUAL, dict_id_field (dict_id_make ("QUAL", 4)));
+}             
+
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
@@ -57,7 +68,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
     const char *seq_start = next_field;
     dl->seq_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, &has_13, "SEQ");
-    vb->txt_section_bytes[SEC_SEQ_DATA] += dl->seq_len + 1 + has_13;
+    vb->mtf_ctx[FAST_SEQ].txt_len += dl->seq_len + 1 + has_13;
     
     metadata[1] = 'X' + has_13;
 
@@ -68,14 +79,13 @@ const char *seg_fastq_data_line (VBlock *vb_,
             global_cmd, field_len, field_start);
 
     metadata[2] = 'X' + has_13;    
-    vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] += 2 + has_13; // + \n and sometimes \r (we account for the + here, but we don't store it)
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
     dl->qual_data_start = next_field - vb->txt_data.data;
     unsigned qual_len;
     field_start = next_field;
     next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &qual_len, &separator, &has_13, "QUAL");
-    vb->txt_section_bytes[SEC_QUAL_DATA] += dl->seq_len + 1 + has_13;
+    vb->mtf_ctx[FASTQ_QUAL].txt_len += dl->seq_len + 1 + has_13;
     metadata[3] = 'X' + has_13;    
 
     ASSSEG (qual_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ=%.*s\nQUAL==%.*s",
@@ -87,8 +97,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
     unsigned seq_len_str_len;
     str_int (dl->seq_len, &metadata[4], &seq_len_str_len);
 
-    seg_one_field (vb, metadata, 4 + seq_len_str_len, FAST_LINEMETA);
-    vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] -= 5 + seq_len_str_len; // seg_one_field account for our string and \t - these were all already accounted for
+    seg_one_field (vb, metadata, 4 + seq_len_str_len, FAST_LINEMETA, 2 + has_13); // we account for the '+' \n and maybe \r
 
     return next_field;
 }
@@ -123,16 +132,16 @@ const char *seg_fasta_data_line (VBlock *vb_,
                             SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
         
         static const char *desc_metadata[2] = { "X>", "Y>" };
-        seg_one_field (vb, desc_metadata[has_13], 2, FAST_LINEMETA);
+        seg_one_field (vb, desc_metadata[has_13], 2, FAST_LINEMETA, 0);
         vb->last_line = FASTA_LINE_DESC;
     }
 
     // case: comment line - stored in the comment buffer
     else if (*line_start == ';' || !line_len) {
-        seg_add_to_data_buf (vb_, &vb->comment_data, SEC_FASTA_COMMENT_DATA, line_start, line_len, line_len + 1 + has_13); 
+        seg_add_to_data_buf (vb_, &vb->comment_data, line_start, line_len, FASTA_COMMENT, line_len + 1 + has_13); 
 
         static const char *comment_metadata[2] = { "X;", "Y;" };
-        seg_one_field (vb, comment_metadata[has_13], 2, FAST_LINEMETA);
+        seg_one_field (vb, comment_metadata[has_13], 2, FAST_LINEMETA, 0);
         vb->last_line = FASTA_LINE_COMMENT;
     }
 
@@ -140,17 +149,16 @@ const char *seg_fasta_data_line (VBlock *vb_,
     else {
         DATA_LINE (vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
         DATA_LINE (vb->line_i)->seq_len        = line_len;
-        vb->txt_section_bytes[SEC_SEQ_DATA] += line_len + 1 + has_13;
+
+        vb->mtf_ctx[FAST_SEQ].txt_len += line_len + 1 + has_13;
 
         char seq_meta_data[30];
         unsigned seq_len_len;
         seq_meta_data[0] = 'X' + has_13;
         str_int (line_len, &seq_meta_data[1], &seq_len_len);
-        seg_one_field (vb, seq_meta_data, seq_len_len + 1, FAST_LINEMETA);
+        seg_one_field (vb, seq_meta_data, seq_len_len + 1, FAST_LINEMETA, 0);
         vb->last_line = FASTA_LINE_SEQ;
     }
-
-    vb->txt_section_bytes[SEC_FAST_LINEMETA_B250] = 0; // cancel the seg_one_field additions here, they are already accounted for 
 
     return next_field;
 }

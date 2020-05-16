@@ -489,7 +489,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                         }
                         break; // eof if splitting
                     
-                    case SEC_EOF: 
+                    case SEC_NONE: 
                         break; 
                     
                     default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));

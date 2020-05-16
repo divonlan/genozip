@@ -207,14 +207,6 @@ static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool 
         z_file->txt_data_so_far_concat           += (int64_t)vb->vb_data_size;
     }
 
-    // update section stats
-    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        if (update_txt_file) txt_file->section_bytes[sec_i]  += vb->txt_section_bytes[sec_i];
-        z_file->num_sections[sec_i]     += vb->z_num_sections[sec_i];
-        z_file->section_bytes[sec_i]    += vb->z_section_bytes[sec_i];
-        z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
-    }
-
     // this function holds the mutex and hence has a non-trival performance penalty. we call
     // it only if the user specifically requested --show-sections
     if (flag_show_sections) mtf_update_stats (vb);

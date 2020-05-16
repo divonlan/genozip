@@ -278,10 +278,6 @@ void vb_release_vb (VBlock *vb)
     vb->vb_position_txt_file = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
 
-    memset(vb->txt_section_bytes, 0, sizeof(vb->txt_section_bytes));
-    memset(vb->z_section_bytes, 0, sizeof(vb->z_section_bytes));
-    memset(vb->z_num_sections, 0, sizeof(vb->z_num_sections));
-    memset(vb->z_section_entries, 0, sizeof(vb->z_section_entries));
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
 
@@ -443,11 +439,6 @@ unsigned vb_vcf_num_samples_in_sb (const VBlockVCF *vb, unsigned sb_i)
     else
         return vb->num_samples_per_block;
 } 
-
-unsigned vb_vcf_num_sections(VBlockVCF *vb) 
-{
-    return 1 + vb->has_genotype_data + (vb->phase_type == PHASE_MIXED_PHASED) + (vb->num_haplotypes_per_line > 0);
-}
 
 // NOT thread safe, use only in execution-terminating messages
 const char *err_vb_pos (void *vb)

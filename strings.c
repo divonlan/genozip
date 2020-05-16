@@ -20,11 +20,13 @@ void str_to_lowercase (char *s)
 
 char *str_size (int64_t size, char *str /* out */)
 {
-    if      (size > (1LL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
+    if      (size > (1LL << 50)) sprintf (str, "%3.1lf PB", ((double)size) / (double)(1LL << 50));
+    else if (size > (1LL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
     else if (size > (1LL << 30)) sprintf (str, "%3.1lf GB", ((double)size) / (double)(1LL << 30));
     else if (size > (1LL << 20)) sprintf (str, "%3.1lf MB", ((double)size) / (double)(1LL << 20));
     else if (size > (1LL << 10)) sprintf (str, "%3.1lf KB", ((double)size) / (double)(1LL << 10));
-    else                         sprintf (str, "%3d B"    ,     (int)size)                       ;
+    else if (size > 0          ) sprintf (str, "%3d B"    ,     (int)size)                       ;
+    else                         sprintf (str, "-"                       )                       ;
 
     return str; // for convenience so caller can use in printf directly
 }

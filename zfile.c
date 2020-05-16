@@ -196,7 +196,7 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     START_TIMER;
 
     ASSERT (section_type_is_dictionary(ctx->dict_section_type),
-            "Error: dict_section_type=%s is not a dictionary section", st_name(ctx->dict_section_type));
+            "Error in zfile_compress_dictionary_data: dict_section_type=%s is not a dictionary section", st_name(ctx->dict_section_type));
 
     SectionHeaderDictionary header;
     memset (&header, 0, sizeof(header)); // safety
@@ -508,7 +508,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
         if (!crypt_have_password()) crypt_prompt_for_password();
 
-        crypt_do (evb, header->password_test, sizeof(header->password_test), 0, SEC_EOF, true); // decrypt password test
+        crypt_do (evb, header->password_test, sizeof(header->password_test), 0, SEC_NONE, true); // decrypt password test
 
         ASSERT (!memcmp (header->password_test, password_test_string, sizeof(header->password_test)),
                 "Error: password is wrong for file %s", z_name);
@@ -585,7 +585,7 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
 
     if (is_encrypted) {
         memcpy (header.password_test, password_test_string, sizeof(header.password_test));
-        crypt_do (evb, header.password_test, sizeof(header.password_test), 0, SEC_EOF, true);
+        crypt_do (evb, header.password_test, sizeof(header.password_test), 0, SEC_NONE, true);
     }
 
     Buffer *z_data = &evb->z_data;
@@ -615,7 +615,6 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     buf_alloc (evb, z_data, z_data->len + sizeof(SectionFooterGenozipHeader), 1.5, "z_data", 0);
     memcpy (&z_data->data[z_data->len], &footer, sizeof(SectionFooterGenozipHeader));
     z_data->len += sizeof(SectionFooterGenozipHeader);
-    evb->z_section_bytes[SEC_GENOZIP_HEADER] += sizeof(SectionFooterGenozipHeader);
 }
 
 // reads the the genozip header section's header from a GENOZIP file - used by main_list, returns true if successful
@@ -815,7 +814,7 @@ void zfile_vcf_compress_vb_header (VBlock *vb_)
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
     vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
     vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
-    vb_header.h.sec_compression_alg  = COMP_PLN; // in versions 2-4 it was (needlessly) compressed with bzlib
+    vb_header.h.sec_compression_alg   = COMP_PLN; // in versions 2-4 it was (needlessly) compressed with bzlib
     vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.phase_type              = (char)vb->phase_type; 
     vb_header.has_genotype_data       = vb->has_genotype_data;
@@ -845,11 +844,6 @@ void zfile_vcf_compress_vb_header (VBlock *vb_)
     vb->z_data.param = vb->vblock_i;
     comp_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, 
                     my_squeeze_len ? vb->haplotype_permutation_index_squeezed.data : NULL, NULL);
-
-    // account for haplotype_index as part of the haplotype_data for compression statistics
-    // even though we store it in the variant_data header
-    vb->z_section_bytes[SEC_HT_DATA]   += my_squeeze_len;
-    vb->z_section_bytes[SEC_VB_HEADER] -= my_squeeze_len;
 }
 
 // ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed

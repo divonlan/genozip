@@ -18,7 +18,7 @@
 
 // note: the numbering of the sections cannot be modified, for backward compatibility
 typedef enum {
-    SEC_EOF                = -1, // doesn't appear in the file - just a value to indicate there are no more sections
+    SEC_NONE               = -1, // doesn't appear in the file 
 
     // data sections - statring in v1
     SEC_TXT_HEADER         = 0,                                // used by VCF, SAM, ME23
@@ -51,7 +51,7 @@ typedef enum {
     SEC_SAM_BD_DATA        = 33,  SEC_SAM_BI_DATA        = 34,
     SEC_SEQ_DATA           = 35,                               // used by SAM, FASTA, FASTQ 
     SEC_QUAL_DATA          = 36,                               // used by SAM, FASTQ
-    SEC_NUMERIC_ID_DATA    = 37,                               // used by VCF (starting v5) and ME23
+    SEC_NUMERIC_ID_DATA    = 37,                               // used by VCF (starting v5), GFF3 and ME23
     SEC_SAM_QNAME_SF_DICT  = 38,  SEC_SAM_QNAME_SF_B250  = 39,
     SEC_SAM_OPTNL_SF_DICT  = 40,  SEC_SAM_OPTNL_SF_B250  = 41,
     SEC_SAM_QNAME_DICT     = 42,  SEC_SAM_QNAME_B250     = 43,
@@ -81,8 +81,8 @@ typedef enum {
     SEC_GFF3_ATTRS_SF_DICT = 85,  SEC_GFF3_ATTRS_SF_B250 = 86, 
 
     SEC_ENST_DATA          = 87,
-    // This sections is not a real section - it doesn't appear in the genozip file. It can be changed if needed.
-    SEC_STATS_HT_SEPERATOR
+
+    NUM_SEC_TYPES // fake section for counting
 } SectionType;
 
 // this data must be perfectly aligned with SectionType.
@@ -142,11 +142,7 @@ typedef enum {
     {"SEC_GFF3_ATTRS_SF_DICT",  }, {"SEC_GFF3_ATTRS_SF_B250",  },\
     \
     {"SEC_ENST_DATA",           },\
-    \
-    {"SEC_STATS_HT_SEPERATOR",  } \
 }
-
-#define NUM_SEC_TYPES (SEC_STATS_HT_SEPERATOR+1) 
 
 #define section_type_is_dictionary(s) (((s) >= SEC_CHROM_DICT        && (s) <= SEC_VCF_INFO_SF_DICT   && ((s)%2) == (SEC_CHROM_DICT % 2)) ||       \
                                         (s) == SEC_VCF_FRMT_SF_DICT || \

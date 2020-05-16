@@ -381,7 +381,7 @@ bool comp_compress_none (VBlock *vb,
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
-    ASSERT0 (uncompressed, "comp_compress_none: only option 1 supported in the mean time");
+    ASSERT0 (uncompressed, "Error in comp_compress_none: only option 1 supported in the mean time");
 
     if (*compressed_len < uncompressed_len && soft_fail) return false;
     ASSERT0 (*compressed_len >= uncompressed_len, "Error in comp_compress_none: compressed_len too small");
@@ -435,7 +435,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     }
 
     // if there's no data to compress, or its too small, don't compress
-    if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION) 
+    if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION && !callback) 
         header->sec_compression_alg = COMP_PLN;
 
     uint32_t est_compressed_len = 
@@ -519,10 +519,6 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     z_data->len += total_z_len;
 
-    // do calculations for --show-content and --show-sections options
-    vb->z_section_bytes[header->section_type] += total_z_len;
-    vb->z_num_sections [header->section_type] ++;
-    
     if (flag_show_headers) zfile_show_header (header, vb->vblock_i ? vb : NULL); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 

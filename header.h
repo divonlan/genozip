@@ -50,7 +50,7 @@ typedef struct DataTypeProperties {
 #define DATA_TYPE_PROPERTIES { \
     { "VCF",     RA,    usz(VBlockVCF),  usz(ZipDataLineVCF),  HDR_MUST, '#', seg_vcf_initialize,   seg_vcf_data_line,   zip_vcf_compress_one_vb,  zfile_vcf_update_compressed_vb_header, piz_vcf_read_one_vb,  piz_vcf_uncompress_one_vb,  vb_vcf_release_vb,  vb_vcf_destroy_vb,  NULL, vb_vcf_cleanup_memory, "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
     { "SAM",     RA,    usz(VBlockSAM),  usz(ZipDataLineSAM),  HDR_OK,   '@', seg_sam_initialize,   seg_sam_data_line,   zip_sam_compress_one_vb,  zfile_update_compressed_vb_header,     piz_sam_read_one_vb,  piz_sam_uncompress_one_vb,  vb_sam_release_vb,  vb_sam_destroy_vb,  vb_sam_initialize_vb, NULL,  "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
-    { "FASTQ",   NO_RA, usz(VBlockFAST), usz(ZipDataLineFAST), HDR_NONE, -1,  NULL,                 seg_fastq_data_line, zip_fast_compress_one_vb, zfile_update_compressed_vb_header,     piz_fast_read_one_vb, piz_fast_uncompress_one_vb, vb_fast_release_vb, vb_fast_destroy_vb, NULL,                 NULL,  "Entries",         { "FIELD", "ERROR!", "DESC"   } }, \
+    { "FASTQ",   NO_RA, usz(VBlockFAST), usz(ZipDataLineFAST), HDR_NONE, -1,  seg_fastq_initialize, seg_fastq_data_line, zip_fast_compress_one_vb, zfile_update_compressed_vb_header,     piz_fast_read_one_vb, piz_fast_uncompress_one_vb, vb_fast_release_vb, vb_fast_destroy_vb, NULL,                 NULL,  "Entries",         { "FIELD", "ERROR!", "DESC"   } }, \
     { "FASTA",   NO_RA, usz(VBlockFAST), usz(ZipDataLineFAST), HDR_NONE, -1,  seg_fasta_initialize, seg_fasta_data_line, zip_fast_compress_one_vb, zfile_update_compressed_vb_header,     piz_fast_read_one_vb, piz_fast_uncompress_one_vb, vb_fast_release_vb, vb_fast_destroy_vb, NULL,                 NULL,  "Lines",           { "FIELD", "ERROR!", "DESC"   } }, \
     { "GVF",     RA,    usz(VBlockGFF3), usz(ZipDataLineGFF3), HDR_OK,   '#', seg_gff3_initialize,  seg_gff3_data_line,  zip_gff3_compress_one_vb, zfile_update_compressed_vb_header,     piz_gff3_read_one_vb, piz_gff3_uncompress_one_vb, vb_gff3_release_vb, vb_gff3_destroy_vb, NULL,                 NULL,  "Sequences",       { "FIELD", "ATTRS",  "ERROR!" } }, \
     { "23ANDME", RA,    usz(VBlockME23), 0,                    HDR_OK,   '#', seg_me23_initialize,  seg_me23_data_line,  zip_me23_compress_one_vb, zfile_update_compressed_vb_header,     piz_me23_read_one_vb, piz_me23_uncompress_one_vb, vb_me23_release_vb, vb_me23_destroy_vb, NULL,                 NULL,  "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }  \
@@ -66,7 +66,10 @@ extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;
 // VCF fields: CHROM up to the FORMAT field - excluding the samples. Note: we treat REF and ALT and the tab between them as a 
 // single field as they are correlated so compress better together
 #define NUM_VCF_FIELDS 8 
-typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT } VcfFields;
+#define NUM_VCF_FIELDS_EXT 9 
+typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, // Fields
+               VCF_GT // extended-fields, just used to store stats 
+             } VcfFields;
 
 // Note on SAM fields: 
 // - the QNAME field is broken into its :-separated components
@@ -75,42 +78,54 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
 // - OPTIONAL fields are stored as a template and then each subfield has its own dictionary.
 //   the template looks like eg: "CT:Z:NM:i:" for two subfields CT and NM
 #define NUM_SAM_FIELDS 9
-typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL } SamFields;
+#define NUM_SAM_FIELDS_EXT 14
+typedef enum { SAM_QNAME, SAM_FLAG, SAM_RNAME, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, // Fields
+               SAM_SEQ, SAM_QUAL, SAM_BD, SAM_BI, SAM_MD // extended-fields, just used to store stats 
+             } SamFields;
 
 // FASTQ/FASTA fields
 #define NUM_FAST_FIELDS 2
-typedef enum { FAST_DESC, FAST_LINEMETA } FastqFields;
+#define NUM_FAST_FIELDS_EXT 4
+typedef enum { FAST_DESC, FAST_LINEMETA,
+               FAST_SEQ, FASTQ_QUAL // extended-fields, just used to store stats 
+#define FASTA_COMMENT FASTQ_QUAL  
+} FastqFields;
 
 #define NUM_GFF3_FIELDS 9 // https://m.ensembl.org/info/website/upload/gff3.html
-typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS } Gff3Fields;
+#define NUM_GFF3_FIELDS_EXT 10
+typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS,
+               GVF_SEQ // extended-fields, just used to store stats 
+ } Gff3Fields;
 
 // 23ANDME fields
 #define NUM_ME23_FIELDS 3
-typedef enum { ME23_CHROM, ME23_POS, ME23_ID } Me23Fields; // same order as VCF
+#define NUM_ME23_FIELDS_EXT 4
+typedef enum { ME23_CHROM, ME23_POS, ME23_ID, // same order as VCF
+               ME23_HT // extended-fields, just used to store stats
+ } Me23Fields;  
 
-#define MAX_NUM_FIELDS_PER_DATA_TYPE 9 // maximum between NUM_*_FIELDS
+#define MAX_NUM_FIELDS_PER_DATA_TYPE 14 // maximum between NUM_*_FIELDS_EXT
 #if MAX_NUM_FIELDS_PER_DATA_TYPE + 2*MAX_SUBFIELDS > MAX_DICTS 
 #error "MAX_NUM_FIELDS_PER_DATA_TYPE too large"
 #endif
 
 typedef struct DataTypeFields {
-    unsigned num_fields;
-    int chrom; // used for random access data ; -1 if DATATYPE_HAS_RANDOM_ACCESS is false
-    int info;
+    unsigned num_fields, num_fields_ext;
+    int chrom, pos, info; // the fields, or -1 if this data type doesn't have them
     SectionType first_dict_sec;
-    SectionType info_dict_sec;
     SectionType info_sf_dict_sec;
     SectionType chrom_dict_sec; // used by --regions for subsetting
     char *names[MAX_NUM_FIELDS_PER_DATA_TYPE]; // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed (names are not longer than 8=DICT_ID_LEN as the code assumes it)
 } DataTypeFields;
 
 #define DATA_TYPE_FIELDS { \
-  {NUM_VCF_FIELDS,  VCF_CHROM,   VCF_INFO,  SEC_CHROM_DICT,      SEC_VCF_INFO_DICT,   SEC_VCF_INFO_SF_DICT,   SEC_CHROM_DICT,      { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" } }, \
-  {NUM_SAM_FIELDS,  SAM_RNAME,  -1,         SEC_SAM_QNAME_DICT, -1,                   -1,                     SEC_SAM_RNAME_DICT,  { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL" } }, \
-  {NUM_FAST_FIELDS, -1,         -1,         SEC_FAST_DESC_DICT, -1,                   -1,                     -1,                  { "DESC", "LINEMETA" } }, \
-  {NUM_FAST_FIELDS, -1,         -1,         SEC_FAST_DESC_DICT, -1,                   -1,                     -1,                  { "DESC", "LINEMETA" } }, \
-  {NUM_GFF3_FIELDS, GFF3_SEQID, GFF3_ATTRS, SEC_GFF3_SEQID_DICT, SEC_GFF3_ATTRS_DICT, SEC_GFF3_ATTRS_SF_DICT, SEC_GFF3_SEQID_DICT, { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS" } }, \
-  {NUM_ME23_FIELDS, ME23_CHROM, -1,         SEC_CHROM_DICT,     -1,                   -1,                     SEC_CHROM_DICT,      { "CHROM", "POS", "ID" } }, \
+/* num_fields       num_fields_ext       chrom       pos         info        first_dict_sec       info_sf_dict_sec        chrom_dict_sec       names (including extend fields)                                                                                    */ \
+  {NUM_VCF_FIELDS,  NUM_VCF_FIELDS_EXT,  VCF_CHROM,  VCF_POS,    VCF_INFO,   SEC_CHROM_DICT,      SEC_VCF_INFO_SF_DICT,   SEC_CHROM_DICT,      { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "GT" } }, \
+  {NUM_SAM_FIELDS,  NUM_SAM_FIELDS_EXT,  SAM_RNAME,  SAM_POS,    -1,         SEC_SAM_QNAME_DICT,  -1,                     SEC_SAM_RNAME_DICT,  { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL", "SEQ", "QUAL", "BD", "BI", "MD" } }, \
+  {NUM_FAST_FIELDS, NUM_FAST_FIELDS_EXT, -1,         -1,         -1,         SEC_FAST_DESC_DICT,  -1,                     -1,                  { "DESC", "LINEMETA", "SEQ", "QUAL" } }, \
+  {NUM_FAST_FIELDS, NUM_FAST_FIELDS_EXT, -1,         -1,         -1,         SEC_FAST_DESC_DICT,  -1,                     -1,                  { "DESC", "LINEMETA", "SEQ", "COMMENT" } }, \
+  {NUM_GFF3_FIELDS, NUM_GFF3_FIELDS_EXT, GFF3_SEQID, GFF3_START, GFF3_ATTRS, SEC_GFF3_SEQID_DICT, SEC_GFF3_ATTRS_SF_DICT, SEC_GFF3_SEQID_DICT, { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "SEQ" } }, \
+  {NUM_ME23_FIELDS, NUM_ME23_FIELDS_EXT, ME23_CHROM, ME23_POS,   -1,         SEC_CHROM_DICT,      -1,                     SEC_CHROM_DICT,      { "CHROM", "POS", "ID", "HT" } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)
@@ -122,6 +137,7 @@ extern bool header_txt_to_genozip (uint32_t *vcf_line_i);
 extern bool header_genozip_to_txt (Md5Hash *digest);
 
 extern const char *dt_name (DataType data_type);
+extern uint32_t last_txt_header_len; // for stats
 
 // v1 compatibility (VCF only)
 extern bool v1_header_genozip_to_vcf (Md5Hash *digest);

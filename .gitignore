@@ -2,6 +2,7 @@
 .archive.tar.gz
 *.o
 *.debug-o
+*.opt-o
 *.d
 *.genozip
 *.gz
@@ -15,6 +16,7 @@ genounzip*
 genocat*
 genols*
 genozip-debug*
+genozip-opt*
 1000genomes/*
 data/*
 benchmark.txt

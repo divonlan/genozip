@@ -6,7 +6,6 @@
 #ifndef STATS_INCLUDED
 #define STATS_INCLUDED
 
-extern void stats_show_content (void);
 extern void stats_show_sections (void);
 
 #endif

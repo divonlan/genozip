@@ -67,55 +67,43 @@ void seg_store (VBlock *vb,
     if (src_buf) buf_free (src_buf);
 }
 
-// returns the node index
-uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len,
-                           DictIdType dict_id, SectionType sec_b250, int accounts_for_chars)
+static inline uint32_t seg_one_snip_do (VBlock *vb, const char *str, unsigned len, MtfContext *ctx, uint32_t add_bytes,
+                                        bool *is_new) // optional out
 {
-    MtfNode *node;
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, sec_b250 - 1);
-
-    // allocate memory if needed
     buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
                CTX_GROWTH, "mtf_ctx->mtf_i", ctx->did_i);
-
-    uint32_t node_index = mtf_evaluate_snip_seg (vb, ctx, str, len, &node, NULL);
-
-    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
-            "Error in seg_one_subfield: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
-            err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),
-            node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
-
-    NEXTENT (uint32_t, ctx->mtf_i) = node_index;
-
-    vb->txt_section_bytes[sec_b250] += accounts_for_chars; 
-
-    return node_index;
-}
-
-// returns the node index
-uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, int did_i, SectionType sec_b250,
-                       bool *is_new) // optional out
-{
-    MtfContext *ctx = &vb->mtf_ctx[did_i];
-
-    buf_alloc (vb, &ctx->mtf_i, (ctx->mtf_i.len + 1) * sizeof (uint32_t), 2, "mtf_ctx->mtf_i", did_i);
     
-    MtfNode *node;
-    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, &node, is_new);
+    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, is_new);
 
     ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
             "Error in seg_one_field: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
             err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),
             node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
-    NEXTENT (uint32_t, vb->mtf_ctx[did_i].mtf_i) = node_index;
+    NEXTENT (uint32_t, ctx->mtf_i) = node_index;
+    ctx->txt_len += add_bytes;
 
-    vb->txt_section_bytes[sec_b250] += len + 1;
     return node_index;
 } 
 
+// returns the node index
+uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len,
+                           DictIdType dict_id, SectionType sec_b250, uint32_t add_bytes)
+{
+    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, sec_b250 - 1);
+    return seg_one_snip_do (vb, str, len, ctx, add_bytes, NULL);
+}
+
+// returns the node index
+uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, int did_i, uint32_t add_bytes,
+                       bool *is_new) // optional out
+{
+    MtfContext *ctx = &vb->mtf_ctx[did_i];
+    return seg_one_snip_do (vb, str, len, ctx, add_bytes, is_new);
+} 
+
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
-                               unsigned *len, char *separator, bool *has_13, // out
+                               unsigned *len, char *separator, bool *has_13, // out - only needed if allow_newline=true
                                const char *item_name)
 {
     VBlockP vb = (VBlockP)vb_;
@@ -131,6 +119,7 @@ const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool al
                 // check for Windows-style '\r\n' end of line 
                 if (i && str[i] == '\n' && str[i-1] == '\r') {
                     (*len)--;
+                    ASSERT0 (has_13, "Error in seg_get_next_item: has_13==NULL but expecting it because allow_newline=true");
                     *has_13 = true;
                 }
 
@@ -211,7 +200,7 @@ uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, DTF(chrom));
+    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, DTF(chrom), chrom_str_len+1);
 
     random_access_update_chrom ((VBlockP)vb, chrom_node_index);
 
@@ -219,7 +208,7 @@ uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_
 }
 
 // get number for storage in RANDOM_POS and check if it is a valid number
-uint32_t seg_add_to_random_pos_data (VBlock *vb, SectionType sec, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name)
+uint32_t seg_add_to_random_pos_data (VBlock *vb, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name)
 {
     bool standard_random_pos_encoding = true;
 
@@ -252,15 +241,15 @@ uint32_t seg_add_to_random_pos_data (VBlock *vb, SectionType sec, const char *sn
     uint32_t n32 = (uint32_t)n64;
     NEXTENT (uint32_t, vb->random_pos_data) = BGEN32 (n32);
 
-    vb->txt_section_bytes[sec] += add_bytes;
+    vb->mtf_ctx[DTF(pos)].txt_len += add_bytes;
 
     return n32;
 }
 
 int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*in /out */, 
                        bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
-                       int did_i, SectionType sec_pos_b250,
-                       const char *pos_str, unsigned pos_len, const char *field_name)
+                       int did_i, const char *pos_str, unsigned pos_len, 
+                       const char *field_name, bool account_for_separator)
 {
     bool is_nonsense = false;
     
@@ -268,12 +257,11 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
 
     // if caller allows a non-valid-number and this is indeed a non-valid-number, just store the string, prefixed by POS_NONSENSE
     if (is_nonsense) { 
-        int32_t nonsense_len = this_pos; 
+        int32_t nonsense_len = this_pos; // in case nonsense, seg_pos_snip_to_int returns the length
         char save = *(pos_str-1);
         *(char*)(pos_str-1) = POS_NONSENSE; // note: even if its the very first character in txt_data, we're fine - it will temporarily overwrite the buffer underflow
 
-        seg_one_snip (vb, pos_str-1, nonsense_len+1, did_i, sec_pos_b250, NULL);
-        vb->txt_section_bytes[sec_pos_b250]--; // don't account for the .
+        seg_one_snip (vb, pos_str-1, nonsense_len+1, did_i, nonsense_len + account_for_separator, NULL); 
 
         *(char*)(pos_str-1) = save; // restore
         return last_pos; // unchanged last_pos
@@ -285,10 +273,9 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
     // section in every VB just for a single entry in case of a nicely sorted file
     if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && last_pos) {
-        seg_add_to_random_pos_data (vb, SEC_RANDOM_POS_DATA, pos_str, pos_len, pos_len+1, field_name);
+        seg_add_to_random_pos_data (vb, pos_str, pos_len, pos_len+account_for_separator, field_name);
         static const char pos_lookup[1] = {POS_LOOKUP};
-        seg_one_snip (vb, pos_lookup, 1, did_i, sec_pos_b250, NULL);
-        vb->txt_section_bytes[sec_pos_b250] -= 2;
+        seg_one_snip (vb, pos_lookup, 1, did_i, 0, NULL);
 
         return this_pos;
     }
@@ -322,15 +309,10 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
             delta_len = 1;
         }
         
-        seg_one_snip (vb, pos_delta_str, delta_len, did_i, sec_pos_b250, NULL);
-
-        vb->txt_section_bytes[sec_pos_b250] += pos_len - delta_len; // re-do the calculation - seg_one_field doesn't do it good in our case
+        seg_one_snip (vb, pos_delta_str, delta_len, did_i, pos_len + account_for_separator, NULL);
     }
     else {
-        seg_one_snip (vb, "", 0, did_i, sec_pos_b250, NULL);
-        
-        vb->txt_section_bytes[sec_pos_b250] += pos_len; // re-do the calculation - seg_one_field doesn't do it good in our case
-    
+        seg_one_snip (vb, "", 0, did_i, pos_len + account_for_separator, NULL);
         *last_pos_delta = 0; // no negated delta next time
     }
     
@@ -363,7 +345,7 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType s
     // added to sec_buf if we have a trailing number
     if (num_digits) {
         uint32_t id_num = BGEN32 (atoi (&id_snip[id_snip_len - num_digits]));
-        seg_add_to_fixed_buf (vb, id_buf, sec_buf, (char*)&id_num, sizeof (id_num), num_digits); // account for the digits
+        seg_add_to_fixed_buf (vb, id_buf, (char*)&id_num, sizeof (id_num));
     }
 
     // append the textual part with \1 and \2 as needed - we have enough space - we have a tab following the field
@@ -379,7 +361,7 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, SectionType s
         ((char*)id_snip)[new_len++] = 2;
     }
 
-    seg_one_subfield (vb, id_snip, new_len, dict_id, sec_b250, id_snip_len - num_digits + !!account_for_separator); // account for the length without the digits, and sometimes with \t
+    seg_one_subfield (vb, id_snip, new_len, dict_id, sec_b250, id_snip_len + !!account_for_separator); // account for the entire length, and sometimes with \t
 
     // restore
     if (extra_bit)  ((char*)id_snip)[--new_len] = save_2;
@@ -424,17 +406,13 @@ static void seg_sort_iname (InfoNames *names, unsigned num_names, char *iname, u
 void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_buf, uint8_t *num_info_subfields,
                      SegSpecialInfoSubfields seg_special_subfields,
                      const char *info_str, unsigned info_len, 
-                     bool has_13) // this GFF3 file line ends with a Windows-style \r\n
+                     bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
+                     bool this_line_has_13)  // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
 {
     // data type de-multiplexors
     #define info_field DTF(info)
     #define field_name DTF(names)[info_field]
-
-    #define sec_info_dict DTF(info_dict_sec)
-    #define sec_info_b250 (sec_info_dict + 1) 
-
     #define sec_info_sf_dict DTF(info_sf_dict_sec)
-    #define sec_info_sf_b250 (sec_info_sf_dict + 1) 
 
     char iname[MAX_INFO_NAMES_LEN];
     unsigned iname_len = 0;
@@ -448,9 +426,11 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     InfoNames names[MAX_SUBFIELDS];
     unsigned num_names=0;
 
+    MtfContext *info_ctx = &vb->mtf_ctx[info_field];
+
     // if the txt file line ends with \r\n when we add an artificial additional info subfield "#"
     // we know we have space for adding ":#" because the line as at least a "\r\n" appearing somewhere after the INFO field
-    if (has_13) {
+    if (this_line_has_13) {
         if (info_len) {
             save_2 = info_str[info_len];
             ((char*)info_str)[info_len++] = ';';
@@ -498,7 +478,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
 
                 if (i==info_len) { // our artificial ; terminator
                     iname_len--; // remove ;
-                    vb->txt_section_bytes[sec_info_b250]++; // account for the separator (; or \t or \n)
+                    info_ctx->txt_len++;  // account for the separator (; or \t or \n)
                 }
                 else {
                     this_name = &info_str[i+1]; // skip the value-less name
@@ -528,18 +508,16 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                 buf_alloc (vb, mtf_i_buf, MIN (vb->lines.len, mtf_i_buf->len + 1) * sizeof (uint32_t),
                            CTX_GROWTH, "mtf_ctx->mtf_i", ctx->dict_section_type);
 
-                MtfNode *sf_node;
-
                 // Call back to handle special subfields
                 char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
                 bool needs_evaluate = seg_special_subfields (vb, ctx, &this_value, &this_value_len, optimized_snip);
                     
                 if (needs_evaluate) {
-                    NEXTENT (uint32_t, *mtf_i_buf) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, &sf_node, NULL);
-                    vb->txt_section_bytes[sec_info_sf_b250] += this_value_len; 
+                    NEXTENT (uint32_t, *mtf_i_buf) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, NULL);
+                    ctx->txt_len += this_value_len;
                 }
 
-                vb->txt_section_bytes[sec_info_b250]++; // account for the separator (; or \t or \n) 
+                info_ctx->txt_len++; // account for the separator (; or \t or \n) 
 
                 reading_name = true;  // end of value - move to the next time
                 this_name = &info_str[i+1]; // move to next field in info string
@@ -558,11 +536,9 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
     // 1. find it's mtf_i (and add to dictionary if a new name)
     // 2. place mtf_i in INFO section of this VB
-    MtfContext *info_ctx = &vb->mtf_ctx[info_field];
     ARRAY (uint32_t, info_field_mtf_i, info_ctx->mtf_i);
-    MtfNode *node;
     bool is_new;
-    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &node, &is_new);
+    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &is_new);
     info_field_mtf_i[vb->mtf_ctx[info_field].mtf_i.len++] = node_index;
 
     // if this is a totally new iname (first time in this file) - make a new SubfieldMapper for it.
@@ -580,13 +556,16 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
 
     *dl_info_mtf_i = node_index;
 
-    vb->txt_section_bytes[sec_info_b250] += iname_len; // this includes all the =
-
+    info_ctx->txt_len += iname_len + this_field_has_13; // this includes all the = and, in case INFO is the last field and terminated by \r\n, account for the \r
+    
     // recover characters we temporarily changed
-    if (has_13) {
+    if (this_line_has_13) {
         ((char*)info_str)[info_len-1] = save_1;
-        if (info_len > 1)
+        info_ctx->txt_len--; // we accounted for this character, but it doesn't appear in the original txt
+        if (info_len > 1) {
             ((char*)info_str)[info_len-2] = save_2;
+            info_ctx->txt_len--; // we accounted for this character, but it doesn't appear in the original txt
+        }
     }
 }
 
@@ -611,7 +590,6 @@ void seg_compound_field (VBlock *vb,
     unsigned snip_len = 0;
     unsigned sf_i = 0;
     char template[MAX_COMPOUND_COMPONENTS-1]; // separators is one less than the subfields
-    MtfNode *node;
     bool rewritten_tab=false;
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
@@ -648,7 +626,8 @@ void seg_compound_field (VBlock *vb,
             buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
                        CTX_GROWTH, "mtf_ctx->mtf_i", sf_ctx->did_i);
 
-            NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, &node, NULL);
+            NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
+            sf_ctx->txt_len += snip_len;
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
@@ -670,34 +649,31 @@ void seg_compound_field (VBlock *vb,
     if (sf_i==1) template[0] = '*';
 
     // add template to the field dictionary (note: template may be of length zero if field has no / or :)
-    NEXTENT (uint32_t, field_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, field_ctx, template, MAX (1, sf_i-1), &node, NULL);
-
-    // byte counts for --show-sections 
-    vb->txt_section_bytes[field_b250_sec] += sf_i + account_for_13; // sf_i has 1 for each separator including the terminating \t or \n / \r\n
-    vb->txt_section_bytes[sf_b250_sec]    += field_len - (sf_i-1); // the entire field except for the / and : separators
+    NEXTENT (uint32_t, field_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, field_ctx, template, MAX (1, sf_i-1), NULL);
+    field_ctx->txt_len += sf_i + account_for_13; // sf_i has 1 for each separator including the terminating \t or \n / \r\n
 }
 
-void seg_add_to_data_buf (VBlock *vb, Buffer *buf, SectionType sec, 
+void seg_add_to_data_buf (VBlock *vb, Buffer *buf, 
                           const char *snip, unsigned snip_len, 
-                          unsigned add_bytes)  // bytes in the original text file accounted for by this snip
+                          uint8_t add_bytes_did_i, unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
     ASSERT0 (buf_is_allocated (buf), "Error in seg_add_to_data_buf: buf is not allocated");
 
     buf_alloc_more (vb, buf, snip_len + 1, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_data_buf
     if (snip_len) buf_add (buf, snip, snip_len); 
     buf_add (buf, "\n", 1); 
-    vb->txt_section_bytes[sec] += add_bytes;
+
+    if (add_bytes_did_i != DID_I_NONE)
+        vb->mtf_ctx[add_bytes_did_i].txt_len += add_bytes;
 }
 
-void seg_add_to_fixed_buf (VBlock *vb, Buffer *buf, SectionType sec, 
-                           const void *data, unsigned data_len, 
-                           unsigned add_bytes)  // bytes in the original text file accounted for by this snip
+void seg_add_to_fixed_buf (VBlock *vb, Buffer *buf, 
+                           const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
 {
     ASSERT0 (buf_is_allocated (buf), "Error in seg_add_to_fixed_buf: buf is not allocated");
 
     buf_alloc_more (vb, buf, data_len, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_fixed_buf
     if (data_len) buf_add (buf, data, data_len); 
-    vb->txt_section_bytes[sec] += add_bytes;
 }
 
 static void seg_set_hash_hints (VBlock *vb, int third_num)
@@ -748,24 +724,24 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 static void seg_verify_file_size (VBlock *vb)
 {
     uint32_t reconstructed_vb_size = 0;
-    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) 
-        reconstructed_vb_size += vb->txt_section_bytes[sec_i];
 
-    // if --show-sections is specified, and we have an mismatch, we show the sections
-    if (flag_show_sections && vb->vb_data_size != reconstructed_vb_size) {
-        fprintf (stderr, "\n\nNon-zero sections:\n");
-        for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) 
-            if (vb->txt_section_bytes[sec_i]) // not 0
-                fprintf (stderr, "%s : %u\n", st_name (sec_i), vb->txt_section_bytes[sec_i]);
-    }
+    for (unsigned sf_i=0; sf_i < vb->num_dict_ids; sf_i++) 
+        reconstructed_vb_size += vb->mtf_ctx[sf_i].txt_len;
         
+    if (vb->vb_data_size != reconstructed_vb_size && !flag_optimize) {
 
-    char s1[30], s2[30];
-    ASSSEG (vb->vb_data_size == reconstructed_vb_size || flag_optimize, vb->txt_data.data, 
-            "Error while verifying reconstructed vblock size: "
-            "reconstructed_vb_size=%s (calculated bottoms-up) but vb->vb_data_size=%s (calculated tops-down) (diff=%d)", 
-            str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
-            (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
+        fprintf (stderr, "Txt lengths:\n");
+        for (unsigned sf_i=0; sf_i < vb->num_dict_ids; sf_i++) {
+            MtfContext *ctx = &vb->mtf_ctx[sf_i];
+            fprintf (stderr, "%s: %u\n", err_dict_id (ctx->dict_id), (uint32_t)ctx->txt_len);
+        }
+        
+        char s1[30], s2[30];
+        ABOSEG (vb->txt_data.data, "Error while verifying reconstructed vblock size: "
+                "reconstructed_vb_size=%s (calculated bottoms-up) but vb->vb_data_size=%s (calculated tops-down) (diff=%d)", 
+                str_uint_commas (reconstructed_vb_size, s1), str_uint_commas (vb->vb_data_size, s2), 
+                (int32_t)reconstructed_vb_size - (int32_t)vb->vb_data_size);
+    }
 }
 
 // split each lines in this variant block to its components

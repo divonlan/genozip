@@ -21,6 +21,8 @@ void seg_gff3_initialize (VBlock *vb_)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
+    EXTENDED_FIELD_CTX (GVF_SEQ, dict_id_gff3_attr_sf (dict_id_make ("SEQ", 3)));
+
     buf_alloc (vb, &vb->dbxref_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "dbxref_numeric_data", vb->vblock_i);    
     buf_alloc (vb, &vb->seq_data, 20 * vb->lines.len, 1, "seq_data", vb->vblock_i); // should normally be more than enough, but if not, seg_add_to_data_buf will realloc
     buf_alloc (vb, &vb->enst_data, 10000, 1, "enst_data", vb->vblock_i); // symbolic initial allocation
@@ -85,13 +87,13 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
     seg_gff3_array_of_struct_ctxs (vb, subfield_ctx->dict_id, num_items_in_struct, &ctxs, &enst_ctx);
 
     // set roll back point
-    uint64_t saved_mtf_i_len[MAX_AoS_ITEMS];
-    for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++)
+    uint64_t saved_mtf_i_len[MAX_AoS_ITEMS], saved_txt_len[MAX_AoS_ITEMS];
+    for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++) {
         saved_mtf_i_len[item_i] = ctxs[item_i].mtf_i.len;
+        saved_txt_len[item_i]   = ctxs[item_i].txt_len;
+    }
     uint64_t saved_enst_mtf_i_len = enst_ctx->mtf_i.len;    
     uint64_t saved_enst_data_len = vb->enst_data.len;
-    uint32_t saved_bytes_attr_sf = vb->txt_section_bytes[SEC_GFF3_ATTRS_SF_B250];
-    uint32_t saved_bytes_enst    = vb->txt_section_bytes[SEC_ENST_DATA];
     const char *saved_snip = snip;
     unsigned saved_snip_len = snip_len;
 
@@ -130,12 +132,12 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
 
 badly_formatted:
     // roll back all the changed data
-    for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++)
+    for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++) {
         ctxs[item_i].mtf_i.len = saved_mtf_i_len[item_i];
+        ctxs[item_i].txt_len   = saved_txt_len[item_i];
+    }
     enst_ctx->mtf_i.len = saved_enst_mtf_i_len;        
     vb->enst_data.len = saved_enst_data_len;
-    vb->txt_section_bytes[SEC_GFF3_ATTRS_SF_B250] = saved_bytes_attr_sf;
-    vb->txt_section_bytes[SEC_ENST_DATA] = saved_bytes_enst;
 
     // now save the entire snip in the dictionary
     seg_one_subfield ((VBlockP)vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, SEC_GFF3_ATTRS_SF_B250, saved_snip_len); 
@@ -147,10 +149,8 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
 
     // ID - this is a sequential number (at least in GRCh37/38)
     if (ctx->dict_id.num == dict_id_ATTR_ID) {
-        vb->last_id = seg_pos_field ((VBlockP)vb, vb->last_id, NULL, true, ctx->did_i, SEC_GFF3_ATTRS_SF_B250, 
-                                     *this_value, *this_value_len, "ID");
-        vb->txt_section_bytes[SEC_GFF3_ATTRS_SF_B250]--; // exclude the separator included by default by seg_pos_field
-
+        vb->last_id = seg_pos_field ((VBlockP)vb, vb->last_id, NULL, true, ctx->did_i, 
+                                     *this_value, *this_value_len, "ID", false);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -179,7 +179,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         ctx->dict_id.num == dict_id_ATTR_Reference_seq ||
         ctx->dict_id.num == dict_id_ATTR_ancestral_allele) {
 
-        seg_add_to_data_buf (vb_, &vb->seq_data, SEC_SEQ_DATA, *this_value, *this_value_len, *this_value_len);
+        seg_add_to_data_buf (vb_, &vb->seq_data, *this_value, *this_value_len, GVF_SEQ, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -206,60 +206,58 @@ const char *seg_gff3_data_line (VBlock *vb_,
     const char *next_field, *field_start;
     unsigned field_len=0;
     char separator;
-    bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
     // SEQID
     field_start = field_start_line;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "SEQID");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "SEQID");
     seg_chrom_field (vb_, field_start, field_len);
 
     // SOURCE
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "SOURCE");
-    seg_one_field (vb, field_start, field_len, GFF3_SOURCE);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "SOURCE");
+    seg_one_field (vb, field_start, field_len, GFF3_SOURCE, field_len + 1);
 
     // TYPE
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "TYPE");
-    seg_one_field (vb, field_start, field_len, GFF3_TYPE);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "TYPE");
+    seg_one_field (vb, field_start, field_len, GFF3_TYPE, field_len + 1);
 
     // START - delta vs previous line 
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "START");
-    vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, GFF3_START, SEC_GFF3_START_B250, field_start, field_len, "START");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "START");
+    vb->last_pos = seg_pos_field (vb_, vb->last_pos, NULL, false, GFF3_START, field_start, field_len, "START", true);
     random_access_update_pos (vb_, vb->last_pos);
 
     // END - delta vs START
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "END");
-    seg_pos_field (vb_, vb->last_pos, NULL, false, GFF3_END, SEC_GFF3_END_B250, field_start, field_len, "END");
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "END");
+    seg_pos_field (vb_, vb->last_pos, NULL, false, GFF3_END, field_start, field_len, "END", true);
 
     // SCORE
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "SCORE");
-    seg_one_field (vb, field_start, field_len, GFF3_SCORE);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "SCORE");
+    seg_one_field (vb, field_start, field_len, GFF3_SCORE, field_len + 1);
 
     // STRAND
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "STRAND");
-    seg_one_field (vb, field_start, field_len, GFF3_STRAND);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "STRAND");
+    seg_one_field (vb, field_start, field_len, GFF3_STRAND, field_len + 1);
 
     // PHASE
     field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, &has_13, "PHASE");
-    seg_one_field (vb, field_start, field_len, GFF3_PHASE);
+    next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "PHASE");
+    seg_one_field (vb, field_start, field_len, GFF3_PHASE, field_len + 1);
 
     // ATTRIBUTES
     field_start = next_field; 
+    bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
     next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, 
                                     DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
 
     seg_info_field (vb_, &dl->attrs_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, seg_gff3_special_info_subfields,
-                    field_start, field_len, has_13); // we break the const bc seg_vcf_info_field might add a :#
-
-    vb->txt_section_bytes[SEC_STATS_HT_SEPERATOR] -= has_13; // the \r in case of Windows \r\n line ending (WHY IS THIS?)
+                    field_start, field_len, has_13, has_13); // we break the const bc seg_vcf_info_field might add a :#
 
     return next_field;
 }
