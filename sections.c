@@ -84,25 +84,7 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
 
     buf_free (section_list_buf);
 }
-/*
-// called by PIZ I/O thread: piz_read_one_vb
-uint8_t sections_count_sec_type (unsigned vb_i, DictIdType template)
-{
-    ARRAY (SectionListEntry, sl, z_file->section_list_buf);    
 
-    // skip to the first sec (if there is one...)
-    while (z_file->sl_cursor < z_file->section_list_buf.len &&
-           sl[z_file->sl_cursor].vblock_i == vb_i &&
-           sl[z_file->sl_cursor].section_type != sec) 
-        z_file->sl_cursor++;
-
-    // count the sec sections
-    uint32_t start = z_file->sl_cursor;
-    while (sl[z_file->sl_cursor].section_type == sec) z_file->sl_cursor++;
-
-    return (uint8_t)(z_file->sl_cursor - start);
-}
-*/
 // called by PIZ I/O to know if next up is a VB Header or VCF Header or EOF
 SectionType sections_get_next_header_type (SectionListEntry **sl_ent, 
                                            bool *skipped_vb,   // out (VB only) - true if this vb should be skipped

@@ -32,7 +32,7 @@ typedef struct DataTypeProperties {
     void (*update_header)(VBlockP, uint32_t vcf_first_line_i);
 
     // PIZ functions
-    void (*read_one_vb)(VBlockP);
+    bool (*read_one_vb)(VBlockP, SectionListEntryP);
     ComputeFunc uncompress;  
 
     // VBlock functions

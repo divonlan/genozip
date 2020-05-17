@@ -765,24 +765,12 @@ void piz_vcf_uncompress_one_vb (VBlock *vb_)
 }
 
 
-void piz_vcf_read_one_vb (VBlock *vb_)
+bool piz_vcf_read_one_vb (VBlock *vb_, SectionListEntry *sl)
 { 
-    // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
-    // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
-    // integrated into the global dictionaries.
-    // Order of sections in a V2 VB:
-    // 1. SEC_VB_HEADER - its data is the haplotype index
-    // 2. SEC_VCF_INFO_SF_B250 - Fields 1-9 b250 data
-    // 3. SEC_VCF_INFO_SF_B250 - All INFO subfield data
-    // 4. All sample data: up 3 sections per sample block:
-    //    4a. SEC_VCF_GT_DATA - genotype data
-    //    4b. SEC_VCF_PHASE_DATA - phase data
-    //    4c. SEC_HT_DATA  or SEC_HAPLOTYPE_GTSHARK - haplotype data
-
-    PREPARE_TO_READ (VBlockVCF, 100000, SectionHeaderVbHeaderVCF); // an arbitrary large number of sections - we need room for all the HT/GT sections 
+    VBlockVCFP vb = (VBlockVCFP)vb_;
 
     // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
-    #define vb_header ((SectionHeaderVbHeaderVCF *)&vb->z_data.data[vb_header_offset])
+    #define vb_header ((SectionHeaderVbHeaderVCF *)vb->z_data.data)
     
     // iname mapper: first VB, we map all iname and format subfields to a global mapper. this uses
     // dictionary info only, not b250
@@ -791,13 +779,7 @@ void piz_vcf_read_one_vb (VBlock *vb_)
         piz_map_iname_subfields();
     }
 
-    //READ_FIELDS; // CHROM to FORMAT
-    //READ_SUBFIELDS (vb->num_info_subfields, SEC_VCF_INFO_SF_B250); // INFO subfields
-
-    piz_read_all_b250_local (vb_, &sl);
-
     READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // optional - POS data that failed delta (introduced in v5)
-    //READ_DATA_SECTION (SEC_SEQ_DATA, true);        // optional - if any REF+ALT exists where not both REF and ALT are length 1
     READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // optional - numeric data of the ID field (the non-numeric part is in SEC_ID_B250) (introduced in v5)
         
     // read the sample data
@@ -833,9 +815,9 @@ void piz_vcf_read_one_vb (VBlock *vb_)
         }
     }
     
-    READ_DONE;
-
     #undef vb_header
+
+    return true;
 }
 
 #define V1_PIZ // select the piz functions of v1.c

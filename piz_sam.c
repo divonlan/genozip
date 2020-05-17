@@ -410,17 +410,14 @@ void piz_sam_uncompress_one_vb (VBlock *vb_)
     UNCOMPRESS_DONE;
 }
 
-void piz_sam_read_one_vb (VBlock *vb_)
+bool piz_sam_read_one_vb (VBlock *vb, SectionListEntry *sl)
 { 
-    PREPARE_TO_READ (VBlockSAM, MAX_DICTS + 5, SectionHeaderVbHeader);
-    
-    piz_read_all_b250_local (vb_, &sl);
-    
     READ_DATA_SECTION (SEC_RANDOM_POS_DATA, false);
     READ_DATA_SECTION (SEC_SAM_MD_DATA, true); // optional
     READ_DATA_SECTION (SEC_SAM_BD_DATA, true); // optional
     READ_DATA_SECTION (SEC_SAM_BI_DATA, true); // optional
     READ_DATA_SECTION (SEC_SEQ_DATA, false);
     READ_DATA_SECTION (SEC_QUAL_DATA, false);
-    READ_DONE;
+
+    return true;
 }

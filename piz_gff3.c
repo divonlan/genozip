@@ -131,17 +131,14 @@ void piz_gff3_uncompress_one_vb (VBlock *vb_)
     UNCOMPRESS_DONE;
 }
 
-void piz_gff3_read_one_vb (VBlock *vb_)
+bool piz_gff3_read_one_vb (VBlock *vb, SectionListEntry *sl)
 { 
-    PREPARE_TO_READ (VBlockGFF3, MAX_DICTS + 2, SectionHeaderVbHeader);
-
     if (vb->vblock_i == 1) piz_map_iname_subfields();
     
-    piz_read_all_b250_local (vb_, &sl);
-
     READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // POS data that failed delta
     READ_DATA_SECTION (SEC_SEQ_DATA, true); // Data of Variant_seq, Reference_seq and ancestral_allele
     READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // Data of Dbxref
     READ_DATA_SECTION (SEC_ENST_DATA, true); // Data of ENST IDs coming from Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
-    READ_DONE;
+
+    return true;
 }

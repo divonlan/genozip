@@ -440,6 +440,33 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     return data_type;
 }
 
+static bool piz_read_one_vb (VBlock *vb)
+{
+    START_TIMER; 
+
+    SectionListEntry *sl = sections_vb_first (vb->vblock_i); 
+
+    int vb_header_offset = zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
+                                               z_file->data_type == DT_VCF ? sizeof (SectionHeaderVbHeaderVCF) : sizeof (SectionHeaderVbHeader), 
+                                               SEC_VB_HEADER, sl++); 
+
+    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+    mtf_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
+
+    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(char*), 0, "z_section_headers", 1); // room for section headers  
+    NEXTENT (unsigned, vb->z_section_headers) = vb_header_offset; 
+
+    // read all b250 and local of all fields and subfields
+    piz_read_all_b250_local (vb, &sl);
+
+    // read additional sections specific to this data type
+    bool ok_to_compute = DTPZ(read_one_vb) ? DTPZ(read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
+
+    COPY_TIMER (vb->profile.piz_read_one_vb); 
+
+    return ok_to_compute;
+}
+
 static void enforce_v1_limitations (bool is_first_component)
 {
     #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s was compressed with genozip version 1", (lflag), z_name);
@@ -537,15 +564,11 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                         }
                         
                         // read one VB's genozip data
-                        DTPZ(read_one_vb)(next_vb);
+                        grepped_out = !piz_read_one_vb (next_vb);
+
+                        if (grepped_out) dispatcher_abandon_next_vb (dispatcher); 
 
                         still_more_data = true; // not eof yet
-
-                        // if grep found nothing next_vb->ready_to_dispatch is set to false
-                        if (!next_vb->ready_to_dispatch) {
-                            grepped_out = true;
-                            dispatcher_abandon_next_vb (dispatcher); 
-                        }
 
                         break;
                     }

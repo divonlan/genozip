@@ -18,34 +18,34 @@ extern void piz_map_iname_subfields (void);
 // ----------------------
 // VCF stuff
 // ----------------------
-extern void piz_vcf_read_one_vb  (VBlockP vb);
+extern bool piz_vcf_read_one_vb  (VBlockP vb, SectionListEntryP sl);
 extern void piz_vcf_uncompress_one_vb (VBlockP vb);
 extern void v2v3_piz_vcf_map_iname_subfields (BufferP vb);
 
 // ----------------------
 // SAM stuff
 // ----------------------
-extern void piz_sam_read_one_vb  (VBlockP vb);
+extern bool piz_sam_read_one_vb  (VBlockP vb, SectionListEntryP sl);
 extern void piz_sam_uncompress_one_vb (VBlockP vb);
 
 // ----------------------
 // FASTQ + FASTA stuff
 // ----------------------
-extern void piz_fast_read_one_vb (VBlockP vb);
+extern bool piz_fast_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern void piz_fast_uncompress_one_vb (VBlockP vb);
 extern bool piz_fast_test_grep (VBlockFASTP vb);
 
 // ----------------------
 // GFF3 stuff
 // ----------------------
-extern void piz_gff3_read_one_vb (VBlockP vb);
+extern bool piz_gff3_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern void piz_gff3_uncompress_one_vb
  (VBlockP vb);
 
 // ----------------------
 // 23andMe stuff
 // ----------------------
-extern void piz_me23_read_one_vb (VBlockP vb);
+extern bool piz_me23_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern void piz_me23_uncompress_one_vb (VBlockP vb);
 
 // ----------------------------------------------
@@ -57,7 +57,7 @@ extern void piz_read_all_b250_local (VBlockP vb, SectionListEntryP *next_sl);
 #define PREPARE_TO_READ(vbblock_type,max_sections,sec_type_vb_header)  \
     START_TIMER; \
     vbblock_type *vb = (vbblock_type *)vb_; \
-    SectionListEntry *sl = sections_vb_first (vb->vblock_i); \
+    SectionListEntryP sl = sections_vb_first (vb->vblock_i); \
     int vb_header_offset = zfile_read_section (vb_, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", \
                                                sizeof(sec_type_vb_header), SEC_VB_HEADER, sl++); \
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);\
@@ -67,7 +67,7 @@ extern void piz_read_all_b250_local (VBlockP vb, SectionListEntryP *next_sl);
     vb->z_section_headers.len =1;
 
 #define READ_SB_SECTION(sec,header_type,sb_i) \
-    { *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len++) = vb->z_data.len; \
+    { NEXTENT (unsigned, vb->z_section_headers) = (uint32_t)vb->z_data.len; \
       zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
 
 #define READ_SECTION(sec,header_type,is_optional) {  \

@@ -239,28 +239,10 @@ void piz_fast_uncompress_one_vb (VBlock *vb_)
     UNCOMPRESS_DONE;
 }
 
-
-void piz_fast_read_one_vb (VBlock *vb_)
+bool piz_fast_read_one_vb (VBlock *vb, SectionListEntry *sl)
 { 
-    // The VB is read from disk here, in the I/O thread, and is decompressed in piz_uncompress_all_sections() in the 
-    // Compute thread, with the exception of dictionaries that are handled here - this VBs dictionary fragments are
-    // integrated into the global dictionaries.
-    // Order of sections in a VB:
-    // 1. SEC_VB_HEADER - its data is the haplotype index
-    // 2. SEC_FAST_DESC_B250 and SEC_FAST_LINEMETA_B250
-    // 3. SEC_FAST_DESC_SF_B250 - Description subfields
-    // 7. SEC_SEQ_DATA      - Sequences data 
-    // 8. SEC_QUAL_DATA     - Quality data (FASTQ only)    
-
-    PREPARE_TO_READ (VBlockFAST, MAX_DICTS + 3, SectionHeaderVbHeader);
-    
-    piz_read_all_b250_local (vb_, &sl);
-    
-    
-    //READ_FIELDS;
-    //READ_SUBFIELDS (vb->desc_mapper.num_subfields, SEC_FAST_DESC_SF_B250); // DESC subfields
-
-    if (flag_grep && !piz_fast_test_grep (vb)) goto finish; // ususually, we uncompress and reconstruct the DESC from the I/O thread in case of --grep
+    // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
+    if (flag_grep && !piz_fast_test_grep ((VBlockFASTP)vb)) return false; 
 
     // read SEQ and QUAL data (FASTQ) or COMMENT data (FASTA)
     READ_DATA_SECTION (SEC_SEQ_DATA, false);
@@ -270,8 +252,5 @@ void piz_fast_read_one_vb (VBlock *vb_)
     else // fasta
         READ_DATA_SECTION (SEC_FASTA_COMMENT_DATA, true);
 
-    vb->ready_to_dispatch = true; // all good
-
-finish:
-    COPY_TIMER (vb->profile.piz_read_one_vb);
+    return true;
 }
