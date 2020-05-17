@@ -70,8 +70,6 @@ DictIdType dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
 
 static char *threads_str  = NULL;
 
-static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - despite common wisdom, it is NOT always 0 (on Windows it is 1)
-
 void exit_on_error(void) 
 {
     buf_test_overflows_all_vbs();
@@ -86,11 +84,8 @@ void exit_on_error(void)
 
         // if we're not the main thread - cancel the main thread before closing z_file, so that the main 
         // thread doesn't attempt to access it (eg. z_file->data_type) and get a segmentation fault.
-        if (pthread_self() != io_thread_id) {  // i'm not the main thread
-            pthread_cancel (io_thread_id);     // cancel the main thread
-            usleep (200000);                   // wait 200ms for the main thread to die. pthread_join here hangs on Windows (not tested on others)
-            //pthread_join (io_thread_id, NULL); // wait for the thread cancelation to complete
-        }
+        if (!arch_am_i_io_thread()) 
+            cancel_io_thread(); 
 
         file_close (&z_file, false); // also frees file->name
 
@@ -483,7 +478,7 @@ void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 
 int main (int argc, char **argv)
 {
-    io_thread_id = pthread_self();
+    arch_initialize();
 
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows
@@ -497,8 +492,6 @@ int main (int argc, char **argv)
     else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
     else                                    exe_type = EXE_GENOZIP; // default
     
-    arch_verify();
-
     buf_initialize();
 
     char *out_filename = NULL;

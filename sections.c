@@ -20,7 +20,7 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     bool is_dict = (section_type_is_dictionary (header->section_type));
 
     if (is_dict)                                          dict_id = ((SectionHeaderDictionary *)header)->dict_id;
-    else if (section_type_is_b250 (header->section_type)) dict_id = ((SectionHeaderBase250    *)header)->dict_id;
+    else if (section_type_is_b250 (header->section_type)) dict_id = ((SectionHeaderB250    *)header)->dict_id;
 
     // 1. if this is a vcf_header, random_access or genozip_header - it goes directly into the z_file by the I/O thread
     //    before or after all the compute threads are operational
@@ -84,9 +84,9 @@ void sections_list_concat (VBlock *vb, BufferP section_list_buf)
 
     buf_free (section_list_buf);
 }
-
+/*
 // called by PIZ I/O thread: piz_read_one_vb
-uint8_t sections_count_sec_type (unsigned vb_i, SectionType sec)
+uint8_t sections_count_sec_type (unsigned vb_i, DictIdType template)
 {
     ARRAY (SectionListEntry, sl, z_file->section_list_buf);    
 
@@ -102,7 +102,7 @@ uint8_t sections_count_sec_type (unsigned vb_i, SectionType sec)
 
     return (uint8_t)(z_file->sl_cursor - start);
 }
-
+*/
 // called by PIZ I/O to know if next up is a VB Header or VCF Header or EOF
 SectionType sections_get_next_header_type (SectionListEntry **sl_ent, 
                                            bool *skipped_vb,   // out (VB only) - true if this vb should be skipped

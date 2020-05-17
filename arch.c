@@ -18,12 +18,19 @@
 #include <sys/sysinfo.h>
 #endif
 #endif
+#ifndef _MSC_VER // Microsoft compiler
+#include <pthread.h>
+#else
+#include "compatibility/visual_c_pthread.h"
+#endif
 
 #include "genozip.h"
 #include "endianness.h"
 #include "url.h"
 
-void arch_verify()
+static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - despite common wisdom, it is NOT always 0 (on Windows it is 1)
+
+void arch_initialize(void)
 {
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
@@ -45,6 +52,20 @@ void arch_verify()
 #error Compilation error - on Windows, genozip must be compiled as a 64 bit application
 #endif
 #endif
+
+    io_thread_id = pthread_self();
+}
+
+bool arch_am_i_io_thread (void)
+{
+    return pthread_self() == io_thread_id;
+}
+
+void cancel_io_thread (void)
+{
+    pthread_cancel (io_thread_id);     // cancel the main thread
+    usleep (200000);                   // wait 200ms for the main thread to die. pthread_join here hangs on Windows (not tested on others)
+    //pthread_join (io_thread_id, NULL); // wait for the thread cancelation to complete
 }
 
 unsigned arch_get_num_cores (void)

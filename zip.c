@@ -68,21 +68,26 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 }
 
 // generate & write b250 data for all primary fields of this data type
-void zip_generate_and_compress_fields (VBlock *vb)
+void zip_generate_and_compress_ctxs (VBlock *vb)
 {
     // generate & write b250 data for all primary fields
-    for (int f=0 ; f < DTF(num_fields) ; f++) {
-        MtfContext *ctx = &vb->mtf_ctx[f];
+    for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
+        MtfContext *ctx = &vb->mtf_ctx[did_i];
 
-        ASSERT (FIELD_TO_B250_SECTION(vb->data_type, f) == ctx->b250_section_type, "zip_generate_and_compress_fields: field mismatch with section type: f=%s sec=%s vb_i=%u",
-                (char*)DTF(names)[f], st_name (ctx->b250_section_type), vb->vblock_i);
+        if (ctx->mtf_i.len || ctx->did_i < DTF(num_fields)) {
+            
+            // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
+            if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue;
 
-        zip_generate_b250_section (vb, ctx);
+            zip_generate_b250_section (vb, ctx);
+            zfile_compress_b250_data (vb, ctx, COMP_BZ2);
+        }
 
-        zfile_compress_b250_data (vb, ctx, COMP_BZ2);
+        if (ctx->local.len)
+            zfile_compress_local_data (vb, ctx, COMP_BZ2);
     }
 }
-
+/*
 // generate & write b250 data for all subfields mapped in a mapper
 void zip_generate_and_compress_subfields (VBlock *vb, const SubfieldMapper *mapper)
 {
@@ -90,7 +95,7 @@ void zip_generate_and_compress_subfields (VBlock *vb, const SubfieldMapper *mapp
         
         MtfContext *ctx = &vb->mtf_ctx[mapper->did_i[sf_i]];
 
-        if (ctx->mtf_i.len) {; // we compress only if this subfield has data this VB
+        if (ctx->mtf_i.len) { // we compress only if this subfield has data this VB
             zip_generate_b250_section (vb, ctx);
             zfile_compress_b250_data  (vb, ctx, COMP_BZ2);
         }
@@ -116,7 +121,7 @@ void zip_generate_and_compress_subfields2 (VBlock *vb, SectionType sec_dict)
             "Error: vb_i=%u has %u subfields of sec=%s exceeding the maximum of %u",
             vb->vblock_i, num_subfields, st_name(sec_dict), MAX_SUBFIELDS);
 }
-
+*/
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
 // Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
@@ -131,7 +136,7 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
 
     if (show) 
-        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %.*s: ", vb->vblock_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id);
+        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
@@ -146,7 +151,7 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
             uint8_t *numerals     = node->word_index.encoded.numerals;
             
-            bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_VCF_GT_DATA) && (i > 0);
+            bool one_up = (n == prev + 1) && (ctx->dict_id.num != dict_id_fields[VCF_GT]) && (i > 0);
 
             if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
                 NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
@@ -288,8 +293,8 @@ static void zip_compress_one_vb (VBlock *vb)
     if (DTP(has_random_access)) 
         random_access_merge_in_vb (vb);
 
-    // generate & compress b250 data for all fields 
-    zip_generate_and_compress_fields (vb);
+    // generate & compress b250 and local data for all ctxs 
+    zip_generate_and_compress_ctxs (vb);
 
     // compress data-type specific sections
     DTP(compress)(vb);

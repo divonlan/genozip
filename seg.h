@@ -26,8 +26,7 @@ extern void seg_store (VBlockP vb,
                        const char *limit_txt_data, // we cannot store in txt starting here. if NULL always allocates in txt_data_spillover
                        bool align32); // does start address need to be 32bit aligned to prevent aliasing issues
 
-extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len,
-                                  DictIdType dict_id, SectionType sec_b250, uint32_t add_bytes);
+extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len, DictIdType dict_id, uint32_t add_bytes);
 
 extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did_i, uint32_t add_bytes,
                               bool *is_new); // optional out
@@ -40,13 +39,11 @@ extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chr
 extern uint32_t seg_add_to_random_pos_data (VBlockP vb, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name);
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
-#define POS_LOOKUP   '\1'   // used in dictionary if pos is stored in random_pos because delta is too large. this value is part of the file format so cannot be (easily) changed. Introduced in v5.
-#define POS_NONSENSE '\2'   // used in dictionary if pos is not an unsigned int <= 0x7fffffff. this value is part of the file format so cannot be (easily) changed. Introduced in v5.
 extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_delta, bool allow_non_number, 
                               int pos_field, const char *pos_str, unsigned pos_len, 
                               const char *field_name, bool account_for_separator);
 
-extern void seg_id_field (VBlockP vb, BufferP id_buf, DictIdType dict_id, SectionType sec_b250, SectionType sec_buf,
+extern void seg_id_field (VBlockP vb, BufferP id_buf, DictIdType dict_id, 
                           const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator);
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip);
@@ -57,12 +54,11 @@ extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_m
                             bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
                             bool this_line_has_13); // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
 
-extern void seg_add_to_data_buf  (VBlockP vb, BufferP buf, const char *snip, unsigned snip_len, uint8_t add_bytes_did_i, unsigned add_bytes);
+extern void seg_add_to_data_buf  (VBlockP vb, BufferP buf, const char *snip, unsigned snip_len, uint8_t add_bytes_did_i, unsigned add_bytes, const char *buf_name);
 extern void seg_add_to_fixed_buf (VBlockP vb, BufferP buf, const void *data, unsigned data_len);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
-                                SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep, bool account_for_13,
-                                SectionType field_b250_sec, SectionType sf_b250_sec);
+                                SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep, bool account_for_13);
                                
 // ---------
 // VCF Stuff
@@ -112,10 +108,17 @@ extern void seg_me23_initialize (VBlockP vb_);
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, (DictIdType)dict_id_num, SEC_NONE); \
+    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, NULL, (DictIdType)dict_id_num); \
     ASSERT (ctx->did_i == extended_field, "Error: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 }
+
+#define SAFE_ASSIGN(reg,addr,char_val) /* we are careful to evaluate addr, char_val only once, less they contain eg ++ */ \
+    char *__addr##reg = (char*)(addr); \
+    char __save##reg = *__addr##reg; \
+    *__addr##reg = (char_val);
+
+#define SAFE_RESTORE(reg) *__addr##reg = __save##reg; 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
     ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\

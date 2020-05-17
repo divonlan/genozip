@@ -396,11 +396,7 @@ void piz_sam_uncompress_one_vb (VBlock *vb_)
 {
     UNCOMPRESS_HEADER_AND_FIELDS (VBlockSAM, true);
 
-    // QNAME subfields
-    piz_uncompress_compound_field ((VBlockP)vb, SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250, &vb->qname_mapper, &section_i);
-
-    // OPTIONAL subfields
-    UNCOMPRESS_SUBFIELDS (vb->num_optional_subfield_b250s, SEC_SAM_OPTNL_SF_B250);
+    piz_map_compound_field ((VBlockP)vb, dict_id_is_sam_qname_sf, &vb->qname_mapper);
     piz_sam_map_optional_subfields (vb);
 
     UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, false);
@@ -417,9 +413,9 @@ void piz_sam_uncompress_one_vb (VBlock *vb_)
 void piz_sam_read_one_vb (VBlock *vb_)
 { 
     PREPARE_TO_READ (VBlockSAM, MAX_DICTS + 5, SectionHeaderVbHeader);
-    READ_FIELDS; // primary fields
-    READ_SUBFIELDS (vb->qname_mapper.num_subfields,  SEC_SAM_QNAME_SF_B250); // QNAME subfields
-    READ_SUBFIELDS (vb->num_optional_subfield_b250s, SEC_SAM_OPTNL_SF_B250); // OPTIONAL subfields
+    
+    piz_read_all_b250_local (vb_, &sl);
+    
     READ_DATA_SECTION (SEC_RANDOM_POS_DATA, false);
     READ_DATA_SECTION (SEC_SAM_MD_DATA, true); // optional
     READ_DATA_SECTION (SEC_SAM_BD_DATA, true); // optional

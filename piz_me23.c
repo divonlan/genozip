@@ -65,7 +65,9 @@ void piz_me23_uncompress_one_vb (VBlock *vb_)
 void piz_me23_read_one_vb (VBlock *vb_)
 { 
     PREPARE_TO_READ (VBlockME23, 5, SectionHeaderVbHeader);
-    READ_FIELDS;
+    
+    piz_read_all_b250_local (vb_, &sl);
+
     READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, false);
     READ_DATA_SECTION (SEC_HT_DATA, false);
     READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // POS data that failed delta

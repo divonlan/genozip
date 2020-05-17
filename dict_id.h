@@ -29,9 +29,9 @@ extern DictIdType dict_id_make (const char *str, unsigned str_len);
 static inline DictIdType dict_id_field (DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
 
 #define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_printable (dict_id).num)
-#define dict_id_is_field(dict_id)  ((dict_id.id[0] >> 6) == 0) // 2 MSb of first byte determine dictionary type
-#define dict_id_is_type_1(dict_id) ((dict_id.id[0] >> 6) == 3)
-#define dict_id_is_type_2(dict_id) ((dict_id.id[0] >> 6) == 1)
+static inline bool dict_id_is_field (DictIdType dict_id) { return ((dict_id.id[0] >> 6) == 0); } // 2 MSb of first byte determine dictionary type
+static inline bool dict_id_is_type_1(DictIdType dict_id) { return ((dict_id.id[0] >> 6) == 3); }
+static inline bool dict_id_is_type_2(DictIdType dict_id) { return ((dict_id.id[0] >> 6) == 1); }
 
 static inline DictIdType dict_id_type_1(DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
 static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } // no change - keep Msb 01
@@ -59,8 +59,8 @@ static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } 
 #define dict_id_gff3_attr_sf dict_id_type_1
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
+#define DICT_ID_NONE ((DictIdType)0ULL)
 
-extern DictIdType DICT_ID_NONE;
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
 
@@ -104,6 +104,10 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_ATTR_SEQ, dict_id_ENSTid;  // private genozip dict
 
 extern void dict_id_initialize (DataType data_type);
+
+// template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
+// candidate is a specific dict_id that we test for its matching of the template
+extern bool dict_id_is_match (DictIdType template, DictIdType candidate);
 
 extern const char *dict_id_display_type (DataType dt, DictIdType dict_id);
 

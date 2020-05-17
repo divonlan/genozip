@@ -60,8 +60,7 @@ const char *seg_fastq_data_line (VBlock *vb_,
 
     // we segment it using / | : and " " as separators. 
     seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], field_start, field_len, &vb->desc_mapper,
-                        dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, has_13,
-                        SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
+                        dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, has_13);
     metadata[0] = 'X' + has_13;
 
     // SEQ - just get the whole line
@@ -128,8 +127,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
         // we segment using / | : and " " as separators. 
         seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FAST_DESC], line_start, line_len, &vb->desc_mapper,
-                            dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, has_13,
-                            SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250);
+                            dict_id_fast_desc_sf (dict_id_make ("D0ESC", 5)), true, has_13);
         
         static const char *desc_metadata[2] = { "X>", "Y>" };
         seg_one_field (vb, desc_metadata[has_13], 2, FAST_LINEMETA, 0);
@@ -138,7 +136,7 @@ const char *seg_fasta_data_line (VBlock *vb_,
 
     // case: comment line - stored in the comment buffer
     else if (*line_start == ';' || !line_len) {
-        seg_add_to_data_buf (vb_, &vb->comment_data, line_start, line_len, FASTA_COMMENT, line_len + 1 + has_13); 
+        seg_add_to_data_buf (vb_, &vb->comment_data, line_start, line_len, FASTA_COMMENT, line_len + 1 + has_13, "COMMENT"); 
 
         static const char *comment_metadata[2] = { "X;", "Y;" };
         seg_one_field (vb, comment_metadata[has_13], 2, FAST_LINEMETA, 0);

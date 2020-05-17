@@ -45,6 +45,27 @@
         },
         {
             "type": "shell",
+            "label": "Make Opt - compiler debug info and optimizations",
+            "command": "make",
+            "args": [
+                "opt"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
             "label": "Clean All",
             "command": "make.exe",
             "args": [

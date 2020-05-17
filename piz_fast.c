@@ -41,11 +41,9 @@ bool piz_fast_test_grep (VBlockFAST *vb)
     // we only need room for one line for now 
     buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data", vb->vblock_i);
 
-    // uncompress the fields     
-    UNCOMPRESS_FIELDS;
-    
-    // uncompress DESC subfields
-    piz_uncompress_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
+    // uncompress & map desc field (filtered by zfile_is_skip_section)
+    piz_uncompress_all_b250_local ((VBlockP)vb, &section_i);
+    piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper);
 
     // reconstruct each description line and check for string matching with flag_grep
     bool found = false, match = false;
@@ -218,10 +216,14 @@ void piz_fast_uncompress_one_vb (VBlock *vb_)
     UNCOMPRESS_HEADER_AND_FIELDS (VBlockFAST, !flag_grep); // if flag_grep - the DESC fields were already uncompressed by the I/O thread
     
     // DESC subfields
-    if (!flag_grep) // if flag_grep - the DESC subfields were already uncompressed by the I/O thread
-        piz_uncompress_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
+/*    if (!flag_grep) // if flag_grep - the DESC subfields were already uncompressed by the I/O thread
+        piz_map_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
     else 
         section_i += vb->desc_mapper.num_subfields + NUM_FAST_FIELDS; // we didn't compress the fields - just skip them
+*/
+    // uncompress fields, possibly skipped DESC that's already been decompressed if flag_grep (filtered by zfile_is_skip_section)
+    piz_uncompress_all_b250_local (vb_, &section_i);
+    if (!flag_grep) piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); // it not already done during grep
 
     UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, false); // SEQ    
 
@@ -251,8 +253,12 @@ void piz_fast_read_one_vb (VBlock *vb_)
     // 8. SEC_QUAL_DATA     - Quality data (FASTQ only)    
 
     PREPARE_TO_READ (VBlockFAST, MAX_DICTS + 3, SectionHeaderVbHeader);
-    READ_FIELDS;
-    READ_SUBFIELDS (vb->desc_mapper.num_subfields, SEC_FAST_DESC_SF_B250); // DESC subfields
+    
+    piz_read_all_b250_local (vb_, &sl);
+    
+    
+    //READ_FIELDS;
+    //READ_SUBFIELDS (vb->desc_mapper.num_subfields, SEC_FAST_DESC_SF_B250); // DESC subfields
 
     if (flag_grep && !piz_fast_test_grep (vb)) goto finish; // ususually, we uncompress and reconstruct the DESC from the I/O thread in case of --grep
 

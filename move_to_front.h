@@ -21,6 +21,9 @@
 #define WORD_INDEX_EMPTY_SF   0xfffffffeUL // subfield is missing, terminating : present
 #define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
+#define SNIP_LOOKUP  '\1'   // Tell PIZ to replace this character by a look up from local (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
+#define SNIP_VERBTIM '\2'   // Appears as first character in the SNIP, tell PIZ to copy the remainder of the snip as is without special handing
+
 #define NIL ((int32_t)-1)
 typedef struct MtfNode {
     uint32_t char_index;      // character index into dictionary array
@@ -50,11 +53,11 @@ typedef struct MtfContext {
     // ----------------------------
     unsigned did_i;            // the index of this ctx within the array vb->mtf_ctx
     DictIdType dict_id;        // which dict_id is this MTF dealing with
-    SectionType b250_section_type; // section type where the the corresponding b250 data goes
-    SectionType dict_section_type; // section type for dictionary statistics (this is a "fake" section type, not one that we write to disk)
+    const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
-    Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. Used by vardata fields 
-                               // and INFO subfields. Not used by FORMAT subfields - those are stored in genotype_data.
+    Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. 
+    Buffer local;              // VB only (not z_file): Data private to this VB that is not in the dictionary
+
     // ----------------------------
     // ZIP only fields
     // ----------------------------
@@ -88,10 +91,11 @@ typedef struct MtfContext {
     uint64_t txt_len;          // How many characters in the txt file are accounted for by snips in this ctx (for stats)
     
     // ----------------------------
-    // UNZIP only fields
+    // PIZ only fields
     // ----------------------------
     Buffer word_list;          // PIZ only. word list. an array of MtfWord - referring to the snips in dictionary
     SnipIterator iterator;     // PIZ only: used to iterate on the context, reading one b250 word_index at a time
+    uint32_t next_local;       // PIZ only: iterator on local buf
 
 } MtfContext;
 
@@ -109,7 +113,10 @@ extern void mtf_clone_ctx (VBlockP vb);
 extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
-extern MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id, SectionType dict_section_type);
+
+extern MtfContext *mtf_get_ctx_by_dict_id_do (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id);
+#define mtf_get_ctx_by_dict_id(vb,num_subfields,dict_id) mtf_get_ctx_by_dict_id_do (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (num_subfields), (dict_id))
+
 extern uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id);
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);

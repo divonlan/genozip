@@ -121,7 +121,7 @@ static void piz_gff3_reconstruct_vb (VBlockGFF3 *vb)
 void piz_gff3_uncompress_one_vb (VBlock *vb_)
 {
     UNCOMPRESS_HEADER_AND_FIELDS (VBlockGFF3, true);
-    UNCOMPRESS_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250);
+    //UNCOMPRESS_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250);
     UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
     UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, true);    
     UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, dbxref_numeric_data, char, true);    
@@ -137,8 +137,8 @@ void piz_gff3_read_one_vb (VBlock *vb_)
 
     if (vb->vblock_i == 1) piz_map_iname_subfields();
     
-    READ_FIELDS; // primary fields
-    READ_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250); // ATTRIBUTES subfields
+    piz_read_all_b250_local (vb_, &sl);
+
     READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // POS data that failed delta
     READ_DATA_SECTION (SEC_SEQ_DATA, true); // Data of Variant_seq, Reference_seq and ancestral_allele
     READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // Data of Dbxref

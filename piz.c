@@ -35,7 +35,7 @@ int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
     int32_t delta=0;
 
     // case: this is not a delta and snip is stored in dictionary (a result of a "nonsense number")
-    if (delta_snip_len && delta_snip[0] == POS_NONSENSE) { 
+    if (delta_snip_len && delta_snip[0] == SNIP_VERBTIM) { 
 
         ASSERT0 (!last_delta, "Error: piz_decode_pos requires last_delta==NULL in delta fields that might be nonsense");
         
@@ -45,8 +45,8 @@ int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
     }
 
     // case: this is not a delta and pos is stored in random_pos (a result of the delta being out of range)
-    if (delta_snip[0] == POS_LOOKUP) { 
-        ASSERT (delta_snip_len==1, "Expected POS_LOOKUP to be of length 1, but its length is %u", delta_snip_len);
+    if (delta_snip[0] == SNIP_LOOKUP) { 
+        ASSERT (delta_snip_len==1, "Expected SNIP_LOOKUP to be of length 1, but its length is %u", delta_snip_len);
         ASSERT (vb->next_random_pos < vb->random_pos_data.len, "Error reading sam_line=%u: unexpected end of RANDOM_POS data", txt_line_i);
         last_pos = BGEN32 (*ENT (uint32_t, vb->random_pos_data, vb->next_random_pos++));
         str_int (last_pos, pos_str, pos_len);
@@ -101,6 +101,32 @@ int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
     return last_pos;
 }
 
+void piz_reconstruct_from_local (VBlock *vb, MtfContext *ctx, char *sep, unsigned sep_len, uint32_t txt_line_i)
+{
+    RECONSTRUCT_FROM_BUF (ctx->local, ctx->next_local, ctx->name, sep, sep_len);
+}
+
+// returns word_index
+uint32_t piz_reconstruct_from_dict (VBlock *vb, uint8_t did_i, bool add_tab, uint32_t txt_line_i)
+{
+    DECLARE_SNIP;
+    uint32_t word_index = LOAD_SNIP(did_i); 
+
+    unsigned start=0;
+    for (unsigned i=0; i < snip_len; i++)
+        if (snip[i] == SNIP_LOOKUP) {
+            if (start < i) RECONSTRUCT (&snip[start], i-start);
+            start=i+1;
+            piz_reconstruct_from_local (vb, &vb->mtf_ctx[did_i], "", 0, txt_line_i);
+        }
+
+    if (start < snip_len) RECONSTRUCT (&snip[start], snip_len - start);
+
+    if (add_tab) RECONSTRUCT ("\t", 1); 
+
+    return word_index;
+}
+
 void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const char *id_snip, unsigned id_snip_len, 
                          bool *extra_bit, bool add_tab)
 {
@@ -124,24 +150,19 @@ void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const ch
     if (add_tab) RECONSTRUCT1 ("\t");
 }
 
-void piz_uncompress_compound_field (VBlock *vb, SectionType field_b250_sec, SectionType sf_b250_sec, 
-                                    SubfieldMapper *mapper, unsigned *section_i)
+void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), SubfieldMapper *mapper)
 {
-    ARRAY (const unsigned, section_index, vb->z_section_headers);
+    mapper->num_subfields = 0;
 
-    for (uint8_t sf_i=0; sf_i < mapper->num_subfields ; sf_i++) {
-        
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[(*section_i)++]);
-        
-        if (zfile_is_skip_section (vb, field_b250_sec, DICT_ID_NONE)) continue; // don't create ctx if section is skipped
-
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, 
-                                                  header->dict_id, sf_b250_sec-1);
-
-        mapper->did_i[sf_i] = ctx->did_i;
-
-        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", sf_b250_sec);    
-    }    
+    for (uint8_t did_i=0; did_i < vb->num_dict_ids; did_i++)
+        if (predicate (vb->mtf_ctx[did_i].dict_id)) {
+         
+            char index_char = vb->mtf_ctx[did_i].dict_id.id[1];
+            unsigned index = IS_DIGIT(index_char) ? index_char - '0' : 10 + index_char - 'a';
+         
+            mapper->did_i[index] = did_i;
+            mapper->num_subfields++;
+        }
 }
 
 void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const char *separator, unsigned separator_len,
@@ -314,6 +335,53 @@ void piz_reconstruct_seq_qual (VBlock *vb, uint32_t seq_len,
     
     *next += len;
 }
+
+void piz_read_all_b250_local (VBlock *vb, SectionListEntry **next_sl)
+{
+    // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
+    while (section_type_is_b250 ((*next_sl)->section_type) || (*next_sl)->section_type == SEC_LOCAL) {
+    
+        *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len++) = vb->z_data.len; 
+    
+        if ((*next_sl)->section_type == SEC_LOCAL) 
+            zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderLocal), SEC_LOCAL, *next_sl); 
+        else
+            zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderB250),  (*next_sl)->section_type, *next_sl); 
+
+        (*next_sl)++;
+    }
+}
+
+void piz_uncompress_all_b250_local (VBlock *vb, uint32_t *section_i)
+{
+    ARRAY (const unsigned, section_index, vb->z_section_headers); \
+
+    while (1) {
+        SectionHeader *header = (SectionHeader *)(vb->z_data.data + section_index[*section_i]);
+
+        // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
+        if (section_type_is_b250 (header->section_type)) {
+            SectionHeaderB250 *header_b250 = (SectionHeaderB250 *)header;
+            if (zfile_is_skip_section (vb, SEC_B250, header_b250->dict_id)) continue; 
+
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, NULL, header_b250->dict_id); 
+            zfile_uncompress_section (vb, header_b250, &ctx->b250, "mtf_ctx.b250", header->section_type); 
+            (*section_i)++;
+        }    
+
+        else if (header->section_type == SEC_LOCAL) {
+            SectionHeaderLocal *header_local = (SectionHeaderLocal *)header;
+            if (zfile_is_skip_section (vb, SEC_LOCAL, header_local->dict_id)) continue; 
+
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, NULL, header_local->dict_id); 
+            zfile_uncompress_section (vb, header_local, &ctx->local, "mtf_ctx.local", SEC_LOCAL); 
+            (*section_i)++;
+        }    
+
+        else break;
+    }
+}
+
 
 // Called by PIZ I/O thread: read all the sections at the end of the file, before starting to process VBs
 static DataType piz_read_global_area (Md5Hash *original_file_digest) // out

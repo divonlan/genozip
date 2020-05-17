@@ -23,6 +23,7 @@
 #include "compressor.h"
 #include "piz.h"
 #include "license.h"
+#include "arch.h"
 
 bool is_v2_or_above=0, is_v3_or_above=0, is_v4_or_above=0, is_v5_or_above=0;
 
@@ -33,7 +34,8 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     DictIdType dict_id = {0};
 
     if (section_type_is_dictionary (header->section_type)) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
-    if (section_type_is_b250       (header->section_type)) dict_id = ((SectionHeaderBase250    *)header)->dict_id;
+    else if (section_type_is_b250  (header->section_type)) dict_id = ((SectionHeaderB250    *)header)->dict_id;
+    else if (header->section_type == SEC_LOCAL)            dict_id = ((SectionHeaderLocal   *)header)->dict_id;
 
     char str[1000];
 
@@ -55,7 +57,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
 static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 {
-    SectionHeaderBase250 *header = (SectionHeaderBase250 *)section_header_p;
+    SectionHeaderB250 *header = (SectionHeaderB250 *)section_header_p;
 
     if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
 
@@ -77,6 +79,7 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
     fprintf (stderr, "\n");
 }
 
+// returns true if section is to be skipped
 bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
 {
     VBlock *vb = (VBlock *)vb_;
@@ -94,6 +97,16 @@ bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
             if (flag_header_one &&
                 (st == SEC_SEQ_DATA || st == SEC_QUAL_DATA || st == SEC_FASTA_COMMENT_DATA))
                 return true;
+
+            // when grepping by I/O thread - skipping all section but DESC
+            if (flag_grep && arch_am_i_io_thread() && dict_id.num != dict_id_fields[FAST_DESC])
+                return true;
+
+            // if grepping, compute thread doesn't need to decompressed DESC again
+            if (flag_grep && !arch_am_i_io_thread() && dict_id.num == dict_id_fields[FAST_DESC])
+                return true;
+            
+            break;
 
         default: break; // other sections don't have special logic not already covered in abouts
     }
@@ -115,7 +128,7 @@ void zfile_uncompress_section (VBlock *vb,
     if (section_type_is_dictionary (expected_section_type))
         dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
     else if (section_type_is_b250 (expected_section_type))
-        dict_id = ((SectionHeaderBase250 *)section_header_p)->dict_id;
+        dict_id = ((SectionHeaderB250 *)section_header_p)->dict_id;
 
     if (zfile_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
 
@@ -195,14 +208,11 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
 {
     START_TIMER;
 
-    ASSERT (section_type_is_dictionary(ctx->dict_section_type),
-            "Error in zfile_compress_dictionary_data: dict_section_type=%s is not a dictionary section", st_name(ctx->dict_section_type));
-
     SectionHeaderDictionary header;
     memset (&header, 0, sizeof(header)); // safety
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    header.h.section_type          = ctx->dict_section_type;
+    header.h.section_type          = SEC_DICT;
     header.h.data_uncompressed_len = BGEN32 (num_chars);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary));
     header.h.sec_compression_alg  = COMP_BZ2;
@@ -212,9 +222,8 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     header.dict_id                 = ctx->dict_id;
 
     if (flag_show_dict)
-        fprintf (stderr, "%.*s (vb_i=%u, %s, did=%u, num_snips=%u):\t%.*s\n", 
-                DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, vb->vblock_i, st_name(ctx->dict_section_type), 
-                ctx->did_i, num_words, num_chars, data);
+        fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t%.*s\n", 
+                 ctx->name, vb->vblock_i, ctx->did_i, num_words, num_chars, data);
 
     if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
         fprintf (stderr, "%.*s\t", num_chars, data);
@@ -228,13 +237,13 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
 
 void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_alg)
 {
-    SectionHeaderBase250 header;
+    SectionHeaderB250 header;
     memset (&header, 0, sizeof(header)); // safety
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    header.h.section_type          = ctx->b250_section_type;
+    header.h.section_type          = SEC_B250;
     header.h.data_uncompressed_len = BGEN32 (ctx->b250.len);
-    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderBase250));
+    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderB250));
     header.h.sec_compression_alg   = comp_alg;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
@@ -242,6 +251,23 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_
     header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
             
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
+}
+
+void zfile_compress_local_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_alg)
+{   
+    SectionHeaderLocal header;
+    memset (&header, 0, sizeof(header)); // safety
+
+    header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
+    header.h.section_type          = SEC_LOCAL;
+    header.h.data_uncompressed_len = BGEN32 (ctx->local.len);
+    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderLocal));
+    header.h.sec_compression_alg   = COMP_BZ2;
+    header.h.vblock_i              = BGEN32 (vb->vblock_i);
+    header.h.section_i             = BGEN16 (vb->z_next_header_i++);
+    header.dict_id                 = ctx->dict_id;
+
+    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->local.data, NULL);
 }
 
 // compress section - two options for input data - 
@@ -423,13 +449,13 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
 
         // cases where we can skip reading these dictionaries because we don't be using them
-        SectionType st = sl_ent->section_type; 
-        if (read_chrom == DICTREAD_CHROM_ONLY   && st != DTFZ(chrom_dict_sec)) continue;
-        if (read_chrom == DICTREAD_EXCEPT_CHROM && st == DTFZ(chrom_dict_sec)) continue;
+        bool is_chrom = (sl_ent->dict_id.num == dict_id_fields[DTFZ(chrom)]);
+        if (read_chrom == DICTREAD_CHROM_ONLY  && !is_chrom) continue;
+        if (read_chrom == DICTREAD_EXCEPT_CHROM && is_chrom) continue;
 
-        if (zfile_is_skip_section (NULL, st, sl_ent->dict_id)) continue;
+        if (zfile_is_skip_section (NULL, sl_ent->section_type, sl_ent->dict_id)) continue;
         
-        zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), st, sl_ent);    
+        zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type, sl_ent);    
 
         // update dictionaries in z_file->mtf_ctx with dictionary data 
         mtf_integrate_dictionary_fragment (evb, evb->z_data.data);
@@ -447,9 +473,8 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
                 fprintf (stderr, "%.*s\t", (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
             
             if (flag_show_dict)
-                fprintf (stderr, "%.*s (%s, did=%u, num_snips=%u):\t%.*s\n", 
-                         DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, st_name(ctx->dict_section_type), 
-                         did_i, (uint32_t)ctx->word_list.len, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
+                fprintf (stderr, "%s (did_i=%u, num_snips=%u):\t%.*s\n", 
+                         ctx->name, did_i, (uint32_t)ctx->word_list.len, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), ctx->dict.data);
         }
         fprintf (stderr, "\n");
 

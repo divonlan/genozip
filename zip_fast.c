@@ -60,9 +60,6 @@ void zip_fast_compress_one_vb (VBlockP vb_)
 { 
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
-    // DESC subfields
-    zip_generate_and_compress_subfields (vb_, &vb->desc_mapper);
-
     // SEQ
     uint32_t seq_len;
     zip_fast_get_seq_len (vb, &seq_len);

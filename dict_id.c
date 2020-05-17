@@ -41,11 +41,9 @@ uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_s
 // our stuff used in multiple data types
 uint64_t dict_id_WindowsEOL=0;         
 
-DictIdType DICT_ID_NONE = {0};
-
 DictIdType dict_id_make(const char *str, unsigned str_len) 
 { 
-    DictIdType dict_id = {0}; 
+    DictIdType dict_id = DICT_ID_NONE; 
 
     if (!str_len) str_len = strlen (str);
 
@@ -175,6 +173,24 @@ void dict_id_initialize (DataType data_type)
     default:
         break; // no special fields for the other data types
     }
+}
+
+// template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
+// candidate is a specific dict_id that we test for its matching of the template
+bool dict_id_is_match (DictIdType template, DictIdType candidate)
+{
+    if (!template.num) return true;
+
+    if (template.num == candidate.num) return true;
+
+    // template if it is 0 except for the 2 MSb of byte 0 - i.e. we're searching for a type of dict_id rather than a specific one
+    DictIdType copy = template;
+    copy.id[0] &= 0x3f; // remove the two MSb */
+
+    if (!copy.num && ((template.id[0] & 0xc0) == (candidate.id[0] & 0xc0)))
+        return true;
+
+    return false;
 }
 
 const char *dict_id_display_type (DataType dt, DictIdType dict_id)

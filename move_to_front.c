@@ -88,8 +88,8 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
 {
     ASSERT (ctx->dict_id.num, "Error in mtf_node_do: this ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
-    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s %s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
-            err_dict_id (ctx->dict_id), st_name (ctx->dict_section_type),
+    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
+            err_dict_id (ctx->dict_id), 
             mtf_i, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len, func, code_line);
 
     bool is_ol = mtf_i < ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
@@ -145,8 +145,9 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
-        ASSERT (!ctx || ctx->b250_section_type == SEC_VCF_GT_DATA, "Error while reconstrucing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s (%s)",
-                txt_line, vb->vblock_i, err_dict_id (ctx->dict_id), st_name(ctx->b250_section_type)); // there will be no context if this GT subfield was always missing - never appeared on any sample
+        ASSERT (!ctx || (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)), 
+                "Error while reconstructing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s",
+                txt_line, vb->vblock_i, err_dict_id (ctx->dict_id)); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
@@ -166,8 +167,8 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
         if (word_index == WORD_INDEX_ONE_UP) 
             word_index = ctx->iterator.prev_word_index + 1;
 
-        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s %s dictionary has only %u entries",
-                txt_line, word_index, st_name (ctx->dict_section_type),
+        ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s dictionary has only %u entries",
+                txt_line, word_index, 
                 err_dict_id (ctx->dict_id), (uint32_t)ctx->word_list.len);
 
         //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
@@ -315,8 +316,6 @@ void mtf_clone_ctx (VBlock *vb)
 
         vb_ctx->did_i             = did_i;
         vb_ctx->dict_id           = zf_ctx->dict_id;
-        vb_ctx->dict_section_type = zf_ctx->dict_section_type;
-        vb_ctx->b250_section_type = zf_ctx->b250_section_type;
         
         vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
         
@@ -381,8 +380,7 @@ static MtfContext *mtf_add_new_zf_ctx (VBlock *merging_vb, const MtfContext *vb_
     zf_ctx->mutex_initialized = true;
     zf_ctx->did_i             = z_file->num_dict_ids; 
     zf_ctx->dict_id           = vb_ctx->dict_id;
-    zf_ctx->b250_section_type = vb_ctx->b250_section_type;
-    zf_ctx->dict_section_type = vb_ctx->dict_section_type;
+    memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
 
     // only when the new entry is finalized, do we increment num_dict_ids, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
@@ -518,30 +516,9 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
     
     mtf_verify_field_ctxs (merging_vb); // this was useful in the past to catch nasty thread issues
 
-    // first, all field dictionaries (note: even if the dictionary is not allocated - eg FORMAT in a FORMATless VCF)  
-    for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++) {
-
-        MtfContext *ctx = &merging_vb->mtf_ctx[did_i];
-
-        SectionType dict_sec_type = ctx->dict_section_type;
-        ASSERT (section_type_is_dictionary(dict_sec_type) || dict_sec_type == SEC_NONE, // SEC_NONE is a stats-only ctx
-                "Error in mtf_merge_in_vb_ctx: dict_sec_type=%s is not a dictionary section", st_name(dict_sec_type));
-
-        if (dict_sec_type != SEC_VCF_INFO_SF_DICT && dict_sec_type != SEC_VCF_FRMT_SF_DICT) 
-            mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
-    }
-
-    // second, all the info subfield dictionaries
-    for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++)         
-        if (//buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
-            merging_vb->mtf_ctx[did_i].dict_section_type == SEC_VCF_INFO_SF_DICT) 
-            mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
-
-    // third, all the genotype subfield dictionaries
-    for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++)         
-        if (//buf_is_allocated (&merging_vb->mtf_ctx[did_i].dict) && 
-            merging_vb->mtf_ctx[did_i].dict_section_type == SEC_VCF_FRMT_SF_DICT) 
-            mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
+    // merge all contexts
+    for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++) 
+        mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
 
     // note: z_file->num_dict_ids might be larger than merging_vb->num_dict_ids at this point, for example:
     // vb_i=1 started, z_file is empty, created 20 contexts
@@ -565,12 +542,11 @@ uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
-MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */, 
-                                    uint8_t *dict_id_to_did_i_map,
-                                    unsigned *num_dict_ids, 
-                                    uint8_t *num_subfields, // variable to increment if a new context is added
-                                    DictIdType dict_id,
-                                    SectionType dict_section_type)
+MtfContext *mtf_get_ctx_by_dict_id_do (MtfContext *mtf_ctx /* an array */, 
+                                       uint8_t *dict_id_to_did_i_map,
+                                       unsigned *num_dict_ids, 
+                                       uint8_t *num_subfields, // variable to increment if a new context is added
+                                       DictIdType dict_id)
 {
     // attempt to get did_i from dict_id mapper
     uint8_t did_i = dict_id_to_did_i_map[dict_id.map_key];
@@ -590,10 +566,12 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
     ASSERT (*num_dict_ids+1 < MAX_DICTS, 
             "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
 
-    ctx->did_i             = did_i;
-    ctx->dict_id           = dict_id;
-    ctx->dict_section_type = dict_section_type;
-    ctx->b250_section_type = dict_section_type + 1; // the b250 is 1 after the dictionary for all dictionary sections
+    ctx->did_i   = did_i;
+    ctx->dict_id = dict_id;
+    
+    memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
+    ((char*)ctx->name)[DICT_ID_LEN] = 0;
+
     mtf_init_iterator (ctx);
     
     if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
@@ -606,15 +584,11 @@ MtfContext *mtf_get_ctx_by_dict_id (MtfContext *mtf_ctx /* an array */,
     if (num_subfields) { 
         (*num_subfields)++;
         ASSERT (*num_subfields+1 <= MAX_SUBFIELDS, 
-                "Error: number of %s dictionaries is greater than MAX_SUBFIELDS=%u", st_name (dict_section_type), MAX_SUBFIELDS);
+                "Error in mtf_get_ctx_by_dict_id: number of dictionaries is greater than MAX_SUBFIELDS=%u, when creating ctx for %s", MAX_SUBFIELDS, err_dict_id (dict_id));
     }
 
 done:
     ctx = &mtf_ctx[did_i];
-
-    ASSERT (ctx->dict_section_type == dict_section_type, "Error: mismatch in dict_id=%s dict_section_type: requested %s but in the ctx says: %s",
-            err_dict_id (dict_id), st_name(dict_section_type), st_name(ctx->dict_section_type));
-
     return ctx;
 }
 
@@ -630,11 +604,9 @@ void mtf_initialize_primary_field_ctxs (VBlock *vb, // NULL if called by zfile_r
     // note: we create only the regular ctxs here, not extend, as extended may belong to a different type. extended are created in seg_*_initialize
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         
-        const char *fname    = dt_fields[dt].names[f];
-        DictIdType dict_id   = dict_id_field (dict_id_make (fname, strlen(fname)));
-        SectionType dict_sec = FIELD_TO_DICT_SECTION(dt, f);
-
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, dict_id, dict_sec); 
+        const char *fname  = dt_fields[dt].names[f];
+        DictIdType dict_id = dict_id_field (dict_id_make (fname, strlen(fname)));
+        MtfContext *ctx    = mtf_get_ctx_by_dict_id_do (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, dict_id); 
 
         // verify that the ctx is at its correct place
         ASSERT (ctx - mtf_ctx == f, "Error in mtf_initialize_primary_field_ctxs: f=%u (%s) but ctx is at mtf_ctx[%u]. vb_i=%u vb.first_line=%u",
@@ -673,7 +645,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
-    MtfContext *zf_ctx = mtf_get_ctx_by_dict_id (z_file->mtf_ctx, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id, header->h.section_type);
+    MtfContext *zf_ctx = mtf_get_ctx_by_dict_id_do (z_file->mtf_ctx, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id);
     
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
@@ -733,11 +705,10 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 
         if (buf_is_allocated (&zf_ctx->dict) && buf_is_allocated (&zf_ctx->word_list)) { 
             
-            vb_ctx->did_i             = did_i;
-            vb_ctx->dict_id           = zf_ctx->dict_id;
-            vb_ctx->b250_section_type = zf_ctx->b250_section_type;
-            vb_ctx->dict_section_type = zf_ctx->dict_section_type;
-            
+            vb_ctx->did_i   = did_i;
+            vb_ctx->dict_id = zf_ctx->dict_id;
+            memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
+
             if (vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] == DID_I_NONE)
                 vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
 
@@ -830,11 +801,9 @@ void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 
             MtfContext *ctx = &vb->mtf_ctx[f];
 
-            ASSERT (FIELD_TO_DICT_SECTION(vb->data_type, f) == ctx->dict_section_type && 
-                    FIELD_TO_B250_SECTION(vb->data_type, f) == ctx->b250_section_type,
-                    "mtf_verify_field_ctxs called from %s:%u: field mismatch with section type: f=%s ctx->dict_section_type=%s ctx->b250_section_type=%s vb_i=%u",
-                    func, code_line,
-                    (char*)DTF(names)[f], st_name (ctx->dict_section_type), st_name (ctx->b250_section_type), vb->vblock_i);
+            ASSERT (dict_id_fields[f] == ctx->dict_id.num,
+                    "mtf_verify_field_ctxs called from %s:%u: dict_id mismatch with section type: f=%s ctx->dict_id=%s vb_i=%u",
+                    func, code_line, (char*)DTF(names)[f], err_dict_id (ctx->dict_id), vb->vblock_i);
     }
 }
 
@@ -864,16 +833,17 @@ void mtf_free_context (MtfContext *ctx)
     buf_free (&ctx->sorter);
     buf_free (&ctx->mtf_i);
     buf_free (&ctx->b250);
+    buf_free (&ctx->local);
     ctx->mtf_i.len = 0; // VCF stores FORMAT length in here for stats, even if mtf_i is not allocated (and therefore buf_free will not cleanup)
     ctx->dict_id.num = 0;
-    ctx->dict_section_type = ctx->b250_section_type = 0;
     ctx->iterator.next_b250 = NULL;
     ctx->iterator.prev_word_index =0;
     ctx->local_hash_prime = 0;
     ctx->global_hash_prime = 0;
     ctx->merge_num = 0;
     ctx->mtf_len_at_1_3 = ctx->mtf_len_at_2_3 = 0;
-    ctx->txt_len = 0;
+    ctx->txt_len = ctx->next_local = 0;
+    memset ((char*)ctx->name, 0, sizeof(ctx->name));
 
     if (ctx->mutex_initialized) {
         pthread_mutex_destroy (&ctx->mutex);

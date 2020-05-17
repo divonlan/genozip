@@ -15,9 +15,6 @@ void zip_gff3_compress_one_vb (VBlockP vb_)
 { 
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
-    // generate & write b250 data for all ATTRIBUTES subfields
-    zip_generate_and_compress_subfields2 (vb_, SEC_GFF3_ATTRS_SF_DICT);
-
     // optional data sections
     COMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, COMP_LZMA, true);
     COMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, COMP_LZMA, true);

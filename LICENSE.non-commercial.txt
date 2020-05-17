@@ -1,5 +1,5 @@
 This program, "genozip", and all associated, source code, object code, documentation and other files, are copyright (C)
-2019-2020 Divon M Lan. All rights reserved.
+2019-2020 Divon M Lan ("Copyright Owner"). All rights reserved.
 
 This license is limited in scope, and covers NON-COMMERCIAL and some other limited use cases as described below.
 
@@ -15,7 +15,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 "License" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through
 9 of this document.
 
-"Licensor" shall mean the copyright owner or entity authorized by the copyright owner that is granting the License.
+"Licensor" shall mean Copyright Owner or entity authorized by Copyright Owner that is granting the License.
 
 "Legal Entity" shall mean the union of the acting entity and all other entities that control, are controlled by, or are
 under common control with that entity. For the purposes of this definition, "control" means (i) the power, direct or
@@ -41,20 +41,8 @@ and for which the editorial revisions, annotations, elaborations, or other modif
 original work of authorship. For the purposes of this License, Derivative Works shall not include works that remain
 separable from, or merely link (or bind by name) to the interfaces of, the Work and Derivative Works thereof.
 
-"Contribution" shall mean any work of authorship, including the original version of the Work and any modifications or
-additions to that Work or Derivative Works thereof, that is intentionally submitted to Licensor for inclusion in the
-Work by the copyright owner or by an individual or Legal Entity authorized to submit on behalf of the copyright owner.
-For the purposes of this definition, "submitted" means any form of electronic, verbal, or written communication sent to
-the Licensor or its representatives, including but not limited to communication on electronic mailing lists, source
-code control systems, and issue tracking systems that are managed by, or on behalf of, the Licensor for the purpose of
-discussing and improving the Work, but excluding communication that is conspicuously marked or otherwise designated in
-writing by the copyright owner as "Not a Contribution."
-
-"Contributor" shall mean Licensor and any individual or Legal Entity on behalf of whom a Contribution has been received
-by Licensor and subsequently incorporated within the Work.
-
-2. Grant of Copyright License. Subject to the terms and conditions of this License, each Contributor hereby grants to
-You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, revocable copyright license to reproduce, publicly
+2. Grant of Copyright License. Subject to the terms and conditions of this License, Licensor hereby grants to You a
+perpetual, worldwide, non-exclusive, no-charge, royalty-free, revocable copyright license to reproduce, publicly
 display, publicly perform, and distribute the Work in Source or Object form (together: "Using"), subject to the
 following details:
 
@@ -62,36 +50,38 @@ following details:
 Object based on modified Source
 
    b. This license does NOT permit Using the features of the Work intended for compressing data, including the genozip
-Executable, for any purpose except c,d,e hereinafter if (i). you are a commercial entity or working on behalf or for
-the benefit of a commercial entity; and/or (ii). the use of the Work is in the context of a project that has ultimate
-commerical goals. 
+Executable, for any purpose except b1,b2,b3,b4 hereinafter if (i). you are a commercial entity or working on behalf or
+for the benefit of a commercial entity; and/or (ii). the use of the Work is in the context of a project that has
+ultimate commerical goals. 
 
-   c. This license DOES permit Using the Work for educational or training purposes, including by a commerical entity.
+      b1. This license DOES permit Using the Work for educational or training purposes, including by a commerical
+entity.
 
-   d. This license DOES permit Using the Work for the purpose of distributing it to others in unmodified Source form or
-Object derived from unmodified Source, and including this License via a platform that is both publicly accessible and
-free of charge, including but not limited to an Internet website
+      b2. This license DOES permit Using the Work for the purpose of evaluating it for a duration of 30 days, including
+by a commerical entity.
 
-   e. This license DOES permit Using, including reproducing and distributing, the three Executables genounzip, genocat
-and genols for any purpose including commercial.
+      b3. This license DOES permit Using the Work for the purpose of distributing it to others in unmodified Source
+form or Object derived from unmodified Source, and including this License via a platform that is both publicly
+accessible and free of charge, including but not limited to an Internet website
 
-   f. This license DOES NOT permit compressing a file, unless the uncompressed file is also kept or the potential loss
+      b4. This license DOES permit Using, including reproducing and distributing, the three Executables genounzip,
+genocat and genols for any purpose including commercial.
+
+   c. This license DOES NOT permit compressing a file, unless the uncompressed file is also kept or the potential loss
 of data due to genozip not being able to uncompress the compressed file would not cause any harm.
 
-3. Submission of Contributions. Unless You explicitly state otherwise, any Contribution intentionally submitted for
-inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any
-additional terms or conditions. Notwithstanding the above, nothing herein shall supersede or modify the terms of any
-separate license agreement you may have executed with Licensor regarding such Contributions.
+3. Submission of Contributions. Unless You explicitly state otherwise, any software source code intentionally submitted
+for inclusion in the Work by You to the Licensor shall imply complete and irrevocable assignment by You to Copyright
+Owner of all copyright in the submitted source code.
 
 4. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product
 names of the Licensor, except as required for reasonable and customary use in describing the origin of the Work
 
-5. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor provides the Work (and
-each Contributor provides its Contributions) on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT,
-MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of
-using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.
-
+5. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor provides the Work on an 
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation,
+any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are
+solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks
+associated with Your exercise of permissions under this License.
 
 6. Limitation of Liability. In no event and under no legal theory, whether in tort (including negligence), contract, or
 otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing,

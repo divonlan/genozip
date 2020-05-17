@@ -117,20 +117,6 @@ void zip_sam_compress_one_vb (VBlockP vb_)
 { 
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
-    // generate & write b250 data for all QNAME subfields
-    zip_generate_and_compress_subfields (vb_, &vb->qname_mapper);
-
-    // generate & write b250 data for all OPTIONAL subfields
-    for (unsigned did_i=dt_fields[DT_SAM].num_fields; did_i < vb->num_dict_ids; did_i++) {
-                
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
-        
-        if (ctx->mtf_i.len && ctx->dict_section_type == SEC_SAM_OPTNL_SF_DICT) {
-            zip_generate_b250_section (vb_, ctx);
-            zfile_compress_b250_data (vb_, ctx, COMP_BZ2);
-        }
-    }
-
     COMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, COMP_LZMA, false);
     COMPRESS_DATA_SECTION (SEC_SAM_MD_DATA, md_data, char, COMP_BZ2, true);
     

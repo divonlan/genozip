@@ -45,7 +45,7 @@ static bool piz_vcf_reconstruct_special_info_subfields (VBlock *vb, uint8_t did_
 
     return true; // proceed with normal reconstruction
 }
-        
+/*        
 static void piz_vcf_reconstruct_ref_alt (VBlockVCF *vb, uint32_t txt_line_i)
 {
     DECLARE_SNIP;
@@ -61,7 +61,7 @@ static void piz_vcf_reconstruct_ref_alt (VBlockVCF *vb, uint32_t txt_line_i)
 
     RECONSTRUCT ("\t", 1); 
 }      
-
+*/
 static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i, 
                                         bool *has_13) // out: original vcf line ended with Windows-style \r\n
 {
@@ -78,9 +78,8 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
         line_included = false;
 
     RECONSTRUCT_ID (VCF_ID, &vb->id_numeric_data, &vb->next_id_numeric, NULL, true); 
-    
-    piz_vcf_reconstruct_ref_alt (vb, txt_line_i);
 
+    RECONSTRUCT_FROM_DICT (VCF_REFALT, true);
     RECONSTRUCT_FROM_DICT (VCF_QUAL, true);
     RECONSTRUCT_FROM_DICT (VCF_FILTER, true);
 
@@ -89,7 +88,7 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
                             txt_line_i, has_13);
     RECONSTRUCT1 ("\t");
 
-    if (vb->has_genotype_data || vb->has_genotype_data) {
+    if (vb->mtf_ctx[VCF_FORMAT].word_list.len) {
         if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
         else              RECONSTRUCT_FROM_DICT (VCF_FORMAT, true);
     }
@@ -649,10 +648,9 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
     unsigned section_i=1;
     
-    UNCOMPRESS_FIELDS; // uncompress the 8 fields (CHROM to FORMAT)    
-    UNCOMPRESS_SUBFIELDS(vb->num_info_subfields, SEC_VCF_INFO_SF_B250);
+    piz_uncompress_all_b250_local ((VBlockP)vb, &section_i);
+
     UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
-    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, true);    
     UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, char, true);
 
     if (flag_drop_genotypes) return; // if --drop-genotypes was requested - no need to uncompress the following sections
@@ -793,11 +791,13 @@ void piz_vcf_read_one_vb (VBlock *vb_)
         piz_map_iname_subfields();
     }
 
-    READ_FIELDS; // CHROM to FORMAT
-    READ_SUBFIELDS (vb->num_info_subfields, SEC_VCF_INFO_SF_B250); // INFO subfields
+    //READ_FIELDS; // CHROM to FORMAT
+    //READ_SUBFIELDS (vb->num_info_subfields, SEC_VCF_INFO_SF_B250); // INFO subfields
+
+    piz_read_all_b250_local (vb_, &sl);
 
     READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // optional - POS data that failed delta (introduced in v5)
-    READ_DATA_SECTION (SEC_SEQ_DATA, true);        // optional - if any REF+ALT exists where not both REF and ALT are length 1
+    //READ_DATA_SECTION (SEC_SEQ_DATA, true);        // optional - if any REF+ALT exists where not both REF and ALT are length 1
     READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // optional - numeric data of the ID field (the non-numeric part is in SEC_ID_B250) (introduced in v5)
         
     // read the sample data

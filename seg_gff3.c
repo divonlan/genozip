@@ -54,14 +54,12 @@ void seg_gff3_array_of_struct_ctxs (VBlockGFF3 *vb, DictIdType dict_id, unsigned
 {
     ASSERT (num_items <= MAX_AoS_ITEMS, "seg_gff3_create_ctx_sub_array: num_items=%u expected to be at most %u", num_items, MAX_AoS_ITEMS);
 
-    *enst_ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, &vb->num_info_subfields, 
-                                        (DictIdType)dict_id_ENSTid, SEC_GFF3_ATTRS_SF_DICT); 
+    *enst_ctx = mtf_get_ctx_by_dict_id (vb, &vb->num_info_subfields, (DictIdType)dict_id_ENSTid); 
 
     // create new contexts - they are guaranteed to be sequential in mtf_ctx
     for (unsigned i=0; i < num_items; i++) {
         dict_id.id[1] = '0' + i; // change the 2nd char (the first two chars are used for hashing in dict_id_to_did_i_map)
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, &vb->num_info_subfields, 
-                                                  dict_id, SEC_GFF3_ATTRS_SF_DICT); 
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, &vb->num_info_subfields, dict_id); 
 
         if (i==0) *ctx_array = ctx;
         
@@ -105,10 +103,10 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
             if (!item_len) goto badly_formatted;
 
             if (!is_last_item)
-                seg_one_subfield ((VBlockP)vb, snip, item_len, ctxs[item_i].dict_id, SEC_GFF3_ATTRS_SF_B250, item_len+1); // include the separating space after
+                seg_one_subfield ((VBlockP)vb, snip, item_len, ctxs[item_i].dict_id, item_len+1); // include the separating space after
             else {
                 is_last_entry = (snip_len - item_len == 0);
-                seg_id_field ((VBlockP)vb, &vb->enst_data, (DictIdType)dict_id_ENSTid, SEC_GFF3_ATTRS_SF_B250, SEC_ENST_DATA, snip, item_len, false, !is_last_entry);
+                seg_id_field ((VBlockP)vb, &vb->enst_data, (DictIdType)dict_id_ENSTid, snip, item_len, false, !is_last_entry);
             }
     
             snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
@@ -126,7 +124,7 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
     str[0] = AOS_NUM_ENTRIES;
     str_int (num_entries, str+1, &str_len);
 
-    seg_one_subfield ((VBlockP)vb, str, str_len+1, subfield_ctx->dict_id, SEC_GFF3_ATTRS_SF_B250, 0); 
+    seg_one_subfield ((VBlockP)vb, str, str_len+1, subfield_ctx->dict_id, 0); 
 
     return;
 
@@ -140,7 +138,7 @@ badly_formatted:
     vb->enst_data.len = saved_enst_data_len;
 
     // now save the entire snip in the dictionary
-    seg_one_subfield ((VBlockP)vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, SEC_GFF3_ATTRS_SF_B250, saved_snip_len); 
+    seg_one_subfield ((VBlockP)vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
 }                           
 
 static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip)
@@ -157,8 +155,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a NUMERICAL_ID_DATA section
     if (ctx->dict_id.num == dict_id_ATTR_Dbxref) {
-        seg_id_field (vb_, &vb->dbxref_numeric_data, ctx->dict_id, SEC_GFF3_ATTRS_SF_B250, SEC_NUMERIC_ID_DATA,
-                      *this_value, *this_value_len, false, false); // discard the const as seg_id_field modifies
+        seg_id_field (vb_, &vb->dbxref_numeric_data, ctx->dict_id, *this_value, *this_value_len, false, false); // discard the const as seg_id_field modifies
 
         return false; // do not add to dictionary/b250 - we already did it
     }
@@ -179,7 +176,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         ctx->dict_id.num == dict_id_ATTR_Reference_seq ||
         ctx->dict_id.num == dict_id_ATTR_ancestral_allele) {
 
-        seg_add_to_data_buf (vb_, &vb->seq_data, *this_value, *this_value_len, GVF_SEQ, *this_value_len);
+        seg_add_to_data_buf (vb_, &vb->seq_data, *this_value, *this_value_len, GVF_SEQ, *this_value_len, "SEQ");
         return false; // do not add to dictionary/b250 - we already did it
     }
 

@@ -52,6 +52,8 @@ extern void piz_me23_uncompress_one_vb (VBlockP vb);
 // utilities for use by piz_*_read_one_vb
 // ----------------------------------------------
 
+extern void piz_read_all_b250_local (VBlockP vb, SectionListEntryP *next_sl);
+
 #define PREPARE_TO_READ(vbblock_type,max_sections,sec_type_vb_header)  \
     START_TIMER; \
     vbblock_type *vb = (vbblock_type *)vb_; \
@@ -74,15 +76,6 @@ extern void piz_me23_uncompress_one_vb (VBlockP vb);
 }
 #define READ_DATA_SECTION(sec,is_optional) READ_SECTION((sec), SectionHeader, (is_optional))
 
-#define READ_FIELDS { for (int f=0; f < DTFZ(num_fields); f++) \
-                          READ_SECTION (FIELD_TO_B250_SECTION(z_file->data_type, f), SectionHeaderBase250, false); }
-
-#define READ_SUBFIELDS(num,sec_b250) { \
-    num = sections_count_sec_type (vb->vblock_i, (sec_b250)); \
-    for (uint8_t sf_i=0; sf_i < (num); sf_i++) \
-        READ_SECTION (sec_b250, SectionHeaderBase250, false);  \
-}
-
 #define READ_DONE \
     COPY_TIMER (vb->profile.piz_read_one_vb); \
     vb->ready_to_dispatch = true; /* all good */ 
@@ -91,7 +84,9 @@ extern void piz_me23_uncompress_one_vb (VBlockP vb);
 // utilities for use by piz_*_uncompress_all_sections
 // --------------------------------------------------
 
-extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
+extern void piz_uncompress_all_b250_local (VBlockP vb, uint32_t *section_i);
+//extern void piz_map_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
+extern void piz_map_compound_field (VBlockP vb, bool (*predicate)(DictIdType), SubfieldMapperP mapper);
 
 #define UNCOMPRESS_HEADER_AND_FIELDS(vb_block_type,also_uncompress_fields) \
     START_TIMER;\
@@ -103,25 +98,8 @@ extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_se
     vb->vb_data_size     = BGEN32 (header->vb_data_size);    \
     vb->longest_line_len = BGEN32 (header->longest_line_len);\
     if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ \
-    unsigned section_i=1;\
-    if (also_uncompress_fields) UNCOMPRESS_FIELDS;
-
-#define UNCOMPRESS_FIELDS { \
-    for (int f=0 ; f < DTF(num_fields) ; f++) { \
-        SectionType b250_sec = FIELD_TO_B250_SECTION(vb->data_type, f); \
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]); \
-        zfile_uncompress_section ((VBlockP)vb, header, &vb->mtf_ctx[f].b250, "mtf_ctx.b250", b250_sec);\
-    }\
-}
-
-#define UNCOMPRESS_SUBFIELDS(num_subfields,sec_b250) {\
-    for (uint8_t sf_i=0; sf_i < num_subfields ; sf_i++) {\
-        SectionHeaderBase250 *header = (SectionHeaderBase250 *)(vb->z_data.data + section_index[section_i++]); \
-        if (zfile_is_skip_section (vb, (sec_b250), header->dict_id)) continue; \
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, header->dict_id, (sec_b250)-1); \
-        zfile_uncompress_section ((VBlockP)vb, header, &ctx->b250, "mtf_ctx.b250", (sec_b250)); \
-    } \
-}
+    uint32_t section_i=1;\
+    if (also_uncompress_fields) piz_uncompress_all_b250_local (vb_, &section_i);
 
 #define UNCOMPRESS_DATA_SECTION(sec, vb_buf_name, type, is_optional) { \
     SectionHeader *data_header = (SectionHeader *)(vb->z_data.data + section_index[section_i]); \
@@ -140,6 +118,8 @@ extern void piz_uncompress_compound_field (VBlockP vb, SectionType field_b250_se
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb
 // ----------------------------------------------
+
+extern uint32_t piz_reconstruct_from_dict (VBlockP vb, uint8_t did_i, bool add_tab, uint32_t txt_line_i);
 
 extern void piz_reconstruct_compound_field (VBlockP vb, SubfieldMapperP mapper, const char *separator, unsigned separator_len, 
                                             const char *template, unsigned template_len, uint32_t txt_line_i);
@@ -172,11 +152,11 @@ typedef struct PizSubfieldMapper {
 #define RECONSTRUCT1(s) buf_add (&vb->txt_data, (s), 1)
 #define RECONSTRUCT_TABBED(s,len) { RECONSTRUCT((s), (len)); RECONSTRUCT ("\t", 1); }
 
-#define RECONSTRUCT_FROM_DICT(did_i,add_tab)  /* we don't put in a {} so that caller can use index=RECONSTRUCT_FROM_DICT() */ \
-    LOAD_SNIP(did_i) \
+#define RECONSTRUCT_FROM_DICT(did_i,add_tab) piz_reconstruct_from_dict ((VBlockP)vb, (did_i), (add_tab), txt_line_i)
+/*    LOAD_SNIP(did_i)  we don't put in a {} so that caller can use index=RECONSTRUCT_FROM_DICT() 
     RECONSTRUCT (snip, snip_len); \
     if (add_tab) RECONSTRUCT ("\t", 1); 
-
+*/
 #define RECONSTRUCT_FROM_DICT_POS(did_i,last_pos,update_last_pos,last_delta,add_tab) { \
     if ((did_i) != DID_I_NONE) LOAD_SNIP(did_i);\
     char pos_str[30];\

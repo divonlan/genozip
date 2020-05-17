@@ -112,20 +112,17 @@ typedef enum { ME23_CHROM, ME23_POS, ME23_ID, // same order as VCF
 typedef struct DataTypeFields {
     unsigned num_fields, num_fields_ext;
     int chrom, pos, info; // the fields, or -1 if this data type doesn't have them
-    SectionType first_dict_sec;
-    SectionType info_sf_dict_sec;
-    SectionType chrom_dict_sec; // used by --regions for subsetting
     char *names[MAX_NUM_FIELDS_PER_DATA_TYPE]; // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed (names are not longer than 8=DICT_ID_LEN as the code assumes it)
 } DataTypeFields;
 
 #define DATA_TYPE_FIELDS { \
-/* num_fields       num_fields_ext       chrom       pos         info        first_dict_sec       info_sf_dict_sec        chrom_dict_sec       names (including extend fields)                                                                                    */ \
-  {NUM_VCF_FIELDS,  NUM_VCF_FIELDS_EXT,  VCF_CHROM,  VCF_POS,    VCF_INFO,   SEC_CHROM_DICT,      SEC_VCF_INFO_SF_DICT,   SEC_CHROM_DICT,      { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "GT" } }, \
-  {NUM_SAM_FIELDS,  NUM_SAM_FIELDS_EXT,  SAM_RNAME,  SAM_POS,    -1,         SEC_SAM_QNAME_DICT,  -1,                     SEC_SAM_RNAME_DICT,  { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL", "SEQ", "QUAL", "BD", "BI", "MD" } }, \
-  {NUM_FAST_FIELDS, NUM_FAST_FIELDS_EXT, -1,         -1,         -1,         SEC_FAST_DESC_DICT,  -1,                     -1,                  { "DESC", "LINEMETA", "SEQ", "QUAL" } }, \
-  {NUM_FAST_FIELDS, NUM_FAST_FIELDS_EXT, -1,         -1,         -1,         SEC_FAST_DESC_DICT,  -1,                     -1,                  { "DESC", "LINEMETA", "SEQ", "COMMENT" } }, \
-  {NUM_GFF3_FIELDS, NUM_GFF3_FIELDS_EXT, GFF3_SEQID, GFF3_START, GFF3_ATTRS, SEC_GFF3_SEQID_DICT, SEC_GFF3_ATTRS_SF_DICT, SEC_GFF3_SEQID_DICT, { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "SEQ" } }, \
-  {NUM_ME23_FIELDS, NUM_ME23_FIELDS_EXT, ME23_CHROM, ME23_POS,   -1,         SEC_CHROM_DICT,      -1,                     SEC_CHROM_DICT,      { "CHROM", "POS", "ID", "HT" } }, \
+/* num_fields       num_fields_ext       chrom       pos         info        names (including extend fields)                                                                                    */ \
+  {NUM_VCF_FIELDS,  NUM_VCF_FIELDS_EXT,  VCF_CHROM,  VCF_POS,    VCF_INFO,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "GT" } }, \
+  {NUM_SAM_FIELDS,  NUM_SAM_FIELDS_EXT,  SAM_RNAME,  SAM_POS,    -1,         { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL", "SEQ", "QUAL", "BD", "BI", "MD" } }, \
+  {NUM_FAST_FIELDS, NUM_FAST_FIELDS_EXT, -1,         -1,         -1,         { "DESC", "LINEMETA", "SEQ", "QUAL" } }, \
+  {NUM_FAST_FIELDS, NUM_FAST_FIELDS_EXT, -1,         -1,         -1,         { "DESC", "LINEMETA", "SEQ", "COMMENT" } }, \
+  {NUM_GFF3_FIELDS, NUM_GFF3_FIELDS_EXT, GFF3_SEQID, GFF3_START, GFF3_ATTRS, { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "SEQ" } }, \
+  {NUM_ME23_FIELDS, NUM_ME23_FIELDS_EXT, ME23_CHROM, ME23_POS,   -1,         { "CHROM", "POS", "ID", "HT" } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)

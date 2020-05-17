@@ -121,12 +121,10 @@ static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsign
         seg_add_to_random_pos_data ((VBlockP)vb, pos, pos_len, pos_len+1, field_name);
 
         // nm : we store in the same dictionary as the Optional subfield NM
-        seg_one_subfield ((VBlockP)vb, nm, nm_len, (DictIdType)dict_id_OPTION_NM, 
-                          SEC_SAM_OPTNL_SF_B250, nm_len+1);
+        seg_one_subfield ((VBlockP)vb, nm, nm_len, (DictIdType)dict_id_OPTION_NM, nm_len+1);
 
         // strand : we store in in the STRAND dictionary (used by SA, OA, XA)
-        seg_one_subfield ((VBlockP)vb, strand, 1, (DictIdType)dict_id_OPTION_STRAND, 
-                          SEC_SAM_OPTNL_SF_B250, 2);
+        seg_one_subfield ((VBlockP)vb, strand, 1, (DictIdType)dict_id_OPTION_STRAND, 2);
 
         // rname, cigar and mapq: we store in the same dictionary as the primary fields
         seg_one_field ((VBlockP)vb, rname, rname_len, SAM_RNAME, rname_len+1);
@@ -168,12 +166,10 @@ static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned fie
         seg_add_to_random_pos_data ((VBlockP)vb, pos+1, pos_len-1, pos_len, "XA"); // one less for the strand, one more for the ,
 
         // strand
-        seg_one_subfield ((VBlockP)vb, pos, 1, (DictIdType)dict_id_OPTION_STRAND, 
-                          SEC_SAM_OPTNL_SF_B250, 1);
+        seg_one_subfield ((VBlockP)vb, pos, 1, (DictIdType)dict_id_OPTION_STRAND, 1);
 
         // nm : we store in the same dictionary as the Optional subfield NM
-        seg_one_subfield ((VBlockP)vb, nm, nm_len, (DictIdType)dict_id_OPTION_NM, 
-                          SEC_SAM_OPTNL_SF_B250, nm_len+1);
+        seg_one_subfield ((VBlockP)vb, nm, nm_len, (DictIdType)dict_id_OPTION_NM, nm_len+1);
 
         // rname and cigar: we store in the same dictionary as the primary fields
         seg_one_field (vb, rname, rname_len, SAM_RNAME, rname_len+1);
@@ -269,12 +265,12 @@ static inline void seg_sam_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictIdTy
         new_snip[0] = '*'; 
         str_int (dl->seq_len-as, &new_snip[1], &delta_len);
 
-        seg_one_subfield ((VBlock *)vb, new_snip, delta_len+1, dict_id, SEC_SAM_OPTNL_SF_B250, snip_len + 1); 
+        seg_one_subfield ((VBlock *)vb, new_snip, delta_len+1, dict_id, snip_len + 1); 
     }
 
     // not possible - just store unmodified
     else
-        seg_one_subfield ((VBlock *)vb, snip, snip_len, dict_id, SEC_SAM_OPTNL_SF_B250, snip_len + 1); // +1 for \t
+        seg_one_subfield ((VBlock *)vb, snip, snip_len, dict_id, snip_len + 1); // +1 for \t
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -304,7 +300,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
     if (repeats) {
         char repeats_str[20];
         sprintf (repeats_str, "%c%u", -1, repeats); // (char)-1 to indicate repeats (invalid char per SAM specification, so it cannot appear organically)
-        seg_one_subfield ((VBlock *)vb, repeats_str, strlen (repeats_str), dict_id, SEC_SAM_OPTNL_SF_B250, 1 /* \t */); 
+        seg_one_subfield ((VBlock *)vb, repeats_str, strlen (repeats_str), dict_id, 1 /* \t */); 
     }
 
     else { // non-repeating fields
@@ -327,7 +323,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             seg_add_to_data_buf ((VBlockP)vb, &vb->md_data, 
                                  md_is_changeable ? new_md : value, 
                                  md_is_changeable ? new_md_len : value_len,
-                                 SAM_MD, value_len+1);
+                                 SAM_MD, value_len+1, "MD");
         }
 
         // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
@@ -359,7 +355,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
         // we encode as a delta.
         else if (dict_id.num == dict_id_OPTION_mc) {
-            uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, dict_id, SEC_SAM_OPTNL_SF_DICT)->did_i;
+            uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb, NULL, dict_id)->did_i;
 
             seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, mc_did_i, value, value_len, "mc:i", true);
         }
@@ -387,8 +383,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         }
         // All other subfields - have their own dictionary
         else        
-            seg_one_subfield ((VBlock *)vb, value, value_len, dict_id, SEC_SAM_OPTNL_SF_B250,
-                             (value_len) + 1); // +1 for \t
+            seg_one_subfield ((VBlock *)vb, value, value_len, dict_id, (value_len) + 1); // +1 for \t
     }
 }
 
@@ -489,8 +484,7 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "QNAME");
     
     seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[SAM_QNAME], field_start, field_len, &vb->qname_mapper,
-                        dict_id_sam_qname_sf (dict_id_make ("Q0NAME", 6)), false, false,
-                        SEC_SAM_QNAME_B250, SEC_SAM_QNAME_SF_B250);
+                        dict_id_sam_qname_sf (dict_id_make ("Q0NAME", 6)), false, false);
 
     // FLAG
     field_start = next_field;

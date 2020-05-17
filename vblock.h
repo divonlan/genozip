@@ -268,7 +268,6 @@ typedef struct VBlockSAM {
     Buffer md_data, bd_data, bi_data;    // data for optional field MD, BD, BI;
 
     // PIZ-only stuff
-    int8_t num_optional_subfield_b250s;  // PIZ: total number of optional subfield b250s in this VB
     Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
     Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
     uint32_t next_qual, next_md, next_bd, next_bi;   // PIZ only: indeces into random_pos_data, md_data, bd_data, bi_data
