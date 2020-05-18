@@ -307,6 +307,16 @@ static const char *help_genocat[] = {
     "   -L --license      Show the license terms and conditions for this product",
     "",
     "   -V --version      Display version number",
+    "",
+    "Tip regarding using genozip files in a pipeline:",
+    "",
+    "   Option 1: For tools that support input redirection - use a regular pipe. Example:",
+    "             genocat myfile.vcf.genozip | bcftools view -",
+    "",
+    "   Option 2: For tools that don't support input redirection - use a named pipe. Example:",
+    "             mkfifo mypipe.vcf",
+    "             genocat myfile.vcf.genozip > mypipe.vcf &",
+    "             othertool mypipe.vcf",
 };
 
 static const char *help_footer[] = {
