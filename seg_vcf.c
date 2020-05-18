@@ -77,7 +77,7 @@ static void seg_vcf_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
             ASSSEG (dict_id_is_vcf_format_sf (subfield), field_start,
                     "Error: string %.*s in the FORMAT field is not a legal subfield", DICT_ID_LEN, subfield.id);
 
-            MtfContext *ctx = mtf_get_ctx_by_dict_id_sf (vb, &vb->num_format_subfields, subfield);
+            MtfContext *ctx = mtf_get_ctx_sf (vb, &vb->num_format_subfields, subfield);
             
             format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
         } 

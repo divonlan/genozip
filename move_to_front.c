@@ -557,7 +557,7 @@ uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
-MtfContext *mtf_get_ctx_by_dict_id_if_not_found_by_inline (
+MtfContext *mtf_get_ctx_if_not_found_by_inline (
     MtfContext *mtf_ctx /* an array */, 
     uint8_t *dict_id_to_did_i_map, 
     uint8_t did_i,
@@ -588,7 +588,7 @@ MtfContext *mtf_get_ctx_by_dict_id_if_not_found_by_inline (
     if (num_subfields) { 
         (*num_subfields)++;
         ASSERT (*num_subfields+1 <= MAX_SUBFIELDS, 
-                "Error in mtf_get_ctx_by_dict_id: number of dictionaries is greater than MAX_SUBFIELDS=%u, when creating ctx for %s", MAX_SUBFIELDS, err_dict_id (dict_id));
+                "Error in mtf_get_ctx: number of dictionaries is greater than MAX_SUBFIELDS=%u, when creating ctx for %s", MAX_SUBFIELDS, err_dict_id (dict_id));
     }
 
 done:
@@ -644,7 +644,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
-    MtfContext *zf_ctx = mtf_get_ctx_by_dict_id_do (z_file->mtf_ctx, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id);
+    MtfContext *zf_ctx = mtf_get_ctx_do (z_file->mtf_ctx, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id);
     
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment

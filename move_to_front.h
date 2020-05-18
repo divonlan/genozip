@@ -121,20 +121,20 @@ extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char *
 #define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
 
-extern MtfContext *mtf_get_ctx_by_dict_id_if_not_found_by_inline (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id);
+extern MtfContext *mtf_get_ctx_if_not_found_by_inline (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-static inline MtfContext *mtf_get_ctx_by_dict_id_do (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id)
+#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, (dict_id))
+#define mtf_get_ctx_sf(vb,num_subfields,dict_id) mtf_get_ctx_do (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (num_subfields), (dict_id))
+static inline MtfContext *mtf_get_ctx_do (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id)
 {
     uint8_t did_i = dict_id_to_did_i_map[dict_id.map_key];
     if (did_i != DID_I_NONE && mtf_ctx[did_i].dict_id.num == dict_id.num) 
         return &mtf_ctx[did_i];
     else    
-        return mtf_get_ctx_by_dict_id_if_not_found_by_inline (mtf_ctx, dict_id_to_did_i_map, did_i, num_dict_ids, num_subfields, dict_id);
+        return mtf_get_ctx_if_not_found_by_inline (mtf_ctx, dict_id_to_did_i_map, did_i, num_dict_ids, num_subfields, dict_id);
 }
 
-#define mtf_get_ctx_by_dict_id(vb,dict_id) mtf_get_ctx_by_dict_id_do (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, (dict_id))
-#define mtf_get_ctx_by_dict_id_sf(vb,num_subfields,dict_id) mtf_get_ctx_by_dict_id_do (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (num_subfields), (dict_id))
 extern uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id);
 
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);

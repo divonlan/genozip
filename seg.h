@@ -104,7 +104,7 @@ extern const char *seg_me23_data_line (VBlockP vb_, const char *field_start_line
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_num); \
+    MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_num); \
     ASSERT (ctx->did_i == extended_field, "Error: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 }

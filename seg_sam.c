@@ -303,7 +303,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             if (md_is_changeable) 
                 md_is_changeable = seg_sam_get_shortened_MD (value, value_len, dl->seq_len, new_md, &new_md_len);
 
-            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+            MtfContext *ctx = mtf_get_ctx (vb, dict_id);
             seg_add_to_local_text ((VBlockP)vb, ctx, 
                                  md_is_changeable ? new_md : value, 
                                  md_is_changeable ? new_md_len : value_len,
@@ -319,7 +319,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             dl->bd_data_start = value - vb->txt_data.data;
             dl->bd_data_len   = value_len;
 
-            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+            MtfContext *ctx = mtf_get_ctx (vb, dict_id);
             ctx->local.len += value_len;
             ctx->txt_len   += value_len + 1; // +1 for \t
         }
@@ -332,7 +332,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             dl->bi_data_start = value - vb->txt_data.data;
             dl->bi_data_len   = value_len;
 
-            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+            MtfContext *ctx = mtf_get_ctx (vb, dict_id);
             ctx->local.len += value_len;
             ctx->txt_len   += value_len + 1; // +1 for \t
         }
@@ -345,7 +345,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
         // we encode as a delta.
         else if (dict_id.num == dict_id_OPTION_mc) {
-            uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb, dict_id)->did_i;
+            uint8_t mc_did_i = mtf_get_ctx (vb, dict_id)->did_i;
 
             seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, mc_did_i, value, value_len, "mc:i", true);
         }

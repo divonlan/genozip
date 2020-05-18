@@ -65,7 +65,7 @@ static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t di
         dict_id.num == dict_id_ATTR_ancestral_allele) {
         
         // note: all three are stored together in dict_id_ATTR_Variant_seq as they are correlated
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_ATTR_Variant_seq); 
+        MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_ATTR_Variant_seq); 
         RECONSTRUCT_FROM_BUF (ctx->local, ctx->next_local, ctx->name, "", 0);
         return false;
     }

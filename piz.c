@@ -385,14 +385,14 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
         // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
         if (section_type_is_b250 (header->section_type)) {
             SectionHeaderB250 *header_b250 = (SectionHeaderB250 *)header;
-            zfile_uncompress_section (vb, header_b250, &mtf_get_ctx_by_dict_id (vb, header_b250->dict_id)->b250, 
+            zfile_uncompress_section (vb, header_b250, &mtf_get_ctx (vb, header_b250->dict_id)->b250, 
                                       "mtf_ctx.b250", header->section_type); // type is SEC_B250 starting v5, but potentially other VCF B250 in v1-v4
             section_i++;
         }    
 
         else if (header->section_type == SEC_LOCAL) {
             SectionHeaderLocal *header_local = (SectionHeaderLocal *)header;
-            zfile_uncompress_section (vb, header_local, &mtf_get_ctx_by_dict_id (vb, header_local->dict_id)->local, 
+            zfile_uncompress_section (vb, header_local, &mtf_get_ctx (vb, header_local->dict_id)->local, 
                                       "mtf_ctx.local", SEC_LOCAL); 
             section_i++;
         }    

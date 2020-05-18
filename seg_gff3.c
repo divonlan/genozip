@@ -44,12 +44,12 @@ void seg_gff3_array_of_struct_ctxs (VBlockGFF3 *vb, DictIdType dict_id, unsigned
 {
     ASSERT (num_items <= MAX_AoS_ITEMS, "seg_gff3_create_ctx_sub_array: num_items=%u expected to be at most %u", num_items, MAX_AoS_ITEMS);
 
-    *enst_ctx = mtf_get_ctx_by_dict_id_sf (vb, &vb->num_info_subfields, (DictIdType)dict_id_ENSTid); 
+    *enst_ctx = mtf_get_ctx_sf (vb, &vb->num_info_subfields, (DictIdType)dict_id_ENSTid); 
 
     // create new contexts - they are guaranteed to be sequential in mtf_ctx
     for (unsigned i=0; i < num_items; i++) {
         dict_id.id[1] = '0' + i; // change the 2nd char (the first two chars are used for hashing in dict_id_to_did_i_map)
-        MtfContext *ctx = mtf_get_ctx_by_dict_id_sf (vb, &vb->num_info_subfields, dict_id); 
+        MtfContext *ctx = mtf_get_ctx_sf (vb, &vb->num_info_subfields, dict_id); 
 
         if (i==0) *ctx_array = ctx;
         
@@ -165,7 +165,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         ctx->dict_id.num == dict_id_ATTR_ancestral_allele) {
 
         // note: all three are stored together in dict_id_ATTR_Variant_seq as they are correlated
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_ATTR_Variant_seq); 
+        MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_ATTR_Variant_seq); 
 
         seg_add_to_local_text (vb_, ctx, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it

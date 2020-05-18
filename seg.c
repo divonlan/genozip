@@ -87,7 +87,7 @@ static inline uint32_t seg_one_snip_do (VBlock *vb, const char *str, unsigned le
 // returns the node index
 uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, DictIdType dict_id, uint32_t add_bytes)
 {
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+    MtfContext *ctx = mtf_get_ctx (vb, dict_id);
     return seg_one_snip_do (vb, str, len, ctx, add_bytes, NULL);
 }
 
@@ -342,7 +342,7 @@ void seg_id_field (VBlock *vb, DictIdType dict_id, const char *id_snip, unsigned
 
     // added to local if we have a trailing number
     if (num_digits) {
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+        MtfContext *ctx = mtf_get_ctx (vb, dict_id);
         uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
         
         buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, sizeof(uint32_t));
@@ -486,7 +486,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                 DictIdType dict_id = dict_id_type_1 (dict_id_make (this_name, this_name_len));
 
                 // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
-                MtfContext *ctx = mtf_get_ctx_by_dict_id_sf (vb, num_info_subfields, dict_id);
+                MtfContext *ctx = mtf_get_ctx_sf (vb, num_info_subfields, dict_id);
                 iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
 
                 // allocate memory if needed
@@ -597,7 +597,7 @@ void seg_compound_field (VBlock *vb,
             if (mapper->num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
                 sf_dict_id.id[1] = (sf_i <= 9) ? (sf_i + '0') : (sf_i-10 + 'a');
 
-                sf_ctx = mtf_get_ctx_by_dict_id (vb, sf_dict_id);
+                sf_ctx = mtf_get_ctx (vb, sf_dict_id);
                 mapper->did_i[sf_i] = sf_ctx->did_i;
                 mapper->num_subfields++;
             }

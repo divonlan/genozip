@@ -99,7 +99,7 @@ static inline void piz_sam_reconstruct_AS (VBlockSAM *vb, const char *snip, unsi
 
 static inline void piz_sam_reconstruct_MD (VBlockSAM *vb, uint32_t txt_line_i, uint32_t cigar_seq_len)
 {
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_OPTION_MD);
+    MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_OPTION_MD);
 
     DECLARE_SNIP;
     LOAD_SNIP_FROM_BUF (ctx->local, ctx->next_local, ctx->name);
@@ -179,7 +179,7 @@ static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t tx
     GET_ADD_SNIP (SAM_RNAME, ","); // rname - consume but don't output - shares the same dictionary as main RNAME
 
     // strand
-    MtfContext *strand_ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_OPTION_STRAND);
+    MtfContext *strand_ctx = mtf_get_ctx (vb, (DictIdType)dict_id_OPTION_STRAND);
     mtf_get_next_snip ((VBlockP)vb, strand_ctx, NULL, &snip, &snip_len, txt_line_i);\
 
     if (is_xa) RECONSTRUCT (snip, 1); // XA: add strand concatenated with pos
@@ -194,7 +194,7 @@ static void piz_sam_reconstruct_SA_OA_XA (VBlockSAM *vb, bool is_xa, uint32_t tx
     if (!is_xa) GET_ADD_SNIP (SAM_MAPQ, ","); // SA and OA only: mapq
 
     // nm
-    MtfContext *nm_ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_OPTION_NM);
+    MtfContext *nm_ctx = mtf_get_ctx (vb, (DictIdType)dict_id_OPTION_NM);
     GET_ADD_SNIP (nm_ctx->did_i, ";");
 }
 
