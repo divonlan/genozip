@@ -34,6 +34,10 @@
 
 // SAM file variations
 #define SAM_           ".sam"
+#define SAM_GZ_        ".sam.gz"
+#define SAM_BGZ_       ".sam.bgz"
+#define SAM_BZ2_       ".sam.bz2"
+#define SAM_XZ_        ".sam.xz"
 #define BAM_           ".bam"
 #define SAM_GENOZIP_   ".sam" GENOZIP_EXT
 
@@ -99,7 +103,7 @@ typedef enum {TXT_FILE, Z_FILE} FileSupertype;
 
 typedef enum      { UNKNOWN_FILE_TYPE, 
                     VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, BCF, BCF_GZ, BCF_BGZ, VCF_GENOZIP,  
-                    SAM, BAM,                             SAM_GENOZIP,
+                    SAM, SAM_GZ, SAM_BGZ, SAM_BZ2, SAM_XZ, BAM,                  SAM_GENOZIP,
                     FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
                     FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,    FQ_GENOZIP,
                     FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ, FASTA_GENOZIP,
@@ -114,7 +118,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
-                   SAM_, BAM_,                               SAM_GENOZIP_, \
+                   SAM_, SAM_GZ_, SAM_BGZ_, SAM_BZ2_, SAM_XZ_, BAM_,                    SAM_GENOZIP_, \
                    FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_, \
                    FQ_,    FQ_GZ_,    FQ_BZ2_,    FQ_XZ_,    FQ_GENOZIP_, \
                    FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FASTA_GENOZIP_,\
@@ -141,7 +145,9 @@ typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */,
 #define TXT_IN_FT_BY_DT  { { { VCF,       COMP_PLN, VCF_GENOZIP   }, { VCF_GZ,   COMP_GZ,  VCF_GENOZIP   }, { VCF_BGZ, COMP_GZ,  VCF_GENOZIP },\
                              { VCF_BZ2,   COMP_BZ2, VCF_GENOZIP   }, { VCF_XZ,   COMP_XZ,  VCF_GENOZIP   },\
                              { BCF,       COMP_BCF, VCF_GENOZIP   }, { BCF_GZ,   COMP_BCF, VCF_GENOZIP   }, { BCF_BGZ, COMP_BCF, VCF_GENOZIP }, {0, 0, 0} },\
-                           { { SAM,       COMP_PLN, SAM_GENOZIP   }, { BAM,      COMP_BAM, SAM_GENOZIP   }, { 0, 0, 0 }, },\
+                           { { SAM,       COMP_PLN, SAM_GENOZIP   }, { SAM_GZ,   COMP_GZ,  SAM_GENOZIP   }, { SAM_BGZ, COMP_GZ,  SAM_GENOZIP },\
+                             { SAM_BZ2,   COMP_BZ2, SAM_GENOZIP   }, { SAM_XZ,   COMP_XZ,  SAM_GENOZIP   },\
+                             { BAM,       COMP_BAM, SAM_GENOZIP   },                                        { 0, 0, 0 }, },\
                            { { FASTQ,     COMP_PLN, FASTQ_GENOZIP }, { FASTQ_GZ, COMP_GZ,  FASTQ_GENOZIP },\
                              { FASTQ_BZ2, COMP_BZ2, FASTQ_GENOZIP }, { FASTQ_XZ, COMP_XZ,  FASTQ_GENOZIP },\
                              { FQ,        COMP_PLN, FQ_GENOZIP    }, { FQ_GZ,    COMP_GZ,  FQ_GENOZIP    },\
@@ -165,19 +171,19 @@ typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */,
 // plain file MUST appear first on the list - this will be the default output when redirecting
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
 #define TXT_OUT_FT_BY_DT { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   \
-                           { SAM,  BAM, 0 },                      \
-                           { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },\
+                           { SAM,  SAM_GZ,  BAM, 0 },   \
+                           { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },     \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
-                           { GVF, GVF_GZ, 0 },\
+                           { GVF, GVF_GZ, 0 },                    \
                            { ME23, ME23_ZIP, 0 } }                        
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default genozip file
-#define Z_FT_BY_DT { { VCF_GENOZIP, 0 }, \
-                     { SAM_GENOZIP, 0 }, \
-                     { FASTQ_GENOZIP, FQ_GENOZIP, 0 }, \
+#define Z_FT_BY_DT { { VCF_GENOZIP, 0  },               \
+                     { SAM_GENOZIP, 0  },               \
+                     { FASTQ_GENOZIP, FQ_GENOZIP, 0 },  \
                      { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, 0 }, \
-                     { GVF_GENOZIP, 0 }, \
+                     { GVF_GENOZIP, 0  },               \
                      { ME23_GENOZIP, 0 } } 
 
 typedef const char *FileMode;

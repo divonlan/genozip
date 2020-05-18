@@ -210,26 +210,26 @@ void stats_show_sections (void)
         else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
         else if (i==OVERHEAD_SEC_RA_INDEX)    strcpy (s->name, "--regions index");
 
-        /* Type         */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
+        /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 
         if (ctx) {
-        /* did_i        */ str_uint_commas ((uint64_t)ctx->did_i, s->did_i); 
-        /* #Words       */ str_uint_commas (ctx->mtf_i.len, s->words);
-        /* #Uniq        */ str_uint_commas (ctx->mtf.len, s->uniq);
-        /* Hash         */ str_uint_commas (ctx->global_hash_prime, s->hash);
-        /* uncomp dict  */ str_size (ctx->dict.len, s->uncomp_dict);
-        /* comp dict    */ str_size (dict_compressed_size, s->comp_dict);
+        /* did_i          */ str_uint_commas ((uint64_t)ctx->did_i, s->did_i); 
+        /* #Words in file */ str_uint_commas (ctx->mtf_i.len, s->words);
+        /* #Words in dict */ str_uint_commas (ctx->mtf.len, s->uniq);
+        /* Hash           */ str_uint_commas (ctx->global_hash_prime, s->hash);
+        /* uncomp dict    */ str_size (ctx->dict.len, s->uncomp_dict);
+        /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
         }
         else 
             s->did_i[0] = s->words[0] = s->uniq[0] = s->hash[0] = s->uncomp_dict[0] = s->comp_dict[0] = '-';
         
-        /* txt          */ str_size (txt_len, s->txt);
-        /* comp b250    */ str_size (b250_compressed_size, s->comp_b250);
-        /* comp data    */ str_size (local_compressed_size, s->comp_data);
-        /* comp total   */ str_size (s->total_comp_size, s->comp_total);
-        /* comp ratio   */ s->comp_ratio = (double)txt_len / (double)s->total_comp_size;
-        /* % of txt     */ s->pc_txt     = 100.0 * (double)txt_len / (double)txt_file->txt_data_so_far_single;
-        /* % of genozip */ s->pc_genozip = 100.0 * (double)s->total_comp_size / (double)z_file->disk_size;
+        /* txt            */ str_size (txt_len, s->txt);
+        /* comp b250      */ str_size (b250_compressed_size, s->comp_b250);
+        /* comp data      */ str_size (local_compressed_size, s->comp_data);
+        /* comp total     */ str_size (s->total_comp_size, s->comp_total);
+        /* comp ratio     */ s->comp_ratio = (double)txt_len / (double)s->total_comp_size;
+        /* % of txt       */ s->pc_txt     = 100.0 * (double)txt_len / (double)txt_file->txt_data_so_far_single;
+        /* % of genozip   */ s->pc_genozip = 100.0 * (double)s->total_comp_size / (double)z_file->disk_size;
 
         s++;
     }
@@ -239,8 +239,8 @@ void stats_show_sections (void)
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_total_comp_size);
 
     fprintf (stderr, "\nSections (sorted by %% of genozip file):\n");
-    fprintf (stderr, "did_i Name            Type            #Words        #Uniq         Hash    uncomp      comp      comp      comp      comp       txt    comp  %% of   %% of  \n");
-    fprintf (stderr, "                                                                            dict      dict      b250     local     TOTAL             ratio   txt   genozip\n");
+    fprintf (stderr, "did_i Name            Type            #Words       #Words         Hash    uncomp      comp      comp      comp      comp       txt    comp  %% of   %% of  \n");
+    fprintf (stderr, "                                     in file      in dict                   dict      dict      b250     local     TOTAL             ratio   txt   genozip\n");
 
     for (uint32_t i=0; i < num_stats; i++) { // don't show CHROM-FORMAT as they are already showed above
 
