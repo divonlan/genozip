@@ -542,7 +542,7 @@ static void mtf_initialize_ctx (MtfContext *ctx, uint8_t did_i, DictIdType dict_
 }
 
 // PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
-// or returns NIL, if not. Called by I/O thread after reading dictionaries for mapping subfields
+// or returns NIL, if not. Called by subfield mapper functions only.
 uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
 {
     // attempt to get did_i from dict_id mapper
