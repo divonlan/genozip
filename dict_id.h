@@ -59,7 +59,7 @@ static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } 
 #define dict_id_gff3_attr_sf dict_id_type_1
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
-#define DICT_ID_NONE ((DictIdType)0ULL)
+#define DICT_ID_NONE ((DictIdType)(uint64_t)0)
 
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
