@@ -9,7 +9,6 @@
 #include <math.h>
 #include "optimize.h"
 #include "dict_id.h"
-#include "header.h"
 #include "strings.h"
 
 // optimize numbers in the range (-99.5,99.5) to 2 significant digits

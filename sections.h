@@ -111,7 +111,6 @@ typedef struct {
 
 typedef struct {
     SectionHeader h;
-    uint32_t tbd;
     DictIdType dict_id;           
 } SectionHeaderLocal;         
 

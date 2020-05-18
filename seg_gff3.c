@@ -7,7 +7,6 @@
 #include "seg.h"
 #include "vblock.h"
 #include "move_to_front.h"
-#include "header.h"
 #include "random_access.h"
 #include "file.h"
 #include "strings.h"
@@ -17,18 +16,9 @@
 #define DATA_LINE(i) ENT (ZipDataLineGFF3, vb->lines, i)
 
 // called from seg_all_data_lines
-void seg_gff3_initialize (VBlock *vb_)
+void seg_gff3_initialize (VBlock *vb)
 {
-    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
-
-    EXTENDED_FIELD_CTX (GVF_SEQ, dict_id_gff3_attr_sf (dict_id_make ("SEQ", 3)));
-
-    buf_alloc (vb, &vb->dbxref_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "dbxref_numeric_data", vb->vblock_i);    
-    buf_alloc (vb, &vb->seq_data, 20 * vb->lines.len, 1, "seq_data", vb->vblock_i); // should normally be more than enough, but if not, seg_add_to_data_buf will realloc
-    buf_alloc (vb, &vb->enst_data, 10000, 1, "enst_data", vb->vblock_i); // symbolic initial allocation
-    buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
-
-    seg_init_mapper (vb_, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");    
+    seg_init_mapper (vb, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");    
 }
 
 // returns length of next expected item, and 0 if unsuccessful
@@ -54,12 +44,12 @@ void seg_gff3_array_of_struct_ctxs (VBlockGFF3 *vb, DictIdType dict_id, unsigned
 {
     ASSERT (num_items <= MAX_AoS_ITEMS, "seg_gff3_create_ctx_sub_array: num_items=%u expected to be at most %u", num_items, MAX_AoS_ITEMS);
 
-    *enst_ctx = mtf_get_ctx_by_dict_id (vb, &vb->num_info_subfields, (DictIdType)dict_id_ENSTid); 
+    *enst_ctx = mtf_get_ctx_by_dict_id_sf (vb, &vb->num_info_subfields, (DictIdType)dict_id_ENSTid); 
 
     // create new contexts - they are guaranteed to be sequential in mtf_ctx
     for (unsigned i=0; i < num_items; i++) {
         dict_id.id[1] = '0' + i; // change the 2nd char (the first two chars are used for hashing in dict_id_to_did_i_map)
-        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, &vb->num_info_subfields, dict_id); 
+        MtfContext *ctx = mtf_get_ctx_by_dict_id_sf (vb, &vb->num_info_subfields, dict_id); 
 
         if (i==0) *ctx_array = ctx;
         
@@ -85,13 +75,12 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
     seg_gff3_array_of_struct_ctxs (vb, subfield_ctx->dict_id, num_items_in_struct, &ctxs, &enst_ctx);
 
     // set roll back point
-    uint64_t saved_mtf_i_len[MAX_AoS_ITEMS], saved_txt_len[MAX_AoS_ITEMS];
+    uint64_t saved_mtf_i_len[MAX_AoS_ITEMS], saved_local_len[MAX_AoS_ITEMS], saved_txt_len[MAX_AoS_ITEMS];
     for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++) {
         saved_mtf_i_len[item_i] = ctxs[item_i].mtf_i.len;
+        saved_local_len[item_i] = ctxs[item_i].local.len;
         saved_txt_len[item_i]   = ctxs[item_i].txt_len;
     }
-    uint64_t saved_enst_mtf_i_len = enst_ctx->mtf_i.len;    
-    uint64_t saved_enst_data_len = vb->enst_data.len;
     const char *saved_snip = snip;
     unsigned saved_snip_len = snip_len;
 
@@ -106,7 +95,7 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
                 seg_one_subfield ((VBlockP)vb, snip, item_len, ctxs[item_i].dict_id, item_len+1); // include the separating space after
             else {
                 is_last_entry = (snip_len - item_len == 0);
-                seg_id_field ((VBlockP)vb, &vb->enst_data, (DictIdType)dict_id_ENSTid, snip, item_len, false, !is_last_entry);
+                seg_id_field ((VBlockP)vb, (DictIdType)dict_id_ENSTid, snip, item_len, !is_last_entry);
             }
     
             snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
@@ -132,10 +121,9 @@ badly_formatted:
     // roll back all the changed data
     for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++) {
         ctxs[item_i].mtf_i.len = saved_mtf_i_len[item_i];
+        ctxs[item_i].local.len = saved_local_len[item_i];
         ctxs[item_i].txt_len   = saved_txt_len[item_i];
     }
-    enst_ctx->mtf_i.len = saved_enst_mtf_i_len;        
-    vb->enst_data.len = saved_enst_data_len;
 
     // now save the entire snip in the dictionary
     seg_one_subfield ((VBlockP)vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
@@ -155,7 +143,7 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a NUMERICAL_ID_DATA section
     if (ctx->dict_id.num == dict_id_ATTR_Dbxref) {
-        seg_id_field (vb_, &vb->dbxref_numeric_data, ctx->dict_id, *this_value, *this_value_len, false, false); // discard the const as seg_id_field modifies
+        seg_id_field (vb_, ctx->dict_id, *this_value, *this_value_len, false); // discard the const as seg_id_field modifies
 
         return false; // do not add to dictionary/b250 - we already did it
     }
@@ -176,7 +164,10 @@ static bool seg_gff3_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         ctx->dict_id.num == dict_id_ATTR_Reference_seq ||
         ctx->dict_id.num == dict_id_ATTR_ancestral_allele) {
 
-        seg_add_to_data_buf (vb_, &vb->seq_data, *this_value, *this_value_len, GVF_SEQ, *this_value_len, "SEQ");
+        // note: all three are stored together in dict_id_ATTR_Variant_seq as they are correlated
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_ATTR_Variant_seq); 
+
+        seg_add_to_local_text (vb_, ctx, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 

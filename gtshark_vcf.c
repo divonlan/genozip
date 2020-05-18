@@ -16,6 +16,7 @@
 #include "file.h"
 #include "endianness.h"
 #include "stream.h"
+#include "header.h"
 
 static void gtshark_create_vcf_file (VBlockVCF *vb, const Buffer *section_data, unsigned sb_i,
                                      const char *gtshark_vcf_name)

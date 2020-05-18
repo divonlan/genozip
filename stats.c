@@ -22,45 +22,44 @@ static struct { uint64_t words_total, words_so_far, comp_bytes_so_far; } vcf_gt_
 #define OVERHEAD_SEC_RA_INDEX    -4
 #define LAST_OVERHEAD            -4
 static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec /* option 2*/, 
-                             uint64_t *dict_compressed_size, uint64_t *b250_compressed_size, uint64_t *data_compressed_size,
+                             uint64_t *dict_compressed_size, uint64_t *b250_compressed_size, uint64_t *local_compressed_size,
                              double format_proportion /* only needed for FORMAT subfields - number of words of this dict_id in gt_data divided by all words in gt_data */)
 {
-    *dict_compressed_size = *b250_compressed_size = *data_compressed_size = 0;
+    *dict_compressed_size = *b250_compressed_size = *local_compressed_size = 0;
     uint64_t total_gt_data=0;
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
 
         SectionListEntry *section = ENT (SectionListEntry, z_file->section_list_buf, i);
 
-        if (section->dict_id.num == dict_id.num && section_type_is_dictionary (section->section_type))
+        if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
             *dict_compressed_size += (section+1)->offset - section->offset;
 
-        else if (section->dict_id.num == dict_id.num && section_type_is_b250 (section->section_type))
+        else if (section->dict_id.num == dict_id.num && section->section_type == SEC_B250)
             *b250_compressed_size += (section+1)->offset - section->offset;
 
+        else if (section->dict_id.num == dict_id.num && section->section_type == SEC_LOCAL)
+            *local_compressed_size += (section+1)->offset - section->offset;
+
         else if (section->section_type == SEC_VB_HEADER && overhead_sec == OVERHEAD_SEC_VB_HDR)
-            *data_compressed_size += (z_file->data_type == DT_VCF) ? sizeof (SectionHeaderVbHeaderVCF) // payload is haplotype index which goes to VCF_GT
+            *local_compressed_size += (z_file->data_type == DT_VCF) ? sizeof (SectionHeaderVbHeaderVCF) // payload is haplotype index which goes to VCF_GT
                                                                    : (section+1)->offset - section->offset;
 
         else if (section->section_type == SEC_GENOZIP_HEADER && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
-            *data_compressed_size += z_file->disk_size - section->offset;
+            *local_compressed_size += z_file->disk_size - section->offset;
 
         else if (section->section_type == SEC_TXT_HEADER && overhead_sec == OVERHEAD_SEC_TXT_HDR)
-            *data_compressed_size += (section+1)->offset - section->offset;
+            *local_compressed_size += (section+1)->offset - section->offset;
 
         else if (section->section_type == SEC_RANDOM_ACCESS && overhead_sec == OVERHEAD_SEC_RA_INDEX)
-            *data_compressed_size += (section+1)->offset - section->offset;
+            *local_compressed_size += (section+1)->offset - section->offset;
 
         // Data type specific
-        switch (z_file->data_type) {
+        if (z_file->data_type == DT_VCF) {
         
-        case DT_VCF:        
             if ((section->section_type == SEC_HT_DATA && dict_id.num == dict_id_fields[VCF_GT])             ||
-                (section->section_type == SEC_VCF_PHASE_DATA && dict_id.num == dict_id_fields[VCF_GT])      ||
-                (section->section_type == SEC_SEQ_DATA && dict_id.num == dict_id_fields[VCF_REFALT])        ||
-                (section->section_type == SEC_NUMERIC_ID_DATA && dict_id.num == dict_id_fields[VCF_ID])     ||
-                (section->section_type == SEC_RANDOM_POS_DATA && dict_id.num == dict_id_fields[VCF_POS])) 
-                *data_compressed_size += (section+1)->offset - section->offset;
+                (section->section_type == SEC_VCF_PHASE_DATA && dict_id.num == dict_id_fields[VCF_GT]))
+                *local_compressed_size += (section+1)->offset - section->offset;
             
             // we allocate the size of SEC_VCF_GT_DATA by the proportion of words due to this FORMAT dict_id
             else if (section->section_type == SEC_VCF_GT_DATA && dict_id_is_vcf_format_sf (dict_id)) {
@@ -75,8 +74,9 @@ static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec
             }
 
             else if (section->section_type == SEC_VB_HEADER && dict_id.num == dict_id_fields[VCF_GT]) // squeezed index is part of GT data
-                *data_compressed_size += (section+1)->offset - section->offset - sizeof (SectionHeaderVbHeaderVCF); // section header already accounted for
-
+                *local_compressed_size += (section+1)->offset - section->offset - sizeof (SectionHeaderVbHeaderVCF); // section header already accounted for
+        }
+        /*
             break;
 
         case DT_SAM:
@@ -86,19 +86,19 @@ static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec
                 (section->section_type == SEC_SAM_BD_DATA     && dict_id.num == dict_id_fields[SAM_BD])     ||
                 (section->section_type == SEC_SAM_BI_DATA     && dict_id.num == dict_id_fields[SAM_BI])     ||
                 (section->section_type == SEC_SAM_MD_DATA     && dict_id.num == dict_id_fields[SAM_MD]))
-                *data_compressed_size += (section+1)->offset - section->offset;
+                *local_compressed_size += (section+1)->offset - section->offset;
             break;
 
         case DT_FASTQ: 
             if ((section->section_type == SEC_SEQ_DATA        && dict_id.num == dict_id_fields[FAST_SEQ]) ||  
                 (section->section_type == SEC_QUAL_DATA       && dict_id.num == dict_id_fields[FASTQ_QUAL]))
-                *data_compressed_size += (section+1)->offset - section->offset;
+                *local_compressed_size += (section+1)->offset - section->offset;
             break;
 
         case DT_FASTA:
             if ((section->section_type == SEC_SEQ_DATA        && dict_id.num == dict_id_fields[FAST_SEQ]) ||  
                 (section->section_type == SEC_FASTA_COMMENT_DATA && dict_id.num == dict_id_fields[FASTA_COMMENT]))
-                *data_compressed_size += (section+1)->offset - section->offset;
+                *local_compressed_size += (section+1)->offset - section->offset;
             break;
         
         case DT_GFF3:
@@ -106,20 +106,20 @@ static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec
                 (section->section_type == SEC_SEQ_DATA        && dict_id.num == dict_id_fields[GVF_SEQ])    ||
                 (section->section_type == SEC_NUMERIC_ID_DATA && dict_id.num == dict_id_ATTR_Dbxref)        || 
                 (section->section_type == SEC_ENST_DATA       && dict_id.num == dict_id_ENSTid))
-                *data_compressed_size += (section+1)->offset - section->offset;
+                *local_compressed_size += (section+1)->offset - section->offset;
             break;
 
         case DT_ME23:        
             if ((section->section_type == SEC_RANDOM_POS_DATA && dict_id.num == dict_id_fields[ME23_POS])    ||
                 (section->section_type == SEC_NUMERIC_ID_DATA && dict_id.num == dict_id_fields[ME23_ID])     ||
-                (section->section_type == SEC_HT_DATA         && dict_id.num == dict_id_fields[ME23_HT]))
-                *data_compressed_size += (section+1)->offset - section->offset;
+                (section->section_type == SEC_HT_DATA         && dict_id.num == dict_id_fields[ME23_GENOTYPE]))
+                *local_compressed_size += (section+1)->offset - section->offset;
             break;
 
         default: ABORT ("Error in stats_get_sizes: invalid data_type=%s", dt_name (z_file->data_type));
         }
+*/
     }
-
     // case: the last dict_id contributing to gt_data. take everything that's remaining to make sure all the components add up
     if (z_file->data_type == DT_VCF && dict_id_is_vcf_format_sf (dict_id) && vcf_gt_data_tracker.words_so_far == vcf_gt_data_tracker.words_total)
         *b250_compressed_size = total_gt_data - vcf_gt_data_tracker.comp_bytes_so_far;
@@ -187,11 +187,11 @@ void stats_show_sections (void)
             vcf_gt_data_tracker.words_so_far += ctx->mtf_i.len;
         }
    
-        uint64_t dict_compressed_size, b250_compressed_size, data_compressed_size, txt_len;
+        uint64_t dict_compressed_size, b250_compressed_size, local_compressed_size, txt_len;
         stats_get_sizes (ctx ? ctx->dict_id : DICT_ID_NONE, ctx ? 0 : i, 
-                         &dict_compressed_size, &b250_compressed_size, &data_compressed_size, format_proportion);
+                         &dict_compressed_size, &b250_compressed_size, &local_compressed_size, format_proportion);
 
-        s->total_comp_size = dict_compressed_size + b250_compressed_size + data_compressed_size;
+        s->total_comp_size = dict_compressed_size + b250_compressed_size + local_compressed_size;
         if (ctx && !ctx->mtf_i.len && !ctx->txt_len && !ctx->b250.len && !s->total_comp_size) continue;
 
         txt_len = ctx ? ctx->txt_len : (i==OVERHEAD_SEC_TXT_HDR ? last_txt_header_len : 0);
@@ -199,12 +199,12 @@ void stats_show_sections (void)
         all_comp_dict   += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;
         all_comp_b250   += b250_compressed_size;
-        all_comp_data   += data_compressed_size;
+        all_comp_data   += local_compressed_size;
         all_comp_total  += s->total_comp_size;
         all_txt         += txt_len;
 
         /* Name         */ 
-        if (ctx)                              strcpy (s->name, err_dict_id (ctx->dict_id)); 
+        if (ctx)                              strcpy (s->name, ctx->name); 
         else if (i==OVERHEAD_SEC_GENOZIP_HDR) strcpy (s->name, "genozip hdr");
         else if (i==OVERHEAD_SEC_VB_HDR)      strcpy (s->name, "VBlock hdrs");
         else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
@@ -225,7 +225,7 @@ void stats_show_sections (void)
         
         /* txt          */ str_size (txt_len, s->txt);
         /* comp b250    */ str_size (b250_compressed_size, s->comp_b250);
-        /* comp data    */ str_size (data_compressed_size, s->comp_data);
+        /* comp data    */ str_size (local_compressed_size, s->comp_data);
         /* comp total   */ str_size (s->total_comp_size, s->comp_total);
         /* comp ratio   */ s->comp_ratio = (double)txt_len / (double)s->total_comp_size;
         /* % of txt     */ s->pc_txt     = 100.0 * (double)txt_len / (double)txt_file->txt_data_so_far_single;
@@ -240,7 +240,7 @@ void stats_show_sections (void)
 
     fprintf (stderr, "\nSections (sorted by %% of genozip file):\n");
     fprintf (stderr, "did_i Name            Type            #Words        #Uniq         Hash    uncomp      comp      comp      comp      comp       txt    comp  %% of   %% of  \n");
-    fprintf (stderr, "                                                                            dict      dict      b250      data     TOTAL             ratio   txt   genozip\n");
+    fprintf (stderr, "                                                                            dict      dict      b250     local     TOTAL             ratio   txt   genozip\n");
 
     for (uint32_t i=0; i < num_stats; i++) { // don't show CHROM-FORMAT as they are already showed above
 

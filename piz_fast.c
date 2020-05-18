@@ -7,7 +7,6 @@
 #include "profiler.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "header.h"
 #include "vblock.h"
 #include "base250.h"
 #include "move_to_front.h"
@@ -36,13 +35,14 @@ bool piz_fast_test_grep (VBlockFAST *vb)
     // because the dispatcher is re-initialized for every sam component
     if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i);
     
-    unsigned section_i=1;
-
     // we only need room for one line for now 
     buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data", vb->vblock_i);
 
     // uncompress & map desc field (filtered by zfile_is_skip_section)
-    piz_uncompress_all_b250_local ((VBlockP)vb, &section_i);
+    vb->grep_stages = GS_TEST; // tell zfile_is_skip_section to skip decompressing sections not needed for determining the grep
+    piz_uncompress_all_ctxs ((VBlockP)vb);
+    vb->grep_stages = GS_UNCOMPRESS; // during uncompress in the compute thread, uncompress only what was not already uncompressed here
+
     piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper);
 
     // reconstruct each description line and check for string matching with flag_grep
@@ -93,9 +93,9 @@ bool piz_fast_test_grep (VBlockFAST *vb)
     return found; // no match found
 }
 
-static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
+void piz_fastq_reconstruct_vb (VBlockFAST *vb)
 {
-    START_TIMER;
+    if (!flag_grep) piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); // it not already done during grep
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
     
@@ -128,27 +128,22 @@ static void piz_fastq_reconstruct_vb (VBlockFAST *vb)
 
         // sequence line
         uint32_t seq_len = atoi (&md[4]); // numeric string terminated by dictionary's \t separator
-        piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, grepped_out);
+        piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FAST_SEQ], seq_len, txt_line_i, grepped_out);
         if (!grepped_out) RECONSTRUCT (eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
 
         // + line
         if (!grepped_out) RECONSTRUCT (md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
 
         // quality line
-        piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->qual_data, &vb->next_qual, SEC_QUAL_DATA, txt_line_i, grepped_out);
+        piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FASTQ_QUAL], seq_len, txt_line_i, grepped_out);
         
         if (!grepped_out) RECONSTRUCT (eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
     }
-
-    COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
-static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
+void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 {
-    // note: we cannot easily do grep for FASTA, because records might span multiple VBs - the second+ VB doesn't have
-    // access to the description to compare
-
-    START_TIMER;
+    if (!flag_grep) piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); // it not already done during grep
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
 
@@ -174,7 +169,7 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
                                                 snip, snip_len, txt_line_i);
                 *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string - for strstr below
 
-                vb->last_line = FASTA_LINE_DESC;
+                vb->last_line = FASTA_DESC;
 
                 // case: we're grepping, and this line doesn't match
                 if (flag_grep && !strstr (&vb->txt_data.data[txt_data_start_line], flag_grep)) { 
@@ -185,72 +180,35 @@ static void piz_fasta_reconstruct_vb (VBlockFAST *vb)
                 break;
 
             case ';': // comment line
-                if (!flag_header_one && !flag_grep) 
-                    RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", eol[has_13], eol_len[has_13]);
+                if (!flag_header_one && !flag_grep)
+                    piz_reconstruct_from_ctx ((VBlockP)vb, FASTA_COMMENT, eol[has_13], eol_len[has_13], txt_line_i); 
+                    //RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", eol[has_13], eol_len[has_13]);
 
                 //if (flag_header_one && !snip_len)
                 //    vb->txt_data.len -= eol_len[has_13]; // don't show empty lines in --header-only mode
 
-                vb->last_line = FASTA_LINE_COMMENT;
+                vb->last_line = FASTA_COMMENT;
                 break;
 
             default:  // sequence line
                 if (!flag_header_one) { // this is invoked by --header-only (re-written to flag_header_one in piz_read_global_area)
 
-                    if (flag_fasta_sequential && vb->last_line == FASTA_LINE_SEQ && vb->txt_data.len >= 2)
+                    if (flag_fasta_sequential && vb->last_line == FASTA_SEQ && vb->txt_data.len >= 2)
                         vb->txt_data.len -= 1 + (vb->txt_data.data[vb->txt_data.len-2]=='\r');
 
                     uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's \t separator
-                    piz_reconstruct_seq_qual ((VBlockP)vb, seq_len, &vb->seq_data, &vb->next_seq, SEC_SEQ_DATA, txt_line_i, grepped_out);
+                    piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FASTA_SEQ], seq_len, txt_line_i, grepped_out);
                     if (!grepped_out) RECONSTRUCT (eol[has_13], eol_len[has_13]); // end of line
-                    vb->last_line = FASTA_LINE_SEQ;
+                    vb->last_line = FASTA_SEQ;
                 }
         }
     }
-
-    COPY_TIMER(vb->profile.piz_reconstruct_vb);
-}
-
-void piz_fast_uncompress_one_vb (VBlock *vb_)
-{
-    UNCOMPRESS_HEADER_AND_FIELDS (VBlockFAST, !flag_grep); // if flag_grep - the DESC fields were already uncompressed by the I/O thread
-    
-    // DESC subfields
-/*    if (!flag_grep) // if flag_grep - the DESC subfields were already uncompressed by the I/O thread
-        piz_map_compound_field ((VBlockP)vb, SEC_FAST_DESC_B250, SEC_FAST_DESC_SF_B250, &vb->desc_mapper, &section_i);
-    else 
-        section_i += vb->desc_mapper.num_subfields + NUM_FAST_FIELDS; // we didn't compress the fields - just skip them
-*/
-    // uncompress fields, possibly skipped DESC that's already been decompressed if flag_grep (filtered by zfile_is_skip_section)
-    piz_uncompress_all_b250_local (vb_, &section_i);
-    if (!flag_grep) piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); // it not already done during grep
-
-    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, false); // SEQ    
-
-    if (vb->data_type == DT_FASTQ) {
-        UNCOMPRESS_DATA_SECTION (SEC_QUAL_DATA, qual_data, char, false) // QUAL (FASTQ only)
-        piz_fastq_reconstruct_vb ((VBlockFASTP)vb);
-    }
-    else {
-        UNCOMPRESS_DATA_SECTION (SEC_FASTA_COMMENT_DATA, comment_data, char, true); // COMMENT (FASTA only)
-        piz_fasta_reconstruct_vb ((VBlockFASTP)vb);
-    }
-
-    UNCOMPRESS_DONE;
 }
 
 bool piz_fast_read_one_vb (VBlock *vb, SectionListEntry *sl)
 { 
     // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
     if (flag_grep && !piz_fast_test_grep ((VBlockFASTP)vb)) return false; 
-
-    // read SEQ and QUAL data (FASTQ) or COMMENT data (FASTA)
-    READ_DATA_SECTION (SEC_SEQ_DATA, false);
-
-    if (z_file->data_type == DT_FASTQ)
-        READ_DATA_SECTION (SEC_QUAL_DATA, false)
-    else // fasta
-        READ_DATA_SECTION (SEC_FASTA_COMMENT_DATA, true);
 
     return true;
 }

@@ -30,7 +30,7 @@ extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs *
 extern void zfile_compress_dictionary_data (VBlockP vb, MtfContextP ctx, 
                                             uint32_t num_words, const char *data, uint32_t num_chars);
 extern void zfile_compress_b250_data  (VBlockP vb, MtfContextP ctx, CompressionAlg comp_alg);
-extern void zfile_compress_local_data (VBlockP vb, MtfContextP ctx, CompressionAlg comp_alg);
+extern void zfile_compress_local_data (VBlockP vb, MtfContextP ctx);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
 #define SEEK_NONE ((uint64_t)-1)

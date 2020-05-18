@@ -5,21 +5,17 @@
 
 #include <math.h>
 #include "genozip.h"
-#include "profiler.h"
 #include "vblock.h"
 #include "buffer.h"
 #include "file.h"
 #include "zfile.h"
-#include "txtfile.h"
 #include "header.h"
 #include "seg.h"
 #include "vblock.h"
-#include "dispatcher.h"
 #include "move_to_front.h"
 #include "zip.h"
 #include "base250.h"
 #include "endianness.h"
-#include "random_access.h"
 #include "strings.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
@@ -134,7 +130,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
                     MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
                     Base250 index = node->word_index;
 
-                    if (flag_show_gt_nodes) fprintf (stderr, "%.*s:%u ", DICT_ID_LEN, err_dict_id (ctx->dict_id), index.n);
+                    if (flag_show_gt_nodes) fprintf (stderr, "%.*s:%u ", DICT_ID_LEN, ctx->name, index.n);
 
                     base250_copy (dst_next, index);
                     dst_next += base250_len (index.encoded.numerals);
@@ -381,9 +377,6 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 { 
     VBlockVCF *vb = (VBlockVCF *)vb_;
     
-    COMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, COMP_LZMA, true); // optional - POS data that could not be delta'ed
-    COMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, char,     COMP_LZMA, true); // optional - numeric part of the ID field
-
     // compress the sample data - genotype, haplotype and phase sections. genotype data is generated here too.
     CompressionAlg gt_data_alg;
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {

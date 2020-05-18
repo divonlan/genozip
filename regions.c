@@ -7,7 +7,6 @@
 #include "regions.h"
 #include "buffer.h"
 #include "move_to_front.h"
-#include "header.h"
 #include "vblock.h"
 #include "file.h"
 #include "strings.h"

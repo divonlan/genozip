@@ -221,7 +221,7 @@ bool v1_piz_vcf_read_one_vb (VBlockVCF *vb)
         for (unsigned did_i=0; did_i < num_dictionary_sections; did_i++) {
 
             unsigned start_i = vb->z_data.len; // vb->z_data.len is updated next, by v1_zfile_read_section()
-            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_VCF_FRMT_SF_DICT, false);    
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_VCF_FRMT_SF_DICT_legacy, false);    
 
             // update dictionaries in z_file->mtf_ctx with dictionary data from this VB
             mtf_integrate_dictionary_fragment ((VBlockP)vb, &vb->z_data.data[start_i]);

@@ -43,8 +43,7 @@ extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_de
                               int pos_field, const char *pos_str, unsigned pos_len, 
                               const char *field_name, bool account_for_separator);
 
-extern void seg_id_field (VBlockP vb, BufferP id_buf, DictIdType dict_id, 
-                          const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator);
+extern void seg_id_field (VBlockP vb, DictIdType dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip);
 
@@ -54,8 +53,8 @@ extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_m
                             bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
                             bool this_line_has_13); // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
 
-extern void seg_add_to_data_buf  (VBlockP vb, BufferP buf, const char *snip, unsigned snip_len, uint8_t add_bytes_did_i, unsigned add_bytes, const char *buf_name);
-extern void seg_add_to_fixed_buf (VBlockP vb, BufferP buf, const void *data, unsigned data_len);
+extern void seg_add_to_local_text  (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
+extern void seg_add_to_local_fixed (VBlockP vb, MtfContextP ctx, const void *data, unsigned data_len);
 
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
                                 SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep, bool account_for_13);
@@ -71,7 +70,6 @@ extern void seg_vcf_complete_missing_lines (VBlockVCFP vb);
 // SAM Stuff
 // ---------
 extern const char *seg_sam_data_line (VBlockP vb_, const char *field_start_line);
-extern void seg_sam_initialize (VBlockP vb_);
 extern uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
 extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len, bool *is_numeric);
 
@@ -81,10 +79,9 @@ extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md
 // ---------------------------
 // FASTA and FASTQ Stuff
 // ---------------------------
-extern const char *seg_fastq_data_line (VBlockP vb_, const char *field_start_line);
-extern const char *seg_fasta_data_line (VBlockP vb_, const char *field_start_line);
-extern void seg_fastq_initialize (VBlockP vb_);
-extern void seg_fasta_initialize (VBlockP vb_);
+extern void seg_fasta_initialize();
+extern const char *seg_fastq_data_line();
+extern const char *seg_fasta_data_line();
 
 // ------------------
 // GFF3 Stuff
@@ -100,7 +97,6 @@ extern void seg_gff3_array_of_struct_ctxs (VBlockGFF3P vb, DictIdType dict_id, u
 // ME23 Stuff
 // ------------------
 extern const char *seg_me23_data_line (VBlockP vb_, const char *field_start_line);
-extern void seg_me23_initialize (VBlockP vb_);
 
 // ------------------
 // Seg utilities
@@ -108,7 +104,7 @@ extern void seg_me23_initialize (VBlockP vb_);
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, NULL, (DictIdType)dict_id_num); \
+    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_num); \
     ASSERT (ctx->did_i == extended_field, "Error: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 }

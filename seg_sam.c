@@ -7,29 +7,12 @@
 #include "seg.h"
 #include "vblock.h"
 #include "move_to_front.h"
-#include "header.h"
 #include "file.h"
 #include "random_access.h"
 #include "endianness.h"
 #include "strings.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)
-
-// called from seg_all_data_lines
-void seg_sam_initialize (VBlock *vb_)
-{
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-
-    // create extendent field contexts in the correct order of the fields
-    EXTENDED_FIELD_CTX (SAM_SEQ,  dict_id_field (dict_id_make ("SEQ", 3)));
-    EXTENDED_FIELD_CTX (SAM_QUAL, dict_id_field (dict_id_make ("QUAL", 4)));
-    EXTENDED_FIELD_CTX (SAM_BD,   dict_id_sam_optnl_sf (dict_id_make ("BD:Z", 4))); // GATK tag
-    EXTENDED_FIELD_CTX (SAM_BI,   dict_id_sam_optnl_sf (dict_id_make ("BI:Z", 4))); // GATK tag
-    EXTENDED_FIELD_CTX (SAM_MD,   dict_id_sam_optnl_sf (dict_id_make ("MD:Z", 4))); 
-
-    buf_alloc (vb, &vb->md_data, 12 * vb->lines.len, 1, "md_data", vb->vblock_i);
-    buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
-}             
 
 // TLEN - 3 cases: 
 // 1. if a value that is the negative of the previous line with "*"
@@ -117,7 +100,7 @@ static unsigned seg_sam_SA_or_OA_field (VBlockSAM *vb, const char *field, unsign
         // sanity checks before adding to any dictionary
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
 
-        // pos - add to the random pos data together with all other random pos data (originating from POS, PNEXT etc).
+        // pos - add to the random pos data together with pos data (originating from POS).
         seg_add_to_random_pos_data ((VBlockP)vb, pos, pos_len, pos_len+1, field_name);
 
         // nm : we store in the same dictionary as the Optional subfield NM
@@ -160,7 +143,7 @@ static unsigned seg_sam_XA_field (VBlockSAM *vb, const char *field, unsigned fie
         // sanity checks before adding to any dictionary
         if (pos_len < 2 || (pos[0] != '+' && pos[0] != '-')) goto error; // invalid format - expecting pos to begin with the strand
 
-        // pos - add to the pos data together with all other pos data (POS, PNEXT etc),
+        // pos - add to the pos data together with all POS data
         // strand - add to separate STRAND dictionary, to not adversely affect compression of POS.
         // there is no advantage to storing the strand together with pos as they are not correlated.
         seg_add_to_random_pos_data ((VBlockP)vb, pos+1, pos_len-1, pos_len, "XA"); // one less for the strand, one more for the ,
@@ -320,10 +303,11 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
             if (md_is_changeable) 
                 md_is_changeable = seg_sam_get_shortened_MD (value, value_len, dl->seq_len, new_md, &new_md_len);
 
-            seg_add_to_data_buf ((VBlockP)vb, &vb->md_data, 
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+            seg_add_to_local_text ((VBlockP)vb, ctx, 
                                  md_is_changeable ? new_md : value, 
                                  md_is_changeable ? new_md_len : value_len,
-                                 SAM_MD, value_len+1, "MD");
+                                 value_len+1);
         }
 
         // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
@@ -334,7 +318,10 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->bd_data_start = value - vb->txt_data.data;
             dl->bd_data_len   = value_len;
-            vb->mtf_ctx[SAM_BD].txt_len += value_len + 1; // +1 for \t
+
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+            ctx->local.len += value_len;
+            ctx->txt_len   += value_len + 1; // +1 for \t
         }
 
         else if (dict_id.num == dict_id_OPTION_BI) { 
@@ -344,7 +331,10 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->bi_data_start = value - vb->txt_data.data;
             dl->bi_data_len   = value_len;
-            vb->mtf_ctx[SAM_BI].txt_len += value_len + 1; // +1 for \t
+
+            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+            ctx->local.len += value_len;
+            ctx->txt_len   += value_len + 1; // +1 for \t
         }
 
         // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
@@ -355,7 +345,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
         // mc:i: (output of bamsormadup? - mc in small letters) appears to a pos value usually close to POS.
         // we encode as a delta.
         else if (dict_id.num == dict_id_OPTION_mc) {
-            uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb, NULL, dict_id)->did_i;
+            uint8_t mc_did_i = mtf_get_ctx_by_dict_id (vb, dict_id)->did_i;
 
             seg_pos_field ((VBlockP)vb, vb->last_pos, NULL, true, mc_did_i, value, value_len, "mc:i", true);
         }
@@ -368,7 +358,8 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->e2_data_start = value - vb->txt_data.data;
             dl->e2_data_len   = value_len;
-            vb->mtf_ctx[SAM_SEQ].txt_len += value_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_SEQ].txt_len   += value_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_SEQ].local.len += value_len;
         }
 
         // U2 - QUAL data (note: U2 doesn't have a dictionary)
@@ -379,7 +370,8 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             dl->u2_data_start = value - vb->txt_data.data;
             dl->u2_data_len   = value_len;
-            vb->mtf_ctx[SAM_QUAL].txt_len += value_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_QUAL].txt_len   += value_len + 1; // +1 for \t
+            vb->mtf_ctx[SAM_QUAL].local.len += value_len;
         }
         // All other subfields - have their own dictionary
         else        
@@ -459,6 +451,10 @@ static void seg_sam_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
                 "Bad line: according to CIGAR, expecting QUAL length to be %u but it is %u. QUAL=%.*s", 
                 dl->seq_len, dl->qual_data_len, dl->qual_data_len, qual);    
     }
+
+    // used by zfile_compress_local_data
+    vb->mtf_ctx[SAM_SEQ] .local.len += dl->seq_data_len; // +1 for terminating \t
+    vb->mtf_ctx[SAM_QUAL].local.len += dl->qual_data_len;
 
     // byte counts for --show-sections 
     vb->mtf_ctx[SAM_SEQ] .txt_len += dl->seq_data_len  + 1; // +1 for terminating \t
@@ -571,7 +567,7 @@ const char *seg_sam_data_line (VBlock *vb_, const char *field_start_line)     //
         }
     }
 
-    else  // RNAME and RNEXT differ - store in random_pos
+    else  // RNAME and RNEXT differ - store in local
         seg_add_to_random_pos_data (vb_, field_start, field_len, field_len+1, "PNEXT");
 
     // TLEN - 3 cases: 

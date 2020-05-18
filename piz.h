@@ -13,46 +13,42 @@ extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool i
 extern int32_t piz_decode_pos (VBlockP vb, uint32_t txt_line_i,
                                int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);
-extern void piz_map_iname_subfields (void);
+extern void piz_map_iname_subfields (VBlockP vb);
 
 // ----------------------
 // VCF stuff
 // ----------------------
-extern bool piz_vcf_read_one_vb  (VBlockP vb, SectionListEntryP sl);
-extern void piz_vcf_uncompress_one_vb (VBlockP vb);
+extern bool piz_vcf_read_one_vb (VBlockP vb, SectionListEntryP sl);
+extern void piz_vcf_uncompress_vb(); // no parameter - implicit casting of VBlockP to VBlockVCFP
 extern void v2v3_piz_vcf_map_iname_subfields (BufferP vb);
 
 // ----------------------
 // SAM stuff
 // ----------------------
-extern bool piz_sam_read_one_vb  (VBlockP vb, SectionListEntryP sl);
-extern void piz_sam_uncompress_one_vb (VBlockP vb);
+extern void piz_sam_reconstruct_vb ();
 
 // ----------------------
 // FASTQ + FASTA stuff
 // ----------------------
 extern bool piz_fast_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern void piz_fast_uncompress_one_vb (VBlockP vb);
 extern bool piz_fast_test_grep (VBlockFASTP vb);
+extern void piz_fasta_reconstruct_vb(); // no parameter - implicit casting of VBlockP to VBlockFASTP
+extern void piz_fastq_reconstruct_vb();
 
 // ----------------------
 // GFF3 stuff
 // ----------------------
 extern bool piz_gff3_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern void piz_gff3_uncompress_one_vb
- (VBlockP vb);
+extern void piz_gff3_reconstruct_vb(); // no parameter - implicit casting of VBlockP to VBlockGFF3P
 
 // ----------------------
 // 23andMe stuff
 // ----------------------
-extern bool piz_me23_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern void piz_me23_uncompress_one_vb (VBlockP vb);
+extern void piz_me23_reconstruct_vb (VBlockP vb);
 
 // ----------------------------------------------
 // utilities for use by piz_*_read_one_vb
 // ----------------------------------------------
-
-extern void piz_read_all_b250_local (VBlockP vb, SectionListEntryP *next_sl);
 
 #define PREPARE_TO_READ(vbblock_type,max_sections,sec_type_vb_header)  \
     START_TIMER; \
@@ -84,51 +80,20 @@ extern void piz_read_all_b250_local (VBlockP vb, SectionListEntryP *next_sl);
 // utilities for use by piz_*_uncompress_all_sections
 // --------------------------------------------------
 
-extern void piz_uncompress_all_b250_local (VBlockP vb, uint32_t *section_i);
-//extern void piz_map_compound_field (VBlockP vb, SectionType field_b250_sec, SectionType sf_b250_sec, SubfieldMapperP mapper, unsigned *section_i);
+extern uint32_t piz_uncompress_all_ctxs (VBlockP vb);
+
 extern void piz_map_compound_field (VBlockP vb, bool (*predicate)(DictIdType), SubfieldMapperP mapper);
-
-#define UNCOMPRESS_HEADER_AND_FIELDS(vb_block_type,also_uncompress_fields) \
-    START_TIMER;\
-    vb_block_type *vb = (vb_block_type *)vb_; \
-    ARRAY (const unsigned, section_index, vb->z_section_headers); \
-    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);\
-    vb->first_line       = BGEN32 (header->first_line);      \
-    vb->lines.len        = BGEN32 (header->num_lines);       \
-    vb->vb_data_size     = BGEN32 (header->vb_data_size);    \
-    vb->longest_line_len = BGEN32 (header->longest_line_len);\
-    if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ \
-    uint32_t section_i=1;\
-    if (also_uncompress_fields) piz_uncompress_all_b250_local (vb_, &section_i);
-
-#define UNCOMPRESS_DATA_SECTION(sec, vb_buf_name, type, is_optional) { \
-    SectionHeader *data_header = (SectionHeader *)(vb->z_data.data + section_index[section_i]); \
-    if (!(is_optional) || (section_i < vb->z_section_headers.len && data_header->section_type == (sec))) { \
-        zfile_uncompress_section ((VBlockP)vb, data_header, &vb->vb_buf_name, #vb_buf_name, (sec)); \
-        vb->vb_buf_name.len /= sizeof(type); \
-        section_i++;\
-    }\
-}
-
-#define UNCOMPRESS_DONE \
-    vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ \
-    COPY_TIMER (vb->profile.compute);
-
 
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb
 // ----------------------------------------------
 
-extern uint32_t piz_reconstruct_from_dict (VBlockP vb, uint8_t did_i, bool add_tab, uint32_t txt_line_i);
+extern uint32_t piz_reconstruct_from_ctx (VBlockP vb, uint8_t did_i, const char *sep, unsigned sep_len, uint32_t txt_line_i);
 
 extern void piz_reconstruct_compound_field (VBlockP vb, SubfieldMapperP mapper, const char *separator, unsigned separator_len, 
                                             const char *template, unsigned template_len, uint32_t txt_line_i);
 
-extern void piz_reconstruct_seq_qual (VBlockP vb, uint32_t seq_len, ConstBufferP data, uint32_t *next, 
-                                      SectionType sec, uint32_t txt_line_i, bool grepped_out);
-
-extern void piz_reconstruct_id (VBlockP vb, BufferP id_buf, uint32_t *next_id, 
-                                const char *id_snip, unsigned id_snip_len, bool *extra_bit, bool add_tab);
+extern void piz_reconstruct_seq_qual (VBlockP vb, MtfContext *ctx, uint32_t seq_len, uint32_t txt_line_i, bool grepped_out);
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, uint8_t did_i, DictIdType dict_id, uint32_t txt_line_i);
 
@@ -152,11 +117,8 @@ typedef struct PizSubfieldMapper {
 #define RECONSTRUCT1(s) buf_add (&vb->txt_data, (s), 1)
 #define RECONSTRUCT_TABBED(s,len) { RECONSTRUCT((s), (len)); RECONSTRUCT ("\t", 1); }
 
-#define RECONSTRUCT_FROM_DICT(did_i,add_tab) piz_reconstruct_from_dict ((VBlockP)vb, (did_i), (add_tab), txt_line_i)
-/*    LOAD_SNIP(did_i)  we don't put in a {} so that caller can use index=RECONSTRUCT_FROM_DICT() 
-    RECONSTRUCT (snip, snip_len); \
-    if (add_tab) RECONSTRUCT ("\t", 1); 
-*/
+#define RECONSTRUCT_FROM_DICT(did_i,add_tab) piz_reconstruct_from_ctx ((VBlockP)vb, (did_i), (add_tab) ? "\t" : NULL, add_tab, txt_line_i)
+
 #define RECONSTRUCT_FROM_DICT_POS(did_i,last_pos,update_last_pos,last_delta,add_tab) { \
     if ((did_i) != DID_I_NONE) LOAD_SNIP(did_i);\
     char pos_str[30];\
@@ -168,7 +130,7 @@ typedef struct PizSubfieldMapper {
 #define LOAD_SNIP_FROM_BUF(buf,next,field_name) { \
     uint32_t start = next; \
     ARRAY (char, data, buf);\
-    while (next < buf.len && data[next] != '\n') next++;\
+    while (next < buf.len && data[next] != LOCAL_BUF_TEXT_SEP) next++;\
     ASSERT (next < buf.len, \
             "Error reconstructing txt_line=%u: unexpected end of %s data (len=%u)", txt_line_i, field_name, (uint32_t)buf.len); \
     snip = &data[start];\
@@ -191,12 +153,6 @@ typedef struct PizSubfieldMapper {
     RECONSTRUCT (&data[(next)], (fixed_len)); \
     if (add_tab) RECONSTRUCT ("\t", 1);  \
     (next) += (fixed_len); }
-
-#define RECONSTRUCT_ID(did_i,id_data,next_id,extra_bit,add_tab) { \
-    DECLARE_SNIP; \
-    LOAD_SNIP (did_i);         \
-    piz_reconstruct_id ((VBlockP)vb, id_data, next_id, snip, snip_len, extra_bit,add_tab);\
-}
 
 #endif
 

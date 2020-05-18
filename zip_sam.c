@@ -5,36 +5,15 @@
 
 #include "genozip.h"
 #include "vblock.h"
-#include "buffer.h"
-#include "zfile.h"
-#include "header.h"
 #include "zip.h"
-#include "seg.h"
-#include "txtfile.h"
 #include "optimize.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)
 
-// get lengths of sequence data (SEQ+E2) and quality data (QUAL+U2)
-static void zip_sam_get_data_lengths (VBlockSAM *vb, 
-                                      uint32_t *seq_len, uint32_t *qual_len, 
-                                      uint32_t *bd_len, uint32_t *bi_len)
-{
-    *seq_len = *qual_len = *bi_len = *bd_len = 0;
-
-    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
-        ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-        *seq_len  += dl->seq_len * (1 + !!dl->e2_data_start); // length SEQ and E2 - they must be the same per SAM file specification
-        *qual_len += dl->seq_len * (1 + !!dl->u2_data_start); // length QUAL and U2 - they must be the same per SAM file specification        
-        *bd_len   += dl->bd_data_len;
-        *bi_len   += dl->bi_data_len;
-    }
-}
-
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
-static void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
-                                              char **line_seq_data, uint32_t *line_seq_len,  // out 
-                                              char **line_e2_data,  uint32_t *line_e2_len)
+void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
+                                       char **line_seq_data, uint32_t *line_seq_len,  // out 
+                                       char **line_e2_data,  uint32_t *line_e2_len)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     *line_seq_data = ENT (char, vb->txt_data, dl->seq_data_start);
@@ -48,9 +27,9 @@ static void zip_sam_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
 }   
 
 // callback function for compress to get data of one line (called by comp_compress_bzlib)
-static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i, 
-                                               char **line_qual_data, uint32_t *line_qual_len, // out
-                                               char **line_u2_data,   uint32_t *line_u2_len) 
+void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i, 
+                                        char **line_qual_data, uint32_t *line_qual_len, // out
+                                        char **line_u2_data,   uint32_t *line_u2_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
      
@@ -72,9 +51,9 @@ static void zip_sam_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 }
 
 // callback function for compress to get data of one line
-static void zip_sam_get_start_len_line_i_bd (VBlock *vb, uint32_t vb_line_i, 
-                                             char **line_bd_data, uint32_t *line_bd_len,  // out 
-                                             char **unused1,  uint32_t *unused2)
+void zip_sam_get_start_len_line_i_bd (VBlock *vb, uint32_t vb_line_i, 
+                                      char **line_bd_data, uint32_t *line_bd_len,  // out 
+                                      char **unused1,  uint32_t *unused2)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
@@ -87,9 +66,9 @@ static void zip_sam_get_start_len_line_i_bd (VBlock *vb, uint32_t vb_line_i,
 // callback function for compress to get BI data of one line
 // if BD data is available for this line too - we output the character-wise delta as they are correlated
 // we expect the length of BI and BD to be the same, the length of the sequence. this is enforced by seg_sam_optional_field.
-static void zip_sam_get_start_len_line_i_bi (VBlock *vb, uint32_t vb_line_i, 
-                                             char **line_bi_data, uint32_t *line_bi_len,  // out 
-                                             char **unused1,  uint32_t *unused2)
+void zip_sam_get_start_len_line_i_bi (VBlock *vb, uint32_t vb_line_i, 
+                                      char **line_bi_data, uint32_t *line_bi_len,  // out 
+                                      char **unused1,  uint32_t *unused2)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
@@ -110,22 +89,3 @@ static void zip_sam_get_start_len_line_i_bi (VBlock *vb, uint32_t vb_line_i,
     *unused1 = NULL;
     *unused2 = 0;
 }   
-
-// this function receives all lines of a vblock and processes them
-// in memory to the compressed format. This thread then terminates, and the I/O thread writes the output.
-void zip_sam_compress_one_vb (VBlockP vb_)
-{ 
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-
-    COMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, COMP_LZMA, false);
-    COMPRESS_DATA_SECTION (SEC_SAM_MD_DATA, md_data, char, COMP_BZ2, true);
-    
-    // generate & compress the BD, BI, SEQ & QUAL data
-    uint32_t seq_len, qual_len, bd_len, bi_len;
-    zip_sam_get_data_lengths (vb, &seq_len, &qual_len, &bd_len, &bi_len);
-
-    COMPRESS_DATA_SECTION_CALLBACK (SEC_SAM_BD_DATA, zip_sam_get_start_len_line_i_bd,   bd_len,   COMP_LZMA, true);
-    COMPRESS_DATA_SECTION_CALLBACK (SEC_SAM_BI_DATA, zip_sam_get_start_len_line_i_bi,   bi_len,   COMP_LZMA, true);
-    COMPRESS_DATA_SECTION_CALLBACK (SEC_SEQ_DATA,    zip_sam_get_start_len_line_i_seq,  seq_len,  COMP_LZMA, false);
-    COMPRESS_DATA_SECTION_CALLBACK (SEC_QUAL_DATA,   zip_sam_get_start_len_line_i_qual, qual_len, COMP_BZ2,  false);
-}

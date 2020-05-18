@@ -10,6 +10,7 @@
 #include "move_to_front.h"
 #include "vblock.h"
 #include "file.h"
+#include "header.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;
@@ -35,7 +36,7 @@ void vb_vcf_release_vb (VBlock *vb_)
     vb->ploidy = vb->num_haplotypes_per_line = 0;
     vb->has_genotype_data = vb->has_haplotype_data = false;
     vb->phase_type = PHASE_UNKNOWN;
-    vb->max_gt_line_len = vb->next_id_numeric = vb->max_genotype_section_len = 0;
+    vb->max_gt_line_len = vb->max_genotype_section_len = 0;
 
     buf_free(&vb->line_gt_data);
     buf_free(&vb->line_ht_data);
@@ -45,7 +46,6 @@ void vb_vcf_release_vb (VBlock *vb_)
     buf_free(&vb->genotype_one_section_data);
     buf_free(&vb->is_sb_included);
     buf_free(&vb->genotype_section_lens_buf);
-    buf_free(&vb->id_numeric_data);
 
     buf_free (&vb->format_mapper_buf);
     buf_free (&vb->iname_mapper_buf);
@@ -103,7 +103,6 @@ void vb_vcf_destroy_vb (VBlock *vb_)
     buf_destroy (&vb->helper_index_buf);
     buf_destroy (&vb->ht_columns_data);
     buf_destroy (&vb->format_mapper_buf);
-    buf_destroy (&vb->id_numeric_data);
     buf_destroy (&vb->column_of_zeros);
     buf_destroy (&vb->gtshark_db_db_data);
     buf_destroy (&vb->gtshark_db_gt_data);
@@ -155,9 +154,7 @@ void vb_sam_release_vb (VBlock *vb_)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
-    vb->next_qual = vb->next_random_pos = 
-    vb->next_md = vb->next_bd = vb->next_bi = 0;
-    vb->nm_did_i = vb->strand_did_i = vb->last_tlen_abs_len = vb->last_pnext_delta = 0;
+    vb->last_tlen_abs_len = vb->last_pnext_delta = 0;
     vb->rname_index_minus_1 = vb->rname_index_minus_2 = vb->rname_index_minus_3 = 0;
     vb->last_tlen_abs = 0;
     vb->last_tlen_is_positive = 0;
@@ -165,10 +162,6 @@ void vb_sam_release_vb (VBlock *vb_)
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     
     buf_free (&vb->optional_mapper_buf);
-    buf_free (&vb->qual_data);
-    buf_free (&vb->md_data);
-    buf_free (&vb->bd_data);
-    buf_free (&vb->bi_data);
 }
 
 // free all memory of a VB
@@ -176,12 +169,7 @@ void vb_sam_destroy_vb (VBlock *vb_)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
 
-    buf_destroy (&vb->random_pos_data);
     buf_destroy (&vb->optional_mapper_buf);
-    buf_destroy (&vb->qual_data);    
-    buf_destroy (&vb->md_data);    
-    buf_destroy (&vb->bd_data);    
-    buf_destroy (&vb->bi_data);    
 }
 
 //--------------------------------
@@ -192,22 +180,11 @@ void vb_fast_release_vb (VBlock *vb_)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
-    vb->next_qual = vb->next_comment = vb->last_line = 0;
+    vb->last_line = 0;
     vb->fasta_prev_vb_last_line_was_grepped = 0;
+    vb->grep_stages = 0;
     
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
-    
-    buf_free (&vb->qual_data);
-    buf_free (&vb->comment_data);
-}
-
-// free all memory of a VB
-void vb_fast_destroy_vb (VBlock *vb_)
-{
-    VBlockFAST *vb = (VBlockFAST *)vb_;
-
-    buf_destroy (&vb->qual_data);    
-    buf_destroy (&vb->comment_data);
 }
 
 //--------------------------------
@@ -218,13 +195,10 @@ void vb_gff3_release_vb (VBlock *vb_)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
-    vb->next_dbxref_numeric_data = vb->next_enst = 0;
     vb->num_info_subfields = 0;
     vb->last_id = 0;
     
-    buf_free (&vb->dbxref_numeric_data);
     buf_free (&vb->iname_mapper_buf);
-    buf_free (&vb->enst_data);
 }
 
 // free all memory of a VB
@@ -232,32 +206,7 @@ void vb_gff3_destroy_vb (VBlock *vb_)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
-    buf_destroy (&vb->dbxref_numeric_data);
     buf_destroy (&vb->iname_mapper_buf);
-    buf_destroy (&vb->enst_data);
-}
-
-//--------------------------------
-// ME23 stuff
-//--------------------------------
-
-void vb_me23_release_vb (VBlock *vb_)
-{
-    VBlockME23 *vb = (VBlockME23 *)vb_;
-
-    vb->next_id_numeric = vb->next_genotype = 0;
-
-    buf_free (&vb->id_numeric_data);
-    buf_free (&vb->genotype_data);
-}
-
-// free all memory of a VB
-void vb_me23_destroy_vb (VBlock *vb_)
-{
-    VBlockME23 *vb = (VBlockME23 *)vb_;
-
-    buf_destroy (&vb->id_numeric_data);
-    buf_destroy (&vb->genotype_data);
 }
 
 //--------------------------------
@@ -274,7 +223,7 @@ void vb_release_vb (VBlock *vb)
     vb->ready_to_dispatch = vb->is_processed = false;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = 0;
-    vb->chrom_node_index = vb->next_random_pos = vb->next_seq = 0; 
+    vb->chrom_node_index = 0; 
     vb->vb_position_txt_file = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
 
@@ -293,8 +242,6 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
-    buf_free(&vb->seq_data);
-    buf_free(&vb->random_pos_data);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)
@@ -306,7 +253,7 @@ void vb_release_vb (VBlock *vb)
     vb->in_use = false; // released the VB back into the pool - it may now be reused
 
     // release data_type -specific fields
-    if (vb->data_type != DT_NONE) 
+    if (vb->data_type != DT_NONE && DTP(release_vb)) 
         DTP(release_vb)(vb);
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
@@ -333,8 +280,6 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->show_b250_buf);
     buf_destroy (&vb->section_list_buf);
     buf_destroy (&vb->region_ra_intersection_matrix);
-    buf_destroy (&vb->seq_data);
-    buf_destroy (&vb->random_pos_data);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->mtf_ctx[i].dict_id.num)

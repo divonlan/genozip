@@ -89,7 +89,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         fprintf (stderr, "      read: %u\n", ms(p->read));
         fprintf (stderr, "      mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
         fprintf (stderr, "   write: %u\n", ms(p->write));
-        fprintf (stderr, "GENOUNZIP compute threads (piz_vcf_uncompress_one_vb): %u\n", ms(p->compute));
+        fprintf (stderr, "GENOUNZIP compute threads (piz_vcf_uncompress_vb): %u\n", ms(p->compute));
         fprintf (stderr, "   zfile_uncompress_section: %u\n", ms(p->zfile_uncompress_section));
         fprintf (stderr, "   piz_reconstruct_vb: %u\n", ms(p->piz_reconstruct_vb));
         fprintf (stderr, "      piz_vcf_get_variant_data_line: %u\n", ms(p->piz_vcf_get_variant_data_line));

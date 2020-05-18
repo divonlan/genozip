@@ -11,10 +11,9 @@
 #include "profiler.h"
 #include "aes.h"
 #include "move_to_front.h"
-#include "header.h"
 
-extern void vb_vcf_release_vb(VBlockP), vb_sam_release_vb(VBlockP), vb_fast_release_vb(VBlockP), vb_gff3_release_vb(VBlockP), vb_me23_release_vb(VBlockP); 
-extern void vb_vcf_destroy_vb(VBlockP), vb_sam_destroy_vb(VBlockP), vb_fast_destroy_vb(VBlockP), vb_gff3_destroy_vb(VBlockP), vb_me23_destroy_vb(VBlockP);
+extern void vb_vcf_release_vb(VBlockP), vb_sam_release_vb(VBlockP), vb_fast_release_vb(VBlockP), vb_gff3_release_vb(VBlockP);
+extern void vb_vcf_destroy_vb(VBlockP), vb_sam_destroy_vb(VBlockP), vb_gff3_destroy_vb(VBlockP);
 extern void vb_sam_initialize_vb(VBlockP);
 extern void vb_vcf_cleanup_memory(VBlockP);
 
@@ -60,10 +59,6 @@ typedef struct SubfieldMapper {
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
     int32_t chrom_node_index;  /* ZIP: index into ra_buf: used by random_access_update_chrom/random_access_update_pos to sync between them */\
-    Buffer seq_data;           \
-    uint32_t next_seq;         /* PIZ only: indeces into seq_data */ \
-    Buffer random_pos_data;    /* ZIP & PIZ: POS data - data from any POS-like field, where we cannot delta it for any reason */ \
-    uint32_t next_random_pos;  /* PIZ */ \
     int32_t last_pos;          /* value of POS field of the previous line, to do delta encoding - we do delta encoding even across chromosome changes */\
     \
     /* regions & filters */ \
@@ -197,9 +192,6 @@ typedef struct VBlockVCF {
     Buffer is_sb_included;            // PIZ only:  array of bool indicating for each sample block whether it is included, based on --samples 
     Buffer genotype_one_section_data; // ZIP only:  for zip we need only one section data
     
-    Buffer id_numeric_data;           // ZIP & PIZ
-    uint32_t next_id_numeric;         // PIZ
-
     Buffer gt_sb_line_starts_buf,     // used by zip_vcf_get_genotype_vb_start_len 
            gt_sb_line_lengths_buf,
            genotype_section_lens_buf; 
@@ -265,13 +257,8 @@ typedef struct VBlockSAM {
 
     int32_t last_pnext_delta;            // last delta calculated for PNEXT
 
-    Buffer md_data, bd_data, bi_data;    // data for optional field MD, BD, BI;
-
     // PIZ-only stuff
     Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
-    Buffer qual_data;                    // PIZ only: contains QUAL data and also U2 data for lines for which it exists
-    uint32_t next_qual, next_md, next_bd, next_bi;   // PIZ only: indeces into random_pos_data, md_data, bd_data, bi_data
-    uint8_t nm_did_i, strand_did_i;      // PIZ only: did_i of some fields, if they exists
 } VBlockSAM;
 
 //-----------------------------------------
@@ -291,19 +278,14 @@ typedef struct VBlockFAST { // for FASTA and FASTQ
 
     // shared fields FASTA and FASTQ
     SubfieldMapper desc_mapper; // ZIP & PIZ
-
-    // FASTQ-only fields
-    Buffer qual_data;           // PIZ only: contains QUAL data and also U2 data for lines for which it exists
-    uint32_t next_qual;         // PIZ only: indeces into qual_data
+    enum { GS_READ, GS_TEST, GS_UNCOMPRESS } grep_stages;   // PIZ: tell zfile_is_skip_section what to skip
 
     // FASTA-only fields
-    Buffer comment_data;        // ZIP & PIZ
-    uint32_t next_comment;
     bool fasta_prev_vb_last_line_was_grepped; // PIZ: whether previous VB's last line was grepped successfully. 
 
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB
     // is interpreted as a description, not a comment
-    enum { FASTA_LINE_SEQ, FASTA_LINE_DESC, FASTA_LINE_COMMENT } last_line; // ZIP
+    FastaFields last_line; // ZIP
 
 } VBlockFAST;
 
@@ -323,34 +305,11 @@ typedef struct VBlockGFF3 {
 
     uint32_t last_id;             // used for detla'ing the ID subfield
 
-    Buffer dbxref_numeric_data;   // ZIP & PIZ
-    Buffer enst_data; 
-
     uint8_t num_info_subfields;   // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                   // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
 
-    // PIZ-only stuff
-    uint32_t next_dbxref_numeric_data, next_enst;  // PIZ only: used to reconstruct data from buffers
-
 } VBlockGFF3;
-
-//-----------------------------------------
-// ME23 STUFF
-//-----------------------------------------
-
-// IMPORTANT: if changing fields in VBlockME23, also update vb_me23_release_vb and vb_me23_destroy_vb
-typedef struct VBlockME23 { // for 23andMe 
-
-    VBLOCK_COMMON_FIELDS
-
-    Buffer id_numeric_data;       // ZIP & PIZ
-    Buffer genotype_data;         // ZIP & PIZ
-    
-    // PIZ-only stuff
-    uint32_t next_id_numeric;     // PIZ only: used to reconstruct rsid
-    uint32_t next_genotype;       // PIZ only: used to genotype_data rsid
-} VBlockME23;
 
 #endif
 

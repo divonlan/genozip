@@ -14,17 +14,10 @@
 #include "file.h"
 #include "samples.h"
 #include "dispatcher.h"
-#include "zip.h"
-#include "piz.h"
-#include "seg.h"
-#include "zfile.h"
 #include "txtfile.h"
 #include "strings.h"
 
 static bool is_first_txt = true; 
-
-DataTypeProperties dt_props [NUM_DATATYPES] = DATA_TYPE_PROPERTIES;
-DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
 uint32_t last_txt_header_len = 0;
 
@@ -234,7 +227,3 @@ bool header_genozip_to_txt (Md5Hash *digest) // NULL if we're just skipped this 
     return true;
 }
 
-const char *dt_name (DataType dt)
-{
-    return type_name (dt, &dt_props[dt].name, NUM_DATATYPES);
-}

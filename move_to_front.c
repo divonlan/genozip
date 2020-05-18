@@ -89,8 +89,7 @@ MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i,
     ASSERT (ctx->dict_id.num, "Error in mtf_node_do: this ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
     ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
-            err_dict_id (ctx->dict_id), 
-            mtf_i, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len, func, code_line);
+            ctx->name, mtf_i, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len, func, code_line);
 
     bool is_ol = mtf_i < ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
 
@@ -131,14 +130,14 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     SnipIterator *iterator = override_iterator ? override_iterator : &ctx->iterator;
     
     if (!override_iterator && !iterator->next_b250) { // INFO and Field1-9 data (GT data uses override_next_b250)
-        ASSERT (buf_is_allocated (&ctx->b250), "Error in mtf_get_next_snip: b250 is unallocated. dict_id=%s", err_dict_id(ctx->dict_id));
+        ASSERT (buf_is_allocated (&ctx->b250), "Error in mtf_get_next_snip: b250 is unallocated. dict_id=%s", ctx->name);
         
         iterator->next_b250 = FIRSTENT (uint8_t, ctx->b250); // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
     }
 
     // an imperfect test for overflow, but this should never happen anyway 
     ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), "Error while reconstrucing line %u vb_i=%u: iterator for %s reached end of data",
-            txt_line, vb->vblock_i, err_dict_id (ctx->dict_id));
+            txt_line, vb->vblock_i, ctx->name);
             
     uint32_t word_index = is_v2_or_above ? base250_decode    (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
                                          : v1_base250_decode (&iterator->next_b250);
@@ -147,7 +146,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     if (word_index == WORD_INDEX_MISSING_SF) {
         ASSERT (!ctx || (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)), 
                 "Error while reconstructing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s",
-                txt_line, vb->vblock_i, err_dict_id (ctx->dict_id)); // there will be no context if this GT subfield was always missing - never appeared on any sample
+                txt_line, vb->vblock_i, ctx->dict_id.num ? ctx->name : "(no ctx)"); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
@@ -168,8 +167,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
             word_index = ctx->iterator.prev_word_index + 1;
 
         ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s dictionary has only %u entries",
-                txt_line, word_index, 
-                err_dict_id (ctx->dict_id), (uint32_t)ctx->word_list.len);
+                txt_line, word_index, ctx->name, (uint32_t)ctx->word_list.len);
 
         //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
         MtfWord *dict_word = ENT (MtfWord, ctx->word_list, word_index);
@@ -206,8 +204,7 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
     zf_ctx->mtf.len++; // we have a new dictionary item - this snip
 
     ASSERT (zf_ctx->mtf.len < MAX_WORDS_IN_CTX, 
-            "Error: too many words in directory %s, max allowed number of words is is %u", 
-            err_dict_id (zf_ctx->dict_id), MAX_WORDS_IN_CTX);
+            "Error: too many words in directory %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
 
     buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, zf_ctx->mtf.len), CTX_GROWTH, 
                "z_file->mtf_ctx->mtf", zf_ctx->did_i);
@@ -237,7 +234,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     
     ASSERT (new_mtf_i_if_no_old_one <= MAX_WORDS_IN_CTX, 
             "Error: ctx of %s is full (max allowed words=%u): ol_mtf.len=%u mtf.len=%u",
-            err_dict_id (vb_ctx->dict_id), MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
+            vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     MtfNode *node;
@@ -252,7 +249,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     }
     
     // this snip isn't in the hash table - its a new snip
-    ASSERT (vb_ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %s", err_dict_id (vb_ctx->dict_id));
+    ASSERT (vb_ctx->mtf.len < 0x7fffffff, "Error: too many words in directory %s", vb_ctx->name);
 
     buf_alloc (segging_vb, &vb_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, 1+vb_ctx->mtf.len), CTX_GROWTH, 
                "mtf_ctx->mtf", vb_ctx->did_i);
@@ -447,7 +444,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
             ASSERT (zf_node->word_index.n < zf_ctx->mtf.len, // sanity check
                     "Error: word_index=%u out of bound - mtf.len=%u, in dictionary %s", 
-                    (uint32_t)zf_node->word_index.n, (uint32_t)zf_ctx->mtf.len, err_dict_id (zf_ctx->dict_id));
+                    (uint32_t)zf_node->word_index.n, (uint32_t)zf_ctx->mtf.len, zf_ctx->name);
         }
     }
     else {
@@ -530,11 +527,29 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
         mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
 }
 
+static void mtf_initialize_ctx (MtfContext *ctx, uint8_t did_i, DictIdType dict_id, uint8_t *dict_id_to_did_i_map)
+{
+    ctx->did_i   = did_i;
+    ctx->dict_id = dict_id;
+    
+    memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
+    ((char*)ctx->name)[DICT_ID_LEN] = 0;
+
+    mtf_init_iterator (ctx);
+    
+    if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
+        dict_id_to_did_i_map[dict_id.map_key] = did_i;
+}
+
 // PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
-// or returns NIL, if not
+// or returns NIL, if not. Called by I/O thread after reading dictionaries for mapping subfields
 uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
 {
-    for (uint8_t did_i=0; did_i < z_file->num_dict_ids; did_i++) 
+    // attempt to get did_i from dict_id mapper
+    uint8_t did_i = z_file->dict_id_to_did_i_map[dict_id.map_key];
+    if (did_i != DID_I_NONE && z_file->mtf_ctx[did_i].dict_id.num == dict_id.num) return did_i;
+
+    for (did_i=0; did_i < z_file->num_dict_ids; did_i++) 
         if (dict_id.num == z_file->mtf_ctx[did_i].dict_id.num) return did_i;
 
     return DID_I_NONE; // not found
@@ -566,16 +581,7 @@ MtfContext *mtf_get_ctx_by_dict_id_do (MtfContext *mtf_ctx /* an array */,
     ASSERT (*num_dict_ids+1 < MAX_DICTS, 
             "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
 
-    ctx->did_i   = did_i;
-    ctx->dict_id = dict_id;
-    
-    memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
-    ((char*)ctx->name)[DICT_ID_LEN] = 0;
-
-    mtf_init_iterator (ctx);
-    
-    if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
-        dict_id_to_did_i_map[dict_id.map_key] = did_i;
+    mtf_initialize_ctx (ctx, did_i, dict_id, dict_id_to_did_i_map);
 
     // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
@@ -595,22 +601,17 @@ done:
 // called from seg_all_data_lines (ZIP) and zfile_read_all_dictionaries (PIZ) to initialize all
 // primary field ctx's. these are not always used (e.g. when some are not read from disk due to genocat options)
 // but we maintain their fixed positions anyway as the code relies on it
-void mtf_initialize_primary_field_ctxs (VBlock *vb, // NULL if called by zfile_read_all_dictionaries
-                                        MtfContext *mtf_ctx /* an array */, 
+void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */, 
                                         DataType dt,
                                         uint8_t *dict_id_to_did_i_map,
                                         unsigned *num_dict_ids)
 {
-    // note: we create only the regular ctxs here, not extend, as extended may belong to a different type. extended are created in seg_*_initialize
+    *num_dict_ids = MAX (dt_fields[dt].num_fields, *num_dict_ids);
+
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
-        
         const char *fname  = dt_fields[dt].names[f];
         DictIdType dict_id = dict_id_field (dict_id_make (fname, strlen(fname)));
-        MtfContext *ctx    = mtf_get_ctx_by_dict_id_do (mtf_ctx, dict_id_to_did_i_map, num_dict_ids, NULL, dict_id); 
-
-        // verify that the ctx is at its correct place
-        ASSERT (ctx - mtf_ctx == f, "Error in mtf_initialize_primary_field_ctxs: f=%u (%s) but ctx is at mtf_ctx[%u]. vb_i=%u vb.first_line=%u",
-                f, fname, (unsigned)(ctx - mtf_ctx), vb ? vb->vblock_i : 0, vb ? vb->first_line : 0);
+        mtf_initialize_ctx (&mtf_ctx[f], f, dict_id, dict_id_to_did_i_map);
     }
 }
 
@@ -803,7 +804,7 @@ void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 
             ASSERT (dict_id_fields[f] == ctx->dict_id.num,
                     "mtf_verify_field_ctxs called from %s:%u: dict_id mismatch with section type: f=%s ctx->dict_id=%s vb_i=%u",
-                    func, code_line, (char*)DTF(names)[f], err_dict_id (ctx->dict_id), vb->vblock_i);
+                    func, code_line, (char*)DTF(names)[f], ctx->name, vb->vblock_i);
     }
 }
 
@@ -835,6 +836,7 @@ void mtf_free_context (MtfContext *ctx)
     buf_free (&ctx->b250);
     buf_free (&ctx->local);
     ctx->mtf_i.len = 0; // VCF stores FORMAT length in here for stats, even if mtf_i is not allocated (and therefore buf_free will not cleanup)
+    ctx->local.len = 0; // For callback ctxs, length is stored, but data is not copied to local and is kept in vb->txt_data
     ctx->dict_id.num = 0;
     ctx->iterator.next_b250 = NULL;
     ctx->iterator.prev_word_index =0;

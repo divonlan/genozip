@@ -8,7 +8,6 @@
 #include "seg.h"
 #include "vblock.h"
 #include "move_to_front.h"
-#include "header.h"
 #include "endianness.h"
 #include "file.h"
 #include "strings.h"
@@ -77,7 +76,7 @@ static inline uint32_t seg_one_snip_do (VBlock *vb, const char *str, unsigned le
 
     ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
             "Error in seg_one_field: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
-            err_dict_id (ctx->dict_id), node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
+            ctx->name, node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
     NEXTENT (uint32_t, ctx->mtf_i) = node_index;
     ctx->txt_len += add_bytes;
@@ -88,7 +87,7 @@ static inline uint32_t seg_one_snip_do (VBlock *vb, const char *str, unsigned le
 // returns the node index
 uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, DictIdType dict_id, uint32_t add_bytes)
 {
-    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, NULL, dict_id);
+    MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
     return seg_one_snip_do (vb, str, len, ctx, add_bytes, NULL);
 }
 
@@ -233,13 +232,15 @@ uint32_t seg_add_to_random_pos_data (VBlock *vb, const char *snip, unsigned snip
     ASSSEG (standard_random_pos_encoding, snip, "%s: Error: Bad position data in field %s - expecting an integer between 0 and %u without leading zeros, but instead seeing \"%.*s\"",
             global_cmd, field_name, 0xfffffffe, snip_len, snip);
 
-    buf_alloc_more (vb, &vb->random_pos_data, 1, 0, uint32_t, 2);
+    // note: random pos data always goes into the primary pos local - no point in anything several local sections with the same type of data
+    MtfContext *ctx = &vb->mtf_ctx[DTF(pos)];
+    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, sizeof (uint32_t));
 
     // 32 bit number - this compresses better than textual numbers with LZMA
     uint32_t n32 = (uint32_t)n64;
-    NEXTENT (uint32_t, vb->random_pos_data) = BGEN32 (n32);
+    NEXTENT (uint32_t, ctx->local) = BGEN32 (n32);
 
-    vb->mtf_ctx[DTF(pos)].txt_len += add_bytes;
+    ctx->txt_len += add_bytes;
 
     return n32;
 }
@@ -272,7 +273,7 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
     // section in every VB just for a single entry in case of a nicely sorted file
     if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && last_pos) {
         seg_add_to_random_pos_data (vb, pos_str, pos_len, pos_len+account_for_separator, field_name);
-        static const char pos_lookup[1] = {SNIP_LOOKUP};
+        static const char pos_lookup[1] = { SNIP_LOOKUP_UINT32 };
         seg_one_snip (vb, pos_lookup, 1, did_i, 0, NULL);
 
         return this_pos;
@@ -325,8 +326,7 @@ int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*i
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id, 
-                   const char *id_snip, unsigned id_snip_len, bool extra_bit, bool account_for_separator)
+void seg_id_field (VBlock *vb, DictIdType dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator)
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
@@ -340,30 +340,20 @@ void seg_id_field (VBlock *vb, Buffer *id_buf, DictIdType dict_id,
         else 
             break;
 
-    // added to sec_buf if we have a trailing number
+    // added to local if we have a trailing number
     if (num_digits) {
-        uint32_t id_num = BGEN32 (atoi (&id_snip[id_snip_len - num_digits]));
-        seg_add_to_fixed_buf (vb, id_buf, (char*)&id_num, sizeof (id_num));
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, dict_id);
+        uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
+        
+        buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, sizeof(uint32_t));
+        NEXTENT (uint32_t, ctx->local) = BGEN32 (id_num);
     }
 
-    // append the textual part with \1 and \2 as needed - we have enough space - we have a tab following the field
-    // and if we need to add \1 we also know that we have at least one digit
+    // append the textual part with SNIP_LOOKUP_UINT32 if needed - we have enough space - we have a tab following the field
     unsigned new_len = id_snip_len - num_digits;
-    char save_1=0, save_2=0;
-    if (num_digits) {
-        save_1 = id_snip[new_len]; 
-        ((char*)id_snip)[new_len++] = 1;
-    }
-    if (extra_bit) {
-        save_2 = id_snip[new_len]; 
-        ((char*)id_snip)[new_len++] = 2;
-    }
-
-    seg_one_subfield (vb, id_snip, new_len, dict_id, id_snip_len + !!account_for_separator); // account for the entire length, and sometimes with \t
-
-    // restore
-    if (extra_bit)  ((char*)id_snip)[--new_len] = save_2;
-    if (num_digits) ((char*)id_snip)[--new_len] = save_1;
+    SAFE_ASSIGN (1, &id_snip[new_len], SNIP_LOOKUP_UINT32); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
+    seg_one_subfield (vb, id_snip, new_len + (num_digits > 0), dict_id, id_snip_len + !!account_for_separator); // account for the entire length, and sometimes with \t
+    SAFE_RESTORE (1);
 }
 
 typedef struct { const char *start; unsigned len; } InfoNames;
@@ -496,7 +486,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                 DictIdType dict_id = dict_id_type_1 (dict_id_make (this_name, this_name_len));
 
                 // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
-                MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, num_info_subfields, dict_id);
+                MtfContext *ctx = mtf_get_ctx_by_dict_id_sf (vb, num_info_subfields, dict_id);
                 iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
 
                 // allocate memory if needed
@@ -607,7 +597,7 @@ void seg_compound_field (VBlock *vb,
             if (mapper->num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
                 sf_dict_id.id[1] = (sf_i <= 9) ? (sf_i + '0') : (sf_i-10 + 'a');
 
-                sf_ctx = mtf_get_ctx_by_dict_id (vb, NULL, sf_dict_id);
+                sf_ctx = mtf_get_ctx_by_dict_id (vb, sf_dict_id);
                 mapper->did_i[sf_i] = sf_ctx->did_i;
                 mapper->num_subfields++;
             }
@@ -647,25 +637,25 @@ void seg_compound_field (VBlock *vb,
     field_ctx->txt_len += sf_i + account_for_13; // sf_i has 1 for each separator including the terminating \t or \n / \r\n
 }
 
-void seg_add_to_data_buf (VBlock *vb, Buffer *buf, 
-                          const char *snip, unsigned snip_len, 
-                          uint8_t add_bytes_did_i, unsigned add_bytes, const char *buf_name)  // bytes in the original text file accounted for by this snip
+void seg_add_to_local_text (VBlock *vb, MtfContext *ctx, 
+                            const char *snip, unsigned snip_len, 
+                            unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
-    buf_alloc (vb, buf, MAX (buf->len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, buf_name, vb->vblock_i); // buffer must be pre-allocated before first call to seg_add_to_data_buf
-    if (snip_len) buf_add (buf, snip, snip_len); 
-    buf_add (buf, "\n", 1); 
+    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, ctx->name, sizeof(char)); // param=quantum of len
+    if (snip_len) buf_add (&ctx->local, snip, snip_len); 
+    
+    static const char sep[1] = { LOCAL_BUF_TEXT_SEP };
+    buf_add (&ctx->local, sep, 1); 
 
-    if (add_bytes_did_i != DID_I_NONE)
-        vb->mtf_ctx[add_bytes_did_i].txt_len += add_bytes;
+    if (add_bytes) ctx->txt_len += add_bytes;
 }
 
-void seg_add_to_fixed_buf (VBlock *vb, Buffer *buf, 
-                           const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
+void seg_add_to_local_fixed (VBlock *vb, MtfContext *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
 {
-    ASSERT0 (buf_is_allocated (buf), "Error in seg_add_to_fixed_buf: buf is not allocated");
-
-    buf_alloc_more (vb, buf, data_len, 0, char, 2); // buffer must be pre-allocated before first call to seg_add_to_fixed_buf
-    if (data_len) buf_add (buf, data, data_len); 
+    if (data_len) {
+        buf_alloc (vb, &ctx->local, MAX (ctx->local.len + data_len, vb->lines.len * data_len), CTX_GROWTH, ctx->name, sizeof (char)); 
+        buf_add (&ctx->local, data, data_len); 
+    }
 }
 
 static void seg_set_hash_hints (VBlock *vb, int third_num)
@@ -725,7 +715,7 @@ static void seg_verify_file_size (VBlock *vb)
         fprintf (stderr, "Txt lengths:\n");
         for (unsigned sf_i=0; sf_i < vb->num_dict_ids; sf_i++) {
             MtfContext *ctx = &vb->mtf_ctx[sf_i];
-            fprintf (stderr, "%s: %u\n", err_dict_id (ctx->dict_id), (uint32_t)ctx->txt_len);
+            fprintf (stderr, "%s: %u\n", ctx->name, (uint32_t)ctx->txt_len);
         }
         
         char s1[30], s2[30];
@@ -741,7 +731,7 @@ void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
 
-    mtf_initialize_primary_field_ctxs (vb, vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
+    mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
 
     mtf_verify_field_ctxs (vb);
     

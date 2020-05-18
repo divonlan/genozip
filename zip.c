@@ -74,7 +74,7 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
         MtfContext *ctx = &vb->mtf_ctx[did_i];
 
-        if (ctx->mtf_i.len || ctx->did_i < DTF(num_fields)) {
+        if (ctx->mtf_i.len) {
             
             // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
             if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue;
@@ -84,51 +84,17 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
         }
 
         if (ctx->local.len)
-            zfile_compress_local_data (vb, ctx, COMP_BZ2);
-    }
-}
-/*
-// generate & write b250 data for all subfields mapped in a mapper
-void zip_generate_and_compress_subfields (VBlock *vb, const SubfieldMapper *mapper)
-{
-    for (unsigned sf_i=0; sf_i < mapper->num_subfields; sf_i++) {
-        
-        MtfContext *ctx = &vb->mtf_ctx[mapper->did_i[sf_i]];
-
-        if (ctx->mtf_i.len) { // we compress only if this subfield has data this VB
-            zip_generate_b250_section (vb, ctx);
-            zfile_compress_b250_data  (vb, ctx, COMP_BZ2);
-        }
+            zfile_compress_local_data (vb, ctx);
     }
 }
 
-void zip_generate_and_compress_subfields2 (VBlock *vb, SectionType sec_dict)
-{
-    uint8_t num_subfields=0;
-    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
-                
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
-        
-        if (ctx->dict_section_type == sec_dict) {
-            if (ctx->mtf_i.len) {
-                zip_generate_b250_section (vb, ctx);
-                zfile_compress_b250_data (vb, ctx, COMP_BZ2);
-            }
-            num_subfields++;
-        }
-    }
-    ASSERT (num_subfields <= MAX_SUBFIELDS,
-            "Error: vb_i=%u has %u subfields of sec=%s exceeding the maximum of %u",
-            vb->vblock_i, num_subfields, st_name(sec_dict), MAX_SUBFIELDS);
-}
-*/
 // here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
 // Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
 void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 {
-    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%s", err_dict_id (ctx->dict_id));
+    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%s", ctx->name);
 
     buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
                1.1, "ctx->b250_buf", 0);
@@ -297,7 +263,7 @@ static void zip_compress_one_vb (VBlock *vb)
     zip_generate_and_compress_ctxs (vb);
 
     // compress data-type specific sections
-    DTP(compress)(vb);
+    if (DTP(compress)) DTP(compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true

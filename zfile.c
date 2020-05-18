@@ -22,6 +22,7 @@
 #include "gtshark_vcf.h"
 #include "compressor.h"
 #include "piz.h"
+#include "zip.h"
 #include "license.h"
 #include "arch.h"
 
@@ -61,9 +62,12 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 
     if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
 
-    if (flag_show_b250 && header->h.section_type == SEC_CHROM_B250)
+    static bool first = true;
+    if (flag_show_b250 && first) { 
         fprintf (stderr, "Base-250 data for VB %u (result of '--show-b250'):\n", BGEN32 (header->h.vblock_i));
-        
+        first = false;
+    }
+
     fprintf (stderr, "  %*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
 
     const uint8_t *data = (const uint8_t *)b250_data->data;
@@ -87,7 +91,7 @@ bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
     switch (vb ? vb->data_type : z_file->data_type) {
         case DT_VCF:
             if ((flag_drop_genotypes || flag_gt_only) && 
-                (st == SEC_VCF_FORMAT_B250 || st == SEC_VCF_FORMAT_DICT || st == SEC_VCF_GT_DATA || st == SEC_VCF_FRMT_SF_DICT))
+                (st == SEC_VCF_FORMAT_B250_legacy || st == SEC_VCF_FORMAT_DICT_legacy || st == SEC_VCF_GT_DATA || st == SEC_VCF_FRMT_SF_DICT_legacy))
                 return true;
 
             break;
@@ -95,15 +99,17 @@ bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
         case DT_FASTQ:
         case DT_FASTA:
             if (flag_header_one &&
-                (st == SEC_SEQ_DATA || st == SEC_QUAL_DATA || st == SEC_FASTA_COMMENT_DATA))
+                (dict_id.num == dict_id_fields[FAST_SEQ] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
                 return true;
 
             // when grepping by I/O thread - skipping all section but DESC
-            if (flag_grep && arch_am_i_io_thread() && dict_id.num != dict_id_fields[FAST_DESC])
+            if (vb && flag_grep && (((VBlockFASTP)vb)->grep_stages == GS_TEST) && 
+                dict_id.num != dict_id_fields[FAST_DESC] && !dict_id_is_fast_desc_sf (dict_id))
                 return true;
 
             // if grepping, compute thread doesn't need to decompressed DESC again
-            if (flag_grep && !arch_am_i_io_thread() && dict_id.num == dict_id_fields[FAST_DESC])
+            if (vb && flag_grep && (((VBlockFASTP)vb)->grep_stages == GS_UNCOMPRESS) && 
+                (dict_id.num == dict_id_fields[FAST_DESC] || dict_id_is_fast_desc_sf (dict_id)))
                 return true;
             
             break;
@@ -129,6 +135,8 @@ void zfile_uncompress_section (VBlock *vb,
         dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
     else if (section_type_is_b250 (expected_section_type))
         dict_id = ((SectionHeaderB250 *)section_header_p)->dict_id;
+    else if (expected_section_type == SEC_LOCAL)
+        dict_id = ((SectionHeaderLocal *)section_header_p)->dict_id;
 
     if (zfile_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
 
@@ -253,21 +261,44 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
-void zfile_compress_local_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_alg)
+static CompressionAlg zfile_get_local_data_comp_alg (DataType dt, DictIdType dict_id)
+{
+    for (uint64_t **next = dt_fields[dt].local_by_lzma ; *next; next++) 
+        if (**next == dict_id.num) return COMP_LZMA;
+
+    return COMP_BZ2;
+}
+
+static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictIdType dict_id)
+{
+    static struct { DataType dt; uint64_t *dict_id_num; CompGetLineCallback *func; } callbacks[] = LOCAL_COMP_CALLBACKS;
+
+    for (unsigned i=0; i < sizeof(callbacks)/sizeof(callbacks[0]); i++)
+        if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == dict_id.num) 
+            return callbacks[i].func;
+
+    return NULL;
+}
+
+void zfile_compress_local_data (VBlock *vb, MtfContext *ctx)
 {   
     SectionHeaderLocal header;
     memset (&header, 0, sizeof(header)); // safety
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.section_type          = SEC_LOCAL;
-    header.h.data_uncompressed_len = BGEN32 (ctx->local.len);
+    header.h.data_uncompressed_len = BGEN32 (ctx->local.len * (ctx->local.param ? ctx->local.param : 1)); // for regular (non-callback) locals, we store the len quantum in local.param
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderLocal));
-    header.h.sec_compression_alg   = COMP_BZ2;
+    header.h.sec_compression_alg   = zfile_get_local_data_comp_alg (vb->data_type, ctx->dict_id);
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;
 
-    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->local.data, NULL);
+    CompGetLineCallback *callback = zfile_get_local_data_callback (vb->data_type, ctx->dict_id);
+
+    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
+                   callback ? NULL : ctx->local.data, 
+                   callback);
 }
 
 // compress section - two options for input data - 
@@ -442,7 +473,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 {
     SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_dictionary() will reset cursor 
 
-    mtf_initialize_primary_field_ctxs (NULL, z_file->mtf_ctx, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
+    mtf_initialize_primary_field_ctxs (z_file->mtf_ctx, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
 
     while (sections_get_next_dictionary (&sl_ent)) {
 

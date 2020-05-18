@@ -16,11 +16,11 @@
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {
-    DictIdType dict_id = { 0 };
-    bool is_dict = (section_type_is_dictionary (header->section_type));
+    DictIdType dict_id = DICT_ID_NONE;
 
-    if (is_dict)                                          dict_id = ((SectionHeaderDictionary *)header)->dict_id;
-    else if (section_type_is_b250 (header->section_type)) dict_id = ((SectionHeaderB250    *)header)->dict_id;
+    if      (header->section_type == SEC_DICT ) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
+    else if (header->section_type == SEC_B250 ) dict_id = ((SectionHeaderB250       *)header)->dict_id;
+    else if (header->section_type == SEC_LOCAL) dict_id = ((SectionHeaderLocal      *)header)->dict_id;
 
     // 1. if this is a vcf_header, random_access or genozip_header - it goes directly into the z_file by the I/O thread
     //    before or after all the compute threads are operational
@@ -41,7 +41,7 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
         name   = "z_file->section_list_buf";
         offset = z_file->disk_so_far + vb->z_data.len;
     }
-    else if (is_dict) {          // case 2 - dictionaries
+    else if (header->section_type == SEC_DICT) {          // case 2 - dictionaries
         buf    = &z_file->section_list_dict_buf;
         alc_vb = evb; // z_file buffer goes to evb
         name   = "z_file->section_list_dict_buf";

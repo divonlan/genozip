@@ -8,12 +8,12 @@
 #include "seg.h"
 #include "vblock.h"
 #include "move_to_front.h"
-#include "header.h"
 #include "random_access.h"
 #include "optimize.h"
 #include "file.h"
 #include "strings.h"
 #include "zip.h"
+#include "header.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
@@ -26,12 +26,6 @@ void seg_vcf_initialize (VBlock *vb_)
     vb->phase_type = PHASE_UNKNOWN;  // phase type of this block
     vb->num_samples_per_block = global_vcf_samples_per_block;
     vb->num_sample_blocks = ceil((float)global_vcf_num_samples / (float)vb->num_samples_per_block);
-
-    EXTENDED_FIELD_CTX (VCF_GT, dict_id_vcf_format_sf (dict_id_make ("GT", 2)));
-
-    buf_alloc (vb, &vb->id_numeric_data, sizeof(uint32_t) * vb->lines.len, 1, "id_numeric_data", vb->vblock_i);   
-    buf_alloc (vb, &vb->random_pos_data, vb->lines.len * sizeof (uint32_t), 1, "random_pos_data", vb->vblock_i);    
-    buf_alloc (vb, &vb->seq_data, 10000, 1, "seq_data", vb->vblock_i); // arbitrary initial allocation
 
     seg_init_mapper (vb_, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
     seg_init_mapper (vb_, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf,  "iname_mapper_buf");    
@@ -83,7 +77,7 @@ static void seg_vcf_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
             ASSSEG (dict_id_is_vcf_format_sf (subfield), field_start,
                     "Error: string %.*s in the FORMAT field is not a legal subfield", DICT_ID_LEN, subfield.id);
 
-            MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, &vb->num_format_subfields, subfield);
+            MtfContext *ctx = mtf_get_ctx_by_dict_id_sf (vb, &vb->num_format_subfields, subfield);
             
             format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
         } 
@@ -116,7 +110,7 @@ static void seg_vcf_refalt_field (VBlockVCF *vb,
                                   const char *ref_start, unsigned ref_len, 
                                   const char *alt_start, unsigned alt_len)
 {
-    Buffer *local = &vb->mtf_ctx[VCF_REFALT].local;
+    MtfContext *ctx = &vb->mtf_ctx[VCF_REFALT];
 
     // case: SNP or missing ref or alt ('.', 'N' etc) or 2 alternatives 'C,G' etc simple cases
     if (ref_len == 1 && alt_len <= 3) 
@@ -124,28 +118,28 @@ static void seg_vcf_refalt_field (VBlockVCF *vb,
 
     // case: ref is short, alt is long
     else if (ref_len == 1) {
-        SAFE_ASSIGN (1, alt_start, SNIP_LOOKUP);
-        seg_one_field (vb, ref_start, ref_len+2, VCF_REFALT, ref_len+alt_len+2); // store just the ref, and the tab between them and SNIP_LOOKUP, but account for everything
+        SAFE_ASSIGN (1, alt_start, SNIP_LOOKUP_TEXT);
+        seg_one_field (vb, ref_start, ref_len+2, VCF_REFALT, ref_len+alt_len+2); // store just the ref, and the tab between them and SNIP_LOOKUP_TEXT, but account for everything
         SAFE_RESTORE(1);
 
-        seg_add_to_data_buf ((VBlockP)vb, local, alt_start, alt_len, DID_I_NONE, 0, "REFALT"); // store alt in local
+        seg_add_to_local_text ((VBlockP)vb, ctx, alt_start, alt_len, 0); // store alt in local
     }
 
     // case: ref is long, alt is short
     else if (alt_len <= 3) {
-        SAFE_ASSIGN (1, alt_start-2, SNIP_LOOKUP);
+        SAFE_ASSIGN (1, alt_start-2, SNIP_LOOKUP_TEXT);
         seg_one_field (vb, alt_start-2, alt_len+2, VCF_REFALT, ref_len+alt_len+2); // store just the alt, and the tab between them, but account for everything
         SAFE_RESTORE(1);
 
-        seg_add_to_data_buf ((VBlockP)vb, local, ref_start, ref_len, DID_I_NONE, 0, "REFALT"); // store ref in local
+        seg_add_to_local_text ((VBlockP)vb, ctx, ref_start, ref_len, 0); // store ref in local
     }
 
     // case: both are along
     else {
-        char snip[3] = { SNIP_LOOKUP, '\t', SNIP_LOOKUP };
+        char snip[3] = { SNIP_LOOKUP_TEXT, '\t', SNIP_LOOKUP_TEXT };
         seg_one_field (vb, snip, 3, VCF_REFALT, ref_len+alt_len+2); // store just the tab between the ref and alt, but account for everything
-        seg_add_to_data_buf ((VBlockP)vb, local, ref_start, ref_len, DID_I_NONE, 0, "REFALT"); // store ref in local
-        seg_add_to_data_buf ((VBlockP)vb, local, alt_start, alt_len, DID_I_NONE, 0, "REFALT"); // store alt in local
+        seg_add_to_local_text ((VBlockP)vb, ctx, ref_start, ref_len, 0); // store ref in local
+        seg_add_to_local_text ((VBlockP)vb, ctx, alt_start, alt_len, 0); // store alt in local
     }
 }
 
@@ -516,7 +510,7 @@ const char *seg_vcf_data_line (VBlock *vb_,
     // ID
     field_start = next_field;
     next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, "ID");
-    seg_id_field (vb_, &vb->id_numeric_data, (DictIdType)dict_id_fields[VCF_ID], field_start, field_len, false, true);
+    seg_id_field (vb_, (DictIdType)dict_id_fields[VCF_ID], field_start, field_len, true);
 
     // REF + ALT
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:

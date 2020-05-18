@@ -21,7 +21,7 @@ The command line options are similar to gzip and bcftools, so if you're familiar
 <b><i>Commands</i></b>: <br>
 <b>genozip</b>   - compress one or more files <br>
 <b>genounzip</b> - decompress one or more files <br>
-<b>genols</b>    - show metadata of files or the entire directory <br>
+<b>genols</b>    - show metadata of one or more files or the entire directory <br>
 <b>genocat</b>   - view one or more files <br>
 <br>
 <b><i>Some advanced options:</i></b><br>
@@ -38,7 +38,6 @@ Note: there is no need for a separate indexing step or index file<br>
 <br>
 <b><i>Calculating the MD5:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
-<b>genols</b> <i>file.vcf.genozip</i> --md5 <br>
 <br>
 <b><i>Encryption:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>

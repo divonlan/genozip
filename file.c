@@ -728,11 +728,9 @@ uint64_t file_get_size (const char *filename)
 bool file_is_dir (const char *filename)
 {
     struct stat64 st;
+    int ret = stat64(filename, &st); // 0 if successful
     
-    int ret = stat64(filename, &st);
-    ASSERT (!ret, "Error: failed accessing %s: %s", filename, strerror(errno));
-    
-    return S_ISDIR (st.st_mode);
+    return !ret && S_ISDIR (st.st_mode);
 }
 
 void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, unsigned buf_param,

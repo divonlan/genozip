@@ -9,11 +9,8 @@
 #include "vblock.h"
 #include "piz.h"
 #include "seg.h"
-#include "profiler.h"
 #include "endianness.h"
-#include "zfile.h"
 #include "buffer.h"
-#include "header.h"
 #include "move_to_front.h"
 #include "regions.h"
 #include "file.h"
@@ -42,7 +39,7 @@ static void piz_gff3_reconstruct_array_of_struct (VBlockGFF3 *vb, uint8_t did_i,
             RECONSTRUCT1 (" ");
         }
 
-        RECONSTRUCT_ID (enst_ctx->did_i, &vb->enst_data, &vb->next_enst, NULL, false);
+        RECONSTRUCT_FROM_DICT (enst_ctx->did_i, false);
 
         if (entry_i < num_entries-1) RECONSTRUCT1 (",");
     }
@@ -59,14 +56,17 @@ static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t di
     }
 
     if (dict_id.num == dict_id_ATTR_Dbxref) {
-        RECONSTRUCT_ID (did_i, &vb->dbxref_numeric_data, &vb->next_dbxref_numeric_data, NULL, false)
+        RECONSTRUCT_FROM_DICT (did_i, false);
         return false;
     }
 
     if (dict_id.num == dict_id_ATTR_Variant_seq   ||
         dict_id.num == dict_id_ATTR_Reference_seq ||
         dict_id.num == dict_id_ATTR_ancestral_allele) {
-        RECONSTRUCT_FROM_BUF (vb->seq_data, vb->next_seq, "SEQ", "", 0);
+        
+        // note: all three are stored together in dict_id_ATTR_Variant_seq as they are correlated
+        MtfContext *ctx = mtf_get_ctx_by_dict_id (vb, (DictIdType)dict_id_ATTR_Variant_seq); 
+        RECONSTRUCT_FROM_BUF (ctx->local, ctx->next_local, ctx->name, "", 0);
         return false;
     }
 
@@ -82,10 +82,8 @@ static bool piz_gff3_reconstruct_special_info_subfields (VBlock *vb_, uint8_t di
     return true;// proceed with normal reconstruction
 }
 
-static void piz_gff3_reconstruct_vb (VBlockGFF3 *vb)
+void piz_gff3_reconstruct_vb (VBlockGFF3 *vb)
 {
-    START_TIMER;
-
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
     
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
@@ -114,31 +112,10 @@ static void piz_gff3_reconstruct_vb (VBlockGFF3 *vb)
         if (flag_regions && !regions_is_site_included (seqid_word_index, vb->last_pos))
             vb->txt_data.len = txt_data_start; // remove excluded line
     }
-
-    COPY_TIMER(vb->profile.piz_reconstruct_vb);
-}
-
-void piz_gff3_uncompress_one_vb (VBlock *vb_)
-{
-    UNCOMPRESS_HEADER_AND_FIELDS (VBlockGFF3, true);
-    //UNCOMPRESS_SUBFIELDS (vb->num_info_subfields, SEC_GFF3_ATTRS_SF_B250);
-    UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
-    UNCOMPRESS_DATA_SECTION (SEC_SEQ_DATA, seq_data, char, true);    
-    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, dbxref_numeric_data, char, true);    
-    UNCOMPRESS_DATA_SECTION (SEC_ENST_DATA, enst_data, char, true);    
-
-    piz_gff3_reconstruct_vb (vb);
-    UNCOMPRESS_DONE;
 }
 
 bool piz_gff3_read_one_vb (VBlock *vb, SectionListEntry *sl)
 { 
-    if (vb->vblock_i == 1) piz_map_iname_subfields();
-    
-    READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // POS data that failed delta
-    READ_DATA_SECTION (SEC_SEQ_DATA, true); // Data of Variant_seq, Reference_seq and ancestral_allele
-    READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // Data of Dbxref
-    READ_DATA_SECTION (SEC_ENST_DATA, true); // Data of ENST IDs coming from Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
-
+    if (vb->vblock_i == 1) piz_map_iname_subfields(vb);
     return true;
 }

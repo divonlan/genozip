@@ -4,14 +4,11 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "profiler.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "header.h"
 #include "seg.h"
 #include "vblock.h"
 #include "base250.h"
-#include "dispatcher.h"
 #include "move_to_front.h"
 #include "file.h"
 #include "endianness.h"
@@ -24,6 +21,7 @@
 #include "gtshark_vcf.h"
 #include "dict_id.h"
 #include "strings.h"
+#include "header.h"
 
 #define DATA_LINE(i) ENT (PizDataLineVCF, vb->lines, i)
 
@@ -45,23 +43,7 @@ static bool piz_vcf_reconstruct_special_info_subfields (VBlock *vb, uint8_t did_
 
     return true; // proceed with normal reconstruction
 }
-/*        
-static void piz_vcf_reconstruct_ref_alt (VBlockVCF *vb, uint32_t txt_line_i)
-{
-    DECLARE_SNIP;
-    LOAD_SNIP(VCF_REFALT);
 
-    if (snip[0] == '\t') 
-        RECONSTRUCT_FROM_BUF (vb->seq_data, vb->next_seq, DTF(names)[VCF_REFALT], "",0);
-
-    RECONSTRUCT (snip, snip_len); 
-
-    if (snip[snip_len-1] == '\t') 
-        RECONSTRUCT_FROM_BUF (vb->seq_data, vb->next_seq, DTF(names)[VCF_REFALT], "",0);
-
-    RECONSTRUCT ("\t", 1); 
-}      
-*/
 static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i, 
                                         bool *has_13) // out: original vcf line ended with Windows-style \r\n
 {
@@ -77,10 +59,9 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
     if (flag_regions && !regions_is_site_included (chrom_word_index, vb->last_pos)) // test here bc vb->last_pos might change if INFO has END
         line_included = false;
 
-    RECONSTRUCT_ID (VCF_ID, &vb->id_numeric_data, &vb->next_id_numeric, NULL, true); 
-
+    RECONSTRUCT_FROM_DICT (VCF_ID,     true); 
     RECONSTRUCT_FROM_DICT (VCF_REFALT, true);
-    RECONSTRUCT_FROM_DICT (VCF_QUAL, true);
+    RECONSTRUCT_FROM_DICT (VCF_QUAL,   true);
     RECONSTRUCT_FROM_DICT (VCF_FILTER, true);
 
     uint32_t iname_word_index = LOAD_SNIP (VCF_INFO);        
@@ -90,7 +71,7 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
 
     if (vb->mtf_ctx[VCF_FORMAT].word_list.len) {
         if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
-        else              RECONSTRUCT_FROM_DICT (VCF_FORMAT, true);
+        else if (!flag_drop_genotypes) RECONSTRUCT_FROM_DICT (VCF_FORMAT, true);
     }
 
     // after consuming sections' data, if this line is not to be outputed - shorten txt_data back to start of line
@@ -102,7 +83,7 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
 // Called from the I/O thread piz_vcf_read_one_vb - and immutable thereafter
 // This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries.
 // It populates piz_format_mapper_buf with info about each unique format type in this vb (FormatInfo structure)
-static void piz_vcf_map_format_subfields (void)
+static void piz_vcf_map_format_subfields (VBlock *vb)
 {    
     MtfContext *format_ctx = &z_file->mtf_ctx[VCF_FORMAT];
 
@@ -144,9 +125,9 @@ static void piz_vcf_map_format_subfields (void)
 
             DictIdType dict_id = dict_id_vcf_format_sf (dict_id_make (start, is_v5_or_above ? len : MIN (len, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
 
-            // get the did_i of this subfield. note: did_i can be NIL if the subfield appeared in a FORMAT field
+            // get the did_i of this subfield. note: the context will be new (exist in the VB but not z_file) did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
-            uint8_t did_i = mtf_get_existing_did_i_by_dict_id (dict_id);
+            uint8_t did_i = mtf_get_existing_did_i_by_dict_id (dict_id); 
             formats[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &z_file->mtf_ctx[did_i] : NULL;
         }
     }
@@ -244,7 +225,7 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
                 MtfContext *sf_ctx = line_format_info->ctx[sf_i];
 
                 ASSERT (sf_ctx || *sample_iterator[sample_i].next_b250 == BASE250_MISSING_SF, 
-                        "Error: line_format_info->ctx[sf_i=%u] for line %u sample %u (both counting from 1) is NULL, indicating that this subfield has no value in the vb in any sample or any line. And yet, it does...", 
+                        "Error: line_format_info->ctx[sf_i=%u] for line %u sample %u (counting from 1) is dict_id=0, indicating that this subfield has no value in the vb in any sample or any line. And yet, it does...", 
                         sf_i, vb_line_i + vb->first_line, sample_i+1);
 
                 // add a colon before, if needed
@@ -575,6 +556,8 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
                 piz_vcf_reconstruct_samples (vb, vb_line_i, has_13);
             }
         }
+        else if (is_line_included) // flag_drop_genotypes
+            *LASTENT (char, vb->txt_data) = '\n'; // if it was a \t, it is now a \n
             
         // reset len for next line - no need to alloc as all the lines are the same size?
         vb->line_ht_data.len = vb->line_gt_data.len = vb->line_phase_data.len = 0;
@@ -585,18 +568,6 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
 
 static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 {
-    // The VB is read from disk in piz_vcf_read_one_vb(), in the I/O thread, and is decompressed here in the 
-    // Compute thread, with the exception of dictionaries that are processed by the I/O thread
-    // Order of sections in a V2 VB:
-    // 1. SEC_VB_HEADER - its data is the haplotype index
-    // 2. (the dictionaries were here in the file, but they are omitted from vb->z_data)
-    // 3. b250 of CHROM to FORMAT fields
-    // 4. SEC_VCF_INFO_SF_B250 - All INFO subfield data
-    // 5. All sample data: multiple sections per sample block:
-    //    5a. SEC_VCF_GT_DATA - genotype data
-    //    5b. SEC_VCF_PHASE_DATA - phase data
-    //    5c. SEC_HT_DATA (1 section) or SEC_HAPLOTYPE_GTSHARK (5 sections) - haplotype data
-
     ARRAY (const unsigned, section_index, vb->z_section_headers);
 
     SectionHeaderVbHeaderVCF *header = (SectionHeaderVbHeaderVCF *)(vb->z_data.data + section_index[0]);
@@ -646,12 +617,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
                    vb->num_haplotypes_per_line);
     }
 
-    unsigned section_i=1;
-    
-    piz_uncompress_all_b250_local ((VBlockP)vb, &section_i);
-
-    UNCOMPRESS_DATA_SECTION (SEC_RANDOM_POS_DATA, random_pos_data, uint32_t, true);    
-    UNCOMPRESS_DATA_SECTION (SEC_NUMERIC_ID_DATA, id_numeric_data, char, true);
+    unsigned section_i = piz_uncompress_all_ctxs ((VBlockP)vb);
 
     if (flag_drop_genotypes) return; // if --drop-genotypes was requested - no need to uncompress the following sections
 
@@ -738,12 +704,8 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
 // this is the compute thread entry point. It receives all data of a variant block and processes it
 // in memory to the uncompressed format. This thread then terminates the I/O thread writes the output.
-void piz_vcf_uncompress_one_vb (VBlock *vb_)
+void piz_vcf_uncompress_vb (VBlockVCFP vb)
 {
-    START_TIMER;
-
-    VBlockVCF *vb = (VBlockVCF *)vb_;
-
     if (is_v2_or_above) {
         piz_vcf_uncompress_all_sections (vb);
 
@@ -760,8 +722,6 @@ void piz_vcf_uncompress_one_vb (VBlock *vb_)
         void v1_piz_vcf_reconstruct_vb (VBlockVCFP vb);
         v1_piz_vcf_reconstruct_vb (vb);
     }
-
-    UNCOMPRESS_DONE;
 }
 
 
@@ -775,12 +735,9 @@ bool piz_vcf_read_one_vb (VBlock *vb_, SectionListEntry *sl)
     // iname mapper: first VB, we map all iname and format subfields to a global mapper. this uses
     // dictionary info only, not b250
     if (vb->vblock_i == 1) {
-        piz_vcf_map_format_subfields();
-        piz_map_iname_subfields();
+        piz_vcf_map_format_subfields(vb_);
+        piz_map_iname_subfields(vb_);
     }
-
-    READ_DATA_SECTION (SEC_RANDOM_POS_DATA, true); // optional - POS data that failed delta (introduced in v5)
-    READ_DATA_SECTION (SEC_NUMERIC_ID_DATA, true); // optional - numeric data of the ID field (the non-numeric part is in SEC_ID_B250) (introduced in v5)
         
     // read the sample data
     uint32_t num_sample_blocks     = BGEN32 (vb_header->num_sample_blocks);

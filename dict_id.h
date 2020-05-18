@@ -12,7 +12,7 @@
 #include "compatibility/visual_c_stdint.h"
 #endif
 #include "genozip.h"
-#include "header.h"
+#include "data_types.h"
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 
@@ -101,7 +101,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_ATTR_polyphen_prediction,
                 dict_id_ATTR_variant_peptide,
 
-                dict_id_ATTR_SEQ, dict_id_ENSTid;  // private genozip dict
+                dict_id_ENSTid;  // private genozip dict
 
 extern void dict_id_initialize (DataType data_type);
 

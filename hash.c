@@ -197,7 +197,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
                "mtf_ctx->local_hash", vb_ctx->did_i);
     vb_ctx->local_hash.len = vb_ctx->local_hash_prime;
     memset (vb_ctx->local_hash.data, 0xff, vb_ctx->local_hash_prime * sizeof (LocalHashEnt)); // initialize core table
-//printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->vblock_i, err_dict_id (vb_ctx->dict_id), vb_ctx->local_hash_prime); 
+//printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->vblock_i, vb_ctx->name, vb_ctx->local_hash_prime); 
 }
 
 // ZIP merge: allocating the global cache for a dictionary, when merging the first VB that encountered it
