@@ -20,7 +20,9 @@ extern void vb_vcf_cleanup_memory(VBlockP);
 // PIZ only: can appear in did_i of an INFO subfield mapping, indicating that this INFO has an added
 // ":#" indicating that the original VCF line had a Windows-style \r\n ending
 #define DID_I_HAS_13 254 
+#ifndef DID_I_NONE // also defined in move_to_front.h
 #define DID_I_NONE   255
+#endif
 typedef struct SubfieldMapper {
     uint8_t num_subfields;        // (uint8_t)NIL if this mapper is not defined
     uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]

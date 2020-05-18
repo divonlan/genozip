@@ -557,16 +557,14 @@ uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
-MtfContext *mtf_get_ctx_by_dict_id_do (MtfContext *mtf_ctx /* an array */, 
-                                       uint8_t *dict_id_to_did_i_map,
-                                       unsigned *num_dict_ids, 
-                                       uint8_t *num_subfields, // variable to increment if a new context is added
-                                       DictIdType dict_id)
+MtfContext *mtf_get_ctx_by_dict_id_if_not_found_by_inline (
+    MtfContext *mtf_ctx /* an array */, 
+    uint8_t *dict_id_to_did_i_map, 
+    uint8_t did_i,
+    unsigned *num_dict_ids, 
+    uint8_t *num_subfields, // variable to increment if a new context is added
+    DictIdType dict_id)
 {
-    // attempt to get did_i from dict_id mapper
-    uint8_t did_i = dict_id_to_did_i_map[dict_id.map_key];
-    if (did_i != DID_I_NONE && mtf_ctx[did_i].dict_id.num == dict_id.num) goto done;
-
     // case: its not in mapper - mapper is occupied by another - perhaps it exists
     // and missing the opportunity to enter mapper - search for it
     if (did_i != DID_I_NONE)    
