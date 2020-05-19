@@ -370,7 +370,7 @@ static int seg_vcf_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl,
 
         // if case MIN_DP subfield - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
-        else if (cell_gt_data && ctx->dict_id.num == dict_id_FORMAT_MIN_DP) {
+        else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_MIN_DP) {
             int32_t min_dp_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
             int32_t delta = dp_value - min_dp_value; // expected to be 0 or positive integer (may be negative if no DP preceeds)
             char delta_str[30]; unsigned delta_str_len;
