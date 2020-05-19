@@ -401,7 +401,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
 
         if (vb->has_haplotype_data) {
             if (!flag_gtshark)
-                COMPRESS_DATA_SECTION (SEC_HT_DATA, haplotype_sections_data[sb_i], char, COMP_BZ2, false) // ht data
+                COMPRESS_DATA_SECTION (SEC_VCF_HT_DATA, haplotype_sections_data[sb_i], char, COMP_BZ2, false) // ht data
             else 
                 zfile_vcf_compress_haplotype_data_gtshark (vb, &vb->haplotype_sections_data[sb_i], sb_i);
         }

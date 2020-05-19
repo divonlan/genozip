@@ -261,7 +261,7 @@ bool v1_piz_vcf_read_one_vb (VBlockVCF *vb)
 
         if (num_haplotypes_per_line) {
             *ENT (unsigned, vb->z_section_headers, section_i++) = vb->z_data.len;
-            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_HT_DATA , false);    
+            v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeader), SEC_VCF_HT_DATA , false);    
         }
 
         *ENT (bool, vb->is_sb_included, sb_i) = true;
@@ -737,7 +737,7 @@ void v1_piz_vcf_uncompress_all_sections (VBlockVCF *vb)
         if (vb->has_haplotype_data) {
             
             zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], 
-                                      &vb->haplotype_sections_data[sb_i], "haplotype_sections_data", SEC_HT_DATA );
+                                      &vb->haplotype_sections_data[sb_i], "haplotype_sections_data", SEC_VCF_HT_DATA );
             
             uint32_t expected_size = (uint32_t)vb->lines.len * num_samples_in_sb * vb->ploidy;
             ASSERT (vb->haplotype_sections_data[sb_i].len == expected_size, 

@@ -57,7 +57,7 @@ static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec
         // Data type specific
         if (z_file->data_type == DT_VCF) {
         
-            if ((section->section_type == SEC_HT_DATA && dict_id.num == dict_id_fields[VCF_GT])             ||
+            if ((section->section_type == SEC_VCF_HT_DATA && dict_id.num == dict_id_fields[VCF_GT])             ||
                 (section->section_type == SEC_VCF_PHASE_DATA && dict_id.num == dict_id_fields[VCF_GT]))
                 *local_compressed_size += (section+1)->offset - section->offset;
             
@@ -112,7 +112,7 @@ static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec
         case DT_ME23:        
             if ((section->section_type == SEC_RANDOM_POS_DATA && dict_id.num == dict_id_fields[ME23_POS])    ||
                 (section->section_type == SEC_NUMERIC_ID_DATA && dict_id.num == dict_id_fields[ME23_ID])     ||
-                (section->section_type == SEC_HT_DATA         && dict_id.num == dict_id_fields[ME23_GENOTYPE]))
+                (section->section_type == SEC_VCF_HT_DATA         && dict_id.num == dict_id_fields[ME23_GENOTYPE]))
                 *local_compressed_size += (section+1)->offset - section->offset;
             break;
 

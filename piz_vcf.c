@@ -670,7 +670,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
             
             if (!header->is_gtshark) {
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], &vb->haplotype_sections_data[sb_i], 
-                                          "haplotype_sections_data", SEC_HT_DATA );
+                                          "haplotype_sections_data", SEC_VCF_HT_DATA );
             }
             else { // gtshark
 
@@ -761,7 +761,7 @@ bool piz_vcf_read_one_vb (VBlock *vb_, SectionListEntry *sl)
             READ_SB_SECTION (SEC_VCF_PHASE_DATA,      SectionHeader, sb_i);
 
         if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) 
-            READ_SB_SECTION (SEC_HT_DATA,             SectionHeader, sb_i);
+            READ_SB_SECTION (SEC_VCF_HT_DATA,         SectionHeader, sb_i);
 
         if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
             READ_SB_SECTION (SEC_HT_GTSHARK_X_LINE,   SectionHeader, sb_i);
