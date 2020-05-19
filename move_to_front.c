@@ -240,10 +240,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     MtfNode *node;
     int32_t existing_mtf_i = hash_get_entry_for_seg (segging_vb, vb_ctx, snip, snip_len, new_mtf_i_if_no_old_one, &node);
     if (existing_mtf_i != NIL) {
-
-        if (segging_vb->vblock_i == 1) 
-            ENT (SorterEnt, vb_ctx->sorter, existing_mtf_i)->count++;
-
+        node->count++;
         if (is_new) *is_new = false;
         return existing_mtf_i; // snip found - we're done
     }
@@ -261,17 +258,7 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     node->snip_len     = snip_len;
     node->char_index   = mtf_insert_to_dict (segging_vb, vb_ctx, false, snip, snip_len);
     node->word_index.n = new_mtf_i_if_no_old_one;
-
-    // if this is the first variant block - allocate/grow sorter to contain exactly the same number of entries as mtf
-    if (segging_vb->vblock_i == 1) {
-        unsigned prev_size = vb_ctx->sorter.size;
-        buf_alloc (segging_vb, &vb_ctx->sorter, sizeof (SorterEnt) * (vb_ctx->mtf.size / sizeof(MtfNode)), 1, "mtf_ctx->sorter", 0);
-        if (vb_ctx->sorter.size > prev_size) memset (&vb_ctx->sorter.data[prev_size], 0, vb_ctx->sorter.size - prev_size);
-
-        SorterEnt *sorter_ent = ENT (SorterEnt, vb_ctx->sorter, new_mtf_i_if_no_old_one);
-        sorter_ent->node_index = new_mtf_i_if_no_old_one;
-        sorter_ent->count = 1;
-    }
+    node->count++;
 
     if (is_new) *is_new = true;
     return new_mtf_i_if_no_old_one;
@@ -743,12 +730,11 @@ MtfNode *mtf_get_node_by_word_index (MtfContext *ctx, uint32_t word_index)
     return NULL; // never reaches here
 }
 
-static int sorter_cmp(const void *a_, const void *b_)  
+static Buffer *sorter_cmp_mtf = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues
+static int sorter_cmp(const void *a, const void *b)  
 { 
-    SorterEnt *a = (SorterEnt *)a_;
-    SorterEnt *b = (SorterEnt *)b_;
-    
-    return (int)b->count - (int)a->count;
+    return ENT (MtfNode, *mtf, *(uint32_t *)b)->count -
+           ENT (MtfNode, *mtf, *(uint32_t *)a)->count;
 }
 
 void mtf_sort_dictionaries_vb_1(VBlock *vb)
@@ -758,20 +744,28 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
 
         MtfContext *ctx = &vb->mtf_ctx[did_i];
 
+        // prepare sorter array containing indeces into ctx->mtf. We are going to sort it rather than sort mtf directly
+        // as the b250 data contains node indeces into ctx->mtf.
+        static Buffer sorter = EMPTY_BUFFER;
+        buf_alloc (vb, &sorter, ctx->mtf.len * sizeof (int32_t), CTX_GROWTH, "sorter", ctx->did_i);
+        for (uint32_t i=0; i < ctx->mtf.len; i++)
+            NEXTENT (uint32_t, sorter) = i;
+
         // sort in ascending order of mtf->count
-        qsort (ctx->sorter.data, ctx->mtf.len, sizeof(SorterEnt), sorter_cmp);
+        sorter_cmp_mtf = &ctx->mtf; // communicate the ctx to sorter_cmp via a global var
+        qsort (sorter.data, ctx->mtf.len, sizeof (uint32_t), sorter_cmp);
 
         // rebuild dictionary is the sorted order, and update char and word indices in mtf
         static Buffer old_dict = EMPTY_BUFFER;
         buf_move (vb, &old_dict, vb, &ctx->dict);
 
-        buf_alloc (vb, &ctx->dict, old_dict.size, 1, "mtf_ctx->dict", did_i);
+        buf_alloc (vb, &ctx->dict, old_dict.len, CTX_GROWTH, "mtf_ctx->dict", did_i);
         ctx->dict.len = old_dict.len;
 
         char *next = ctx->dict.data;
         for (unsigned i=0; i < ctx->mtf.len; i++) {
-            int32_t mtf_i = ((SorterEnt *)ctx->sorter.data)[i].node_index;
-            MtfNode *node = &((MtfNode *)ctx->mtf.data)[mtf_i];
+            uint32_t node_index = *ENT (uint32_t, sorter, i);
+            MtfNode *node = ENT (MtfNode, ctx->mtf, node_index);
             memcpy (next, &old_dict.data[node->char_index], node->snip_len + 1 /* +1 for SNIP_SEP */);
             node->char_index   = next - ctx->dict.data;
             node->word_index.n = i;
@@ -779,18 +773,8 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
             next += node->snip_len + 1;
         }
 
-        buf_destroy (&old_dict);
-    }
-}
-
-// zero all sorters - this is called in case of a re-do of the first VB due to ploidy overflow
-void mtf_zero_all_sorters (VBlock *vb)
-{
-    ASSERT (vb->vblock_i == 1, "Error in mtf_zero_all_sorters: expected vb_i==1, but vb_i==%u", vb->vblock_i);
-    
-    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
-        buf_zero (&ctx->sorter);
+        buf_free (&sorter);
+        buf_free (&old_dict);
     }
 }
 
@@ -831,7 +815,6 @@ void mtf_free_context (MtfContext *ctx)
     buf_free (&ctx->word_list);
     buf_free (&ctx->local_hash);
     buf_free (&ctx->global_hash);
-    buf_free (&ctx->sorter);
     buf_free (&ctx->mtf_i);
     buf_free (&ctx->b250);
     buf_free (&ctx->local);
@@ -863,7 +846,6 @@ void mtf_destroy_context (MtfContext *ctx)
     buf_destroy (&ctx->word_list);
     buf_destroy (&ctx->local_hash);
     buf_destroy (&ctx->global_hash);
-    buf_destroy (&ctx->sorter);
     buf_destroy (&ctx->mtf_i);
     buf_destroy (&ctx->b250);
 

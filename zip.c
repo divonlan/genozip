@@ -233,6 +233,9 @@ static void zip_compress_one_vb (VBlock *vb)
     // split each line in this variant block to its components
     seg_all_data_lines (vb);
 
+    // identify dictionaries that contain almost only unique words (eg a unique id) and move the data from dict to local
+    //zip_handle_unique_words_ctxs (vb);
+
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely
     // beneficial to all vbs as they are likely to more-or-less have the same frequent entries

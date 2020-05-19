@@ -402,7 +402,6 @@ static void file_initialize_z_file_data (File *file)
         INIT (ol_dict);
         INIT (ol_mtf);
         INIT (local_hash);
-        INIT (sorter);
         INIT (word_list);
     }
 

@@ -35,19 +35,14 @@
 typedef struct MtfNode {
     uint32_t char_index;      // character index into dictionary array
     uint32_t snip_len;        // not including SNIP_SEP terminator present in dictionary array
-    Base250 word_index;       // word index into dictionary 
+    Base250  word_index;      // word index into dictionary 
+    int32_t  count;           // number of times this snip has been evaluated in this VB
 } MtfNode;
 
 typedef struct {
     uint32_t char_index;
     uint32_t snip_len;
 } MtfWord;
-
-// used by vblock_i=1 to collect frequency statistics
-typedef struct {
-    int32_t node_index;        // index into MtfContext.mtf
-    int32_t count;             // number of times this snip has been encoutered so far
-} SorterEnt;
 
 typedef struct { // initialize with mtf_init_iterator()
     const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
@@ -88,8 +83,6 @@ typedef struct MtfContext {
                                // in zf_ctx: incremented with every merge into this ctx.
     // the next 2 are used in merge to set the size of the global hash table, when the first vb to create a ctx does so
     uint32_t mtf_len_at_1_3, mtf_len_at_2_3;  // value of mtf->len after an estimated 1/3 + 2/3 of the lines have been segmented
-
-    Buffer sorter;             // used by the vb_i==1 only of ZIP to sort the dictionary - entries of SorterEnt
 
     // used by zf_ctx only in ZIP only    
     pthread_mutex_t mutex;     // MtfContext in z_file (only) is protected by a mutex 
@@ -138,7 +131,6 @@ extern uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id);
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);
 extern void mtf_sort_dictionaries_vb_1(VBlockP vb);
-extern void mtf_zero_all_sorters (VBlockP vb);
 extern void mtf_verify_field_ctxs_do (VBlockP vb, const char *func, uint32_t code_line);
 #define mtf_verify_field_ctxs(vb) mtf_verify_field_ctxs_do(vb, __FUNCTION__, __LINE__);
 
