@@ -575,18 +575,11 @@ void seg_compound_field (VBlock *vb,
     unsigned snip_len = 0;
     unsigned sf_i = 0;
     char template[MAX_COMPOUND_COMPONENTS-1]; // separators is one less than the subfields
-    bool rewritten_tab=false;
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
     
         char sep = (i==field_len) ? 0 : field[i];
-
-        // re-write \t as 1 so that they can go into a dictionary (\t is reserved for the dictionary internal separator)
-        if (sep=='\t') {
-            sep = ((char*)field)[i] = DICT_TAB_REWRITE_CHAR;
-            rewritten_tab = true;
-        }
 
         if (!sep || 
             ((sf_i < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || (ws_is_sep && (sep==' ' || sep==1))))) {
@@ -624,11 +617,6 @@ void seg_compound_field (VBlock *vb,
         else snip_len++;
     }
 
-    // un-re-write tabs, for safety
-    if (rewritten_tab)
-        for (unsigned i=0; i < field_len; i++) 
-            if (field[i] == DICT_TAB_REWRITE_CHAR) ((char*)field)[i] = '\t';
-
     // if template is empty, make it "*"
     if (sf_i==1) template[0] = '*';
 
@@ -644,7 +632,7 @@ void seg_add_to_local_text (VBlock *vb, MtfContext *ctx,
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, ctx->name, sizeof(char)); // param=quantum of len
     if (snip_len) buf_add (&ctx->local, snip, snip_len); 
     
-    static const char sep[1] = { LOCAL_BUF_TEXT_SEP };
+    static const char sep[1] = { SNIP_SEP };
     buf_add (&ctx->local, sep, 1); 
 
     if (add_bytes) ctx->txt_len += add_bytes;

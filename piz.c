@@ -65,14 +65,15 @@ int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
         // we parse the string ourselves - this is hugely faster than sscanf.
         unsigned negative = *delta_snip == '-'; // 1 or 0
 
-        const char *s; for (s=(delta_snip + negative); *s != '\t' ; s++)
+        char sep = PIZ_SNIP_SEP; // local variable that can be compiler-optimized
+        const char *s; for (s=(delta_snip + negative); *s != sep ; s++)
             delta = delta*10 + (*s - '0');
 
         if (negative) delta = -delta;
     }
 
     last_pos += delta;    
-    ASSERT (last_pos >= 0, "Error: last_pos=%d is negative", last_pos);
+    ASSERT (last_pos >= 0, "Error in piz_decode_pos: last_pos=%d is negative", last_pos);
 
     if (last_delta) *last_delta = delta;
 
@@ -161,30 +162,7 @@ uint32_t piz_reconstruct_from_ctx (VBlock *vb, uint8_t did_i, const char *sep, u
 
     return word_index;
 }
-/*
-void piz_reconstruct_id (VBlock *vb, Buffer *id_buf, uint32_t *next_id, const char *id_snip, unsigned id_snip_len, 
-                         bool *extra_bit, bool add_tab)
-{
-    bool my_extra_bit = (id_snip_len && id_snip[id_snip_len-1] == 2);
-    if (my_extra_bit) id_snip_len--;
-    if (extra_bit) *extra_bit = my_extra_bit;
 
-    bool has_numeric = (id_snip_len && id_snip[id_snip_len-1] == 1);
-    if (has_numeric) id_snip_len--;
-
-    RECONSTRUCT (id_snip, id_snip_len);
-
-    if (has_numeric) {
-        uint32_t num = BGEN32 (*ENT (uint32_t, *id_buf, (*next_id)++));
-        char num_str[20];
-        unsigned num_str_len;
-        str_int (num, num_str, &num_str_len);
-        RECONSTRUCT (num_str, num_str_len);
-    }
-    
-    if (add_tab) RECONSTRUCT1 ("\t");
-}
-*/
 void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), SubfieldMapper *mapper)
 {
     mapper->num_subfields = 0;
@@ -213,8 +191,8 @@ void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const c
         RECONSTRUCT (snip, snip_len);
         
         if (i < template_len)
-            // add middle-field separator. note: in seg_compound_field we re-wrote \t at 1, now we re-write back
-            RECONSTRUCT (template[i]==DICT_TAB_REWRITE_CHAR ? "\t" : &template[i], 1) // buf_add is a macro - no semicolon
+            // add middle-field separator
+            RECONSTRUCT (&template[i], 1) // buf_add is a macro - no semicolon
         else if (separator_len)
             RECONSTRUCT (separator, separator_len); // add end-of-field separator if needed
     }
@@ -246,6 +224,8 @@ void piz_map_iname_subfields (VBlock *vb)
     ARRAY (PizSubfieldMapper, all_iname_mappers, piz_iname_mapper_buf);
     ARRAY (const MtfWord, all_inames, info_ctx->word_list);
 
+    char sep = PIZ_SNIP_SEP; // pre-calculate macro
+
     for (unsigned iname_i=0; iname_i < piz_iname_mapper_buf.len; iname_i++) {
 
         // e.g. "I1=I2=I3=" - pointer into the INFO dictionary - immutable - global shared with all threads
@@ -266,7 +246,7 @@ void piz_map_iname_subfields (VBlock *vb)
             // traverse the iname, and get the dict_id for each subfield name (using only the first 8 characers)
             dict_id->num = 0;
             unsigned j=0; 
-            while (iname[i] != '=' && (v2v3_bug || iname[i] != ';') && iname[i] != '\t') { // value-less INFO names can be terminated by the end-of-word \t in the dictionary
+            while (iname[i] != '=' && (v2v3_bug || iname[i] != ';') && iname[i] != sep) { // value-less INFO names can be terminated by PIZ_SNIP_SEP in the dictionary
                 if (j < DICT_ID_LEN) 
                     dict_id->id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
                 i++, j++;
@@ -286,9 +266,9 @@ void piz_map_iname_subfields (VBlock *vb)
                 
                 // we now modify the global dictionary to match the true iname strings, so it can be used for reconstruction
                 if (i>=2 && iname[i-2] == ';')
-                    iname[iname_len-2] = '\t'; // chop off the ";#" at the end of the INFO word in the dictionary (happens if previous subfield is value-less)
+                    iname[iname_len-2] = sep; // chop off the ";#" at the end of the INFO word in the dictionary (happens if previous subfield is value-less)
                 else     
-                    iname[iname_len-1] = '\t'; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
+                    iname[iname_len-1] = sep; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
             }
             else 
                 iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (*dict_id); // it will be NIL if this is an INFO name without values            
@@ -316,6 +296,8 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
 
     const PizSubfieldMapper *iname_mapper = ENT (PizSubfieldMapper, piz_iname_mapper_buf, iname_word_index);
 
+    char sep = PIZ_SNIP_SEP; // pre-calc macro
+
     for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
 
         uint8_t did_i = iname_mapper->did_i[sf_i]; // DID_I_NONE for fields that have no ctx (either because they have no values or because the values are stored elsewhere)
@@ -327,7 +309,7 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
         
         // get the name eg "AF="
         const char *start = iname_snip;
-        for (; *iname_snip != '=' && (*iname_snip != ';' || v2v3_bug) && *iname_snip != '\t'; iname_snip++);
+        for (; *iname_snip != '=' && (*iname_snip != ';' || v2v3_bug) && *iname_snip != sep; iname_snip++);
         bool has_value = (*iname_snip == '=');
         
         if (has_value) iname_snip++; // move past the '=', if one exists

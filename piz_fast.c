@@ -127,7 +127,7 @@ void piz_fastq_reconstruct_vb (VBlockFAST *vb)
         if (flag_header_one) continue; // this is invoked by --header-only (re-written to flag_header_one in piz_read_global_area)
 
         // sequence line
-        uint32_t seq_len = atoi (&md[4]); // numeric string terminated by dictionary's \t separator
+        uint32_t seq_len = atoi (&md[4]); // numeric string terminated by dictionary's SNIP_SEP
         piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FAST_SEQ], seq_len, txt_line_i, grepped_out);
         if (!grepped_out) RECONSTRUCT (eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
 
@@ -196,7 +196,7 @@ void piz_fasta_reconstruct_vb (VBlockFAST *vb)
                     if (flag_fasta_sequential && vb->last_line == FASTA_SEQ && vb->txt_data.len >= 2)
                         vb->txt_data.len -= 1 + (vb->txt_data.data[vb->txt_data.len-2]=='\r');
 
-                    uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's \t separator
+                    uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's SNIP_SEP separator
                     piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FASTA_SEQ], seq_len, txt_line_i, grepped_out);
                     if (!grepped_out) RECONSTRUCT (eol[has_13], eol_len[has_13]); // end of line
                     vb->last_line = FASTA_SEQ;

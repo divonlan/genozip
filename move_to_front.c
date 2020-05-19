@@ -75,7 +75,7 @@ static inline uint32_t mtf_insert_to_dict (VBlock *vb_of_dict, MtfContext *ctx, 
     char *dict_p = &ctx->dict.data[char_index];
 
     memcpy (dict_p, snip, snip_len);
-    dict_p[snip_len] = '\t'; // dictionary snips have a \t separator within dictionary string
+    dict_p[snip_len] = SNIP_SEP; // dictionary have a SNIP_SEP separating snips, so that PIZ can generate word_list
 
     ctx->dict.len += snip_len + 1;
     return char_index;
@@ -661,16 +661,18 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
                "z_file->mtf_ctx->word_list", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->word_list);
 
-    bool is_ref_alt = (z_file->data_type == DT_VCF && header->dict_id.num == dict_id_fields[VCF_REFALT]);
+    bool is_ref_alt = (!is_v5_or_above && z_file->data_type == DT_VCF && header->dict_id.num == dict_id_fields[VCF_REFALT]);
 
     char *start = fragment.data;
+    char sep = PIZ_SNIP_SEP; // local variable that can be optimized to a cpu register
+    
     for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
 
         MtfWord *word = &NEXTENT (MtfWord, zf_ctx->word_list);
 
-        char *c=start; while (*c != '\t') c++;
+        char *c=start; while (*c != sep) c++;
 
-        // special case of REFALT - there is always one \t in the middle of the snip, eg "A\tC"
+        // v1-v4: special case of REFALT - there is always one \t in the middle of the snip, eg "A\tC"
         if (is_ref_alt) {
             c++;
             while (*c != '\t') c++;
@@ -679,7 +681,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
         word->snip_len   = c - start;
         word->char_index = dict_old_len + (start - fragment.data);
 
-        start = c+1; // skip over the \t
+        start = c+1; // skip over the PIZ_SNIP_SEP
     }
 
     buf_free (&fragment);
@@ -770,7 +772,7 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
         for (unsigned i=0; i < ctx->mtf.len; i++) {
             int32_t mtf_i = ((SorterEnt *)ctx->sorter.data)[i].node_index;
             MtfNode *node = &((MtfNode *)ctx->mtf.data)[mtf_i];
-            memcpy (next, &old_dict.data[node->char_index], node->snip_len + 1 /* +1 for \t */);
+            memcpy (next, &old_dict.data[node->char_index], node->snip_len + 1 /* +1 for SNIP_SEP */);
             node->char_index   = next - ctx->dict.data;
             node->word_index.n = i;
 

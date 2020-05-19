@@ -580,7 +580,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     is_v3_or_above = (z_file->genozip_version >= 3);
     is_v4_or_above = (z_file->genozip_version >= 4);
     is_v5_or_above = (z_file->genozip_version >= 5);
-    
+     
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", SEC_GENOZIP_HEADER);
     z_file->section_list_buf.len /= sizeof (SectionListEntry); // fix len
     BGEN_sections_list();

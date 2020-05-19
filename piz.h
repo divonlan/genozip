@@ -130,7 +130,7 @@ typedef struct PizSubfieldMapper {
 #define LOAD_SNIP_FROM_BUF(buf,next,field_name) { \
     uint32_t start = next; \
     ARRAY (char, data, buf);\
-    while (next < buf.len && data[next] != LOCAL_BUF_TEXT_SEP) next++;\
+    while (next < buf.len && data[next] != SNIP_SEP) next++;\
     ASSERT (next < buf.len, \
             "Error reconstructing txt_line=%u: unexpected end of %s data (len=%u)", txt_line_i, field_name, (uint32_t)buf.len); \
     snip = &data[start];\

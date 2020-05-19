@@ -21,6 +21,8 @@
 #include "profiler.h"
 #include "vblock.h"
 #include "gloptimize_vcf.h"
+#include "zfile.h"
+#include "move_to_front.h"
 
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */
 
@@ -208,9 +210,11 @@ void gl_deoptimize_dictionary (char *data, int len)
             gl_start[1] = missing_gl_int + '0';
             gl_start[0] = '-';
         }
-        // move to next dictionary entry - after \t
-        do { data++; len--; } while (data[-1] != '\t' && len);
-        ASSERT0 (data[-1] == '\t', "Error: missing \\t at end of dictionary");
+        // move to next dictionary entry - after snip
+        char sep = PIZ_SNIP_SEP; // open macro to local var
+        do { data++; len--; } while (data[-1] != sep && len);
+        
+        ASSERT0 (data[-1] == PIZ_SNIP_SEP, "Error in gl_deoptimize_dictionary: missing seperator at end of dictionary");
     }
 }
 

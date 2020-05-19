@@ -22,11 +22,11 @@
 #define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
+#define SNIP_SEP           '\0'   // Seperator between snips - both for dict and local 
+#define PIZ_SNIP_SEP       (is_v5_or_above ? SNIP_SEP : '\t') // for use by PIZ
 #define SNIP_LOOKUP_UINT32 '\1'   // Lookup from local containing big endian uint32   
-#define SNIP_LOOKUP_TEXT   '\2'   // Lookup from local containing snips separated by LOCAL_BUF_TEXT_SEP
+#define SNIP_LOOKUP_TEXT   '\2'   // Lookup from local containing snips separated by SNIP_SEP
 #define SNIP_VERBTIM       '\3'   // Appears as first character in the SNIP, tell PIZ to copy the remainder of the snip as is without special handing
-
-#define LOCAL_BUF_TEXT_SEP '\2'
 
 #ifndef DID_I_NONE // also defined in vblock.h
 #define DID_I_NONE   255
@@ -34,7 +34,7 @@
 #define NIL ((int32_t)-1)
 typedef struct MtfNode {
     uint32_t char_index;      // character index into dictionary array
-    uint32_t snip_len;        // not including \t terminator present in dictionary array
+    uint32_t snip_len;        // not including SNIP_SEP terminator present in dictionary array
     Base250 word_index;       // word index into dictionary 
 } MtfNode;
 
@@ -108,8 +108,6 @@ typedef struct MtfContext {
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75
-
-#define DICT_TAB_REWRITE_CHAR 1 // in case we need to write a tab in the dictionary, we re-write it to ASCII 1 as tab is used as the separator between words in the dictionary
 
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
