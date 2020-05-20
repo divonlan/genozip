@@ -32,7 +32,7 @@ typedef struct {
 
 static Buffer piz_format_mapper_buf = EMPTY_BUFFER; //global array, initialized by I/O thread and immitable thereafter
 
-static bool piz_vcf_reconstruct_special_info_subfields (VBlock *vb, uint8_t did_i, DictIdType dict_id, uint32_t txt_line_i)
+static bool piz_vcf_reconstruct_special_info_subfields (VBlock *vb, uint8_t did_i, DictIdType dict_id)
 {
     // starting v5, END is a delta vs POS
     if (is_v5_or_above && dict_id.num == dict_id_INFO_END) {
@@ -44,10 +44,8 @@ static bool piz_vcf_reconstruct_special_info_subfields (VBlock *vb, uint8_t did_
     return true; // proceed with normal reconstruction
 }
 
-static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i, 
-                                        bool *has_13) // out: original vcf line ended with Windows-style \r\n
+static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, bool *has_13) // out: original vcf line ended with Windows-style \r\n
 {
-    uint32_t txt_line_i = vb->first_line + vb_line_i;
     bool line_included = true;
     uint64_t txt_data_start = vb->txt_data.len;
 
@@ -59,19 +57,18 @@ static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, unsigned vb_line_i,
     if (flag_regions && !regions_is_site_included (chrom_word_index, vb->last_pos)) // test here bc vb->last_pos might change if INFO has END
         line_included = false;
 
-    RECONSTRUCT_FROM_DICT (VCF_ID,     true); 
-    RECONSTRUCT_FROM_DICT (VCF_REFALT, true);
-    RECONSTRUCT_FROM_DICT (VCF_QUAL,   true);
-    RECONSTRUCT_FROM_DICT (VCF_FILTER, true);
+    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_ID,     "\t", 1);
+    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_REFALT, "\t", 1);
+    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_QUAL,   "\t", 1);
+    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_FILTER, "\t", 1);
 
     uint32_t iname_word_index = LOAD_SNIP (VCF_INFO);        
-    piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, piz_vcf_reconstruct_special_info_subfields, 
-                            txt_line_i, has_13);
-    RECONSTRUCT1 ("\t");
+    piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, piz_vcf_reconstruct_special_info_subfields, has_13);
+    RECONSTRUCT1 ('\t');
 
     if (vb->mtf_ctx[VCF_FORMAT].word_list.len) {
         if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
-        else if (!flag_drop_genotypes) RECONSTRUCT_FROM_DICT (VCF_FORMAT, true);
+        else if (!flag_drop_genotypes) piz_reconstruct_from_ctx ((VBlockP)vb, VCF_FORMAT, "\t", 1);
     }
 
     // after consuming sections' data, if this line is not to be outputed - shorten txt_data back to start of line
@@ -145,8 +142,10 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 
     // Get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
     MtfContext *format_ctx = &vb->mtf_ctx[VCF_FORMAT];
-    for (unsigned line_i=0; line_i < vb->lines.len; line_i++) 
-        DATA_LINE (line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL, vb->first_line + line_i);
+    for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
+        vb->line_i = vb->first_line + line_i;
+        DATA_LINE (line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL);
+    }
 
     mtf_init_iterator (format_ctx); // reset iterator as FORMAT data will be consumed again when reconstructing the fields
 
@@ -232,7 +231,7 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
                 if (snip && is_line_included) *(next++) = ':'; // this works for empty "" snip too
 
                 unsigned snip_len;
-                mtf_get_next_snip ((VBlockP)vb, sf_ctx, &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + vb_line_i);
+                mtf_get_next_snip ((VBlockP)vb, sf_ctx, &sample_iterator[sample_i], &snip, &snip_len);
 
                 // handle MIN_DP : if its a DP, store it...
                 char min_dp[30];
@@ -531,14 +530,13 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
     // fields, but only those info subfields defined in the INFO names of a particular line are used in that line).
             
     // now reconstruct the lines, one line at a time
-
-    buf_alloc (vb, &vb->txt_data, (vb->vb_data_size + 1), 1.1, "txt_data", vb->vblock_i); // +1 bc piz_vcf_reconstruct_samples needs room for a temporary redundant '*' in case ht='*'
-
     for (unsigned vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
+
+        vb->line_i = vb->first_line + vb_line_i;
 
         // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->txt_data
         bool has_13 = false;
-        bool is_line_included = piz_vcf_reconstruct_fields (vb, vb_line_i, &has_13);
+        bool is_line_included = piz_vcf_reconstruct_fields (vb, &has_13);
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
@@ -714,7 +712,7 @@ void piz_vcf_uncompress_vb (VBlockVCFP vb)
         piz_vcf_reconstruct_vb (vb);
     }
 
-    // v1 c
+    // v1
     else {
         void v1_piz_vcf_uncompress_all_sections (VBlockVCFP vb); // forwwrd declaration - these are included at the end of this file
         v1_piz_vcf_uncompress_all_sections (vb);

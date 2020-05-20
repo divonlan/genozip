@@ -17,16 +17,14 @@
 
 void piz_me23_reconstruct_vb (VBlock *vb)
 {
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
-
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         uint32_t txt_data_start = vb->txt_data.len;
-        uint32_t txt_line_i = vb->first_line + vb_line_i;
+        vb->line_i = vb->first_line + vb_line_i;
+
+        piz_reconstruct_from_ctx (vb, ME23_ID, "\t", 1);
 
         DECLARE_SNIP;
-        RECONSTRUCT_FROM_DICT (ME23_ID, true);
-
         uint32_t chrom_word_index = RECONSTRUCT_FROM_DICT (ME23_CHROM, true);
         RECONSTRUCT_FROM_DICT_POS (ME23_POS, vb->last_pos, true, NULL, true); // reconstruct from delta
         RECONSTRUCT_FROM_TABLESS_BUF (vb->mtf_ctx[ME23_GENOTYPE].local, vb->mtf_ctx[ME23_GENOTYPE].next_local, 2, false, "GENOTYPE");

@@ -483,7 +483,7 @@ static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
             // we have theremore, only one "fake" subfield in this line, which we shall skip
             if (line_subfields[0] == -2) {
                 ASSERT (*sample_iterator[sample_i].next_b250 == BASE250_MISSING_SF, 
-                        "Error in vcf line %u - line has no subfields, expecting BASE250_MISSING_SF but not seeting it", vb->first_line + line_i);
+                        "Error in vcf line %u - line has no subfields, expecting BASE250_MISSING_SF but not seeting it", vb->line_i);
                 
                 sample_iterator[sample_i].next_b250++; // skip
             }
@@ -497,7 +497,7 @@ static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
 
                         unsigned snip_len;
                         mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case sample_iterator[sample_i] will be a control character
-                                           &sample_iterator[sample_i], &snip, &snip_len, vb->first_line + line_i);
+                                           &sample_iterator[sample_i], &snip, &snip_len);
 
                         if (snip && snip_len) { // it can be a valid empty subfield if snip="" and snip_len=0
                             memcpy (next, snip, snip_len);
@@ -516,7 +516,7 @@ static void v1_piz_vcf_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
             // safety
             ASSERT (next <= vb->line_gt_data.data + vb->line_gt_data.size, 
                     "Error: line_gt_data buffer overflow. vblock_i=%u vcf_line=%u sb_i=%u sample_i=%u",
-                    vb->vblock_i, line_i + vb->first_line, sb_i, sample_i);
+                    vb->vblock_i, vb->line_i, sb_i, sample_i);
         }
     }
 
@@ -629,9 +629,9 @@ void v1_piz_vcf_reconstruct_vb (VBlockVCF *vb)
     variant_data_next_line = vb->v1_variant_data_section_data.data;
     variant_data_length_remaining = vb->v1_variant_data_section_data.len;
 
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
-
     for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
+
+        vb->line_i = vb->first_line + line_i;
 
         // reconstruct fields into vb->txt_data
         v1_piz_vcf_reconstruct_fields (vb, vb->first_line + line_i, &variant_data_length_remaining, &variant_data_next_line);

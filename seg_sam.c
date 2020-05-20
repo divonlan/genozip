@@ -282,7 +282,7 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
     // the data itself was already stored in the subsubfields in seg_sam_*_field
     if (repeats) {
         char repeats_str[20];
-        sprintf (repeats_str, "%c%u", -1, repeats); // (char)-1 to indicate repeats (invalid char per SAM specification, so it cannot appear organically)
+        sprintf (repeats_str, "%c%u", SNIP_STRUCTURED, repeats); // (char)-1 to indicate repeats (invalid char per SAM specification, so it cannot appear organically)
         seg_one_subfield ((VBlock *)vb, repeats_str, strlen (repeats_str), dict_id, 1 /* \t */); 
     }
 
@@ -305,9 +305,9 @@ static void seg_sam_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
             MtfContext *ctx = mtf_get_ctx (vb, dict_id);
             seg_add_to_local_text ((VBlockP)vb, ctx, 
-                                 md_is_changeable ? new_md : value, 
-                                 md_is_changeable ? new_md_len : value_len,
-                                 value_len+1);
+                                   md_is_changeable ? new_md : value, 
+                                   md_is_changeable ? new_md_len : value_len,
+                                   value_len+1);
         }
 
         // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)

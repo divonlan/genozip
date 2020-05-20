@@ -54,7 +54,7 @@ typedef struct SubfieldMapper {
     int32_t vb_data_size;      /* ZIP: actual size of txt read file file ; PIZ: expected size of decompressed txt. Might be different than original if --optimize is used. */\
     uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
     uint32_t longest_line_len; /* length of longest line of text line in this vb */\
-    uint32_t line_i;           /* current line in VB (0-based) being segmented */\
+    uint32_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     \
     ProfilerRec profile; \
     \
@@ -260,7 +260,7 @@ typedef struct VBlockSAM {
     int32_t last_pnext_delta;            // last delta calculated for PNEXT
 
     // PIZ-only stuff
-    Buffer optional_mapper_buf;          // PIZ: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_QNAME].mtf
+    Buffer optional_mapper_buf;          // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_OPTIONAL].mtf
 } VBlockSAM;
 
 //-----------------------------------------

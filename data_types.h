@@ -77,16 +77,17 @@ typedef struct DataTypeFields {
     int chrom, pos, info; // the fields, or -1 if this data type doesn't have them
     char *names[MAX_NUM_FIELDS_PER_DATA_TYPE]; // these names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed (names are not longer than 8=DICT_ID_LEN as the code assumes it)
     uint64_t *local_by_lzma[MAX_NUM_FIELDS_PER_DATA_TYPE];
+    uint64_t *dont_move_to_local[MAX_NUM_FIELDS_PER_DATA_TYPE]; // dict_ids that don't get moved from dict to local, even if everything is a singleton
 } DataTypeFields;
 
 #define DATA_TYPE_FIELDS { \
-/* num_fields        chrom       pos         info        names (including extend fields)                                                                   local_by_lzma                                                         */ \
-  {NUM_VCF_FIELDS,   VCF_CHROM,  VCF_POS,    VCF_INFO,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "GT" },                    { &dict_id_fields[VCF_POS], &dict_id_fields[VCF_ID], 0 } }, \
-  {NUM_SAM_FIELDS,   SAM_RNAME,  SAM_POS,    -1,         { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL", "SEQ", "QUAL" }, { &dict_id_fields[SAM_POS], &dict_id_fields[SAM_PNEXT], &dict_id_fields[SAM_SEQ], &dict_id_OPTION_BD, &dict_id_OPTION_BI, 0 } }, \
-  {NUM_FASTQ_FIELDS, 1,         -1,          -1,         { "DESC", "LINEMETA", "SEQ", "QUAL" },                                                            { &dict_id_fields[FAST_SEQ], 0 } },   \
-  {NUM_FASTA_FIELDS, 1,         -1,          -1,         { "DESC", "LINEMETA", "SEQ", "COMMENT" },                                                         { &dict_id_fields[FASTA_SEQ], 0 } }, \
-  {NUM_GFF3_FIELDS,  GFF3_SEQID, GFF3_START, GFF3_ATTRS, { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS" },               { &dict_id_fields[GFF3_START], &dict_id_ATTR_Dbxref, &dict_id_ENSTid, &dict_id_ATTR_Variant_seq, 0} }, \
-  {NUM_ME23_FIELDS,  ME23_CHROM, ME23_POS,   -1,         { "CHROM", "POS", "ID", "GENOTYPE", "HAS13" },                                                    { &dict_id_fields[ME23_ID], 0} }, \
+/* num_fields        chrom       pos         info        names (including extend fields)                                                                   local_by_lzma, dont_move_to_local                                                         */ \
+  {NUM_VCF_FIELDS,   VCF_CHROM,  VCF_POS,    VCF_INFO,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "GT" },                    { &dict_id_fields[VCF_POS], &dict_id_fields[VCF_ID], 0 }, { &dict_id_fields[VCF_CHROM], &dict_id_fields[VCF_POS], &dict_id_fields[VCF_ID], &dict_id_INFO_END, 0 } }, \
+  {NUM_SAM_FIELDS,   SAM_RNAME,  SAM_POS,    -1,         { "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "PNEXT", "TLEN", "OPTIONAL", "SEQ", "QUAL" }, { &dict_id_fields[SAM_POS], &dict_id_fields[SAM_PNEXT], &dict_id_fields[SAM_SEQ], &dict_id_OPTION_BD, &dict_id_OPTION_BI, 0 }, { &dict_id_fields[SAM_RNAME], &dict_id_fields[SAM_POS], &dict_id_fields[SAM_PNEXT], &dict_id_OPTION_mc, 0}  }, \
+  {NUM_FASTQ_FIELDS, 1,         -1,          -1,         { "DESC", "LINEMETA", "SEQ", "QUAL" },                                                            { &dict_id_fields[FAST_SEQ], 0 },  { &dict_id_fields[FAST_LINEMETA],  0 }  },   \
+  {NUM_FASTA_FIELDS, 1,         -1,          -1,         { "DESC", "LINEMETA", "SEQ", "COMMENT" },                                                         { &dict_id_fields[FASTA_SEQ], 0 }, { &dict_id_fields[FASTA_LINEMETA], 0 }  }, \
+  {NUM_GFF3_FIELDS,  GFF3_SEQID, GFF3_START, GFF3_ATTRS, { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS" },               { &dict_id_fields[GFF3_START], &dict_id_ATTR_Dbxref, &dict_id_ENSTid, &dict_id_ATTR_Variant_seq, 0}, {&dict_id_fields[GFF3_SEQID], &dict_id_fields[GFF3_START], &dict_id_fields[GFF3_END], &dict_id_fields[GFF3_ATTRS], &dict_id_ATTR_Dbxref, 0}  }, \
+  {NUM_ME23_FIELDS,  ME23_CHROM, ME23_POS,   -1,         { "CHROM", "POS", "ID", "GENOTYPE", "HAS13" },                                                    { &dict_id_fields[ME23_ID], 0}, {0} }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)

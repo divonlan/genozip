@@ -636,12 +636,13 @@ void buf_copy_do (VBlock *vb, Buffer *dst, const Buffer *src,
     dst->len = num_entries;  
 }   
 
-// moves all the data from one buffer to another, leaving the source buffer without data, but possibly with memory moved from dst.
+// moves all the data from one buffer to another, leaving the source buffer unallocated
 // both the src and dst buffer remain (or are added) to the buf_lists of their respective VBs
 void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 {
-    ASSERT (dst->type == BUF_UNALLOCATED || (dst->type == BUF_REGULAR && dst->data == 0 && dst->len == 0), 
-            "Error: attempt to move to an already-allocated src: %s dst: %s", buf_desc (src), buf_desc (dst));
+    if (dst->type == BUF_REGULAR && !dst->data) buf_destroy (dst);
+    
+    ASSERT (dst->type == BUF_UNALLOCATED, "Error: attempt to move to an already-allocated src: %s dst: %s", buf_desc (src), buf_desc (dst));
 
     ASSERT (src_vb==dst_vb || dst->vb==dst_vb, "Error in buf_move: to move a buffer between VBs, the dst buffer needs to be added"
                                                " to the dst_vb buffer_list in advance. If dst_vb=evb the dst buffer must be added to"
@@ -650,19 +651,10 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
 
     if (!dst->vb) buf_add_to_buffer_list (dst_vb, dst); // this can only happen if src_vb==dst_vb 
 
-    // save dst details in case it is a regular freed buf
-    BufferType save_type = dst->type;
-    char *save_memory    = dst->memory;
-    uint64_t save_size   = dst->size;
-
     memcpy (dst, src, sizeof(Buffer));    
     dst->vb = dst_vb;
 
-    // move the dst memory allocation to the src (effectively, the buffers switch their memory allocation with each other)
     buf_reset (src); // zero buffer except vb
-    src->type   = save_type;
-    src->memory = save_memory;
-    src->size   = save_size;
 }
 
 void buf_add_string (VBlock *vb, Buffer *buf, const char *str) 

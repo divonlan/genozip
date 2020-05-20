@@ -67,6 +67,33 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
     }
 }
 
+// after segging - if any context appears to contain only singleton snips (eg a unique ID),
+// we move it to local instead of needlessly cluttering the global dictionary
+static void zip_handle_unique_words_ctxs (VBlock *vb)
+{
+    for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
+        MtfContext *ctx = &vb->mtf_ctx[did_i];
+    
+        if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
+        if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
+        if (ctx->mtf.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
+        if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
+
+        // don't move to local if its on the list of special dict_ids that are always in dict
+        bool dont_move = false;
+        for (uint64_t **next_dont_move = DTF (dont_move_to_local); *next_dont_move; next_dont_move++)
+            if (**next_dont_move == ctx->dict_id.num) {
+                dont_move = true;
+                break;
+            }
+        if (dont_move) continue;
+
+        buf_move (vb, &ctx->local, vb, &ctx->dict);
+        buf_free (&ctx->mtf);
+        buf_free (&ctx->mtf_i);
+    }
+}
+
 // generate & write b250 data for all primary fields of this data type
 void zip_generate_and_compress_ctxs (VBlock *vb)
 {
@@ -234,7 +261,7 @@ static void zip_compress_one_vb (VBlock *vb)
     seg_all_data_lines (vb);
 
     // identify dictionaries that contain almost only unique words (eg a unique id) and move the data from dict to local
-    //zip_handle_unique_words_ctxs (vb);
+    zip_handle_unique_words_ctxs (vb);
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
     // base-250 indices. This can be done only before any dictionary is written to disk, but likely

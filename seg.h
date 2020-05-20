@@ -88,8 +88,6 @@ extern const char *seg_fasta_data_line();
 // ------------------
 extern const char *seg_gff3_data_line (VBlockP vb_, const char *field_start_line);
 extern void seg_gff3_initialize (VBlockP vb_);
-
-#define AOS_NUM_ENTRIES '\1' // first char of dictionary word in case of a valid AoS- followed by the number of entries. this value is part of the file format so cannot be (easily) changed.
 extern void seg_gff3_array_of_struct_ctxs (VBlockGFF3P vb, DictIdType dict_id, unsigned num_items, 
                                            MtfContextP *ctx_array, MtfContextP *enst_ctx); // out
 

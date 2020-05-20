@@ -124,9 +124,10 @@ int32_t mtf_search_for_word_index (MtfContext *ctx, const char *snip, unsigned s
 // PIZ only (uses word_list): returns word index, and advances the iterator
 uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx, 
                             SnipIterator *override_iterator,   // if NULL, taken from ctx
-                            const char **snip, uint32_t *snip_len, // optional out
-                            uint32_t txt_line) 
+                            const char **snip, uint32_t *snip_len) // optional out 
 {
+    ASSERT (ctx || override_iterator, "Error in mtf_get_next_snip: ctx is NULL. vb_i=%u", vb->vblock_i);
+
     SnipIterator *iterator = override_iterator ? override_iterator : &ctx->iterator;
     
     if (!override_iterator && !iterator->next_b250) { // INFO and Field1-9 data (GT data uses override_next_b250)
@@ -137,7 +138,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 
     // an imperfect test for overflow, but this should never happen anyway 
     ASSERT (override_iterator || iterator->next_b250 <= LASTENT (uint8_t, ctx->b250), "Error while reconstrucing line %u vb_i=%u: iterator for %s reached end of data",
-            txt_line, vb->vblock_i, ctx->name);
+            vb->line_i, vb->vblock_i, ctx->name);
             
     uint32_t word_index = is_v2_or_above ? base250_decode    (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
                                          : v1_base250_decode (&iterator->next_b250);
@@ -146,7 +147,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
     if (word_index == WORD_INDEX_MISSING_SF) {
         ASSERT (!ctx || (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)), 
                 "Error while reconstructing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s",
-                txt_line, vb->vblock_i, ctx->dict_id.num ? ctx->name : "(no ctx)"); // there will be no context if this GT subfield was always missing - never appeared on any sample
+                vb->line_i, vb->vblock_i, ctx->dict_id.num ? ctx->name : "(no ctx)"); // there will be no context if this GT subfield was always missing - never appeared on any sample
 
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
@@ -167,9 +168,8 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
             word_index = ctx->iterator.prev_word_index + 1;
 
         ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s dictionary has only %u entries",
-                txt_line, word_index, ctx->name, (uint32_t)ctx->word_list.len);
+                vb->line_i, word_index, ctx->name, (uint32_t)ctx->word_list.len);
 
-        //MtfWord *dict_word = &((MtfWord*)ctx->word_list.data)[word_index];
         MtfWord *dict_word = ENT (MtfWord, ctx->word_list, word_index);
 
         if (snip) {
@@ -733,8 +733,8 @@ MtfNode *mtf_get_node_by_word_index (MtfContext *ctx, uint32_t word_index)
 static Buffer *sorter_cmp_mtf = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues
 static int sorter_cmp(const void *a, const void *b)  
 { 
-    return ENT (MtfNode, *mtf, *(uint32_t *)b)->count -
-           ENT (MtfNode, *mtf, *(uint32_t *)a)->count;
+    return ENT (MtfNode, *sorter_cmp_mtf, *(uint32_t *)b)->count -
+           ENT (MtfNode, *sorter_cmp_mtf, *(uint32_t *)a)->count;
 }
 
 void mtf_sort_dictionaries_vb_1(VBlock *vb)
@@ -774,7 +774,7 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
         }
 
         buf_free (&sorter);
-        buf_free (&old_dict);
+        buf_destroy (&old_dict);
     }
 }
 

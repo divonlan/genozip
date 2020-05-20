@@ -27,6 +27,9 @@
 #define SNIP_LOOKUP_UINT32 '\1'   // Lookup from local containing big endian uint32   
 #define SNIP_LOOKUP_TEXT   '\2'   // Lookup from local containing snips separated by SNIP_SEP
 #define SNIP_VERBTIM       '\3'   // Appears as first character in the SNIP, tell PIZ to copy the remainder of the snip as is without special handing
+#define SNIP_STRUCTURED    '\4'   // Appears as first character in the SNIP, followed by a specification of a structured field
+
+#define MAX_AoS_ITEMS 10
 
 #ifndef DID_I_NONE // also defined in vblock.h
 #define DID_I_NONE   255
@@ -105,7 +108,7 @@ typedef struct MtfContext {
 static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
 
 extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
-extern uint32_t mtf_get_next_snip (VBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len, uint32_t vcf_line);
+extern uint32_t mtf_get_next_snip (VBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
 extern int32_t mtf_search_for_word_index (MtfContext *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VBlockP vb);
 extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);

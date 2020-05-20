@@ -27,11 +27,12 @@
 static Buffer piz_iname_mapper_buf = EMPTY_BUFFER;
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
-int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
-                        int32_t last_pos, const char *delta_snip, unsigned delta_snip_len,
+int32_t piz_decode_pos (VBlock *vb, int32_t last_pos, const char *delta_snip, unsigned delta_snip_len,
                         int32_t *last_delta, // optional in/out
                         char *pos_str, unsigned *pos_len) // out
 {
+    ASSERT (delta_snip, "Error in piz_decode_pos: delta_snip is NULL. vb_i=%u", vb->vblock_i);
+    
     int32_t delta=0;
 
     // case: this is not a delta and snip is stored in dictionary (a result of a "nonsense number")
@@ -48,7 +49,7 @@ int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
     if (delta_snip[0] == SNIP_LOOKUP_UINT32) { 
         ASSERT (delta_snip_len==1, "Error in piz_decode_pos: Expected snip with SNIP_LOOKUP_UINT32 to be of length 1, but its length is %u", delta_snip_len);
         MtfContext *pos_ctx = &vb->mtf_ctx[DTF(pos)];
-        ASSERT (pos_ctx->next_local < pos_ctx->local.len, "Error in piz_decode_pos: reading txt_line_i=%u: unexpected end of %s local data", txt_line_i, pos_ctx->name);
+        ASSERT (pos_ctx->next_local < pos_ctx->local.len, "Error in piz_decode_pos: reading vb->line_i=%u: unexpected end of %s local data", vb->line_i, pos_ctx->name);
         last_pos = BGEN32 (*ENT (uint32_t, pos_ctx->local, pos_ctx->next_local++));
         str_int (last_pos, pos_str, pos_len);
 
@@ -103,18 +104,18 @@ int32_t piz_decode_pos (VBlock *vb, uint32_t txt_line_i,
     return last_pos;
 }
 
-static void piz_reconstruct_from_local_text (VBlock *vb, MtfContext *ctx, uint32_t txt_line_i)
+void piz_reconstruct_from_local_text (VBlock *vb, MtfContext *ctx)
 {
     DECLARE_SNIP;
     LOAD_SNIP_FROM_BUF (ctx->local, ctx->next_local, ctx->name);
     RECONSTRUCT (snip, snip_len);
 }
 
-static void piz_reconstruct_from_local_uint32 (VBlock *vb, MtfContext *ctx, uint32_t txt_line_i)
+static void piz_reconstruct_from_local_uint32 (VBlock *vb, MtfContext *ctx)
 {
     ASSERT (ctx->next_local < ctx->local.len - 1, 
             "Error reconstructing txt_line=%u: unexpected end of %s data (ctx->local.len=%u next=%u)", 
-            txt_line_i, ctx->name, (uint32_t)ctx->local.len, ctx->next_local); 
+            vb->line_i, ctx->name, (uint32_t)ctx->local.len, ctx->next_local); 
 
     uint32_t num = BGEN32 (*ENT (uint32_t, ctx->local, ctx->next_local++));
     char num_str[20];
@@ -123,32 +124,33 @@ static void piz_reconstruct_from_local_uint32 (VBlock *vb, MtfContext *ctx, uint
     RECONSTRUCT (num_str, num_str_len);
 }
 
-// returns word_index
-uint32_t piz_reconstruct_from_ctx (VBlock *vb, uint8_t did_i, const char *sep, unsigned sep_len, uint32_t txt_line_i)
+// returns reconstructed length
+uint32_t piz_reconstruct_from_ctx (VBlock *vb, uint8_t did_i, const char *sep, unsigned sep_len)
 {
     MtfContext *ctx = &vb->mtf_ctx[did_i];
-    uint32_t word_index = (uint32_t)-1;
 
     ASSERT0 (ctx->dict_id.num, "Error in piz_reconstruct_from_ctx: ctx not initialized (dict_id=0)");
 
+    uint64_t start = vb->txt_data.len;
+
     // case: we have dictionary data
-    if (ctx->word_list.len) { 
+    if (ctx->b250.len) { 
         
         DECLARE_SNIP;
-        word_index = LOAD_SNIP(did_i); 
+        LOAD_SNIP(did_i); 
 
         unsigned start=0;
         for (unsigned i=0; i < snip_len; i++) {
             if (snip[i] == SNIP_LOOKUP_TEXT) {
                 if (start < i) RECONSTRUCT (&snip[start], i-start);
                 start=i+1;
-                piz_reconstruct_from_local_text (vb, &vb->mtf_ctx[did_i], txt_line_i);
+                piz_reconstruct_from_local_text (vb, &vb->mtf_ctx[did_i]);
             }
 
             if (snip[i] == SNIP_LOOKUP_UINT32) {
                 if (start < i) RECONSTRUCT (&snip[start], i-start);
                 start=i+1;
-                piz_reconstruct_from_local_uint32 (vb, &vb->mtf_ctx[did_i], txt_line_i);
+                piz_reconstruct_from_local_uint32 (vb, &vb->mtf_ctx[did_i]);
             }
         }
 
@@ -156,11 +158,11 @@ uint32_t piz_reconstruct_from_ctx (VBlock *vb, uint8_t did_i, const char *sep, u
     }
     
     // case: all data is only in local
-    else piz_reconstruct_from_local_text (vb, ctx, txt_line_i);
+    else piz_reconstruct_from_local_text (vb, ctx);
 
     if (sep) RECONSTRUCT (sep, sep_len); 
 
-    return word_index;
+    return (uint32_t)(vb->txt_data.len - start);
 }
 
 void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), SubfieldMapper *mapper)
@@ -179,20 +181,23 @@ void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), Subfield
 }
 
 void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const char *separator, unsigned separator_len,
-                                     const char *template, unsigned template_len, uint32_t txt_line_i)
+                                     const char *template, unsigned template_len)
 {
-    if (template_len==1 && template[0]=='*') template_len=0; // no separators, only one component
+#   define MAX_COMPOUND_LEN 10000
+    char template_copy[MAX_COMPOUND_LEN];
+    ASSERT (template_len <= MAX_COMPOUND_LEN, "Error in piz_reconstruct_compound_field: compound field exceeds the maximum length of %u:\n%.*s\n", 
+            MAX_COMPOUND_LEN, template_len, template);
+    memcpy (template_copy, template, template_len); // we need to copy it, as it may reside in vb->txt_data which we will be overwriting
+
+    if (template_len==1 && template_copy[0]=='*') template_len=0; // no separators, only one component
 
     for (unsigned i=0; i <= template_len; i++) { // for template_len, we have template_len+1 elements
         
-        DECLARE_SNIP;
-        mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[mapper->did_i[i]], NULL, &snip, &snip_len, txt_line_i);
-
-        RECONSTRUCT (snip, snip_len);
+        piz_reconstruct_from_ctx (vb, mapper->did_i[i], "", 0);
         
         if (i < template_len)
             // add middle-field separator
-            RECONSTRUCT (&template[i], 1) // buf_add is a macro - no semicolon
+            RECONSTRUCT (&template_copy[i], 1) // buf_add is a macro - no semicolon
         else if (separator_len)
             RECONSTRUCT (separator, separator_len); // add end-of-field separator if needed
     }
@@ -262,7 +267,7 @@ void piz_map_iname_subfields (VBlock *vb)
 
             // case - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
             if (dict_id->num == dict_id_WindowsEOL) {
-                iname_mapper->did_i[iname_mapper->num_subfields] = DID_I_HAS_13;
+                //iname_mapper->did_i[iname_mapper->num_subfields] = DID_I_HAS_13;
                 
                 // we now modify the global dictionary to match the true iname strings, so it can be used for reconstruction
                 if (i>=2 && iname[i-2] == ';')
@@ -270,8 +275,8 @@ void piz_map_iname_subfields (VBlock *vb)
                 else     
                     iname[iname_len-1] = sep; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
             }
-            else 
-                iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (*dict_id); // it will be NIL if this is an INFO name without values            
+            //else 
+                //iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (*dict_id); // it will be NIL if this is an INFO name without values            
             
             iname_mapper->num_subfields++;
         }
@@ -282,7 +287,7 @@ void piz_map_iname_subfields (VBlock *vb)
 void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index, 
                            const char *iname_snip, unsigned iname_snip_len, 
                            PizReconstructSpecialInfoSubfields reconstruct_special_info_subfields,
-                           uint32_t txt_line_i, bool *has_13)
+                           bool *has_13)
 {
     *has_13 = false; // false unless proven true
 
@@ -300,7 +305,7 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
 
     for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
 
-        uint8_t did_i = iname_mapper->did_i[sf_i]; // DID_I_NONE for fields that have no ctx (either because they have no values or because the values are stored elsewhere)
+        uint8_t did_i = mtf_get_ctx (vb, iname_mapper->dict_id[sf_i])->did_i; // DID_I_NONE for fields that have no ctx (either because they have no values or because the values are stored elsewhere)
         
         if (did_i == DID_I_HAS_13) {
             *has_13 = true; // line needs to end with a \r\n
@@ -318,17 +323,13 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
         // handle the value part of "name=value", if there is one
         if (has_value) {
         
-            bool regular = reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i], txt_line_i);
+            bool regular = reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i]);
             
-            if (regular) { // no special treatment - we proceed with the regular treatment
-                ASSERT (did_i != DID_I_NONE, "Error in piz_reconstruct_info: did_i=DID_I_NONE for dict_id=%s", err_dict_id (iname_mapper->dict_id[sf_i]));
-                DECLARE_SNIP;
-                LOAD_SNIP (did_i);
-                RECONSTRUCT (snip, snip_len); // value e.g "value1"
-            }
+            // no special treatment - we proceed with the regular treatment
+            if (regular) piz_reconstruct_from_ctx (vb, did_i, "", 0);
         }
 
-        RECONSTRUCT1 (";"); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
+        RECONSTRUCT1 (';'); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
         if (*iname_snip == ';') iname_snip++;
     }
 
@@ -336,13 +337,13 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
     vb->txt_data.len -= 1;
 }
 
-void piz_reconstruct_seq_qual (VBlock *vb, MtfContext *ctx, uint32_t seq_len, uint32_t txt_line_i, bool grepped_out)
+void piz_reconstruct_seq_qual (VBlock *vb, MtfContext *ctx, uint32_t seq_len, bool grepped_out)
 {
     ASSERT0 (ctx, "Error in piz_reconstruct_seq_qual: ctx is NULL");
 
     // seq and qual are expected to be either of length seq_len, or " " (unavailable)
     uint32_t len = (ctx->next_local >= ctx->local.len || ctx->local.data[ctx->next_local] == ' ') ? 1 : seq_len;
-    ASSERT (ctx->next_local + len <= ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", txt_line_i, ctx->name);
+    ASSERT (ctx->next_local + len <= ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, ctx->name);
 
     // rewrite unavailable back to "*"
     if (ctx->local.data[ctx->next_local] == ' ') ctx->local.data[ctx->next_local] = '*';
@@ -402,6 +403,8 @@ static void piz_uncompress_one_vb (VBlock *vb)
 
         piz_uncompress_all_ctxs (vb);
     }
+
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
 
     DTP(uncompress)(vb);
 

@@ -37,8 +37,6 @@ static unsigned seg_gff3_get_aofs_item_len (const char *str, unsigned len, bool 
     else return 0; // the string ended prematurely - this is not yet the last item
 }
 
-#define MAX_AoS_ITEMS 10
-
 void seg_gff3_array_of_struct_ctxs (VBlockGFF3 *vb, DictIdType dict_id, unsigned num_items, 
                                     MtfContext **ctx_array, MtfContext **enst_ctx) // out
 {
@@ -49,11 +47,7 @@ void seg_gff3_array_of_struct_ctxs (VBlockGFF3 *vb, DictIdType dict_id, unsigned
     // create new contexts - they are guaranteed to be sequential in mtf_ctx
     for (unsigned i=0; i < num_items; i++) {
         dict_id.id[1] = '0' + i; // change the 2nd char (the first two chars are used for hashing in dict_id_to_did_i_map)
-        MtfContext *ctx = mtf_get_ctx_sf (vb, &vb->num_info_subfields, dict_id); 
-
-        if (i==0) *ctx_array = ctx;
-        
-        ASSERT0 ((*ctx_array) + i == ctx, "Error in seg_gff3_create_ctx_sub_array: expecting ctxs to be consecutive");                                                  
+        ctx_array[i] = mtf_get_ctx_sf (vb, &vb->num_info_subfields, dict_id); 
     }
 }
 
@@ -70,16 +64,16 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
     unsigned num_entries = 0;
     bool is_last_entry = false;
 
-    MtfContext *ctxs; // an array of length num_items_in_struct (pointer to start of sub-array in vb->mtf_ctx)
+    MtfContext *ctxs[MAX_AoS_ITEMS]; // an array of length num_items_in_struct (pointer to start of sub-array in vb->mtf_ctx)
     MtfContext *enst_ctx;
-    seg_gff3_array_of_struct_ctxs (vb, subfield_ctx->dict_id, num_items_in_struct, &ctxs, &enst_ctx);
+    seg_gff3_array_of_struct_ctxs (vb, subfield_ctx->dict_id, num_items_in_struct, ctxs, &enst_ctx);
 
     // set roll back point
     uint64_t saved_mtf_i_len[MAX_AoS_ITEMS], saved_local_len[MAX_AoS_ITEMS], saved_txt_len[MAX_AoS_ITEMS];
     for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++) {
-        saved_mtf_i_len[item_i] = ctxs[item_i].mtf_i.len;
-        saved_local_len[item_i] = ctxs[item_i].local.len;
-        saved_txt_len[item_i]   = ctxs[item_i].txt_len;
+        saved_mtf_i_len[item_i] = ctxs[item_i]->mtf_i.len;
+        saved_local_len[item_i] = ctxs[item_i]->local.len;
+        saved_txt_len[item_i]   = ctxs[item_i]->txt_len;
     }
     const char *saved_snip = snip;
     unsigned saved_snip_len = snip_len;
@@ -92,7 +86,7 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
             if (!item_len) goto badly_formatted;
 
             if (!is_last_item)
-                seg_one_subfield ((VBlockP)vb, snip, item_len, ctxs[item_i].dict_id, item_len+1); // include the separating space after
+                seg_one_subfield ((VBlockP)vb, snip, item_len, ctxs[item_i]->dict_id, item_len+1); // include the separating space after
             else {
                 is_last_entry = (snip_len - item_len == 0);
                 seg_id_field ((VBlockP)vb, (DictIdType)dict_id_ENSTid, snip, item_len, !is_last_entry);
@@ -107,10 +101,10 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
         num_entries++;
     }
 
-    // we successfully segged all items of all entries - now we enter into the subfields - the number of entries preceeded by a AOS_NUM_ENTRIES
+    // we successfully segged all items of all entries - now we enter into the subfields - the number of entries preceeded by a SNIP_STRUCTURED
     char str[30];
     unsigned str_len;
-    str[0] = AOS_NUM_ENTRIES;
+    str[0] = SNIP_STRUCTURED;
     str_int (num_entries, str+1, &str_len);
 
     seg_one_subfield ((VBlockP)vb, str, str_len+1, subfield_ctx->dict_id, 0); 
@@ -120,9 +114,9 @@ static void seg_gff3_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
 badly_formatted:
     // roll back all the changed data
     for (unsigned item_i=0; item_i < num_items_in_struct ; item_i++) {
-        ctxs[item_i].mtf_i.len = saved_mtf_i_len[item_i];
-        ctxs[item_i].local.len = saved_local_len[item_i];
-        ctxs[item_i].txt_len   = saved_txt_len[item_i];
+        ctxs[item_i]->mtf_i.len = saved_mtf_i_len[item_i];
+        ctxs[item_i]->local.len = saved_local_len[item_i];
+        ctxs[item_i]->txt_len   = saved_txt_len[item_i];
     }
 
     // now save the entire snip in the dictionary

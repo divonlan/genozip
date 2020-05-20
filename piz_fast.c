@@ -51,12 +51,12 @@ bool piz_fast_test_grep (VBlockFAST *vb)
     MtfContext *desc_ctx = &vb->mtf_ctx[FAST_DESC];
     desc_ctx->iterator.next_b250 = FIRSTENT (uint8_t, desc_ctx->b250); 
 
-    uint32_t txt_line_i = vb->data_type == DT_FASTQ ? 4 * vb->first_line : vb->first_line;
+    vb->line_i = vb->data_type == DT_FASTQ ? 4 * vb->first_line : vb->first_line;
 
     while (desc_ctx->iterator.next_b250 < AFTERENT (uint8_t, desc_ctx->b250)) {
         DECLARE_SNIP;
         LOAD_SNIP (FAST_DESC);
-        piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, 0, 0, snip, snip_len, txt_line_i);
+        piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, 0, 0, snip, snip_len);
 
         *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string
 
@@ -69,7 +69,7 @@ bool piz_fast_test_grep (VBlockFAST *vb)
             if (vb->data_type == DT_FASTQ) break; // for FASTA, we need to go until the last line, for FASTQ, we can break here
         }
 
-        if (vb->data_type == DT_FASTQ) txt_line_i += 4; // note: for FASTA we have no idea what txt line we're on, because we're only tracking DESC lines
+        if (vb->data_type == DT_FASTQ) vb->line_i += 4; // note: for FASTA we have no idea what txt line we're on, because we're only tracking DESC lines
     }
 
     // last FASTA - carry over whether its grepped to the next VB - in case next VB starts not from the description line
@@ -97,11 +97,9 @@ void piz_fastq_reconstruct_vb (VBlockFAST *vb)
 {
     if (!flag_grep) piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); // it not already done during grep
 
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size, 1.1, "txt_data", vb->vblock_i);
-    
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
-        uint32_t txt_line_i = 4 * (vb->first_line + vb_line_i); // each vb line is a fastq record which is 4 txt lines
+        vb->line_i = 4 * (vb->first_line + vb_line_i); // each vb line is a fastq record which is 4 txt lines
         
         uint32_t txt_data_start_line = vb->txt_data.len;
 
@@ -112,9 +110,12 @@ void piz_fastq_reconstruct_vb (VBlockFAST *vb)
         const char *md = snip;
 
         // description line
-        LOAD_SNIP (FAST_DESC);
+        snip = AFTERENT (const char, vb->txt_data);
+        snip_len = piz_reconstruct_from_ctx ((VBlockP)vb, FAST_DESC, "", 0);
+        vb->txt_data.len -= snip_len; 
+
         piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[md[0]-'X'], eol_len[md[0]-'X'], 
-                                        snip, snip_len, txt_line_i);
+                                        snip, snip_len);
         *AFTERENT (char, vb->txt_data) = 0; // null-terminate for sec, in case of grep
 
         bool grepped_out = false;
@@ -128,14 +129,14 @@ void piz_fastq_reconstruct_vb (VBlockFAST *vb)
 
         // sequence line
         uint32_t seq_len = atoi (&md[4]); // numeric string terminated by dictionary's SNIP_SEP
-        piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FAST_SEQ], seq_len, txt_line_i, grepped_out);
+        piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FAST_SEQ], seq_len, grepped_out);
         if (!grepped_out) RECONSTRUCT (eol[md[1]-'X'], eol_len[md[1]-'X']); // end of line
 
         // + line
         if (!grepped_out) RECONSTRUCT (md[2]-'X' ? "+\r\n" : "+\n", eol_len[md[2]-'X'] + 1);
 
         // quality line
-        piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FASTQ_QUAL], seq_len, txt_line_i, grepped_out);
+        piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FASTQ_QUAL], seq_len, grepped_out);
         
         if (!grepped_out) RECONSTRUCT (eol[md[3]-'X'], eol_len[md[3]-'X']); // end of line
     }
@@ -151,7 +152,7 @@ void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
-        uint32_t txt_line_i = vb->first_line + vb_line_i;
+        vb->line_i = vb->first_line + vb_line_i;
 
         // metadata looks like this - "X>" (desc line), "X;" (comment line) "X123" (sequence line)
         // X, Y characters specify whether each row has a \r (Y=has)
@@ -164,12 +165,13 @@ void piz_fasta_reconstruct_vb (VBlockFAST *vb)
 
         switch (md[1]) {
             case '>': // description line 
-                LOAD_SNIP (FAST_DESC);
-                piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[has_13], eol_len[has_13], 
-                                                snip, snip_len, txt_line_i);
-                *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string - for strstr below
+                snip = AFTERENT (const char, vb->txt_data);
+                snip_len = piz_reconstruct_from_ctx ((VBlockP)vb, FAST_DESC, "", 0);
+                vb->txt_data.len -= snip_len; // roll back
 
-                vb->last_line = FASTA_DESC;
+                piz_reconstruct_compound_field ((VBlockP)vb, &vb->desc_mapper, eol[has_13], eol_len[has_13], 
+                                                snip, snip_len);
+                *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string - for strstr below
 
                 // case: we're grepping, and this line doesn't match
                 if (flag_grep && !strstr (&vb->txt_data.data[txt_data_start_line], flag_grep)) { 
@@ -177,15 +179,15 @@ void piz_fasta_reconstruct_vb (VBlockFAST *vb)
                     grepped_out = true;
                 }
                 else grepped_out = false;
+
+                if (flag_no_header) vb->txt_data.len = txt_data_start_line; // roll back
+
+                vb->last_line = FASTA_DESC;
                 break;
 
             case ';': // comment line
-                if (!flag_header_one && !flag_grep)
-                    piz_reconstruct_from_ctx ((VBlockP)vb, FASTA_COMMENT, eol[has_13], eol_len[has_13], txt_line_i); 
-                    //RECONSTRUCT_FROM_BUF (vb->comment_data, vb->next_comment, "COMMENT", eol[has_13], eol_len[has_13]);
-
-                //if (flag_header_one && !snip_len)
-                //    vb->txt_data.len -= eol_len[has_13]; // don't show empty lines in --header-only mode
+                if (!flag_header_one && !flag_no_header && !flag_grep)
+                    piz_reconstruct_from_ctx ((VBlockP)vb, FASTA_COMMENT, eol[has_13], eol_len[has_13]); 
 
                 vb->last_line = FASTA_COMMENT;
                 break;
@@ -197,10 +199,10 @@ void piz_fasta_reconstruct_vb (VBlockFAST *vb)
                         vb->txt_data.len -= 1 + (vb->txt_data.data[vb->txt_data.len-2]=='\r');
 
                     uint32_t seq_len = atoi (&md[1]); // numeric string terminated by dictionary's SNIP_SEP separator
-                    piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FASTA_SEQ], seq_len, txt_line_i, grepped_out);
+                    piz_reconstruct_seq_qual ((VBlockP)vb, &vb->mtf_ctx[FASTA_SEQ], seq_len, grepped_out);
                     if (!grepped_out) RECONSTRUCT (eol[has_13], eol_len[has_13]); // end of line
-                    vb->last_line = FASTA_SEQ;
                 }
+                vb->last_line = FASTA_SEQ;
         }
     }
 }
