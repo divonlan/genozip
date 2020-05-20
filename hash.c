@@ -15,17 +15,17 @@
 
 #define NO_NEXT 0xffffffff
 typedef struct {        
-    int32_t mtf_i;            // index into MtfContext.ol_mtf (if < ol_mtf.len) or MtfContext.mtf or NIL
+    int32_t node_index;       // index into MtfContext.ol_mtf (if < ol_mtf.len) or MtfContext.mtf or NIL
     uint32_t next;            // linked list - index into MtfContext.global/local_hash or NIL
                               //               local_hash indeces started at LOCAL_HASH_OFFSET
 } LocalHashEnt;
 
 #pragma pack(push, hash, 4)
 typedef struct {        
-    int32_t mtf_i;            // index into MtfContext.ol_mtf (if < ol_mtf.len) or MtfContext.mtf or NIL
+    int32_t node_index;       // index into MtfContext.mtf or NIL
     uint32_t next;            // linked list - index into MtfContext.global/local_hash or NIL
-    int32_t merge_num;        // the merge_num in which the "mtf_i" field was set. when this global hash is overlayed 
-                              // to a vb_ctx, that vb_ctx is permitted use the mtf_i value if this merge_num is <= vb_ctx->merge_num,
+    int32_t merge_num;        // the merge_num in which the "node_index" field was set. when this global hash is overlayed 
+                              // to a vb_ctx, that vb_ctx is permitted use the node_index value if this merge_num is <= vb_ctx->merge_num,
                               // otherwise, it should treat it as NIL.
 } GlobalHashEnt;
 #pragma pack (pop)
@@ -347,7 +347,7 @@ static inline uint32_t hash_do (uint32_t hash_len, const char *snip, unsigned sn
     return (uint32_t)(result % hash_len);
 }
 
-// gets the mtf_i if the snip is already in the hash table, or puts a new one in the hash table in not
+// gets the node_index if the snip is already in the hash table, or puts a new one in the hash table in not
 int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned snip_len, 
                                   int32_t new_mtf_i_if_no_old_one,
                                   MtfNode **node)        // out - node if node is found, NULL if not
@@ -364,15 +364,15 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
         hashent_i = g_hashent->next;
         g_hashent = ENT(GlobalHashEnt, zf_ctx->global_hash, hashent_i);
 
-        // case: snip is not in core hash table and also no other snip occupies the slot (mtf_i==NIL happens only in the core table)
-        if (g_hashent->mtf_i == NIL) { // unoccupied space in core hash table
+        // case: snip is not in core hash table and also no other snip occupies the slot (node_index==NIL happens only in the core table)
+        if (g_hashent->node_index == NIL) { // unoccupied space in core hash table
             // thread safety: VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
             // and accessing it. we make sure that the setting of g_hashent->merge_num is atomic and the other threads will at all times either
             // see NIL or merge_num - both of which indicate the this entry is effectively NIL as they have an older merge_num
 
             g_hashent->next = NO_NEXT;
-            g_hashent->mtf_i = new_mtf_i_if_no_old_one;
-            __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the mtf_i
+            g_hashent->node_index = new_mtf_i_if_no_old_one;
+            __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
             if (node) *node = NULL;
             return NIL;
         }
@@ -381,11 +381,11 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
             const char *snip_in_dict;
             uint32_t snip_len_in_dict;
 
-            *node = mtf_node (zf_ctx, g_hashent->mtf_i, &snip_in_dict, &snip_len_in_dict);
+            *node = mtf_node (zf_ctx, g_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
         
             // case: snip is in the hash table 
             if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) 
-                return g_hashent->mtf_i;
+                return g_hashent->node_index;
         }
     }
 
@@ -400,8 +400,8 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
     // VBs from using it, before we atomically set the "next"
     uint32_t next = zf_ctx->global_hash.len++;
     GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, next);
-    new_hashent->merge_num = zf_ctx->merge_num; // stamp our merge_num as the ones that set the mtf_i
-    new_hashent->mtf_i     = new_mtf_i_if_no_old_one;
+    new_hashent->merge_num = zf_ctx->merge_num; // stamp our merge_num as the ones that set the node_index
+    new_hashent->node_index     = new_mtf_i_if_no_old_one;
     new_hashent->next      = NO_NEXT;
     
     // now, with the new g_hashent set, we can atomically update the "next"
@@ -411,7 +411,7 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
     return NIL;
 }
 
-// gets the mtf_i if the snip is already in the hash table, or puts a new one in the hash table in not
+// gets the node_index if the snip is already in the hash table, or puts a new one in the hash table in not
 // 1. if its in the global hash table, with merge_num lower or equal to ours - i.e. added by an earler thread - we take it 
 // 2. if its in the local hash table - i.e. added by us (this vb) earlier - we take it
 // 3. if not found - we add it to the local hash table
@@ -443,15 +443,15 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
 
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
         uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_RELAXED);
-        if (g_hashent->mtf_i == NIL || merge_num > vb_ctx->merge_num) break; // case 3
+        if (g_hashent->node_index == NIL || merge_num > vb_ctx->merge_num) break; // case 3
 
         const char *snip_in_dict;
         uint32_t snip_len_in_dict;
-        *node = mtf_node (vb_ctx, g_hashent->mtf_i, &snip_in_dict, &snip_len_in_dict);
+        *node = mtf_node (vb_ctx, g_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
 
         // case: snip is in the global hash table - we're done
         if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) 
-            return g_hashent->mtf_i; // case 2
+            return g_hashent->node_index; // case 2
     }
 
     // snip was not found in the global hash table (as it was at the time we cloned), we now search
@@ -472,10 +472,10 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         l_hashent_i = l_hashent->next;
         l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);
 
-        // case: snip is not in hash table and also no other snip occupies the slot (mtf_i==NIL happens only in the core table)
-        if (l_hashent->mtf_i == NIL) { // unoccupied space in core hash table
+        // case: snip is not in hash table and also no other snip occupies the slot (node_index==NIL happens only in the core table)
+        if (l_hashent->node_index == NIL) { // unoccupied space in core hash table
             l_hashent->next = NO_NEXT;
-            l_hashent->mtf_i = new_mtf_i_if_no_old_one;
+            l_hashent->node_index = new_mtf_i_if_no_old_one;
             if (node) *node = NULL;
             return NIL;
         }
@@ -483,11 +483,11 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         if (node) { // if the caller doesn't provide "node", he is telling us that with certainly the snip is not in the hash table
             const char *snip_in_dict;
             uint32_t snip_len_in_dict;
-            *node = mtf_node (vb_ctx, l_hashent->mtf_i, &snip_in_dict, &snip_len_in_dict);
+            *node = mtf_node (vb_ctx, l_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
 
             // case: snip is in the hash table - we're done
             if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) 
-                return l_hashent->mtf_i;
+                return l_hashent->node_index;
         }
     }
 
@@ -500,7 +500,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
 
     LocalHashEnt *new_l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent->next);
     new_l_hashent->next = NO_NEXT;
-    new_l_hashent->mtf_i = new_mtf_i_if_no_old_one;
+    new_l_hashent->node_index = new_mtf_i_if_no_old_one;
 
     if (node) *node = NULL;
     return NIL;
