@@ -160,6 +160,8 @@ typedef struct {
 
 static uint64_t stats_get_num_singletons (MtfContext *ctx)
 {
+    if (!buf_is_allocated (&ctx->mtf)) return 0;
+    
     uint64_t num_singletons = 0;
     ARRAY (MtfNode, mtf, ctx->mtf);
 
