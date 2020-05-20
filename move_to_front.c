@@ -187,7 +187,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
 // 1. During segregate - as snips are encountered in the data. No base250 encoding yet
 // 2. During mtf_merge_in_vb_ctx_one_dict_id() - to enter snips into z_file->mtf_ctx - also encoding in base250
 static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx, MtfContext *vb_ctx, 
-                                         const char *snip, uint32_t snip_len,
+                                         const char *snip, uint32_t snip_len, uint32_t count,
                                          MtfNode **node, bool *is_new)  // out
 {
     // attempt to get the node from the hash table
@@ -196,6 +196,7 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
     int32_t existing_mtf_i = hash_get_entry_for_merge (zf_ctx, snip, snip_len, new_mtf_i_if_no_old_one, node);
     if (existing_mtf_i != NIL) {
         *is_new = false;
+        (*node)->count = 2; // note singleton. note: for zf_ctx, we only care if its a singleton or not. 1=singleton, >1 not. (we don't keep the real count to avoid needing to bloat the nodes with an int64 count)
         return existing_mtf_i; // snip was found in hash table - we're done
     }
     
@@ -215,7 +216,8 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
     (*node)->snip_len     = snip_len;
     (*node)->char_index   = mtf_insert_to_dict (evb, zf_ctx, true, snip, snip_len);
     (*node)->word_index.n = new_mtf_i_if_no_old_one;
-
+    (*node)->count        = count; // 1 if singleton, >1 if not.
+    
     *is_new = true;
 
     return new_mtf_i_if_no_old_one;
@@ -443,9 +445,9 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
             MtfNode *zf_node;
             bool is_new;
             // use evb and not vb because zf_context is z_file (which belongs to evb)
-            int32_t zf_node_index = mtf_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, 
-                                                             &vb_ctx->dict.data[vb_node->char_index], vb_node->snip_len,
-                                                             &zf_node, &is_new);
+            int32_t zf_node_index = 
+                mtf_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, &vb_ctx->dict.data[vb_node->char_index], 
+                                         vb_node->snip_len, vb_node->count, &zf_node, &is_new);
 
             ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vb_ctx->mtf.len);
 
