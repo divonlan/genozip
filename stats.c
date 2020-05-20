@@ -153,10 +153,21 @@ static void initialize_vcf_gt_data_tracker (void)
 
 typedef struct {
     uint64_t total_comp_size;
-    char did_i[20], name[50], type[20], words[20], uniq[20], hash[20], uncomp_dict[20], comp_dict[20],
+    char did_i[20], name[50], type[20], words[20], uniq[20], singletons[20], hash[20], uncomp_dict[20], comp_dict[20],
          comp_b250[20], comp_data[20], comp_total[20], txt[20];
          double comp_ratio, pc_txt, pc_genozip;
 } StatsByLine;
+
+static uint64_t stats_get_num_singletons (MtfContext *ctx)
+{
+    uint64_t num_singletons = 0;
+    ARRAY (MtfNode, mtf, ctx->mtf);
+
+    for (unsigned i=0; i < ctx->mtf.len; i++)
+        if (mtf[i].count == 1) num_singletons++;
+
+    return num_singletons;
+}
 
 static int stats_sort_by_total_comp_size(const void *a, const void *b)  
 { 
@@ -216,12 +227,13 @@ void stats_show_sections (void)
         /* did_i          */ str_uint_commas ((uint64_t)ctx->did_i, s->did_i); 
         /* #Words in file */ str_uint_commas (ctx->mtf_i.len, s->words);
         /* #Words in dict */ str_uint_commas (ctx->mtf.len, s->uniq);
+        /* #Sing. in dict */ str_uint_commas (stats_get_num_singletons(ctx), s->singletons);
         /* Hash           */ str_uint_commas (ctx->global_hash_prime, s->hash);
         /* uncomp dict    */ str_size (ctx->dict.len, s->uncomp_dict);
         /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
         }
         else 
-            s->did_i[0] = s->words[0] = s->uniq[0] = s->hash[0] = s->uncomp_dict[0] = s->comp_dict[0] = '-';
+            s->did_i[0] = s->words[0] = s->singletons[0] = s->uniq[0] = s->hash[0] = s->uncomp_dict[0] = s->comp_dict[0] = '-';
         
         /* txt            */ str_size (txt_len, s->txt);
         /* comp b250      */ str_size (b250_compressed_size, s->comp_b250);
@@ -239,16 +251,16 @@ void stats_show_sections (void)
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_total_comp_size);
 
     fprintf (stderr, "\nSections (sorted by %% of genozip file):\n");
-    fprintf (stderr, "did_i Name            Type            #Words       #Words         Hash    uncomp      comp      comp      comp      comp       txt    comp  %% of   %% of  \n");
-    fprintf (stderr, "                                     in file      in dict                   dict      dict      b250     local     TOTAL             ratio   txt   genozip\n");
+    fprintf (stderr, "did_i Name            Type            #Words       #Words  #Singletons         Hash    uncomp      comp      comp      comp      comp       txt    comp  %% of   %% of  \n");
+    fprintf (stderr, "                                     in file      in dict      in dict                   dict      dict      b250     local     TOTAL             ratio   txt   genozip\n");
 
     for (uint32_t i=0; i < num_stats; i++) { // don't show CHROM-FORMAT as they are already showed above
 
         StatsByLine *s = &sbl[i];
         if (!s->total_comp_size) continue;
 
-        fprintf (stderr, "%-2.2s    %-15.15s %-6.6s %15s %12s %12s %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-                 s->did_i, s->name, s->type, s->words, s->uniq, s->hash, // These don't appear in the total
+        fprintf (stderr, "%-2.2s    %-15.15s %-6.6s %15s %12s %12s %12s %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+                 s->did_i, s->name, s->type, s->words, s->uniq, s->singletons, s->hash, // These don't appear in the total
                  s->uncomp_dict, s->comp_dict, s->comp_b250, s->comp_data, s->comp_total, s->txt, s->comp_ratio, s->pc_txt, s->pc_genozip);
     }
 
@@ -257,7 +269,7 @@ void stats_show_sections (void)
     double all_pc_genozip = 100.0 * (double)all_comp_total / (double)z_file->disk_size;
     
     char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
-    fprintf (stderr, "TOTAL                                                                  "
+    fprintf (stderr, "TOTAL                                                                               "
              "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
              str_size (all_uncomp_dict, s1), str_size (all_comp_dict, s2),  str_size (all_comp_b250, s3), 
              str_size (all_comp_data, s4),   str_size (all_comp_total, s5), str_size (all_txt, s6), 
