@@ -21,7 +21,7 @@ fi
 
 cmp_2_files() {
     if [[ `$md5 $1 | cut -d" " -f1` != `$md5 ${2%.*} | cut -d" " -f1` ]]; then
-        echo FAILED!
+        echo "MD5 comparison FAILED!"
         exit 1
     fi
 }
