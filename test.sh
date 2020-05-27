@@ -111,6 +111,9 @@ for file in ${files[@]}; do
 
 done
 
+test_header "$file - testing VCF with sblock=1"
+./genozip test-file.vcf --sblock 1 -ft -o ${output}.genozip || exit 1
+
 files=`ls backward-compatibility-test/*.vcf` 
 for file in $files; do
     test_header "$file - backward compatability test"
@@ -137,7 +140,8 @@ if `command -v samtools >& /dev/null`; then
     rm bam-test.input.bam bam-test.output.bam
 fi
 
-test_header "Testing subsets (~3 VBs) or real world files"
+test_header "Testing subsets (~3 VBs) or real world files
+"
 rm -f test-data/*.genozip
 ./genozip -ft test-data/* || exit 1
 
