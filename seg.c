@@ -127,7 +127,7 @@ void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id, uint32
         *snip_len += str_int (lookup_len, &snip[*snip_len]);
 }
 
-#define MAX_POS 0xfffffffe // maximum allowed value for POS (reserving 0xffffffff for future use)
+#define MAX_POS 0xffffffff // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
 
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
 // (if allow_nonsense) or errors
