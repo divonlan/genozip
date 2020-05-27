@@ -34,7 +34,7 @@
         "random_access.h": "c",
         "profiler.h": "c",
         "txtfile.h": "c",
-        "header.h": "c",
+        "txtheader.h": "c",
         "regex": "c",
         "memory": "cpp",
         "random": "c",

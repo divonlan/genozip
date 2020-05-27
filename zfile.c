@@ -16,32 +16,39 @@
 #include "endianness.h"
 #include "version.h"
 #include "sections.h"
-#include "samples.h"
-#include "squeeze_vcf.h"
-#include "header.h"
-#include "gtshark_vcf.h"
 #include "compressor.h"
 #include "piz.h"
 #include "zip.h"
 #include "license.h"
 #include "arch.h"
+#include "strings.h"
 
-bool is_v2_or_above=0, is_v3_or_above=0, is_v4_or_above=0, is_v5_or_above=0;
+bool is_v2_or_above=true, is_v3_or_above=true, is_v4_or_above=true, is_v5_or_above=true; // default to 'true' for ZIP, modifed when PIZ reads the genozip header
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
 {
     DictIdType dict_id = {0};
+    char flags[10], ltype[10];
+    bool has_flags = false;
 
     if (section_type_is_dictionary (header->section_type)) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
-    else if (section_type_is_b250  (header->section_type)) dict_id = ((SectionHeaderB250    *)header)->dict_id;
-    else if (header->section_type == SEC_LOCAL)            dict_id = ((SectionHeaderLocal   *)header)->dict_id;
+    
+    else if (header->section_type == SEC_LOCAL || section_type_is_b250  (header->section_type)) {
+        SectionHeaderCtx *header_ctx = (SectionHeaderCtx *)header;
+        dict_id = header_ctx->dict_id;
+        str_int (header_ctx->flags, flags);
+        str_int (header_ctx->ltype, ltype);
+        has_flags = true;
+    }
 
     char str[1000];
 
-    sprintf (str, "%-23s %*.*s vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%u vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
+             has_flags ? "flags=" : "", has_flags ? flags : "", has_flags ? "ltype=" : "", has_flags ? ltype : "", 
+             header->sec_compression_alg,
              BGEN32 (header->vblock_i), BGEN16 (header->section_i), 
              BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
              BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic));
@@ -58,7 +65,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
 static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 {
-    SectionHeaderB250 *header = (SectionHeaderB250 *)section_header_p;
+    SectionHeaderCtx *header = (SectionHeaderCtx *)section_header_p;
 
     if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
 
@@ -70,8 +77,10 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 
     fprintf (stderr, "  %*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
 
-    const uint8_t *data = (const uint8_t *)b250_data->data;
-    for (unsigned i=0; i < BGEN32 (header->num_b250_items); i++) {
+    const uint8_t *data  = FIRSTENT (const uint8_t, *b250_data);
+    const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
+
+    while (data < after) {
         uint32_t word_index = base250_decode (&data);
         switch (word_index) {
             case WORD_INDEX_ONE_UP     : fprintf (stderr, "ONE_UP "); break;
@@ -87,29 +96,35 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
 {
     VBlock *vb = (VBlock *)vb_;
+    DataType dt = vb ? vb->data_type : z_file->data_type;
 
-    switch (vb ? vb->data_type : z_file->data_type) {
+    switch (dt) {
         case DT_VCF:
             if ((flag_drop_genotypes || flag_gt_only) && 
-                (st == SEC_VCF_FORMAT_B250_legacy || st == SEC_VCF_FORMAT_DICT_legacy || st == SEC_VCF_GT_DATA || st == SEC_VCF_FRMT_SF_DICT_legacy))
+                (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id_is_vcf_format_sf (dict_id) || st == SEC_VCF_GT_DATA ||
+                st == SEC_VCF_FORMAT_B250_legacy || st == SEC_VCF_FORMAT_DICT_legacy ||  st == SEC_VCF_FRMT_SF_DICT_legacy))
                 return true;
 
             break;
 
         case DT_FASTQ:
         case DT_FASTA:
+        
             if (flag_header_one &&
-                (dict_id.num == dict_id_fields[FAST_SEQ] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
+                (dict_id.num == dict_id_FASTA_SEQ || dict_id.num == dict_id_FASTA_COMMENT || 
+                 dict_id.num == dict_id_fields[FASTQ_SEQ] || dict_id.num == dict_id_fields[FASTQ_QUAL]))
                 return true;
 
+            uint64_t desc_dict_id = (dt == DT_FASTQ) ? dict_id_fields[FASTQ_DESC] : dict_id_FASTA_DESC;
+
             // when grepping by I/O thread - skipping all section but DESC
-            if (vb && flag_grep && (((VBlockFASTP)vb)->grep_stages == GS_TEST) && 
-                dict_id.num != dict_id_fields[FAST_DESC] && !dict_id_is_fast_desc_sf (dict_id))
+            if (vb && flag_grep && (vb->grep_stages == GS_TEST) && 
+                dict_id.num != desc_dict_id && !dict_id_is_fast_desc_sf (dict_id))
                 return true;
 
             // if grepping, compute thread doesn't need to decompressed DESC again
-            if (vb && flag_grep && (((VBlockFASTP)vb)->grep_stages == GS_UNCOMPRESS) && 
-                (dict_id.num == dict_id_fields[FAST_DESC] || dict_id_is_fast_desc_sf (dict_id)))
+            if (vb && flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
+                (dict_id.num == desc_dict_id || dict_id_is_fast_desc_sf (dict_id)))
                 return true;
             
             break;
@@ -134,9 +149,9 @@ void zfile_uncompress_section (VBlock *vb,
     if (section_type_is_dictionary (expected_section_type))
         dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
     else if (section_type_is_b250 (expected_section_type))
-        dict_id = ((SectionHeaderB250 *)section_header_p)->dict_id;
+        dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
     else if (expected_section_type == SEC_LOCAL)
-        dict_id = ((SectionHeaderLocal *)section_header_p)->dict_id;
+        dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
 
     if (zfile_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
 
@@ -170,7 +185,7 @@ void zfile_uncompress_section (VBlock *vb,
         if (is_v2_or_above)
             crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_header->section_type, false);
         else
-            v1_crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_i);
+            vcf_v1_crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_i);
     }
 
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
@@ -245,33 +260,26 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
 
 void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_alg)
 {
-    SectionHeaderB250 header;
+    SectionHeaderCtx header;
     memset (&header, 0, sizeof(header)); // safety
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.section_type          = SEC_B250;
     header.h.data_uncompressed_len = BGEN32 (ctx->b250.len);
-    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderB250));
+    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx));
     header.h.sec_compression_alg   = comp_alg;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;
-    header.num_b250_items          = BGEN32 (ctx->mtf_i.len);
+    header.flags                   = ctx->flags;
+    header.ltype              = ctx->ltype;
             
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
-static CompressionAlg zfile_get_local_data_comp_alg (DataType dt, DictIdType dict_id)
-{
-    for (uint64_t **next = dt_fields[dt].local_by_lzma ; *next; next++) 
-        if (**next == dict_id.num) return COMP_LZMA;
-
-    return COMP_BZ2;
-}
-
 static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictIdType dict_id)
 {
-    static struct { DataType dt; uint64_t *dict_id_num; CompGetLineCallback *func; } callbacks[] = LOCAL_COMP_CALLBACKS;
+    static struct { DataType dt; uint64_t *dict_id_num; CompGetLineCallback *func; } callbacks[] = LOCAL_COMPRESSOR_CALLBACKS;
 
     for (unsigned i=0; i < sizeof(callbacks)/sizeof(callbacks[0]); i++)
         if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == dict_id.num) 
@@ -282,17 +290,21 @@ static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictIdTy
 
 void zfile_compress_local_data (VBlock *vb, MtfContext *ctx)
 {   
-    SectionHeaderLocal header;
+    SectionHeaderCtx header;
     memset (&header, 0, sizeof(header)); // safety
+
+    unsigned local_len_multiplier  = ctx_lt_sizeof_one[ctx->ltype];
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.section_type          = SEC_LOCAL;
-    header.h.data_uncompressed_len = BGEN32 (ctx->local.len * (ctx->local.param ? ctx->local.param : 1)); // for regular (non-callback) locals, we store the len quantum in local.param
-    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderLocal));
-    header.h.sec_compression_alg   = zfile_get_local_data_comp_alg (vb->data_type, ctx->dict_id);
+    header.h.data_uncompressed_len = BGEN32 (ctx->local.len * local_len_multiplier); 
+    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx));
+    header.h.sec_compression_alg   = (ctx->flags & CTX_FL_LOCAL_LZMA) ? COMP_LZMA : COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;
+    header.flags                   = ctx->flags;
+    header.ltype                   = ctx->ltype;
 
     CompGetLineCallback *callback = zfile_get_local_data_callback (vb->data_type, ctx->dict_id);
 
@@ -330,7 +342,7 @@ void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type,
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
 // this doesn't make a big difference for SSD, but makes a huge difference for HD
 // return true if data was read as requested, false if file has reached EOF and error otherwise
-static void *zfile_read_from_disk (VBlock *vb, Buffer *buf, unsigned len, bool fail_quietly_if_not_enough_data)
+void *zfile_read_from_disk (VBlock *vb, Buffer *buf, unsigned len, bool fail_quietly_if_not_enough_data)
 {
     START_TIMER;
 
@@ -392,7 +404,7 @@ int zfile_read_section (VBlock *vb,
 
     if (sl && zfile_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
 
-    if (sb_i != NO_SB_I && ! *ENT(bool, ((VBlockVCFP)vb)->is_sb_included, sb_i)) return 0; // skip section if this sample block is excluded by --samples
+    if (sb_i != NO_SB_I && !vcf_is_sb_included(vb, sb_i)) return 0; // skip section if this sample block is excluded by --samples
 
     // note: the first section is always read by zfile_read_section(). if it is a v1, or
     // if it is not readable (perhaps v1 encrypted) - we assume its a v1 VCF header
@@ -494,6 +506,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         buf_free (&evb->z_data);
     }
 
+    // output the dictionaries if we're asked to
     if (flag_show_dict || dict_id_show_one_dict.num) {
         for (uint32_t did_i=0; did_i < z_file->num_dict_ids; did_i++) {
             MtfContext *ctx = &z_file->mtf_ctx[did_i];
@@ -513,7 +526,6 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
     }
 }
 
-
 // returns the read data IF this is an invalid v2+ file, and hence might be v1
 int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 {
@@ -527,6 +539,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     
     // case: this is not a valid genozip v2+ file... maybe its v1?
     if (BGEN32 (footer.magic) != GENOZIP_MAGIC) {
+        is_v2_or_above = is_v3_or_above = is_v4_or_above = is_v5_or_above = false;
         file_seek (z_file, 0, SEEK_SET, false);
         return DT_VCF_V1;
     }
@@ -693,7 +706,7 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
     // case: this is not a valid genozip v2+ file... maybe its v1?
     if (BGEN32 (footer.magic) != GENOZIP_MAGIC) {
         file_seek (z_file, 0, SEEK_SET, false);
-        return v1_vcf_header_get_vcf_header (uncompressed_data_size, num_samples, num_items_concat, 
+        return vcf_v1_header_get_vcf_header (uncompressed_data_size, num_samples, num_items_concat, 
                                              md5_hash_concat, created, created_len);
     }
 
@@ -804,7 +817,7 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     return true; // success
 }
 
-// ZIP compute thread - called from zip_sam_compress_one_vb()
+// ZIP compute thread - called from sam_zip_compress_one_vb()
 void zfile_compress_generic_vb_header (VBlock *vb)
 {
     uint32_t sizeof_header = sizeof (SectionHeaderVbHeader);
@@ -848,102 +861,3 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
         crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
                   BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
 }
-
-//------------------------------------------------------------------------------
-// VCF stuff
-//------------------------------------------------------------------------------
-
-// called by ZIP compute thread - called from zip_vcf_compress_one_vb()
-void zfile_vcf_compress_vb_header (VBlock *vb_)
-{
-    VBlockVCF *vb = (VBlockVCF *)vb_;
-
-    uint32_t my_squeeze_len = squeeze_len (vb->num_haplotypes_per_line);
-    uint32_t sizeof_header = sizeof (SectionHeaderVbHeaderVCF);
-
-    SectionHeaderVbHeaderVCF vb_header;
-    memset (&vb_header, 0, sizeof(SectionHeaderVbHeaderVCF)); // safety
-    
-    vb_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    vb_header.h.section_type          = SEC_VB_HEADER;
-    vb_header.h.data_uncompressed_len = BGEN32 (my_squeeze_len);
-    vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
-    vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
-    vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
-    vb_header.h.sec_compression_alg   = COMP_PLN; // in versions 2-4 it was (needlessly) compressed with bzlib
-    vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
-    vb_header.phase_type              = (char)vb->phase_type; 
-    vb_header.has_genotype_data       = vb->has_genotype_data;
-    vb_header.num_samples             = BGEN32 (global_vcf_num_samples);
-    vb_header.num_haplotypes_per_line = BGEN32 (vb->num_haplotypes_per_line);
-    vb_header.num_samples_per_block   = BGEN32 (vb->num_samples_per_block);
-    vb_header.num_sample_blocks       = BGEN32 (vb->num_sample_blocks);
-    vb_header.ploidy                  = BGEN16 (vb->ploidy);
-    vb_header.vb_data_size            = BGEN32 (vb->vb_data_size);
-    vb_header.max_gt_line_len         = BGEN32 (vb->max_gt_line_len);
-    vb_header.is_gtshark              = flag_gtshark;
-
-    // create squeezed index - IF we have haplotype data AND more than one haplotype per line (i.e. my_squeeze_len > 0)
-    if (my_squeeze_len) {
-        buf_alloc (vb, &vb->haplotype_permutation_index_squeezed, my_squeeze_len, 1, "haplotype_permutation_index_squeezed", 0);
-
-        uint16_t haplotype_index_checksum;
-        squeeze (vb, (uint8_t *)vb->haplotype_permutation_index_squeezed.data, &haplotype_index_checksum,
-                (unsigned *)vb->haplotype_permutation_index.data, 
-                vb->num_haplotypes_per_line);
-
-        vb_header.haplotype_index_checksum = BGEN16(haplotype_index_checksum);
-    }
-    
-    // compress section into z_data - to be eventually written to disk by the I/O thread
-    vb->z_data.name = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named
-    vb->z_data.param = vb->vblock_i;
-    comp_compress ((VBlockP)vb, &vb->z_data, false, (SectionHeader*)&vb_header, 
-                    my_squeeze_len ? vb->haplotype_permutation_index_squeezed.data : NULL, NULL);
-}
-
-// ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed
-// variant data section (compressed by the compute thread in zfile_vcf_compress_vb_header) just before writing it to disk
-// note: this updates the z_data in memory (not on disk)
-void zfile_vcf_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
-{
-    SectionHeaderVbHeaderVCF *vb_header = (SectionHeaderVbHeaderVCF *)vb->z_data.data;
-    vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
-    vb_header->first_line   = BGEN32 (txt_first_line_i);
-
-    if (flag_show_vblocks) {
-        fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u uncomprssed=%u compressed=%u num_sample_blocks=%u ht_per_line=%u max_gt_line_len=%u\n",
-                 vb->vblock_i, txt_first_line_i, BGEN32 (vb_header->num_lines), 
-                 BGEN32 (vb_header->vb_data_size), BGEN32 (vb_header->z_data_bytes), 
-                 BGEN32 (vb_header->num_sample_blocks), BGEN32 (vb_header->num_haplotypes_per_line), 
-                 BGEN32 (vb_header->max_gt_line_len));
-    }
-    // now we can finally encrypt the header - if needed
-    if (crypt_have_password())  
-        crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
-                  BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
-}
-
-void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCF *vb, const Buffer *haplotype_sections_data, unsigned sb_i)
-{
-    gtshark_compress_haplotype_data (vb, haplotype_sections_data, sb_i); // populates vb->gtshark_*
-    
-    vb->gtshark_exceptions_line_i.len *= sizeof (uint32_t);
-    vb->gtshark_exceptions_ht_i.len *= sizeof (uint16_t);
-
-    zfile_compress_section_data     ((VBlockP)vb, SEC_HT_GTSHARK_X_LINE,   &vb->gtshark_exceptions_line_i);
-    zfile_compress_section_data     ((VBlockP)vb, SEC_HT_GTSHARK_X_HTI,    &vb->gtshark_exceptions_ht_i);
-    zfile_compress_section_data     ((VBlockP)vb, SEC_HT_GTSHARK_X_ALLELE, &vb->gtshark_exceptions_allele);
-    zfile_compress_section_data_alg ((VBlockP)vb, SEC_HT_GTSHARK_DB_DB,    &vb->gtshark_db_db_data, 0, 0, COMP_PLN);
-    zfile_compress_section_data_alg ((VBlockP)vb, SEC_HT_GTSHARK_DB_GT,    &vb->gtshark_db_gt_data, 0, 0, COMP_PLN);
-
-    // free buffers - they will be needed by the next section
-    buf_free (&vb->gtshark_exceptions_line_i);
-    buf_free (&vb->gtshark_exceptions_ht_i);
-    buf_free (&vb->gtshark_exceptions_allele);
-    buf_free (&vb->gtshark_db_db_data);
-    buf_free (&vb->gtshark_db_gt_data);
-}
-
-#define V1_ZFILE // select the zfile functions of v1.c
-#include "v1_vcf.c"

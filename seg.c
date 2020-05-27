@@ -14,6 +14,7 @@
 #include "optimize.h"
 #include "random_access.h"
 #include "dict_id.h"
+#include "base64.h"
 
 void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *name)
 {
@@ -27,80 +28,31 @@ void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *n
         ((SubfieldMapper *)mapper_buf->data)[i].num_subfields = (uint8_t)NIL;
 }
 
-// store src_buf in dst_buf, and frees src_buf. we attempt to "allocate" dst_buf using memory from txt_data,
-// but in the part of txt_data has been already consumed and no longer needed.
-// if there's not enough space in txt_data, we allocate on txt_data_spillover
-void seg_store (VBlock *vb, 
-                bool *dst_is_spillover, uint32_t *dst_start, uint32_t *dst_len, // out
-                Buffer *src_buf, uint32_t size, // Either src_buf OR size must be given
-                const char *limit_txt_data, // we cannot store in txt starting here. if NULL always allocates in txt_data_spillover
-                bool align32) // does start address need to be 32bit aligned to prevent aliasing issues
-{
-    if (src_buf) size = src_buf->len;
-
-    // align to 32bit (4 bytes) if needed
-    if (align32 && (vb->txt_data_next_offset % 4))
-        vb->txt_data_next_offset += 4 - (vb->txt_data_next_offset % 4);
-
-    if (limit_txt_data && (vb->txt_data.data + vb->txt_data_next_offset + size < limit_txt_data)) { // we have space in txt_data - we can overlay
-        *dst_is_spillover = false;
-        *dst_start        = vb->txt_data_next_offset;
-        *dst_len          = size;
-        if (src_buf) memcpy (&vb->txt_data.data[*dst_start], src_buf->data, size);
-
-        vb->txt_data_next_offset += size;
-    }
-
-    else {
-        *dst_is_spillover = true;
-        *dst_start = vb->txt_data_spillover.len;
-        *dst_len = size;
-        
-        vb->txt_data_spillover.len += size;
-        buf_alloc (vb, &vb->txt_data_spillover, MAX (1000, vb->txt_data_spillover.len), 1.5, 
-                   "txt_data_spillover", vb->vblock_i);
-
-        if (src_buf) memcpy (&vb->txt_data_spillover.data[*dst_start], src_buf->data, size);
-    }
-
-    if (src_buf) buf_free (src_buf);
-}
-
-static inline uint32_t seg_one_snip_do (VBlock *vb, const char *str, unsigned len, MtfContext *ctx, uint32_t add_bytes,
-                                        bool *is_new) // optional out
+uint32_t seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, MtfContext *ctx, uint32_t add_bytes,
+                     bool *is_new) // optional out
 {
     buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
                CTX_GROWTH, "mtf_ctx->mtf_i", ctx->did_i);
     
-    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, str, len, is_new);
+    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
     ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
-            "Error in seg_one_field: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
+            "Error in seg_by_did_i: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
             ctx->name, node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
     NEXTENT (uint32_t, ctx->mtf_i) = node_index;
     ctx->txt_len += add_bytes;
 
+    // a snip who is stored in its entirety in local, with just a LOOKUP in the dictionary, is counted as a singleton
+    if (snip_len==1 && (snip[0] == SNIP_LOOKUP))
+        ctx->num_singletons++;
+
     return node_index;
 } 
 
-// returns the node index
-uint32_t seg_one_subfield (VBlock *vb, const char *str, unsigned len, DictIdType dict_id, uint32_t add_bytes)
-{
-    MtfContext *ctx = mtf_get_ctx (vb, dict_id);
-    return seg_one_snip_do (vb, str, len, ctx, add_bytes, NULL);
-}
-
-// returns the node index
-uint32_t seg_one_snip (VBlock *vb, const char *str, unsigned len, int did_i, uint32_t add_bytes,
-                       bool *is_new) // optional out
-{
-    MtfContext *ctx = &vb->mtf_ctx[did_i];
-    return seg_one_snip_do (vb, str, len, ctx, add_bytes, is_new);
-} 
-
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
-                               unsigned *len, char *separator, bool *has_13, // out - only needed if allow_newline=true
+                               unsigned *len, char *separator, 
+                               bool *has_13, // out - only needed if allow_newline=true
                                const char *item_name)
 {
     VBlockP vb = (VBlockP)vb_;
@@ -165,157 +117,129 @@ const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigne
     return 0; // avoid compiler warning - never reaches here
 }
 
-#define MAX_POS 0x7fffffff // maximum allowed value for POS
+void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id, uint32_t lookup_len, /*ignored if 0 */
+                             char *snip, unsigned *snip_len) // out
+{
+    snip[0] = snip_code;
+    *snip_len = 1 + base64_encode (other_dict_id.id, DICT_ID_LEN, &snip[1]);
 
-// reads a tab-terminated POS string
-static int32_t seg_pos_snip_to_int (VBlock *vb, const char *pos_str, const char *field_name,
-                                    bool *is_nonsense /* optional out */)
+    if (lookup_len)
+        *snip_len += str_int (lookup_len, &snip[*snip_len]);
+}
+
+#define MAX_POS 0xfffffffe // maximum allowed value for POS (reserving 0xffffffff for future use)
+
+// scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
+// (if allow_nonsense) or errors
+int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool allow_nonsense)
 {
     // scan by ourselves - hugely faster the sscanf
-    int64_t this_pos_64=0; // int64_t so we can test for overflow
-    bool all_digits = true;
-    const char *s; for (s=pos_str; *s != '\t' && *s != '\n' && *s != '\r' && *s != ';'; s++) {
-        if (!IS_DIGIT (*s)) all_digits=false;
-
-        if (all_digits)
-            this_pos_64 = this_pos_64 * 10 + (*s - '0');
+    int64_t value=0; 
+    for (unsigned i=0; i < snip_len; i++) {
+        if (!IS_DIGIT (snip[i])) goto error;
+        value = value * 10 + (snip[i] - '0');
     }
 
-    if (s == pos_str || !all_digits || this_pos_64 < 0 || this_pos_64 > 0x7fffffff) {
-        ASSSEG (is_nonsense, pos_str, "Error: '%s' field must be an integer number between 0 and %u, seeing: %.*s", 
-                field_name, MAX_POS, (int32_t)(s-pos_str), pos_str);
+    if (value > MAX_POS) goto error;
 
-        *is_nonsense = true;
-        return (int32_t)(s-pos_str);
-    }
-    else if (is_nonsense) *is_nonsense = false;
+    return value;
 
-    return (int32_t)this_pos_64;
+error:
+    ASSSEG (allow_nonsense, snip, "Error: position field must be an integer number between 0 and %u, seeing: %.*s", 
+            MAX_POS, snip_len, snip);
+    return -1;
 }
 
 uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint32_t chrom_node_index = seg_one_field (vb, chrom_str, chrom_str_len, DTF(chrom), chrom_str_len+1);
+    uint8_t chrom_did_i = DTF(chrom);
+    uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, chrom_did_i, chrom_str_len+1);
 
     random_access_update_chrom ((VBlockP)vb, chrom_node_index);
 
     return chrom_node_index;
 }
 
-// get number for storage in RANDOM_POS and check if it is a valid number
-uint32_t seg_add_to_random_pos_data (VBlock *vb, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name)
+void seg_pos_field (VBlock *vb, 
+                    uint8_t snip_did_i,    // mandatory: the ctx the snip belongs to
+                    uint8_t base_did_i,    // mandatory: base for delta
+                    bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                    const char *pos_str, unsigned pos_len, 
+                    bool account_for_separator)
 {
-    bool standard_random_pos_encoding = true;
-
-    // it is eligable for standard encoding only if the length is within the range
-    if (!snip_len || snip_len > 10) standard_random_pos_encoding = false; // more than 10 digits is for sure bigger than 4GB=32bits
-
-    // a multi-digit number cannot have a leading zero
-    if (snip_len > 1 && snip[0] == '0') standard_random_pos_encoding = false;
-
-    // it is eligable for standard encoding only if all the characters are digits
-    uint64_t n64=0; // 64 bit just in case we go above 32 bit
-    if (standard_random_pos_encoding)
-        for (unsigned i=0; i < snip_len; i++) {
-            if (!IS_DIGIT (snip[i])) {
-                standard_random_pos_encoding = false;
-                break;
-            }
-            n64 = n64 * 10 + (snip[i] - '0');
-        }
-
-    // it is eligable for standard encoding only if it fits in 32 bit (0xffffffff is reserved for a future escape, if needed)
-    if (n64 > 0xfffffffe) standard_random_pos_encoding = false;
-
-    ASSSEG (standard_random_pos_encoding, snip, "%s: Error: Bad position data in field %s - expecting an integer between 0 and %u without leading zeros, but instead seeing \"%.*s\"",
-            global_cmd, field_name, 0xfffffffe, snip_len, snip);
-
-    // note: random pos data always goes into the primary pos local - no point in anything several local sections with the same type of data
-    MtfContext *ctx = &vb->mtf_ctx[DTF(pos)];
-    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, sizeof (uint32_t));
-
-    // 32 bit number - this compresses better than textual numbers with LZMA
-    uint32_t n32 = (uint32_t)n64;
-    NEXTENT (uint32_t, ctx->local) = BGEN32 (n32);
-
-    ctx->txt_len += add_bytes;
-
-    return n32;
-}
-
-int32_t seg_pos_field (VBlock *vb, int32_t last_pos, int32_t *last_pos_delta /*in /out */, 
-                       bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
-                       int did_i, const char *pos_str, unsigned pos_len, 
-                       const char *field_name, bool account_for_separator)
-{
-    bool is_nonsense = false;
+    MtfContext *snip_ctx = &vb->mtf_ctx[snip_did_i];
+    MtfContext *base_ctx = &vb->mtf_ctx[base_did_i];
     
-    int32_t this_pos = seg_pos_snip_to_int (vb, pos_str, field_name, allow_non_number ? &is_nonsense : NULL);
+    int64_t this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
-    // if caller allows a non-valid-number and this is indeed a non-valid-number, just store the string, prefixed by SNIP_VERBTIM
-    if (is_nonsense) { 
-        int32_t nonsense_len = this_pos; // in case nonsense, seg_pos_snip_to_int returns the length
-        char save = *(pos_str-1);
-        *(char*)(pos_str-1) = SNIP_VERBTIM; // note: even if its the very first character in txt_data, we're fine - it will temporarily overwrite the buffer underflow
+    // < 0  -  caller allows a non-valid-number and this is indeed a non-valid-number, just store the string
+    // == 0 - special case where pos=0, e.g. "not available" in SAM_PNEXT. we just store it verbatim
+    if (this_pos <= 0) { 
+        seg_by_ctx (vb, pos_str, pos_len, snip_ctx, pos_len + account_for_separator, NULL); 
 
-        seg_one_snip (vb, pos_str-1, nonsense_len+1, did_i, nonsense_len + account_for_separator, NULL); 
-
-        *(char*)(pos_str-1) = save; // restore
-        return last_pos; // unchanged last_pos
+        snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
+        return;
     }
-    int32_t pos_delta = this_pos - last_pos;
-    if (last_pos_delta) *last_pos_delta = pos_delta;
+
+    int64_t pos_delta = this_pos - base_ctx->last_value;
     
-    // if the delta is too big, add the POS to RANDOM_POS and put \5 in the b250
+    // if we're self-delta'ing - we store the value
+    if (snip_ctx == base_ctx) base_ctx->last_value = this_pos; 
+
+    // if the delta is too big, add this_pos (not delta) to local and put SNIP_LOOKUP in the b250
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
     // section in every VB just for a single entry in case of a nicely sorted file
-    if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && last_pos) {
-        seg_add_to_random_pos_data (vb, pos_str, pos_len, pos_len+account_for_separator, field_name);
-        static const char pos_lookup[1] = { SNIP_LOOKUP_UINT32 };
-        seg_one_snip (vb, pos_lookup, 1, did_i, 0, NULL);
+    if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value) {
+        
+        // store the value in store it in local - uint32
+        buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, snip_ctx->name, snip_ctx->did_i);
+        NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
+        snip_ctx->txt_len += pos_len + account_for_separator;
+        snip_ctx->flags |= CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA;
+        snip_ctx->ltype  = CTX_LT_UINT32;
 
-        return this_pos;
+        // add a LOOKUP to b250
+        static const char lookup[1] = { SNIP_LOOKUP };
+        seg_by_ctx (vb, lookup, 1, snip_ctx, 0, NULL);
+
+        snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
+        return;
     }
 
-    // print our string without expensive sprintf
-    char pos_delta_str[50], reverse_pos_delta_str[50];
+    // store the delta in last_delta only if we're also putting in the b250
+    snip_ctx->last_delta = pos_delta;
+    base_ctx->flags |= CTX_FL_STORE_VALUE; // piz is going to need base_ctx.last_value to recover the delta
     
     // if the delta is the negative of the previous delta (as happens in unsorted BAM files with the second line in
     // each pair of lines) - we just store an empty snippet
-    bool is_negated_last = (last_pos_delta && *last_pos_delta && (*last_pos_delta == -pos_delta));
+    bool is_negated_last = (snip_ctx->last_delta && snip_ctx->last_delta == -pos_delta);
 
+    // case: add a delta
     if (!is_negated_last) {
-
-        bool negative = (pos_delta < 0);
-        if (negative) pos_delta = -pos_delta;
-
-        // create reverse string
-        unsigned delta_len=0; 
-        if (pos_delta) { 
-            while (pos_delta) {
-                reverse_pos_delta_str[delta_len++] = '0' + (pos_delta % 10);
-                pos_delta /= 10;
-            }
-            if (negative) reverse_pos_delta_str[delta_len++] = '-';
-
-            // reverse it
-            for (unsigned i=0; i < delta_len; i++) pos_delta_str[i] = reverse_pos_delta_str[delta_len-i-1];
-        }
-        else { //pos_delta==0
-            pos_delta_str[0] = '0';
-            delta_len = 1;
-        }
         
-        seg_one_snip (vb, pos_delta_str, delta_len, did_i, pos_len + account_for_separator, NULL);
+        char pos_delta_str[100]; // more than enough for the base64
+        unsigned total_len;
+
+        if (base_ctx == snip_ctx) {
+            pos_delta_str[0] = SNIP_SELF_DELTA;
+            total_len = 1;
+        }
+        else 
+            seg_prepare_snip_other (SNIP_OTHER_DELTA, base_ctx->dict_id, 0, pos_delta_str, &total_len);
+
+        unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
+        total_len += delta_len;
+
+        seg_by_ctx (vb, pos_delta_str, total_len, snip_ctx, pos_len + account_for_separator, NULL);
     }
+    // case: the delta is the negative of the previous delta - add a SNIP_SELF_DELTA with no payload - meaning negated delta
     else {
-        seg_one_snip (vb, "", 0, did_i, pos_len + account_for_separator, NULL);
-        *last_pos_delta = 0; // no negated delta next time
+        char negated_delta = SNIP_SELF_DELTA; // no delta means negate the previous delta
+        seg_by_did_i (vb, &negated_delta, 1, snip_did_i, pos_len + account_for_separator);
+        snip_ctx->last_delta = 0; // no negated delta next time
     }
-    
-    return this_pos;
 }
 
 // Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
@@ -342,17 +266,18 @@ void seg_id_field (VBlock *vb, DictIdType dict_id, const char *id_snip, unsigned
 
     // added to local if we have a trailing number
     if (num_digits) {
-        MtfContext *ctx = mtf_get_ctx (vb, dict_id);
         uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
-        
-        buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, sizeof(uint32_t));
-        NEXTENT (uint32_t, ctx->local) = BGEN32 (id_num);
+        seg_add_to_local_uint32 (vb, mtf_get_ctx (vb, dict_id), id_num, 0);
     }
 
-    // append the textual part with SNIP_LOOKUP_UINT32 if needed - we have enough space - we have a tab following the field
+    MtfContext *ctx = mtf_get_ctx (vb, dict_id);
+    ctx->flags |= CTX_FL_ID;
+    ctx->ltype  = CTX_LT_UINT32;
+
+    // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
-    SAFE_ASSIGN (1, &id_snip[new_len], SNIP_LOOKUP_UINT32); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-    seg_one_subfield (vb, id_snip, new_len + (num_digits > 0), dict_id, id_snip_len + !!account_for_separator); // account for the entire length, and sometimes with \t
+    SAFE_ASSIGN (1, &id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
+    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len + !!account_for_separator, NULL); // account for the entire length, and sometimes with \t
     SAFE_RESTORE (1);
 }
 
@@ -555,6 +480,39 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     }
 }
 
+void seg_structured_by_ctx (VBlock *vb, MtfContext *ctx, Structured *st, unsigned add_bytes)
+{
+    st->repeats = BGEN16 (st->repeats);
+    char b64[1 + base64_sizeof(Structured)]; // maximal size
+    b64[0] = SNIP_STRUCTURED;
+    unsigned b64_len = base64_encode ((uint8_t*)st, sizeof_structured (*st), &b64[1]);
+    st->repeats = BGEN16 (st->repeats); // restore
+
+    ctx->flags |= CTX_FL_STRUCTURED;
+
+    seg_by_ctx (vb, b64, b64_len + 1, ctx, add_bytes, NULL); 
+}
+
+#define MAX_COMPOUND_COMPONENTS 36
+
+void seg_initialize_compound_structured (VBlockP vb, char *name_template, Structured *st)
+{
+    memset (st, 0, sizeof (Structured));
+    unsigned name_len = MIN (strlen (name_template), DICT_ID_LEN);
+
+    char name[DICT_ID_LEN] = {}; // modifiable string
+    memcpy (name, name_template, name_len);
+
+    for (unsigned i=0; i < MAX_COMPOUND_COMPONENTS; i++) {
+        name[1] = (i < 10) ? ('0' + i) : ('a' + (i-10));
+        st->items[i].dict_id = dict_id_type_1 (dict_id_make (name, name_len));
+
+        mtf_get_ctx (vb, st->items[i].dict_id); // create ctx
+    }
+
+    st->repeats = 1;
+}
+
 // We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
 // these are vendor-defined strings.
 // Up to MAX_COMPOUND_COMPONENTS subfields are permitted - if there are more, then all the trailing part is just
@@ -565,17 +523,15 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
 // anticipate that usually all lines have the same format, but we allow lines to have different formats.
 void seg_compound_field (VBlock *vb, 
                          MtfContext *field_ctx, const char *field, unsigned field_len, 
-                         SubfieldMapper *mapper, DictIdType sf_dict_id,
+                         SubfieldMapper *mapper, Structured st,
                          bool ws_is_sep, // whitespace is separator - separate by ' ' at '\t'
-                         bool account_for_13)
+                         unsigned add_for_eol) // account for characters beyond the component seperators
 {
-#define MAX_COMPOUND_COMPONENTS (10+26)
-
+    
     const char *snip = field;
     unsigned snip_len = 0;
     unsigned sf_i = 0;
-    char template[MAX_COMPOUND_COMPONENTS-1]; // separators is one less than the subfields
-
+        
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
     
@@ -588,9 +544,7 @@ void seg_compound_field (VBlock *vb,
             MtfContext *sf_ctx;
 
             if (mapper->num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
-                sf_dict_id.id[1] = (sf_i <= 9) ? (sf_i + '0') : (sf_i-10 + 'a');
-
-                sf_ctx = mtf_get_ctx (vb, sf_dict_id);
+                sf_ctx = mtf_get_ctx (vb, st.items[sf_i].dict_id);
                 mapper->did_i[sf_i] = sf_ctx->did_i;
                 mapper->num_subfields++;
             }
@@ -608,7 +562,7 @@ void seg_compound_field (VBlock *vb,
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
-                template[sf_i] = field[i];
+                st.items[sf_i].seperator = field[i];
                 snip = &field[i+1];
                 snip_len = 0;
             }
@@ -617,19 +571,55 @@ void seg_compound_field (VBlock *vb,
         else snip_len++;
     }
 
-    // if template is empty, make it "*"
-    if (sf_i==1) template[0] = '*';
+    st.num_items = sf_i;
 
-    // add template to the field dictionary (note: template may be of length zero if field has no / or :)
-    NEXTENT (uint32_t, field_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, field_ctx, template, MAX (1, sf_i-1), NULL);
-    field_ctx->txt_len += sf_i + account_for_13; // sf_i has 1 for each separator including the terminating \t or \n / \r\n
+    seg_structured_by_ctx (vb, field_ctx, &st, sf_i-1 + add_for_eol);
+}
+
+void seg_array_field (VBlock *vb, DictIdType dict_id, const char *value, unsigned value_len, 
+                      SegOptimize optimize) // optional optimization function
+{   
+    const char *str = value; 
+    int str_len = (int)value_len; // must be int, not unsigned, for the for loop
+    
+    Structured st = { .num_items = 1, .flags = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT, { { .seperator = ',' } } };
+    DictIdType arr_dict_id = dict_id_make ("XX_ARRAY", 8);
+    arr_dict_id.id[0]      = FLIP_CASE (dict_id.id[0]);
+    arr_dict_id.id[1]      = FLIP_CASE (dict_id.id[1]);
+    st.items[0].dict_id    = sam_dict_id_optnl_sf (arr_dict_id);
+    
+    MtfContext *arr_ctx = mtf_get_ctx (vb, st.items[0].dict_id);
+
+    for (st.repeats=0; st.repeats < STRUCTURED_MAX_REPEATS && str_len > 0; st.repeats++) { // str_len will be -1 after last number
+
+        const char *snip = str;
+        for (; str_len && *str != ','; str++, str_len--) {};
+
+        unsigned number_len = (unsigned)(str - snip);
+
+        if (st.repeats == STRUCTURED_MAX_REPEATS-1) // final permitted repeat - take entire remaining string
+            number_len += str_len;
+
+        unsigned snip_len = number_len; 
+             
+        char new_number_str[30];
+        if (optimize && st.repeats < STRUCTURED_MAX_REPEATS-1 && snip_len < 25)
+            optimize (&snip, &snip_len, new_number_str);
+
+        seg_by_ctx (vb, snip, snip_len, arr_ctx, number_len+1, NULL);
+        
+        str_len--; // skip comma
+        str++;
+    }
+
+    seg_structured_by_dict_id (vb, dict_id, &st, 0);
 }
 
 void seg_add_to_local_text (VBlock *vb, MtfContext *ctx, 
                             const char *snip, unsigned snip_len, 
                             unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
-    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, ctx->name, sizeof(char)); // param=quantum of len
+    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + snip_len + 1, vb->lines.len * (snip_len+1)), 2, ctx->name, ctx->did_i); 
     if (snip_len) buf_add (&ctx->local, snip, snip_len); 
     
     static const char sep[1] = { SNIP_SEP };
@@ -641,9 +631,56 @@ void seg_add_to_local_text (VBlock *vb, MtfContext *ctx,
 void seg_add_to_local_fixed (VBlock *vb, MtfContext *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
 {
     if (data_len) {
-        buf_alloc (vb, &ctx->local, MAX (ctx->local.len + data_len, vb->lines.len * data_len), CTX_GROWTH, ctx->name, sizeof (char)); 
+        buf_alloc (vb, &ctx->local, MAX (ctx->local.len + data_len, vb->lines.len * data_len), CTX_GROWTH, ctx->name, ctx->did_i); 
         buf_add (&ctx->local, data, data_len); 
     }
+}
+
+// SIGNED NUMBERS ARE NOT UNTEST YET! NOT USE YET BY ANY SEG
+// for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
+// example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
+// compressing better in an array that contains both positive and negative
+#define SAFE_NEGATE(type,n) ((u##type)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
+#define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
+
+void seg_add_to_local_uint8 (VBlockP vb, MtfContextP ctx, uint8_t value, unsigned add_bytes)
+{
+    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint8_t), CTX_GROWTH, ctx->name, ctx->did_i);
+
+    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int8_t, value);
+    NEXTENT (uint8_t, ctx->local) = value;
+
+    if (add_bytes) ctx->txt_len += add_bytes;
+}
+
+void seg_add_to_local_uint16 (VBlockP vb, MtfContextP ctx, uint16_t value, unsigned add_bytes)
+{
+    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint16_t), CTX_GROWTH, ctx->name, ctx->did_i);
+
+    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int16_t, value);
+    NEXTENT (uint16_t, ctx->local) = BGEN16 (value);
+
+    if (add_bytes) ctx->txt_len += add_bytes;
+}
+
+void seg_add_to_local_uint32 (VBlockP vb, MtfContextP ctx, uint32_t value, unsigned add_bytes)
+{
+    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, ctx->did_i);
+
+    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int32_t, value);
+    NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
+
+    if (add_bytes) ctx->txt_len += add_bytes;
+}
+
+void seg_add_to_local_uint64 (VBlockP vb, MtfContextP ctx, uint64_t value, unsigned add_bytes)
+{
+    buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint64_t), CTX_GROWTH, ctx->name, ctx->did_i);
+
+    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int64_t, value);
+    NEXTENT (uint64_t, ctx->local) = BGEN64 (value);
+
+    if (add_bytes) ctx->txt_len += add_bytes;
 }
 
 static void seg_set_hash_hints (VBlock *vb, int third_num)
@@ -723,7 +760,7 @@ void seg_all_data_lines (VBlock *vb)
 
     mtf_verify_field_ctxs (vb);
     
-    uint32_t sizeof_line = (uint32_t)DTP(sizeof_zip_dataline);
+    uint32_t sizeof_line = DTP(sizeof_zip_dataline) ? DTP(sizeof_zip_dataline)() : 0;
 
     if (!sizeof_line) sizeof_line=1; // we waste a little bit of memory to avoid making exceptions throughout the code logic
  
@@ -740,6 +777,7 @@ void seg_all_data_lines (VBlock *vb)
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
+    bool does_any_line_have_special_eol = false;
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
         if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
@@ -748,9 +786,10 @@ void seg_all_data_lines (VBlock *vb)
         }
 
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
+        bool has_special_eol = false;
+        const char *next_field = DTP(seg_txt_line) (vb, field_start, &has_special_eol);
+        if (has_special_eol) does_any_line_have_special_eol = true;
 
-        const char *next_field = DTP(seg_data_line) (vb, field_start);
-        
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
 
@@ -769,6 +808,15 @@ void seg_all_data_lines (VBlock *vb)
             seg_set_hash_hints (vb, 2);
             hash_hints_set_2_3 = true;
         }
+    }
+
+    // if no line has special EOL, we can get rid of the EOL ctx
+    if (!does_any_line_have_special_eol) {
+        MtfContext *eol_ctx = &vb->mtf_ctx[DTF(eol)];
+        buf_free (&eol_ctx->dict);
+        buf_free (&eol_ctx->mtf);
+        buf_free (&eol_ctx->mtf_i);
+        buf_free (&eol_ctx->local);
     }
 
     seg_verify_file_size (vb);

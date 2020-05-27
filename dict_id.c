@@ -7,8 +7,13 @@
 #include "dict_id.h"
 #include "data_types.h"
 #include "file.h"
+#include "zfile.h"
+#include "sections.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
+static Buffer dict_id_aliases_buf  = EMPTY_BUFFER;
+const DictIdAlias *dict_id_aliases = NULL;
+uint32_t dict_id_num_aliases = 0;
 
 uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 
@@ -27,7 +32,13 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
          dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
          dict_id_OPTION_BD=0, dict_id_OPTION_BI=0,
-         dict_id_OPTION_STRAND=0; // private genozip dict
+         dict_id_OPTION_ZM=0,
+  
+         // private genozip dict
+         dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0; 
+
+// FASTA stuff
+uint64_t dict_id_FASTA_DESC=0, dict_id_FASTA_SEQ=0, dict_id_FASTA_COMMENT=0;
 
 // GVF stuff
 uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_seq=0, dict_id_ATTR_Variant_freq=0,
@@ -97,57 +108,70 @@ void dict_id_initialize (DataType data_type)
         break;
 
     case DT_SAM:
-        dict_id_OPTION_AM = dict_id_sam_optnl_sf (dict_id_make ("AM:i", 4)).num;
-        dict_id_OPTION_AS = dict_id_sam_optnl_sf (dict_id_make ("AS:i", 4)).num;
-        dict_id_OPTION_CC = dict_id_sam_optnl_sf (dict_id_make ("CC:Z", 4)).num;
-        dict_id_OPTION_BD = dict_id_sam_optnl_sf (dict_id_make ("BD:Z", 4)).num;
-        dict_id_OPTION_BI = dict_id_sam_optnl_sf (dict_id_make ("BI:Z", 4)).num;
-        dict_id_OPTION_CM = dict_id_sam_optnl_sf (dict_id_make ("CM:i", 4)).num;
-        dict_id_OPTION_E2 = dict_id_sam_optnl_sf (dict_id_make ("E2:Z", 4)).num;
-        dict_id_OPTION_FI = dict_id_sam_optnl_sf (dict_id_make ("FI:i", 4)).num;
-        dict_id_OPTION_H0 = dict_id_sam_optnl_sf (dict_id_make ("H0:i", 4)).num;
-        dict_id_OPTION_H1 = dict_id_sam_optnl_sf (dict_id_make ("H1:i", 4)).num;
-        dict_id_OPTION_H2 = dict_id_sam_optnl_sf (dict_id_make ("H2:i", 4)).num;
-        dict_id_OPTION_LB = dict_id_sam_optnl_sf (dict_id_make ("LB:Z", 4)).num;
-        dict_id_OPTION_MC = dict_id_sam_optnl_sf (dict_id_make ("MC:Z", 4)).num;
-        dict_id_OPTION_MD = dict_id_sam_optnl_sf (dict_id_make ("MD:Z", 4)).num;
-        dict_id_OPTION_MQ = dict_id_sam_optnl_sf (dict_id_make ("MQ:i", 4)).num;
-        dict_id_OPTION_NH = dict_id_sam_optnl_sf (dict_id_make ("NH:i", 4)).num;
-        dict_id_OPTION_NM = dict_id_sam_optnl_sf (dict_id_make ("NM:i", 4)).num;
-        dict_id_OPTION_OA = dict_id_sam_optnl_sf (dict_id_make ("OA:Z", 4)).num;
-        dict_id_OPTION_OC = dict_id_sam_optnl_sf (dict_id_make ("OC:Z", 4)).num;
-        dict_id_OPTION_PG = dict_id_sam_optnl_sf (dict_id_make ("PG:Z", 4)).num;
-        dict_id_OPTION_PQ = dict_id_sam_optnl_sf (dict_id_make ("PQ:i", 4)).num;
-        dict_id_OPTION_PU = dict_id_sam_optnl_sf (dict_id_make ("PU:Z", 4)).num;
-        dict_id_OPTION_RG = dict_id_sam_optnl_sf (dict_id_make ("RG:Z", 4)).num;
-        dict_id_OPTION_SA = dict_id_sam_optnl_sf (dict_id_make ("SA:Z", 4)).num;
-        dict_id_OPTION_SM = dict_id_sam_optnl_sf (dict_id_make ("SM:i", 4)).num;
-        dict_id_OPTION_TC = dict_id_sam_optnl_sf (dict_id_make ("TC:i", 4)).num;
-        dict_id_OPTION_UQ = dict_id_sam_optnl_sf (dict_id_make ("UQ:i", 4)).num;
-        dict_id_OPTION_U2 = dict_id_sam_optnl_sf (dict_id_make ("U2:Z", 4)).num;
+        dict_id_OPTION_AM = sam_dict_id_optnl_sf (dict_id_make ("AM:i", 4)).num;
+        dict_id_OPTION_AS = sam_dict_id_optnl_sf (dict_id_make ("AS:i", 4)).num;
+        dict_id_OPTION_CC = sam_dict_id_optnl_sf (dict_id_make ("CC:Z", 4)).num;
+        dict_id_OPTION_BD = sam_dict_id_optnl_sf (dict_id_make ("BD:Z", 4)).num;
+        dict_id_OPTION_BI = sam_dict_id_optnl_sf (dict_id_make ("BI:Z", 4)).num;
+        dict_id_OPTION_CM = sam_dict_id_optnl_sf (dict_id_make ("CM:i", 4)).num;
+        dict_id_OPTION_E2 = sam_dict_id_optnl_sf (dict_id_make ("E2:Z", 4)).num;
+        dict_id_OPTION_FI = sam_dict_id_optnl_sf (dict_id_make ("FI:i", 4)).num;
+        dict_id_OPTION_H0 = sam_dict_id_optnl_sf (dict_id_make ("H0:i", 4)).num;
+        dict_id_OPTION_H1 = sam_dict_id_optnl_sf (dict_id_make ("H1:i", 4)).num;
+        dict_id_OPTION_H2 = sam_dict_id_optnl_sf (dict_id_make ("H2:i", 4)).num;
+        dict_id_OPTION_LB = sam_dict_id_optnl_sf (dict_id_make ("LB:Z", 4)).num;
+        dict_id_OPTION_MC = sam_dict_id_optnl_sf (dict_id_make ("MC:Z", 4)).num;
+        dict_id_OPTION_MD = sam_dict_id_optnl_sf (dict_id_make ("MD:Z", 4)).num;
+        dict_id_OPTION_MQ = sam_dict_id_optnl_sf (dict_id_make ("MQ:i", 4)).num;
+        dict_id_OPTION_NH = sam_dict_id_optnl_sf (dict_id_make ("NH:i", 4)).num;
+        dict_id_OPTION_NM = sam_dict_id_optnl_sf (dict_id_make ("NM:i", 4)).num;
+        dict_id_OPTION_OA = sam_dict_id_optnl_sf (dict_id_make ("OA:Z", 4)).num;
+        dict_id_OPTION_OC = sam_dict_id_optnl_sf (dict_id_make ("OC:Z", 4)).num;
+        dict_id_OPTION_PG = sam_dict_id_optnl_sf (dict_id_make ("PG:Z", 4)).num;
+        dict_id_OPTION_PQ = sam_dict_id_optnl_sf (dict_id_make ("PQ:i", 4)).num;
+        dict_id_OPTION_PU = sam_dict_id_optnl_sf (dict_id_make ("PU:Z", 4)).num;
+        dict_id_OPTION_RG = sam_dict_id_optnl_sf (dict_id_make ("RG:Z", 4)).num;
+        dict_id_OPTION_SA = sam_dict_id_optnl_sf (dict_id_make ("SA:Z", 4)).num;
+        dict_id_OPTION_SM = sam_dict_id_optnl_sf (dict_id_make ("SM:i", 4)).num;
+        dict_id_OPTION_TC = sam_dict_id_optnl_sf (dict_id_make ("TC:i", 4)).num;
+        dict_id_OPTION_UQ = sam_dict_id_optnl_sf (dict_id_make ("UQ:i", 4)).num;
+        dict_id_OPTION_U2 = sam_dict_id_optnl_sf (dict_id_make ("U2:Z", 4)).num;
                 
+        // Ion Torrent flow signal array
+        dict_id_OPTION_ZM = sam_dict_id_optnl_sf (dict_id_make ("ZM:B", 4)).num;
+
         // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
-        dict_id_OPTION_X0 = dict_id_sam_optnl_sf (dict_id_make ("X0:i", 4)).num; 
-        dict_id_OPTION_X1 = dict_id_sam_optnl_sf (dict_id_make ("X1:i", 4)).num; 
-        dict_id_OPTION_XA = dict_id_sam_optnl_sf (dict_id_make ("XA:Z", 4)).num; 
-        dict_id_OPTION_XN = dict_id_sam_optnl_sf (dict_id_make ("XN:i", 4)).num; 
-        dict_id_OPTION_XM = dict_id_sam_optnl_sf (dict_id_make ("XM:i", 4)).num; 
-        dict_id_OPTION_XO = dict_id_sam_optnl_sf (dict_id_make ("XO:i", 4)).num;
-        dict_id_OPTION_XG = dict_id_sam_optnl_sf (dict_id_make ("XG:i", 4)).num; 
-        dict_id_OPTION_XS = dict_id_sam_optnl_sf (dict_id_make ("XS:i", 4)).num; 
-        dict_id_OPTION_XE = dict_id_sam_optnl_sf (dict_id_make ("XE:i", 4)).num;
+        dict_id_OPTION_X0 = sam_dict_id_optnl_sf (dict_id_make ("X0:i", 4)).num; 
+        dict_id_OPTION_X1 = sam_dict_id_optnl_sf (dict_id_make ("X1:i", 4)).num; 
+        dict_id_OPTION_XA = sam_dict_id_optnl_sf (dict_id_make ("XA:Z", 4)).num; 
+        dict_id_OPTION_XN = sam_dict_id_optnl_sf (dict_id_make ("XN:i", 4)).num; 
+        dict_id_OPTION_XM = sam_dict_id_optnl_sf (dict_id_make ("XM:i", 4)).num; 
+        dict_id_OPTION_XO = sam_dict_id_optnl_sf (dict_id_make ("XO:i", 4)).num;
+        dict_id_OPTION_XG = sam_dict_id_optnl_sf (dict_id_make ("XG:i", 4)).num; 
+        dict_id_OPTION_XS = sam_dict_id_optnl_sf (dict_id_make ("XS:i", 4)).num; 
+        dict_id_OPTION_XE = sam_dict_id_optnl_sf (dict_id_make ("XE:i", 4)).num;
 
         // biobambam tags
-        dict_id_OPTION_mc = dict_id_sam_optnl_sf (dict_id_make ("mc:i", 4)).num;
-        dict_id_OPTION_ms = dict_id_sam_optnl_sf (dict_id_make ("ms:i", 4)).num;
+        dict_id_OPTION_mc = sam_dict_id_optnl_sf (dict_id_make ("mc:i", 4)).num;
+        dict_id_OPTION_ms = sam_dict_id_optnl_sf (dict_id_make ("ms:i", 4)).num;
 
         // added by GATK's BQSR (Base Quality Score Recalibration)
-        dict_id_OPTION_BD = dict_id_sam_optnl_sf (dict_id_make ("BD:Z", 4)).num; // not used in newer versions of GATK
-        dict_id_OPTION_BI = dict_id_sam_optnl_sf (dict_id_make ("BI:Z", 4)).num; // not used in newer versions of GATK
+        dict_id_OPTION_BD = sam_dict_id_optnl_sf (dict_id_make ("BD:Z", 4)).num; // not used in newer versions of GATK
+        dict_id_OPTION_BI = sam_dict_id_optnl_sf (dict_id_make ("BI:Z", 4)).num; // not used in newer versions of GATK
 
         // our private dictionary for + or 0 strands
-        dict_id_OPTION_STRAND = dict_id_sam_optnl_sf (dict_id_make ("STRAND", 6)).num;
+        dict_id_OPTION_STRAND = sam_dict_id_optnl_sf (dict_id_make ("@STRAND", 7)).num;
+        dict_id_OPTION_RNAME  = sam_dict_id_optnl_sf (dict_id_make ("@RNAME",  6)).num;
+        dict_id_OPTION_POS    = sam_dict_id_optnl_sf (dict_id_make ("@POS",    4)).num;
+        dict_id_OPTION_CIGAR  = sam_dict_id_optnl_sf (dict_id_make ("@CIGAR",  6)).num;
+        dict_id_OPTION_MAPQ   = sam_dict_id_optnl_sf (dict_id_make ("@MAPQ",   5)).num;
 
+        break;
+
+    case DT_FASTA:
+        dict_id_FASTA_DESC    = dict_id_field (dict_id_make ("DESC",    4)).num;
+        dict_id_FASTA_SEQ     = dict_id_field (dict_id_make ("SEQ",     3)).num;
+        dict_id_FASTA_COMMENT = dict_id_field (dict_id_make ("COMMENT", 7)).num;
         break;
 
     case DT_GFF3:
@@ -165,13 +189,61 @@ void dict_id_initialize (DataType data_type)
         dict_id_ATTR_polyphen_prediction = dict_id_gff3_attr_sf (dict_id_make ("polyphen_prediction", 0)).num;
         dict_id_ATTR_variant_peptide  = dict_id_gff3_attr_sf (dict_id_make ("variant_peptide", 0)).num;
 
-        dict_id_ENSTid                = dict_id_gff3_attr_sf (dict_id_make ("ENSTid", 0)).num;
+        dict_id_ENSTid                = dict_id_type_2 (dict_id_make ("ENSTid", 0)).num; // type 2 is ENST subsubfields
         break;
 
     default:
         break; // no special fields for the other data types
     }
 }
+
+// called by ZIP I/O thread for writing to global section
+Buffer *dict_id_create_aliases_buf (void)
+{
+    static struct { DataType dt; uint64_t *dict_id_alias; uint64_t *dict_id_dst; } aliases_def[] = DICT_ID_ALIASES;
+
+    // count
+    dict_id_aliases_buf.len = 0;
+    for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
+        if (aliases_def[i].dt == z_file->data_type)
+            dict_id_aliases_buf.len += sizeof (DictIdAlias);
+
+    // build global alias reference, which will be immutable until the end of this z_file
+    buf_alloc (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf", 0);
+
+    DictIdAlias *next = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
+    for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
+        if (aliases_def[i].dt == z_file->data_type) {
+            next->alias = (DictIdType)*aliases_def[i].dict_id_alias;
+            next->dst   = (DictIdType)*aliases_def[i].dict_id_dst;
+            next++;
+        }
+
+    return &dict_id_aliases_buf;
+}
+
+// PIZ I/O thread: read all dict_id aliaeses, if there are any
+void dict_id_read_aliases (void) 
+{ 
+    // we just finished reading all the dictionaries, so the sl_dir_cursor should be pointing to our section (+1)
+    SectionListEntry *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_dir_cursor - 1);
+
+    if (sl_ent->section_type != SEC_DICT_ID_ALIASES) return;
+
+    static Buffer compressed_aliases = EMPTY_BUFFER;
+
+    zfile_read_section (evb, 0, NO_SB_I, &dict_id_aliases_buf, "dict_id_aliases_buf", 
+                        sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
+
+    SectionHeader *header = (SectionHeader *)dict_id_aliases_buf.data;
+    zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", SEC_DICT_ID_ALIASES);
+
+    buf_destroy (&compressed_aliases);
+
+    dict_id_aliases = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
+    dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);
+}
+
 
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
 // candidate is a specific dict_id that we test for its matching of the template

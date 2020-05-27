@@ -17,8 +17,8 @@
             //"program": "${workspaceFolder}/genols-debug.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
 
-            "args":["test-file.fa", "-fm","--show-gh"],
-            //"args":["test-file.vcf.genozip"],
+            "args":["test-data/test.genome_Full.txt", "test-data/test.HG002_NA24385_SRR1767406_IonXpress_020_rawlib_24028.30k.sam", "-f"],
+            //"args":["bug.vcf.genozip", "-t"],
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

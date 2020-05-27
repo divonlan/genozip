@@ -1,15 +1,13 @@
 // ------------------------------------------------------------------
-//   zip_vcf.c
+//   vcf_zip.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <math.h>
-#include "genozip.h"
-#include "vblock.h"
+#include "vcf_private.h"
 #include "buffer.h"
 #include "file.h"
 #include "zfile.h"
-#include "header.h"
 #include "seg.h"
 #include "vblock.h"
 #include "move_to_front.h"
@@ -24,12 +22,12 @@ uint32_t global_vcf_samples_per_block = 0;
 
 static pthread_mutex_t best_gt_data_compressor_mutex;
 
-void zip_vcf_initialize (void)
+void vcf_zip_initialize (void)
 {
     pthread_mutex_init (&best_gt_data_compressor_mutex, NULL);
 }
 
-void zip_vcf_set_global_samples_per_block (const char *num_samples_str)
+void vcf_zip_set_global_samples_per_block (const char *num_samples_str)
 {
     unsigned len = strlen (num_samples_str);
     for (unsigned i=0; i < len; i++) 
@@ -42,7 +40,7 @@ void zip_vcf_set_global_samples_per_block (const char *num_samples_str)
 
 #define SBL(line_i,sb_i) ((line_i) * vb->num_sample_blocks + (sb_i))
 
-static unsigned zip_vcf_get_genotype_vb_start_len (VBlockVCF *vb)
+static unsigned vcf_zip_get_genotype_vb_start_len (VBlockVCF *vb)
 {
     buf_alloc (vb, &vb->genotype_section_lens_buf, sizeof(unsigned) * vb->num_sample_blocks, 1, "section_lens_buf", 0);
     unsigned section_0_len = 0; // all sections are the same length except the last that might be shorter
@@ -68,7 +66,7 @@ static unsigned zip_vcf_get_genotype_vb_start_len (VBlockVCF *vb)
         
         for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-            unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
+            unsigned num_samples_in_sb = vcf_vb_num_samples_in_sb (vb, sb_i);
 
             gt_sb_line_starts[SBL(line_i, sb_i)] = 
                 &gt_data[global_vcf_samples_per_block * sb_i * format_mapper->num_subfields];
@@ -84,7 +82,7 @@ static unsigned zip_vcf_get_genotype_vb_start_len (VBlockVCF *vb)
 }
 
 // split genotype data to sample groups, within a sample group genotypes are separated by a tab
-static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
+static void vcf_zip_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
 {
     START_TIMER;
 
@@ -94,7 +92,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
     // move the GT items from the line data to the permuted data - with each 
     // sample block of gt data containing the data in TRANSPOSED order - i.e. first
     // the gt data for all the variants for sample 1, then all of samples 2 etc.
-    uint32_t num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
+    uint32_t num_samples_in_sb = vcf_vb_num_samples_in_sb (vb, sb_i);
     for (uint32_t sample_i=0; sample_i < num_samples_in_sb; sample_i++) {
 
         if (flag_show_gt_nodes) fprintf (stderr, "sample=%u (vb_i=%u sb_i=%u):\n", sb_i * global_vcf_samples_per_block + sample_i + 1, vb->vblock_i, sb_i);
@@ -116,7 +114,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
             int num_subfields = format_mapper->num_subfields;
             ASSERT (num_subfields >= 0, "Error: format_mapper->num_subfields=%d", format_mapper->num_subfields);
 
-            // if this VB has subfields in some line, but not in this line, then we have filled it in seg_vcf_complete_missing_lines(), 
+            // if this VB has subfields in some line, but not in this line, then we have filled it in vcf_seg_complete_missing_lines(), 
             // therefore we have 1 fake subfield
             if (vb->num_format_subfields > 0 && num_subfields==0) num_subfields = 1;
 
@@ -127,7 +125,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
                 if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
 
                     MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
-                    MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
+                    MtfNode *node = mtf_node_vb (ctx, node_index, NULL, NULL);
                     Base250 index = node->word_index;
 
                     if (flag_show_gt_nodes) fprintf (stderr, "%.*s:%u ", DICT_ID_LEN, ctx->name, index.n);
@@ -153,7 +151,7 @@ static void zip_vcf_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
 }
 
 // split phase data to sample groups, in each group is a string of / | or -
-static void zip_vcf_generate_phase_sections (VBlockVCF *vb)
+static void vcf_zip_generate_phase_sections (VBlockVCF *vb)
 {   
     START_TIMER;
 
@@ -164,7 +162,7 @@ static void zip_vcf_generate_phase_sections (VBlockVCF *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i); 
+        unsigned num_samples_in_sb = vcf_vb_num_samples_in_sb (vb, sb_i); 
     
         // allocate memory for phase data for each sample block - one character per sample
         buf_alloc (vb, &vb->phase_sections_data[sb_i], vb->lines.len * num_samples_in_sb, 
@@ -187,7 +185,7 @@ static void zip_vcf_generate_phase_sections (VBlockVCF *vb)
     }
           
     // add back the phase data bytes that weren't actually "saved"
-    COPY_TIMER (vb->profile.zip_vcf_generate_phase_sections)
+    COPY_TIMER (vb->profile.vcf_zip_generate_phase_sections)
 }
 
 typedef struct {
@@ -210,7 +208,7 @@ static int sort_by_original_index_comparator(const void *p, const void *q)
     return (l - r); 
 }
 
-static HaploTypeSortHelperIndex *zip_vcf_construct_ht_permutation_helper_index (VBlockVCF *vb)
+static HaploTypeSortHelperIndex *vcf_zip_construct_ht_permutation_helper_index (VBlockVCF *vb)
 {
     START_TIMER; 
 
@@ -242,7 +240,7 @@ static HaploTypeSortHelperIndex *zip_vcf_construct_ht_permutation_helper_index (
 
 // sort haplogroups by alt allele count within the variant group, create an index for it, and split
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
-static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
+static void vcf_zip_generate_haplotype_sections (VBlockVCF *vb)
 {
     START_TIMER;
 
@@ -255,7 +253,7 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
     buf_alloc (vb, &vb->haplotype_permutation_index, vb->num_haplotypes_per_line * sizeof(uint32_t), 
                0, "haplotype_permutation_index", vb->vblock_i);
 
-    HaploTypeSortHelperIndex *helper_index = zip_vcf_construct_ht_permutation_helper_index (vb);
+    HaploTypeSortHelperIndex *helper_index = vcf_zip_construct_ht_permutation_helper_index (vb);
 
     // set dl->haplotype_ptr for all lines (for effeciency in the time loop below)
     for (unsigned line_i=0; line_i < vb->lines.len; line_i++) 
@@ -265,7 +263,7 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
         unsigned num_haplotypes_in_sample_block = 
-            vb->ploidy * vb_vcf_num_samples_in_sb (vb, sb_i); 
+            vb->ploidy * vcf_vb_num_samples_in_sb (vb, sb_i); 
 
         unsigned helper_index_sb_i = sb_i * vb->num_samples_per_block * vb->ploidy;
 
@@ -313,10 +311,10 @@ static void zip_vcf_generate_haplotype_sections (VBlockVCF *vb)
 
     buf_free (&vb->helper_index_buf);
 
-    COPY_TIMER (vb->profile.zip_vcf_generate_haplotype_sections);
+    COPY_TIMER (vb->profile.vcf_zip_generate_haplotype_sections);
 }
 
-static CompressionAlg zip_vcf_get_best_gt_compressor (VBlock *vb, Buffer *test_data)
+static CompressionAlg vcf_zip_get_best_gt_compressor (VBlock *vb, Buffer *test_data)
 {
     static CompressionAlg best_gt_data_compressor = COMP_UNKNOWN;
     static Buffer compressed = EMPTY_BUFFER; // no thread issues as protected my mutex
@@ -349,31 +347,31 @@ finish:
     return best_gt_data_compressor;
 }
 
-void zip_vcf_generate_ht_gt_compress_vb_header (VBlockP vb_)
+void vcf_zip_generate_ht_gt_compress_vb_header (VBlockP vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     
     if (vb->has_haplotype_data)
-        seg_vcf_complete_missing_lines (vb);
+        vcf_seg_complete_missing_lines (vb);
 
     // if block has haplotypes - handle them now
     if (vb->has_haplotype_data)
-        zip_vcf_generate_haplotype_sections (vb); 
+        vcf_zip_generate_haplotype_sections (vb); 
 
     // if block has genetype data - calculate starts, lengths and allocate memory
-    vb->max_genotype_section_len = vb->has_genotype_data ? zip_vcf_get_genotype_vb_start_len (vb) : 0; // number of b250s in one gt section matrix
+    vb->max_genotype_section_len = vb->has_genotype_data ? vcf_zip_get_genotype_vb_start_len (vb) : 0; // number of b250s in one gt section matrix
 
     // if block has phase data - handle it
     if (vb->phase_type == PHASE_MIXED_PHASED) 
-        zip_vcf_generate_phase_sections (vb);
+        vcf_zip_generate_phase_sections (vb);
 
     //unsigned variant_data_header_pos = vb->z_data.len;
-    zfile_vcf_compress_vb_header (vb_); // variant data header + ht index    
+    vcf_zfile_compress_vb_header (vb_); // variant data header + ht index    
 }
 
 // this function receives all lines of a vblock and processes them
 // in memory to the compressed format. This thread then terminates the I/O thread writes the output.
-void zip_vcf_compress_one_vb (VBlockP vb_)
+void vcf_zip_compress_one_vb (VBlockP vb_)
 { 
     VBlockVCF *vb = (VBlockVCF *)vb_;
     
@@ -387,9 +385,9 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
             buf_alloc (vb, &vb->genotype_one_section_data, vb->max_genotype_section_len * MAX_BASE250_NUMERALS, 1, "genotype_one_section_data", sb_i);
 
             // we compress each section at a time to save memory
-            zip_vcf_generate_genotype_one_section (vb, sb_i); 
+            vcf_zip_generate_genotype_one_section (vb, sb_i); 
 
-            gt_data_alg = zip_vcf_get_best_gt_compressor (vb_, &vb->genotype_one_section_data);
+            gt_data_alg = vcf_zip_get_best_gt_compressor (vb_, &vb->genotype_one_section_data);
 
             COMPRESS_DATA_SECTION (SEC_VCF_GT_DATA, genotype_one_section_data, char, gt_data_alg, false); // gt data
 
@@ -403,7 +401,7 @@ void zip_vcf_compress_one_vb (VBlockP vb_)
             if (!flag_gtshark)
                 COMPRESS_DATA_SECTION (SEC_VCF_HT_DATA, haplotype_sections_data[sb_i], char, COMP_BZ2, false) // ht data
             else 
-                zfile_vcf_compress_haplotype_data_gtshark (vb, &vb->haplotype_sections_data[sb_i], sb_i);
+                vcf_zfile_compress_haplotype_data_gtshark (vb_, &vb->haplotype_sections_data[sb_i], sb_i);
         }
     }
 }

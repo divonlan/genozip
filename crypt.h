@@ -29,6 +29,6 @@ extern unsigned crypt_max_padding_len(void);
 extern const char *encryption_name (unsigned encryption_type);
 
 // genozip v1 compatibility
-extern void v1_crypt_do (VBlockP vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i); // used to generate an aes key unique to each block
+extern void vcf_v1_crypt_do (VBlockP vb, uint8_t *data, unsigned data_len, uint32_t vb_i, int16_t sec_i); // used to generate an aes key unique to each block
 
 #endif

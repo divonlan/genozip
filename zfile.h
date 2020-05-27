@@ -12,6 +12,7 @@
 #include "md5.h"
 #include "compressor.h"
 
+extern void *zfile_read_from_disk (VBlockP vb, BufferP buf, unsigned len, bool fail_quietly_if_not_enough_data);
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (const Md5Hash *single_component_md5);
 extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,
@@ -58,17 +59,6 @@ extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_li
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
-
-// -----------------------------
-// VCF stuff
-// -----------------------------
-extern void zfile_vcf_compress_vb_header (VBlockP vb);
-extern void zfile_vcf_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
-extern void zfile_vcf_compress_haplotype_data_gtshark (VBlockVCFP vb, ConstBufferP haplotype_sections_data, unsigned sb_i);
-
-// v1 compatibility (VCF only)
-extern bool v1_piz_vcf_read_one_vb (VBlockVCFP vb);
-extern int v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name, unsigned header_size, SectionType expected_sec_type, bool allow_eof);
 
 extern bool is_v2_or_above, is_v3_or_above, is_v4_or_above, is_v5_or_above;
 

@@ -4,8 +4,6 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "zip.h"
-#include "gtshark_vcf.h"
 
 static const char *help_genozip[] = {
     "",
@@ -95,6 +93,8 @@ static const char *help_genozip[] = {
     "                       Quality scores of 2-9 are changed to 6; 10-19->15 ; 20-24->22 ; 25-29->27 ; 30-34->33 ; 35-39->37 ; 40+ ->40",
     "                       This assumes a standard Sanger format of Phred quality scores 0->93 encoded in ASCII 33->126",
     "                       Example: 'LSVIHINKHK' -> 'IIIIFIIIFI'",
+    "   --optimize-ZM     - Optimizes the Ion Torrent flow signal vector ZM:B:s - negative values are changed to zero, and positives are rounded to the nearest 10.",
+    "                       Example: '-20,212,427' -> '0,210,430'",
     "",
     "                     Optimizations for FASTQ files: ",
     "   --optimize-QUAL   - The quality data is optimized as described for SAM above",
@@ -135,7 +135,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   Z    --show-gt-nodes   (VCF only) Show transposed GT matrix - each value is an index into its dictionary",
     "",
-    "   ZU   --show-b250       Show fields 1-9 (CHROM to FORMAT) as well as INFO tags - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip, but without the line numbers.",
+    "   ZUC  --show-b250       Show b250 sections content - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip and genocat, but without the line numbers.",
     "",
     "   ZU   --show-one-b250   <field-name>. Show the values for this field or subfield - can be a field like CHROM, RNAME or a subfield like MX",
     "",

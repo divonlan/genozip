@@ -19,8 +19,8 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     DictIdType dict_id = DICT_ID_NONE;
 
     if      (header->section_type == SEC_DICT ) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
-    else if (header->section_type == SEC_B250 ) dict_id = ((SectionHeaderB250       *)header)->dict_id;
-    else if (header->section_type == SEC_LOCAL) dict_id = ((SectionHeaderLocal      *)header)->dict_id;
+    else if (header->section_type == SEC_B250 ) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
+    else if (header->section_type == SEC_LOCAL) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
 
     // 1. if this is a vcf_header, random_access or genozip_header - it goes directly into the z_file by the I/O thread
     //    before or after all the compute threads are operational
@@ -114,19 +114,23 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
 // dictionary section iterator. returns true if another dictionary was found.
 bool sections_get_next_dictionary (SectionListEntry **sl_ent) // if *sl_ent==NULL - initialize cursor
 {
-    if (! *sl_ent) z_file->sl_dir_cursor = 0;
-    
-    // find the next VB or VCF header section
-    while (z_file->sl_dir_cursor < z_file->section_list_buf.len) {
-        *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_dir_cursor++);
-        if (section_type_is_dictionary((*sl_ent)->section_type)) 
-            return true;
+    // case: first time
+    if (! *sl_ent) {
+        z_file->sl_dir_cursor = 0;
+        while (z_file->sl_dir_cursor < z_file->section_list_buf.len) {
+            *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_dir_cursor++);
+            if (section_type_is_dictionary((*sl_ent)->section_type)) 
+                return true;
+        }
     }
+        
+    if (z_file->sl_dir_cursor == z_file->section_list_buf.len) return false; // we're
 
-    return false; // no more dictionaries
+    *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_dir_cursor++);
+    return section_type_is_dictionary((*sl_ent)->section_type);
 }
 
-// called by PIZ I/O : zfile_vcf_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
+// called by PIZ I/O : vcf_zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
 SectionListEntry *sections_vb_first (uint32_t vb_i)
 {
     SectionListEntry *sl=NULL;

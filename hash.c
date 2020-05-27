@@ -50,10 +50,15 @@ static uint32_t hash_next_size_up (uint64_t size)
 // Now we need to populate hash. 
 static void hash_populate_from_mtf (MtfContext *zf_ctx)
 {
-    for (uint32_t i=0; i < zf_ctx->mtf.len; i++) {
+    uint32_t len = zf_ctx->mtf.len;
+    zf_ctx->mtf.len = 0; // hash_get_entry_for_merge will increment it back to its original value
+
+    for (uint32_t i=0; i < len; i++) {
         MtfNode *node = ENT (MtfNode, zf_ctx->mtf, i);
-        const char *snip = &zf_ctx->dict.data[node->char_index];
-        hash_get_entry_for_merge (zf_ctx, snip, node->snip_len, i, NULL /* the snip is not in the hash for sure */); 
+        //bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == CTX_LT_TEXT) && !(vb_ctx->flags & CTX_FL_NO_STONS)); // is singleton in this VB
+
+        const char *snip = ENT (const char, zf_ctx->dict, node->char_index);
+        hash_get_entry_for_merge (zf_ctx, snip, node->snip_len, false /* is_singleton_in_vb */, NULL /* the snip is not in the hash for sure */); 
     }
 }
 
@@ -79,6 +84,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->dict_id.num == dict_id_fields[VCF_INFO]   ||
             vb_ctx->dict_id.num == dict_id_fields[VCF_REFALT] ||
             vb_ctx->dict_id.num == dict_id_fields[VCF_FILTER] ||
+            vb_ctx->dict_id.num == dict_id_fields[VCF_EOL]    ||
             vb_ctx->dict_id.num == dict_id_INFO_AC ||
             vb_ctx->dict_id.num == dict_id_INFO_AF ||
             vb_ctx->dict_id.num == dict_id_INFO_AN ||
@@ -99,8 +105,10 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         // typically small - use minimal hash table ~ 500
         if (vb_ctx->dict_id.num == dict_id_fields[SAM_FLAG]      ||
             vb_ctx->dict_id.num == dict_id_fields[SAM_MAPQ]      ||
+            vb_ctx->dict_id.num == dict_id_OPTION_MAPQ           ||
             vb_ctx->dict_id.num == dict_id_fields[SAM_QNAME]     ||
             vb_ctx->dict_id.num == dict_id_fields[SAM_OPTIONAL]  ||
+            vb_ctx->dict_id.num == dict_id_fields[SAM_EOL]       ||
 
             // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
             vb_ctx->dict_id.num == dict_id_OPTION_AM ||
@@ -144,6 +152,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         // typically smallish - use hash table ~ 2000
         else 
         if (vb_ctx->dict_id.num == dict_id_fields[SAM_RNAME]  ||
+            vb_ctx->dict_id.num == dict_id_OPTION_RNAME  ||
             vb_ctx->dict_id.num == dict_id_OPTION_CC)
 
             vb_ctx->local_hash_prime = hash_next_size_up(2000);
@@ -157,9 +166,16 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
         break;
 
     case DT_FASTQ:
+        if (vb_ctx->dict_id.num == dict_id_fields[FASTQ_DESC]    ||
+            vb_ctx->dict_id.num == dict_id_fields[FASTQ_E1L])
+            
+            vb_ctx->local_hash_prime = hash_next_size_up(500);
+        break;
+
     case DT_FASTA:
-        if (vb_ctx->dict_id.num == dict_id_fields[FAST_DESC] ||
-            vb_ctx->dict_id.num == dict_id_fields[FAST_LINEMETA])
+        if (vb_ctx->dict_id.num == dict_id_FASTA_DESC ||
+            vb_ctx->dict_id.num == dict_id_fields[FASTA_LINEMETA] ||
+            vb_ctx->dict_id.num == dict_id_fields[FASTA_EOL])
             
             vb_ctx->local_hash_prime = hash_next_size_up(500);
         break;
@@ -172,13 +188,15 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
             vb_ctx->dict_id.num == dict_id_fields[GFF3_SCORE] ||
             vb_ctx->dict_id.num == dict_id_fields[GFF3_STRAND] ||
             vb_ctx->dict_id.num == dict_id_fields[GFF3_PHASE] ||
-            vb_ctx->dict_id.num == dict_id_fields[GFF3_ATTRS])
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_ATTRS] ||
+            vb_ctx->dict_id.num == dict_id_fields[GFF3_EOL])
             
             vb_ctx->local_hash_prime = hash_next_size_up(500);
         break;
 
     case DT_ME23:
-        if (vb_ctx->dict_id.num == dict_id_fields[ME23_CHROM])
+        if (vb_ctx->dict_id.num == dict_id_fields[ME23_CHROM] ||
+            vb_ctx->dict_id.num == dict_id_fields[ME23_EOL])
             
             vb_ctx->local_hash_prime = hash_next_size_up(500);
         break;
@@ -223,7 +241,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     // of the gradient appearance of new snips
     double n1 = first_merging_vb_ctx->mtf_len_at_1_3;
     double n2 = first_merging_vb_ctx->mtf_len_at_2_3 ? ((double)first_merging_vb_ctx->mtf_len_at_2_3 - (double)first_merging_vb_ctx->mtf_len_at_1_3) : 0;
-    double n3 = (double)first_merging_vb_ctx->ol_mtf.len - n1 - n2;
+    double n3 = (double)first_merging_vb_ctx->mtf.len - n1 - n2;
 
     double n1_lines      = (double)merging_vb->num_lines_at_1_3;
     double n2_lines      = (double)merging_vb->num_lines_at_2_3 - n1_lines;
@@ -263,7 +281,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     unsigned gp=0;
 
     if (n3 == 0) 
-        estimated_entries = zf_ctx->mtf.len; // we don't expect new entries coming from the next VBs
+        estimated_entries = first_merging_vb_ctx->mtf.len; // we don't expect new entries coming from the next VBs
 
     // case: growth from n2 to n3 looks like is almost linear growth. we distiguish between 2 cases
     // 1. this is truly a uniform introduction of new entries (for example, an ID per line) - in which case the
@@ -290,7 +308,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
 
         for (gp = sizeof(growth_plan) / sizeof(growth_plan[0]) - 1; gp >= 0 ; gp--)
             if (MIN (effective_num_vbs + 1 /* +1 for first vb */, estimated_num_vbs) > growth_plan[gp].vbs) {
-                estimated_entries = zf_ctx->mtf.len * n2_n3_density * growth_plan[gp].factor;
+                estimated_entries = first_merging_vb_ctx->mtf.len * n2_n3_density * growth_plan[gp].factor;
                 break;
             }
     
@@ -306,16 +324,16 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     if (flag_show_hash) {
         char s1[30], s2[30];
  
-        if (zf_ctx->did_i==0) {
+        if (first_merging_vb_ctx->did_i==0) {
             fprintf (stderr, "\n\nOutput of --show-hash:\n");
             fprintf (stderr, "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
                      (unsigned)ceil(estimated_num_vbs), str_uint_commas (merging_vb->lines.len, s1), str_uint_commas ((uint64_t)estimated_num_lines, s2));
         }
         
         fprintf (stderr, "dict=%s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u "
-                 "n2_n3_lines=%s zf_ctx->mtf.len=%u est_entries=%d hashsize=%s\n", 
-                 zf_ctx->name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
-                 str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)zf_ctx->mtf.len, (int)estimated_entries, 
+                 "n2_n3_lines=%s vb_ctx->mtf.len=%u est_entries=%d hashsize=%s\n", 
+                 first_merging_vb_ctx->name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
+                 str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)first_merging_vb_ctx->mtf.len, (int)estimated_entries, 
                  str_uint_commas (zf_ctx->global_hash_prime, s1)); 
     }
 
@@ -347,14 +365,16 @@ static inline uint32_t hash_do (uint32_t hash_len, const char *snip, unsigned sn
     return (uint32_t)(result % hash_len);
 }
 
-// gets the node_index if the snip is already in the hash table, or puts a new one in the hash table in not
-int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned snip_len, 
-                                  int32_t new_mtf_i_if_no_old_one,
-                                  MtfNode **node)        // out - node if node is found, NULL if not
+// creates a node in the hash table, unless the snip is already there. 
+// the old node is in node, and NULL if its a new node.
+// returns the node_index (positive if in mtf and negative-2 if in ol_mtf - the singleton buffer)
+int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned snip_len, bool is_singleton_in_vb,
+                                  MtfNode **old_node)        // out - node if node is found, NULL if not
 {
     GlobalHashEnt g_head, *g_hashent = &g_head;
     g_hashent->next = hash_do (zf_ctx->global_hash_prime, snip, snip_len); // entry in hash table determined by hash function on snip
     int32_t hashent_i = NO_NEXT; // squash compiler warning (note: global hash table is always allocated in the first merge)
+    bool singleton_encountered = false;
 
     while (g_hashent->next != NO_NEXT) {
 
@@ -371,21 +391,31 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
             // see NIL or merge_num - both of which indicate the this entry is effectively NIL as they have an older merge_num
 
             g_hashent->next = NO_NEXT;
-            g_hashent->node_index = new_mtf_i_if_no_old_one;
+            g_hashent->node_index = is_singleton_in_vb ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NIL)
             __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
-            if (node) *node = NULL;
-            return NIL;
+            if (old_node) *old_node = NULL; // no old node
+            if (is_singleton_in_vb) zf_ctx->num_singletons++;
+            return g_hashent->node_index;
         }
 
-        if (node) {  // if node=NULL, caller is telling us it is not in MTF for sure
+        if (old_node) {  // if node=NULL, caller is telling us it is not in MTF for sure
             const char *snip_in_dict;
             uint32_t snip_len_in_dict;
 
-            *node = mtf_node (zf_ctx, g_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
+            *old_node = mtf_node_zf (zf_ctx, g_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
         
             // case: snip is in the hash table 
-            if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) 
+            if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) {
+
+                // case: it is already in the hash table - as a singleton. we note that we encountered a singleton
+                // and continue searching
+                if (g_hashent->node_index < 0) {
+                    singleton_encountered = true;
+                    continue;
+                }
+
                 return g_hashent->node_index;
+            }
         }
     }
 
@@ -400,15 +430,25 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
     // VBs from using it, before we atomically set the "next"
     uint32_t next = zf_ctx->global_hash.len++;
     GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, next);
-    new_hashent->merge_num = zf_ctx->merge_num; // stamp our merge_num as the ones that set the node_index
-    new_hashent->node_index     = new_mtf_i_if_no_old_one;
-    new_hashent->next      = NO_NEXT;
+    new_hashent->merge_num     = zf_ctx->merge_num; // stamp our merge_num as the ones that set the node_index
+    
+    // we enter the node as a singleton (=in ol_mtf) if this was a singleton in this VB but not in any previous VB 
+    // (the second occurange in the file isn't a singleton anymore)
+    bool is_singleton_global   = (is_singleton_in_vb && !singleton_encountered);
+    new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NIL)
+    new_hashent->next          = NO_NEXT;
     
     // now, with the new g_hashent set, we can atomically update the "next"
     __atomic_store_n (&g_hashent->next, next, __ATOMIC_RELAXED);
 
-    if (node) *node = NULL; // we don't have an old node
-    return NIL;
+    if (is_singleton_global) 
+        zf_ctx->num_singletons++; // we encoutered this snip for the first time ever in this file - count it as a singleton
+
+    if (singleton_encountered)  // a snip that was previously counted as a singleton is encountered for the second time. it is therefore a failed singleton
+        zf_ctx->num_failed_singletons++;
+
+    if (old_node) *old_node = NULL; // we don't have an old node
+    return new_hashent->node_index;
 }
 
 // gets the node_index if the snip is already in the hash table, or puts a new one in the hash table in not
@@ -417,7 +457,7 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
 // 3. if not found - we add it to the local hash table
 int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
                                 const char *snip, unsigned snip_len, 
-                                int32_t new_mtf_i_if_no_old_one,
+                                int32_t node_index_if_new,
                                 MtfNode **node)        // out - node if node is found, NULL if not
 {
     // first, search for the snip in the global table
@@ -440,14 +480,17 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
             break;
 
         g_hashent = ENT(GlobalHashEnt, vb_ctx->global_hash, next);
-
+                
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
         uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_RELAXED);
         if (g_hashent->node_index == NIL || merge_num > vb_ctx->merge_num) break; // case 3
 
+        // we skip singletons and continue searching
+        if (g_hashent->node_index < 0) continue;
+
         const char *snip_in_dict;
         uint32_t snip_len_in_dict;
-        *node = mtf_node (vb_ctx, g_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
+        *node = mtf_node_vb (vb_ctx, g_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
 
         // case: snip is in the global hash table - we're done
         if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) 
@@ -475,7 +518,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         // case: snip is not in hash table and also no other snip occupies the slot (node_index==NIL happens only in the core table)
         if (l_hashent->node_index == NIL) { // unoccupied space in core hash table
             l_hashent->next = NO_NEXT;
-            l_hashent->node_index = new_mtf_i_if_no_old_one;
+            l_hashent->node_index = node_index_if_new;
             if (node) *node = NULL;
             return NIL;
         }
@@ -483,7 +526,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
         if (node) { // if the caller doesn't provide "node", he is telling us that with certainly the snip is not in the hash table
             const char *snip_in_dict;
             uint32_t snip_len_in_dict;
-            *node = mtf_node (vb_ctx, l_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
+            *node = mtf_node_vb (vb_ctx, l_hashent->node_index, &snip_in_dict, &snip_len_in_dict);
 
             // case: snip is in the hash table - we're done
             if (snip_len == snip_len_in_dict && !memcmp (snip, snip_in_dict, snip_len)) 
@@ -500,7 +543,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
 
     LocalHashEnt *new_l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent->next);
     new_l_hashent->next = NO_NEXT;
-    new_l_hashent->node_index = new_mtf_i_if_no_old_one;
+    new_l_hashent->node_index = node_index_if_new;
 
     if (node) *node = NULL;
     return NIL;

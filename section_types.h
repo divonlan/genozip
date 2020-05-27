@@ -32,7 +32,7 @@ typedef enum {
     // data sections added in v2
     SEC_GENOZIP_HEADER     = 6,   SEC_RANDOM_ACCESS      = 7,
 
-    // these (2 + 8-25) were used in v1-v4, no longer used for files created starting v5 
+    // these (2 + 8-25) were used in v2-v4, no longer used for files created starting v5 
     // we keep them here to be able to decompress files compressed with older versions
     SEC_VCF_CHROM_DICT_legacy     = 8,   SEC_VCF_CHROM_B250_legacy     = 9,  
     SEC_VCF_POS_DICT_legacy       = 10,  SEC_VCF_POS_B250_legacy       = 11, 
@@ -49,7 +49,9 @@ typedef enum {
     SEC_HT_GTSHARK_X_LINE         = 28,  SEC_HT_GTSHARK_X_HTI          = 29,
     SEC_HT_GTSHARK_X_ALLELE       = 30,
 
-    SEC_DICT = 31, SEC_B250 = 32, SEC_LOCAL = 33, // added v5
+    // added in v5
+    SEC_DICT = 31, SEC_B250 = 32, SEC_LOCAL = 33, 
+    SEC_DICT_ID_ALIASES = 34,
 
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
@@ -77,7 +79,7 @@ typedef enum {
     {"SEC_HT_GTSHARK_X_LINE",          },  {"SEC_HT_GTSHARK_X_HTI",          },\
     {"SEC_HT_GTSHARK_X_ALLELE",        },\
     \
-    {"SEC_DICT", }, {"SEC_B250", }, {"SEC_LOCAL", },\
+    {"SEC_DICT", }, {"SEC_B250", }, {"SEC_LOCAL", }, { "SEC_DICT_ID_ALIASES", },\
 }
 
 #define section_type_is_dictionary(s) ((s) == SEC_DICT                 || (s) == SEC_VCF_FRMT_SF_DICT_legacy || (s) == SEC_VCF_CHROM_DICT_legacy  || (s) == SEC_VCF_POS_DICT_legacy    || \

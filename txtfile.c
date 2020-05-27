@@ -11,16 +11,22 @@
 #define Z_LARGE64
 #include <errno.h>
 #include <bzlib.h>
-
 #include "genozip.h"
 #include "txtfile.h"
 #include "vblock.h"
-#include "vblock.h"
-#include "vblock.h"
+#include "vcf.h"
+#include "zfile.h"
 #include "file.h"
 #include "compressor.h"
 #include "strings.h"
+#include "endianness.h"
+#include "crypt.h"
 #include "zlib/zlib.h"
+
+static bool is_first_txt = true; 
+static uint32_t last_txt_header_len = 0;
+
+uint32_t txtfile_get_last_header_len(void) { return last_txt_header_len; }
 
 static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
 {
@@ -270,18 +276,16 @@ unsigned txtfile_write_to_disk (const Buffer *buf)
     return buf->len;
 }
 
-void txtfile_write_one_vblock (VBlockP vb_)
+void txtfile_write_one_vblock (VBlockP vb)
 {
     START_TIMER;
 
-    VBlockSAMP vb = (VBlockSAMP)vb_;
-    
     txtfile_write_to_disk (&vb->txt_data);
 
     char s1[20], s2[20];
     ASSERTW (vb->txt_data.len == vb->vb_data_size || exe_type == EXE_GENOCAT, 
-            "Warning: vblock_i=%u (num_lines=%u start_char_in_source_file=%"PRIu64") had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-            vb->vblock_i, (uint32_t)vb->lines.len, vb->vb_position_txt_file,
+            "Warning: vblock_i=%u (num_lines=%u vb_start_line_in_file=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+            vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
             str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 
@@ -301,7 +305,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
     
     double ratio=1;
 
-    bool is_no_gt_vcf = (txt_file->data_type == DT_VCF && !((VBlockVCFP)vb)->has_genotype_data);
+    bool is_no_ht_vcf = (txt_file->data_type == DT_VCF && vcf_vb_has_haplotype_data(vb));
 
     switch (txt_file->comp_alg) {
         // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
@@ -314,9 +318,9 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
         // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
         // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
         // the bcf is compressed as it normally is.
-        case COMP_BCF: ratio = is_no_gt_vcf ? 55 : 8.5; break;
+        case COMP_BCF: ratio = is_no_ht_vcf ? 55 : 8.5; break;
 
-        case COMP_XZ:  ratio = is_no_gt_vcf ? 171 : 12.7; break;
+        case COMP_XZ:  ratio = is_no_ht_vcf ? 171 : 12.7; break;
 
         case COMP_BAM: ratio = 4; break;
 
@@ -329,3 +333,110 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
     txt_file->txt_data_size_single = disk_size * ratio;
 }
+
+
+// PIZ: called before reading each genozip file
+void txtfile_header_initialize(void)
+{
+    is_first_txt = true;
+    vcf_header_initialize(); // we don't yet know the data type, but we initialize the VCF stuff just in case, no harm.
+}
+
+// ZIP: reads VCF or SAM header and writes its compressed form to the GENOZIP file
+bool txtfile_header_to_genozip (uint32_t *txt_line_i)
+{    
+    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
+
+    if (DTPT(txt_header_required) == HDR_MUST || DTPT(txt_header_required) == HDR_OK)
+        txtfile_read_header (is_first_txt, DTPT(txt_header_required) == HDR_MUST, DTPT(txt_header_1st_char)); // reads into evb->txt_data and evb->lines.len
+    
+    *txt_line_i += (uint32_t)evb->lines.len;
+
+    // for vcf, we need to check if the samples are the same before approving concatanation.
+    // other data types can concatenate without restriction
+    bool can_concatenate = (txt_file->data_type == DT_VCF) ? vcf_header_set_globals(txt_file->name, &evb->txt_data)
+                                                           : true;
+    if (!can_concatenate) { 
+        // this is the second+ file in a concatenation list, but its samples are incompatible
+        buf_free (&evb->txt_data);
+        return false;
+    }
+
+    // we always write the txt_header section, even if we don't actually have a header, because the section
+    // header contains the data about the file
+    if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
+
+    last_txt_header_len = evb->txt_data.len;
+
+    z_file->num_txt_components_so_far++; // when compressing
+
+    buf_free (&evb->txt_data);
+    
+    is_first_txt = false;
+
+    return true; // everything's good
+}
+
+// PIZ: returns offset of header within data, EOF if end of file
+bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
+{
+    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
+    static Buffer header_section = EMPTY_BUFFER;
+
+    int header_offset = zfile_read_section (evb, 0, NO_SB_I, &header_section, "header_section", 
+                                            sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, NULL);
+    if (header_offset == EOF) {
+        buf_free (&header_section);
+        return false; // empty file (or in case of split mode - no more components) - not an error
+    }
+
+    // handle the GENOZIP header of the txt header section
+    SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)header_section.data;
+
+    ASSERT (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
+            "Error: invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
+
+    // in split mode - we open the output txt file of the component
+    if (flag_split) {
+        ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode");
+        txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
+        txt_file->txt_data_size_single = BGEN64 (header->txt_data_size);       
+    }
+
+    txt_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
+
+    if (is_first_txt || flag_split) 
+        z_file->num_lines = BGEN64 (header->num_lines);
+
+    if (flag_split) *digest = header->md5_hash_single; // override md5 from genozip header
+        
+    // now get the text of the VCF header itself
+    static Buffer header_buf = EMPTY_BUFFER;
+    zfile_uncompress_section (evb, header, &header_buf, "header_buf", SEC_TXT_HEADER);
+
+    bool is_vcf = (z_file->data_type == DT_VCF);
+
+    bool can_concatenate = is_vcf ? vcf_header_set_globals(z_file->name, &header_buf) : true;
+    if (!can_concatenate) {
+        buf_free (&header_section);
+        buf_free (&header_buf);
+        return false;
+    }
+
+    if (is_vcf && flag_drop_genotypes) vcf_header_trim_header_line (&header_buf); // drop FORMAT and sample names
+
+    if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
+
+    // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
+    if ((is_first_txt || flag_split) && !flag_no_header)
+        txtfile_write_to_disk (&header_buf);
+    
+    buf_free (&header_section);
+    buf_free (&header_buf);
+
+    z_file->num_txt_components_so_far++;
+    is_first_txt = false;
+
+    return true;
+}
+

@@ -1,86 +1,62 @@
 // ------------------------------------------------------------------
-//   piz_vcf.c
+//   vcf_piz.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "genozip.h"
+#include "vcf_private.h"
 #include "zfile.h"
 #include "txtfile.h"
 #include "seg.h"
-#include "vblock.h"
 #include "base250.h"
 #include "move_to_front.h"
 #include "file.h"
 #include "endianness.h"
-#include "squeeze_vcf.h"
 #include "piz.h"
 #include "sections.h"
 #include "random_access.h"
-#include "regions.h"
-#include "samples.h"
-#include "gtshark_vcf.h"
 #include "dict_id.h"
 #include "strings.h"
-#include "header.h"
 
 #define DATA_LINE(i) ENT (PizDataLineVCF, vb->lines, i)
 
 typedef struct {
-    unsigned num_subfields;         // number of subfields this FORMAT has
-    MtfContext *ctx[MAX_SUBFIELDS]; // pointer to the ctx of each format subfield
+    unsigned num_subfields;       // number of subfields this FORMAT has
+    uint8_t did_i[MAX_SUBFIELDS]; // did_i of each format subfield
 } FormatInfo;
 
 static Buffer piz_format_mapper_buf = EMPTY_BUFFER; //global array, initialized by I/O thread and immitable thereafter
 
-static bool piz_vcf_reconstruct_special_info_subfields (VBlock *vb, uint8_t did_i, DictIdType dict_id)
+static bool vcf_piz_reconstruct_fields (VBlockVCF *vb, bool *has_13) // out: original vcf line ended with Windows-style \r\n
 {
-    // starting v5, END is a delta vs POS
-    if (is_v5_or_above && dict_id.num == dict_id_INFO_END) {
-        DECLARE_SNIP;
-        RECONSTRUCT_FROM_DICT_POS (did_i, vb->last_pos, true, NULL, false);
-        return false;
-    }
-
-    return true; // proceed with normal reconstruction
-}
-
-static bool piz_vcf_reconstruct_fields (VBlockVCF *vb, bool *has_13) // out: original vcf line ended with Windows-style \r\n
-{
-    bool line_included = true;
     uint64_t txt_data_start = vb->txt_data.len;
 
+    piz_reconstruct_from_ctx (vb, VCF_CHROM,  '\t');
+    piz_reconstruct_from_ctx (vb, VCF_POS,    '\t');
+    piz_reconstruct_from_ctx (vb, VCF_ID,     '\t');
+    piz_reconstruct_from_ctx (vb, VCF_REFALT, '\t');
+    piz_reconstruct_from_ctx (vb, VCF_QUAL,   '\t');
+    piz_reconstruct_from_ctx (vb, VCF_FILTER, '\t');
+
     DECLARE_SNIP;
-    uint32_t chrom_word_index = RECONSTRUCT_FROM_DICT (VCF_CHROM, true);
-    RECONSTRUCT_FROM_DICT_POS (VCF_POS, vb->last_pos, true, NULL, true); // reconstruct from delta
-
-    // in case of --regions - check if this line is needed at all (based on CHROM and POS)
-    if (flag_regions && !regions_is_site_included (chrom_word_index, vb->last_pos)) // test here bc vb->last_pos might change if INFO has END
-        line_included = false;
-
-    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_ID,     "\t", 1);
-    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_REFALT, "\t", 1);
-    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_QUAL,   "\t", 1);
-    piz_reconstruct_from_ctx ((VBlockP)vb, VCF_FILTER, "\t", 1);
-
     uint32_t iname_word_index = LOAD_SNIP (VCF_INFO);        
-    piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, piz_vcf_reconstruct_special_info_subfields, has_13);
+    piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, NULL, has_13);
     RECONSTRUCT1 ('\t');
 
     if (vb->mtf_ctx[VCF_FORMAT].word_list.len) {
         if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
-        else if (!flag_drop_genotypes) piz_reconstruct_from_ctx ((VBlockP)vb, VCF_FORMAT, "\t", 1);
+        else if (!flag_drop_genotypes) piz_reconstruct_from_ctx (vb, VCF_FORMAT, '\t');
     }
 
-    // after consuming sections' data, if this line is not to be outputed - shorten txt_data back to start of line
-    if (!line_included) vb->txt_data.len = txt_data_start; 
+    // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
+    if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
 
-    return line_included;
+    return !vb->dont_show_curr_line;
 }
 
-// Called from the I/O thread piz_vcf_read_one_vb - and immutable thereafter
+// Called from the I/O thread vcf_piz_read_one_vb - and immutable thereafter
 // This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries.
 // It populates piz_format_mapper_buf with info about each unique format type in this vb (FormatInfo structure)
-static void piz_vcf_map_format_subfields (VBlock *vb)
+static void vcf_piz_map_format_subfields (VBlock *vb)
 {    
     MtfContext *format_ctx = &z_file->mtf_ctx[VCF_FORMAT];
 
@@ -124,14 +100,13 @@ static void piz_vcf_map_format_subfields (VBlock *vb)
 
             // get the did_i of this subfield. note: the context will be new (exist in the VB but not z_file) did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
-            uint8_t did_i = mtf_get_existing_did_i_by_dict_id (dict_id); 
-            formats[format_i].ctx[sf_i] = (did_i != DID_I_NONE) ? &z_file->mtf_ctx[did_i] : NULL;
+            formats[format_i].did_i[sf_i] = mtf_get_existing_did_i_from_z_file (dict_id); 
         }
     }
 }
 
 // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
-static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
+static void vcf_piz_initialize_sample_iterators (VBlockVCF *vb)
 {
     START_TIMER;
     
@@ -151,9 +126,10 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        if (! *ENT(bool, vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
+        // unfortunately we must always consume gt_data as it might contain local that is not divided to sblocks
+        //if (! vcf_is_sb_included(vb, sb_i)) continue; // skip if this sample block is excluded by --samples
 
-        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
+        unsigned num_samples_in_sb = vcf_vb_num_samples_in_sb (vb, sb_i);
         
         const uint8_t *next  = FIRSTENT (const uint8_t, vb->genotype_sections_data[sb_i]);
         const uint8_t *after = AFTERENT (const uint8_t, vb->genotype_sections_data[sb_i]);
@@ -186,13 +162,13 @@ static void piz_vcf_initialize_sample_iterators (VBlockVCF *vb)
                 sb_i, vb->vblock_i, (uint32_t)vb->lines.len, num_samples_in_sb);
     }
 
-    COPY_TIMER (vb->profile.piz_vcf_initialize_sample_iterators)
+    COPY_TIMER (vb->profile.vcf_piz_initialize_sample_iterators)
 }
 
 // convert genotype data from sample block format of indices in base-250 to line format
 // of tab-separated genotype data string, each string being a colon-seperated list of subfields, 
 // the subfields being defined in the FORMAT of this line
-static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, bool is_line_included)
+static void vcf_piz_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_line_i, bool is_line_included)
 {
     START_TIMER;
 
@@ -207,13 +183,13 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
         unsigned first_sample = sb_i * vb->num_samples_per_block;
-        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
+        unsigned num_samples_in_sb = vcf_vb_num_samples_in_sb (vb, sb_i);
 
         for (unsigned sample_i=first_sample; 
              sample_i < first_sample + num_samples_in_sb; 
              sample_i++) {
 
-            if (!samples_am_i_included (sample_i)) continue;
+            char *next_at_sample_start = next;
 
             const char *snip = NULL; // will be set to a pointer into a dictionary
             
@@ -221,7 +197,7 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
 
             for (unsigned sf_i=0; sf_i < line_format_info->num_subfields; sf_i++) {
 
-                MtfContext *sf_ctx = line_format_info->ctx[sf_i];
+                MtfContext *sf_ctx = MAPPER_CTX (line_format_info, sf_i);
 
                 ASSERT (sf_ctx || *sample_iterator[sample_i].next_b250 == BASE250_MISSING_SF, 
                         "Error: line_format_info->ctx[sf_i=%u] for line %u sample %u (counting from 1) is dict_id=0, indicating that this subfield has no value in the vb in any sample or any line. And yet, it does...", 
@@ -240,12 +216,18 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
                 // ...and if its an MIN_DP - calculate it 
                 else if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_MIN_DP && snip_len && is_v5_or_above) {
                     int32_t delta = atoi (snip);
-                    str_int (dp_value - delta, min_dp, &snip_len); // note: we dp_value==0 if no DP subfield preceeds DP_MIN, that's fine
+                    snip_len = str_int (dp_value - delta, min_dp); // note: we dp_value==0 if no DP subfield preceeds DP_MIN, that's fine
                     snip = min_dp;
                 }
 
                 if (snip && snip_len && is_line_included) { // it can be a valid empty subfield if snip="" and snip_len=0
-                    memcpy (next, snip, snip_len); 
+                
+                    // ugly hack until I get time to refactor this code - reconstruct to txt_data, copy to gt_line_data and later copy back to txt_data. yuck
+                    uint64_t start = vb->txt_data.len;
+                    piz_reconstruct_one_snip ((VBlockP)vb, sf_ctx, snip, snip_len);  
+                    uint64_t snip_len = vb->txt_data.len - start;
+                    memcpy (next, ENT (char, vb->txt_data, start), snip_len); 
+                    vb->txt_data.len -= snip_len;
                     next += snip_len;
                 }
             }
@@ -262,6 +244,10 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
                         "Error: line_gt_data buffer overflow. vblock_i=%u vcf_line_i=%u sb_i=%u sample_i=%u",
                         vb->vblock_i, vb_line_i + vb->first_line, sb_i, sample_i);
             }
+
+            // note - we need to consume all the gt_data as it might contain local that is not divided into
+            // sample blocks
+            if (!samples_am_i_included (sample_i)) next = next_at_sample_start; // roll back
         } // for sample
     } // for sample block
     
@@ -272,31 +258,31 @@ static void piz_vcf_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
 
     dl->has_genotype_data = (vb->line_gt_data.len > global_vcf_num_displayed_samples); // not all just \t
 
-    COPY_TIMER(vb->profile.piz_vcf_reconstruct_genotype_data_line);
+    COPY_TIMER(vb->profile.vcf_piz_reconstruct_genotype_data_line);
 }
 
-static void piz_vcf_get_phase_data_line (VBlockVCF *vb, unsigned vb_line_i)
+static void vcf_piz_get_phase_data_line (VBlockVCF *vb, unsigned vb_line_i)
 {
     START_TIMER;
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        if (! *ENT(bool, vb->is_sb_included, sb_i)) continue; // skip if this sample block is excluded by --samples
+        if (! vcf_is_sb_included(vb, sb_i)) continue; // skip if this sample block is excluded by --samples
 
-        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
+        unsigned num_samples_in_sb = vcf_vb_num_samples_in_sb (vb, sb_i);
 
         memcpy (ENT (char, vb->line_phase_data, sb_i * vb->num_samples_per_block),
                 ENT (char, vb->phase_sections_data[sb_i], vb_line_i * num_samples_in_sb), 
                 num_samples_in_sb);
     }
 
-    COPY_TIMER(vb->profile.piz_vcf_get_phase_data_line);
+    COPY_TIMER(vb->profile.vcf_piz_get_phase_data_line);
 }
 
 // for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
 // transposed, each column will be a row, or a contiguous array, in the section data. This function returns an array
 // of pointers, each pointer being a beginning of column data within the section array
-static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
+static const char **vcf_piz_get_ht_columns_data (VBlockVCF *vb)
 {
     buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 7), 1, "ht_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
 
@@ -315,7 +301,7 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
 
     for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        bool is_sb_included = *ENT(bool, vb->is_sb_included, sb_i);
+        bool is_sb_included = vcf_is_sb_included(vb, sb_i);
 
         for (unsigned ht_i = sb_i * max_ht_per_block; 
              ht_i < MIN ((sb_i+1) * max_ht_per_block, vb->num_haplotypes_per_line); 
@@ -336,7 +322,7 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
             ht_columns_data[ht_i] = &vb->haplotype_sections_data[sb_i].data[sb_ht_i];
 
             ASSERT (ht_columns_data[ht_i], 
-                    "Error in piz_vcf_get_ht_columns_data: haplotype column is NULL for vb_i=%u sb_i=%u sb_ht_i=%u", vb->vblock_i, sb_i, sb_ht_i);
+                    "Error in vcf_piz_get_ht_columns_data: haplotype column is NULL for vb_i=%u sb_i=%u sb_ht_i=%u", vb->vblock_i, sb_i, sb_ht_i);
         }
     }
 
@@ -347,7 +333,7 @@ static const char **piz_vcf_get_ht_columns_data (VBlockVCF *vb)
 }
 
 // build haplotype for a line - reversing the permutation and the transposal.
-static void piz_vcf_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, const char **ht_columns_data)
+static void vcf_piz_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, const char **ht_columns_data)
 {
     START_TIMER;
 
@@ -358,7 +344,7 @@ static void piz_vcf_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, 
     uint32_t ht_i = 0;
     for (uint32_t sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        if (! *ENT(bool, vb->is_sb_included, sb_i)) continue;
+        if (! vcf_is_sb_included(vb, sb_i)) continue;
 
         // start from the nearest block 8 columns that includes our start column (might include some previous columns too)
         // but if already done (because it overlaps the previous SB that that SB was included) 
@@ -404,19 +390,19 @@ static void piz_vcf_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, 
     dl->has_haplotype_data = false;
     for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
         // it can be '-' in three scenarios. 
-        // 1. '-' - line has no GT despite other lines in the VB having - seg_vcf_complete_missing_lines sets it all to '-'
+        // 1. '-' - line has no GT despite other lines in the VB having - vcf_seg_complete_missing_lines sets it all to '-'
         // 2. 0   - initialized above ^ and not filled in due to --samples 
-        // 3. 0   - it comes from a column of zeros set in piz_vcf_get_ht_columns_data - due to --samples
+        // 3. 0   - it comes from a column of zeros set in vcf_piz_get_ht_columns_data - due to --samples
         if (vb->line_ht_data.data[ht_i] != '-' && vb->line_ht_data.data[ht_i] != 0) { 
             dl->has_haplotype_data = true; // found one sample that has haplotype
             break;
         }
     }
-    COPY_TIMER(vb->profile.piz_vcf_get_haplotype_data_line);
+    COPY_TIMER(vb->profile.vcf_piz_get_haplotype_data_line);
 }
 
 // add the samples (haplotype, genotype, phase) to txt_dataa
-static void piz_vcf_reconstruct_samples (VBlockVCF *vb, unsigned vb_line_i, bool has_13)
+static void vcf_piz_reconstruct_samples (VBlockVCF *vb, unsigned vb_line_i, bool has_13)
 {
     START_TIMER;
 
@@ -490,12 +476,12 @@ static void piz_vcf_reconstruct_samples (VBlockVCF *vb, unsigned vb_line_i, bool
     vb->txt_data.len--;
     RECONSTRUCT (has_13 ? "\r\n" : "\n", has_13 ? 2 : 1);
 
-    COPY_TIMER (vb->profile.piz_vcf_reconstruct_samples);
+    COPY_TIMER (vb->profile.vcf_piz_reconstruct_samples);
 }
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block
-static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
+static void vcf_piz_reconstruct_vb (VBlockVCF *vb)
 {
     START_TIMER;
 
@@ -513,14 +499,14 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
         //  memory - realloc for exact size, add 7 because depermuting_loop works on a word (32/64 bit) boundary
         buf_alloc (vb, &vb->line_ht_data, vb->num_haplotypes_per_line + 7, 1, "line_ht_data", vb->vblock_i);
 
-        ht_columns_data = piz_vcf_get_ht_columns_data (vb);
+        ht_columns_data = vcf_piz_get_ht_columns_data (vb);
     }
     
     // initialize genotype stuff
     if (vb->has_genotype_data && !flag_drop_genotypes && !flag_gt_only) {
         
         // initialize vb->sample_iterator to the first line in the gt data for each sample (column) 
-        piz_vcf_initialize_sample_iterators(vb);
+        vcf_piz_initialize_sample_iterators(vb);
 
         buf_alloc (vb, &vb->line_gt_data, vb->max_gt_line_len, 1, "line_gt_data", vb->vblock_i);
     }
@@ -536,22 +522,22 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
 
         // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->txt_data
         bool has_13 = false;
-        bool is_line_included = piz_vcf_reconstruct_fields (vb, &has_13);
+        bool is_line_included = vcf_piz_reconstruct_fields (vb, &has_13);
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
-            // note: we always call piz_vcf_reconstruct_genotype_data_line even if !is_line_included, bc we need to advance the iterators
+            // note: we always call vcf_piz_reconstruct_genotype_data_line even if !is_line_included, bc we need to advance the iterators
             if (vb->has_genotype_data && !flag_gt_only)  
-                piz_vcf_reconstruct_genotype_data_line (vb, vb_line_i, is_line_included);
+                vcf_piz_reconstruct_genotype_data_line (vb, vb_line_i, is_line_included);
 
             if (is_line_included)  {
                 if (vb->phase_type == PHASE_MIXED_PHASED) 
-                    piz_vcf_get_phase_data_line (vb, vb_line_i);
+                    vcf_piz_get_phase_data_line (vb, vb_line_i);
 
                 if (vb->has_haplotype_data) 
-                    piz_vcf_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
+                    vcf_piz_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
 
-                piz_vcf_reconstruct_samples (vb, vb_line_i, has_13);
+                vcf_piz_reconstruct_samples (vb, vb_line_i, has_13);
             }
         }
         else if (is_line_included) // flag_drop_genotypes
@@ -564,7 +550,7 @@ static void piz_vcf_reconstruct_vb (VBlockVCF *vb)
     COPY_TIMER(vb->profile.piz_reconstruct_vb);
 }
 
-static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
+static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
 {
     ARRAY (const unsigned, section_index, vb->z_section_headers);
 
@@ -580,6 +566,8 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
     vb->ploidy                  = BGEN16 (header->ploidy);
     vb->max_gt_line_len         = BGEN32 (header->max_gt_line_len);
     vb->vb_data_size            = BGEN32 (header->vb_data_size);
+
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
 
     // this can if 1. VCF has no samples or 2. num_samples was not re-written to genozip header (for example if we were writing to stdout)
     if (!global_vcf_num_samples) 
@@ -635,15 +623,7 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
 
-        // skip uncompressing this sample block if it is excluded by --samples
-        if (! *ENT(bool, vb->is_sb_included, sb_i)) {
-            section_i += (vb->has_genotype_data ? 1 : 0) + 
-                         (vb->phase_type == PHASE_MIXED_PHASED) + 
-                         (vb->has_haplotype_data ? (header->is_gtshark ? 5 : 1) : 0); // just advance section_i
-            continue;
-        }
-
-        unsigned num_samples_in_sb = vb_vcf_num_samples_in_sb (vb, sb_i);
+        unsigned num_samples_in_sb = vcf_vb_num_samples_in_sb (vb, sb_i);
 
         // if genotype data exists, it appears first
         if (vb->has_genotype_data) {
@@ -651,6 +631,14 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i], &vb->genotype_sections_data[sb_i], "genotype_sections_data", SEC_VCF_GT_DATA);
             section_i++;
         }                
+
+        // skip uncompressing ht and phase data of this sample block if it is excluded by --samples
+        if (! vcf_is_sb_included(vb, sb_i)) {
+            section_i += //(vb->has_genotype_data ? 1 : 0) + 
+                         (vb->phase_type == PHASE_MIXED_PHASED) + 
+                         (vb->has_haplotype_data ? (header->is_gtshark ? 5 : 1) : 0); // just advance section_i
+            continue;
+        }
 
         // next, comes phase data
         if (vb->phase_type == PHASE_MIXED_PHASED) {
@@ -702,28 +690,22 @@ static void piz_vcf_uncompress_all_sections (VBlockVCF *vb)
 
 // this is the compute thread entry point. It receives all data of a variant block and processes it
 // in memory to the uncompressed format. This thread then terminates the I/O thread writes the output.
-void piz_vcf_uncompress_vb (VBlockVCFP vb)
+void vcf_piz_uncompress_vb (VBlockVCFP vb)
 {
     if (is_v2_or_above) {
-        piz_vcf_uncompress_all_sections (vb);
-
-        // combine all the sections of a variant block to regenerate the fields, haplotype_data,
-        // genotype_data and phase_data for each row of the variant block
-        piz_vcf_reconstruct_vb (vb);
+        vcf_piz_uncompress_all_sections (vb);
+        vcf_piz_reconstruct_vb (vb);
     }
 
     // v1
-    else {
-        void v1_piz_vcf_uncompress_all_sections (VBlockVCFP vb); // forwwrd declaration - these are included at the end of this file
-        v1_piz_vcf_uncompress_all_sections (vb);
-
-        void v1_piz_vcf_reconstruct_vb (VBlockVCFP vb);
-        v1_piz_vcf_reconstruct_vb (vb);
+    else { 
+        vcf_v1_piz_uncompress_all_sections (vb);
+        vcf_v1_piz_reconstruct_vb (vb);
     }
 }
 
 
-bool piz_vcf_read_one_vb (VBlock *vb_, SectionListEntry *sl)
+bool vcf_piz_read_one_vb (VBlock *vb_, SectionListEntry *sl)
 { 
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
@@ -733,7 +715,7 @@ bool piz_vcf_read_one_vb (VBlock *vb_, SectionListEntry *sl)
     // iname mapper: first VB, we map all iname and format subfields to a global mapper. this uses
     // dictionary info only, not b250
     if (vb->vblock_i == 1) {
-        piz_vcf_map_format_subfields(vb_);
+        vcf_piz_map_format_subfields(vb_);
         piz_map_iname_subfields(vb_);
     }
         
@@ -747,7 +729,7 @@ bool piz_vcf_read_one_vb (VBlock *vb_, SectionListEntry *sl)
 
         // calculate whether this block is included. zfile_read_section will skip reading and piz_uncompress_all_sections
         // will skip uncompressing based on this value
-        NEXTENT (bool, vb->is_sb_included) = samples_is_sb_included (num_samples_per_block, sb_i);
+        NEXTENT (bool, vb->is_sb_included) = samples_get_is_sb_included (num_samples_per_block, sb_i);
  
         // make sure we have enough space for the section pointers
         buf_alloc_more (vb, &vb->z_section_headers, 3, 0, uint32_t, 2);
@@ -776,4 +758,4 @@ bool piz_vcf_read_one_vb (VBlock *vb_, SectionListEntry *sl)
 }
 
 #define V1_PIZ // select the piz functions of v1.c
-#include "v1_vcf.c"
+#include "vcf_v1.c"

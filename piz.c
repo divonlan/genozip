@@ -8,9 +8,9 @@
 #include "profiler.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "header.h"
 #include "vblock.h"
 #include "base250.h"
+#include "base64.h"
 #include "dispatcher.h"
 #include "move_to_front.h"
 #include "file.h"
@@ -19,7 +19,6 @@
 #include "sections.h"
 #include "random_access.h"
 #include "regions.h"
-#include "samples.h"
 #include "dict_id.h"
 #include "strings.h"
 #include "seg.h"
@@ -27,140 +26,296 @@
 static Buffer piz_iname_mapper_buf = EMPTY_BUFFER;
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
-int32_t piz_decode_pos (VBlock *vb, int32_t last_pos, const char *delta_snip, unsigned delta_snip_len,
-                        int32_t *last_delta, // optional in/out
-                        char *pos_str, unsigned *pos_len) // out
+// Special values:
+// "-" - negated previous value
+// ""  - negated previous delta
+static int64_t piz_reconstruct_from_delta (VBlock *vb, 
+                                           MtfContext *my_ctx,   // use and store last_delta
+                                           MtfContext *base_ctx, // get last_value
+                                           const char *delta_snip, unsigned delta_snip_len) 
 {
-    ASSERT (delta_snip, "Error in piz_decode_pos: delta_snip is NULL. vb_i=%u", vb->vblock_i);
+    ASSERT (delta_snip, "Error in piz_reconstruct_from_delta: delta_snip is NULL. vb_i=%u", vb->vblock_i);
     
-    int32_t delta=0;
+    if (delta_snip_len == 1 && delta_snip[0] == '-')
+        my_ctx->last_delta = -2 * base_ctx->last_value; // negated previous value
 
-    // case: this is not a delta and snip is stored in dictionary (a result of a "nonsense number")
-    if (delta_snip_len && delta_snip[0] == SNIP_VERBTIM) { 
+    else if (!delta_snip_len)
+        my_ctx->last_delta = -my_ctx->last_delta; // negated previous delta
 
-        ASSERT0 (!last_delta, "Error in piz_decode_pos: piz_decode_pos requires last_delta==NULL in delta fields that might be nonsense");
-        
-        memcpy (pos_str, delta_snip+1, delta_snip_len-1);
-        *pos_len = delta_snip_len - 1;
-        return last_pos; // unchanged
-    }
+    else 
+        my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
-    // case: this is not a delta and pos is stored in random_pos (a result of the delta being out of range)
-    if (delta_snip[0] == SNIP_LOOKUP_UINT32) { 
-        ASSERT (delta_snip_len==1, "Error in piz_decode_pos: Expected snip with SNIP_LOOKUP_UINT32 to be of length 1, but its length is %u", delta_snip_len);
-        MtfContext *pos_ctx = &vb->mtf_ctx[DTF(pos)];
-        ASSERT (pos_ctx->next_local < pos_ctx->local.len, "Error in piz_decode_pos: reading vb->line_i=%u: unexpected end of %s local data", vb->line_i, pos_ctx->name);
-        last_pos = BGEN32 (*ENT (uint32_t, pos_ctx->local, pos_ctx->next_local++));
-        str_int (last_pos, pos_str, pos_len);
+    int64_t new_value = base_ctx->last_value + my_ctx->last_delta;    
+    RECONSTRUCT_INT (new_value);
 
-        if (last_delta) 
-            *last_delta = last_pos - vb->last_pos;
-
-        return last_pos;
-    }
-
-    if (!delta_snip_len && last_delta)
-        delta = -(*last_delta); // negated delta of last line - happens every other line in unsorted BAMs
-
-    else {
-        // we parse the string ourselves - this is hugely faster than sscanf.
-        unsigned negative = *delta_snip == '-'; // 1 or 0
-
-        char sep = PIZ_SNIP_SEP; // local variable that can be compiler-optimized
-        const char *s; for (s=(delta_snip + negative); *s != sep ; s++)
-            delta = delta*10 + (*s - '0');
-
-        if (negative) delta = -delta;
-    }
-
-    last_pos += delta;    
-    ASSERT (last_pos >= 0, "Error in piz_decode_pos: last_pos=%d is negative", last_pos);
-
-    if (last_delta) *last_delta = delta;
-
-    // create number string without calling slow sprintf - start with creating the reverse string
-    char reverse_pos_str[50];
-    uint32_t n = last_pos;
-
-    unsigned len=0; 
-    if (n) {
-        while (n) {
-            reverse_pos_str[len++] = '0' + (n % 10);
-            n /= 10;
-        }
-
-        // reverse it
-        for (unsigned i=0; i < len; i++) pos_str[i] = reverse_pos_str[len-i-1];
-        pos_str[len] = '\0';
-
-        *pos_len = len;
-    }
-    else {  // n=0. 
-        pos_str[0] = '0';
-        pos_str[1] = '\0';
-        *pos_len = 1;
-    }
-
-    return last_pos;
+    return new_value;
 }
 
-void piz_reconstruct_from_local_text (VBlock *vb, MtfContext *ctx)
+static uint32_t piz_reconstruct_from_local_text (VBlock *vb, MtfContext *ctx)
 {
-    DECLARE_SNIP;
-    LOAD_SNIP_FROM_BUF (ctx->local, ctx->next_local, ctx->name);
-    RECONSTRUCT (snip, snip_len);
+    uint32_t start = ctx->next_local; 
+    ARRAY (char, data, ctx->local);
+
+    while (ctx->next_local < ctx->local.len && data[ctx->next_local] != SNIP_SEP) ctx->next_local++;
+    ASSERT (ctx->next_local < ctx->local.len, 
+            "Error reconstructing txt_line=%u: unexpected end of CTX_LT_TEXT data in %s (len=%u)", vb->line_i, ctx->name, (uint32_t)ctx->local.len); \
+
+    char *snip = &data[start];
+    uint32_t snip_len = ctx->next_local - start; 
+    ctx->next_local++; /* skip the tab */ 
+
+    piz_reconstruct_one_snip (vb, ctx, snip, snip_len);
+
+    return snip_len;
 }
 
-static void piz_reconstruct_from_local_uint32 (VBlock *vb, MtfContext *ctx)
+// for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
+// example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
+// compressing better in an array that contains both positive and negative
+// NOT TESTED YET
+#define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
+
+static int64_t piz_reconstruct_from_local_int (VBlock *vb, MtfContext *ctx, char seperator /* 0 if none */)
 {
-    ASSERT (ctx->next_local < ctx->local.len - 1, 
-            "Error reconstructing txt_line=%u: unexpected end of %s data (ctx->local.len=%u next=%u)", 
+    unsigned width = ctx_lt_sizeof_one[ctx->ltype];
+    bool is_signed = ctx_lt_is_signed [ctx->ltype];
+
+    ASSERT (ctx->next_local < ctx->local.len,  // len is in units of width
+            "Error in piz_reconstruct_from_local_int while reconstructing txt_line=%u: unexpected end of %s data (ctx->local.len=%u next=%u)", 
             vb->line_i, ctx->name, (uint32_t)ctx->local.len, ctx->next_local); 
 
-    uint32_t num = BGEN32 (*ENT (uint32_t, ctx->local, ctx->next_local++));
-    char num_str[20];
-    unsigned num_str_len;
-    str_int (num, num_str, &num_str_len);
-    RECONSTRUCT (num_str, num_str_len);
+    int64_t num=0;
+    if (width == 4) { // check 4 first, as its the most popular
+        uint32_t num_big_en = *ENT (uint32_t, ctx->local, ctx->next_local++);
+        uint32_t unum = BGEN32 (num_big_en); 
+        num = (int64_t)(is_signed ? DEINTERLACE(int32_t,unum) : unum);
+    }
+    else if (width == 2) {
+        uint16_t num_big_en = *ENT (uint16_t, ctx->local, ctx->next_local++);
+        uint16_t unum = BGEN16 (num_big_en); 
+        num = (int64_t)(is_signed ? DEINTERLACE(int16_t,unum) : unum);
+    }
+    else if (width == 1) {
+        uint8_t unum = *ENT (uint8_t, ctx->local, ctx->next_local++);
+        num = (int64_t)(is_signed ? DEINTERLACE(int8_t,unum) : unum);
+    }
+    else if (width == 8) { // note: for uint64_t the function returns the number correctly, it just needs to be casted to uint64_t
+        uint64_t num_big_en = *ENT (uint64_t, ctx->local, ctx->next_local++);
+        uint64_t unum = BGEN64 (num_big_en); 
+        num = (int64_t)(is_signed ? DEINTERLACE(int64_t,unum) : unum);
+    }
+
+    // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
+    RECONSTRUCT_INT (num);
+    if (seperator) RECONSTRUCT1 (seperator);
+
+    return num;
+}
+
+// two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
+// if snip_len==0, then the length is taken from seq_len.
+static void piz_reconstruct_from_local_sequence (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
+{
+    ASSERT0 (ctx, "Error in piz_reconstruct_from_local_sequence: ctx is NULL");
+
+    bool reconstruct = !zfile_is_skip_section (vb, SEC_LOCAL, ctx->dict_id);
+    uint32_t len;
+
+    // if we have length in the snip, update vb->seq_len (for example in FASTQ, we will a snip for seq but qual will use seq_len)
+    if (snip_len) vb->seq_len = atoi(snip);
+
+    // special case: it is "*" that was written to " " - we reconstruct it
+    if (ctx->local.data[ctx->next_local] == ' ') {
+        len = 1;
+        if (reconstruct) RECONSTRUCT1 ('*');
+    }
+    else {
+        len = vb->seq_len;
+        ASSERT (ctx->next_local + len <= ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, ctx->name);
+
+        if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
+    }
+
+    ctx->last_value = ctx->next_local; // for seq_qual, we use last_value for storing the beginning of the sequence
+    ctx->next_local += len;
+}
+
+static void piz_reconstruct_structured (VBlock *vb, MtfContext *snip_ctx, const char *snip, unsigned snip_len)
+{
+    uint8_t structured_data[sizeof(Structured)];
+    Structured *st = (Structured *)structured_data;
+
+    ASSERT (snip_len <= base64_sizeof(Structured), "Error in piz_reconstruct_structured: snip_len=%u exceed base64_sizeof(Structured)=%u",
+            snip_len, base64_sizeof(Structured));
+
+    unsigned st_size = sizeof (structured_data); 
+    base64_decode (snip, snip_len, structured_data, &st_size);
+
+    st->repeats = BGEN16 (st->repeats);
+
+    for (unsigned rep_i=0; rep_i < st->repeats; rep_i++) 
+        for (unsigned i=0; i < st->num_items; i++) 
+            piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, st->items[i].dict_id)->did_i, st->items[i].seperator);
+
+    if ((st->flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st->items[st->num_items-1].seperator)
+        vb->txt_data.len--;
+}
+
+static MtfContext *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
+{
+    unsigned b64_len = base64_sizeof (DictIdType);
+    ASSERT (b64_len + 1 <= *snip_len, "Error in piz_get_other_ctx_from_snip: snip_len=%u but expecting it to be >= %u",
+            *snip_len, b64_len + 1);
+
+    DictIdType dict_id;
+    unsigned dict_id_size = DICT_ID_LEN;
+    base64_decode ((*snip)+1, b64_len, dict_id.id, &dict_id_size);
+
+    MtfContext *other_ctx = mtf_get_ctx (vb, dict_id);
+
+    *snip     += b64_len + 1;
+    *snip_len -= b64_len + 1;
+    
+    return other_ctx;
+}
+
+void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *snip, unsigned snip_len)
+{
+    if (!snip_len) return; // nothing to do
+    
+    int64_t new_value;
+    bool have_new_value = false;
+    MtfContext *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
+    bool store = (snip_ctx->flags & CTX_FL_STORE_VALUE);
+
+    switch (snip[0]) {
+
+    // display the rest of the snip first, and then the lookup up text.
+    case SNIP_LOOKUP:
+    case SNIP_OTHER_LOOKUP: {
+
+        if (snip[0] == SNIP_LOOKUP) 
+            { snip++; snip_len--; }
+        else 
+            // we are request to reconstruct from another ctx
+            base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+
+        // case 1: LOCAL is not SEQUENCE - we reconstruct this snip before adding the looked up data
+        if (snip_len && !(base_ctx->ltype == CTX_LT_SEQUENCE)) RECONSTRUCT (snip, snip_len);
+        
+        if (base_ctx->ltype >= CTX_LT_INT8 && base_ctx->ltype <= CTX_LT_UINT64) {
+            new_value = piz_reconstruct_from_local_int (vb, base_ctx, 0);
+            have_new_value = true;
+        }
+
+        // case 2: LOCAL is SEQ_QUAL - the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
+        else if (base_ctx->ltype == CTX_LT_SEQUENCE) 
+            piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
+
+        else piz_reconstruct_from_local_text (vb, base_ctx); // this will call us back recursively with the snip retrieved
+                
+        break;
+    }
+    case SNIP_SELF_DELTA:
+        new_value = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip+1, snip_len-1);
+        have_new_value = true;
+        break;
+
+    case SNIP_OTHER_DELTA: 
+        base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+        new_value = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip, snip_len); 
+        have_new_value = true;
+        break;
+
+    case SNIP_STRUCTURED:
+        piz_reconstruct_structured (vb, snip_ctx, snip+1, snip_len-1);
+        break;
+
+    case SNIP_SPECIAL:
+        ASSERT (snip_len >= 2, "Error: SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
+        uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
+        ASSERT (special < DTP (num_special), "Error: file requires special handler %u which doesn't exist in this version of genounzip- please upgrade to the latest version", special);
+        DTP(special)[special](vb, snip_ctx, snip+2, snip_len-2);  
+        break;
+
+    case SNIP_REDIRECTION: 
+        base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+        piz_reconstruct_from_ctx (vb, base_ctx->did_i, 0);
+        break;
+    
+    default:
+        // case: pizzing a v4 and below file - all snips in the POS ctx are deltas
+        if (!is_v5_or_above && snip_ctx->dict_id.num == dict_id_fields[VCF_POS]) {
+            new_value = piz_reconstruct_from_delta (vb, snip_ctx, snip_ctx, snip, snip_len); 
+            have_new_value = true;
+            store = true; // hard coded store value - flags were only introduced in v5
+            break;
+        }
+    
+        RECONSTRUCT (snip, snip_len); // simple reconstruction
+
+        snip_ctx->last_delta  = 0; // delta is 0 since we didn't calculate delta
+    }
+
+    // update last_value in *base_ctx* if *snip_ctx* tell us to
+    if (have_new_value && store) 
+        base_ctx->last_value = new_value; 
+
+    snip_ctx->last_line_i = vb->line_i;
 }
 
 // returns reconstructed length
-uint32_t piz_reconstruct_from_ctx (VBlock *vb, uint8_t did_i, const char *sep, unsigned sep_len)
+uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
 {
     MtfContext *ctx = &vb->mtf_ctx[did_i];
 
-    ASSERT0 (ctx->dict_id.num, "Error in piz_reconstruct_from_ctx: ctx not initialized (dict_id=0)");
+    ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "Error in piz_reconstruct_from_ctx: ctx not initialized (dict_id=0)");
+
+    // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
+    if (!ctx->dict_id.num) {
+        did_i = ctx->did_i;
+        ctx = &vb->mtf_ctx[ctx->did_i];
+    }
 
     uint64_t start = vb->txt_data.len;
 
     // case: we have dictionary data
-    if (ctx->b250.len) { 
-        
+    if (ctx->b250.len) {         
         DECLARE_SNIP;
-        LOAD_SNIP(did_i); 
+        uint32_t word_index = LOAD_SNIP(did_i); 
+        piz_reconstruct_one_snip (vb, &vb->mtf_ctx[did_i], snip, snip_len);        
 
-        unsigned start=0;
-        for (unsigned i=0; i < snip_len; i++) {
-            if (snip[i] == SNIP_LOOKUP_TEXT) {
-                if (start < i) RECONSTRUCT (&snip[start], i-start);
-                start=i+1;
-                piz_reconstruct_from_local_text (vb, &vb->mtf_ctx[did_i]);
-            }
+        // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
+        if (flag_regions) {
+            if (ctx->did_i == DTF(chrom)) 
+                vb->chrom_node_index = word_index;
 
-            if (snip[i] == SNIP_LOOKUP_UINT32) {
-                if (start < i) RECONSTRUCT (&snip[start], i-start);
-                start=i+1;
-                piz_reconstruct_from_local_uint32 (vb, &vb->mtf_ctx[did_i]);
-            }
+            else if (ctx->did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, (uint32_t)ctx->last_value)) 
+                vb->dont_show_curr_line = true;
         }
-
-        if (start < snip_len) RECONSTRUCT (&snip[start], snip_len - start);
     }
     
     // case: all data is only in local
-    else piz_reconstruct_from_local_text (vb, ctx);
+    else if (ctx->local.len) {
+        if (ctx->ltype >= CTX_LT_INT8 && ctx->ltype <= CTX_LT_UINT64)
+            piz_reconstruct_from_local_int(vb, ctx, 0);
+        
+        else if (ctx->ltype == CTX_LT_SEQUENCE) 
+            piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
+        
+        else if (ctx->ltype == CTX_LT_TEXT)
+            piz_reconstruct_from_local_text (vb, ctx);
 
-    if (sep) RECONSTRUCT (sep, sep_len); 
+        else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u", ctx->ltype, ctx->name, vb->vblock_i);
+    }
+
+    // case: the entire VB was just \n - so seg dropped the ctx
+    else if (ctx->did_i == DTF(eol))
+        RECONSTRUCT1('\n');
+
+    else ABORT("Error in piz_reconstruct_from_ctx_do: ctx %s has no data (b250 or local) in vb_i=%u", ctx->name, vb->vblock_i);
+
+    if (sep) RECONSTRUCT1 (sep); 
 
     return (uint32_t)(vb->txt_data.len - start);
 }
@@ -178,29 +333,6 @@ void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), Subfield
             mapper->did_i[index] = did_i;
             mapper->num_subfields++;
         }
-}
-
-void piz_reconstruct_compound_field (VBlock *vb, SubfieldMapper *mapper, const char *separator, unsigned separator_len,
-                                     const char *template, unsigned template_len)
-{
-#   define MAX_COMPOUND_LEN 10000
-    char template_copy[MAX_COMPOUND_LEN];
-    ASSERT (template_len <= MAX_COMPOUND_LEN, "Error in piz_reconstruct_compound_field: compound field exceeds the maximum length of %u:\n%.*s\n", 
-            MAX_COMPOUND_LEN, template_len, template);
-    memcpy (template_copy, template, template_len); // we need to copy it, as it may reside in vb->txt_data which we will be overwriting
-
-    if (template_len==1 && template_copy[0]=='*') template_len=0; // no separators, only one component
-
-    for (unsigned i=0; i <= template_len; i++) { // for template_len, we have template_len+1 elements
-        
-        piz_reconstruct_from_ctx (vb, mapper->did_i[i], "", 0);
-        
-        if (i < template_len)
-            // add middle-field separator
-            RECONSTRUCT (&template_copy[i], 1) // buf_add is a macro - no semicolon
-        else if (separator_len)
-            RECONSTRUCT (separator, separator_len); // add end-of-field separator if needed
-    }
 }
 
 // Called from the I/O thread piz_*_read_one_vb - and immutable thereafter
@@ -276,7 +408,7 @@ void piz_map_iname_subfields (VBlock *vb)
                     iname[iname_len-1] = sep; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
             }
             //else 
-                //iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_by_dict_id (*dict_id); // it will be NIL if this is an INFO name without values            
+                //iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_from_z_file (*dict_id); // it will be NIL if this is an INFO name without values            
             
             iname_mapper->num_subfields++;
         }
@@ -323,35 +455,20 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
         // handle the value part of "name=value", if there is one
         if (has_value) {
         
-            bool regular = reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i]);
+            bool regular = true; 
+            if (reconstruct_special_info_subfields)
+                regular = reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i]);
             
             // no special treatment - we proceed with the regular treatment
-            if (regular) piz_reconstruct_from_ctx (vb, did_i, "", 0);
+            if (regular) piz_reconstruct_from_ctx (vb, did_i, 0);
         }
 
         RECONSTRUCT1 (';'); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
         if (*iname_snip == ';') iname_snip++;
     }
 
-    // remove the semicolon for the last field. easier to remove now than calculate the cases involving has_13.
-    vb->txt_data.len -= 1;
-}
-
-void piz_reconstruct_seq_qual (VBlock *vb, MtfContext *ctx, uint32_t seq_len, bool grepped_out)
-{
-    ASSERT0 (ctx, "Error in piz_reconstruct_seq_qual: ctx is NULL");
-
-    // seq and qual are expected to be either of length seq_len, or " " (unavailable)
-    uint32_t len = (ctx->next_local >= ctx->local.len || ctx->local.data[ctx->next_local] == ' ') ? 1 : seq_len;
-    ASSERT (ctx->next_local + len <= ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, ctx->name);
-
-    // rewrite unavailable back to "*"
-    if (ctx->local.data[ctx->next_local] == ' ') ctx->local.data[ctx->next_local] = '*';
-
-    if (!grepped_out && !zfile_is_skip_section (vb, SEC_LOCAL, ctx->dict_id)) 
-        RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
-    
-    ctx->next_local += len;
+    // remove the semicolon for the last field 
+     vb->txt_data.len -= 1;
 }
 
 uint32_t piz_uncompress_all_ctxs (VBlock *vb)
@@ -363,20 +480,18 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
 
         if (section_i == vb->z_section_headers.len) break; // no more sections left
 
-        SectionHeader *header = (SectionHeader *)(vb->z_data.data + section_index[section_i]);
+        SectionHeaderCtx *header = (SectionHeaderCtx *)(vb->z_data.data + section_index[section_i]);
 
         // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
-        if (section_type_is_b250 (header->section_type)) {
-            SectionHeaderB250 *header_b250 = (SectionHeaderB250 *)header;
-            zfile_uncompress_section (vb, header_b250, &mtf_get_ctx (vb, header_b250->dict_id)->b250, 
-                                      "mtf_ctx.b250", header->section_type); // type is SEC_B250 starting v5, but potentially other VCF B250 in v1-v4
-            section_i++;
-        }    
+        bool is_local = header->h.section_type == SEC_LOCAL;
+        if (section_type_is_b250 (header->h.section_type) || is_local) {
+            MtfContext *ctx = mtf_get_ctx (vb, header->dict_id);
+        
+            ctx->flags      = is_v5_or_above ? header->flags : 0; // flags and ltype were introduced in v5, before that this field, in b250, was used for something else (not 0)
+            ctx->ltype = is_v5_or_above ? header->ltype : 0;
 
-        else if (header->section_type == SEC_LOCAL) {
-            SectionHeaderLocal *header_local = (SectionHeaderLocal *)header;
-            zfile_uncompress_section (vb, header_local, &mtf_get_ctx (vb, header_local->dict_id)->local, 
-                                      "mtf_ctx.local", SEC_LOCAL); 
+            zfile_uncompress_section (vb, header, is_local ? &ctx->local : &ctx->b250, 
+                                      is_local ? "mtf_ctx.local" : "mtf_ctx.b250", header->h.section_type); // type is SEC_B250 starting v5, but potentially other VCF B250 in v1-v4
             section_i++;
         }    
 
@@ -401,10 +516,10 @@ static void piz_uncompress_one_vb (VBlock *vb)
         vb->longest_line_len = BGEN32 (header->longest_line_len);
         if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ 
 
+        buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
+
         piz_uncompress_all_ctxs (vb);
     }
-
-    buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
 
     DTP(uncompress)(vb);
 
@@ -419,15 +534,11 @@ static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
 
     // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
     while (section_type_is_b250 ((*next_sl)->section_type) || (*next_sl)->section_type == SEC_LOCAL) {
-    
         *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len++) = vb->z_data.len; 
-    
-        if ((*next_sl)->section_type == SEC_LOCAL) 
-            zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderLocal), SEC_LOCAL, *next_sl); 
-        else
-            zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderB250),  (*next_sl)->section_type, *next_sl); 
 
-        (*next_sl)++;
+        zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
+                            (*next_sl)->section_type, *next_sl);
+        (*next_sl)++;                             
     }
 }
 
@@ -443,7 +554,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     // for FASTA and FASTQ we convert a "header_only" flag to "header_one" for consistency with other formats (header-only implies we don't show any data)
     if (flag_header_only && (data_type == DT_FASTA || data_type == DT_FASTQ)) {
         flag_header_only = false;
-        flag_header_one = true;
+        flag_header_one  = true;
     }
 
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
@@ -481,6 +592,9 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
         // read dictionaries (this also seeks to the start of the dictionaries)
         if (last_vb_i >= 0)
             zfile_read_all_dictionaries (last_vb_i, flag_regions ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
+
+        // read dict_id aliases, if there are any
+        dict_id_read_aliases();
     }
     
     file_seek (z_file, 0, SEEK_SET, false);
@@ -572,8 +686,8 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (!is_v2_or_above) enforce_v1_limitations (is_first_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
 
     // read and write txt header. in split mode this also opens txt_file
-    piz_successful = (data_type != DT_VCF_V1) ? header_genozip_to_txt (&original_file_digest)
-                                              : v1_header_genozip_to_vcf (&original_file_digest);
+    piz_successful = (data_type != DT_VCF_V1) ? txtfile_genozip_to_txt_header (&original_file_digest)
+                                              : vcf_v1_header_genozip_to_vcf (&original_file_digest);
     
     ASSERT (piz_successful || !is_first_component, "Error: failed to read %s header in %s", 
             dt_name (z_file->data_type), z_name);
@@ -623,7 +737,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
 
                     case SEC_TXT_HEADER: // 2nd+ txt header of a concatenated file
                         if (!flag_split) {
-                            header_genozip_to_txt (NULL); // skip 2nd+ txt header if concatenating
+                            txtfile_genozip_to_txt_header (NULL); // skip 2nd+ txt header if concatenating
                             continue;
                         }
                         break; // eof if splitting
@@ -634,7 +748,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
                     default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));
                 }
             }
-            else still_more_data = v1_piz_vcf_read_one_vb ((VBlockVCF *)dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
+            else still_more_data = vcf_v1_piz_read_one_vb (dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
             
             if (still_more_data) {
                 if (!grepped_out) 
@@ -674,16 +788,17 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
         
         else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
-            if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n");
+            if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n\n");
 
             if (flag_md5 && !flag_quiet) 
                 fprintf (stderr, "MD5 = %s verified as identical to the original %s\n", 
                          md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type));
         }
-        else if (flag_test) 
+        else if (flag_test) {
             fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
                     md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
-            
+            exit (1);
+        }
         else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
                      "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
                      txt_file->name, md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type), 

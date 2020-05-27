@@ -11,7 +11,6 @@
 #include "file.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "header.h"
 #include "vblock.h"
 #include "dispatcher.h"
 #include "move_to_front.h"
@@ -79,14 +78,8 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         if (ctx->mtf.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
         if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
-        // don't move to local if its on the list of special dict_ids that are always in dict
-        bool dont_move = false;
-        for (uint64_t **next_dont_move = DTF (dont_move_to_local); *next_dont_move; next_dont_move++)
-            if (**next_dont_move == ctx->dict_id.num) {
-                dont_move = true;
-                break;
-            }
-        if (dont_move) continue;
+        // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
+        if ((ctx->flags & CTX_FL_NO_STONS) || ctx->ltype != CTX_LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
 
         buf_move (vb, &ctx->local, vb, &ctx->dict);
         buf_free (&ctx->mtf);
@@ -101,11 +94,9 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
         MtfContext *ctx = &vb->mtf_ctx[did_i];
 
-        if (ctx->mtf_i.len) {
+        if (ctx->mtf_i.len && 
+            (vb->data_type != DT_VCF || !dict_id_is_vcf_format_sf (ctx->dict_id))) { // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
             
-            // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
-            if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue;
-
             zip_generate_b250_section (vb, ctx);
             zfile_compress_b250_data (vb, ctx, COMP_BZ2);
         }
@@ -138,7 +129,7 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 
         if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
 
-            MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
+            MtfNode *node = mtf_node_vb (ctx, node_index, NULL, NULL);
 
             uint32_t n            = node->word_index.n;
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
@@ -218,10 +209,14 @@ static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool 
 // write all the sections at the end of the file, after all VB stuff has been written
 static void zip_write_global_area (const Md5Hash *single_component_md5)
 {
-    // output dictionaries to disk
+    // output dictionaries (inc. aliases) to disk - they are in the "processed" data of evb
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, false);  
    
+    // add dict_id aliases list, if we have one
+    Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
+    if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
+
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) {
 
@@ -276,12 +271,12 @@ static void zip_compress_one_vb (VBlock *vb)
     }
 
     if (vb->data_type == DT_VCF)
-        zip_vcf_generate_ht_gt_compress_vb_header (vb);
+        vcf_zip_generate_ht_gt_compress_vb_header (vb);
     else
         zfile_compress_generic_vb_header (vb); // vblock header
 
     // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
-    // zip_vcf_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
+    // vcf_zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     mtf_merge_in_vb_ctx(vb);
 
@@ -329,12 +324,12 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
     
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
-    bool success = header_txt_to_genozip (&txt_line_i);
+    bool success = txtfile_header_to_genozip (&txt_line_i);
     if (!success) goto finish;
 
     mtf_initialize_for_zip();
 
-    if (z_file->data_type == DT_VCF) zip_vcf_initialize();
+    if (z_file->data_type == DT_VCF) vcf_zip_initialize();
 
     uint32_t max_lines_per_vb=0;
 

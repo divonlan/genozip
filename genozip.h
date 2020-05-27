@@ -54,14 +54,6 @@
 // ------------------------------------------------------------------------------------------------------------------------
 typedef struct VBlock *VBlockP;
 typedef const struct VBlock *ConstVBlockP;
-typedef struct VBlockVCF *VBlockVCFP;
-typedef const struct VBlockVCF *ConstVBlockVCFP;
-typedef struct VBlockSAM *VBlockSAMP;
-typedef const struct VBlockSAM *ConstVBlockSAMP;
-typedef struct VBlockFAST *VBlockFASTP;
-typedef const struct VBlockFAST *ConstVBlockFASTP;
-typedef struct VBlockGFF3 *VBlockGFF3P;
-typedef const struct VBlockGFF3 *ConstVBlockGFF3P;
 
 typedef struct SubfieldMapper *SubfieldMapperP; 
 typedef const struct SubfieldMapper *ConstSubfieldMapperP; 
@@ -69,6 +61,7 @@ typedef struct File *FileP;
 typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;
 typedef const struct Buffer *ConstBufferP;
+typedef struct Structured *StructuredP;
 typedef struct MtfContext *MtfContextP;
 typedef struct MtfNode *MtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
@@ -97,10 +90,10 @@ extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads,
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only,
            flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_register,
-           flag_debug_progress, flag_show_hash, flag_debug_memory,
+           flag_debug_progress, flag_show_hash, flag_debug_memory, flag_debug_no_singletons,
 
            flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
-           flag_optimize_QUAL, flag_optimize_Vf;
+           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM;
            
 extern char *flag_grep;
 extern uint64_t flag_stdin_size;
@@ -114,6 +107,15 @@ extern VBlockP evb;
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
 #endif
 
+#define SPECIAL(dt,num,name,func) \
+    extern void func (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len); \
+    static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
+
+#define COMPRESSOR_CALLBACK(func) \
+extern void func (VBlockP vb, uint32_t vb_line_i, \
+                  char **line_data_1, uint32_t *line_data_len_1,\
+                  char **line_data_2, uint32_t *line_data_len_2);
+                  
 // sanity checks
 extern void exit_on_error(void);
 

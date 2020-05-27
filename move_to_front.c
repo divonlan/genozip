@@ -26,7 +26,7 @@ unzip:
 #include "genozip.h"
 #include "profiler.h"
 #include "section_types.h"
-#include "gloptimize_vcf.h"
+#include "vcf.h"
 #include "base250.h"
 #include "vblock.h"
 #include "move_to_front.h"
@@ -34,6 +34,13 @@ unzip:
 #include "endianness.h"
 #include "file.h"
 #include "hash.h"
+#include "seg.h"
+
+const char ctx_lt_to_sam_map[NUM_CTX_LT] = "\0cCsSiI\0\0f\0\0" ;
+const int ctx_lt_sizeof_one[NUM_CTX_LT]  = { 1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 1 };
+const bool ctx_lt_is_signed[NUM_CTX_LT]  = { 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0 };
+const int64_t ctx_lt_min[NUM_CTX_LT]     = { 0, -128, 0, -16384, 0,    -2147483648, 0,         -0x8000000000000000LL, 0,                     0, 0, 0 };
+const int64_t ctx_lt_max[NUM_CTX_LT]     = { 0, 127, 255, 16383, 32767, 2147483647, 4294967295, 0x7fffffffffffffffLL, 0xffffffffffffffffULL, 0, 0, 0 };
 
 #define INITIAL_NUM_NODES 10000
 
@@ -64,40 +71,74 @@ void mtf_vb_1_lock (VBlockP vb)
 
 // ZIP: add a snip to the dictionary the first time it is encountered in the VCF file.
 // the dictionary will be written to GENOZIP and used to reconstruct the MTF during decompression
-static inline uint32_t mtf_insert_to_dict (VBlock *vb_of_dict, MtfContext *ctx, bool is_zf_ctx, const char *snip, uint32_t snip_len)
+typedef enum { DICT_VB, DICT_ZF, DICT_ZF_SINGLTON } DictType;
+static inline uint32_t mtf_insert_to_dict (VBlock *vb_of_dict, MtfContext *ctx, DictType type, const char *snip, uint32_t snip_len)
 {
-    buf_alloc (vb_of_dict, &ctx->dict, MAX ((ctx->dict.len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 
-               CTX_GROWTH, is_zf_ctx ? "z_file->mtf_ctx->dict" : "mtf_ctx->dict", ctx->did_i);
+    Buffer *dict = (type == DICT_ZF_SINGLTON) ? &ctx->ol_dict : &ctx->dict;
+
+    static const char *buf_name[3] = { "mtf_ctx->dict", "zf_ctx->dict", "zf_ctx->ol_dict" };
+    buf_alloc (vb_of_dict, dict, MAX ((dict->len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 
+               CTX_GROWTH, buf_name[type] , ctx->did_i);
     
-    if (is_zf_ctx) buf_set_overlayable (&ctx->dict); // during merge
+    if (type == DICT_ZF) buf_set_overlayable (dict); // during merge
     
-    unsigned char_index = ctx->dict.len;
-    char *dict_p = &ctx->dict.data[char_index];
+    uint32_t char_index = (uint32_t)dict->len;
+    char *dict_p = ENT (char, *dict, char_index);
 
     memcpy (dict_p, snip, snip_len);
     dict_p[snip_len] = SNIP_SEP; // dictionary have a SNIP_SEP separating snips, so that PIZ can generate word_list
 
-    ctx->dict.len += snip_len + 1;
+    dict->len += snip_len + 1;
     return char_index;
 }
 
 // ZIP only (PIZ doesn't have mtf) mtf index to node - possibly in ol_mtf, or in mtf
-MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, 
-                      const char **snip_in_dict, uint32_t *snip_len,  // optional outs
-                      const char *func, uint32_t code_line)
+MtfNode *mtf_node_vb_do (const MtfContext *vb_ctx, uint32_t node_index, 
+                         const char **snip_in_dict, uint32_t *snip_len,  // optional outs
+                         const char *func, uint32_t code_line)
 {
-    ASSERT (ctx->dict_id.num, "Error in mtf_node_do: this ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
+    ASSERT (vb_ctx->dict_id.num, "Error in mtf_node_do: this vb_ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
-    ASSERT (mtf_i < ctx->mtf.len + ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
-            ctx->name, mtf_i, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len, func, code_line);
+    ASSERT (node_index < vb_ctx->mtf.len + vb_ctx->ol_mtf.len, "Error in mtf_node_do: out of range: dict=%s node_index=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
+            vb_ctx->name, node_index, (uint32_t)vb_ctx->mtf.len, (uint32_t)vb_ctx->ol_mtf.len, func, code_line);
 
-    bool is_ol = mtf_i < ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
+    bool is_ol = node_index < vb_ctx->ol_mtf.len; // is this entry from a previous vb (overlay buffer)
 
-    MtfNode *node = is_ol ? ENT (MtfNode, ctx->ol_mtf, mtf_i)
-                          : ENT (MtfNode, ctx->mtf, mtf_i - ctx->ol_mtf.len);
+    MtfNode *node = is_ol ? ENT (MtfNode, vb_ctx->ol_mtf, node_index)
+                          : ENT (MtfNode, vb_ctx->mtf, node_index - vb_ctx->ol_mtf.len);
 
     if (snip_in_dict) {
-        const Buffer *dict = is_ol ? &ctx->ol_dict : &ctx->dict;
+        const Buffer *dict = is_ol ? &vb_ctx->ol_dict : &vb_ctx->dict;
+        ASSERT0 (buf_is_allocated (dict), "Error in mtf_node_do: dict not allocated");
+
+        ASSERT ((int32_t)node->char_index + (int32_t)node->snip_len < (int32_t)dict->len, "Error in mtf_node_vb_do: snip out of range: node->char_index=%d + node->snip_len=%d >= %s->len=%u",
+                node->char_index, node->snip_len, is_ol ? "ol_dict" : "dict", (uint32_t)dict->len);
+
+        *snip_in_dict = ENT (char, *dict, node->char_index);
+    }
+
+    if (snip_len) *snip_len = node->snip_len;
+    
+    return node;
+}
+
+// ZIP only (PIZ doesn't have mtf) mtf index to node - possibly in ol_mtf, or in mtf
+MtfNode *mtf_node_zf_do (const MtfContext *zf_ctx, int32_t node_index, 
+                         const char **snip_in_dict, uint32_t *snip_len,  // optional outs
+                         const char *func, uint32_t code_line)
+{
+    ASSERT (zf_ctx->dict_id.num, "Error in mtf_node_do: this zf_ctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
+    
+    ASSERT (node_index > -2 - (int32_t)zf_ctx->ol_mtf.len && node_index < (int32_t)zf_ctx->mtf.len , "Error in mtf_node_do: out of range: dict=%s node_index=%d mtf.len=%u ol_mtf.len=%u. Caller: %s:%u",  
+            zf_ctx->name, node_index, (uint32_t)zf_ctx->mtf.len, (uint32_t)zf_ctx->ol_mtf.len, func, code_line);
+
+    bool is_singleton = node_index < 0; // is this entry from a previous vb (overlay buffer)
+
+    MtfNode *node = is_singleton ? ENT (MtfNode, zf_ctx->ol_mtf, -node_index - 2)
+                                 : ENT (MtfNode, zf_ctx->mtf, node_index);
+
+    if (snip_in_dict) {
+        const Buffer *dict = is_singleton ? &zf_ctx->ol_dict : &zf_ctx->dict;
         ASSERT0 (buf_is_allocated (dict), "Error in mtf_node_do: dict not allocated");
 
         *snip_in_dict = &dict->data[node->char_index];
@@ -141,7 +182,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, MtfContext *ctx,
             vb->line_i, vb->vblock_i, ctx->name);
             
     uint32_t word_index = is_v2_or_above ? base250_decode    (&iterator->next_b250)  // if this line has no non-GT subfields, it will not have a ctx 
-                                         : v1_base250_decode (&iterator->next_b250);
+                                         : vcf_v1_base250_decode (&iterator->next_b250);
 
     // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
     if (word_index == WORD_INDEX_MISSING_SF) {
@@ -190,37 +231,55 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, MtfContext *zf_ctx,
                                          const char *snip, uint32_t snip_len, uint32_t count,
                                          MtfNode **node, bool *is_new)  // out
 {
-    // attempt to get the node from the hash table
-    uint32_t new_mtf_i_if_no_old_one = zf_ctx->mtf.len;
+    // if this turns out to be a singelton - i.e. a new snip globally - where it goes depends on whether its a singleton in the VB 
+    // and whether we are allowed to move singletons to local. if its a singleton:
+    // 1. we keep it in ol_mtf and the index in the node is negative to indicate that
+    // 2. we insert it to ol_dict instead of dict - i.e. it doesn't get written the dict section
+    // 3. we move it to the local section of this vb
+    // 4. we set the word_index of its mtf to be the word_index of the SNIP_LOOKUP_TEXT snip
+    bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == CTX_LT_TEXT) && !(vb_ctx->flags & CTX_FL_NO_STONS)); // is singleton in this VB
 
-    int32_t existing_mtf_i = hash_get_entry_for_merge (zf_ctx, snip, snip_len, new_mtf_i_if_no_old_one, node);
-    if (existing_mtf_i != NIL) {
+    // attempt to get the node from the hash table
+    int32_t node_index = hash_get_entry_for_merge (zf_ctx, snip, snip_len, is_singleton_in_vb, node);
+    
+    // case: existing non-singleton node. Possibly it was a singleton node before, that thanks to us hash_get_entry_for_merge
+    // converted to non-singleton - i.e. node_index is always >= 0.
+    if (*node) { 
         *is_new = false;
-        (*node)->count = 2; // note singleton. note: for zf_ctx, we only care if its a singleton or not. 1=singleton, >1 not. (we don't keep the real count to avoid needing to bloat the nodes with an int64 count)
-        return existing_mtf_i; // snip was found in hash table - we're done
+        return (uint32_t)node_index; // >= 0
     }
     
-    // this snip was just added to the hash table - its a new snip
+    // NEW SNIP globally - this snip was just added to the hash table - either as a regular or singleton node
+    bool is_singleton_in_global = (node_index < 0);
+    Buffer *mtf = is_singleton_in_global ? &zf_ctx->ol_mtf : &zf_ctx->mtf;
+    ASSERT (mtf->len <= MAX_WORDS_IN_CTX, 
+            "Error: too many words in ctx %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
 
-    zf_ctx->mtf.len++; // we have a new dictionary item - this snip
+    buf_alloc (evb, mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, mtf->len), CTX_GROWTH, 
+               is_singleton_in_global ? "zf_ctx->ol_mtf" : "zf_ctx->mtf", zf_ctx->did_i);
 
-    ASSERT (zf_ctx->mtf.len < MAX_WORDS_IN_CTX, 
-            "Error: too many words in directory %s, max allowed number of words is is %u", zf_ctx->name, MAX_WORDS_IN_CTX);
-
-    buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * MAX(INITIAL_NUM_NODES, zf_ctx->mtf.len), CTX_GROWTH, 
-               "z_file->mtf_ctx->mtf", zf_ctx->did_i);
-    buf_set_overlayable (&zf_ctx->mtf);
-
-    *node = mtf_node (zf_ctx, new_mtf_i_if_no_old_one, NULL, NULL);
+    // set either singleton node or regular node with this snip
+    *node = LASTENT (MtfNode, *mtf);
     memset (*node, 0, sizeof(MtfNode)); // safety
-    (*node)->snip_len     = snip_len;
-    (*node)->char_index   = mtf_insert_to_dict (evb, zf_ctx, true, snip, snip_len);
-    (*node)->word_index.n = new_mtf_i_if_no_old_one;
-    (*node)->count        = count; // 1 if singleton, >1 if not.
-    
-    *is_new = true;
+    (*node)->snip_len   = snip_len;
+    (*node)->char_index = mtf_insert_to_dict (evb, zf_ctx, (is_singleton_in_global ? DICT_ZF_SINGLTON : DICT_ZF), snip, snip_len);
 
-    return new_mtf_i_if_no_old_one;
+    // case: vb singleton turns out to be a global singleton - we add it to local and return the SNIP_LOOKUP_TEXT node
+    // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
+    if (node_index < 0) {
+        seg_add_to_local_text (merging_vb, vb_ctx, snip, snip_len, 0);
+        
+        char lookup = SNIP_LOOKUP;
+        return mtf_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, &lookup, 1, 2 /* not singleton */, node, is_new);
+    }
+
+    // case: not singleton - we return this (new) node
+    else {
+        buf_set_overlayable (&zf_ctx->mtf);
+        (*node)->word_index.n = node_index;
+        *is_new = true;
+        return (uint32_t)node_index; // >= 0
+    }
 }
 
 uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx, 
@@ -232,19 +291,19 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
     if (!snip_len) 
         return (!snip || (segging_vb->data_type == DT_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
 
-    uint32_t new_mtf_i_if_no_old_one = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
+    uint32_t node_index_if_new = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
-    ASSERT (new_mtf_i_if_no_old_one <= MAX_WORDS_IN_CTX, 
+    ASSERT (node_index_if_new <= MAX_WORDS_IN_CTX, 
             "Error: ctx of %s is full (max allowed words=%u): ol_mtf.len=%u mtf.len=%u",
             vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     MtfNode *node;
-    int32_t existing_mtf_i = hash_get_entry_for_seg (segging_vb, vb_ctx, snip, snip_len, new_mtf_i_if_no_old_one, &node);
-    if (existing_mtf_i != NIL) {
+    int32_t existing_node_index = hash_get_entry_for_seg (segging_vb, vb_ctx, snip, snip_len, node_index_if_new, &node);
+    if (existing_node_index != NIL) {
         node->count++;
         if (is_new) *is_new = false;
-        return existing_mtf_i; // snip found - we're done
+        return existing_node_index; // snip found - we're done
     }
     
     // this snip isn't in the hash table - its a new snip
@@ -255,15 +314,15 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, MtfContext *vb_ctx,
 
     vb_ctx->mtf.len++; // new hash entry or extend linked list
 
-    node = mtf_node (vb_ctx, new_mtf_i_if_no_old_one, NULL, NULL);
+    node = mtf_node_vb (vb_ctx, node_index_if_new, NULL, NULL);
     memset (node, 0, sizeof(MtfNode)); // safety
     node->snip_len     = snip_len;
-    node->char_index   = mtf_insert_to_dict (segging_vb, vb_ctx, false, snip, snip_len);
-    node->word_index.n = new_mtf_i_if_no_old_one;
+    node->char_index   = mtf_insert_to_dict (segging_vb, vb_ctx, DICT_VB, snip, snip_len);
+    node->word_index.n = node_index_if_new;
     node->count++;
 
     if (is_new) *is_new = true;
-    return new_mtf_i_if_no_old_one;
+    return node_index_if_new;
 }
 
 // ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.
@@ -302,7 +361,9 @@ void mtf_clone_ctx (VBlock *vb)
 
         vb_ctx->did_i             = did_i;
         vb_ctx->dict_id           = zf_ctx->dict_id;
-        
+        vb_ctx->flags             = zf_ctx->flags;
+        vb_ctx->ltype        = zf_ctx->ltype;
+
         vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
         
         mtf_init_iterator (vb_ctx);
@@ -366,6 +427,8 @@ static MtfContext *mtf_add_new_zf_ctx (VBlock *merging_vb, const MtfContext *vb_
     zf_ctx->mutex_initialized = true;
     zf_ctx->did_i             = z_file->num_dict_ids; 
     zf_ctx->dict_id           = vb_ctx->dict_id;
+    zf_ctx->flags             = vb_ctx->flags;
+    zf_ctx->ltype        = vb_ctx->ltype;
     memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
 
     // only when the new entry is finalized, do we increment num_dict_ids, atmoically , this is because
@@ -398,21 +461,22 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
     zf_ctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     zf_ctx->txt_len += vb_ctx->txt_len; // for stats
+    zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->mtf.len; // number of new words in this dict from this VB
+    zf_ctx->num_singletons += vb_ctx->num_singletons; // add singletons created by seg (i.e. SNIP_LOOKUP_* in b250, and snip in local)
 
     if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
 
     uint32_t start_dict_len = zf_ctx->dict.len;
     uint32_t start_mtf_len  = zf_ctx->mtf.len;
-    
+ 
     if (!buf_is_allocated (&zf_ctx->dict)) {
 
         // first data for this dict (usually, but not always, vb_i=1) - move to zf_ctx and leave overlay
-        zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->mtf.len; // number of new words in this dict from this VB
 
         // thread safety note: zf_ctx buffers are already added to evb's buffer list by file_initialize_z_file_data
         // so these buf_move calls don't touch buf_lists and hence there is no possibility of conflict with the I/O thread
         // that might be concurently writing to its buffer list
-
+/*
         buf_move (evb, &zf_ctx->dict, merging_vb, &vb_ctx->dict);
         buf_set_overlayable (&zf_ctx->dict);
         buf_overlay (merging_vb, &vb_ctx->ol_dict, &zf_ctx->dict, "ctx->ol_dict", did_i);
@@ -420,13 +484,13 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
         buf_move (evb, &zf_ctx->mtf,  merging_vb, &vb_ctx->mtf);
         buf_set_overlayable (&zf_ctx->mtf);
         buf_overlay (merging_vb, &vb_ctx->ol_mtf, &zf_ctx->mtf, "ctx->ol_mtf", did_i);
-
+*/
         // allocate hash table, based on the statitics gather by this first vb that is merging this dict and 
         // populate the hash table without needing to reevalate the snips (we know none are in the hash table, but all are in mtf and dict)
         if (zf_ctx->global_hash.size <= 1) // only initial allocation in zip_dict_data_initialize
             hash_alloc_global (merging_vb, zf_ctx, vb_ctx);
-
-        // encode in base250 - to be used by zip_vcf_generate_genotype_one_section() and zip_generate_b250_section()
+/*
+        // encode in base250 - to be used by vcf_zip_generate_genotype_one_section() and zip_generate_b250_section()
         for (unsigned i=0; i < zf_ctx->mtf.len; i++) {
             MtfNode *zf_node = &((MtfNode *)zf_ctx->mtf.data)[i];
             zf_node->word_index = base250_encode (zf_node->word_index.n); // note that vb overlays this. also, vb_1 has been sorted so word_index != node_index
@@ -434,9 +498,9 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
             ASSERT (zf_node->word_index.n < zf_ctx->mtf.len, // sanity check
                     "Error: word_index=%u out of bound - mtf.len=%u, in dictionary %s", 
                     (uint32_t)zf_node->word_index.n, (uint32_t)zf_ctx->mtf.len, zf_ctx->name);
-        }
+        }*/
     }
-    else {
+    /*else */{
         // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
         // (vb_ctx->mtf contains only new words, old words from previous vbs are in vb_ctx->ol_mtf)
         for (unsigned i=0; i < vb_ctx->mtf.len; i++) {
@@ -451,7 +515,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
             ASSERT (zf_node_index >= 0 && zf_node_index < zf_ctx->mtf.len, "Error: zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vb_ctx->mtf.len);
 
-            // set word_index to be indexing the global dict - to be used by zip_vcf_generate_genotype_one_section() and zip_generate_b250_section()
+            // set word_index to be indexing the global dict - to be used by vcf_zip_generate_genotype_one_section() and zip_generate_b250_section()
             if (is_new)
                 vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index);
             else 
@@ -471,7 +535,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     if (added_chars) {
         // special optimization for the GL dictionary (it is ineffective with --optimize-GL that already optimizes GL)
         if (zf_ctx->dict_id.num == dict_id_FORMAT_GL && !flag_optimize_GL) 
-            start_dict = gl_optimize_dictionary ((VBlockVCFP)merging_vb, &zf_ctx->dict, &((MtfNode *)zf_ctx->mtf.data)[start_mtf_len], start_dict_len, added_words);
+            start_dict = gl_optimize_dictionary (merging_vb, &zf_ctx->dict, ENT (MtfNode, zf_ctx->mtf, start_mtf_len), start_dict_len, added_words);
 
         // we need to protect z_file->dict_data while we're writing to it. this ensures a single writer
         // to this data. we also need this mutex embedded in the zf_ctx->mutex, so that fragments of
@@ -516,7 +580,7 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
         mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
 }
 
-static void mtf_initialize_ctx (MtfContext *ctx, uint8_t did_i, DictIdType dict_id, uint8_t *dict_id_to_did_i_map)
+static void mtf_initialize_ctx (MtfContext *ctx, DataType dt, uint8_t did_i, DictIdType dict_id, uint8_t *dict_id_to_did_i_map)
 {
     ctx->did_i   = did_i;
     ctx->dict_id = dict_id;
@@ -528,11 +592,32 @@ static void mtf_initialize_ctx (MtfContext *ctx, uint8_t did_i, DictIdType dict_
     
     if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
         dict_id_to_did_i_map[dict_id.map_key] = did_i;
+/*
+    // ZIP set flags (in PIZ the flags are set from the b250/local section headers)
+    if (command == ZIP) {
+        static struct { DataType dt; uint64_t *dict_id_num; uint8_t ltype ; uint8_t flags; } flags_by_dict_id[] = FLAGS_BY_DICT_ID;
+        for (unsigned i=0; i < sizeof(flags_by_dict_id)/sizeof(flags_by_dict_id[0]); i++) {
+            if (flags_by_dict_id[i].dt == dt && *flags_by_dict_id[i].dict_id_num == dict_id.num) {
+                ctx->flags      = flags_by_dict_id[i].flags;
+                ctx->ltype = flags_by_dict_id[i].ltype;
+                break;
+            }
+
+            // CTX_FL_NO_STONS if ltype is not TEXT
+            if (ctx->ltype != CTX_LT_TEXT) ctx->flags |= CTX_FL_NO_STONS;
+
+            // CTX_FL_NO_STONS if ctx is chrom
+            if (ctx->did_i != DTFZ (chrom))     ctx->flags |= CTX_FL_NO_STONS;
+        }
+
+        if (flag_debug_no_singletons) ctx->flags |= CTX_FL_NO_STONS;
+    }*/
 }
 
 // PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
-// or returns NIL, if not. Called by subfield mapper functions only.
-uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
+// or returns NIL, if not. Called by subfield mapper functions only. NOTE: if ctx is local only (not dict)
+// then it will NOT be found, as it is not in z_file
+uint8_t mtf_get_existing_did_i_from_z_file (DictIdType dict_id)
 {
     // attempt to get did_i from dict_id mapper
     uint8_t did_i = z_file->dict_id_to_did_i_map[dict_id.map_key];
@@ -544,10 +629,22 @@ uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id)
     return DID_I_NONE; // not found
 }
 
+uint8_t mtf_get_existing_did_i (VBlockP vb, DictIdType dict_id)
+{
+    uint8_t did_i = vb->dict_id_to_did_i_map[dict_id.map_key];
+    if (did_i != DID_I_NONE && vb->mtf_ctx[did_i].dict_id.num == dict_id.num) return did_i;
+
+    for (did_i=0; did_i < vb->num_dict_ids; did_i++) 
+        if (dict_id.num == vb->mtf_ctx[did_i].dict_id.num) return did_i;
+
+    return DID_I_NONE; // not found
+}
+
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
 MtfContext *mtf_get_ctx_if_not_found_by_inline (
     MtfContext *mtf_ctx /* an array */, 
+    DataType dt, 
     uint8_t *dict_id_to_did_i_map, 
     uint8_t did_i,
     unsigned *num_dict_ids, 
@@ -560,6 +657,26 @@ MtfContext *mtf_get_ctx_if_not_found_by_inline (
         for (did_i=0; did_i < *num_dict_ids; did_i++) 
             if (dict_id.num == mtf_ctx[did_i].dict_id.num) goto done;
 
+    // PIZ only: check if its an alias
+    if (command != ZIP && dict_id_aliases) {
+        for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
+            if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
+
+                // get the context of the dst dictionary (+ create it if it doesn't exist yet)
+                MtfContext *dst_ctx = mtf_get_ctx_do (mtf_ctx, dt, dict_id_to_did_i_map, num_dict_ids, num_subfields,
+                                                      dict_id_aliases[alias_i].dst);
+
+                ASSERT (dst_ctx, "Error in mtf_get_ctx_if_not_found_by_inline: cannot find ctx of %.*s which is the destination of the alias %.*s",
+                        DICT_ID_LEN, dict_id_printable (dict_id_aliases[alias_i].dst).id, DICT_ID_LEN, dict_id_printable (dict_id_aliases[alias_i].alias).id);
+                        
+                // if have room in the map - add the alias there pointing to the dst did_i
+                if (did_i == DID_I_NONE) 
+                    dict_id_to_did_i_map[dict_id_aliases[alias_i].alias.map_key] = dst_ctx->did_i;
+
+                return dst_ctx;
+            }
+    }
+
     did_i = *num_dict_ids; // note: *num_dict_ids cannot be updated until ctx is initialized, see comment below
     
     MtfContext *ctx = &mtf_ctx[did_i]; 
@@ -568,7 +685,7 @@ MtfContext *mtf_get_ctx_if_not_found_by_inline (
     ASSERT (*num_dict_ids+1 < MAX_DICTS, 
             "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
 
-    mtf_initialize_ctx (ctx, did_i, dict_id, dict_id_to_did_i_map);
+    mtf_initialize_ctx (ctx, dt, did_i, dict_id, dict_id_to_did_i_map);
 
     // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
@@ -598,7 +715,20 @@ void mtf_initialize_primary_field_ctxs (MtfContext *mtf_ctx /* an array */,
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         const char *fname  = dt_fields[dt].names[f];
         DictIdType dict_id = dict_id_field (dict_id_make (fname, strlen(fname)));
-        mtf_initialize_ctx (&mtf_ctx[f], f, dict_id, dict_id_to_did_i_map);
+
+        // check if its an alias
+        MtfContext *dst_ctx  = NULL;
+        for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
+            if (dict_id.num == dict_id_aliases[alias_i].alias.num) 
+                dst_ctx = mtf_get_zf_ctx (dict_id_aliases[alias_i].dst);
+
+        if (!dst_ctx) // normal field, not an alias
+            mtf_initialize_ctx (&mtf_ctx[f], dt, f, dict_id, dict_id_to_did_i_map);
+
+        else { // an alias
+            mtf_ctx[f].did_i = dst_ctx->did_i;
+            dict_id_to_did_i_map[dict_id.map_key] = dst_ctx->did_i;        
+        }
     }
 }
 
@@ -615,7 +745,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // compute threads might be using these dictionaries. This is ok, bc the dispatcher thread makes
     // sure we integrate dictionaries from vbs by order - so that running compute threads never
     // need to access the new parts of dictionaries. We also pre-allocate the dictionaries in
-    // header_genozip_to_txt() so that they don't need to be realloced. dict.len may be accessed
+    // txtfile_genozip_to_txt_header() so that they don't need to be realloced. dict.len may be accessed
     // by compute threads, but its change is assumed to be atomic, so that no weird things will happen
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)section_data;
 
@@ -633,7 +763,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
-    MtfContext *zf_ctx = mtf_get_ctx_do (z_file->mtf_ctx, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id);
+    MtfContext *zf_ctx = mtf_get_ctx_do (z_file->mtf_ctx, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id);
     
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
@@ -709,9 +839,9 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 
             // count dictionaries of genotype data subfields
             // note: this is needed only for V1 files...
-            if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vb_ctx->dict_id)) {
-
-                ASSERT (++((VBlockVCFP)vb)->num_format_subfields <= MAX_SUBFIELDS, 
+            if (!is_v2_or_above && dict_id_is_vcf_format_sf (vb_ctx->dict_id)) {
+                vb->num_type2_subfields++;
+                ASSERT (vb->num_type2_subfields <= MAX_SUBFIELDS, 
                         "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 
                         z_name, MAX_SUBFIELDS, vb->vblock_i);
             }
@@ -829,7 +959,9 @@ void mtf_free_context (MtfContext *ctx)
     ctx->global_hash_prime = 0;
     ctx->merge_num = 0;
     ctx->mtf_len_at_1_3 = ctx->mtf_len_at_2_3 = 0;
-    ctx->txt_len = ctx->next_local = 0;
+    ctx->txt_len = ctx->next_local = ctx->num_singletons = ctx->num_failed_singletons = 0;
+    ctx->last_delta = ctx->last_value = 0;
+    ctx->last_line_i = 0;
     memset ((char*)ctx->name, 0, sizeof(ctx->name));
 
     if (ctx->mutex_initialized) {

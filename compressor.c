@@ -252,7 +252,7 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
     }
 
     // get next line if we have no data - keep on calling back until there is a line with data 
-    // (not all lines must have seq data - for example, in FASTA they don't)
+    // (not all lines must have seq data - for example, in FASTA they don't or SAM optional fields BI/BD/E2/U2 might not appear on every line)
     while (instream->line_i < ((VBlockP)instream->vb)->lines.len && 
            !instream->avail_in_1 && !instream->avail_in_2) {
 
@@ -374,6 +374,10 @@ bool comp_compress_lzma (VBlock *vb,
     return success;
 }
 
+// -----------------------------------------------------
+// plain (no compression) stuff
+// -----------------------------------------------------
+
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool comp_compress_none (VBlock *vb, 
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
@@ -381,12 +385,23 @@ bool comp_compress_none (VBlock *vb,
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
-    ASSERT0 (uncompressed, "Error in comp_compress_none: only option 1 supported in the mean time");
-
     if (*compressed_len < uncompressed_len && soft_fail) return false;
     ASSERT0 (*compressed_len >= uncompressed_len, "Error in comp_compress_none: compressed_len too small");
-    
-    memcpy (compressed, uncompressed, uncompressed_len);
+
+    if (callback) {
+        char *next = compressed;
+        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
+            char *start1, *start2;
+            uint32_t len1, len2;        
+            callback (vb, line_i, &start1, &len1, &start2, &len2);
+            memcpy (next, start1, len1);
+            next += len1;
+            memcpy (next, start2, len2);
+            next += len2;
+        }
+    }
+    else
+        memcpy (compressed, uncompressed, uncompressed_len);
 
     *compressed_len = uncompressed_len;
 
@@ -400,7 +415,7 @@ bool comp_error (VBlock *vb, const char *uncompressed, uint32_t uncompressed_len
     return false;
 }
 
-#define MIN_LEN_FOR_COMPRESSION 30 // less that this size its not worth compressing
+#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
 
 // compresses data - either a conitguous block or one line at a time. If both are NULL that there is no data to compress.
 void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
@@ -435,7 +450,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     }
 
     // if there's no data to compress, or its too small, don't compress
-    if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION && !callback) 
+    if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION) 
         header->sec_compression_alg = COMP_PLN;
 
     uint32_t est_compressed_len = 

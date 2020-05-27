@@ -32,7 +32,7 @@ extern uint32_t base250_decode (const uint8_t **str_p); // decodes and advances 
 #define base250_copy(dst, b250) memcpy (dst, (b250).encoded.numerals, base250_len((b250).encoded.numerals))
 
 // v1 compatibility
-extern uint32_t v1_base250_decode (const uint8_t **str);
+extern uint32_t vcf_v1_base250_decode (const uint8_t **str);
 #define v1_base250_len(data) ((*(data) <= 252) ? 1 : *(data) - 250) // 3 or 4 or 5
 
 #endif

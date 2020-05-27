@@ -13,7 +13,7 @@
 #include "dict_id.h"
 #include "section_types.h"
 
-#define MAX_WORDS_IN_CTX 0x7fffffff // limit on mtf.len, word_list.len - partly because hash uses signed int32_t
+#define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on mtf.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
 // fake mtf index values that go into genotype_data after segregation if subfields are missing
 #define WORD_INDEX_MAX_INDEX  0xfffffffcUL // the number just smaller than all the special values below
@@ -22,14 +22,31 @@
 #define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
-#define SNIP_SEP           '\0'   // Seperator between snips - both for dict and local 
-#define PIZ_SNIP_SEP       (is_v5_or_above ? SNIP_SEP : '\t') // for use by PIZ
-#define SNIP_LOOKUP_UINT32 '\1'   // Lookup from local containing big endian uint32   
-#define SNIP_LOOKUP_TEXT   '\2'   // Lookup from local containing snips separated by SNIP_SEP
-#define SNIP_VERBTIM       '\3'   // Appears as first character in the SNIP, tell PIZ to copy the remainder of the snip as is without special handing
-#define SNIP_STRUCTURED    '\4'   // Appears as first character in the SNIP, followed by a specification of a structured field
+#define SNIP_SEP                 '\0'   // Seperator between snips - both for dict and local 
+#define PIZ_SNIP_SEP             (is_v5_or_above ? SNIP_SEP : '\t') // PIZ_SNIP_SEP must be used instead of SNIP_SEP, if there's any chance the code might be executed for PIZ of a VCF of an older version.
+#define SNIP_LOOKUP              '\1'   // Lookup from local 
+#define SNIP_OTHER_LOOKUP        '\2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
+#define SNIP_STRUCTURED          '\3'   // Appears as first character in the SNIP, followed by a specification of a structured field
+#define SNIP_SELF_DELTA          '\4'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
+#define SNIP_OTHER_DELTA         '\5'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictIdType dict_id, int32_t delta, bool update_other} in base64)
+#define SNIP_SPECIAL             '\6'   // Special algorithm followed by ID of the algorithm 
+#define SNIP_REDIRECTION         '\7'   // Get the data from another dict_id (can be in b250, local...)
 
-#define MAX_AoS_ITEMS 10
+// structured snip: it starts with SNIP_STRUCTURED, following by a base64 of a big endian Structured
+#pragma pack(1)
+#define STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT 0x01
+#define STRUCTURED_MAX_REPEATS 65534
+typedef struct Structured {
+    uint16_t repeats;     // number of "repeats" (array elements)
+    uint8_t num_items;    // 1 to MAX_STRUCTURED_ITEMS
+    uint8_t flags;
+    struct {
+        DictIdType dict_id;  
+        char seperator;
+    } items[MAX_SUBFIELDS];
+} Structured;
+#pragma pack()
+#define sizeof_structured(st) (sizeof(st) - sizeof((st).items) + (st).num_items * sizeof((st).items[0]))
 
 #ifndef DID_I_NONE // also defined in vblock.h
 #define DID_I_NONE   255
@@ -52,22 +69,54 @@ typedef struct { // initialize with mtf_init_iterator()
     int32_t prev_word_index;   // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
 
+// these values and flags are part of the file format (in SectionHeaderCtx.flags) - so values cannot be changed easily
+// CTX_LT_* values are consistent with BAM optional 'B' types (and extend them)
+#define CTX_LT_TEXT        0
+#define CTX_LT_INT8        1    
+#define CTX_LT_UINT8       2
+#define CTX_LT_INT16       3
+#define CTX_LT_UINT16      4
+#define CTX_LT_INT32       5
+#define CTX_LT_UINT32      6 
+#define CTX_LT_INT64       7    // ffu
+#define CTX_LT_UINT64      8    // ffu
+#define CTX_LT_FLOAT32     9    // ffu
+#define CTX_LT_FLOAT64     10   // ffu
+#define CTX_LT_SEQUENCE    11   // length of data extracted is determined by vb->seq_len
+#define NUM_CTX_LT         12
+extern const char ctx_lt_to_sam_map[NUM_CTX_LT];
+extern const int ctx_lt_sizeof_one[NUM_CTX_LT];
+extern const bool ctx_lt_is_signed[NUM_CTX_LT];
+extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
+
+#define CTX_FL_NO_STONS    0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
+#define CTX_FL_LOCAL_LZMA  0x02 // compress local with lzma
+#define CTX_FL_STORE_VALUE 0x04 // the values of this ctx are uint32_t, and are a basis for a delta calculation (by this field or another one)
+#define CTX_FL_STRUCTURED  0x08 // snips usually contain Structured
+#define CTX_FL_POS         0x03 // A POS field that stores a delta vs. a different field
+#define CTX_FL_POS_BASE    0x07 // A POS field that is the base for delta calculations (with itself and/or other fields)
+#define CTX_FL_ID          0x03 // An ID field that is split between a numeric component in local and a textual component in b250
+
 typedef struct MtfContext {
     // ----------------------------
     // common fields for ZIP & PIZ
     // ----------------------------
-    unsigned did_i;            // the index of this ctx within the array vb->mtf_ctx
-    DictIdType dict_id;        // which dict_id is this MTF dealing with
     const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
+    uint8_t did_i;             // the index of this ctx within the array vb->mtf_ctx
+    uint8_t ltype;        // CTX_LT_*
+    uint8_t flags;             // CTX_*
+    DictIdType dict_id;        // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. 
-    Buffer local;              // VB only (not z_file): Data private to this VB that is not in the dictionary
-    
+    Buffer local;              // VB: Data private to this VB that is not in the dictionary
+
     // ----------------------------
     // ZIP only fields
     // ----------------------------
-    Buffer ol_dict;            // tab-delimited list of all unique snips - overlayed all previous VB dictionaries
+    Buffer ol_dict;            // VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
+                               // zfile: singletons are stored here
     Buffer ol_mtf;             // MTF nodes - overlayed all previous VB dictionaries. char/word indeces are into ol_dict.
+                               // zfile: nodes of singletons
     Buffer mtf;                // array of MtfNode - in this VB that don't exist in ol_mtf. char/word indeces are into dict.
     Buffer mtf_i;              // contains 32bit indeces into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
     
@@ -86,12 +135,17 @@ typedef struct MtfContext {
                                // in zf_ctx: incremented with every merge into this ctx.
     // the next 2 are used in merge to set the size of the global hash table, when the first vb to create a ctx does so
     uint32_t mtf_len_at_1_3, mtf_len_at_2_3;  // value of mtf->len after an estimated 1/3 + 2/3 of the lines have been segmented
+    
+    // stats
+    uint64_t txt_len;          // How many characters in the txt file are accounted for by snips in this ctx (for stats)
+    uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
+    uint32_t num_failed_singletons;// Words that we wrote into local in one VB only to discover later that they're not a singleton, and wrote into the global dict too
 
-    // used by zf_ctx only in ZIP only    
+    // ----------------------------
+    // ZIP in z_file only
+    // ----------------------------
     pthread_mutex_t mutex;     // MtfContext in z_file (only) is protected by a mutex 
     bool mutex_initialized;
-    
-    uint64_t txt_len;          // How many characters in the txt file are accounted for by snips in this ctx (for stats)
     
     // ----------------------------
     // PIZ only fields
@@ -100,36 +154,42 @@ typedef struct MtfContext {
     SnipIterator iterator;     // PIZ only: used to iterate on the context, reading one b250 word_index at a time
     uint32_t next_local;       // PIZ only: iterator on MtfContext.local
 
+    uint32_t last_line_i;      // PIZ only: the last line_i this ctx was encountered
+    int64_t last_value;        // PIZ only: last value from which to conduct a delta. 
+    int64_t last_delta;        // PIZ only: last delta value calculated
 } MtfContext;
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75
 
-static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; }
+static inline void mtf_init_iterator (MtfContext *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
 extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, MtfContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
 extern uint32_t mtf_get_next_snip (VBlockP vb, MtfContext *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
 extern int32_t mtf_search_for_word_index (MtfContext *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VBlockP vb);
-extern MtfNode *mtf_node_do (const MtfContext *ctx, uint32_t mtf_i, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
-#define mtf_node(ctx, mtf_i, snip_in_dict, snip_len) mtf_node_do(ctx, mtf_i, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
+extern MtfNode *mtf_node_vb_do (const MtfContext *ctx, uint32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+#define mtf_node_vb(ctx, node_index, snip_in_dict, snip_len) mtf_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
+extern MtfNode *mtf_node_zf_do (const MtfContext *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+#define mtf_node_zf(ctx, node_index, snip_in_dict, snip_len) mtf_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
 
-extern MtfContext *mtf_get_ctx_if_not_found_by_inline (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id);
+extern MtfContext *mtf_get_ctx_if_not_found_by_inline (MtfContext *mtf_ctx, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, (dict_id))
-#define mtf_get_ctx_sf(vb,num_subfields,dict_id) mtf_get_ctx_do (vb->mtf_ctx, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (num_subfields), (dict_id))
-static inline MtfContext *mtf_get_ctx_do (MtfContext *mtf_ctx, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id)
+#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, (dict_id))
+#define mtf_get_ctx_sf(vb,num_subfields,dict_id) mtf_get_ctx_do (vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (num_subfields), (dict_id))
+static inline MtfContext *mtf_get_ctx_do (MtfContext *mtf_ctx, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id)
 {
     uint8_t did_i = dict_id_to_did_i_map[dict_id.map_key];
     if (did_i != DID_I_NONE && mtf_ctx[did_i].dict_id.num == dict_id.num) 
         return &mtf_ctx[did_i];
     else    
-        return mtf_get_ctx_if_not_found_by_inline (mtf_ctx, dict_id_to_did_i_map, did_i, num_dict_ids, num_subfields, dict_id);
+        return mtf_get_ctx_if_not_found_by_inline (mtf_ctx, dt, dict_id_to_did_i_map, did_i, num_dict_ids, num_subfields, dict_id);
 }
 
-extern uint8_t mtf_get_existing_did_i_by_dict_id (DictIdType dict_id);
+extern uint8_t mtf_get_existing_did_i (VBlockP vb, DictIdType dict_id);
+extern uint8_t mtf_get_existing_did_i_from_z_file (DictIdType dict_id);
 
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);

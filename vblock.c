@@ -10,7 +10,6 @@
 #include "move_to_front.h"
 #include "vblock.h"
 #include "file.h"
-#include "header.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;
@@ -18,215 +17,22 @@ static VBlockPool *pool = NULL;
 // one VBlock outside of pool
 VBlock *evb = NULL;
 
-//--------------------------------
-// VCF stuff
-//--------------------------------
-
-// cleanup vb (except common) and get it ready for another usage (without freeing memory held in the Buffers)
-void vb_vcf_release_vb (VBlock *vb_) 
-{
-    VBlockVCF *vb = (VBlockVCF *)vb_;
-
-    for (unsigned i=0; i < vb->num_sample_blocks; i++) {
-        if (vb->haplotype_sections_data) buf_free(&vb->haplotype_sections_data[i]);
-        if (vb->genotype_sections_data)  buf_free(&vb->genotype_sections_data[i]);
-        if (vb->phase_sections_data)     buf_free(&vb->phase_sections_data[i]);
-    }
-
-    vb->ploidy = vb->num_haplotypes_per_line = 0;
-    vb->has_genotype_data = vb->has_haplotype_data = false;
-    vb->phase_type = PHASE_UNKNOWN;
-    vb->max_gt_line_len = vb->max_genotype_section_len = 0;
-
-    buf_free(&vb->line_gt_data);
-    buf_free(&vb->line_ht_data);
-    buf_free(&vb->line_phase_data);
-
-    buf_free(&vb->sample_iterator);
-    buf_free(&vb->genotype_one_section_data);
-    buf_free(&vb->is_sb_included);
-    buf_free(&vb->genotype_section_lens_buf);
-
-    buf_free (&vb->format_mapper_buf);
-    buf_free (&vb->iname_mapper_buf);
-
-    vb->num_info_subfields = vb->num_format_subfields = 0;
-
-    buf_free(&vb->optimized_gl_dict);
-    buf_free(&vb->haplotype_permutation_index);
-    buf_free(&vb->haplotype_permutation_index_squeezed);
-    
-    buf_free(&vb->gt_sb_line_starts_buf);
-    buf_free(&vb->gt_sb_line_lengths_buf);
-    buf_free(&vb->helper_index_buf);
-    buf_free(&vb->ht_columns_data);
-    buf_free(&vb->column_of_zeros);
-
-    buf_free(&vb->gtshark_db_db_data);
-    buf_free(&vb->gtshark_db_gt_data);
-    buf_free(&vb->gtshark_exceptions_line_i);
-    buf_free(&vb->gtshark_exceptions_ht_i);
-    buf_free(&vb->gtshark_exceptions_allele);
-    buf_free(&vb->gtshark_vcf_data);
-
-    // backward compatibility with genozip v1
-    buf_free(&vb->v1_subfields_start_buf);        
-    buf_free(&vb->v1_subfields_len_buf);
-    buf_free(&vb->v1_num_subfields_buf);
-    buf_free(&vb->v1_variant_data_section_data);
-}
-
-void vb_vcf_destroy_vb (VBlock *vb_)
-{
-    VBlockVCF *vb = (VBlockVCF *)vb_;
-
-    for (unsigned i=0; i < vb->num_sample_blocks; i++) {
-        if (vb->haplotype_sections_data) buf_destroy (&vb->haplotype_sections_data[i]);
-        if (vb->genotype_sections_data)  buf_destroy (&vb->genotype_sections_data[i]);
-        if (vb->phase_sections_data)     buf_destroy (&vb->phase_sections_data[i]);
-    }
-
-    buf_destroy (&vb->line_gt_data);
-    buf_destroy (&vb->line_ht_data);
-    buf_destroy (&vb->line_phase_data);
-    buf_destroy (&vb->sample_iterator);
-    buf_destroy (&vb->genotype_one_section_data);
-    buf_destroy (&vb->is_sb_included);
-    buf_destroy (&vb->genotype_section_lens_buf);
-    buf_destroy (&vb->format_mapper_buf);
-    buf_destroy (&vb->iname_mapper_buf);
-    buf_destroy (&vb->optimized_gl_dict);
-    buf_destroy (&vb->haplotype_permutation_index);
-    buf_destroy (&vb->haplotype_permutation_index_squeezed);
-    buf_destroy (&vb->gt_sb_line_starts_buf);
-    buf_destroy (&vb->gt_sb_line_lengths_buf);
-    buf_destroy (&vb->helper_index_buf);
-    buf_destroy (&vb->ht_columns_data);
-    buf_destroy (&vb->format_mapper_buf);
-    buf_destroy (&vb->column_of_zeros);
-    buf_destroy (&vb->gtshark_db_db_data);
-    buf_destroy (&vb->gtshark_db_gt_data);
-    buf_destroy (&vb->gtshark_exceptions_line_i);
-    buf_destroy (&vb->gtshark_exceptions_ht_i);
-    buf_destroy (&vb->gtshark_exceptions_allele);
-    buf_destroy (&vb->gtshark_vcf_data);
-    buf_destroy (&vb->v1_subfields_start_buf);        
-    buf_destroy (&vb->v1_subfields_len_buf);
-    buf_destroy (&vb->v1_num_subfields_buf);
-    buf_destroy (&vb->v1_variant_data_section_data);
-}
-
-// freeing arrays of buffers allocated by calloc 
-static void vb_vcf_free_buffer_array (Buffer **buf_array, unsigned buf_array_len)
-{
-    if (! (*buf_array)) return; // array not allocated - nothing to do
-
-    for (unsigned i=0; i < buf_array_len; i++) 
-        buf_destroy (&(*buf_array)[i]);
-
-    FREE (*buf_array);
-    *buf_array = NULL;
-}
-
-// free memory allocations that assume subsequent files will have the same number of samples.
-void vb_vcf_cleanup_memory (VBlock *vb_)
-{
-    VBlockVCF *vb = (VBlockVCF *)vb_;
-
-    vb_vcf_free_buffer_array (&vb->genotype_sections_data, vb->num_sample_blocks);
-    vb_vcf_free_buffer_array (&vb->haplotype_sections_data, vb->num_sample_blocks);
-    vb_vcf_free_buffer_array (&vb->phase_sections_data, vb->num_sample_blocks);
-    vb->num_sample_blocks = 0;
-}
-
-//--------------------------------
-// SAM stuff
-//--------------------------------
-
-void vb_sam_initialize_vb (VBlock *vb_)
-{
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-
-    vb->rname_index_minus_1 = vb->rname_index_minus_2 = vb->rname_index_minus_3 = (uint32_t)-1;
-}
-
-void vb_sam_release_vb (VBlock *vb_)
-{
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-
-    vb->last_tlen_abs_len = vb->last_pnext_delta = 0;
-    vb->rname_index_minus_1 = vb->rname_index_minus_2 = vb->rname_index_minus_3 = 0;
-    vb->last_tlen_abs = 0;
-    vb->last_tlen_is_positive = 0;
-    
-    memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
-    
-    buf_free (&vb->optional_mapper_buf);
-}
-
-// free all memory of a VB
-void vb_sam_destroy_vb (VBlock *vb_)
-{
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-
-    buf_destroy (&vb->optional_mapper_buf);
-}
-
-//--------------------------------
-// FASTQ & FASTA stuff
-//--------------------------------
-
-void vb_fast_release_vb (VBlock *vb_)
-{
-    VBlockFAST *vb = (VBlockFAST *)vb_;
-
-    vb->last_line = 0;
-    vb->fasta_prev_vb_last_line_was_grepped = 0;
-    vb->grep_stages = 0;
-    
-    memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
-}
-
-//--------------------------------
-// GFF3 stuff
-//--------------------------------
-
-void vb_gff3_release_vb (VBlock *vb_)
-{
-    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
-
-    vb->num_info_subfields = 0;
-    vb->last_id = 0;
-    
-    buf_free (&vb->iname_mapper_buf);
-}
-
-// free all memory of a VB
-void vb_gff3_destroy_vb (VBlock *vb_)
-{
-    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
-
-    buf_destroy (&vb->iname_mapper_buf);
-}
-
-//--------------------------------
-// Non-type-specific stuff
-//--------------------------------
-
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
 void vb_release_vb (VBlock *vb) 
 {
     if (!vb) return; // nothing to release
 
     vb->first_line = vb->vblock_i = vb->txt_data_next_offset = 0;
-    vb->vb_data_size = vb->vb_data_read_size = vb->last_pos = vb->longest_line_len = vb->line_i = 0;
-    vb->ready_to_dispatch = vb->is_processed = false;
+    vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->grep_stages = 0;
+    vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = 0;
-    vb->chrom_node_index = 0; 
+    vb->chrom_node_index = vb->seq_len = 0; 
     vb->vb_position_txt_file = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
-
+    vb->dont_show_curr_line = false;    
+    vb->num_type1_subfields = vb->num_type2_subfields = 0;
+    
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
 
@@ -289,7 +95,7 @@ void vb_destroy_vb (VBlockP *vb_p)
         buf_destroy (&vb->compress_bufs[i]);
 
     // destory data_type -specific buffers
-    if (vb->data_type != DT_NONE)
+    if (vb->data_type != DT_NONE && DTP(destroy_vb))
         DTP(destroy_vb)(vb);
 
     FREE (vb);
@@ -338,7 +144,8 @@ VBlock *vb_get_vb (unsigned vblock_i)
         }
         
         if (!pool->vb[vb_i]) { // VB is not allocated - allocate it
-            pool->vb[vb_i] = calloc (DTPZ(sizeof_vb), 1); 
+            unsigned sizeof_vb = DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock);
+            pool->vb[vb_i] = calloc (sizeof_vb, 1); 
             pool->num_allocated_vbs++;
             pool->vb[vb_i]->data_type = z_file->data_type;
         }
@@ -356,10 +163,6 @@ VBlock *vb_get_vb (unsigned vblock_i)
     vb->buffer_list.vb = vb;
     memset (vb->dict_id_to_did_i_map, DID_I_NONE, sizeof(vb->dict_id_to_did_i_map));
 
-    // initialize data-type-specific fields
-    if (vb->data_type != DT_NONE && DTPZ(initialize_vb))    
-        DTPZ(initialize_vb)(vb);
-
     return vb;
 }
 
@@ -371,19 +174,7 @@ void vb_cleanup_memory (void)
         if (vb && vb->data_type != DT_NONE && DTPZ(cleanup_memory))
             DTPZ(cleanup_memory)(vb);
     }
-
-    global_vcf_num_samples = 0;
 }
-
-unsigned vb_vcf_num_samples_in_sb (const VBlockVCF *vb, unsigned sb_i)
-{
-    // case: last block has less than a full block of samples
-    if (sb_i == vb->num_sample_blocks-1 && global_vcf_num_samples % vb->num_samples_per_block)
-        return global_vcf_num_samples % vb->num_samples_per_block;
-
-    else
-        return vb->num_samples_per_block;
-} 
 
 // NOT thread safe, use only in execution-terminating messages
 const char *err_vb_pos (void *vb)

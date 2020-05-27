@@ -14,37 +14,6 @@ extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_s
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);
 extern void piz_map_iname_subfields (VBlockP vb);
 
-// ----------------------
-// VCF stuff
-// ----------------------
-extern bool piz_vcf_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern void piz_vcf_uncompress_vb(); // no parameter - implicit casting of VBlockP to VBlockVCFP
-extern void v2v3_piz_vcf_map_iname_subfields (BufferP vb);
-
-// ----------------------
-// SAM stuff
-// ----------------------
-extern void piz_sam_reconstruct_vb ();
-
-// ----------------------
-// FASTQ + FASTA stuff
-// ----------------------
-extern bool piz_fast_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern bool piz_fast_test_grep (VBlockFASTP vb);
-extern void piz_fasta_reconstruct_vb(); // no parameter - implicit casting of VBlockP to VBlockFASTP
-extern void piz_fastq_reconstruct_vb();
-
-// ----------------------
-// GFF3 stuff
-// ----------------------
-extern bool piz_gff3_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern void piz_gff3_reconstruct_vb(); // no parameter - implicit casting of VBlockP to VBlockGFF3P
-
-// ----------------------
-// 23andMe stuff
-// ----------------------
-extern void piz_me23_reconstruct_vb (VBlockP vb);
-
 // ----------------------------------------------
 // utilities for use by piz_*_read_one_vb
 // ----------------------------------------------
@@ -87,21 +56,16 @@ extern void piz_map_compound_field (VBlockP vb, bool (*predicate)(DictIdType), S
 // utilities for use by piz_*_reconstruct_vb
 // ----------------------------------------------
 
-extern uint32_t piz_reconstruct_from_ctx (VBlockP vb, uint8_t did_i, const char *sep, unsigned sep_len);
+extern uint32_t piz_reconstruct_from_ctx_do (VBlockP vb, uint8_t did_i, char sep);
+#define piz_reconstruct_from_ctx(vb,did_i,sep) piz_reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep))
 
-extern void piz_reconstruct_from_local_text (VBlockP vb, MtfContextP ctx);
-
-extern void piz_reconstruct_compound_field (VBlockP vb, SubfieldMapperP mapper, const char *separator, unsigned separator_len, 
-                                            const char *template, unsigned template_len);
-
-extern void piz_reconstruct_seq_qual (VBlockP vb, MtfContext *ctx, uint32_t seq_len, bool grepped_out);
+extern void piz_reconstruct_one_snip (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len);
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, uint8_t did_i, DictIdType dict_id);
 
 extern void piz_reconstruct_info (VBlockP vb, uint32_t iname_word_index, 
                                   const char *iname_snip, unsigned iname_snip_len, 
-                                  PizReconstructSpecialInfoSubfields reconstruct_special_info_subfields,
-                                  bool *has_13);
+                                  PizReconstructSpecialInfoSubfields reconstruct_special_info_subfields, bool *has_13);
 
 typedef struct PizSubfieldMapper {
     uint8_t num_subfields;        
@@ -115,8 +79,11 @@ typedef struct PizSubfieldMapper {
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (s), (len))
 #define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c
-#define RECONSTRUCT_SEP(s,len,sep) { RECONSTRUCT((s), (len)); RECONSTRUCT (sep, 1); }
-#define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, "\t")
+#define RECONSTRUCT_SEP(s,len,sep) { RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); }
+#define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
+
+#define RECONSTRUCT_INT(n) unsigned n_len = str_int ((n), AFTERENT (char, vb->txt_data)); /* not in a block because some need access to n_len */ \
+                           vb->txt_data.len += n_len; 
 
 #define RECONSTRUCT_FROM_DICT(did_i,add_tab) /* not a block so caller get the return value of mtf_get_next_snip */ \
     LOAD_SNIP (did_i);\
@@ -130,26 +97,6 @@ typedef struct PizSubfieldMapper {
     if (update_last_pos) last_pos = new_pos;\
     RECONSTRUCT (pos_str, snip_len);\
     if (add_tab) RECONSTRUCT1 ('\t'); }
-
-#define LOAD_SNIP_FROM_BUF(buf,next,field_name) { \
-    uint32_t start = next; \
-    ARRAY (char, data, buf);\
-    while (next < buf.len && data[next] != SNIP_SEP) next++;\
-    ASSERT (next < buf.len, \
-            "Error reconstructing txt_line=%u: unexpected end of %s data (len=%u)", vb->line_i, field_name, (uint32_t)buf.len); \
-    snip = &data[start];\
-    snip_len = next - start; \
-    next++; /* skip the tab */ }
-
-// reconstructs a fix number of characters from a tab-less buffer
-#define RECONSTRUCT_FROM_TABLESS_BUF(buf,next,fixed_len,add_tab,field_name) { \
-    ARRAY (char, data, buf);\
-    ASSERT ((next) + (fixed_len) <= buf.len, \
-            "Error reconstructing txt_line=%u: unexpected end of " field_name " data (buf.len=%u next=%u fixed_len=%u)", \
-            vb->line_i, (uint32_t)buf.len, (next), (fixed_len)); \
-    RECONSTRUCT (&data[(next)], (fixed_len)); \
-    if (add_tab) RECONSTRUCT1 ('\t');  \
-    (next) += (fixed_len); }
 
 #endif
 

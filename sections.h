@@ -102,17 +102,13 @@ typedef struct {
     DictIdType dict_id;           
 } SectionHeaderDictionary; 
 
-// b250 data encoded according to a dictionary
 typedef struct {
     SectionHeader h;
-    uint32_t num_b250_items;           // number of items in b250 items
+    uint8_t ltype;                 // CTX_*  note: in v2-v4 flags/ltype/ffu was "uint32_t num_b250_items"
+    uint8_t flags;    
+    uint16_t ffu;
     DictIdType dict_id;           
-} SectionHeaderB250;         
-
-typedef struct {
-    SectionHeader h;
-    DictIdType dict_id;           
-} SectionHeaderLocal;         
+} SectionHeaderCtx;         
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct SectionListEntry {

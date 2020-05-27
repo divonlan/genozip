@@ -1,12 +1,11 @@
 // ------------------------------------------------------------------
-//   samples.c
+//   vcf_samples.c
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
 #include "buffer.h"
-#include "samples.h"
-#include "header.h"
+#include "vcf_private.h"
 
 // referring to sample strings from the --samples command line option
 static Buffer cmd_samples_buf = EMPTY_BUFFER; // an array of (char *)
@@ -17,7 +16,7 @@ char *vcf_samples_is_included;                // a bytemap indicating for each s
 static char **vcf_sample_names;               // an array of char * to null-terminated names of samples 
 static char *vcf_sample_names_data;           // vcf_sample_names point into here
 
-void samples_add (const char *samples_str)
+void vcf_samples_add  (const char *samples_str)
 {
     ASSERT0 (samples_str, "Error: samples_str is NULL");
 
@@ -115,8 +114,8 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
 }
 
 // PIZ only: calculates whether a sample block is included, based on --samples. this is called once per sample block
-// in zfile_vcf_read_one_vb to set vb->is_sb_included, and thereafter vb->is_sb_included is used
-bool samples_is_sb_included (uint32_t num_samples_per_block, uint32_t sb_i)
+// in vcf_zfile_read_one_vb to set vb->is_sb_included, and thereafter vb->is_sb_included is used
+bool samples_get_is_sb_included (uint32_t num_samples_per_block, uint32_t sb_i)
 {
     if (!flag_samples) return true; // all sample blocks are included if --samples if not specified
 
@@ -128,3 +127,15 @@ bool samples_is_sb_included (uint32_t num_samples_per_block, uint32_t sb_i)
 
     return false; // no sample in this sample block is included - means the whole sample block is excluded
 }
+
+
+bool vcf_is_sb_included (void *vb_, uint32_t sb_i)
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
+    ASSERT (!flag_samples || sb_i < vb->is_sb_included.len, "Error in vcf_is_sb_included: sb_i=%u out of range - len=%u", sb_i, (unsigned)vb->is_sb_included.len);
+
+    return !flag_samples || *ENT(bool, vb->is_sb_included, sb_i);
+}
+
+

@@ -2,8 +2,6 @@
 //   gtshark_vcf.c
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
-#include "gtshark_vcf.h"
-
 #include <errno.h>
 #include <sys/types.h>
 #include <fcntl.h> 
@@ -11,12 +9,11 @@
 #ifndef _WIN32
 #include <sys/wait.h>
 #endif
-#include "vblock.h"
+#include "vcf_private.h"
 #include "buffer.h"
 #include "file.h"
 #include "endianness.h"
 #include "stream.h"
-#include "header.h"
 
 static void gtshark_create_vcf_file (VBlockVCF *vb, const Buffer *section_data, unsigned sb_i,
                                      const char *gtshark_vcf_name)
@@ -29,7 +26,7 @@ static void gtshark_create_vcf_file (VBlockVCF *vb, const Buffer *section_data, 
     fprintf (file, "##FORMAT=<ID=GT>\n");
     fprintf (file, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
 
-    unsigned num_haplotypes = vb->ploidy * vb_vcf_num_samples_in_sb (vb, sb_i); 
+    unsigned num_haplotypes = vb->ploidy * vcf_vb_num_samples_in_sb (vb, sb_i); 
     for (unsigned i=0; i < num_haplotypes; i++)
         fprintf (file, "\t%u", i+1);
     fprintf (file, "\n");
@@ -230,7 +227,7 @@ static void gtshark_run_decompress (VBlockVCF *vb, unsigned sb_i)
 static void gtshark_generate_haplotype_data (VBlockVCF *vb, unsigned sb_i)
 {
     uint32_t num_lines = vb->lines.len;
-    unsigned num_hts = vb->ploidy * vb_vcf_num_samples_in_sb (vb, sb_i);
+    unsigned num_hts = vb->ploidy * vcf_vb_num_samples_in_sb (vb, sb_i);
 
     buf_alloc (vb, &vb->haplotype_sections_data[sb_i], num_lines * num_hts, 1, "haplotype_sections_data", sb_i);
     vb->haplotype_sections_data[sb_i].len = num_lines * num_hts;

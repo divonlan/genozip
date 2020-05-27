@@ -98,10 +98,10 @@ static FileType file_get_type (const char *filename, bool enforce_23andme_name_f
 {
     // 23andme files have the format "genome_Firstname_Lastname_optionalversion_timestamp.txt" or .zip
     if (enforce_23andme_name_format && file_has_ext (filename, ".txt")) 
-        return (strstr (filename, "genome_") && strstr (filename, "_Full_")) ? ME23 : UNKNOWN_FILE_TYPE;
+        return (strstr (filename, "genome") && strstr (filename, "Full")) ? ME23 : UNKNOWN_FILE_TYPE;
     
     if (enforce_23andme_name_format && file_has_ext (filename, ".zip")) 
-        return (strstr (filename, "genome_") && strstr (filename, "_Full_")) ? ME23_ZIP : UNKNOWN_FILE_TYPE;
+        return (strstr (filename, "genome") && strstr (filename, "Full")) ? ME23_ZIP : UNKNOWN_FILE_TYPE;
     
     for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < AFTER_LAST_FILE_TYPE; ft++)
         if (file_has_ext (filename, file_exts[ft])) 

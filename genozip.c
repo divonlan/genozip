@@ -18,7 +18,6 @@
 #endif
 
 #include "genozip.h"
-#include "header.h"
 #include "text_help.h"
 #include "version.h" // automatically incremented by the make when we create a new distribution
 #include "txtfile.h"
@@ -31,14 +30,14 @@
 #include "vblock.h"
 #include "endianness.h"
 #include "regions.h"
-#include "samples.h"
-#include "gtshark_vcf.h"
+#include "vcf.h"
 #include "stream.h"
 #include "url.h"
 #include "strings.h"
 #include "stats.h"
 #include "arch.h"
 #include "license.h"
+#include "vcf.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -55,10 +54,10 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
-    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0,
+    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0,
 
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
-    flag_optimize_QUAL=0, flag_optimize_Vf=0;
+    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0;
 
 
 uint64_t flag_stdin_size = 0;
@@ -237,7 +236,7 @@ static void main_genounzip (const char *z_filename,
                             unsigned max_threads,
                             bool is_last_file)
 {
-    header_initialize();
+    txtfile_header_initialize();
     
     // get input FILE
     ASSERT0 (z_filename, "Error: z_filename is NULL");
@@ -277,7 +276,7 @@ static void main_genounzip (const char *z_filename,
         txt_file = file_open_redirect (WRITE, TXT_FILE, z_file->data_type); // STDOUT
     }
     else if (flag_split) {
-        // do nothing - the component files will be opened by header_genozip_to_txt()
+        // do nothing - the component files will be opened by txtfile_genozip_to_txt_header()
     }
     else {
         ABORT0 ("Error: unrecognized configuration for the txt_file");
@@ -532,6 +531,7 @@ int main (int argc, char **argv)
         #define _9V {"optimize-VQSLOD", no_argument,     &flag_optimize_VQSLOD, 1 }
         #define _9Q {"optimize-QUAL", no_argument,       &flag_optimize_QUAL,1 } 
         #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,  1 }
+        #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,  1 }
         #define _gt {"gtshark",       no_argument,       &flag_gtshark,      1 } 
         #define _th {"threads",       required_argument, 0, '@'                }
         #define _O  {"split",         no_argument,       &flag_split,        1 }
@@ -571,14 +571,15 @@ int main (int argc, char **argv)
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks, 1 }  
         #define _dm {"debug-memory",  no_argument,       &flag_debug_memory, 1 }  
         #define _dp {"debug-progress",no_argument,       &flag_debug_progress, 1 }  
+        #define _ds {"debug-no-singletons",no_argument,  &flag_debug_no_singletons, 1 }  
         #define _dh {"show-hash",    no_argument,        &flag_show_hash,   1 }  
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                          _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _gt, _fa,          _rg, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                               _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                                          _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,      _sd, _sT, _d1, _d2,                                    _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                            _fs, _g,      _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                      _st, _sm,                             _dm,                                                                               _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p,                                          _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p,                                               _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                                                 _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p, _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,      _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                                   _fs, _g,      _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p,                                                                                                      _st, _sm,                             _dm,                                                                                      _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -618,7 +619,7 @@ int main (int argc, char **argv)
             case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
                        // fall through for genocat -r
             case 'r' : flag_regions = true; regions_add (optarg); break;
-            case 's' : flag_samples = true; samples_add (optarg); break;
+            case 's' : flag_samples = true; vcf_samples_add  (optarg); break;
             case 'm' : flag_md5           = 1      ; break;
             case 'O' : flag_split         = 1      ; break;
             case 'G' : flag_drop_genotypes= 1      ; break;
@@ -633,7 +634,7 @@ int main (int argc, char **argv)
             case 'B' : genozip_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
                        break;
-            case 'S' : zip_vcf_set_global_samples_per_block (optarg); 
+            case 'S' : vcf_zip_set_global_samples_per_block (optarg); 
                        flag_sblock = true;
                        break;
             case 'p' : crypt_set_password (optarg) ; break;
@@ -725,16 +726,16 @@ int main (int argc, char **argv)
 
     // default values, if not overridden by the user
     if (!flag_vblock) genozip_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
-    if (!flag_sblock) zip_vcf_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
+    if (!flag_sblock) vcf_zip_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
 
     // if --optimize was selected, all optimizations are turned on
     if (flag_optimize)
         flag_optimize_sort = flag_optimize_PL = flag_optimize_GL = flag_optimize_GP = flag_optimize_VQSLOD = 
-        flag_optimize_QUAL = flag_optimize_Vf = true;
+        flag_optimize_QUAL = flag_optimize_Vf = flag_optimize_ZM = true;
     
     // if any optimization flag is on, we turn on flag_optimize
     if (flag_optimize_sort || flag_optimize_PL || flag_optimize_GL || flag_optimize_GP || flag_optimize_VQSLOD ||
-        flag_optimize_QUAL || flag_optimize_Vf)
+        flag_optimize_QUAL || flag_optimize_Vf || flag_optimize_ZM)
         flag_optimize = true;
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they

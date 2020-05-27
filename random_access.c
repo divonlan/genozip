@@ -24,7 +24,7 @@ void random_access_initialize(void)
     ra_mutex_initialized = true;
 }
 
-// ZIP only: called from seg_vcf_chrom_field when the CHROM changed - this might be a new chrom, or
+// ZIP only: called from vcf_seg_chrom_field when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
 void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
 {
@@ -49,9 +49,11 @@ void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
     vb->chrom_node_index = chrom_node_index;
 }
 
-// ZIP only: called from seg_pos_field - update the pos in the existing chrom entry
-void random_access_update_pos (VBlock *vb, int32_t this_pos)
+// ZIP only: update the pos in the existing chrom entry
+void random_access_update_pos (VBlock *vb, uint8_t did_i_pos)
 {
+    uint32_t this_pos = (uint32_t)vb->mtf_ctx[did_i_pos].last_value;
+
     if (!this_pos) return; // ignore pos=0 (in SAM, it means unmapped POS)
 
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, vb->chrom_node_index);
@@ -83,7 +85,7 @@ void random_access_merge_in_vb (VBlock *vb)
 
         RAEntry *dst_ra = &NEXTENT (RAEntry, z_file->ra_buf);
 
-        MtfNode *chrom_node = mtf_node (chrom_ctx, src_ra[i].chrom_index, NULL, NULL);
+        MtfNode *chrom_node = mtf_node_vb (chrom_ctx, src_ra[i].chrom_index, NULL, NULL);
 
         dst_ra->vblock_i    = vb->vblock_i;
         dst_ra->chrom_index = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index

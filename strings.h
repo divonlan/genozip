@@ -13,12 +13,14 @@
 #define IS_SLETTER(c) ((c)>='a' && (c)<='z')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
+#define FLIP_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 
 extern void str_to_lowercase (char *s);
 
 extern char *str_size (int64_t size, char *str /* out */);
 extern char *str_uint_commas (int64_t n, char *str /* out */);
-extern char *str_int (int64_t n, char *str /* out */, unsigned *len);
+extern unsigned str_int (int64_t n, char *str /* out */);
+extern bool str_is_int (const char *str, unsigned str_len);
 
 #define POINTER_STR_LEN 19
 extern char *str_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/);

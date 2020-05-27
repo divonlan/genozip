@@ -10,23 +10,7 @@
 #include "compressor.h"
 
 extern void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_last_file);
-
-extern void zip_vcf_set_global_samples_per_block (const char *num_samples_str);
-
 extern void zip_generate_b250_section (VBlockP vb, MtfContextP ctx);
-//extern void zip_generate_and_compress_subfields (VBlockP vb, ConstSubfieldMapperP mapper);
-//extern void zip_generate_and_compress_subfields2 (VBlockP vb, SectionType sec_dict);
-
-extern void zip_vcf_initialize (void);
-
-extern void zip_vcf_compress_one_vb  (VBlockP vb_);
-
-extern void zip_vcf_generate_ht_gt_compress_vb_header (VBlockP vb_);
-extern uint32_t global_vcf_samples_per_block;
-
-extern CompGetLineCallback zip_sam_get_start_len_line_i_seq, zip_sam_get_start_len_line_i_qual, 
-                           zip_sam_get_start_len_line_i_bd, zip_sam_get_start_len_line_i_bi,
-                           zip_fast_get_start_len_line_i_seq, zip_fast_get_start_len_line_i_qual;
 
 // --------------------------------------------------
 // utilities for use by zip_*_compress_one_vb

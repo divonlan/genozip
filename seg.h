@@ -10,42 +10,41 @@
 #include "genozip.h"
 #include "section_types.h"
 #include "dict_id.h"
+#include "move_to_front.h"
 
 extern void seg_all_data_lines (VBlockP vb); 
 
 extern void seg_init_mapper (VBlockP vb, int field_i, BufferP mapper_buf, const char *name);
 
-extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, bool allow_newline, bool allow_tab, bool allow_colon, 
+extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, 
+                                      bool allow_newline, bool allow_tab, bool allow_colon, 
                                       unsigned *len, char *separator, bool *has_13, // out
                                       const char *item_name);
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
 
-extern void seg_store (VBlockP vb, 
-                       bool *dst_is_spillover, uint32_t *dst_start, uint32_t *dst_len, // out
-                       BufferP src_buf, uint32_t size, // Either src_buf OR size must be given
-                       const char *limit_txt_data, // we cannot store in txt starting here. if NULL always allocates in txt_data_spillover
-                       bool align32); // does start address need to be 32bit aligned to prevent aliasing issues
-
-extern uint32_t seg_one_subfield (VBlockP vb, const char *str, unsigned len, DictIdType dict_id, uint32_t add_bytes);
-
-extern uint32_t seg_one_snip (VBlockP vb, const char *str, unsigned len, int did_i, uint32_t add_bytes,
-                              bool *is_new); // optional out
-
-#define seg_one_field(vb,str,len,f, add_bytes) \
-    seg_one_snip ((VBlockP)(vb), (str), (len), (f), add_bytes, NULL)
+extern uint32_t seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, MtfContextP ctx, uint32_t add_bytes, bool *is_new);
+#define seg_by_dict_id(vb,str,len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, str, len, mtf_get_ctx (vb, dict_id), add_bytes, NULL)
+#define seg_by_did_i_ex(vb,str,len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, str, len, &vb->mtf_ctx[did_i], add_bytes, is_new);
+#define seg_by_did_i(vb,str,len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, str, len, &vb->mtf_ctx[did_i], add_bytes, NULL);
 
 extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
-extern uint32_t seg_add_to_random_pos_data (VBlockP vb, const char *snip, unsigned snip_len, unsigned add_bytes, const char *field_name);
+extern int64_t seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, bool allow_nonsense);
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
-extern int32_t seg_pos_field (VBlockP vb, int32_t last_pos, int32_t *last_pos_delta, bool allow_non_number, 
-                              int pos_field, const char *pos_str, unsigned pos_len, 
-                              const char *field_name, bool account_for_separator);
+extern void seg_pos_field (VBlockP vb, 
+                           uint8_t snip_did_i,    // mandatory: the ctx the snip belongs to
+                           uint8_t base_did_i,    // mandatory: base for delta
+                           bool allow_non_number,      // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                           const char *pos_str, unsigned pos_len, 
+                           bool account_for_separator);
 
 extern void seg_id_field (VBlockP vb, DictIdType dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip);
+
+extern void seg_structured_by_ctx (VBlockP vb, MtfContextP ctx, StructuredP st, unsigned add_bytes);
+#define seg_structured_by_dict_id(vb,dict_id,st,add_bytes) seg_structured_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), st, add_bytes)
 
 extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_mapper_buf, uint8_t *num_info_subfields,
                             SegSpecialInfoSubfields seg_special_subfields,
@@ -53,52 +52,30 @@ extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_m
                             bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
                             bool this_line_has_13); // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
 
-extern void seg_add_to_local_text  (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
-extern void seg_add_to_local_fixed (VBlockP vb, MtfContextP ctx, const void *data, unsigned data_len);
+extern void seg_add_to_local_text   (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
+extern void seg_add_to_local_fixed  (VBlockP vb, MtfContextP ctx, const void *data, unsigned data_len);
+extern void seg_add_to_local_uint8  (VBlockP vb, MtfContextP ctx, uint8_t  value, unsigned add_bytes);
+extern void seg_add_to_local_uint16 (VBlockP vb, MtfContextP ctx, uint16_t value, unsigned add_bytes);
+extern void seg_add_to_local_uint32 (VBlockP vb, MtfContextP ctx, uint32_t value, unsigned add_bytes);
+extern void seg_add_to_local_uint64 (VBlockP vb, MtfContextP ctx, uint64_t value, unsigned add_bytes);
 
+extern void seg_initialize_compound_structured (VBlockP vb, char *name_template, Structured *st);
 extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
-                                SubfieldMapperP mapper, DictIdType sf_dict_id, bool ws_is_sep, bool account_for_13);
-                               
-// ---------
-// VCF Stuff
-// ---------
-extern const char *seg_vcf_data_line (VBlockP vb_, const char *field_start_line);
-extern void seg_vcf_initialize  (VBlockP vb_);
-extern void seg_vcf_complete_missing_lines (VBlockVCFP vb);
+                                SubfieldMapperP mapper, Structured st, bool ws_is_sep, unsigned add_for_eol);
 
-// ---------
-// SAM Stuff
-// ---------
-extern const char *seg_sam_data_line (VBlockP vb_, const char *field_start_line);
-extern uint32_t seg_sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
-extern uint32_t seg_sam_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len, bool *is_numeric);
+typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
+extern void seg_array_field (VBlockP vb, DictIdType dict_id, const char *value, unsigned value_len, SegOptimize optimize);
 
-// THIS FOLLOWING CONSTANTS CANNOT CHANGE - THEY ARE PART OF THE FILE FORMAT
-#define MAX_SAM_MD_LEN 1000 // maximum length of MD that is shortened.
-
-// ---------------------------
-// FASTA and FASTQ Stuff
-// ---------------------------
-extern void seg_fasta_initialize();
-extern const char *seg_fastq_data_line();
-extern const char *seg_fasta_data_line();
-
-// ------------------
-// GFF3 Stuff
-// ------------------
-extern const char *seg_gff3_data_line (VBlockP vb_, const char *field_start_line);
-extern void seg_gff3_initialize (VBlockP vb_);
-extern void seg_gff3_array_of_struct_ctxs (VBlockGFF3P vb, DictIdType dict_id, unsigned num_items, 
-                                           MtfContextP *ctx_array, MtfContextP *enst_ctx); // out
-
-// ------------------
-// ME23 Stuff
-// ------------------
-extern const char *seg_me23_data_line (VBlockP vb_, const char *field_start_line);
+extern void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id, uint32_t lookup_len, 
+                                    char *snip, unsigned *snip_len);
 
 // ------------------
 // Seg utilities
 // ------------------
+
+#define GET_NEXT_ITEM(item_name,has_13) \
+    field_start = next_field; \
+    next_field = seg_get_next_item (vb, field_start, &len, !!has_13, !has_13, false, &field_len, &separator, has_13, item_name);
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
@@ -113,6 +90,9 @@ extern const char *seg_me23_data_line (VBlockP vb_, const char *field_start_line
     *__addr##reg = (char_val);
 
 #define SAFE_RESTORE(reg) *__addr##reg = __save##reg; 
+
+#define SEG_EOL(f) seg_by_did_i (vb, has_13 ? "\r\n" : "\n", 1 + has_13, (f), 1 + has_13); \
+                   *has_special_eol = *has_special_eol || has_13;
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
     ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\

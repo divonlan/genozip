@@ -31,6 +31,14 @@ test_header() {
     printf "\n${sep}TESTING $1 \n${sep}"
 }
 
+# minimal files - expose edge cases where fields have only 1 instance
+files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf genome_23andme_Full_minimal.txt)
+for file in ${files[@]}; do
+    test_header "$file - minimal file test"
+    cat $file | tr -d "\r" > unix-nl.$file
+    ./genozip unix-nl.$file -ft -o ${output}.genozip || exit 1
+done
+
 files=(test-file.vcf test-file.sam test-file.fq test-file.fa test-file.gvf genome_23andme_Full_test-file.txt)
 for file in ${files[@]}; do
     test_header "$file - basic test - Unix-style end-of-line"
@@ -128,6 +136,10 @@ if `command -v samtools >& /dev/null`; then
     cmp_2_files bam-test.input.bam bam-test.output.bam.fake-extension
     rm bam-test.input.bam bam-test.output.bam
 fi
+
+test_header "Testing subsets (~3 VBs) or real world files"
+rm -f test-data/*.genozip
+./genozip -ft test-data/* || exit 1
 
 printf "\nALL GOOD!\n"
 

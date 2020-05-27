@@ -157,4 +157,4 @@ const char *encryption_name (unsigned encryption_type)
 }
 
 #define V1_CRYPT
-#include "v1_vcf.c"
+#include "vcf_v1.c"

@@ -43,12 +43,6 @@ static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } 
 #define dict_id_vcf_info_sf      dict_id_type_1
 #define dict_id_vcf_format_sf    dict_id_type_2
 
-// SAM field types 
-#define dict_id_is_sam_qname_sf  dict_id_is_type_1
-#define dict_id_is_sam_optnl_sf  dict_id_is_type_2
-
-#define dict_id_sam_qname_sf     dict_id_type_1
-#define dict_id_sam_optnl_sf     dict_id_type_2
 
 // FASTQ/FASTA field types 
 #define dict_id_is_fast_desc_sf dict_id_is_type_2
@@ -60,6 +54,13 @@ static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } 
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 #define DICT_ID_NONE ((DictIdType)(uint64_t)0)
+
+typedef struct { DictIdType alias, dst; } DictIdAlias;
+extern const DictIdAlias *dict_id_aliases;
+uint32_t dict_id_num_aliases;
+
+extern BufferP dict_id_create_aliases_buf (void);
+extern void dict_id_read_aliases (void) ;
 
 extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
 extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
@@ -81,6 +82,9 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_OPTION_X0, dict_id_OPTION_X1, dict_id_OPTION_XA, dict_id_OPTION_XN, dict_id_OPTION_XM, dict_id_OPTION_XO,
                 dict_id_OPTION_XG, dict_id_OPTION_XS, dict_id_OPTION_XE,
 
+                // 
+                dict_id_OPTION_ZM,
+
                 // biobambam tags 
                 dict_id_OPTION_mc, dict_id_OPTION_ms,
 
@@ -88,8 +92,8 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_OPTION_BD, dict_id_OPTION_BI,
                 
                 // our own
-                dict_id_OPTION_STRAND,
-
+                dict_id_OPTION_STRAND, dict_id_OPTION_RNAME, dict_id_OPTION_POS, dict_id_OPTION_CIGAR,  dict_id_OPTION_MAPQ,
+                
                 // GVF attributes - standard
                 dict_id_ATTR_ID, dict_id_ATTR_Variant_seq, dict_id_ATTR_Reference_seq, dict_id_ATTR_Variant_freq,
 
@@ -101,7 +105,29 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_ATTR_polyphen_prediction,
                 dict_id_ATTR_variant_peptide,
 
-                dict_id_ENSTid;  // private genozip dict
+                dict_id_ENSTid,  // private genozip dict
+
+                dict_id_FASTA_DESC, dict_id_FASTA_SEQ, dict_id_FASTA_COMMENT;
+
+// list of ctx who's local data is compressed via a callback function
+#define LOCAL_COMPRESSOR_CALLBACKS {  \
+    VCF_LOCAL_COMPRESSOR_CALLBACKS    \
+    GFF3_LOCAL_COMPRESSOR_CALLBACKS   \
+    SAM_LOCAL_COMPRESSOR_CALLBACKS    \
+    FASTQ_LOCAL_COMPRESSOR_CALLBACKS  \
+    FASTA_LOCAL_COMPRESSOR_CALLBACKS  \
+}
+
+// aliases - these are used only in PIZ, as a way for multiple dict_id's to get access to the same data storage
+// on the ZIP side, the data is just placed directly in the primary ctx
+#define DICT_ID_ALIASES { \
+    VCF_DICT_ID_ALIASES   \
+    SAM_DICT_ID_ALIASES   \
+    FASTQ_DICT_ID_ALIASES \
+    FASTA_DICT_ID_ALIASES \
+    GFF3_DICT_ID_ALIASES  \
+    ME23_DICT_ID_ALIASES  \
+}
 
 extern void dict_id_initialize (DataType data_type);
 
