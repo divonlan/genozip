@@ -252,6 +252,14 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
     
         RECONSTRUCT (snip, snip_len); // simple reconstruction
 
+        if (store) {
+            char *after;
+            new_value = (int64_t)strtoull (snip, &after, 10); // allows negative values
+
+            // if the snip in its entirety is not a valid integer, don't store the value.
+            // this can happen for example when seg_pos_field stores a "nonsense" snip.
+            have_new_value = (after == snip + snip_len);
+        }
         snip_ctx->last_delta  = 0; // delta is 0 since we didn't calculate delta
     }
 

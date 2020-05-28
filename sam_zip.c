@@ -109,6 +109,7 @@ void sam_seg_initialize (VBlock *vb)
     vb->mtf_ctx[SAM_SEQ].flags   = CTX_FL_LOCAL_LZMA;
     vb->mtf_ctx[SAM_SEQ].ltype   = CTX_LT_SEQUENCE;
     vb->mtf_ctx[SAM_QUAL].ltype  = CTX_LT_SEQUENCE;
+    vb->mtf_ctx[SAM_TLEN].flags  = CTX_FL_STORE_VALUE;
 }
 
 // TLEN - 3 cases: 

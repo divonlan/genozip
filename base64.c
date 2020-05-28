@@ -8,14 +8,14 @@
 
 #include "base64.h"
 
-static const uint8_t base64_table[65] = 
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const uint8_t *encode_lookup =
+    (uint8_t *)"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-static const uint8_t dtable[256] = {
+static const uint8_t decode_lookup[256] = {
 	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 0-15
 	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 16-31
 	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 62  , 0x80, 0x80, 0x80, 63  , // ASCII 32-47
-	52  , 53  , 54  , 55  , 56  , 57  , 58  , 59  , 60  , 61  , 0x80, 0x80, 0x80, 0   , 0x80, 0x80, // ASCII 48-63 (outside of base64_table '=' = 0) 
+	52  , 53  , 54  , 55  , 56  , 57  , 58  , 59  , 60  , 61  , 0x80, 0x80, 0x80, 0   , 0x80, 0x80, // ASCII 48-63 (outside of encode_lookup '=' = 0) 
     0x80, 0   , 1   , 2   , 3   , 4   , 5   , 6   , 7   , 8   , 9   , 10  , 11  , 12  , 13  , 14  , // ASCII 64-79
 	15  , 16  , 17  , 18  , 19  , 20  , 21  , 22  , 23  , 24  , 25  , 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 80-95
 	0x80, 26  , 27  , 28  , 29  , 30  , 31  , 32  , 33  , 34  , 35  , 36  , 37  , 38  , 39  , 40  , // ASCII 96-111
@@ -38,21 +38,21 @@ unsigned base64_encode (const uint8_t *in, unsigned in_len, char *b64_str)
 	const uint8_t *end = in + in_len;
 	char *next = b64_str;
 	while (end - in >= 3) {
-		*next++ = base64_table[in[0] >> 2];
-		*next++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-		*next++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
-		*next++ = base64_table[  in[2] & 0x3f];
+		*next++ = encode_lookup[in[0] >> 2];
+		*next++ = encode_lookup[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+		*next++ = encode_lookup[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+		*next++ = encode_lookup[  in[2] & 0x3f];
 		in += 3;
 	}
 
 	if (end - in) {
-		*next++ = base64_table[in[0] >> 2];
+		*next++ = encode_lookup[in[0] >> 2];
 		if (end - in == 1) {
-			*next++ = base64_table[(in[0] & 0x03) << 4];
+			*next++ = encode_lookup[(in[0] & 0x03) << 4];
 			*next++ = '=';
 		} else {
-			*next++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-			*next++ = base64_table[ (in[1] & 0x0f) << 2];
+			*next++ = encode_lookup[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+			*next++ = encode_lookup[ (in[1] & 0x0f) << 2];
 		}
 		*next++ = '=';
 	}
@@ -71,7 +71,7 @@ void base64_decode (const char *b64_str, unsigned b64_str_len, uint8_t *out, uns
 	for (unsigned i=0; i < b64_str_len; i++) {
 
 		if (b64_str[i] == '=') pad++;
-		block[i&3] = dtable[(unsigned)b64_str[i]];
+		block[i&3] = decode_lookup[(unsigned)b64_str[i]];
 		ASSERT (block[i&3] != 0x80, "Invalid character '%c' found in b64 string: %.*s", b64_str[i], b64_str_len, b64_str);
 
 		if ((i&3) == 3) {
