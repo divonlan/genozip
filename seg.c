@@ -133,21 +133,16 @@ void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id, uint32
 // (if allow_nonsense) or errors
 int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool allow_nonsense)
 {
-    // scan by ourselves - hugely faster the sscanf
-    int64_t value=0; 
-    for (unsigned i=0; i < snip_len; i++) {
-        if (!IS_DIGIT (snip[i])) goto error;
-        value = value * 10 + (snip[i] - '0');
-    }
+    char *after;
+    int64_t value = (int64_t)strtoull (snip, &after, 10);
 
-    if (value > MAX_POS) goto error;
+    if (value >= 0 && value <= MAX_POS && ((unsigned)(after - snip) == snip_len))
+        return value; // all good
 
-    return value;
-
-error:
     ASSSEG (allow_nonsense, snip, "Error: position field must be an integer number between 0 and %u, seeing: %.*s", 
             MAX_POS, snip_len, snip);
-    return -1;
+
+    return -1; // bad number
 }
 
 uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
