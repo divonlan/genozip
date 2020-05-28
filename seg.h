@@ -9,7 +9,6 @@
 #include <stdint.h>
 #include "genozip.h"
 #include "section_types.h"
-#include "dict_id.h"
 #include "move_to_front.h"
 
 extern void seg_all_data_lines (VBlockP vb); 

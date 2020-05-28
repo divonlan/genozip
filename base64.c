@@ -3,19 +3,31 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 //
-//   partially based on:
+// inspired by: https://github.com/launchdarkly/c-client-sdk/blob/master/base64.c
+//
 
-/*
- * Base64 encoding/decoding (RFC1341)
- * Copyright (c) 2005-2011, Jouni Malinen <j@w1.fi>
- *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
- */
 #include "base64.h"
 
 static const uint8_t base64_table[65] = 
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static const uint8_t dtable[256] = {
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 0-15
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 16-31
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 62  , 0x80, 0x80, 0x80, 63  , // ASCII 32-47
+	52  , 53  , 54  , 55  , 56  , 57  , 58  , 59  , 60  , 61  , 0x80, 0x80, 0x80, 0   , 0x80, 0x80, // ASCII 48-63 (outside of base64_table '=' = 0) 
+    0x80, 0   , 1   , 2   , 3   , 4   , 5   , 6   , 7   , 8   , 9   , 10  , 11  , 12  , 13  , 14  , // ASCII 64-79
+	15  , 16  , 17  , 18  , 19  , 20  , 21  , 22  , 23  , 24  , 25  , 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 80-95
+	0x80, 26  , 27  , 28  , 29  , 30  , 31  , 32  , 33  , 34  , 35  , 36  , 37  , 38  , 39  , 40  , // ASCII 96-111
+	41  , 42  , 43  , 44  , 45  , 46  , 47  , 48  , 49  , 50  , 51  , 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 112-127
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 128-255
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
 
 // returns length of encoded (which is at most base64_sizeof)
 // out must be allocated base64_sizeof bytes
@@ -23,70 +35,51 @@ unsigned base64_encode (const uint8_t *in, unsigned in_len, char *b64_str)
 {
     ASSERT0 (in, "Error in base64_encode: in is NULL");
 
-	char *pos;
-	const uint8_t *end;
-
-	end = in + in_len;
-	pos = b64_str;
+	const uint8_t *end = in + in_len;
+	char *next = b64_str;
 	while (end - in >= 3) {
-		*pos++ = base64_table[in[0] >> 2];
-		*pos++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-		*pos++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
-		*pos++ = base64_table[in[2] & 0x3f];
+		*next++ = base64_table[in[0] >> 2];
+		*next++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+		*next++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+		*next++ = base64_table[  in[2] & 0x3f];
 		in += 3;
 	}
 
 	if (end - in) {
-		*pos++ = base64_table[in[0] >> 2];
+		*next++ = base64_table[in[0] >> 2];
 		if (end - in == 1) {
-			*pos++ = base64_table[(in[0] & 0x03) << 4];
-			*pos++ = '=';
+			*next++ = base64_table[(in[0] & 0x03) << 4];
+			*next++ = '=';
 		} else {
-			*pos++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-			*pos++ = base64_table[ (in[1] & 0x0f) << 2];
+			*next++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+			*next++ = base64_table[ (in[1] & 0x0f) << 2];
 		}
-		*pos++ = '=';
+		*next++ = '=';
 	}
 
-    return pos - b64_str;
+    return next - b64_str;
 }
 
 
-void base64_decode (const char *b64_str, unsigned len, uint8_t *out, unsigned *out_len /* in/out */)
+void base64_decode (const char *b64_str, unsigned b64_str_len, uint8_t *out, unsigned *out_len /* out */)
 {
-	uint8_t dtable[256], block[4];
+	ASSERT (b64_str_len && !(b64_str_len % 4), "Error in base64_decode: bad base64 - expecting it to be a string with length divisable by 4 but its length is %u: %.*s",
+            b64_str_len, b64_str_len, b64_str);
 
-	memset (dtable, 0x80, 256);
-	for (unsigned i=0; i < 64; i++)
-		dtable[base64_table[i]] = (uint8_t)i;
-	dtable['='] = 0;
-
-	unsigned count=0, pad=0;
-	for (unsigned i=0; i < len; i++)
-		if (dtable[(unsigned)b64_str[i]] != 0x80)
-			count++;
-
-	ASSERT (count && !(count % 4), "Error in base64_decode: bad base64 - expecting it to be a string with length divisable by 4 but its length is %u: %.*s",
-            len, len, b64_str);
-
-	uint8_t *pos = out;
-	count = 0;
-	for (unsigned i=0; i < len; i++) {
-		uint8_t tmp = dtable[(unsigned)b64_str[i]];
-		if (tmp == 0x80) continue;
+	unsigned pad=0;
+	uint8_t block[4];
+	for (unsigned i=0; i < b64_str_len; i++) {
 
 		if (b64_str[i] == '=') pad++;
-		block[count] = tmp;
-		count++;
-		if (count == 4) {
-			             *pos++ = (block[0] << 2) | (block[1] >> 4);
-			if (!pad)    *pos++ = (block[1] << 4) | (block[2] >> 2);
-			if (pad < 2) *pos++ = (block[2] << 6) |  block[3];
-			count = 0;
+		block[i&3] = dtable[(unsigned)b64_str[i]];
+		ASSERT (block[i&3] != 0x80, "Invalid character '%c' found in b64 string: %.*s", b64_str[i], b64_str_len, b64_str);
+
+		if ((i&3) == 3) {
+  			                 *out++ = (block[0] << 2) | (block[1] >> 4);
+			if (pad <= 1)    *out++ = (block[1] << 4) | (block[2] >> 2);
+			if (!pad)        *out++ = (block[2] << 6) |  block[3];
 		}
+	}	
 
-		ASSERT (*out_len >= (unsigned)(pos - out), "Error in base64_decode: 'out' is too small for decoding. out_len=%u b64_str=%.*s", *out_len, len, b64_str);
-	}
-
-	*out_len = pos - out;
+	*out_len = (b64_str_len / 4) * 3 - pad;
 }

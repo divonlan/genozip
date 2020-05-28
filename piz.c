@@ -19,9 +19,9 @@
 #include "sections.h"
 #include "random_access.h"
 #include "regions.h"
-#include "dict_id.h"
 #include "strings.h"
 #include "seg.h"
+#include "dict_id.h"
 
 static Buffer piz_iname_mapper_buf = EMPTY_BUFFER;
 
@@ -118,7 +118,7 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, MtfContext *ctx, co
 {
     ASSERT0 (ctx, "Error in piz_reconstruct_from_local_sequence: ctx is NULL");
 
-    bool reconstruct = !zfile_is_skip_section (vb, SEC_LOCAL, ctx->dict_id);
+    bool reconstruct = !piz_is_skip_section (vb, SEC_LOCAL, ctx->dict_id);
     uint32_t len;
 
     // if we have length in the snip, update vb->seq_len (for example in FASTQ, we will a snip for seq but qual will use seq_len)
@@ -142,22 +142,20 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, MtfContext *ctx, co
 
 static void piz_reconstruct_structured (VBlock *vb, MtfContext *snip_ctx, const char *snip, unsigned snip_len)
 {
-    uint8_t structured_data[sizeof(Structured)];
-    Structured *st = (Structured *)structured_data;
-
     ASSERT (snip_len <= base64_sizeof(Structured), "Error in piz_reconstruct_structured: snip_len=%u exceed base64_sizeof(Structured)=%u",
             snip_len, base64_sizeof(Structured));
 
-    unsigned st_size = sizeof (structured_data); 
-    base64_decode (snip, snip_len, structured_data, &st_size);
+    Structured st;
+    unsigned st_size = sizeof (st); 
+    base64_decode (snip, snip_len, (uint8_t*)&st, &st_size);
 
-    st->repeats = BGEN16 (st->repeats);
+    st.repeats = BGEN16 (st.repeats);
 
-    for (unsigned rep_i=0; rep_i < st->repeats; rep_i++) 
-        for (unsigned i=0; i < st->num_items; i++) 
-            piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, st->items[i].dict_id)->did_i, st->items[i].seperator);
+    for (unsigned rep_i=0; rep_i < st.repeats; rep_i++) 
+        for (unsigned i=0; i < st.num_items; i++) 
+            piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, st.items[i].dict_id)->did_i, st.items[i].seperator);
 
-    if ((st->flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st->items[st->num_items-1].seperator)
+    if ((st.flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st.items[st.num_items-1].seperator)
         vb->txt_data.len--;
 }
 
@@ -234,7 +232,7 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
     case SNIP_SPECIAL:
         ASSERT (snip_len >= 2, "Error: SNIP_SPECIAL expects snip_len >= 2. ctx=%s", snip_ctx->name);
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
-        ASSERT (special < DTP (num_special), "Error: file requires special handler %u which doesn't exist in this version of genounzip- please upgrade to the latest version", special);
+        ASSERT (special < DTP (num_special), "Error: file requires special handler %u which doesn't exist in this version of genounzip - please upgrade to the latest version", special);
         DTP(special)[special](vb, snip_ctx, snip+2, snip_len-2);  
         break;
 
@@ -551,7 +549,8 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
     if (data_type == DT_VCF_V1 || data_type == DT_NONE) return data_type;
     
-    // for FASTA and FASTQ we convert a "header_only" flag to "header_one" for consistency with other formats (header-only implies we don't show any data)
+    // for FASTA and FASTQ we convert a "header_only" flag to "header_one" as flag_header_only has some additional logic
+    // that doesn't work for FAST
     if (flag_header_only && (data_type == DT_FASTA || data_type == DT_FASTQ)) {
         flag_header_only = false;
         flag_header_one  = true;

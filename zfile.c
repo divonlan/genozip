@@ -22,6 +22,7 @@
 #include "license.h"
 #include "arch.h"
 #include "strings.h"
+#include "dict_id.h"
 
 bool is_v2_or_above=true, is_v3_or_above=true, is_v4_or_above=true, is_v5_or_above=true; // default to 'true' for ZIP, modifed when PIZ reads the genozip header
 
@@ -92,49 +93,6 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
     fprintf (stderr, "\n");
 }
 
-// returns true if section is to be skipped
-bool zfile_is_skip_section (void *vb_, SectionType st, DictIdType dict_id)
-{
-    VBlock *vb = (VBlock *)vb_;
-    DataType dt = vb ? vb->data_type : z_file->data_type;
-
-    switch (dt) {
-        case DT_VCF:
-            if ((flag_drop_genotypes || flag_gt_only) && 
-                (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id_is_vcf_format_sf (dict_id) || st == SEC_VCF_GT_DATA ||
-                st == SEC_VCF_FORMAT_B250_legacy || st == SEC_VCF_FORMAT_DICT_legacy ||  st == SEC_VCF_FRMT_SF_DICT_legacy))
-                return true;
-
-            break;
-
-        case DT_FASTQ:
-        case DT_FASTA:
-        
-            if (flag_header_one &&
-                (dict_id.num == dict_id_FASTA_SEQ || dict_id.num == dict_id_FASTA_COMMENT || 
-                 dict_id.num == dict_id_fields[FASTQ_SEQ] || dict_id.num == dict_id_fields[FASTQ_QUAL]))
-                return true;
-
-            uint64_t desc_dict_id = (dt == DT_FASTQ) ? dict_id_fields[FASTQ_DESC] : dict_id_FASTA_DESC;
-
-            // when grepping by I/O thread - skipping all section but DESC
-            if (vb && flag_grep && (vb->grep_stages == GS_TEST) && 
-                dict_id.num != desc_dict_id && !dict_id_is_fast_desc_sf (dict_id))
-                return true;
-
-            // if grepping, compute thread doesn't need to decompressed DESC again
-            if (vb && flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
-                (dict_id.num == desc_dict_id || dict_id_is_fast_desc_sf (dict_id)))
-                return true;
-            
-            break;
-
-        default: break; // other sections don't have special logic not already covered in abouts
-    }
-
-    return false; // don't skip this section
-}
-
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
 // when we get here, the header is already unencrypted zfile_`one_section
 void zfile_uncompress_section (VBlock *vb,
@@ -153,7 +111,7 @@ void zfile_uncompress_section (VBlock *vb,
     else if (expected_section_type == SEC_LOCAL)
         dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
 
-    if (zfile_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
+    if (piz_is_skip_section (vb, expected_section_type, dict_id)) return; // we skip some sections based on flags
 
     SectionHeader *section_header = (SectionHeader *)section_header_p;
     
@@ -402,7 +360,7 @@ int zfile_read_section (VBlock *vb,
     ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u, sb_i=%d",
             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i, sb_i);
 
-    if (sl && zfile_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
+    if (sl && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
 
     if (sb_i != NO_SB_I && !vcf_is_sb_included(vb, sb_i)) return 0; // skip section if this sample block is excluded by --samples
 
@@ -496,7 +454,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         if (read_chrom == DICTREAD_CHROM_ONLY  && !is_chrom) continue;
         if (read_chrom == DICTREAD_EXCEPT_CHROM && is_chrom) continue;
 
-        if (zfile_is_skip_section (NULL, sl_ent->section_type, sl_ent->dict_id)) continue;
+        if (piz_is_skip_sectionz (sl_ent->section_type, sl_ent->dict_id)) continue;
         
         zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type, sl_ent);    
 

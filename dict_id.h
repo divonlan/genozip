@@ -14,17 +14,6 @@
 #include "genozip.h"
 #include "data_types.h"
 
-#pragma pack(push, 1) // structures that are part of the genozip format are packed.
-
-#define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/SAM spec don't limit the ID length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
-typedef union DictIdType {
-    uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
-    uint8_t id[DICT_ID_LEN]; // \0-padded IDs 
-    uint16_t map_key;        // we use the first two bytes as they key into vb/z_file->dict_id_mapper
-} DictIdType;
-
-#pragma pack(pop)
-
 extern DictIdType dict_id_make (const char *str, unsigned str_len);
 static inline DictIdType dict_id_field (DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
 
@@ -35,22 +24,6 @@ static inline bool dict_id_is_type_2(DictIdType dict_id) { return ((dict_id.id[0
 
 static inline DictIdType dict_id_type_1(DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
 static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } // no change - keep Msb 01
-
-// VCF field types -
-#define dict_id_is_vcf_info_sf   dict_id_is_type_1
-#define dict_id_is_vcf_format_sf dict_id_is_type_2
-
-#define dict_id_vcf_info_sf      dict_id_type_1
-#define dict_id_vcf_format_sf    dict_id_type_2
-
-
-// FASTQ/FASTA field types 
-#define dict_id_is_fast_desc_sf dict_id_is_type_2
-#define dict_id_fast_desc_sf dict_id_type_2
-
-// GFF3 field types
-#define dict_id_is_gff3_attr_sf dict_id_is_type_1
-#define dict_id_gff3_attr_sf dict_id_type_1
 
 static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 #define DICT_ID_NONE ((DictIdType)(uint64_t)0)

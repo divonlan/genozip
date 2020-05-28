@@ -5,7 +5,6 @@
 
 #include "genozip.h"
 #include "strings.h"
-#include "dict_id.h"
 #ifndef WIN32
 #include <sys/ioctl.h>
 #endif

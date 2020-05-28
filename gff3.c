@@ -10,9 +10,9 @@
 #include "random_access.h"
 #include "file.h"
 #include "strings.h"
-#include "dict_id.h"
 #include "optimize.h"
 #include "piz.h"
+#include "dict_id.h"
 
 typedef struct {
     uint32_t attrs_mtf_i;     // the mtf_i into mtx_ctx[VCF_INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
@@ -165,10 +165,10 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         static const Structured Variant_effect = {
             .num_items   = 4, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
-            .items       = { { .dict_id={.id="V0arEff" }, .seperator = ' ' },
-                             { .dict_id={.id="V1arEff" }, .seperator = ' ' },
-                             { .dict_id={.id="V2arEff" }, .seperator = ' ' },
-                             { .dict_id={.id="ENSTid"  }, .seperator = ',' } }
+            .items       = { { .dict_id={.id="V0arEff" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="V1arEff" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="V2arEff" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="ENSTid"  }, .seperator = ',', .did_i = DID_I_NONE } }
         };
         gff3_seg_array_of_struct (vb, ctx, Variant_effect, *this_value, *this_value_len);
         return false;
@@ -178,10 +178,10 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         static const Structured sift_prediction = {
             .num_items   = 4, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
-            .items       = { { .dict_id={.id="S0iftPr" }, .seperator = ' ' },
-                             { .dict_id={.id="S1iftPr" }, .seperator = ' ' },
-                             { .dict_id={.id="S2iftPr" }, .seperator = ' ' },
-                             { .dict_id={.id="ENSTid"  }, .seperator = ',' } }
+            .items       = { { .dict_id={.id="S0iftPr" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="S1iftPr" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="S2iftPr" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="ENSTid"  }, .seperator = ',', .did_i = DID_I_NONE } }
         };
         gff3_seg_array_of_struct (vb, ctx, sift_prediction, *this_value, *this_value_len);
         return false;
@@ -191,10 +191,10 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         static const Structured polyphen_prediction = {
             .num_items   = 4, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
-            .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = ' ' },
-                             { .dict_id={.id="P1olyPhP" }, .seperator = ' ' },
-                             { .dict_id={.id="P2olyPhP" }, .seperator = ' ' },
-                             { .dict_id={.id="ENSTid"   }, .seperator = ',' } }
+            .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="P1olyPhP" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="P2olyPhP" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="ENSTid"   }, .seperator = ',', .did_i = DID_I_NONE } }
         };
         gff3_seg_array_of_struct (vb, ctx, polyphen_prediction, *this_value, *this_value_len);
         return false;
@@ -204,9 +204,9 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
         static const Structured variant_peptide = {
             .num_items   = 3, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
-            .items       = { { .dict_id={.id="v0arPep" }, .seperator = ' ' }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
-                             { .dict_id={.id="v1arPep" }, .seperator = ' ' },
-                             { .dict_id={.id="ENSTid"  }, .seperator = ',' } }
+            .items       = { { .dict_id={.id="v0arPep" }, .seperator = ' ', .did_i = DID_I_NONE }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
+                             { .dict_id={.id="v1arPep" }, .seperator = ' ', .did_i = DID_I_NONE },
+                             { .dict_id={.id="ENSTid"  }, .seperator = ',', .did_i = DID_I_NONE } }
         };
         gff3_seg_array_of_struct (vb, ctx, variant_peptide, *this_value, *this_value_len);
         return false;

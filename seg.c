@@ -505,8 +505,8 @@ void seg_initialize_compound_structured (VBlockP vb, char *name_template, Struct
 
     for (unsigned i=0; i < MAX_COMPOUND_COMPONENTS; i++) {
         name[1] = (i < 10) ? ('0' + i) : ('a' + (i-10));
-        st->items[i].dict_id = dict_id_type_1 (dict_id_make (name, name_len));
-
+        st->items[i].dict_id = dict_id_type_1 (dict_id_make (name, name_len)); // both FASTQ and SAM use type1 for their compound field (QNAME and DESC respectively)
+        st->items[i].did_i   = DID_I_NONE;
         mtf_get_ctx (vb, st->items[i].dict_id); // create ctx
     }
 
@@ -582,7 +582,7 @@ void seg_array_field (VBlock *vb, DictIdType dict_id, const char *value, unsigne
     const char *str = value; 
     int str_len = (int)value_len; // must be int, not unsigned, for the for loop
     
-    Structured st = { .num_items = 1, .flags = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT, { { .seperator = ',' } } };
+    Structured st = { .num_items = 1, .flags = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT, { { .seperator = ',', .did_i = DID_I_NONE } } };
     DictIdType arr_dict_id = dict_id_make ("XX_ARRAY", 8);
     arr_dict_id.id[0]      = FLIP_CASE (dict_id.id[0]);
     arr_dict_id.id[1]      = FLIP_CASE (dict_id.id[1]);

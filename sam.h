@@ -29,13 +29,13 @@ extern void sam_vb_destroy_vb();
 extern unsigned sam_vb_size (void);
 extern unsigned sam_vb_zip_dl_size (void);
 
-#define NUM_SAM_SPECIAL 5
 #define SAM_SPECIAL { sam_piz_special_CIGAR, sam_piz_special_TLEN, sam_piz_special_BI, sam_piz_special_AS, sam_piz_special_MD }
 SPECIAL (SAM, 0, CIGAR, sam_piz_special_CIGAR);
 SPECIAL (SAM, 1, TLEN,  sam_piz_special_TLEN);
 SPECIAL (SAM, 2, BI,    sam_piz_special_BI);
 SPECIAL (SAM, 3, AS,    sam_piz_special_AS);
 SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
+#define NUM_SAM_SPECIAL 5
 
 // SAM field types 
 #define sam_dict_id_is_qname_sf  dict_id_is_type_1

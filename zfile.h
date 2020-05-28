@@ -8,7 +8,6 @@
 
 #include "genozip.h"
 #include "section_types.h"
-#include "dict_id.h"
 #include "md5.h"
 #include "compressor.h"
 
@@ -46,8 +45,6 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
                                       SectionType expected_section_type);
 
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */);
-
-extern bool zfile_is_skip_section (void *vb, SectionType st, DictIdType dict_id);
 
 extern void zfile_write_txt_header (BufferP vcf_header_text, bool is_first_vcf);
 extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);

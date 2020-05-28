@@ -26,7 +26,6 @@
 #include "piz.h"
 #include "crypt.h"
 #include "file.h"
-#include "dict_id.h"
 #include "vblock.h"
 #include "endianness.h"
 #include "regions.h"
@@ -38,6 +37,7 @@
 #include "arch.h"
 #include "license.h"
 #include "vcf.h"
+#include "dict_id.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -475,6 +475,7 @@ void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
     global_max_memory_per_vb = mem_size_mb * 1024 * 1024;
 }
 
+//#include "base64.h"
 int main (int argc, char **argv)
 {
     arch_initialize();
@@ -700,11 +701,11 @@ int main (int argc, char **argv)
     ASSERT (!flag_test        || !flag_replace || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSERT (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
     ASSERT (!flag_header_only || !flag_no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
+    ASSERT (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
     ASSERT (!flag_quiet       || !flag_noisy,                       "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
     ASSERT (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
     ASSERT (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
     ASSERT (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
-    ASSERT (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
 

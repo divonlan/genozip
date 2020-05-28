@@ -12,6 +12,7 @@
 #include "strings.h"
 #include "zip.h"
 #include "optimize.h"
+#include "dict_id.h"
 
 static Structured structured_QNAME;
 
@@ -173,12 +174,12 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictIdType subfield_dict_id,
         .repeats     = 0, 
         .num_items   = 6, 
         .flags       = 0,
-        .items       = { { .dict_id = {.id="@RNAME" }, .seperator = ','},  // we don't mix with primary as primary is often sorted, and mixing will ruin its b250 compression
-                         { .dict_id = {.id="@POS"   }, .seperator = ','},  // we don't mix with primary as these are local-stored random numbers anyway - no advantage for mixing, and it would obscure the stats
-                         { .dict_id = {.id="@STRAND"}, .seperator = ','},
-                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = ','}, // we mix with primary - CIGAR tends to be a rather large dictionary, so better not have two copies of it
-                         { .dict_id = {.id="@MAPQ"  }, .seperator = ','},  // we don't mix with primary as primary often has a small number of values, and mixing will ruin its b250 compression
-                         { .dict_id = {.id="NM:i"   }, .seperator = ';'} } // we mix together with the NM option field
+        .items       = { { .dict_id = {.id="@RNAME" }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as primary is often sorted, and mixing will ruin its b250 compression
+                         { .dict_id = {.id="@POS"   }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as these are local-stored random numbers anyway - no advantage for mixing, and it would obscure the stats
+                         { .dict_id = {.id="@STRAND"}, .seperator = ',', .did_i = DID_I_NONE},
+                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = ',', .did_i = DID_I_NONE}, // we mix with primary - CIGAR tends to be a rather large dictionary, so better not have two copies of it
+                         { .dict_id = {.id="@MAPQ"  }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as primary often has a small number of values, and mixing will ruin its b250 compression
+                         { .dict_id = {.id="NM:i"   }, .seperator = ';', .did_i = DID_I_NONE} } // we mix together with the NM option field
     };
 
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(strand); DEC_SSF(cigar); DEC_SSF(mapq); DEC_SSF(nm); 
@@ -237,11 +238,11 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         .repeats     = 0, 
         .num_items   = 5, 
         .flags       = 0,
-        .items       = { { .dict_id = {.id="@RNAME"  }, .seperator = ','},
-                         { .dict_id = {.id="@STRAND" }, .seperator = 0  },
-                         { .dict_id = {.id="@POS"    }, .seperator = ','},
-                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = ','},
-                         { .dict_id = {.id="NM:i"    }, .seperator = ';'} }     
+        .items       = { { .dict_id = {.id="@RNAME"  }, .seperator = ',', .did_i = DID_I_NONE },
+                         { .dict_id = {.id="@STRAND" }, .seperator = 0,   .did_i = DID_I_NONE },
+                         { .dict_id = {.id="@POS"    }, .seperator = ',', .did_i = DID_I_NONE },
+                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = ',', .did_i = DID_I_NONE},
+                         { .dict_id = {.id="NM:i"    }, .seperator = ';', .did_i = DID_I_NONE } }     
     };
 
     Structured xa = structured_XA;

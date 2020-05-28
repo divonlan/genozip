@@ -12,6 +12,7 @@
 #include "endianness.h"
 #include "strings.h"
 #include "piz.h"
+#include "dict_id.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineME23, vb->lines, i)
 

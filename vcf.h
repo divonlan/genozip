@@ -23,6 +23,7 @@ extern void vcf_zip_generate_ht_gt_compress_vb_header (VBlockP vb_);
 extern bool vcf_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern bool vcf_v1_piz_read_one_vb();// v1 compatibility
 extern void vcf_piz_uncompress_vb(); // no parameter - implicit casting of VBlockP to VBlockVCFP
+extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id);
 
 // ZFILE stuff
 extern void vcf_zfile_compress_vb_header (VBlockP vb);
@@ -64,5 +65,11 @@ extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;
     { DT_VCF,  &dict_id_INFO_END,              &dict_id_fields[VCF_POS]    }, \
 
 #define VCF_LOCAL_COMPRESSOR_CALLBACKS
+
+#define dict_id_is_vcf_info_sf   dict_id_is_type_1
+#define dict_id_is_vcf_format_sf dict_id_is_type_2
+
+#define dict_id_vcf_info_sf      dict_id_type_1
+#define dict_id_vcf_format_sf    dict_id_type_2
 
 #endif

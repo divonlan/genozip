@@ -14,8 +14,9 @@
 #include "compatibility/visual_c_stdbool.h"
 #endif
 
+#include "genozip.h"
+#include "section_types.h"
 #include "md5.h"
-#include "dict_id.h"
 
 // Section headers - big endian
 

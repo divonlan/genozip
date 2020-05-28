@@ -19,6 +19,7 @@
 #include "base250.h"
 #include "endianness.h"
 #include "random_access.h"
+#include "dict_id.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_file)
 {

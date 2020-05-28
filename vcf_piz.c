@@ -26,6 +26,17 @@ typedef struct {
 
 static Buffer piz_format_mapper_buf = EMPTY_BUFFER; //global array, initialized by I/O thread and immitable thereafter
 
+// returns true if section is to be skipped reading / uncompressing
+bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
+{
+    if ((flag_drop_genotypes || flag_gt_only) && 
+        (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id_is_vcf_format_sf (dict_id) || st == SEC_VCF_GT_DATA ||
+        st == SEC_VCF_FORMAT_B250_legacy || st == SEC_VCF_FORMAT_DICT_legacy || st == SEC_VCF_FRMT_SF_DICT_legacy))
+        return true;
+
+    return false;
+}
+
 static bool vcf_piz_reconstruct_fields (VBlockVCF *vb, bool *has_13) // out: original vcf line ended with Windows-style \r\n
 {
     uint64_t txt_data_start = vb->txt_data.len;

@@ -10,8 +10,8 @@
 #include "genozip.h"
 #include "buffer.h"
 #include "base250.h"
-#include "dict_id.h"
 #include "section_types.h"
+#include "data_types.h"
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on mtf.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
@@ -35,13 +35,14 @@
 // structured snip: it starts with SNIP_STRUCTURED, following by a base64 of a big endian Structured
 #pragma pack(1)
 #define STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT 0x01
-#define STRUCTURED_MAX_REPEATS 65534
+#define STRUCTURED_MAX_REPEATS 65534 // one less than maxuint16 to make it easier to loop with st.repeats without overflow 
 typedef struct Structured {
     uint16_t repeats;     // number of "repeats" (array elements)
     uint8_t num_items;    // 1 to MAX_STRUCTURED_ITEMS
     uint8_t flags;
     struct {
         DictIdType dict_id;  
+        uint8_t did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
         char seperator;
     } items[MAX_SUBFIELDS];
 } Structured;

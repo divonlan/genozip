@@ -111,8 +111,36 @@ for file in ${files[@]}; do
 
 done
 
-test_header "$file - testing VCF with sblock=1"
-./genozip test-file.vcf --sblock 1 -ft -o ${output}.genozip || exit 1
+file=test-file.vcf
+test_header "$file - testing VCF with --sblock=1"
+./genozip $file --sblock 1 -ft -o ${output}.genozip || exit 1
+
+test_count_genocat_lines() {
+    cmd="./genocat ${output}.genozip $2"
+    test_header "$cmd"
+    ./genozip $1 -fo ${output}.genozip || exit 1
+    wc=`$cmd | wc -l`
+    if [[ $wc != $3 ]]; then
+        echo "FAILED - expected $3 lines, but getting $wc"
+        exit 1
+    fi
+}
+
+# FASTA genocat tests
+test_count_genocat_lines test-file.fa "--sequential" 9
+test_count_genocat_lines test-file.fa "--header-only" 3
+test_count_genocat_lines test-file.fa "--header-one" 3
+test_count_genocat_lines test-file.fa "--no-header" 15
+test_count_genocat_lines test-file.fa "--no-header --sequential" 6
+test_count_genocat_lines test-file.fa "--grep cytochrome" 6
+test_count_genocat_lines test-file.fa "--grep cytochrome --sequential " 2
+test_count_genocat_lines test-file.fa "--grep cytochrome --sequential --no-header " 1
+
+# FASTQ genocat tests
+test_count_genocat_lines test-file.fq "--header-only" 2
+test_count_genocat_lines test-file.fq "--header-one" 2
+test_count_genocat_lines test-file.fq "--grep 8160" 4
+test_count_genocat_lines test-file.fq "--grep 8160 --header-only" 1
 
 files=`ls backward-compatibility-test/*.vcf` 
 for file in $files; do

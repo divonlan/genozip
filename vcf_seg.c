@@ -12,6 +12,7 @@
 #include "file.h"
 #include "strings.h"
 #include "zip.h"
+#include "dict_id.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 

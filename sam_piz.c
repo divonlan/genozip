@@ -8,6 +8,7 @@
 #include "move_to_front.h"
 #include "piz.h"
 #include "strings.h"
+#include "dict_id.h"
 
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
 void sam_piz_special_CIGAR (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
@@ -28,7 +29,7 @@ void sam_piz_special_TLEN (VBlock *vb, MtfContext *ctx, const char *snip, unsign
     int32_t tlen_val = tlen_by_calc + vb->mtf_ctx[SAM_PNEXT].last_delta + vb->seq_len;
 
     ctx->last_value = tlen_val;
-    
+
     RECONSTRUCT_INT (tlen_val);
 }
 

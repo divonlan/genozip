@@ -14,6 +14,9 @@ extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_s
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);
 extern void piz_map_iname_subfields (VBlockP vb);
 
+#define piz_is_skip_section(vb,st,dict_id) (vb->data_type != DT_NONE     && DTP(is_skip_secetion)  && DTP (is_skip_secetion)((VBlockP)(vb), (st), (dict_id)))
+#define piz_is_skip_sectionz(st,dict_id)   (z_file->data_type != DT_NONE && DTPZ(is_skip_secetion) && DTPZ(is_skip_secetion)(NULL, (st), (dict_id)))
+
 // ----------------------------------------------
 // utilities for use by piz_*_read_one_vb
 // ----------------------------------------------

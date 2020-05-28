@@ -35,6 +35,7 @@ unzip:
 #include "file.h"
 #include "hash.h"
 #include "seg.h"
+#include "dict_id.h"
 
 const char ctx_lt_to_sam_map[NUM_CTX_LT] = "\0cCsSiI\0\0f\0\0" ;
 const int ctx_lt_sizeof_one[NUM_CTX_LT]  = { 1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 1 };
