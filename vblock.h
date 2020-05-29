@@ -12,18 +12,15 @@
 #include "aes.h"
 #include "move_to_front.h"
 
-// PIZ only: can appear in did_i of an INFO subfield mapping, indicating that this INFO has an added
-// ":#" indicating that the original VCF line had a Windows-style \r\n ending
-#define DID_I_HAS_13 254 
 #ifndef DID_I_NONE // also defined in move_to_front.h
 #define DID_I_NONE   255
 #endif
 typedef struct SubfieldMapper {
     uint8_t num_subfields;        // (uint8_t)NIL if this mapper is not defined
-    uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->mtf_ctx[]
+    uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->contexts[]
 } SubfieldMapper;
 
-#define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->mtf_ctx[(mapper)->did_i[(sf)]] : NULL)
+#define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->contexts[(mapper)->did_i[(sf)]] : NULL)
 
 #define NUM_COMPRESS_BUFS 7   // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
 
@@ -88,7 +85,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     uint32_t num_dict_ids;            /* total number of dictionaries of all types */\
-    MtfContext mtf_ctx[MAX_DICTS];    \
+    MtfContext contexts[MAX_DICTS];    \
     uint8_t dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\

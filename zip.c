@@ -72,7 +72,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 static void zip_handle_unique_words_ctxs (VBlock *vb)
 {
     for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
+        MtfContext *ctx = &vb->contexts[did_i];
     
         if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
         if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
@@ -93,7 +93,7 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
 {
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
+        MtfContext *ctx = &vb->contexts[did_i];
 
         if (ctx->mtf_i.len && 
             (vb->data_type != DT_VCF || !dict_id_is_vcf_format_sf (ctx->dict_id))) { // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
@@ -276,7 +276,7 @@ static void zip_compress_one_vb (VBlock *vb)
     else
         zfile_compress_generic_vb_header (vb); // vblock header
 
-    // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
+    // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section() and
     // vcf_zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     mtf_merge_in_vb_ctx(vb);
@@ -284,6 +284,13 @@ static void zip_compress_one_vb (VBlock *vb)
     // merge in random access - IF it is used
     if (DTP(has_random_access)) 
         random_access_merge_in_vb (vb);
+
+    // optimize FORMAT/GL data in local (we have already optimized the data in dict elsewhere)
+    if (vb->data_type == DT_VCF) {
+        uint8_t gl_did_i =  mtf_get_existing_did_i (vb, (DictIdType)dict_id_FORMAT_GL);
+        if (gl_did_i != DID_I_NONE) 
+            gl_optimize_local (vb, &vb->contexts[gl_did_i].local);
+    }
 
     // generate & compress b250 and local data for all ctxs 
     zip_generate_and_compress_ctxs (vb);

@@ -37,39 +37,12 @@ bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
     return false;
 }
 
-static bool vcf_piz_reconstruct_fields (VBlockVCF *vb, bool *has_13) // out: original vcf line ended with Windows-style \r\n
-{
-    uint64_t txt_data_start = vb->txt_data.len;
-
-    piz_reconstruct_from_ctx (vb, VCF_CHROM,  '\t');
-    piz_reconstruct_from_ctx (vb, VCF_POS,    '\t');
-    piz_reconstruct_from_ctx (vb, VCF_ID,     '\t');
-    piz_reconstruct_from_ctx (vb, VCF_REFALT, '\t');
-    piz_reconstruct_from_ctx (vb, VCF_QUAL,   '\t');
-    piz_reconstruct_from_ctx (vb, VCF_FILTER, '\t');
-
-    DECLARE_SNIP;
-    uint32_t iname_word_index = LOAD_SNIP (VCF_INFO);        
-    piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, NULL, has_13);
-    RECONSTRUCT1 ('\t');
-
-    if (vb->mtf_ctx[VCF_FORMAT].word_list.len) {
-        if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
-        else if (!flag_drop_genotypes) piz_reconstruct_from_ctx (vb, VCF_FORMAT, '\t');
-    }
-
-    // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-    if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
-
-    return !vb->dont_show_curr_line;
-}
-
 // Called from the I/O thread vcf_piz_read_one_vb - and immutable thereafter
 // This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries.
 // It populates piz_format_mapper_buf with info about each unique format type in this vb (FormatInfo structure)
 static void vcf_piz_map_format_subfields (VBlock *vb)
 {    
-    MtfContext *format_ctx = &z_file->mtf_ctx[VCF_FORMAT];
+    MtfContext *format_ctx = &z_file->contexts[VCF_FORMAT];
 
     // initialize
     buf_free (&piz_format_mapper_buf); // in case it was allocated by a previous file
@@ -127,7 +100,7 @@ static void vcf_piz_initialize_sample_iterators (VBlockVCF *vb)
     ARRAY (FormatInfo, formats, piz_format_mapper_buf);
 
     // Get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
-    MtfContext *format_ctx = &vb->mtf_ctx[VCF_FORMAT];
+    MtfContext *format_ctx = &vb->contexts[VCF_FORMAT];
     for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
         vb->line_i = vb->first_line + line_i;
         DATA_LINE (line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL);
@@ -413,7 +386,7 @@ static void vcf_piz_get_haplotype_data_line (VBlockVCF *vb, unsigned vb_line_i, 
 }
 
 // add the samples (haplotype, genotype, phase) to txt_dataa
-static void vcf_piz_reconstruct_samples (VBlockVCF *vb, unsigned vb_line_i, bool has_13)
+static void vcf_piz_reconstruct_samples (VBlockVCF *vb, unsigned vb_line_i)
 {
     START_TIMER;
 
@@ -483,9 +456,7 @@ static void vcf_piz_reconstruct_samples (VBlockVCF *vb, unsigned vb_line_i, bool
     // trim trailing tabs due to missing data
     for (; vb->txt_data.len >= line_start+2 && *ENT(char, vb->txt_data, vb->txt_data.len - 2) == '\t'; vb->txt_data.len--); // after this loop, next points to the first tab after the last non-tab character
 
-    // now, we need to replace the last tab with \n or with \r\n (depending on has_13)
-    vb->txt_data.len--;
-    RECONSTRUCT (has_13 ? "\r\n" : "\n", has_13 ? 2 : 1);
+    vb->txt_data.len--; // remove last tab
 
     COPY_TIMER (vb->profile.vcf_piz_reconstruct_samples);
 }
@@ -530,29 +501,49 @@ static void vcf_piz_reconstruct_vb (VBlockVCF *vb)
     for (unsigned vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         vb->line_i = vb->first_line + vb_line_i;
+        uint64_t txt_data_start = vb->txt_data.len;
 
-        // re-construct variant data (fields CHROM to FORMAT, including INFO subfields) into vb->txt_data
-        bool has_13 = false;
-        bool is_line_included = vcf_piz_reconstruct_fields (vb, &has_13);
+        // re-construct fields CHROM to FORMAT, including INFO subfields into vb->txt_data
+        piz_reconstruct_from_ctx (vb, VCF_CHROM,  '\t');
+        piz_reconstruct_from_ctx (vb, VCF_POS,    '\t'); // might change vb->dont_show_curr_line to true in case of --regions
+        piz_reconstruct_from_ctx (vb, VCF_ID,     '\t');
+        piz_reconstruct_from_ctx (vb, VCF_REFALT, '\t');
+        piz_reconstruct_from_ctx (vb, VCF_QUAL,   '\t');
+        piz_reconstruct_from_ctx (vb, VCF_FILTER, '\t');
+
+        bool has_13 = false; // for files up to v4, \r is encoded in the INFO data
+        piz_reconstruct_info ((VBlockP)vb, VCF_INFO, &has_13);
+        RECONSTRUCT1 ('\t');
+
+        if (vb->contexts[VCF_FORMAT].word_list.len) {
+            if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
+            else if (!flag_drop_genotypes) piz_reconstruct_from_ctx (vb, VCF_FORMAT, '\t');
+        }
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (!flag_drop_genotypes) {
             // note: we always call vcf_piz_reconstruct_genotype_data_line even if !is_line_included, bc we need to advance the iterators
             if (vb->has_genotype_data && !flag_gt_only)  
-                vcf_piz_reconstruct_genotype_data_line (vb, vb_line_i, is_line_included);
+                vcf_piz_reconstruct_genotype_data_line (vb, vb_line_i, !vb->dont_show_curr_line);
 
-            if (is_line_included)  {
+            if (!vb->dont_show_curr_line)  {
                 if (vb->phase_type == PHASE_MIXED_PHASED) 
                     vcf_piz_get_phase_data_line (vb, vb_line_i);
 
                 if (vb->has_haplotype_data) 
                     vcf_piz_get_haplotype_data_line (vb, vb_line_i, ht_columns_data);
 
-                vcf_piz_reconstruct_samples (vb, vb_line_i, has_13);
+                vcf_piz_reconstruct_samples (vb, vb_line_i);
             }
         }
-        else if (is_line_included) // flag_drop_genotypes
-            *LASTENT (char, vb->txt_data) = '\n'; // if it was a \t, it is now a \n
+
+        if (is_v5_or_above)
+            piz_reconstruct_from_ctx (vb, VCF_EOL, 0);
+        else
+            RECONSTRUCT (has_13 ? "\r\n" : "\n", 1 + has_13);
+
+        // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
+        if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
             
         // reset len for next line - no need to alloc as all the lines are the same size?
         vb->line_ht_data.len = vb->line_gt_data.len = vb->line_phase_data.len = 0;
@@ -615,6 +606,11 @@ static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
     }
 
     unsigned section_i = piz_uncompress_all_ctxs ((VBlockP)vb);
+
+    // de-optimize FORMAT/GL data in local (we have already de-optimized the data in dict elsewhere)
+    uint8_t gl_did_i =  mtf_get_existing_did_i ((VBlockP)vb, (DictIdType)dict_id_FORMAT_GL);
+    if (gl_did_i != DID_I_NONE) 
+        gl_deoptimize (vb->contexts[gl_did_i].local.data, vb->contexts[gl_did_i].local.len);
 
     if (flag_drop_genotypes) return; // if --drop-genotypes was requested - no need to uncompress the following sections
 

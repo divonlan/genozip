@@ -50,8 +50,8 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->region_ra_intersection_matrix);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
-        if (vb->mtf_ctx[i].dict_id.num)
-            mtf_free_context (&vb->mtf_ctx[i]);
+        if (vb->contexts[i].dict_id.num)
+            mtf_free_context (&vb->contexts[i]);
 
     for (unsigned i=0; i < NUM_COMPRESS_BUFS; i++)
         buf_free (&vb->compress_bufs[i]);
@@ -88,8 +88,8 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->region_ra_intersection_matrix);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
-        if (vb->mtf_ctx[i].dict_id.num)
-            mtf_destroy_context (&vb->mtf_ctx[i]);
+        if (vb->contexts[i].dict_id.num)
+            mtf_destroy_context (&vb->contexts[i]);
 
     for (unsigned i=0; i < NUM_COMPRESS_BUFS; i++)
         buf_destroy (&vb->compress_bufs[i]);

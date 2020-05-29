@@ -35,7 +35,7 @@ typedef struct {
     bool has_haplotype_data; // FORMAT field contains GT
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
-    uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    uint32_t format_mtf_i;   // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
     uint32_t info_mtf_i;     // the mtf_i into mtx_ctx[VCF_INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
 } ZipDataLineVCF;
 
@@ -44,7 +44,7 @@ typedef struct {
     bool has_haplotype_data; // FORMAT field contains GT
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
-    uint32_t format_mtf_i;   // the mtf_i into mtf_ctx[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    uint32_t format_mtf_i;   // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
 } PizDataLineVCF;
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
@@ -99,9 +99,9 @@ typedef struct VBlockVCF {
 
     // dictionaries stuff 
 #define num_info_subfields   num_type1_subfields
-    Buffer iname_mapper_buf;          // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
+    Buffer iname_mapper_buf;          // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_INFO].mtf
 #define num_format_subfields num_type2_subfields
-    Buffer format_mapper_buf;         // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_FORMAT].mtf   
+    Buffer format_mapper_buf;         // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_FORMAT].mtf   
 
     // stuff related to compressing haplotype data with gtshark
     Buffer gtshark_db_db_data;        // ZIP & PIZ

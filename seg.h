@@ -23,8 +23,8 @@ extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, 
 
 extern uint32_t seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, MtfContextP ctx, uint32_t add_bytes, bool *is_new);
 #define seg_by_dict_id(vb,str,len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, str, len, mtf_get_ctx (vb, dict_id), add_bytes, NULL)
-#define seg_by_did_i_ex(vb,str,len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, str, len, &vb->mtf_ctx[did_i], add_bytes, is_new);
-#define seg_by_did_i(vb,str,len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, str, len, &vb->mtf_ctx[did_i], add_bytes, NULL);
+#define seg_by_did_i_ex(vb,str,len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, is_new);
+#define seg_by_did_i(vb,str,len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, NULL);
 
 extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
@@ -47,9 +47,7 @@ extern void seg_structured_by_ctx (VBlockP vb, MtfContextP ctx, StructuredP st, 
 
 extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_mapper_buf, uint8_t *num_info_subfields,
                             SegSpecialInfoSubfields seg_special_subfields,
-                            const char *info_str, unsigned info_len, 
-                            bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
-                            bool this_line_has_13); // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
+                            const char *info_str, unsigned info_len);
 
 extern void seg_add_to_local_text   (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, MtfContextP ctx, const void *data, unsigned data_len);
@@ -72,9 +70,21 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id,
 // Seg utilities
 // ------------------
 
-#define GET_NEXT_ITEM(item_name,has_13) \
-    field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, !!has_13, !has_13, false, &field_len, &separator, has_13, item_name);
+#define GET_NEXT_ITEM(item_name) \
+    { field_start = next_field; \
+      next_field = seg_get_next_item (vb, field_start, &len, false, true, false, &field_len, &separator, NULL, (item_name)); }
+
+#define SEG_NEXT_ITEM(f) \
+    { GET_NEXT_ITEM (DTF(names)[f]); \
+      seg_by_did_i (vb, field_start, field_len, f, field_len+1); }
+
+#define GET_LAST_ITEM(item_name) \
+    { field_start = next_field; \
+      next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, has_13, item_name); }
+
+#define GET_MAYBE_LAST_ITEM(item_name) \
+    { field_start = next_field; \
+      next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, has_13, item_name); }
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
@@ -90,8 +100,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id,
 
 #define SAFE_RESTORE(reg) *__addr##reg = __save##reg; 
 
-#define SEG_EOL(f) seg_by_did_i (vb, has_13 ? "\r\n" : "\n", 1 + has_13, (f), 1 + has_13); \
-                   *has_special_eol = *has_special_eol || has_13;
+#define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
     ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\

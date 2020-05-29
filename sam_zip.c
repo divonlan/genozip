@@ -105,11 +105,11 @@ void sam_seg_initialize (VBlock *vb)
         structured_initialized = true;
     }
 
-    vb->mtf_ctx[SAM_RNAME].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->mtf_ctx[SAM_SEQ].flags   = CTX_FL_LOCAL_LZMA;
-    vb->mtf_ctx[SAM_SEQ].ltype   = CTX_LT_SEQUENCE;
-    vb->mtf_ctx[SAM_QUAL].ltype  = CTX_LT_SEQUENCE;
-    vb->mtf_ctx[SAM_TLEN].flags  = CTX_FL_STORE_VALUE;
+    vb->contexts[SAM_RNAME].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[SAM_SEQ].flags   = CTX_FL_LOCAL_LZMA;
+    vb->contexts[SAM_SEQ].ltype   = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].ltype  = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_TLEN].flags  = CTX_FL_STORE_VALUE;
 }
 
 // TLEN - 3 cases: 
@@ -121,7 +121,7 @@ static inline void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
     ASSSEG (tlen_len, tlen, "%s: empty TLEN", global_cmd);
     ASSSEG (str_is_int (tlen, tlen_len), tlen, "%s: expecting TLEN to be an integer", global_cmd);
 
-    MtfContext *ctx = &vb->mtf_ctx[SAM_TLEN];
+    MtfContext *ctx = &vb->contexts[SAM_TLEN];
     ctx->flags = CTX_FL_STORE_VALUE;
 
     int64_t tlen_value = (int64_t)strtoull (tlen, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
@@ -486,8 +486,8 @@ static void sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
         dl->e2_data_start = value - vb->txt_data.data;
         dl->e2_data_len   = value_len;
-        vb->mtf_ctx[SAM_SEQ].txt_len   += value_len + 1; // +1 for \t
-        vb->mtf_ctx[SAM_SEQ].local.len += value_len;
+        vb->contexts[SAM_SEQ].txt_len   += value_len + 1; // +1 for \t
+        vb->contexts[SAM_SEQ].local.len += value_len;
     }
 
     // U2 - QUAL data (note: U2 doesn't have a dictionary)
@@ -498,8 +498,8 @@ static void sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
 
         dl->u2_data_start = value - vb->txt_data.data;
         dl->u2_data_len   = value_len;
-        vb->mtf_ctx[SAM_QUAL].txt_len   += value_len + 1; // +1 for \t
-        vb->mtf_ctx[SAM_QUAL].local.len += value_len;
+        vb->contexts[SAM_QUAL].txt_len   += value_len + 1; // +1 for \t
+        vb->contexts[SAM_QUAL].local.len += value_len;
     }
 
     // Numeric array array
@@ -562,16 +562,16 @@ static void sam_seg_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
                 dl->seq_len, dl->qual_data_len, dl->qual_data_len, qual);    
     }
 
-    MtfContext *seq_ctx = &vb->mtf_ctx[SAM_SEQ];
+    MtfContext *seq_ctx = &vb->contexts[SAM_SEQ];
     seq_ctx->local.len += dl->seq_data_len;  // used by zfile_compress_local_data
     seq_ctx->txt_len   += dl->seq_data_len  + 1; // byte counts for --show-sections - +1 for terminating \t
 
-    MtfContext *qual_ctx = &vb->mtf_ctx[SAM_QUAL];
+    MtfContext *qual_ctx = &vb->contexts[SAM_QUAL];
     qual_ctx->local.len += dl->qual_data_len;
     qual_ctx->txt_len   += dl->qual_data_len + 1;
 }
 
-const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_special_eol)     // index in vb->txt_data where this line starts
+const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
@@ -579,49 +579,46 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;
     char separator;
-    bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
     int32_t len = AFTERENT (char, vb->txt_data) - field_start_line;
 
     // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. Examples:
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
-    GET_NEXT_ITEM ("QNAME", NULL);
-    seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[SAM_QNAME], field_start, field_len, &vb->qname_mapper, structured_QNAME, false, 1 /* \n */);
+    GET_NEXT_ITEM ("QNAME");
+    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, &vb->qname_mapper, structured_QNAME, false, 1 /* \n */);
 
-    GET_NEXT_ITEM ("FLAG", NULL);
-    seg_by_did_i (vb, field_start, field_len, SAM_FLAG, field_len+1);
+    SEG_NEXT_ITEM (SAM_FLAG);
 
-    GET_NEXT_ITEM ("RNAME", NULL);
+    GET_NEXT_ITEM ("RNAME");
     seg_chrom_field (vb_, field_start, field_len);
 
-    GET_NEXT_ITEM ("POS", NULL);
+    GET_NEXT_ITEM ("POS");
     seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, true);
     random_access_update_pos (vb_, SAM_POS);
 
-    GET_NEXT_ITEM ("MAPQ", NULL);
-    seg_by_did_i (vb, field_start, field_len, SAM_MAPQ, field_len+1);
+    SEG_NEXT_ITEM (SAM_MAPQ);
 
     // CIGAR - if CIGAR is "*" and we wait to get the length from SEQ or QUAL
-    GET_NEXT_ITEM ("CIGAR", NULL);
+    GET_NEXT_ITEM ("CIGAR");
     dl->seq_len = sam_seq_len_from_cigar (field_start, field_len);
     if (dl->seq_len) sam_seg_cigar_field (vb, field_start, field_len); // not "*" - all good!
 
-    GET_NEXT_ITEM ("RNEXT", NULL);
+    GET_NEXT_ITEM ("RNEXT");
     seg_by_did_i (vb, field_start, field_len, SAM_RNAME, field_len+1); // add to RNAME dictionary
     
-    GET_NEXT_ITEM ("PNEXT", NULL);
+    GET_NEXT_ITEM ("PNEXT");
     seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, field_start, field_len, true);
 
-    GET_NEXT_ITEM ("TLEN", NULL);
-    sam_seg_tlen_field (vb, field_start, field_len, vb->mtf_ctx[SAM_PNEXT].last_delta, dl->seq_len);
+    GET_NEXT_ITEM ("TLEN");
+    sam_seg_tlen_field (vb, field_start, field_len, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len);
 
     // SEQ & QUAL
     dl->seq_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, false, true, false, &dl->seq_data_len, &separator, NULL, "SEQ");
 
     dl->qual_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (vb, next_field, &len, true, true, false, &dl->qual_data_len, &separator, &has_13, "QUAL");
+    next_field = seg_get_next_item (vb, next_field, &len, true, true, false, &dl->qual_data_len, &separator, has_13, "QUAL");
 
     sam_seg_seq_qual_fields (vb, dl); // also updates cigar if it is "*"
 
@@ -630,22 +627,19 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     unsigned oname_len;
 
     for (oname_len=0; oname_len < MAX_SUBFIELDS*5 && separator != '\n'; oname_len += 5) {
-        field_start = next_field;
-        next_field = seg_get_next_item (vb, field_start, &len, true, true, false, &field_len, &separator, &has_13, "OPTIONAL-subfield");
+        GET_MAYBE_LAST_ITEM ("OPTIONAL-subfield");
         sam_seg_optional_field (vb, dl, field_start, field_len, separator);
         memcpy (&oname[oname_len], field_start, 5);
     }
     ASSSEG (separator=='\n', field_start, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
 
-    // treat a Windows style \r (as part of a \r\n line termination) as part of the oname - add a # to represent it
-    if (has_13) oname[oname_len++] = '#';
-
     // if oname is empty, we make it "*" (and adjust size accounting)
     if (!oname_len) oname[oname_len++] = '*';
 
-    seg_by_did_i (vb, oname, oname_len, SAM_OPTIONAL,
-                   (oname_len == 1) ? (oname[0] == '#' /* \r */) : oname_len /* last subfield accounted for \n */);  
-    vb->mtf_ctx[SAM_OPTIONAL].flags |= CTX_FL_NO_STONS;
+    seg_by_did_i (vb, oname, oname_len, SAM_OPTIONAL, (oname_len == 1) ? 0 : oname_len );  
+    vb->contexts[SAM_OPTIONAL].flags |= CTX_FL_NO_STONS;
+
+    SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
 
     return next_field;
 }

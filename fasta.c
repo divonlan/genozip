@@ -35,13 +35,12 @@ void fasta_seg_initialize (VBlockFAST *vb)
 //     note: if a comment line is the first line in a VB - it will be segmented as a description. No harm done.
 // 123 - a sequence line - any line that's not a description of sequence line - store its length
 // these ^ are preceded by a 'Y' if the line has a Windows-style \r\n line ending or 'X' if not
-const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *has_special_eol) // index in vb->txt_data where this line starts
+const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *has_13) // index in vb->txt_data where this line starts
 {
     // get entire line
     unsigned line_len;
-    bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
     int32_t remaining_vb_txt_len = AFTERENT (char, vb->txt_data) - line_start;
-    const char *next_field = seg_get_next_line (vb, line_start, &remaining_vb_txt_len, &line_len, &has_13, "FASTA line");
+    const char *next_field = seg_get_next_line (vb, line_start, &remaining_vb_txt_len, &line_len, has_13, "FASTA line");
     char special_snip[100];
     unsigned special_snip_len;
 
@@ -59,7 +58,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
         seg_by_did_i (vb, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
 
-        SEG_EOL (FASTA_EOL);
+        SEG_EOL (FASTA_EOL, true);
         vb->last_line = FASTA_LINE_DESC;
     }
 
@@ -75,7 +74,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
         seg_by_did_i (vb, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
         
-        SEG_EOL (FASTA_EOL);
+        SEG_EOL (FASTA_EOL, true);
         vb->last_line = FASTA_LINE_COMMENT;
     }
 
@@ -95,7 +94,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         special_snip[2] = '0' + (vb->last_line != FASTA_LINE_SEQ); // first seq line in this contig
         seg_by_did_i (vb, special_snip, 3 + special_snip_len, FASTA_LINEMETA, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
 
-        SEG_EOL (FASTA_EOL); 
+        SEG_EOL (FASTA_EOL, true); 
         vb->last_line = FASTA_LINE_SEQ;
     }
 

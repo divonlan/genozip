@@ -18,7 +18,7 @@ typedef struct {
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
     SubfieldMapper qname_mapper;         // ZIP & PIZ
-    Buffer optional_mapper_buf;          // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->mtf_ctx[SAM_OPTIONAL].mtf
+    Buffer optional_mapper_buf;          // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->contexts[SAM_OPTIONAL].mtf
 } VBlockSAM;
 
 #define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)

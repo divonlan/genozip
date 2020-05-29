@@ -23,7 +23,7 @@ typedef struct VBlockGFF3 {
     VBLOCK_COMMON_FIELDS
 #define num_info_subfields num_type1_subfields   // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
                                   // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
-    Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->mtf_ctx[VCF_INFO].mtf
+    Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_INFO].mtf
 } VBlockGFF3;
 
 #define DATA_LINE(i) ENT (ZipDataLineGFF3, vb->lines, i)
@@ -48,8 +48,8 @@ void gff3_seg_initialize (VBlock *vb)
 {
     seg_init_mapper (vb, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");  
 
-    vb->mtf_ctx[GFF3_SEQID].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->mtf_ctx[GFF3_ATTRS].flags = CTX_FL_NO_STONS;
+    vb->contexts[GFF3_SEQID].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[GFF3_ATTRS].flags = CTX_FL_NO_STONS;
 }
 
 // returns length of next expected item, and 0 if unsuccessful
@@ -81,7 +81,7 @@ static void gff3_seg_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
     bool is_last_entry = false;
 
     // get ctx's
-    MtfContext *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->mtf_ctx)
+    MtfContext *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
     for (unsigned i=0; i < st.num_items; i++) 
         ctxs[i] = mtf_get_ctx_sf (vb, &vb->num_info_subfields, st.items[i].dict_id); 
 
@@ -239,7 +239,7 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
     return true; // all other cases -  procedue with adding to dictionary/b250
 }
 
-const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_special_eol)     // index in vb->txt_data where this line starts
+const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
     ZipDataLineGFF3 *dl = DATA_LINE (vb->line_i);
@@ -250,39 +250,28 @@ const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *
 
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
-    GET_NEXT_ITEM ("SEQID", NULL);
+    GET_NEXT_ITEM ("SEQID");
     seg_chrom_field (vb_, field_start, field_len);
 
-    GET_NEXT_ITEM ("SOURCE", NULL);
-    seg_by_did_i (vb, field_start, field_len, GFF3_SOURCE, field_len + 1);
+    SEG_NEXT_ITEM (GFF3_SOURCE);
+    SEG_NEXT_ITEM (GFF3_TYPE);
 
-    GET_NEXT_ITEM ("TYPE", NULL);
-    seg_by_did_i (vb, field_start, field_len, GFF3_TYPE, field_len + 1);
-
-    GET_NEXT_ITEM ("START", NULL);
+    GET_NEXT_ITEM ("START");
     seg_pos_field (vb_, GFF3_START, GFF3_START, false, field_start, field_len, true);
     random_access_update_pos (vb_, GFF3_START);
 
-    GET_NEXT_ITEM ("END", NULL);
+    GET_NEXT_ITEM ("END");
     seg_pos_field (vb_, GFF3_END, GFF3_START, false, field_start, field_len, true);
 
-    GET_NEXT_ITEM ("SCORE", NULL);
-    seg_by_did_i (vb, field_start, field_len, GFF3_SCORE, field_len + 1);
+    SEG_NEXT_ITEM (GFF3_SCORE);
+    SEG_NEXT_ITEM (GFF3_STRAND);
+    SEG_NEXT_ITEM (GFF3_PHASE);
 
-    GET_NEXT_ITEM ("STRAND", NULL);
-    seg_by_did_i (vb, field_start, field_len, GFF3_STRAND, field_len + 1);
-
-    GET_NEXT_ITEM ("PHASE", NULL);
-    seg_by_did_i (vb, field_start, field_len, GFF3_PHASE, field_len + 1);
-
-    // ATTRIBUTES
-    field_start = next_field; 
-    bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
-    next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, 
-                                    DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
-
+    GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
     seg_info_field (vb_, &dl->attrs_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, gff3_seg_special_info_subfields,
-                    field_start, field_len, has_13, has_13); // we break the const bc vcf_seg_info_field might add a :#
+                    field_start, field_len);
+
+    SEG_EOL (GFF3_EOL, false);
 
     return next_field;
 }
@@ -304,13 +293,8 @@ void gff3_piz_reconstruct_vb (VBlockGFF3 *vb)
         piz_reconstruct_from_ctx (vb, GFF3_SCORE,  '\t');
         piz_reconstruct_from_ctx (vb, GFF3_STRAND, '\t');
         piz_reconstruct_from_ctx (vb, GFF3_PHASE,  '\t');
-
-        DECLARE_SNIP;
-        uint32_t iname_word_index = LOAD_SNIP (GFF3_ATTRS);        
-        bool has_13;
-        piz_reconstruct_info ((VBlockP)vb, iname_word_index, snip, snip_len, NULL, &has_13);
-        // add the end-of-line
-        RECONSTRUCT (has_13 ? "\r\n" : "\n" , 1 + has_13);
+        piz_reconstruct_info ((VBlockP)vb, GFF3_ATTRS, NULL);
+        piz_reconstruct_from_ctx (vb, GFF3_EOL,    0);
 
         // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
         if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 

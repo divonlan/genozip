@@ -18,7 +18,7 @@
 
 void me23_seg_initialize (VBlock *vb)
 {
-    vb->mtf_ctx[ME23_CHROM].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[ME23_CHROM].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
 }
 
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
@@ -29,37 +29,37 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
 
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
-    GET_NEXT_ITEM ("RSID", NULL);
+    GET_NEXT_ITEM ("RSID");
     seg_id_field (vb, (DictIdType)dict_id_fields[ME23_ID], field_start, field_len, true);
 
-    GET_NEXT_ITEM ("CHROM", NULL);
+    GET_NEXT_ITEM ("CHROM");
     seg_chrom_field (vb, field_start, field_len);
 
-    GET_NEXT_ITEM ("POS", NULL);
+    GET_NEXT_ITEM ("POS");
     seg_pos_field (vb, ME23_POS, ME23_POS, false, field_start, field_len, true);
     random_access_update_pos (vb, ME23_POS);
 
     // Genotype (a combination of one or two bases or "--")
-    GET_NEXT_ITEM ("GENOTYPE", has_13);
+    GET_LAST_ITEM ("GENOTYPE");
     
     ASSERT (field_len == 1 || field_len == 2, "%s: Error in %s: expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
             global_cmd, txt_name, field_len, field_len, field_start);
 
-    seg_add_to_local_fixed (vb, &vb->mtf_ctx[ME23_GENOTYPE], field_start, field_len); 
-    vb->mtf_ctx[ME23_GENOTYPE].ltype = CTX_LT_SEQUENCE;
+    seg_add_to_local_fixed (vb, &vb->contexts[ME23_GENOTYPE], field_start, field_len); 
+    vb->contexts[ME23_GENOTYPE].ltype = CTX_LT_SEQUENCE;
     
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
     seg_by_did_i (vb, lookup, 2, ME23_GENOTYPE, field_len + 1);
 
-    // record whether there is a \r line ending
-    seg_by_did_i (vb, *has_13 ? "\r\n" : "\n", (*has_13) + 1, ME23_EOL, *has_13);
+    SEG_EOL (ME23_EOL, false);
+    //seg_by_did_i (vb, *has_13 ? "\r\n" : "\n", (*has_13) + 1, ME23_EOL, *has_13);
     
     return next_field;
 }
 
 void me23_piz_reconstruct_vb (VBlock *vb)
 {
-    bool has_13_ctx = vb->mtf_ctx[ME23_EOL].word_list.len > 0;
+    bool has_13_ctx = vb->contexts[ME23_EOL].word_list.len > 0;
 
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 

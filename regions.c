@@ -193,7 +193,7 @@ void regions_make_chregs(unsigned chrom_did_i)
     if (!flag_regions) return; // nothing to do
 
     ARRAY (Region, regions, regions_buf);
-    MtfContext *chrom_ctx = &z_file->mtf_ctx[chrom_did_i];
+    MtfContext *chrom_ctx = &z_file->contexts[chrom_did_i];
 
     num_chroms = chrom_ctx->word_list.len;
     chregs = calloc (num_chroms, sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom

@@ -92,7 +92,7 @@ static bool fast_piz_test_grep (VBlockFAST *vb)
     // reconstruct each description line and check for string matching with flag_grep
     bool found = false, match = false;
 
-    MtfContext *desc_ctx = (vb->data_type == DT_FASTQ) ? &vb->mtf_ctx[FASTQ_DESC] : mtf_get_ctx (vb, (DictIdType)dict_id_FASTA_DESC);
+    MtfContext *desc_ctx = (vb->data_type == DT_FASTQ) ? &vb->contexts[FASTQ_DESC] : mtf_get_ctx (vb, (DictIdType)dict_id_FASTA_DESC);
     desc_ctx->iterator.next_b250 = FIRSTENT (uint8_t, desc_ctx->b250); 
 
     vb->line_i = vb->data_type == DT_FASTQ ? 4 * vb->first_line : vb->first_line;
@@ -125,7 +125,7 @@ static bool fast_piz_test_grep (VBlockFAST *vb)
     // reset iterators - piz_fast*_reconstruct_vb will use them again 
     mtf_init_iterator (desc_ctx);
     for (unsigned sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++) 
-        mtf_init_iterator (&vb->mtf_ctx[vb->desc_mapper.did_i[sf_i]]);
+        mtf_init_iterator (&vb->contexts[vb->desc_mapper.did_i[sf_i]]);
 
     return found; // no match found
 }

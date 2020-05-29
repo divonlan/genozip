@@ -52,7 +52,7 @@ void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
 // ZIP only: update the pos in the existing chrom entry
 void random_access_update_pos (VBlock *vb, uint8_t did_i_pos)
 {
-    uint32_t this_pos = (uint32_t)vb->mtf_ctx[did_i_pos].last_value;
+    uint32_t this_pos = (uint32_t)vb->contexts[did_i_pos].last_value;
 
     if (!this_pos) return; // ignore pos=0 (in SAM, it means unmapped POS)
 
@@ -76,7 +76,7 @@ void random_access_merge_in_vb (VBlock *vb)
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
-    MtfContext *chrom_ctx = &vb->mtf_ctx[DTF(chrom)];
+    MtfContext *chrom_ctx = &vb->contexts[DTF(chrom)];
     ASSERT0 (chrom_ctx, "Error in random_access_merge_in_vb: cannot find chrom_ctx");
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
@@ -171,7 +171,7 @@ void random_access_show_index (bool from_zip)
     
     ARRAY (RAEntry, ra, z_file->ra_buf);
 
-    MtfContext *ctx = &z_file->mtf_ctx[DTFZ(chrom)];
+    MtfContext *ctx = &z_file->contexts[DTFZ(chrom)];
 
     for (unsigned i=0; i < z_file->ra_buf.len; i++) {
         

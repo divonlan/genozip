@@ -48,9 +48,9 @@ extern void vcf_samples_add  (const char *samples_str);
 extern bool vcf_is_sb_included (void *vb_, uint32_t sb_i);
 
 // GL-optimize stuff
-extern const char *gl_optimize_dictionary (VBlockP vb, BufferP dict, MtfNodeP nodes, uint64_t dict_start_char, unsigned num_words);
-extern void gl_deoptimize_dictionary (char *data, int len);
-extern bool gl_optimize (const char *snip, unsigned len, char *updated_snip, unsigned *updated_len);
+extern const char *gl_optimize_dictionary (VBlockP vb, ConstBufferP dict, ConstMtfNodeP nodes, uint64_t dict_start_char, unsigned num_words);
+extern void gl_optimize_local (VBlockP vb, BufferP local);
+extern void gl_deoptimize (char *data, int len);
 
 // v1 compatibility
 extern bool vcf_v1_header_genozip_to_vcf (Md5Hash *digest);

@@ -31,7 +31,7 @@
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
 
 #define MAX_SUBFIELDS 100   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME, SAM_OPTIONAL, GFF3_ATTRS subfield types that is supported in one GENOZIP file.
-#define MAX_DICTS     253   // 254 and 255 are used for DID_I_HAS_13 and DID_I_NONE
+#define MAX_DICTS     253   // 254 is for future use and 255 is DID_I_NONE
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
@@ -64,6 +64,7 @@ typedef const struct Buffer *ConstBufferP;
 typedef struct Structured *StructuredP;
 typedef struct MtfContext *MtfContextP;
 typedef struct MtfNode *MtfNodeP;
+typedef const struct MtfNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
 typedef struct SectionListEntry *SectionListEntryP;
 typedef const struct SectionListEntry *ConstSectionListEntryP;
@@ -71,7 +72,7 @@ typedef const struct SectionListEntry *ConstSectionListEntryP;
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
-#define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/SAM spec don't limit the ID length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
+#define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/GFF3 specs don't limit the field name (tag) length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
 typedef union DictIdType {
     uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN]; // \0-padded IDs 

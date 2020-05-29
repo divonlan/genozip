@@ -26,7 +26,7 @@ void sam_piz_special_TLEN (VBlock *vb, MtfContext *ctx, const char *snip, unsign
     ASSERT0 (snip_len, "Error in sam_piz_special_TLEN: snip_len=0");
 
     int32_t tlen_by_calc = atoi (snip);
-    int32_t tlen_val = tlen_by_calc + vb->mtf_ctx[SAM_PNEXT].last_delta + vb->seq_len;
+    int32_t tlen_val = tlen_by_calc + vb->contexts[SAM_PNEXT].last_delta + vb->seq_len;
 
     ctx->last_value = tlen_val;
 
@@ -73,9 +73,7 @@ static void sam_piz_map_optional_subfields (VBlockSAM *vb)
     // oname and can appear in other onames. Each optional subfield is made of a segment of the template eg "MX:Z:"
     // and a value eg "abcded" which is stored in the b250 of that optional subfield.
 
-    // note: an oname might end with a "#" indicating Windows-style newline. We ignore it for now.
-
-    const MtfContext *optional_ctx = &vb->mtf_ctx[SAM_OPTIONAL];
+    const MtfContext *optional_ctx = &vb->contexts[SAM_OPTIONAL];
     vb->optional_mapper_buf.len = optional_ctx->word_list.len;
     buf_alloc (vb, &vb->optional_mapper_buf, sizeof (SubfieldMapper) * vb->optional_mapper_buf.len,
                1, "optional_mapper_buf", 0);
@@ -119,9 +117,6 @@ static void sam_piz_reconstruct_optional_fields (VBlockSAM *vb, const char *onam
         if (sf_i != opt_map->num_subfields-1)
             RECONSTRUCT1 ('\t');
     }
-    
-    if (oname_len % 5 == 1 && oname[oname_len-1] == '#') // Windows style end-of-line \r\n
-        RECONSTRUCT1 ('\r');
 }
 
 void sam_piz_reconstruct_vb (VBlockSAM *vb)
@@ -149,11 +144,11 @@ void sam_piz_reconstruct_vb (VBlockSAM *vb)
 
         // OPTIONAL fields, and Windows-style \r if needed
         uint32_t word_index = LOAD_SNIP (SAM_OPTIONAL);
-        if (snip_len != 1 || (snip[0] != '#' && snip[0] != '*')) RECONSTRUCT1 ('\t');
+        if (snip_len != 1 || snip[0] != '*') RECONSTRUCT1 ('\t');
         
         sam_piz_reconstruct_optional_fields (vb, snip, snip_len, word_index);
 
-        RECONSTRUCT1 ('\n');
+        piz_reconstruct_from_ctx (vb, SAM_EOL, 0);
 
         // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
         if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 

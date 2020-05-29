@@ -3,6 +3,7 @@
 output=test-output
 
 is_windows=`uname|grep -i mingw`
+is_mac=`uname|grep -i Darwin`
 
 # -----------------
 # platform settings
@@ -46,7 +47,13 @@ for file in ${files[@]}; do
     ./genozip unix-nl.$file -ft -o ${output}.genozip || exit 1
 
     test_header "$file - Window-style end-of-line"
-    sed 's/$/\13/g' unix-nl.$file > windows-nl.$file # note: sed on mac doesn't recognize \r
+
+    if [ -n "$is_mac" ]; then
+        sed 's/$/\13/g' unix-nl.$file > windows-nl.$file || exit 1 # note: sed on mac doesn't recognize \r
+    else
+        sed 's/$/\r/g' unix-nl.$file > windows-nl.$file || exit 1 # note: sed on mac doesn't recognize \r
+    fi
+
     ./genozip windows-nl.$file -ft -o ${output}.genozip || exit 1
     rm unix-nl.$file windows-nl.$file
 

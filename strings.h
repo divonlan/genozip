@@ -29,6 +29,8 @@ extern const char *type_name (unsigned item,
                               const char * const *name, // the address in which a pointer to name is found, if item is in range
                               unsigned num_names);
 
+extern void str_print_null_seperated_data (const char *data, unsigned len, bool add_newline);
+
 extern int str_print_text (const char **text, unsigned num_lines,
                            const char *wrapped_line_prefix, 
                            const char *newline_separator, 

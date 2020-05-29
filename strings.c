@@ -118,6 +118,14 @@ const char *type_name (unsigned item,
     return *name;    
 }
 
+void str_print_null_seperated_data (const char *data, unsigned len, bool add_newline)
+{
+    for (unsigned i=0; i < len; i++)
+        fputc (data[i] ? data[i] : ' ', stderr);
+    
+    if (add_newline) fputc ('\n', stderr);
+}
+
 int str_print_text (const char **text, unsigned num_lines,
                     const char *wrapped_line_prefix, 
                     const char *newline_separator, 

@@ -212,7 +212,7 @@ void hash_alloc_local (VBlock *segging_vb, MtfContext *vb_ctx)
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
     buf_alloc (segging_vb, &vb_ctx->local_hash, (vb_ctx->local_hash_prime * 1.2) * sizeof (LocalHashEnt) /* room for expansion */, 1, 
-               "mtf_ctx->local_hash", vb_ctx->did_i);
+               "contexts->local_hash", vb_ctx->did_i);
     vb_ctx->local_hash.len = vb_ctx->local_hash_prime;
     memset (vb_ctx->local_hash.data, 0xff, vb_ctx->local_hash_prime * sizeof (LocalHashEnt)); // initialize core table
 //printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->vblock_i, vb_ctx->name, vb_ctx->local_hash_prime); 
@@ -338,7 +338,7 @@ void hash_alloc_global (VBlock *merging_vb, MtfContext *zf_ctx, const MtfContext
     }
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
-               "z_file->mtf_ctx->global_hash", zf_ctx->did_i);
+               "z_file->contexts->global_hash", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->global_hash);
 
     zf_ctx->global_hash.len = zf_ctx->global_hash_prime; // global_hash.len can get longer over time as extension links are added
@@ -421,7 +421,7 @@ int32_t hash_get_entry_for_merge (MtfContext *zf_ctx, const char *snip, unsigned
 
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
     buf_alloc (evb, &zf_ctx->global_hash, sizeof (GlobalHashEnt) * (1 + zf_ctx->global_hash.len), 2, 
-               "z_file->mtf_ctx->global_hash", zf_ctx->did_i);
+               "z_file->contexts->global_hash", zf_ctx->did_i);
 
     g_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, hashent_i); // might have changed after realloc
 
@@ -536,7 +536,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, MtfContext *vb_ctx,
 
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
     buf_alloc (segging_vb, &vb_ctx->local_hash, sizeof (LocalHashEnt) * (1 + vb_ctx->local_hash.len), // realloc if needed
-                1.5, "mtf_ctx->local_hash", vb_ctx->did_i);
+                1.5, "contexts->local_hash", vb_ctx->did_i);
 
     l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);  // might have changed after realloc
     l_hashent->next = vb_ctx->local_hash.len++;

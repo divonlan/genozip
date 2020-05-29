@@ -33,7 +33,7 @@ typedef struct DataTypeProperties {
     enum {HDR_NONE, HDR_OK, HDR_MUST} txt_header_required;
     char txt_header_1st_char;  // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
     void (*seg_initialize)(VBlockP);
-    const char *(*seg_txt_line)(VBlockP, const char *field_start_line, bool *has_special_eol);
+    const char *(*seg_txt_line)(VBlockP, const char *field_start_line, bool *has_13);
     void (*compress)(VBlockP);
     void (*update_header)(VBlockP, uint32_t vcf_first_line_i);
 

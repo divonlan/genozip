@@ -174,7 +174,8 @@ cleanup:
     return;
 }
 
-const char *gl_optimize_dictionary (VBlockP vb_, Buffer *dict, MtfNode *nodes, uint64_t dict_start_char, unsigned num_words)
+// optimizes a dictionary fragment into a new buffer, as we still need the unoptimized dict for future evals.
+const char *gl_optimize_dictionary (VBlockP vb_, const Buffer *dict, const MtfNode *nodes, uint64_t dict_start_char, unsigned num_words)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
@@ -188,7 +189,18 @@ const char *gl_optimize_dictionary (VBlockP vb_, Buffer *dict, MtfNode *nodes, u
     return vb->optimized_gl_dict.data;
 }
 
-void gl_deoptimize_dictionary (char *data, int len)
+// optimizes the local buffer in-place
+void gl_optimize_local (VBlockP vb, Buffer *local)
+{
+    for (unsigned i=0; i < local->len;) {
+        char *word = ENT (char, *local, i);
+        unsigned word_len = strlen (word);
+        gl_optimize_do (word, word_len);
+        i += word_len + 1; // skip seperator too
+    }
+}
+
+void gl_deoptimize (char *data, int len)
 {
     while (len) {
         // get the missing data and its location and length
@@ -211,7 +223,7 @@ void gl_deoptimize_dictionary (char *data, int len)
         char sep = PIZ_SNIP_SEP; // open macro to local var
         do { data++; len--; } while (data[-1] != sep && len);
         
-        ASSERT0 (data[-1] == PIZ_SNIP_SEP, "Error in gl_deoptimize_dictionary: missing seperator at end of dictionary");
+        ASSERT0 (data[-1] == PIZ_SNIP_SEP, "Error in gl_deoptimize: missing seperator at end of dictionary");
     }
 }
 

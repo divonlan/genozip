@@ -212,7 +212,7 @@ bool vcf_v1_piz_read_one_vb (VBlockVCF *vb)
     unsigned num_dictionary_sections = BGEN16 (vardata_header->num_dictionary_sections);
 
     // dictionaries are processed right here by the dispatcher thread - the compute
-    // thread only access the dictionaries on the z_file->mtf_ctx
+    // thread only access the dictionaries on the z_file->contexts
     if (num_dictionary_sections) {
 
         unsigned start_dictionary_sections = vb->z_data.len;
@@ -223,7 +223,7 @@ bool vcf_v1_piz_read_one_vb (VBlockVCF *vb)
             unsigned start_i = vb->z_data.len; // vb->z_data.len is updated next, by vcf_v1_zfile_read_section()
             vcf_v1_zfile_read_section ((VBlockP)vb, &vb->z_data, "z_data", sizeof(SectionHeaderDictionary), SEC_VCF_FRMT_SF_DICT_legacy, false);    
 
-            // update dictionaries in z_file->mtf_ctx with dictionary data from this VB
+            // update dictionaries in z_file->contexts with dictionary data from this VB
             mtf_integrate_dictionary_fragment ((VBlockP)vb, &vb->z_data.data[start_i]);
         }
 
@@ -290,7 +290,7 @@ static inline void vcf_v1_piz_decode_pos (VBlockVCF *vb, const char *str,
 
     if (negative) delta = -delta;
 
-#define vb_last_pos vb->mtf_ctx[VCF_POS].last_value
+#define vb_last_pos vb->contexts[VCF_POS].last_value
 
     vb_last_pos += delta;
     
@@ -298,23 +298,6 @@ static inline void vcf_v1_piz_decode_pos (VBlockVCF *vb, const char *str,
 
     unsigned len = str_int (vb_last_pos, pos_str);
 
-
-/*
-    // create number string without calling slow sprintf
-
-    // create reverse string
-    char reverse_pos_str[50];
-    uint32_t n = vb_last_pos;
-    unsigned len=0; 
-    while (n) {
-        reverse_pos_str[len++] = '0' + (n % 10);
-        n /= 10;
-    }
-
-    // reverse it
-    for (unsigned i=0; i < len; i++) pos_str[i] = reverse_pos_str[len-i-1];
-    pos_str[len] = '\0';
-*/
     *delta_pos_len = s - str;
     *add_len = len - *delta_pos_len;
 }
@@ -450,8 +433,8 @@ static void v1_piz_get_line_subfields (VBlockVCF *vb, unsigned line_i, // line i
 
         // the dictionaries were already read, so all subfields are expected to have a ctx
         unsigned did_i=0 ; for (; did_i < z_file->num_dict_ids; did_i++) 
-            if (subfield.num == z_file->mtf_ctx[did_i].dict_id.num) {
-                // entry i corresponds to subfield i in FORMAT (excluding GT), and contains the index in mtf_ctx of this subfield
+            if (subfield.num == z_file->contexts[did_i].dict_id.num) {
+                // entry i corresponds to subfield i in FORMAT (excluding GT), and contains the index in contexts of this subfield
                 line_subfields[i] = did_i;
                 break;
             }
@@ -502,7 +485,7 @@ static void vcf_v1_piz_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
                         if (snip) *(next++) = ':'; // this works for empty "" snip too
 
                         unsigned snip_len;
-                        mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case sample_iterator[sample_i] will be a control character
+                        mtf_get_next_snip ((VBlockP)vb, &vb->contexts[line_subfields[sf_i]], // note: line_subfields[sf_i] maybe -2 (set in piz_get_line_subfields()), and this is an invalid value. this is ok, bc in this case sample_iterator[sample_i] will be a control character
                                            &sample_iterator[sample_i], &snip, &snip_len);
 
                         if (snip && snip_len) { // it can be a valid empty subfield if snip="" and snip_len=0
@@ -647,7 +630,7 @@ void vcf_v1_piz_reconstruct_vb (VBlockVCF *vb)
 
         // transform sample blocks (each block: n_lines x s_samples) into line components (each line: 1 line x ALL_samples)
         if (vb->has_genotype_data)  {
-            int line_subfields[MAX_SUBFIELDS]; // entry i corresponds to subfield i in FORMAT (excluding GT), and contains the index in mtf_ctx of this subfield
+            int line_subfields[MAX_SUBFIELDS]; // entry i corresponds to subfield i in FORMAT (excluding GT), and contains the index in contexts of this subfield
             v1_piz_get_line_subfields (vb, vb->first_line + line_i,
                                        subfields_start[line_i], subfields_len[line_i], line_subfields);
 
@@ -659,7 +642,8 @@ void vcf_v1_piz_reconstruct_vb (VBlockVCF *vb)
         if (vb->has_haplotype_data) 
             vcf_piz_get_haplotype_data_line (vb, line_i, ht_columns_data);
 
-        vcf_piz_reconstruct_samples (vb, line_i, false);
+        vcf_piz_reconstruct_samples (vb, line_i);
+        RECONSTRUCT1 ('\n');
     }
 
     COPY_TIMER(vb->profile.piz_reconstruct_vb);

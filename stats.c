@@ -128,7 +128,7 @@ static void initialize_vcf_gt_data_tracker (void)
 
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { 
 
-        const MtfContext *ctx = &z_file->mtf_ctx[i];
+        const MtfContext *ctx = &z_file->contexts[i];
         if (dict_id_is_vcf_format_sf (ctx->dict_id))
             vcf_gt_data_tracker.words_total += ctx->mtf_i.len;
     }
@@ -161,7 +161,7 @@ void stats_show_sections (void)
 
     for (int i=LAST_OVERHEAD; i < (int)z_file->num_dict_ids; i++) { 
 
-        MtfContext *ctx = (i>=0) ? &z_file->mtf_ctx[i] : NULL;
+        MtfContext *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
 
         // for FORMAT subfields, we compress all of them together in GT_DATA, because they are often correlated
         // we allocate their compressed size as the proportion of GT_DATA words that are of this subfield

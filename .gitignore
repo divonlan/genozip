@@ -40,6 +40,8 @@ mac/scripts/*
 *.fa
 *.fa.gz
 *.fasta*
+*.gvf*
+*.gff3*
 !test-file.vcf
 !test-file.sam
 !test-file.fa
@@ -65,3 +67,6 @@ lzma/unused
 !backward-compatibility-test/*.genozip
 !backward-compatibility-test/*.vcf
 genome_*Full*
+unix-nl.*
+windows-nl.*
+test.*

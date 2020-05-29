@@ -181,7 +181,7 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
 {
     if (!snip_len) return; // nothing to do
     
-    int64_t new_value;
+    int64_t new_value=0;
     bool have_new_value = false;
     MtfContext *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
     bool store = (snip_ctx->flags & CTX_FL_STORE_VALUE);
@@ -273,14 +273,14 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
 // returns reconstructed length
 uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
 {
-    MtfContext *ctx = &vb->mtf_ctx[did_i];
+    MtfContext *ctx = &vb->contexts[did_i];
 
     ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "Error in piz_reconstruct_from_ctx: ctx not initialized (dict_id=0)");
 
     // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
     if (!ctx->dict_id.num) {
         did_i = ctx->did_i;
-        ctx = &vb->mtf_ctx[ctx->did_i];
+        ctx = &vb->contexts[ctx->did_i];
     }
 
     uint64_t start = vb->txt_data.len;
@@ -289,7 +289,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
     if (ctx->b250.len) {         
         DECLARE_SNIP;
         uint32_t word_index = LOAD_SNIP(did_i); 
-        piz_reconstruct_one_snip (vb, &vb->mtf_ctx[did_i], snip, snip_len);        
+        piz_reconstruct_one_snip (vb, &vb->contexts[did_i], snip, snip_len);        
 
         // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
         if (flag_regions) {
@@ -331,9 +331,9 @@ void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), Subfield
     mapper->num_subfields = 0;
 
     for (uint8_t did_i=0; did_i < vb->num_dict_ids; did_i++)
-        if (predicate (vb->mtf_ctx[did_i].dict_id)) {
+        if (predicate (vb->contexts[did_i].dict_id)) {
          
-            char index_char = vb->mtf_ctx[did_i].dict_id.id[1];
+            char index_char = vb->contexts[did_i].dict_id.id[1];
             unsigned index = IS_DIGIT(index_char) ? index_char - '0' : 10 + index_char - 'a';
          
             mapper->did_i[index] = did_i;
@@ -356,7 +356,7 @@ void piz_map_iname_subfields (VBlock *vb)
     // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
     bool v2v3_bug = !is_v4_or_above; // recover from a bug we had in v2/v3 VCF (we had only VCF in v2/3). See details in v2v3.c.
 
-    const MtfContext *info_ctx = &z_file->mtf_ctx[DTFZ(info)];
+    const MtfContext *info_ctx = &z_file->contexts[DTFZ(info)];
     
     buf_free (&piz_iname_mapper_buf); // in case it was allocated by a previous file
     piz_iname_mapper_buf.len = info_ctx->word_list.len;
@@ -403,18 +403,14 @@ void piz_map_iname_subfields (VBlock *vb)
                 *dict_id = dict_id_type_1 (*dict_id);
             }
 
-            // case - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
-            if (dict_id->num == dict_id_WindowsEOL) {
-                //iname_mapper->did_i[iname_mapper->num_subfields] = DID_I_HAS_13;
-                
+            // case - for files up to v4 - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
+            if (!is_v5_or_above && dict_id->num == dict_id_WindowsEOL) {
                 // we now modify the global dictionary to match the true iname strings, so it can be used for reconstruction
                 if (i>=2 && iname[i-2] == ';')
                     iname[iname_len-2] = sep; // chop off the ";#" at the end of the INFO word in the dictionary (happens if previous subfield is value-less)
                 else     
                     iname[iname_len-1] = sep; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
             }
-            //else 
-                //iname_mapper->did_i[iname_mapper->num_subfields] = mtf_get_existing_did_i_from_z_file (*dict_id); // it will be NIL if this is an INFO name without values            
             
             iname_mapper->num_subfields++;
         }
@@ -422,17 +418,18 @@ void piz_map_iname_subfields (VBlock *vb)
 }
 
 // used for VCF INFO and GFF3 ATTRIBUTES 
-void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index, 
-                           const char *iname_snip, unsigned iname_snip_len, 
-                           PizReconstructSpecialInfoSubfields reconstruct_special_info_subfields,
-                           bool *has_13)
+void piz_reconstruct_info (VBlock *vb, int field, 
+                           bool *has_13) // only needed for VCF files up to v4, can be NULL otherwise
 {
-    *has_13 = false; // false unless proven true
+    if (!is_v5_or_above) *has_13 = false; // for VCF files up to v4, Windows-style end-of-line \r\n was encoded in INFO. false unless proven true
 
     // in genozip genozip v2 and v3 we had a bug where when there was an INFO subfield with a value following one or more
     // subfields without a value, then the dictionary name of included the names of the valueless subfields
     // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
     bool v2v3_bug = !is_v4_or_above; 
+
+    DECLARE_SNIP;
+    uint32_t iname_word_index = LOAD_SNIP (field);        
 
     ASSERT (iname_word_index < piz_iname_mapper_buf.len, "Error: expected iname_word_index=%d < piz_iname_mapper_buf.len=%u", 
             iname_word_index, (uint32_t)piz_iname_mapper_buf.len);
@@ -443,34 +440,27 @@ void piz_reconstruct_info (VBlock *vb, uint32_t iname_word_index,
 
     for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
 
-        uint8_t did_i = mtf_get_ctx (vb, iname_mapper->dict_id[sf_i])->did_i; // DID_I_NONE for fields that have no ctx (either because they have no values or because the values are stored elsewhere)
-        
-        if (did_i == DID_I_HAS_13) {
+        // up to version 4, we stored a Windows-style EOL as a '#' suffix on the iname
+        if (!is_v5_or_above && iname_mapper->dict_id[sf_i].num == dict_id_WindowsEOL) {
             *has_13 = true; // line needs to end with a \r\n
             continue;
         }
-        
+
+        uint8_t did_i = mtf_get_ctx (vb, iname_mapper->dict_id[sf_i])->did_i; // DID_I_NONE for fields that have no ctx (either because they have no values or because the values are stored elsewhere)
+
         // get the name eg "AF="
-        const char *start = iname_snip;
-        for (; *iname_snip != '=' && (*iname_snip != ';' || v2v3_bug) && *iname_snip != sep; iname_snip++);
-        bool has_value = (*iname_snip == '=');
+        const char *start = snip;
+        for (; *snip != '=' && (*snip != ';' || v2v3_bug) && *snip != sep; snip++);
+        bool has_value = (*snip == '=');
         
-        if (has_value) iname_snip++; // move past the '=', if one exists
-        RECONSTRUCT (start, (unsigned)(iname_snip-start)); // name inc. '=' e.g. "Info1="
+        if (has_value) snip++; // move past the '=', if one exists
+        RECONSTRUCT (start, (unsigned)(snip-start)); // name inc. '=' e.g. "Info1="
 
         // handle the value part of "name=value", if there is one
-        if (has_value) {
-        
-            bool regular = true; 
-            if (reconstruct_special_info_subfields)
-                regular = reconstruct_special_info_subfields (vb, did_i, iname_mapper->dict_id[sf_i]);
-            
-            // no special treatment - we proceed with the regular treatment
-            if (regular) piz_reconstruct_from_ctx (vb, did_i, 0);
-        }
+        if (has_value) piz_reconstruct_from_ctx (vb, did_i, 0);
 
         RECONSTRUCT1 (';'); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
-        if (*iname_snip == ';') iname_snip++;
+        if (*snip == ';') snip++;
     }
 
     // remove the semicolon for the last field 
@@ -497,7 +487,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
             ctx->ltype = is_v5_or_above ? header->ltype : 0;
 
             zfile_uncompress_section (vb, header, is_local ? &ctx->local : &ctx->b250, 
-                                      is_local ? "mtf_ctx.local" : "mtf_ctx.b250", header->h.section_type); // type is SEC_B250 starting v5, but potentially other VCF B250 in v1-v4
+                                      is_local ? "contexts.local" : "contexts.b250", header->h.section_type); // type is SEC_B250 starting v5, but potentially other VCF B250 in v1-v4
             section_i++;
         }    
 
@@ -536,7 +526,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
 {
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
-    mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids);
+    mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids);
 
     // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
     while (section_type_is_b250 ((*next_sl)->section_type) || (*next_sl)->section_type == SEC_LOCAL) {

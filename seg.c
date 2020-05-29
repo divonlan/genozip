@@ -18,9 +18,9 @@
 
 void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *name)
 {
-    if (!buf_is_allocated (&vb->mtf_ctx[field_i].ol_mtf)) return;
+    if (!buf_is_allocated (&vb->contexts[field_i].ol_mtf)) return;
         
-    mapper_buf->len = vb->mtf_ctx[field_i].ol_mtf.len;
+    mapper_buf->len = vb->contexts[field_i].ol_mtf.len;
     
     buf_alloc (vb, mapper_buf, mapper_buf->len * sizeof (SubfieldMapper), 2, name, 0);
     
@@ -32,7 +32,7 @@ uint32_t seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, MtfContext
                      bool *is_new) // optional out
 {
     buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
-               CTX_GROWTH, "mtf_ctx->mtf_i", ctx->did_i);
+               CTX_GROWTH, "contexts->mtf_i", ctx->did_i);
     
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
@@ -164,8 +164,8 @@ void seg_pos_field (VBlock *vb,
                     const char *pos_str, unsigned pos_len, 
                     bool account_for_separator)
 {
-    MtfContext *snip_ctx = &vb->mtf_ctx[snip_did_i];
-    MtfContext *base_ctx = &vb->mtf_ctx[base_did_i];
+    MtfContext *snip_ctx = &vb->contexts[snip_did_i];
+    MtfContext *base_ctx = &vb->contexts[base_did_i];
     
     int64_t this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
@@ -313,9 +313,9 @@ static void seg_sort_iname (InfoNames *names, unsigned num_names, char *iname, u
 // segments fields that look like INFO in VCF or ATTRIBUTES in GFF3
 void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_buf, uint8_t *num_info_subfields,
                      SegSpecialInfoSubfields seg_special_subfields,
-                     const char *info_str, unsigned info_len, 
-                     bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
-                     bool this_line_has_13)  // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
+                     const char *info_str, unsigned info_len)
+//                     bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
+//                     bool this_line_has_13)  // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
 {
     // data type de-multiplexors
     #define info_field DTF(info)
@@ -328,13 +328,13 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     const char *this_value = NULL;
     unsigned this_value_len=0;
     unsigned sf_i=0;
-    char save_1, save_2=0 /* init to avoid compiler warning */;
+//    char save_1, save_2=0 /* init to avoid compiler warning */;
 
     InfoNames names[MAX_SUBFIELDS];
     unsigned num_names=0;
 
-    MtfContext *info_ctx = &vb->mtf_ctx[info_field];
-
+    MtfContext *info_ctx = &vb->contexts[info_field];
+/*
     // if the txt file line ends with \r\n when we add an artificial additional info subfield "#"
     // we know we have space for adding ":#" because the line as at least a "\r\n" appearing somewhere after the INFO field
     if (this_line_has_13) {
@@ -345,7 +345,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
         save_1 = info_str[info_len];
         ((char*)info_str)[info_len++] = '#';
     }
-    
+ */   
     // count infos
     SubfieldMapper iname_mapper;
     memset (&iname_mapper, 0, sizeof (iname_mapper));
@@ -412,7 +412,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
                 // allocate memory if needed
                 Buffer *mtf_i_buf = &ctx->mtf_i;
                 buf_alloc (vb, mtf_i_buf, MIN (vb->lines.len, mtf_i_buf->len + 1) * sizeof (uint32_t),
-                           CTX_GROWTH, "mtf_ctx->mtf_i", ctx->did_i);
+                           CTX_GROWTH, "contexts->mtf_i", ctx->did_i);
 
                 // Call back to handle special subfields
                 char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
@@ -445,7 +445,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     ARRAY (uint32_t, info_field_mtf_i, info_ctx->mtf_i);
     bool is_new;
     uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &is_new);
-    info_field_mtf_i[vb->mtf_ctx[info_field].mtf_i.len++] = node_index;
+    info_field_mtf_i[vb->contexts[info_field].mtf_i.len++] = node_index;
 
     // if this is a totally new iname (first time in this file) - make a new SubfieldMapper for it.
     if (is_new) {   
@@ -461,7 +461,9 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     *ENT (SubfieldMapper, *iname_mapper_buf, node_index) = iname_mapper;
 
     *dl_info_mtf_i = node_index;
-
+    
+    info_ctx->txt_len += iname_len; // this includes all the = 
+/*
     info_ctx->txt_len += iname_len + this_field_has_13; // this includes all the = and, in case INFO is the last field and terminated by \r\n, account for the \r
     
     // recover characters we temporarily changed
@@ -472,7 +474,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
             ((char*)info_str)[info_len-2] = save_2;
             info_ctx->txt_len--; // we accounted for this character, but it doesn't appear in the original txt
         }
-    }
+    }*/
 }
 
 void seg_structured_by_ctx (VBlock *vb, MtfContext *ctx, Structured *st, unsigned add_bytes)
@@ -550,7 +552,7 @@ void seg_compound_field (VBlock *vb,
 
             // allocate memory if needed
             buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
-                       CTX_GROWTH, "mtf_ctx->mtf_i", sf_ctx->did_i);
+                       CTX_GROWTH, "contexts->mtf_i", sf_ctx->did_i);
 
             NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
             sf_ctx->txt_len += snip_len;
@@ -687,7 +689,7 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
 
     for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
 
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
+        MtfContext *ctx = &vb->contexts[did_i];
         if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
 
         if (third_num == 1) 
@@ -720,7 +722,7 @@ static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 
     // allocate more to the mtf_i buffer of the fields, which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc_more_zero (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
+        buf_alloc_more_zero (vb, &vb->contexts[f].mtf_i, vb->lines.len - num_old_lines, 0, uint32_t, 1);
 }
 
 static void seg_verify_file_size (VBlock *vb)
@@ -728,13 +730,13 @@ static void seg_verify_file_size (VBlock *vb)
     uint32_t reconstructed_vb_size = 0;
 
     for (unsigned sf_i=0; sf_i < vb->num_dict_ids; sf_i++) 
-        reconstructed_vb_size += vb->mtf_ctx[sf_i].txt_len;
+        reconstructed_vb_size += vb->contexts[sf_i].txt_len;
         
     if (vb->vb_data_size != reconstructed_vb_size && !flag_optimize) {
 
         fprintf (stderr, "Txt lengths:\n");
         for (unsigned sf_i=0; sf_i < vb->num_dict_ids; sf_i++) {
-            MtfContext *ctx = &vb->mtf_ctx[sf_i];
+            MtfContext *ctx = &vb->contexts[sf_i];
             fprintf (stderr, "%s: %u\n", ctx->name, (uint32_t)ctx->txt_len);
         }
         
@@ -751,7 +753,7 @@ void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
 
-    mtf_initialize_primary_field_ctxs (vb->mtf_ctx, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
+    mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
 
     mtf_verify_field_ctxs (vb);
     
@@ -766,13 +768,13 @@ void seg_all_data_lines (VBlock *vb)
 
     // allocate the mtf_i for the fields which each have num_lines entries
     for (int f=0; f < DTF(num_fields); f++) 
-        buf_alloc (vb, &vb->mtf_ctx[f].mtf_i, vb->lines.len * sizeof (uint32_t), 1, "mtf_ctx->mtf_i", f);
+        buf_alloc (vb, &vb->contexts[f].mtf_i, vb->lines.len * sizeof (uint32_t), 1, "contexts->mtf_i", f);
     
     if (DTP(seg_initialize)) DTP(seg_initialize) (vb); // data-type specific initialization
 
     const char *field_start = vb->txt_data.data;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
-    bool does_any_line_have_special_eol = false;
+    bool does_any_line_have_13 = false;
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
         if (field_start - vb->txt_data.data == vb->txt_data.len) { // we're done
@@ -781,9 +783,9 @@ void seg_all_data_lines (VBlock *vb)
         }
 
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
-        bool has_special_eol = false;
-        const char *next_field = DTP(seg_txt_line) (vb, field_start, &has_special_eol);
-        if (has_special_eol) does_any_line_have_special_eol = true;
+        bool has_13 = false;
+        const char *next_field = DTP(seg_txt_line) (vb, field_start, &has_13);
+        if (has_13) does_any_line_have_13 = true;
 
         vb->longest_line_len = MAX (vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
@@ -806,8 +808,8 @@ void seg_all_data_lines (VBlock *vb)
     }
 
     // if no line has special EOL, we can get rid of the EOL ctx
-    if (!does_any_line_have_special_eol) {
-        MtfContext *eol_ctx = &vb->mtf_ctx[DTF(eol)];
+    if (!does_any_line_have_13) {
+        MtfContext *eol_ctx = &vb->contexts[DTF(eol)];
         buf_free (&eol_ctx->dict);
         buf_free (&eol_ctx->mtf);
         buf_free (&eol_ctx->mtf_i);

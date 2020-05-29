@@ -66,9 +66,7 @@ extern void piz_reconstruct_one_snip (VBlockP vb, MtfContextP ctx, const char *s
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, uint8_t did_i, DictIdType dict_id);
 
-extern void piz_reconstruct_info (VBlockP vb, uint32_t iname_word_index, 
-                                  const char *iname_snip, unsigned iname_snip_len, 
-                                  PizReconstructSpecialInfoSubfields reconstruct_special_info_subfields, bool *has_13);
+extern void piz_reconstruct_info (VBlockP vb, int field, bool *has_13);
 
 typedef struct PizSubfieldMapper {
     uint8_t num_subfields;        
@@ -78,7 +76,7 @@ typedef struct PizSubfieldMapper {
 #define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
 
 // gets snip, snip_len from b250 data
-#define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->mtf_ctx[(did_i)], NULL, &snip, &snip_len); 
+#define LOAD_SNIP(did_i) mtf_get_next_snip ((VBlockP)vb, &vb->contexts[(did_i)], NULL, &snip, &snip_len); 
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (s), (len))
 #define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c

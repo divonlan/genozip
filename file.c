@@ -378,7 +378,7 @@ bool file_open_txt (File *file)
 // we insert all the z_file buffers into the buffer list in advance, to avoid this 
 // thread satety issue:
 // without our pre-allocation, some of these buffers will be first allocated by a compute threads 
-// when the first vb containing a certain did_i is merged in (for the mtf_ctx buffers) or
+// when the first vb containing a certain did_i is merged in (for the contexts buffers) or
 // when the first dictionary is compressed (for dict_data) or ra is merged (for ra_buf). while these operations 
 // are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
 // may change buf_lists in evb buffers, while the I/O thread might be doing so concurrently
@@ -389,9 +389,9 @@ static void file_initialize_z_file_data (File *file)
 {
     memset (file->dict_id_to_did_i_map, DID_I_NONE, sizeof(file->dict_id_to_did_i_map));
 
-#define INIT(buf) file->mtf_ctx[i].buf.name  = #buf; \
-                  file->mtf_ctx[i].buf.param = i;    \
-                  buf_add_to_buffer_list (evb, &file->mtf_ctx[i].buf);
+#define INIT(buf) file->contexts[i].buf.name  = #buf; \
+                  file->contexts[i].buf.param = i;    \
+                  buf_add_to_buffer_list (evb, &file->contexts[i].buf);
 
     for (unsigned i=0; i < MAX_DICTS; i++) {
         INIT (dict);        
@@ -578,7 +578,7 @@ void file_close (File **file_p,
 
         // always destroy all buffers even if unused - for saftey
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
-            mtf_destroy_context (&file->mtf_ctx[i]);
+            mtf_destroy_context (&file->contexts[i]);
 
         buf_destroy (&file->dict_data);
         buf_destroy (&file->ra_buf);

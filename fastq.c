@@ -21,22 +21,21 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->mtf_ctx[FASTQ_SEQ].flags  = CTX_FL_LOCAL_LZMA;
-    vb->mtf_ctx[FASTQ_SEQ].ltype  = CTX_LT_SEQUENCE;
-    vb->mtf_ctx[FASTQ_QUAL].ltype = CTX_LT_SEQUENCE;
+    vb->contexts[FASTQ_SEQ].flags  = CTX_FL_LOCAL_LZMA;
+    vb->contexts[FASTQ_SEQ].ltype  = CTX_LT_SEQUENCE;
+    vb->contexts[FASTQ_QUAL].ltype = CTX_LT_SEQUENCE;
 }
 
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
-const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bool *has_special_eol)     // index in vb->txt_data where this line starts
+const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
 {
     ZipDataLineFAST *dl = DATA_LINE (vb->line_i);
 
     const char *next_field, *field_start=field_start_line;
     unsigned field_len=0;
     char separator;
-    bool has_13 = false; // does this line end in Windows-style \r\n rather than Unix-style \n
 
     int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - field_start_line);
 
@@ -47,46 +46,45 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     // DESC - the description/id line is vendor-specific. example:
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG (<-- this is Illumina format)
     // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
-    next_field = seg_get_next_line (vb, field_start, &len, &field_len, &has_13, "DESC");
+    next_field = seg_get_next_line (vb, field_start, &len, &field_len, has_13, "DESC");
  
     // we segment it using / | : and " " as separators. 
-    seg_compound_field ((VBlockP)vb, &vb->mtf_ctx[FASTQ_DESC], field_start, field_len, &vb->desc_mapper, structured_DESC, true, 0);
-    SEG_EOL (FASTQ_E1L);
+    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, &vb->desc_mapper, structured_DESC, true, 0);
+    SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
     const char *seq_start = next_field;
     dl->seq_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, &has_13, "SEQ");
-    vb->mtf_ctx[FASTQ_SEQ].local.len += dl->seq_len;
+    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, has_13, "SEQ");
+    vb->contexts[FASTQ_SEQ].local.len += dl->seq_len;
     
     // Add LOOKUP snip with seq_len
     char snip[10];
     snip[0] = SNIP_LOOKUP;
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SEQ, dl->seq_len); // we account for the '+' \n and maybe \r
+    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SEQ, dl->seq_len); 
 
-    SEG_EOL (FASTQ_E1L);
+    SEG_EOL (FASTQ_E1L, true);
 
     // PLUS - next line is expected to be a "+"
-    field_start = next_field;
-    next_field = seg_get_next_item (vb, field_start, &len, true, false, false, &field_len, &separator, &has_13, "+");
+    GET_LAST_ITEM ("+");
     ASSSEG (*field_start=='+' && field_len==1, field_start, "%s: Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
             global_cmd, field_len, field_start);
 
     seg_by_did_i (vb, "+", 1, FASTQ_PLUS, 1);
-    SEG_EOL (FASTQ_E1L);
+    SEG_EOL (FASTQ_E1L, true);
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
     dl->qual_data_start = next_field - vb->txt_data.data;
-    unsigned qual_len;
-    field_start = next_field;
-    next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &qual_len, &separator, &has_13, "QUAL");
-    vb->mtf_ctx[FASTQ_QUAL].local.len += dl->seq_len;
-    vb->mtf_ctx[FASTQ_QUAL].txt_len   += dl->seq_len;
-    SEG_EOL (FASTQ_E1L);
+    GET_LAST_ITEM ("QUAL");
+    vb->contexts[FASTQ_QUAL].local.len += dl->seq_len;
+    vb->contexts[FASTQ_QUAL].txt_len   += dl->seq_len;
 
-    ASSSEG (qual_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ=%.*s\nQUAL==%.*s",
-            global_cmd, dl->seq_len, qual_len, dl->seq_len, seq_start, qual_len, field_start);
+    // End Of Line    
+    SEG_EOL (FASTQ_E1L, true);
+
+    ASSSEG (field_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ=%.*s\nQUAL==%.*s",
+            global_cmd, dl->seq_len, field_len, dl->seq_len, seq_start, field_len, field_start);
  
     return next_field;
 }

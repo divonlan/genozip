@@ -202,12 +202,14 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     header.num_snips               = BGEN32 (num_words);
     header.dict_id                 = ctx->dict_id;
 
-    if (flag_show_dict)
-        fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t%.*s\n", 
-                 ctx->name, vb->vblock_i, ctx->did_i, num_words, num_chars, data);
-
+    if (flag_show_dict) {
+        fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t", 
+                 ctx->name, vb->vblock_i, ctx->did_i, num_words);
+        str_print_null_seperated_data (data, num_chars, true);
+    }
+    
     if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
-        fprintf (stderr, "%.*s\t", num_chars, data);
+        str_print_null_seperated_data (data, num_chars, false);
 
     z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
     comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
@@ -443,7 +445,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 {
     SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_dictionary() will reset cursor 
 
-    mtf_initialize_primary_field_ctxs (z_file->mtf_ctx, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
+    mtf_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
 
     while (sections_get_next_dictionary (&sl_ent)) {
 
@@ -458,7 +460,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         
         zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type, sl_ent);    
 
-        // update dictionaries in z_file->mtf_ctx with dictionary data 
+        // update dictionaries in z_file->contexts with dictionary data 
         mtf_integrate_dictionary_fragment (evb, evb->z_data.data);
 
         buf_free (&evb->z_data);
@@ -467,7 +469,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
     // output the dictionaries if we're asked to
     if (flag_show_dict || dict_id_show_one_dict.num) {
         for (uint32_t did_i=0; did_i < z_file->num_dict_ids; did_i++) {
-            MtfContext *ctx = &z_file->mtf_ctx[did_i];
+            MtfContext *ctx = &z_file->contexts[did_i];
 
 #define MAX_PRINTABLE_DICT_LEN 100000
 
