@@ -98,18 +98,20 @@ static void sam_piz_map_optional_subfields (VBlockSAM *vb)
         }
     }
 }
-
-static void sam_piz_reconstruct_optional_fields (VBlockSAM *vb, const char *oname, unsigned oname_len, uint32_t opt_word_index)
+/*
+static void sam_piz_reconstruct_optional_fields (VBlockSAM *vb)
 {
+    DECLARE_SNIP;
+    uint32_t opt_word_index = LOAD_SNIP (SAM_OPTIONAL);
 
     SubfieldMapper *opt_map = ENT (SubfieldMapper, vb->optional_mapper_buf, opt_word_index);
 
-    ASSERT (opt_map->num_subfields == oname_len / 5, "Error: opt_map->num_subfields=%u but oname=%.*s indicates %u optional fields. sam_line=%u", 
-            opt_map->num_subfields, oname_len, oname, oname_len/5, vb->line_i);
+    ASSERT (opt_map->num_subfields == snip_len / 5, "Error: opt_map->num_subfields=%u but snip=%.*s indicates %u optional fields. sam_line=%u", 
+            opt_map->num_subfields, snip_len, snip, snip_len/5, vb->line_i);
 
     for (unsigned sf_i=0; sf_i < opt_map->num_subfields; sf_i++) {
 
-        RECONSTRUCT (&oname[sf_i*5], 5)
+        RECONSTRUCT (&snip[sf_i*5], 5)
 
         uint8_t did_i = opt_map->did_i[sf_i];
         piz_reconstruct_from_ctx (vb, did_i, 0);        
@@ -118,36 +120,31 @@ static void sam_piz_reconstruct_optional_fields (VBlockSAM *vb, const char *onam
             RECONSTRUCT1 ('\t');
     }
 }
-
+*/
 void sam_piz_reconstruct_vb (VBlockSAM *vb)
 {
     piz_map_compound_field ((VBlockP)vb, sam_dict_id_is_qname_sf, &vb->qname_mapper);
     sam_piz_map_optional_subfields (vb);
 
-    DECLARE_SNIP;
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         uint32_t txt_data_start = vb->txt_data.len;
         vb->line_i = vb->first_line + vb_line_i;
 
-        piz_reconstruct_from_ctx (vb, SAM_QNAME, '\t');
-        piz_reconstruct_from_ctx (vb, SAM_FLAG,  '\t');
-        piz_reconstruct_from_ctx (vb, SAM_RNAME, '\t');
-        piz_reconstruct_from_ctx (vb, SAM_POS,   '\t');
-        piz_reconstruct_from_ctx (vb, SAM_MAPQ,  '\t'); 
-        piz_reconstruct_from_ctx (vb, SAM_CIGAR, '\t');
-        piz_reconstruct_from_ctx (vb, SAM_RNEXT, '\t'); 
-        piz_reconstruct_from_ctx (vb, SAM_PNEXT, '\t');
-        piz_reconstruct_from_ctx (vb, SAM_TLEN,  '\t');
-        piz_reconstruct_from_ctx (vb, SAM_SEQ,   '\t');
-        piz_reconstruct_from_ctx (vb, SAM_QUAL,     0);
+        piz_reconstruct_from_ctx (vb, SAM_QNAME,    '\t');
+        piz_reconstruct_from_ctx (vb, SAM_FLAG,     '\t');
+        piz_reconstruct_from_ctx (vb, SAM_RNAME,    '\t');
+        piz_reconstruct_from_ctx (vb, SAM_POS,      '\t');
+        piz_reconstruct_from_ctx (vb, SAM_MAPQ,     '\t'); 
+        piz_reconstruct_from_ctx (vb, SAM_CIGAR,    '\t');
+        piz_reconstruct_from_ctx (vb, SAM_RNEXT,    '\t'); 
+        piz_reconstruct_from_ctx (vb, SAM_PNEXT,    '\t');
+        piz_reconstruct_from_ctx (vb, SAM_TLEN,     '\t');
+        piz_reconstruct_from_ctx (vb, SAM_SEQ,      '\t');
+        piz_reconstruct_from_ctx (vb, SAM_QUAL,     '\t');
+        piz_reconstruct_from_ctx (vb, SAM_OPTIONAL, 0); // the subfields provide the \t separators
 
-        // OPTIONAL fields, and Windows-style \r if needed
-        uint32_t word_index = LOAD_SNIP (SAM_OPTIONAL);
-        if (snip_len != 1 || snip[0] != '*') RECONSTRUCT1 ('\t');
-        
-        sam_piz_reconstruct_optional_fields (vb, snip, snip_len, word_index);
-
+        vb->txt_data.len--; // remove last \t
         piz_reconstruct_from_ctx (vb, SAM_EOL, 0);
 
         // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line

@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------
 //   base64.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Please see terms and conditions data the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 //
 // inspired by: https://github.com/launchdarkly/c-client-sdk/blob/master/base64.c
 //
@@ -30,29 +30,29 @@ static const uint8_t decode_lookup[256] = {
 	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
 
 // returns length of encoded (which is at most base64_sizeof)
-// out must be allocated base64_sizeof bytes
-unsigned base64_encode (const uint8_t *in, unsigned in_len, char *b64_str)
+// data must be allocated base64_sizeof bytes
+unsigned base64_encode (const uint8_t *data, unsigned data_len, char *b64_str)
 {
-    ASSERT0 (in, "Error in base64_encode: in is NULL");
+    ASSERT0 (data, "Error in base64_encode: data is NULL");
 
-	const uint8_t *end = in + in_len;
+	const uint8_t *end = data + data_len;
 	char *next = b64_str;
-	while (end - in >= 3) {
-		*next++ = encode_lookup[in[0] >> 2];
-		*next++ = encode_lookup[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-		*next++ = encode_lookup[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
-		*next++ = encode_lookup[  in[2] & 0x3f];
-		in += 3;
+	while (end - data >= 3) {
+		*next++ = encode_lookup[data[0] >> 2];
+		*next++ = encode_lookup[((data[0] & 0x03) << 4) | (data[1] >> 4)];
+		*next++ = encode_lookup[((data[1] & 0x0f) << 2) | (data[2] >> 6)];
+		*next++ = encode_lookup[  data[2] & 0x3f];
+		data += 3;
 	}
 
-	if (end - in) {
-		*next++ = encode_lookup[in[0] >> 2];
-		if (end - in == 1) {
-			*next++ = encode_lookup[(in[0] & 0x03) << 4];
+	if (end - data) {
+		*next++ = encode_lookup[data[0] >> 2];
+		if (end - data == 1) {
+			*next++ = encode_lookup[(data[0] & 0x03) << 4];
 			*next++ = '=';
 		} else {
-			*next++ = encode_lookup[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-			*next++ = encode_lookup[ (in[1] & 0x0f) << 2];
+			*next++ = encode_lookup[((data[0] & 0x03) << 4) | (data[1] >> 4)];
+			*next++ = encode_lookup[ (data[1] & 0x0f) << 2];
 		}
 		*next++ = '=';
 	}
@@ -61,25 +61,21 @@ unsigned base64_encode (const uint8_t *in, unsigned in_len, char *b64_str)
 }
 
 
-void base64_decode (const char *b64_str, unsigned b64_str_len, uint8_t *out, unsigned *out_len /* out */)
+void base64_decode (const char *b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
 {
-	ASSERT (b64_str_len && !(b64_str_len % 4), "Error in base64_decode: bad base64 - expecting it to be a string with length divisable by 4 but its length is %u: %.*s",
-            b64_str_len, b64_str_len, b64_str);
-
-	unsigned pad=0;
 	uint8_t block[4];
-	for (unsigned i=0; i < b64_str_len; i++) {
-
+	unsigned pad=0, i=0; for (; i < *b64_str_len; i++) {
 		if (b64_str[i] == '=') pad++;
 		block[i&3] = decode_lookup[(unsigned)b64_str[i]];
-		ASSERT (block[i&3] != 0x80, "Invalid character '%c' found in b64 string: %.*s", b64_str[i], b64_str_len, b64_str);
+		
+		if (block[i&3] == 0x80) break; // end of b64 string
 
 		if ((i&3) == 3) {
-  			                 *out++ = (block[0] << 2) | (block[1] >> 4);
-			if (pad <= 1)    *out++ = (block[1] << 4) | (block[2] >> 2);
-			if (!pad)        *out++ = (block[2] << 6) |  block[3];
+  			                 *data++ = (block[0] << 2) | (block[1] >> 4);
+			if (pad <= 1)    *data++ = (block[1] << 4) | (block[2] >> 2);
+			if (!pad)        *data++ = (block[2] << 6) |  block[3];
 		}
 	}	
 
-	*out_len = (b64_str_len / 4) * 3 - pad;
+	*b64_str_len = i;
 }

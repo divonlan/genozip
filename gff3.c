@@ -124,7 +124,7 @@ static void gff3_seg_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
     }
 
     // finally, the "structured" snip itself
-    seg_structured_by_ctx ((VBlockP)vb, subfield_ctx, &st, 0);
+    seg_structured_by_ctx ((VBlockP)vb, subfield_ctx, &st, NULL, 0, 0);
 
     return;
 

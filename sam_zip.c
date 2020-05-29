@@ -105,11 +105,12 @@ void sam_seg_initialize (VBlock *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[SAM_RNAME].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[SAM_SEQ].flags   = CTX_FL_LOCAL_LZMA;
-    vb->contexts[SAM_SEQ].ltype   = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].ltype  = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_TLEN].flags  = CTX_FL_STORE_VALUE;
+    vb->contexts[SAM_RNAME].flags     = CTX_FL_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[SAM_SEQ].flags       = CTX_FL_LOCAL_LZMA;
+    vb->contexts[SAM_SEQ].ltype       = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].ltype      = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_TLEN].flags      = CTX_FL_STORE_VALUE;
+    vb->contexts[SAM_OPTIONAL].flags  = CTX_FL_STRUCTURED;
 }
 
 // TLEN - 3 cases: 
@@ -382,8 +383,7 @@ static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_st
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
-static void sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, 
-                                    char separator)
+static DictIdType sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len)
 {
     ASSSEG0 (field_len, field, "Error: line invalidly ends with a tab");
 
@@ -515,6 +515,8 @@ static void sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const cha
     // All other subfields - have their own dictionary
     else        
         seg_by_dict_id (vb, value, value_len, dict_id, (value_len) + 1); // +1 for \t
+
+    return dict_id;
 }
 
 static void sam_seg_cigar_field (VBlockSAM *vb, const char *cigar, unsigned cigar_len)
@@ -623,21 +625,29 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     sam_seg_seq_qual_fields (vb, dl); // also updates cigar if it is "*"
 
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
-    char oname[MAX_SUBFIELDS * 5 + 1]; // each name is 5 characters per SAM specification, eg "MC:Z:" ; +1 for # in case of \r
-    unsigned oname_len;
+    Structured st = { .repeats=1, .num_items=0, .flags=0 };
+    char prefixes[MAX_SUBFIELDS * 6 + 1]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_STRUCTURED ; +1 for the initial SNIP_STRUCTURED
+    prefixes[0] = SNIP_STRUCTURED;
+    unsigned prefixes_len=1;
 
-    for (oname_len=0; oname_len < MAX_SUBFIELDS*5 && separator != '\n'; oname_len += 5) {
+    while (separator != '\n') {
         GET_MAYBE_LAST_ITEM ("OPTIONAL-subfield");
-        sam_seg_optional_field (vb, dl, field_start, field_len, separator);
-        memcpy (&oname[oname_len], field_start, 5);
+
+        st.items[st.num_items].dict_id   = sam_seg_optional_field (vb, dl, field_start, field_len);
+        st.items[st.num_items].seperator = '\t';
+        st.items[st.num_items].did_i     = DID_I_NONE; // seg always puts NONE, PIZ changes it
+        st.num_items++;
+
+        memcpy (&prefixes[prefixes_len], field_start, 5);
+        prefixes[prefixes_len+5] = SNIP_STRUCTURED;
+        prefixes_len += 6;
     }
     ASSSEG (separator=='\n', field_start, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
 
-    // if oname is empty, we make it "*" (and adjust size accounting)
-    if (!oname_len) oname[oname_len++] = '*';
-
-    seg_by_did_i (vb, oname, oname_len, SAM_OPTIONAL, (oname_len == 1) ? 0 : oname_len );  
-    vb->contexts[SAM_OPTIONAL].flags |= CTX_FL_NO_STONS;
+    if (st.num_items)
+        seg_structured_by_ctx (vb_, &vb->contexts[SAM_OPTIONAL], &st, prefixes, prefixes_len, 5 * st.num_items); // account for prefixes eg MX:i:
+    else
+        seg_by_did_i (vb, "", 0, SAM_OPTIONAL, 0); // empty regular snip in case this line has no OPTIONAL
 
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
 

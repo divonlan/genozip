@@ -286,8 +286,6 @@ static int sort_by_subfield_name (const void *a, const void *b)
     return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
 }
 
-#define MAX_INFO_NAMES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
-
 static void seg_sort_iname (InfoNames *names, unsigned num_names, char *iname, unsigned *iname_len)
 {
     if (! (*iname_len) || ((*iname_len) == 1 && iname[0]=='#')) return ;// nothing to sort
@@ -314,38 +312,24 @@ static void seg_sort_iname (InfoNames *names, unsigned num_names, char *iname, u
 void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_buf, uint8_t *num_info_subfields,
                      SegSpecialInfoSubfields seg_special_subfields,
                      const char *info_str, unsigned info_len)
-//                     bool this_field_has_13, // this is the last field in the line, and it ends with a Windows-style \r\n - we account for it in txt_len
-//                     bool this_line_has_13)  // this line ends with \r\n (this field may or may not be the last field) - we store this information as an info subfield for PIZ to recover
 {
     // data type de-multiplexors
     #define info_field DTF(info)
     #define field_name DTF(names)[info_field]
 
-    char iname[MAX_INFO_NAMES_LEN];
+    char iname[STRUCTURED_MAX_PREFIXES_LEN];
     unsigned iname_len = 0;
     const char *this_name = info_str;
     unsigned this_name_len = 0;
     const char *this_value = NULL;
     unsigned this_value_len=0;
     unsigned sf_i=0;
-//    char save_1, save_2=0 /* init to avoid compiler warning */;
 
     InfoNames names[MAX_SUBFIELDS];
     unsigned num_names=0;
 
     MtfContext *info_ctx = &vb->contexts[info_field];
-/*
-    // if the txt file line ends with \r\n when we add an artificial additional info subfield "#"
-    // we know we have space for adding ":#" because the line as at least a "\r\n" appearing somewhere after the INFO field
-    if (this_line_has_13) {
-        if (info_len) {
-            save_2 = info_str[info_len];
-            ((char*)info_str)[info_len++] = ';';
-        }
-        save_1 = info_str[info_len];
-        ((char*)info_str)[info_len++] = '#';
-    }
- */   
+
     // count infos
     SubfieldMapper iname_mapper;
     memset (&iname_mapper, 0, sizeof (iname_mapper));
@@ -360,7 +344,7 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
 
         if (reading_name) {
             iname[iname_len++] = c; // info names inc. the =. the = terminats each name
-            ASSSEG (iname_len <= MAX_INFO_NAMES_LEN, info_str, "Error: %s field too long, MAX_INFO_NAMES_LEN=%u", field_name, MAX_INFO_NAMES_LEN);
+            ASSSEG (iname_len <= STRUCTURED_MAX_PREFIXES_LEN, info_str, "Error: %s field too long, STRUCTURED_MAX_PREFIXES_LEN=%u", field_name, STRUCTURED_MAX_PREFIXES_LEN);
 
             if (c == '=') {  // end of name
 
@@ -463,31 +447,23 @@ void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_b
     *dl_info_mtf_i = node_index;
     
     info_ctx->txt_len += iname_len; // this includes all the = 
-/*
-    info_ctx->txt_len += iname_len + this_field_has_13; // this includes all the = and, in case INFO is the last field and terminated by \r\n, account for the \r
-    
-    // recover characters we temporarily changed
-    if (this_line_has_13) {
-        ((char*)info_str)[info_len-1] = save_1;
-        info_ctx->txt_len--; // we accounted for this character, but it doesn't appear in the original txt
-        if (info_len > 1) {
-            ((char*)info_str)[info_len-2] = save_2;
-            info_ctx->txt_len--; // we accounted for this character, but it doesn't appear in the original txt
-        }
-    }*/
 }
 
-void seg_structured_by_ctx (VBlock *vb, MtfContext *ctx, Structured *st, unsigned add_bytes)
+void seg_structured_by_ctx (VBlock *vb, MtfContext *ctx, Structured *st, 
+                            const char *prefixes, unsigned prefixes_len, // either NULL or a string of st.num_items prefixes, each terminated with SNIP_STRUCTURED
+                            unsigned add_bytes)
 {
     st->repeats = BGEN16 (st->repeats);
-    char b64[1 + base64_sizeof(Structured)]; // maximal size
-    b64[0] = SNIP_STRUCTURED;
-    unsigned b64_len = base64_encode ((uint8_t*)st, sizeof_structured (*st), &b64[1]);
+    char snip[1 + base64_sizeof(Structured) + STRUCTURED_MAX_PREFIXES_LEN]; // maximal size
+    snip[0] = SNIP_STRUCTURED;
+    unsigned b64_len = base64_encode ((uint8_t*)st, sizeof_structured (*st), &snip[1]);
     st->repeats = BGEN16 (st->repeats); // restore
+
+    if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
 
     ctx->flags |= CTX_FL_STRUCTURED;
 
-    seg_by_ctx (vb, b64, b64_len + 1, ctx, add_bytes, NULL); 
+    seg_by_ctx (vb, snip, 1 + b64_len + prefixes_len, ctx, add_bytes, NULL); 
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
@@ -570,7 +546,7 @@ void seg_compound_field (VBlock *vb,
 
     st.num_items = sf_i;
 
-    seg_structured_by_ctx (vb, field_ctx, &st, sf_i-1 + add_for_eol);
+    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, sf_i-1 + add_for_eol);
 }
 
 void seg_array_field (VBlock *vb, DictIdType dict_id, const char *value, unsigned value_len, 

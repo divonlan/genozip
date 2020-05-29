@@ -36,6 +36,7 @@
 #pragma pack(1)
 #define STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT 0x01
 #define STRUCTURED_MAX_REPEATS 65534 // one less than maxuint16 to make it easier to loop with st.repeats without overflow 
+#define STRUCTURED_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 typedef struct Structured {
     uint16_t repeats;     // number of "repeats" (array elements)
     uint8_t num_items;    // 1 to MAX_STRUCTURED_ITEMS

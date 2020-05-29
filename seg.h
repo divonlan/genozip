@@ -42,8 +42,8 @@ extern void seg_id_field (VBlockP vb, DictIdType dict_id, const char *id_snip, u
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip);
 
-extern void seg_structured_by_ctx (VBlockP vb, MtfContextP ctx, StructuredP st, unsigned add_bytes);
-#define seg_structured_by_dict_id(vb,dict_id,st,add_bytes) seg_structured_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), st, add_bytes)
+extern void seg_structured_by_ctx (VBlockP vb, MtfContextP ctx, StructuredP st, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
+#define seg_structured_by_dict_id(vb,dict_id,st,add_bytes) seg_structured_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), st, NULL, 0, add_bytes)
 
 extern void seg_info_field (VBlockP vb, uint32_t *dl_info_mtf_i, BufferP iname_mapper_buf, uint8_t *num_info_subfields,
                             SegSpecialInfoSubfields seg_special_subfields,

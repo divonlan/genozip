@@ -146,14 +146,27 @@ static void piz_reconstruct_structured (VBlock *vb, MtfContext *snip_ctx, const 
             snip_len, base64_sizeof(Structured));
 
     Structured st;
-    unsigned st_size = sizeof (st); 
-    base64_decode (snip, snip_len, (uint8_t*)&st, &st_size);
+    unsigned b64_len = snip_len;
+    base64_decode (snip, &b64_len, (uint8_t*)&st);
 
     st.repeats = BGEN16 (st.repeats);
 
-    for (unsigned rep_i=0; rep_i < st.repeats; rep_i++) 
-        for (unsigned i=0; i < st.num_items; i++) 
+    for (unsigned rep_i=0; rep_i < st.repeats; rep_i++) {
+
+        const char *next_prefix = (b64_len < snip_len) ? &snip[b64_len+1] : NULL; // if has prefixes - skip the SNIP_STRUCTURED seperator
+
+        for (unsigned i=0; i < st.num_items; i++) {
+            // case this Structured has prefixes - then it has exactly one prefix per item, each terminated by SNIP_STRUCTURED
+            if (next_prefix) { 
+                const char *start = next_prefix;
+                while (*next_prefix != SNIP_STRUCTURED) next_prefix++;
+                RECONSTRUCT (start, (unsigned)(next_prefix - start));
+                next_prefix++; // skip SNIP_STRUCTURED seperator
+            }
+
             piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, st.items[i].dict_id)->did_i, st.items[i].seperator);
+        }
+    }
 
     if ((st.flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st.items[st.num_items-1].seperator)
         vb->txt_data.len--;
@@ -166,8 +179,7 @@ static MtfContext *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, u
             *snip_len, b64_len + 1);
 
     DictIdType dict_id;
-    unsigned dict_id_size = DICT_ID_LEN;
-    base64_decode ((*snip)+1, b64_len, dict_id.id, &dict_id_size);
+    base64_decode ((*snip)+1, &b64_len, dict_id.id);
 
     MtfContext *other_ctx = mtf_get_ctx (vb, dict_id);
 
