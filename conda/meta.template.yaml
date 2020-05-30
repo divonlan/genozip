@@ -52,12 +52,11 @@ test:
       "genocat",
       "genols"
     ] %}
-    {% for executable in genozip_executables %}
-    - genozip
-#    - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
-    {% endfor %}
-    - which genozip.exe  # [win]
-    - genozip --password abc --test --quiet test-file.vcf 2>&1  
+#    {% for executable in genozip_executables %}
+#    - genozip --help
+#    {% endfor %}
+#    - which genozip.exe  # [win]
+    - genozip --help
 
 about:
   home: https://github.com/divonlan/genozip
