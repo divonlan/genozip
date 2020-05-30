@@ -149,6 +149,9 @@ void fastq_piz_reconstruct_vb (VBlockFAST *vb)
         piz_reconstruct_from_ctx (vb, FASTQ_DESC, 0);
         piz_reconstruct_from_ctx (vb, FASTQ_E1L,  0);
 
+        // minor bug here: since all the EOL fields are aliases, in case header_one, we dont consume the
+        // missing line EOLs and they will show wrong ones to the remaining lines. minor bc in virtually all files,
+        // the EOL is identical in all lines
         if (!flag_header_one) { // note that piz_read_global_area rewrites --header-only as flag_header_one
             piz_reconstruct_from_ctx (vb, FASTQ_SEQ,  0);
             piz_reconstruct_from_ctx (vb, FASTQ_E2L,  0);
