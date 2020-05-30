@@ -40,7 +40,10 @@
         "random": "c",
         "strings.h": "c",
         "stdint.h": "c",
-        "text_license.h": "c"
+        "text_license.h": "c",
+        "deque": "c",
+        "unordered_map": "c",
+        "vector": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

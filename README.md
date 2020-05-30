@@ -48,7 +48,7 @@ Note: there is no need for a separate indexing step or index file<br>
 <b><i>Compress and then verify that the compressed file decompresses correctly:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
 <br>
-Is genozip helpful in your research? Please be so kind as to support continued development by citing
+Do you find genozip to be helpful in your research? Please be so kind as to support continued development by citing
 <b>Citing:</b> https://doi.org/10.1093/bioinformatics/btaa290
 <br>
 Feature requests and bug reports: <b>bugs@genozip.com</b> <br>
