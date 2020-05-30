@@ -65,8 +65,6 @@ extern void piz_reconstruct_one_snip (VBlockP vb, MtfContextP ctx, const char *s
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, uint8_t did_i, DictIdType dict_id);
 
-extern void piz_reconstruct_info (VBlockP vb, int field, bool *has_13);
-
 extern void piz_reconstruct_structured_do (VBlockP vb, ConstStructuredP st, const char *prefixes, uint32_t prefixes_len);
 
 typedef struct PizSubfieldMapper {

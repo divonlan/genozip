@@ -56,12 +56,12 @@ typedef struct DataTypeProperties {
 
 #define usz(type) ((unsigned)sizeof(type))
 #define DATA_TYPE_PROPERTIES { \
-    { "VCF",     RA,    vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', vcf_seg_initialize,   vcf_seg_txt_line,   vcf_zip_compress_one_vb,  vcf_zfile_update_compressed_vb_header, vcf_piz_read_one_vb,  vcf_piz_uncompress_vb,    vcf_piz_is_skip_section,  0, {},                          vcf_vb_release_vb,  vcf_vb_destroy_vb,  vcf_vb_cleanup_memory, "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
-    { "SAM",     RA,    sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', sam_seg_initialize,   sam_seg_txt_line,   NULL,                     zfile_update_compressed_vb_header,     NULL,                 sam_piz_reconstruct_vb,   NULL,                     NUM_SAM_SPECIAL,  SAM_SPECIAL,  sam_vb_release_vb,  sam_vb_destroy_vb,  NULL,  "Alignment lines", { "FIELD", "QNAME",   "OPTION" } }, \
-    { "FASTQ",   NO_RA, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  fastq_seg_initialize, fastq_seg_txt_line, NULL,                     zfile_update_compressed_vb_header,     fast_piz_read_one_vb, fastq_piz_reconstruct_vb, fast_piz_is_skip_section, 0, {},                          fast_vb_release_vb, NULL,               NULL,  "Entries",         { "FIELD", "DESC",   "ERROR!"   } }, \
+    { "VCF",     RA,    vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', vcf_seg_initialize,   vcf_seg_txt_line,   vcf_zip_compress_one_vb,  vcf_zfile_update_compressed_vb_header, vcf_piz_read_one_vb,  vcf_piz_uncompress_vb,    vcf_piz_is_skip_section,  0, {},                            vcf_vb_release_vb,  vcf_vb_destroy_vb,  vcf_vb_cleanup_memory, "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
+    { "SAM",     RA,    sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', sam_seg_initialize,   sam_seg_txt_line,   NULL,                     zfile_update_compressed_vb_header,     NULL,                 sam_piz_reconstruct_vb,   NULL,                     NUM_SAM_SPECIAL,  SAM_SPECIAL  ,  sam_vb_release_vb,  sam_vb_destroy_vb,  NULL,  "Alignment lines", { "FIELD", "QNAME",   "OPTION" } }, \
+    { "FASTQ",   NO_RA, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  fastq_seg_initialize, fastq_seg_txt_line, NULL,                     zfile_update_compressed_vb_header,     fast_piz_read_one_vb, fastq_piz_reconstruct_vb, fast_piz_is_skip_section, 0, {},                            fast_vb_release_vb, NULL,               NULL,  "Entries",         { "FIELD", "DESC",   "ERROR!"   } }, \
     { "FASTA",   NO_RA, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  fasta_seg_initialize, fasta_seg_txt_line, NULL,                     zfile_update_compressed_vb_header,     fast_piz_read_one_vb, fasta_piz_reconstruct_vb, fast_piz_is_skip_section, NUM_FASTA_SPECIAL, FASTA_SPECIAL, fast_vb_release_vb, NULL,             NULL,  "Lines",           { "FIELD", "DESC",   "ERROR!"   } }, \
-    { "GVF",     RA,    gff3_vb_size, 0,                   HDR_OK,   '#', gff3_seg_initialize,  gff3_seg_txt_line,  NULL,                     zfile_update_compressed_vb_header,     NULL,                 gff3_piz_reconstruct_vb,  NULL,                     0, {},                          gff3_vb_release_vb, gff3_vb_destroy_vb, NULL,  "Sequences",       { "FIELD", "ATTRS",  "ITEMS" } }, \
-    { "23ANDME", RA,    NULL,         0,                   HDR_OK,   '#', me23_seg_initialize,  me23_seg_txt_line,  NULL,                     zfile_update_compressed_vb_header,     NULL,                 me23_piz_reconstruct_vb,  NULL,                     0, {},                          NULL,               NULL,               NULL,  "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }  \
+    { "GVF",     RA,    0,            0,                   HDR_OK,   '#', gff3_seg_initialize,  gff3_seg_txt_line,  NULL,                     zfile_update_compressed_vb_header,     NULL,                 gff3_piz_reconstruct_vb,  NULL,                     0, {},                            NULL,               NULL,               NULL,  "Sequences",       { "FIELD", "ATTRS",  "ITEMS" } }, \
+    { "23ANDME", RA,    0,            0,                   HDR_OK,   '#', me23_seg_initialize,  me23_seg_txt_line,  NULL,                     zfile_update_compressed_vb_header,     NULL,                 me23_piz_reconstruct_vb,  NULL,                     0, {},                            NULL,               NULL,               NULL,  "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }  \
 }
 extern DataTypeProperties dt_props[NUM_DATATYPES];
 #define DTP(prop)  (dt_props[(vb)->    data_type].prop)
@@ -78,9 +78,6 @@ typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SC
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, NUM_ME23_FIELDS } Me23Fields;  
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE NUM_SAM_FIELDS // CAREFUL! for now its the biggest, change if it changes
-#if MAX_NUM_FIELDS_PER_DATA_TYPE + 2*MAX_SUBFIELDS > MAX_DICTS 
-#error "MAX_NUM_FIELDS_PER_DATA_TYPE too large"
-#endif
 
 typedef struct DataTypeFields {
     unsigned num_fields;

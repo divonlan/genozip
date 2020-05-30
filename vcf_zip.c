@@ -116,7 +116,7 @@ static void vcf_zip_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
 
             // if this VB has subfields in some line, but not in this line, then we have filled it in vcf_seg_complete_missing_lines(), 
             // therefore we have 1 fake subfield
-            if (vb->num_format_subfields > 0 && num_subfields==0) num_subfields = 1;
+            if (vb->has_genotype_data > 0 && num_subfields==0) num_subfields = 1;
 
             for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
             

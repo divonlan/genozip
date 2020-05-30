@@ -34,7 +34,6 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     buf_free(&vb->is_sb_included);
     buf_free(&vb->genotype_section_lens_buf);
     buf_free(&vb->format_mapper_buf);
-    buf_free(&vb->iname_mapper_buf);
     buf_free(&vb->optimized_gl_dict);
     buf_free(&vb->haplotype_permutation_index);
     buf_free(&vb->haplotype_permutation_index_squeezed);
@@ -73,7 +72,6 @@ void vcf_vb_destroy_vb (VBlockVCF *vb)
     buf_destroy (&vb->is_sb_included);
     buf_destroy (&vb->genotype_section_lens_buf);
     buf_destroy (&vb->format_mapper_buf);
-    buf_destroy (&vb->iname_mapper_buf);
     buf_destroy (&vb->optimized_gl_dict);
     buf_destroy (&vb->haplotype_permutation_index);
     buf_destroy (&vb->haplotype_permutation_index_squeezed);

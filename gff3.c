@@ -14,31 +14,11 @@
 #include "piz.h"
 #include "dict_id.h"
 
-// IMPORTANT: if changing fields in VBlockGFF3, also update gff3_vb_release_vb and gff3_vb_destroy_vb
-typedef struct VBlockGFF3 {
-    VBLOCK_COMMON_FIELDS
-    Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_INFO].mtf
-} VBlockGFF3;
-
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
-
-unsigned gff3_vb_size (void) { return sizeof (VBlockGFF3); }
-
-void gff3_vb_release_vb (VBlockGFF3 *vb)
-{
-    buf_free (&vb->iname_mapper_buf);
-}
-
-void gff3_vb_destroy_vb (VBlockGFF3 *vb)
-{
-    buf_destroy (&vb->iname_mapper_buf);
-}
 
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
 {
-    seg_init_mapper (vb, GFF3_ATTRS, &((VBlockGFF3 *)vb)->iname_mapper_buf, "iname_mapper_buf");  
-
     vb->contexts[GFF3_SEQID].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
     vb->contexts[GFF3_ATTRS].flags = CTX_FL_NO_STONS;
 }
@@ -65,7 +45,7 @@ static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool 
 // The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
-static void gff3_seg_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx, 
+static void gff3_seg_array_of_struct (VBlock *vb, MtfContext *subfield_ctx, 
                                       Structured st, 
                                       const char *snip, unsigned snip_len)
 {
@@ -131,10 +111,8 @@ badly_formatted:
     seg_by_dict_id (vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
 }                           
 
-static bool gff3_seg_special_info_subfields (VBlockP vb_, DictIdType dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip)
+static bool gff3_seg_special_info_subfields (VBlockP vb, DictIdType dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
-    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
-
     // ID - this is a sequential number (at least in GRCh37/38)
     if (dict_id.num == dict_id_ATTR_ID) {
         MtfContext *ctx = mtf_get_ctx (vb, dict_id);
@@ -146,7 +124,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb_, DictIdType dict_id, co
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a NUMERICAL_ID_DATA section
     if (dict_id.num == dict_id_ATTR_Dbxref) {
-        seg_id_field (vb_, dict_id, *this_value, *this_value_len, false); // discard the const as seg_id_field modifies
+        seg_id_field (vb, dict_id, *this_value, *this_value_len, false); // discard the const as seg_id_field modifies
 
         return false; // do not add to dictionary/b250 - we already did it
     }
@@ -213,7 +191,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb_, DictIdType dict_id, co
         MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_ATTR_Reference_seq); 
         ctx->flags |= CTX_FL_LOCAL_LZMA;
 
-        seg_add_to_local_text (vb_, ctx, *this_value, *this_value_len, *this_value_len);
+        seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -231,10 +209,8 @@ static bool gff3_seg_special_info_subfields (VBlockP vb_, DictIdType dict_id, co
     return true; // all other cases -  procedue with adding to dictionary/b250
 }
 
-const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
+const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
 {
-    VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
-
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;
     char separator;
@@ -242,24 +218,24 @@ const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *
     int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
     GET_NEXT_ITEM ("SEQID");
-    seg_chrom_field (vb_, field_start, field_len);
+    seg_chrom_field (vb, field_start, field_len);
 
     SEG_NEXT_ITEM (GFF3_SOURCE);
     SEG_NEXT_ITEM (GFF3_TYPE);
 
     GET_NEXT_ITEM ("START");
-    seg_pos_field (vb_, GFF3_START, GFF3_START, false, field_start, field_len, true);
-    random_access_update_pos (vb_, GFF3_START);
+    seg_pos_field (vb, GFF3_START, GFF3_START, false, field_start, field_len, true);
+    random_access_update_pos (vb, GFF3_START);
 
     GET_NEXT_ITEM ("END");
-    seg_pos_field (vb_, GFF3_END, GFF3_START, false, field_start, field_len, true);
+    seg_pos_field (vb, GFF3_END, GFF3_START, false, field_start, field_len, true);
 
     SEG_NEXT_ITEM (GFF3_SCORE);
     SEG_NEXT_ITEM (GFF3_STRAND);
     SEG_NEXT_ITEM (GFF3_PHASE);
 
     GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
-    seg_info_field (vb_, gff3_seg_special_info_subfields, field_start, field_len, false);
+    seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len, false);
 
     SEG_EOL (GFF3_EOL, false);
 
@@ -268,7 +244,7 @@ const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *
 
 // this is the compute thread entry point. It receives all data of a variant block and processes it
 // in memory to the uncompressed format. This thread then terminates the I/O thread writes the output.
-void gff3_piz_reconstruct_vb (VBlockGFF3 *vb)
+void gff3_piz_reconstruct_vb (VBlock *vb)
 {
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 

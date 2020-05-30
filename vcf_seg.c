@@ -27,7 +27,6 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->num_sample_blocks = ceil((float)global_vcf_num_samples / (float)vb->num_samples_per_block);
 
     seg_init_mapper (vb_, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
-    seg_init_mapper (vb_, VCF_INFO,   &((VBlockVCF *)vb)->iname_mapper_buf,  "iname_mapper_buf");    
 
     vb->contexts[VCF_CHROM] .flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
     vb->contexts[VCF_FORMAT].flags = CTX_FL_NO_STONS;
@@ -79,7 +78,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
             ASSSEG (dict_id_is_vcf_format_sf (subfield), field_start,
                     "Error: string %.*s in the FORMAT field is not a legal subfield", DICT_ID_LEN, subfield.id);
 
-            MtfContext *ctx = mtf_get_ctx_sf (vb, &vb->num_format_subfields, subfield);
+            MtfContext *ctx = mtf_get_ctx (vb, subfield);
             
             format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
         } 

@@ -477,7 +477,7 @@ static void vcf_v1_piz_get_genotype_data_line (VBlockVCF *vb, unsigned line_i, i
                 sample_iterator[sample_i].next_b250++; // skip
             }
             else {
-                for (uint8_t sf_i=0; sf_i < vb->num_format_subfields; sf_i++) {
+                for (uint8_t sf_i=0; sf_i < MAX_SUBFIELDS; sf_i++) {
 
                     if (line_subfields[sf_i] != NIL) {  // this line has this subfield (according to its FORMAT field)
 

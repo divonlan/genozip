@@ -650,7 +650,6 @@ MtfContext *mtf_get_ctx_if_not_found_by_inline (
     uint8_t *dict_id_to_did_i_map, 
     uint8_t did_i,
     unsigned *num_dict_ids, 
-    uint8_t *num_subfields, // variable to increment if a new context is added
     DictIdType dict_id)
 {
     // case: its not in mapper - mapper is occupied by another - perhaps it exists
@@ -665,8 +664,7 @@ MtfContext *mtf_get_ctx_if_not_found_by_inline (
             if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
 
                 // get the context of the dst dictionary (+ create it if it doesn't exist yet)
-                MtfContext *dst_ctx = mtf_get_ctx_do (contexts, dt, dict_id_to_did_i_map, num_dict_ids, num_subfields,
-                                                      dict_id_aliases[alias_i].dst);
+                MtfContext *dst_ctx = mtf_get_ctx_do (contexts, dt, dict_id_to_did_i_map, num_dict_ids, dict_id_aliases[alias_i].dst);
 
                 ASSERT (dst_ctx, "Error in mtf_get_ctx_if_not_found_by_inline: cannot find ctx of %.*s which is the destination of the alias %.*s",
                         DICT_ID_LEN, dict_id_printable (dict_id_aliases[alias_i].dst).id, DICT_ID_LEN, dict_id_printable (dict_id_aliases[alias_i].alias).id);
@@ -692,12 +690,6 @@ MtfContext *mtf_get_ctx_if_not_found_by_inline (
     // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
     (*num_dict_ids) = did_i + 1; 
-
-    if (num_subfields) { 
-        (*num_subfields)++;
-        ASSERT (*num_subfields+1 <= MAX_SUBFIELDS, 
-                "Error in mtf_get_ctx: number of dictionaries is greater than MAX_SUBFIELDS=%u, when creating ctx for %s", MAX_SUBFIELDS, err_dict_id (dict_id));
-    }
 
 done:
     ctx = &contexts[did_i];
@@ -765,7 +757,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
-    MtfContext *zf_ctx = mtf_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, NULL, header->dict_id);
+    MtfContext *zf_ctx = mtf_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, header->dict_id);
     
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
@@ -838,15 +830,6 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 
             buf_overlay (vb, &vb_ctx->dict, &zf_ctx->dict, "ctx->dict", did_i);    
             buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, "ctx->word_list", did_i);
-
-            // count dictionaries of genotype data subfields
-            // note: this is needed only for V1 files...
-            if (!is_v2_or_above && dict_id_is_vcf_format_sf (vb_ctx->dict_id)) {
-                vb->num_type2_subfields++;
-                ASSERT (vb->num_type2_subfields <= MAX_SUBFIELDS, 
-                        "Error: number of subfields in %s exceeds MAX_SUBFIELDS=%u, while reading vb_i=%u", 
-                        z_name, MAX_SUBFIELDS, vb->vblock_i);
-            }
         }
     }
     vb->num_dict_ids = z_file->num_dict_ids;

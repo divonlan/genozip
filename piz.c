@@ -23,8 +23,6 @@
 #include "seg.h"
 #include "dict_id.h"
 
-static Buffer piz_iname_mapper_buf = EMPTY_BUFFER;
-
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 // Special values:
 // "-" - negated previous value
@@ -374,56 +372,6 @@ void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), Subfield
             mapper->did_i[index] = did_i;
             mapper->num_subfields++;
         }
-}
-
-// used for VCF INFO and GFF3 ATTRIBUTES 
-void piz_reconstruct_info (VBlock *vb, int field, 
-                           bool *has_13) // only needed for VCF files up to v4, can be NULL otherwise
-{
-    if (!is_v5_or_above) *has_13 = false; // for VCF files up to v4, Windows-style end-of-line \r\n was encoded in INFO. false unless proven true
-
-    // in genozip genozip v2 and v3 we had a bug where when there was an INFO subfield with a value following one or more
-    // subfields without a value, then the dictionary name of included the names of the valueless subfields
-    // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
-    bool v2v3_bug = !is_v4_or_above; 
-
-    DECLARE_SNIP;
-    uint32_t iname_word_index = LOAD_SNIP (field);        
-
-    ASSERT (iname_word_index < piz_iname_mapper_buf.len, "Error: expected iname_word_index=%d < piz_iname_mapper_buf.len=%u", 
-            iname_word_index, (uint32_t)piz_iname_mapper_buf.len);
-
-    const PizSubfieldMapper *iname_mapper = ENT (PizSubfieldMapper, piz_iname_mapper_buf, iname_word_index);
-
-    char sep = PIZ_SNIP_SEP; // pre-calc macro
-
-    for (unsigned sf_i = 0; sf_i < iname_mapper->num_subfields; sf_i++) {
-
-        // up to version 4, we stored a Windows-style EOL as a '#' suffix on the iname
-        if (!is_v5_or_above && iname_mapper->dict_id[sf_i].num == dict_id_WindowsEOL) {
-            *has_13 = true; // line needs to end with a \r\n
-            continue;
-        }
-
-        uint8_t did_i = mtf_get_ctx (vb, iname_mapper->dict_id[sf_i])->did_i; // DID_I_NONE for fields that have no ctx (either because they have no values or because the values are stored elsewhere)
-
-        // get the name eg "AF="
-        const char *start = snip;
-        for (; *snip != '=' && (*snip != ';' || v2v3_bug) && *snip != sep; snip++);
-        bool has_value = (*snip == '=');
-        
-        if (has_value) snip++; // move past the '=', if one exists
-        RECONSTRUCT (start, (unsigned)(snip-start)); // name inc. '=' e.g. "Info1="
-
-        // handle the value part of "name=value", if there is one
-        if (has_value) piz_reconstruct_from_ctx (vb, did_i, 0);
-
-        RECONSTRUCT1 (';'); // seperator between each two name=value pairs e.g "name1=value;name2=value2"
-        if (*snip == ';') snip++;
-    }
-
-    // remove the semicolon for the last field 
-     vb->txt_data.len -= 1;
 }
 
 uint32_t piz_uncompress_all_ctxs (VBlock *vb)

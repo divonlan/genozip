@@ -180,18 +180,18 @@ extern MtfNode *mtf_node_zf_do (const MtfContext *ctx, int32_t node_index, const
 #define mtf_node_zf(ctx, node_index, snip_in_dict, snip_len) mtf_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
 
-extern MtfContext *mtf_get_ctx_if_not_found_by_inline (MtfContext *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id);
+extern MtfContext *mtf_get_ctx_if_not_found_by_inline (MtfContext *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, DictIdType dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, NULL, (dict_id))
-#define mtf_get_ctx_sf(vb,num_subfields,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (num_subfields), (dict_id))
-static inline MtfContext *mtf_get_ctx_do (MtfContext *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, uint8_t *num_subfields, DictIdType dict_id)
+#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (dict_id))
+
+static inline MtfContext *mtf_get_ctx_do (MtfContext *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, DictIdType dict_id)
 {
     uint8_t did_i = dict_id_to_did_i_map[dict_id.map_key];
     if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
         return &contexts[did_i];
     else    
-        return mtf_get_ctx_if_not_found_by_inline (contexts, dt, dict_id_to_did_i_map, did_i, num_dict_ids, num_subfields, dict_id);
+        return mtf_get_ctx_if_not_found_by_inline (contexts, dt, dict_id_to_did_i_map, did_i, num_dict_ids, dict_id);
 }
 
 extern uint8_t mtf_get_existing_did_i (VBlockP vb, DictIdType dict_id);

@@ -507,10 +507,6 @@ static void vcf_piz_reconstruct_vb (VBlockVCF *vb)
         piz_reconstruct_from_ctx (vb, VCF_FILTER, '\t');
         piz_reconstruct_from_ctx (vb, VCF_INFO,   '\t');
 
-//        bool has_13 = false; // for files up to v4, \r is encoded in the INFO data
-//        piz_reconstruct_info ((VBlockP)vb, VCF_INFO, &has_13);
-//        RECONSTRUCT1 ('\t');
-
         if (vb->contexts[VCF_FORMAT].word_list.len) {
             if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
             else if (!flag_drop_genotypes) piz_reconstruct_from_ctx (vb, VCF_FORMAT, '\t');

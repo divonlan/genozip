@@ -638,11 +638,12 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
         st.items[st.num_items].did_i     = DID_I_NONE; // seg always puts NONE, PIZ changes it
         st.num_items++;
 
+        ASSSEG (st.num_items <= MAX_SUBFIELDS, field_start, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
+
         memcpy (&prefixes[prefixes_len], field_start, 5);
         prefixes[prefixes_len+5] = SNIP_STRUCTURED;
         prefixes_len += 6;
     }
-    ASSSEG (separator=='\n', field_start, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
 
     if (st.num_items)
         seg_structured_by_ctx (vb_, &vb->contexts[SAM_OPTIONAL], &st, prefixes, prefixes_len, 5 * st.num_items); // account for prefixes eg MX:i:

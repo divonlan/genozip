@@ -97,8 +97,6 @@ typedef struct VBlockVCF {
     Buffer column_of_zeros;           // used by vcf_piz_get_ht_columns_data
 
     // dictionaries stuff 
-    Buffer iname_mapper_buf;          // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_INFO].mtf
-#define num_format_subfields num_type2_subfields
     Buffer format_mapper_buf;         // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_FORMAT].mtf   
 
     // stuff related to compressing haplotype data with gtshark
