@@ -76,7 +76,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, MtfContext *subfield_ctx,
             if (!item_len) goto badly_formatted;
 
             if (!is_last_item)
-                seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len + (st.items[item_i].seperator != 0));
+                seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len + (st.items[item_i].seperator[0] != 0) + (st.items[item_i].seperator[1] != 0));
             else {
                 is_last_entry = (snip_len - item_len == 0);
                 seg_id_field ((VBlockP)vb, (DictIdType)dict_id_ENSTid, snip, item_len, !is_last_entry);

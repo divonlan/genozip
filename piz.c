@@ -184,8 +184,9 @@ void piz_reconstruct_structured_do (VBlock *vb, const Structured *st, const char
         if (st->repsep[1]) RECONSTRUCT1 (st->repsep[1]);
     }
 
-    if ((st->flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st->items[st->num_items-1].seperator)
-        vb->txt_data.len--;
+    if ((st->flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT))
+        vb->txt_data.len -= (st->items[st->num_items-1].seperator[0] != 0) + 
+                            (st->items[st->num_items-1].seperator[1] != 0);
 }
 
 static void piz_reconstruct_structured (VBlock *vb, const char *snip, unsigned snip_len)
