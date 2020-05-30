@@ -264,7 +264,7 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
     default: {
         bool reconstruct = true;
 
-        // case: backward compatability: pizzing a v4 and below file 
+        // case: backward compatability: pizzing a v4 and below VCF file 
         if (!is_v5_or_above) {
             //all snips in the POS ctx are deltas
             if (snip_ctx->dict_id.num == dict_id_fields[VCF_POS]) {
