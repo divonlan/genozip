@@ -104,7 +104,7 @@ unsigned arch_get_num_cores (void)
 
 const char *arch_get_os (void)
 {
-    static char os[50];
+    static char os[256];
 
 #ifdef _WIN32
     uint32_t windows_version = GetVersion();

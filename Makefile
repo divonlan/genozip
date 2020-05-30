@@ -92,7 +92,7 @@ ifndef IS_CONDA
 SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS)
 else 
 # conda - use packages for bzip2
-SRCS = $(MY_SRCS) $(ZLIB_SRCS)
+SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS)
 endif
 
 OBJS       := $(SRCS:.c=.o)
