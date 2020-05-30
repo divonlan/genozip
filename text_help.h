@@ -93,7 +93,7 @@ static const char *help_genozip[] = {
     "                       Quality scores of 2-9 are changed to 6; 10-19->15 ; 20-24->22 ; 25-29->27 ; 30-34->33 ; 35-39->37 ; 40+ ->40",
     "                       This assumes a standard Sanger format of Phred quality scores 0->93 encoded in ASCII 33->126",
     "                       Example: 'LSVIHINKHK' -> 'IIIIFIIIFI'",
-    "   --optimize-ZM     - Optimizes the Ion Torrent flow signal vector ZM:B:s - negative values are changed to zero, and positives are rounded to the nearest 10.",
+    "   --optimize-ZM     - ZM:B:s data: negative Ion Torrent flow signal values are changed to zero, and positives are rounded to the nearest 10.",
     "                       Example: '-20,212,427' -> '0,210,430'",
     "",
     "                     Optimizations for FASTQ files: ",
