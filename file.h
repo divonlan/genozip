@@ -85,7 +85,12 @@
 #define FNA_XZ_         ".fna.xz"
 #define FNA_GENOZIP_    ".fna" GENOZIP_EXT
 
-// GFF3 file variations (currently only GVF subtype, but maybe others in the future)
+// GFF3 file variations (including GVF, which is a subtype of GFF3)
+#define GFF3_           ".gff3"
+#define GFF3_GZ_        ".gff3.gz"
+#define GFF3_BZ2_       ".gff3.bz2"
+#define GFF3_XZ_        ".gff3.xz"
+#define GFF3_GENOZIP_   ".gff3" GENOZIP_EXT
 #define GVF_            ".gvf"
 #define GVF_GZ_         ".gvf.gz"
 #define GVF_BZ2_        ".gvf.bz2"
@@ -112,6 +117,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     FFN,   FFN_GZ,   FFN_BZ2,   FFN_XZ,   FFN_GENOZIP,
                     FNN,   FNN_GZ,   FNN_BZ2,   FNN_XZ,   FNN_GENOZIP,
                     FNA,   FNA_GZ,   FNA_BZ2,   FNA_XZ,   FNA_GENOZIP,
+                    GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,  GFF3_GENOZIP,
                     GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
                     ME23,  ME23_ZIP,                      ME23_GENOZIP, 
                     AFTER_LAST_FILE_TYPE } FileType;
@@ -127,6 +133,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    FFN_,   FFN_GZ_,   FFN_BZ2_,   FFN_XZ_,   FFN_GENOZIP_, \
                    FNN_,   FNN_GZ_,   FNN_BZ2_,   FNN_XZ_,   FNN_GENOZIP_, \
                    FNA_,   FNA_GZ_,   FNA_BZ2_,   FNA_XZ_,   FNA_GENOZIP_, \
+                   GFF3_,  GFF3_GZ_,  GFF3_BZ2_,  GFF3_XZ_,  GFF3_GENOZIP_, \
                    GVF_,   GVF_GZ_,   GVF_BZ2_,   GVF_XZ_,   GVF_GENOZIP_, \
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,\
                    "stdin", "stdout" }
@@ -164,17 +171,20 @@ typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */,
                              { FNA_BZ2,   COMP_BZ2, FNA_GENOZIP   }, { FNA_XZ,   COMP_XZ,  FNA_GENOZIP   },\
                              { FA,        COMP_PLN, FA_GENOZIP    }, { FA_GZ,    COMP_GZ,  FA_GENOZIP    },\
                              { FA_BZ2,    COMP_BZ2, FA_GENOZIP    }, { FA_XZ,    COMP_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
-                           { { GVF,       COMP_PLN, GVF_GENOZIP   }, { GVF_GZ,   COMP_GZ,  GVF_GENOZIP   },\
+                           { { GFF3,      COMP_PLN, GFF3_GENOZIP  }, { GFF3_GZ,  COMP_GZ,  GFF3_GENOZIP  },\
+                             { GFF3_BZ2,  COMP_BZ2, GFF3_GENOZIP  }, { GFF3_XZ,  COMP_XZ,  GFF3_GENOZIP  },\
+                             { GVF,       COMP_PLN, GVF_GENOZIP   }, { GVF_GZ,   COMP_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   COMP_BZ2, GVF_GENOZIP   }, { GVF_XZ,   COMP_XZ,  GVF_GENOZIP   }, { 0, 0, 0 } },\
                            { { ME23,      COMP_PLN, ME23_GENOZIP  }, { ME23_ZIP, COMP_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
 
+// Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
 #define TXT_OUT_FT_BY_DT { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   \
                            { SAM,  SAM_GZ,  BAM, 0 },   \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },     \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
-                           { GVF, GVF_GZ, 0 },                    \
+                           { GVF, GVF_GZ, GFF3, GFF3_GZ, 0 }, \
                            { ME23, ME23_ZIP, 0 } }                        
 
 // txt file types and their corresponding genozip file types for each data type

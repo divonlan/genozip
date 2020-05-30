@@ -119,10 +119,10 @@ static void dispatcher_show_start (DispatcherData *dd)
     const char *progress = (command == ZIP && txt_file->redirected) ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
     
     if (dd->test_mode) 
-        fprintf (stderr, "testing: %s%s --test %s: %s", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
+        fprintf (stderr, "testing: %s%s --test %s : %s", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
                  dd->filename, progress); 
     else
-        fprintf (stderr, "%s %s: %s", global_cmd, dd->filename, progress); 
+        fprintf (stderr, "%s %s : %s", global_cmd, dd->filename, progress); 
              
     dd->last_len = strlen (progress); // so dispatcher_show_progress knows how many characters to erase
 }

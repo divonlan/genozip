@@ -176,6 +176,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictIdType subfield_dict_id,
         .repeats     = 0, 
         .num_items   = 6, 
         .flags       = 0,
+        .repsep      = {0,0},
         .items       = { { .dict_id = {.id="@RNAME" }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as primary is often sorted, and mixing will ruin its b250 compression
                          { .dict_id = {.id="@POS"   }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as these are local-stored random numbers anyway - no advantage for mixing, and it would obscure the stats
                          { .dict_id = {.id="@STRAND"}, .seperator = ',', .did_i = DID_I_NONE},
@@ -188,9 +189,9 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictIdType subfield_dict_id,
 
     Structured sa_oa = structured_SA_OA;
 
-    for (unsigned i=0; i < field_len; sa_oa.repeats++) {
+    for (uint32_t i=0; i < field_len; sa_oa.repeats++) {
 
-        ASSSEG (sa_oa.repeats <= STRUCTURED_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%u) while parsing %s",
+        ASSSEG (sa_oa.repeats <= STRUCTURED_MAX_REPEATS, field, "Error in sam_seg_SA_or_OA_field - exceeded maximum repeats allowed (%lu) while parsing %s",
                 STRUCTURED_MAX_REPEATS, err_dict_id (subfield_dict_id));
 
         DO_SSF (rname,  ','); // these also do sanity checks
@@ -240,6 +241,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         .repeats     = 0, 
         .num_items   = 5, 
         .flags       = 0,
+        .repsep      = {0,0},
         .items       = { { .dict_id = {.id="@RNAME"  }, .seperator = ',', .did_i = DID_I_NONE },
                          { .dict_id = {.id="@STRAND" }, .seperator = 0,   .did_i = DID_I_NONE },
                          { .dict_id = {.id="@POS"    }, .seperator = ',', .did_i = DID_I_NONE },
@@ -251,9 +253,9 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
 
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(cigar); DEC_SSF(nm); 
 
-    for (unsigned i=0; i < field_len; xa.repeats++) {
+    for (uint32_t i=0; i < field_len; xa.repeats++) {
 
-        ASSSEG (xa.repeats <= STRUCTURED_MAX_REPEATS, field, "Error in sam_seg_XA_field - exceeded maximum repeats allowed (%u) while parsing XA",
+        ASSSEG (xa.repeats <= STRUCTURED_MAX_REPEATS, field, "Error in sam_seg_XA_field - exceeded maximum repeats allowed (%lu) while parsing XA",
                 STRUCTURED_MAX_REPEATS);
 
         DO_SSF (rname,  ','); 
@@ -626,9 +628,9 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
 
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
     Structured st = { .repeats=1, .num_items=0, .flags=0 };
-    char prefixes[MAX_SUBFIELDS * 6 + 1]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_STRUCTURED ; +1 for the initial SNIP_STRUCTURED
-    prefixes[0] = SNIP_STRUCTURED;
-    unsigned prefixes_len=1;
+    char prefixes[MAX_SUBFIELDS * 6 + 2]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_STRUCTURED ; +2 for the initial SNIP_STRUCTURED
+    prefixes[0] = prefixes[1] = SNIP_STRUCTURED; // initial SNIP_STRUCTURED follow by seperator of empty Structured-wide prefix
+    unsigned prefixes_len=2;
 
     while (separator != '\n') {
         GET_MAYBE_LAST_ITEM ("OPTIONAL-subfield");

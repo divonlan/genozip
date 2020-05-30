@@ -138,18 +138,39 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, MtfContext *ctx, co
     ctx->next_local += len;
 }
 
+static inline void piz_reconstruct_structured_prefix (VBlockP vb, const char **prefixes, uint32_t *prefixes_len)
+{
+    if (! (*prefixes_len)) return; // nothing to do
+    
+    const char *start = *prefixes;
+    while (**prefixes != SNIP_STRUCTURED) (*prefixes)++; // prefixes are terminated by SNIP_STRUCTURED
+    uint32_t len = (unsigned)((*prefixes) - start);
+
+    RECONSTRUCT (start, len);
+
+    (*prefixes)++; // skip SNIP_STRUCTURED seperator
+    (*prefixes_len) -= len + 1;
+}
+
 void piz_reconstruct_structured_do (VBlock *vb, const Structured *st, const char *prefixes, uint32_t prefixes_len)
 {
-    for (unsigned rep_i=0; rep_i < st->repeats; rep_i++) {
+    ASSERT (prefixes_len <= STRUCTURED_MAX_PREFIXES_LEN, "Error in piz_reconstruct_structured_do: prefixes_len=%u longer than STRUCTURED_MAX_PREFIXES_LEN=%u", 
+            prefixes_len, STRUCTURED_MAX_PREFIXES_LEN);
+
+    ASSERT (!prefixes || prefixes[prefixes_len-1] == SNIP_STRUCTURED, "Error in piz_reconstruct_structured_do: prefixes array does end with a SNIP_STRUCTURED: %.*s",
+            prefixes_len, prefixes);
+
+    // structured wide prefix - it will be missing if Structured has no prefixes, or empty if it has only items prefixes
+    piz_reconstruct_structured_prefix (vb, &prefixes, &prefixes_len); // item prefix (we will have one per item or none at all)
+
+    for (uint32_t rep_i=0; rep_i < st->repeats; rep_i++) {
+
+        const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
+        uint32_t item_prefixes_len = prefixes_len;
 
         for (unsigned i=0; i < st->num_items; i++) {
-            // case this Structured has prefixes - then it has exactly one prefix per item, each terminated by SNIP_STRUCTURED
-            if (prefixes) { 
-                const char *start = prefixes;
-                while (*prefixes != SNIP_STRUCTURED) prefixes++;
-                RECONSTRUCT (start, (unsigned)(prefixes - start));
-                prefixes++; // skip SNIP_STRUCTURED seperator
-            }
+
+            piz_reconstruct_structured_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix
 
             const StructuredItem *item = &st->items[i];
             if (item->dict_id.num) // not a prefix-only item
@@ -157,6 +178,9 @@ void piz_reconstruct_structured_do (VBlock *vb, const Structured *st, const char
             else
                 RECONSTRUCT1 (item->seperator);
         }
+
+        if (st->repsep[0]) RECONSTRUCT1 (st->repsep[0]);
+        if (st->repsep[1]) RECONSTRUCT1 (st->repsep[1]);
     }
 
     if ((st->flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st->items[st->num_items-1].seperator)
@@ -172,7 +196,7 @@ static void piz_reconstruct_structured (VBlock *vb, const char *snip, unsigned s
 
     unsigned b64_len = snip_len;
     base64_decode (snip, &b64_len, (uint8_t*)&st);
-    st.repeats = BGEN16 (st.repeats);
+    st.repeats = BGEN32 (st.repeats);
     bool has_prefixes = (b64_len < snip_len);
 
     piz_reconstruct_structured_do (vb, &st, 

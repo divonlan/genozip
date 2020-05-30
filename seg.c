@@ -297,7 +297,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
 
-    Structured st = { .repeats=1, .num_items=0, .flags=STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT };
+    Structured st = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT };
 
     const char *this_name = info_str, *this_value = NULL;
     int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
@@ -388,8 +388,8 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
         qsort (info_items, st.num_items, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[STRUCTURED_MAX_PREFIXES_LEN]; // these are the Structured prefixes
-    prefixes[0] = SNIP_STRUCTURED;
-    unsigned prefixes_len = 1;
+    prefixes[0] = prefixes[1] = SNIP_STRUCTURED; // initial SNIP_STRUCTURED follow by seperator of empty Structured-wide prefix
+    unsigned prefixes_len = 2;
 
     // Populate the Structured 
     uint32_t total_names_len=0;
@@ -420,14 +420,21 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
 }
 
 void seg_structured_by_ctx (VBlock *vb, MtfContext *ctx, Structured *st, 
-                            const char *prefixes, unsigned prefixes_len, // either NULL or a string of st.num_items prefixes, each terminated with SNIP_STRUCTURED
+                            // prefixes can be one of 3 options:
+                            // 1. NULL
+                            // 2. a "structured-wide prefix" that will be reconstructed once, at the beginning of the Structured
+                            // 3. a "structured-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
+                            //    displayed once per repeat, before their respective items. in this case, the structured-wide prefix
+                            //    may be empty. 
+                            // Each prefix is terminated by a SNIP_STRUCTURED character
+                            const char *prefixes, unsigned prefixes_len, 
                             unsigned add_bytes)
 {
-    st->repeats = BGEN16 (st->repeats);
+    st->repeats = BGEN32 (st->repeats);
     char snip[1 + base64_sizeof(Structured) + STRUCTURED_MAX_PREFIXES_LEN]; // maximal size
     snip[0] = SNIP_STRUCTURED;
     unsigned b64_len = base64_encode ((uint8_t*)st, sizeof_structured (*st), &snip[1]);
-    st->repeats = BGEN16 (st->repeats); // restore
+    st->repeats = BGEN32 (st->repeats); // restore
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
 
@@ -525,7 +532,8 @@ void seg_array_field (VBlock *vb, DictIdType dict_id, const char *value, unsigne
     const char *str = value; 
     int str_len = (int)value_len; // must be int, not unsigned, for the for loop
     
-    Structured st = { .num_items = 1, .flags = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT, { { .seperator = ',', .did_i = DID_I_NONE } } };
+    Structured st = { .num_items = 1, .flags = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT, 
+                      .repsep = {0,0}, .items = { { .seperator = ',', .did_i = DID_I_NONE } } };
     DictIdType arr_dict_id = dict_id_make ("XX_ARRAY", 8);
     arr_dict_id.id[0]      = FLIP_CASE (dict_id.id[0]);
     arr_dict_id.id[1]      = FLIP_CASE (dict_id.id[1]);

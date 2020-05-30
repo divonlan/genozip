@@ -59,8 +59,6 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
 
 void me23_piz_reconstruct_vb (VBlock *vb)
 {
-    bool has_13_ctx = vb->contexts[ME23_EOL].word_list.len > 0;
-
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
         uint32_t txt_data_start = vb->txt_data.len;
@@ -70,12 +68,7 @@ void me23_piz_reconstruct_vb (VBlock *vb)
         piz_reconstruct_from_ctx (vb, ME23_CHROM, '\t');
         piz_reconstruct_from_ctx (vb, ME23_POS,   '\t');
         piz_reconstruct_from_ctx (vb, ME23_GENOTYPE, 0);
-
-        // add the end-of-line
-        if (has_13_ctx) 
-            piz_reconstruct_from_ctx (vb, ME23_EOL, 0);
-        else
-            RECONSTRUCT1 ('\n');
+        piz_reconstruct_from_ctx (vb, ME23_EOL, 0);
 
         // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
         if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
