@@ -37,16 +37,20 @@
 #define STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT 0x01
 #define STRUCTURED_MAX_REPEATS 65534 // one less than maxuint16 to make it easier to loop with st.repeats without overflow 
 #define STRUCTURED_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
+
+typedef struct StructuredItem {
+        DictIdType dict_id;  
+        uint8_t did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
+        char seperator;
+} StructuredItem;
+
 typedef struct Structured {
     uint16_t repeats;     // number of "repeats" (array elements)
     uint8_t num_items;    // 1 to MAX_STRUCTURED_ITEMS
     uint8_t flags;
-    struct {
-        DictIdType dict_id;  
-        uint8_t did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
-        char seperator;
-    } items[MAX_SUBFIELDS];
+    StructuredItem items[MAX_SUBFIELDS];
 } Structured;
+
 #pragma pack()
 #define sizeof_structured(st) (sizeof(st) - sizeof((st).items) + (st).num_items * sizeof((st).items[0]))
 

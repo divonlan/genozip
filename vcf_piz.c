@@ -19,11 +19,6 @@
 
 #define DATA_LINE(i) ENT (PizDataLineVCF, vb->lines, i)
 
-typedef struct {
-    unsigned num_subfields;       // number of subfields this FORMAT has
-    uint8_t did_i[MAX_SUBFIELDS]; // did_i of each format subfield
-} FormatInfo;
-
 static Buffer piz_format_mapper_buf = EMPTY_BUFFER; //global array, initialized by I/O thread and immitable thereafter
 
 // returns true if section is to be skipped reading / uncompressing
@@ -39,7 +34,7 @@ bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
 
 // Called from the I/O thread vcf_piz_read_one_vb - and immutable thereafter
 // This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries.
-// It populates piz_format_mapper_buf with info about each unique format type in this vb (FormatInfo structure)
+// It populates piz_format_mapper_buf with info about each unique format type in this vb (SubfieldMapper structure)
 static void vcf_piz_map_format_subfields (VBlock *vb)
 {    
     MtfContext *format_ctx = &z_file->contexts[VCF_FORMAT];
@@ -47,12 +42,12 @@ static void vcf_piz_map_format_subfields (VBlock *vb)
     // initialize
     buf_free (&piz_format_mapper_buf); // in case it was allocated by a previous file
     piz_format_mapper_buf.len = format_ctx->word_list.len;
-    buf_alloc (evb, &piz_format_mapper_buf, sizeof (FormatInfo) * piz_format_mapper_buf.len,
+    buf_alloc (evb, &piz_format_mapper_buf, sizeof (SubfieldMapper) * piz_format_mapper_buf.len,
                1, "piz_format_mapper_buf", 0);
     buf_zero (&piz_format_mapper_buf);
 
     // get number of subfields for each FORMAT item in dictionary, by traversing the FORMAT dectionary mtf array
-    ARRAY (FormatInfo, formats, piz_format_mapper_buf);
+    ARRAY (SubfieldMapper, formats, piz_format_mapper_buf);
     ARRAY (const MtfWord, snip_list, format_ctx->word_list);
 
     for (unsigned format_i=0; format_i < format_ctx->word_list.len; format_i++)
@@ -97,7 +92,7 @@ static void vcf_piz_initialize_sample_iterators (VBlockVCF *vb)
     buf_alloc (vb, &vb->sample_iterator, sizeof(SnipIterator) * global_vcf_num_samples, 1, "sample_iterator", 0);
     
     ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
-    ARRAY (FormatInfo, formats, piz_format_mapper_buf);
+    ARRAY (SubfieldMapper, formats, piz_format_mapper_buf);
 
     // Get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
     MtfContext *format_ctx = &vb->contexts[VCF_FORMAT];
@@ -130,7 +125,7 @@ static void vcf_piz_initialize_sample_iterators (VBlockVCF *vb)
             // (gt data is stored transposed - i.e. column by column)
             for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
                 
-                FormatInfo *line_format_info = &formats[DATA_LINE (line_i)->format_mtf_i];
+                SubfieldMapper *line_format_info = &formats[DATA_LINE (line_i)->format_mtf_i];
                 uint32_t num_subfields = line_format_info->num_subfields;
                 
                 for (unsigned sf=0; sf < num_subfields; sf++) 
@@ -159,9 +154,9 @@ static void vcf_piz_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
     PizDataLineVCF *dl = DATA_LINE (vb_line_i);
 
     ARRAY (SnipIterator, sample_iterator, vb->sample_iterator);
-    ARRAY (const FormatInfo, formats, piz_format_mapper_buf);
+    ARRAY (const SubfieldMapper, formats, piz_format_mapper_buf);
 
-    const FormatInfo *line_format_info = &formats[dl->format_mtf_i];
+    const SubfieldMapper *line_format_info = &formats[dl->format_mtf_i];
 
     char *next = vb->line_gt_data.data;
     for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -510,10 +505,11 @@ static void vcf_piz_reconstruct_vb (VBlockVCF *vb)
         piz_reconstruct_from_ctx (vb, VCF_REFALT, '\t');
         piz_reconstruct_from_ctx (vb, VCF_QUAL,   '\t');
         piz_reconstruct_from_ctx (vb, VCF_FILTER, '\t');
+        piz_reconstruct_from_ctx (vb, VCF_INFO,   '\t');
 
-        bool has_13 = false; // for files up to v4, \r is encoded in the INFO data
-        piz_reconstruct_info ((VBlockP)vb, VCF_INFO, &has_13);
-        RECONSTRUCT1 ('\t');
+//        bool has_13 = false; // for files up to v4, \r is encoded in the INFO data
+//        piz_reconstruct_info ((VBlockP)vb, VCF_INFO, &has_13);
+//        RECONSTRUCT1 ('\t');
 
         if (vb->contexts[VCF_FORMAT].word_list.len) {
             if (flag_gt_only) RECONSTRUCT ("GT\t", 3)
@@ -540,7 +536,8 @@ static void vcf_piz_reconstruct_vb (VBlockVCF *vb)
         if (is_v5_or_above)
             piz_reconstruct_from_ctx (vb, VCF_EOL, 0);
         else
-            RECONSTRUCT (has_13 ? "\r\n" : "\n", 1 + has_13);
+            // v4_line_has_13 is either updated on every line by seg_info_field or never at all and remains false
+            RECONSTRUCT (vb->v4_line_has_13 ? "\r\n" : "\n", 1 + vb->v4_line_has_13); 
 
         // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
         if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
@@ -719,12 +716,9 @@ bool vcf_piz_read_one_vb (VBlock *vb_, SectionListEntry *sl)
     // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
     #define vb_header ((SectionHeaderVbHeaderVCF *)vb->z_data.data)
     
-    // iname mapper: first VB, we map all iname and format subfields to a global mapper. this uses
-    // dictionary info only, not b250
-    if (vb->vblock_i == 1) {
+    // first VB, we map all format subfields to a global mapper. this uses dictionary info only, not b250
+    if (vb->vblock_i == 1) 
         vcf_piz_map_format_subfields(vb_);
-        piz_map_iname_subfields(vb_);
-    }
         
     // read the sample data
     uint32_t num_sample_blocks     = BGEN32 (vb_header->num_sample_blocks);
@@ -762,6 +756,11 @@ bool vcf_piz_read_one_vb (VBlock *vb_, SectionListEntry *sl)
     #undef vb_header
 
     return true;
+}
+
+void piz_vcf_v4_line_eol (VBlockP vb, bool has_13) 
+{
+    ((VBlockVCFP)vb)->v4_line_has_13 = has_13;
 }
 
 #define V1_PIZ // select the piz functions of v1.c

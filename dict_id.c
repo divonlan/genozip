@@ -72,6 +72,14 @@ DictIdType dict_id_make(const char *str, unsigned str_len)
     return dict_id;
 }
 
+// for backward compatability
+DictIdType dict_id_make_v2to4 (const char *str, unsigned str_len) 
+{ 
+    DictIdType dict_id = {0}; 
+    memcpy (dict_id.id, str, MIN (str_len, DICT_ID_LEN)); 
+    return dict_id;
+}
+
 void dict_id_initialize (DataType data_type) 
 {   
     ASSERT0 (data_type != DT_NONE, "Error in dict_id_initialize: data_type is DT_NONE");

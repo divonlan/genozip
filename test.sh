@@ -149,11 +149,16 @@ test_count_genocat_lines test-file.fq "--header-one" 2
 test_count_genocat_lines test-file.fq "--grep 8160" 4
 test_count_genocat_lines test-file.fq "--grep 8160 --header-only" 1
 
-files=`ls backward-compatibility-test/*.vcf` 
+files=`ls backward-compatibility-test/*.genozip` 
 for file in $files; do
     test_header "$file - backward compatability test"
-    ./genounzip ${file}.genozip -fo $output || exit 1
-    cmp_2_files $file $output
+
+    if [ `basename $file .vcf.genozip` = test-file.1.1.3 ]; then # in v1 we didn't have the -t option
+        ./genounzip ${file} -fo $output || exit 1
+        cmp_2_files backward-compatibility-test/test-file.1.1.3.vcf $output
+    else
+        ./genounzip -t $file || exit 1
+    fi
 done
 
 if `command -v gtshark >& /dev/null`; then

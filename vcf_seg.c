@@ -148,13 +148,14 @@ static void vcf_seg_store (VBlock *vb,
 }
 
 
-static bool vcf_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip)
+static bool vcf_seg_special_info_subfields(VBlockP vb_, DictIdType dict_id, 
+                                           const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     unsigned optimized_snip_len;
 
     // Optimize VQSLOD
-    if (flag_optimize_VQSLOD && (ctx->dict_id.num == dict_id_INFO_VQSLOD) &&
+    if (flag_optimize_VQSLOD && (dict_id.num == dict_id_INFO_VQSLOD) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
@@ -164,7 +165,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const c
     }
 
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
-    if (ctx->dict_id.num == dict_id_INFO_END) {
+    if (dict_id.num == dict_id_INFO_END) {
         seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, false); // END is an alias of POS
         return false; // do not add to dictionary/b250 - we already did it
     }
@@ -530,8 +531,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     else
         GET_MAYBE_LAST_ITEM (DTF(names)[VCF_INFO]); // may or may not have a FORMAT field
 
-    seg_info_field (vb_, &dl->info_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, vcf_seg_special_info_subfields,
-                    field_start, field_len);
+    seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len, false);
 
     if (separator != '\n') { // has a FORMAT field
 

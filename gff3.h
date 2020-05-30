@@ -13,14 +13,12 @@ extern const char *gff3_seg_txt_line (VBlockP vb_, const char *field_start_line,
 extern void gff3_seg_initialize (VBlockP vb_);
 
 // PIZ Stuff
-extern bool gff3_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern void gff3_piz_reconstruct_vb(); 
 
 // VBlock stuff
 extern void gff3_vb_release_vb();
 extern void gff3_vb_destroy_vb();
 extern unsigned gff3_vb_size (void);
-extern unsigned gff3_vb_zip_dl_size (void);
 
 #define GFF3_DICT_ID_ALIASES \
     /*          alias                           maps to this ctx          */  \

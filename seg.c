@@ -15,6 +15,8 @@
 #include "random_access.h"
 #include "dict_id.h"
 #include "base64.h"
+#include "piz.h"
+#include "zfile.h"
 
 void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *name)
 {
@@ -276,177 +278,145 @@ void seg_id_field (VBlock *vb, DictIdType dict_id, const char *id_snip, unsigned
     SAFE_RESTORE (1);
 }
 
-typedef struct { const char *start; unsigned len; } InfoNames;
+typedef struct { const char *start; unsigned len; DictIdType dict_id; } InfoItem;
 
 static int sort_by_subfield_name (const void *a, const void *b)  
 { 
-    InfoNames *ina = (InfoNames *)a;
-    InfoNames *inb = (InfoNames *)b;
+    InfoItem *ina = (InfoItem *)a;
+    InfoItem *inb = (InfoItem *)b;
     
     return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
 }
 
-static void seg_sort_iname (InfoNames *names, unsigned num_names, char *iname, unsigned *iname_len)
+// used to seg INFO fields in VCF and ATTRS in GFF3, and also to piz INFO fields of v2-v4 files for
+// backward compatability
+void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
+                     const char *info_str, unsigned info_len,
+                     bool reconstruct) // if true, we reconstruct instead of segging - used for backward compatability in piz_reconstruct_one_snip
 {
-    if (! (*iname_len) || ((*iname_len) == 1 && iname[0]=='#')) return ;// nothing to sort
+    const int info_field   = DTF(info);
+    const char *field_name = DTF(names)[info_field];
 
-    if (iname[(*iname_len) - 1] == '#') num_names--; // we keep a final ";#" in its place
+    Structured st = { .repeats=1, .num_items=0, .flags=STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT };
 
-    qsort (names, num_names, sizeof(InfoNames), sort_by_subfield_name);
+    const char *this_name = info_str, *this_value = NULL;
+    int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
 
-    char *next = iname;
-    for (unsigned i=0; i < num_names; i++) {
-        memcpy (next, // pointer into automatic variable iname of seg_info_field
-                names[i].start, // pointer into db->txt_data 
-                names[i].len);
-        next += names[i].len;
+    InfoItem info_items[MAX_SUBFIELDS];
 
-        if (next[-1] != '=' && i < num_names-1) 
-            *(next++) = ';'; // add ; after value-less name, except in the end
-    }
-
-    *iname_len = (unsigned)(next - iname);
-}
-
-// segments fields that look like INFO in VCF or ATTRIBUTES in GFF3
-void seg_info_field (VBlock *vb, uint32_t *dl_info_mtf_i, Buffer *iname_mapper_buf, uint8_t *num_info_subfields,
-                     SegSpecialInfoSubfields seg_special_subfields,
-                     const char *info_str, unsigned info_len)
-{
-    // data type de-multiplexors
-    #define info_field DTF(info)
-    #define field_name DTF(names)[info_field]
-
-    char iname[STRUCTURED_MAX_PREFIXES_LEN];
-    unsigned iname_len = 0;
-    const char *this_name = info_str;
-    unsigned this_name_len = 0;
-    const char *this_value = NULL;
-    unsigned this_value_len=0;
-    unsigned sf_i=0;
-
-    InfoNames names[MAX_SUBFIELDS];
-    unsigned num_names=0;
-
-    MtfContext *info_ctx = &vb->contexts[info_field];
-
-    // count infos
-    SubfieldMapper iname_mapper;
-    memset (&iname_mapper, 0, sizeof (iname_mapper));
-
-    for (unsigned i=0; i < info_len; i++) 
-        if (info_str[i] == '=') iname_mapper.num_subfields++;
-    
     // get name / value pairs - and insert values to the "name" dictionary
     bool reading_name = true;
     for (unsigned i=0; i < info_len + 1; i++) {
         char c = (i==info_len) ? ';' : info_str[i]; // add an artificial ; at the end of the INFO data
 
         if (reading_name) {
-            iname[iname_len++] = c; // info names inc. the =. the = terminats each name
-            ASSSEG (iname_len <= STRUCTURED_MAX_PREFIXES_LEN, info_str, "Error: %s field too long, STRUCTURED_MAX_PREFIXES_LEN=%u", field_name, STRUCTURED_MAX_PREFIXES_LEN);
 
-            if (c == '=') {  // end of name
+            if (c == '=' || c == ';') {  // end of valueful or valueless name
 
-                ASSSEG (this_name_len > 0, info_str, "Error: %s field contains a = without a preceding subfield name", field_name);
+                bool valueful = (c == '=');
 
-                ASSSEG (this_name[0] >= 64 && this_name[0] <= 127, info_str,
-                        "Error: %s field contains a name %.*s starting with an illegal character", field_name, this_name_len, this_name);
+                // in genozip genozip v2 and v3 we had a bug where when there was an INFO subfield with a value following one or more
+                // subfields without a value, then the dictionary name of included the names of the valueless subfields
+                // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
+                bool bug_v2v3_situation = !is_v4_or_above && !valueful && i < info_len;
 
-                reading_name = false; 
-                this_value = &info_str[i+1]; 
-                this_value_len = 0;
+                bool v4_windows_eol = reconstruct && is_v4_or_above && (this_name[this_name_len-1] == '\t' || this_name[this_name_len-1] == '#'); // this is v4 exactly as reconstruct doesn't occur for v5+
 
-                names[num_names].start = this_name; 
-                names[num_names++].len = this_name_len + 1; // +1 for the '='
-            }
-
-            // name without value - valid in GFF3/VCF format
-            else if (c == ';') {
-
-                names[num_names].start = this_name; 
-                names[num_names++].len = this_name_len;
-
-                if (i==info_len) { // our artificial ; terminator
-                    iname_len--; // remove ;
-                    info_ctx->txt_len++;  // account for the separator (; or \t or \n)
+                if (v4_windows_eol) { 
+                    // "\t" v4 indication of Windows-style when last name was valueful
+                    if (this_name[this_name_len-1] == '\t') {
+                        piz_vcf_v4_line_eol (vb, true);
+                        this_name_len--; // remove the \t
+                    }
+                    // "\t#" v4 indication of Windows-style when last name was valueless
+                    else { 
+                        this_name_len -= 2; // remove the "\t#"
+                        piz_vcf_v4_line_eol (vb, true);
+                    }
                 }
-                else {
-                    this_name = &info_str[i+1]; // skip the value-less name
-                    this_name_len = 0;
+                else
+                    ASSSEG (this_name_len > 0 || reconstruct, info_str, "Error: %s field contains a = or ; without a preceding subfield name", field_name);
+
+                if (this_name_len > 0 && !bug_v2v3_situation) { 
+                    ASSSEG (this_name[0] >= 64 && this_name[0] <= 127, info_str,
+                            "Error: %s field contains a name %.*s starting with an illegal character", field_name, this_name_len, this_name);
+
+                    InfoItem *ii = &info_items[st.num_items];
+                    ii->start    = this_name; 
+                    ii->len      = this_name_len + valueful; // include the '=' if there is one 
+                    ii->dict_id  = valueful ? dict_id_type_1 (is_v5_or_above ? dict_id_make (this_name, this_name_len) 
+                                                                             : dict_id_make_v2to4 (this_name, this_name_len)) 
+                                            : DICT_ID_NONE;
+
+                    this_value = &info_str[i+1]; 
+                    this_value_len = -valueful; // if there is a '=' to be skipped, start from -1
+                    reading_name = false; 
                 }
-                continue;
+                else if (bug_v2v3_situation) 
+                    this_name_len++; // include the ';' in the name in v2v3 bug
             }
-            
             else this_name_len++; // don't count the = or ; in the len
         }
-        else {
-            if (c == ';') { // end of value
+        
+        if (!reading_name) {
 
-                ASSSEG (this_value_len > 0, info_str,
-                        "Error: %s field subfield %.*s, does not contain a value", field_name, this_name_len, this_name);
-
-                // find (or create) an MTF context (= a dictionary) for this name
-                DictIdType dict_id = dict_id_type_1 (dict_id_make (this_name, this_name_len));
-
-                // find which DictId (did_i) this subfield belongs to (+ create a new ctx if this is the first occurance)
-                MtfContext *ctx = mtf_get_ctx_sf (vb, num_info_subfields, dict_id);
-                iname_mapper.did_i[sf_i] = ctx ? ctx->did_i : (uint8_t)NIL;
-
-                // allocate memory if needed
-                Buffer *mtf_i_buf = &ctx->mtf_i;
-                buf_alloc (vb, mtf_i_buf, MIN (vb->lines.len, mtf_i_buf->len + 1) * sizeof (uint32_t),
-                           CTX_GROWTH, "contexts->mtf_i", ctx->did_i);
-
-                // Call back to handle special subfields
-                char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
-                bool needs_evaluate = seg_special_subfields (vb, ctx, &this_value, &this_value_len, optimized_snip);
-                    
-                if (needs_evaluate) {
-                    NEXTENT (uint32_t, *mtf_i_buf) = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, this_value, this_value_len, NULL);
-                    ctx->txt_len += this_value_len;
+            if (c == ';' || reconstruct) { // end of value
+                // If its a valueful item, seg it (either special or regular)
+                DictIdType dict_id = info_items[st.num_items].dict_id;
+                if (dict_id.num && !reconstruct) { 
+                    char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
+                    bool not_yet_segged = seg_special_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len, optimized_snip);
+                        
+                    if (not_yet_segged) seg_by_dict_id (vb, this_value, this_value_len, dict_id, this_value_len);
                 }
 
-                info_ctx->txt_len++; // account for the separator (; or \t or \n) 
-
-                reading_name = true;  // end of value - move to the next time
+                reading_name = true;  // end of value - move to the next item
                 this_name = &info_str[i+1]; // move to next field in info string
                 this_name_len = 0;
-                sf_i++;
+                st.num_items++;
+
+                ASSSEG (st.num_items <= MAX_SUBFIELDS, info_str, "A line has too many subfields (tags) in the %s field - the maximum supported is %u",
+                        field_name, MAX_SUBFIELDS);
             }
-            else  
-                this_value_len++;
+            else this_value_len++;
         }
     }
 
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
-    if (flag_optimize_sort) seg_sort_iname (names, num_names, iname, &iname_len);
+    if (flag_optimize_sort && st.num_items > 1) 
+        qsort (info_items, st.num_items, sizeof(InfoItem), sort_by_subfield_name);
 
-    // now insert the info names - a snip is a string that looks like: "INFO1=INFO2=INFO3="
-    // 1. find it's mtf_i (and add to dictionary if a new name)
-    // 2. place mtf_i in INFO section of this VB
-    ARRAY (uint32_t, info_field_mtf_i, info_ctx->mtf_i);
-    bool is_new;
-    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, info_ctx, iname, iname_len, &is_new);
-    info_field_mtf_i[vb->contexts[info_field].mtf_i.len++] = node_index;
+    char prefixes[STRUCTURED_MAX_PREFIXES_LEN]; // these are the Structured prefixes
+    prefixes[0] = SNIP_STRUCTURED;
+    unsigned prefixes_len = 1;
 
-    // if this is a totally new iname (first time in this file) - make a new SubfieldMapper for it.
-    if (is_new) {   
-        ASSSEG (node_index == iname_mapper_buf->len, info_str, "Error: node_index=%u different than iname_mapper_buf->len=%u", 
-                node_index, (uint32_t)iname_mapper_buf->len);
-    
-        iname_mapper_buf->len++;
-        buf_alloc (vb, iname_mapper_buf, MAX (100, iname_mapper_buf->len) * sizeof (SubfieldMapper), 1.5, "iname_mapper_buf", 0);
+    // Populate the Structured 
+    uint32_t total_names_len=0;
+    for (unsigned i=0; i < st.num_items; i++) {
+        // Set the Structured item and find (or create) a context for this name
+        StructuredItem *si = &st.items[i];
+        InfoItem *ii  = &info_items[i];
+        si->dict_id   = ii->dict_id;
+        si->seperator = ';';
+        si->did_i     = DID_I_NONE; // this must be NONE, it is used only by PIZ
+
+        // add to the prefixes
+        ASSSEG (prefixes_len + ii->len + 1 <= STRUCTURED_MAX_PREFIXES_LEN, info_str, 
+                "%s contains tag names that, combined (including the '='), exceed the maximum of %u characters", field_name, STRUCTURED_MAX_PREFIXES_LEN);
+
+        memcpy (&prefixes[prefixes_len], ii->start, ii->len);
+        prefixes_len += ii->len;
+        prefixes[prefixes_len++] = SNIP_STRUCTURED;
+
+        total_names_len += ii->len;
     }
 
-    // it is possible that the iname_mapper is not set yet even though not new - if the node is from a previous VB and
-    // we have not yet encountered in node in this VB
-    *ENT (SubfieldMapper, *iname_mapper_buf, node_index) = iname_mapper;
-
-    *dl_info_mtf_i = node_index;
-    
-    info_ctx->txt_len += iname_len; // this includes all the = 
+    if (reconstruct)
+        piz_reconstruct_structured_do (vb, &st, &prefixes[1], prefixes_len-1); // this is used for backward compatability when pizzing files v4 or older 
+    else 
+        seg_structured_by_ctx (vb, &vb->contexts[info_field], &st, prefixes, prefixes_len, 
+                               total_names_len /* names inc. = */ + (st.num_items-1) /* the ;s */ + 1 /* \t or \n */);
 }
 
 void seg_structured_by_ctx (VBlock *vb, MtfContext *ctx, Structured *st, 

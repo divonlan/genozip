@@ -12,7 +12,6 @@ extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool i
 
 extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);
-extern void piz_map_iname_subfields (VBlockP vb);
 
 #define piz_is_skip_section(vb,st,dict_id) (vb->data_type != DT_NONE     && DTP(is_skip_secetion)  && DTP (is_skip_secetion)((VBlockP)(vb), (st), (dict_id)))
 #define piz_is_skip_sectionz(st,dict_id)   (z_file->data_type != DT_NONE && DTPZ(is_skip_secetion) && DTPZ(is_skip_secetion)(NULL, (st), (dict_id)))
@@ -67,6 +66,8 @@ extern void piz_reconstruct_one_snip (VBlockP vb, MtfContextP ctx, const char *s
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, uint8_t did_i, DictIdType dict_id);
 
 extern void piz_reconstruct_info (VBlockP vb, int field, bool *has_13);
+
+extern void piz_reconstruct_structured_do (VBlockP vb, ConstStructuredP st, const char *prefixes, uint32_t prefixes_len);
 
 typedef struct PizSubfieldMapper {
     uint8_t num_subfields;        

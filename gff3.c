@@ -14,24 +14,15 @@
 #include "piz.h"
 #include "dict_id.h"
 
-typedef struct {
-    uint32_t attrs_mtf_i;     // the mtf_i into mtx_ctx[VCF_INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
-} ZipDataLineGFF3;
-
 // IMPORTANT: if changing fields in VBlockGFF3, also update gff3_vb_release_vb and gff3_vb_destroy_vb
 typedef struct VBlockGFF3 {
     VBLOCK_COMMON_FIELDS
-#define num_info_subfields num_type1_subfields   // e.g. if one inames is I1=I2=I3 and another one is I2=I3=I4= then we have two inames
-                                  // entries in the mapper, which have we have num_info_subfields=4 (I1,I2,I3,I4) between them    
     Buffer iname_mapper_buf;      // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_INFO].mtf
 } VBlockGFF3;
-
-#define DATA_LINE(i) ENT (ZipDataLineGFF3, vb->lines, i)
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
 unsigned gff3_vb_size (void) { return sizeof (VBlockGFF3); }
-unsigned gff3_vb_zip_dl_size (void) { return sizeof (ZipDataLineGFF3); }
 
 void gff3_vb_release_vb (VBlockGFF3 *vb)
 {
@@ -83,7 +74,7 @@ static void gff3_seg_array_of_struct (VBlockGFF3 *vb, MtfContext *subfield_ctx,
     // get ctx's
     MtfContext *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
     for (unsigned i=0; i < st.num_items; i++) 
-        ctxs[i] = mtf_get_ctx_sf (vb, &vb->num_info_subfields, st.items[i].dict_id); 
+        ctxs[i] = mtf_get_ctx (vb, st.items[i].dict_id); 
 
     // set roll back point
     uint64_t saved_mtf_i_len[MAX_ENST_ITEMS], saved_local_len[MAX_ENST_ITEMS], saved_txt_len[MAX_ENST_ITEMS];
@@ -140,12 +131,13 @@ badly_formatted:
     seg_by_dict_id (vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
 }                           
 
-static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const char **this_value, unsigned *this_value_len, char *optimized_snip)
+static bool gff3_seg_special_info_subfields (VBlockP vb_, DictIdType dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
 
     // ID - this is a sequential number (at least in GRCh37/38)
-    if (ctx->dict_id.num == dict_id_ATTR_ID) {
+    if (dict_id.num == dict_id_ATTR_ID) {
+        MtfContext *ctx = mtf_get_ctx (vb, dict_id);
         seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, *this_value, *this_value_len, false);
         ctx->flags &= ~CTX_FL_LOCAL_LZMA; // cancel flag set by  seg_pos_field - use BZ2 instead - it compresses better in this case
         return false; // do not add to dictionary/b250 - we already did it
@@ -153,15 +145,15 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a NUMERICAL_ID_DATA section
-    if (ctx->dict_id.num == dict_id_ATTR_Dbxref) {
-        seg_id_field (vb_, ctx->dict_id, *this_value, *this_value_len, false); // discard the const as seg_id_field modifies
+    if (dict_id.num == dict_id_ATTR_Dbxref) {
+        seg_id_field (vb_, dict_id, *this_value, *this_value_len, false); // discard the const as seg_id_field modifies
 
         return false; // do not add to dictionary/b250 - we already did it
     }
 
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
-    if (ctx->dict_id.num == dict_id_ATTR_Variant_effect) {
+    if (dict_id.num == dict_id_ATTR_Variant_effect) {
         static const Structured Variant_effect = {
             .num_items   = 4, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
@@ -170,11 +162,11 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
                              { .dict_id={.id="V2arEff" }, .seperator = ' ', .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"  }, .seperator = ',', .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, ctx, Variant_effect, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), Variant_effect, *this_value, *this_value_len);
         return false;
     }
 
-    if (ctx->dict_id.num == dict_id_ATTR_sift_prediction) {
+    if (dict_id.num == dict_id_ATTR_sift_prediction) {
         static const Structured sift_prediction = {
             .num_items   = 4, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
@@ -183,11 +175,11 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
                              { .dict_id={.id="S2iftPr" }, .seperator = ' ', .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"  }, .seperator = ',', .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, ctx, sift_prediction, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), sift_prediction, *this_value, *this_value_len);
         return false;
     }
 
-    if (ctx->dict_id.num == dict_id_ATTR_polyphen_prediction) {
+    if (dict_id.num == dict_id_ATTR_polyphen_prediction) {
         static const Structured polyphen_prediction = {
             .num_items   = 4, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
@@ -196,11 +188,11 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
                              { .dict_id={.id="P2olyPhP" }, .seperator = ' ', .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"   }, .seperator = ',', .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, ctx, polyphen_prediction, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), polyphen_prediction, *this_value, *this_value_len);
         return false;
     }
 
-    if (ctx->dict_id.num == dict_id_ATTR_variant_peptide) {
+    if (dict_id.num == dict_id_ATTR_variant_peptide) {
         static const Structured variant_peptide = {
             .num_items   = 3, 
             .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
@@ -208,14 +200,14 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
                              { .dict_id={.id="v1arPep" }, .seperator = ' ', .did_i = DID_I_NONE },
                              { .dict_id={.id="ENSTid"  }, .seperator = ',', .did_i = DID_I_NONE } }
         };
-        gff3_seg_array_of_struct (vb, ctx, variant_peptide, *this_value, *this_value_len);
+        gff3_seg_array_of_struct (vb, mtf_get_ctx (vb, dict_id), variant_peptide, *this_value, *this_value_len);
         return false;
     }
 
     // we store these 3 in one dictionary, as they are correlated and will compress better together
-    if (ctx->dict_id.num == dict_id_ATTR_Variant_seq   ||
-        ctx->dict_id.num == dict_id_ATTR_Reference_seq ||
-        ctx->dict_id.num == dict_id_ATTR_ancestral_allele) {
+    if (dict_id.num == dict_id_ATTR_Variant_seq   ||
+        dict_id.num == dict_id_ATTR_Reference_seq ||
+        dict_id.num == dict_id_ATTR_ancestral_allele) {
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
         MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_ATTR_Reference_seq); 
@@ -227,13 +219,13 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
 
     // Optimize Variant_freq
     unsigned optimized_snip_len;
-    if (flag_optimize_Vf && (ctx->dict_id.num == dict_id_ATTR_Variant_freq) &&
+    if (flag_optimize_Vf && (dict_id.num == dict_id_ATTR_Variant_freq) &&
         optimize_float_2_sig_dig (*this_value, *this_value_len, 0, optimized_snip, &optimized_snip_len)) {
         
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
         *this_value = optimized_snip;
         *this_value_len = optimized_snip_len;
-        return true; // procedue with adding to dictionary/b250
+        return true; // proceed with adding to dictionary/b250
     }
 
     return true; // all other cases -  procedue with adding to dictionary/b250
@@ -242,7 +234,6 @@ static bool gff3_seg_special_info_subfields(VBlockP vb_, MtfContextP ctx, const 
 const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockGFF3 *vb = (VBlockGFF3 *)vb_;
-    ZipDataLineGFF3 *dl = DATA_LINE (vb->line_i);
 
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;
@@ -268,8 +259,7 @@ const char *gff3_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *
     SEG_NEXT_ITEM (GFF3_PHASE);
 
     GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
-    seg_info_field (vb_, &dl->attrs_mtf_i, &vb->iname_mapper_buf, &vb->num_info_subfields, gff3_seg_special_info_subfields,
-                    field_start, field_len);
+    seg_info_field (vb_, gff3_seg_special_info_subfields, field_start, field_len, false);
 
     SEG_EOL (GFF3_EOL, false);
 
@@ -293,16 +283,13 @@ void gff3_piz_reconstruct_vb (VBlockGFF3 *vb)
         piz_reconstruct_from_ctx (vb, GFF3_SCORE,  '\t');
         piz_reconstruct_from_ctx (vb, GFF3_STRAND, '\t');
         piz_reconstruct_from_ctx (vb, GFF3_PHASE,  '\t');
-        piz_reconstruct_info ((VBlockP)vb, GFF3_ATTRS, NULL);
-        piz_reconstruct_from_ctx (vb, GFF3_EOL,    0);
+        piz_reconstruct_from_ctx (vb, GFF3_ATTRS,  '\t');
+
+        vb->txt_data.len--; // remove last \t (the line has ended either after PHASE or after the ATTRS)
+
+        piz_reconstruct_from_ctx (vb, GFF3_EOL,    0   );
 
         // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
         if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
     }
-}
-
-bool gff3_piz_read_one_vb (VBlock *vb, SectionListEntryP sl)
-{ 
-    if (vb->vblock_i == 1) piz_map_iname_subfields(vb);
-    return true;
 }

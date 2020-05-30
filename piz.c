@@ -140,36 +140,46 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, MtfContext *ctx, co
     ctx->next_local += len;
 }
 
-static void piz_reconstruct_structured (VBlock *vb, MtfContext *snip_ctx, const char *snip, unsigned snip_len)
+void piz_reconstruct_structured_do (VBlock *vb, const Structured *st, const char *prefixes, uint32_t prefixes_len)
+{
+    for (unsigned rep_i=0; rep_i < st->repeats; rep_i++) {
+
+        for (unsigned i=0; i < st->num_items; i++) {
+            // case this Structured has prefixes - then it has exactly one prefix per item, each terminated by SNIP_STRUCTURED
+            if (prefixes) { 
+                const char *start = prefixes;
+                while (*prefixes != SNIP_STRUCTURED) prefixes++;
+                RECONSTRUCT (start, (unsigned)(prefixes - start));
+                prefixes++; // skip SNIP_STRUCTURED seperator
+            }
+
+            const StructuredItem *item = &st->items[i];
+            if (item->dict_id.num) // not a prefix-only item
+                piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, item->dict_id)->did_i, item->seperator);
+            else
+                RECONSTRUCT1 (item->seperator);
+        }
+    }
+
+    if ((st->flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st->items[st->num_items-1].seperator)
+        vb->txt_data.len--;
+}
+
+static void piz_reconstruct_structured (VBlock *vb, const char *snip, unsigned snip_len)
 {
     ASSERT (snip_len <= base64_sizeof(Structured), "Error in piz_reconstruct_structured: snip_len=%u exceed base64_sizeof(Structured)=%u",
             snip_len, base64_sizeof(Structured));
 
     Structured st;
+
     unsigned b64_len = snip_len;
     base64_decode (snip, &b64_len, (uint8_t*)&st);
-
     st.repeats = BGEN16 (st.repeats);
+    bool has_prefixes = (b64_len < snip_len);
 
-    for (unsigned rep_i=0; rep_i < st.repeats; rep_i++) {
-
-        const char *next_prefix = (b64_len < snip_len) ? &snip[b64_len+1] : NULL; // if has prefixes - skip the SNIP_STRUCTURED seperator
-
-        for (unsigned i=0; i < st.num_items; i++) {
-            // case this Structured has prefixes - then it has exactly one prefix per item, each terminated by SNIP_STRUCTURED
-            if (next_prefix) { 
-                const char *start = next_prefix;
-                while (*next_prefix != SNIP_STRUCTURED) next_prefix++;
-                RECONSTRUCT (start, (unsigned)(next_prefix - start));
-                next_prefix++; // skip SNIP_STRUCTURED seperator
-            }
-
-            piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, st.items[i].dict_id)->did_i, st.items[i].seperator);
-        }
-    }
-
-    if ((st.flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT) && st.items[st.num_items-1].seperator)
-        vb->txt_data.len--;
+    piz_reconstruct_structured_do (vb, &st, 
+                                   has_prefixes ? &snip[b64_len+1] : NULL,
+                                   has_prefixes ? snip_len - (b64_len+1) : 0);
 }
 
 static MtfContext *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
@@ -238,7 +248,7 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
         break;
 
     case SNIP_STRUCTURED:
-        piz_reconstruct_structured (vb, snip_ctx, snip+1, snip_len-1);
+        piz_reconstruct_structured (vb, snip+1, snip_len-1);
         break;
 
     case SNIP_SPECIAL:
@@ -253,16 +263,28 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
         piz_reconstruct_from_ctx (vb, base_ctx->did_i, 0);
         break;
     
-    default:
-        // case: pizzing a v4 and below file - all snips in the POS ctx are deltas
-        if (!is_v5_or_above && snip_ctx->dict_id.num == dict_id_fields[VCF_POS]) {
-            new_value = piz_reconstruct_from_delta (vb, snip_ctx, snip_ctx, snip, snip_len); 
-            have_new_value = true;
-            store = true; // hard coded store value - flags were only introduced in v5
-            break;
+    default: {
+        bool reconstruct = true;
+
+        // case: backward compatability: pizzing a v4 and below file 
+        if (!is_v5_or_above) {
+            //all snips in the POS ctx are deltas
+            if (snip_ctx->dict_id.num == dict_id_fields[VCF_POS]) {
+                new_value = piz_reconstruct_from_delta (vb, snip_ctx, snip_ctx, snip, snip_len); 
+                have_new_value = true;
+                store = true; // hard coded store value - flags were only introduced in v5
+                break;
+            }
+
+            // INFO up to v4 is given as a string of names "DP=AC=JK;AC=AS" (= for a valueful field (inc. valueful 
+            // final field), ; after a non-final valueless field) - we generate the Structured and then reconstruct from it
+            else if (snip_ctx->dict_id.num == dict_id_fields[VCF_INFO]) {
+                seg_info_field (vb, NULL, snip, snip_len, true); // this will reconstruct too
+                reconstruct = false; 
+            }
         }
     
-        RECONSTRUCT (snip, snip_len); // simple reconstruction
+        if (reconstruct) RECONSTRUCT (snip, snip_len); // simple reconstruction
 
         if (store) {
             char *after;
@@ -272,7 +294,8 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
             // this can happen for example when seg_pos_field stores a "nonsense" snip.
             have_new_value = (after == snip + snip_len);
         }
-        snip_ctx->last_delta  = 0; // delta is 0 since we didn't calculate delta
+        snip_ctx->last_delta = 0; // delta is 0 since we didn't calculate delta
+    }
     }
 
     // update last_value in *base_ctx* if *snip_ctx* tell us to
@@ -351,82 +374,6 @@ void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), Subfield
             mapper->did_i[index] = did_i;
             mapper->num_subfields++;
         }
-}
-
-// Called from the I/O thread piz_*_read_one_vb - and immutable thereafter
-// Constructs the iname mapper - mapping an iname word like "I1=I2=I3" to its subfields
-// This uses dictionary data only, not b250 data, and hence can be done once after reading the dictionaries
-void piz_map_iname_subfields (VBlock *vb)
-{
-    // terminology: we call a list of INFO subfield names, an "iname". An iname looks something like
-    // this: "I1=I2=I3=". Each iname consists of info subfields. These fields are not unique to this
-    // iname and can appear in other inames. The INFO field contains the iname, and values of the subfields.
-    // iname_mapper maps these subfields. This function creates an iname_mapper for every unique iname.
-
-    // in genozip genozip v2 and v3 we had a bug where when there was an INFO subfield with a value following one or more
-    // subfields without a value, then the dictionary name of included the names of the valueless subfields
-    // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
-    bool v2v3_bug = !is_v4_or_above; // recover from a bug we had in v2/v3 VCF (we had only VCF in v2/3). See details in v2v3.c.
-
-    const MtfContext *info_ctx = &z_file->contexts[DTFZ(info)];
-    
-    buf_free (&piz_iname_mapper_buf); // in case it was allocated by a previous file
-    piz_iname_mapper_buf.len = info_ctx->word_list.len;
-    buf_alloc (evb, &piz_iname_mapper_buf, sizeof (PizSubfieldMapper) * piz_iname_mapper_buf.len,
-               1, "piz_iname_mapper_buf", 0);
-    buf_zero (&piz_iname_mapper_buf);
-
-    ARRAY (PizSubfieldMapper, all_iname_mappers, piz_iname_mapper_buf);
-    ARRAY (const MtfWord, all_inames, info_ctx->word_list);
-
-    char sep = PIZ_SNIP_SEP; // pre-calculate macro
-
-    for (unsigned iname_i=0; iname_i < piz_iname_mapper_buf.len; iname_i++) {
-
-        // e.g. "I1=I2=I3=" - pointer into the INFO dictionary - immutable - global shared with all threads
-        char *iname = ENT (char, info_ctx->dict, all_inames[iname_i].char_index); 
-        unsigned iname_len = all_inames[iname_i].snip_len; 
-
-        PizSubfieldMapper *iname_mapper = &all_iname_mappers[iname_i]; // iname_mapper of this specific set of names "I1=I2=I3="
-
-        // get INFO subfield snips - which are the values of the INFO subfield, where the names are
-        // in the INFO snip in the format "info1=info2=info3="). 
-        iname_mapper->num_subfields = 0;
-
-        // traverse the subfields of one iname. E.g. if the iname is "I1=I2=I3=" then we traverse I1, I2, I3
-        for (unsigned i=0; i < iname_len; i++) {
-            
-            DictIdType *dict_id = &iname_mapper->dict_id[iname_mapper->num_subfields];
-
-            // traverse the iname, and get the dict_id for each subfield name (using only the first 8 characers)
-            dict_id->num = 0;
-            unsigned j=0; 
-            while (iname[i] != '=' && (v2v3_bug || iname[i] != ';') && iname[i] != sep) { // value-less INFO names can be terminated by PIZ_SNIP_SEP in the dictionary
-                if (j < DICT_ID_LEN) 
-                    dict_id->id[j] = iname[i]; // scan the whole name, but copy only the first 8 bytes to dict_id
-                i++, j++;
-            }
-            
-            if (is_v5_or_above) 
-                *dict_id = dict_id_type_1 (dict_id_make (&iname[i-j], j));
-            else {
-                // up to version 4 the dict_id was the (up to) 8 first characters
-                memcpy (dict_id->id, &iname[i-j], MIN (j, DICT_ID_LEN)); 
-                *dict_id = dict_id_type_1 (*dict_id);
-            }
-
-            // case - for files up to v4 - INFO has a special added name "#" indicating that this VCF line has a Windows-style \r\n ending
-            if (!is_v5_or_above && dict_id->num == dict_id_WindowsEOL) {
-                // we now modify the global dictionary to match the true iname strings, so it can be used for reconstruction
-                if (i>=2 && iname[i-2] == ';')
-                    iname[iname_len-2] = sep; // chop off the ";#" at the end of the INFO word in the dictionary (happens if previous subfield is value-less)
-                else     
-                    iname[iname_len-1] = sep; // chop off the "#" at the end of the INFO word in the dictionary (happens if previous subfield has a value)
-            }
-            
-            iname_mapper->num_subfields++;
-        }
-    }
 }
 
 // used for VCF INFO and GFF3 ATTRIBUTES 

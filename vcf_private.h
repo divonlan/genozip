@@ -36,7 +36,6 @@ typedef struct {
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
     uint32_t format_mtf_i;   // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
-    uint32_t info_mtf_i;     // the mtf_i into mtx_ctx[VCF_INFO].mtf and also iname_mapper_buf that applies to this line. Data on the infos is in  vb->iname_mapper_buf[dl.info_mtf_i]. either SubfieldInfoMapperPiz or SubfieldInfoZip
 } ZipDataLineVCF;
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
@@ -98,7 +97,6 @@ typedef struct VBlockVCF {
     Buffer column_of_zeros;           // used by vcf_piz_get_ht_columns_data
 
     // dictionaries stuff 
-#define num_info_subfields   num_type1_subfields
     Buffer iname_mapper_buf;          // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_INFO].mtf
 #define num_format_subfields num_type2_subfields
     Buffer format_mapper_buf;         // ZIP only: an array of type SubfieldMapper - one entry per entry in vb->contexts[VCF_FORMAT].mtf   
@@ -111,11 +109,12 @@ typedef struct VBlockVCF {
     Buffer gtshark_exceptions_allele; // ZIP & PIZ: each index (including terminating 0) corresponding to the index in exception_ht_i_offset
     Buffer gtshark_vcf_data;          // PIZ only
 
-    // backward compatibility with genozip v1 
+    // backward compatibility with older versions
     Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)
     Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by vcf_piz_reconstruct_vb
     Buffer v1_subfields_len_buf;
     Buffer v1_num_subfields_buf;
+    bool   v4_line_has_13;
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;

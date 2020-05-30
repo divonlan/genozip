@@ -52,10 +52,11 @@ extern const char *gl_optimize_dictionary (VBlockP vb, ConstBufferP dict, ConstM
 extern void gl_optimize_local (VBlockP vb, BufferP local);
 extern void gl_deoptimize (char *data, int len);
 
-// v1 compatibility
+// backward compatibility stuff
 extern bool vcf_v1_header_genozip_to_vcf (Md5Hash *digest);
 extern bool vcf_v1_header_get_vcf_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,uint64_t *num_items_concat,
                                           Md5Hash  *md5_hash_concat, char *created, unsigned created_len);
+extern void piz_vcf_v4_line_eol (VBlockP vb, bool has_13);
 
 // global parameters - set before any thread is created
 extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;

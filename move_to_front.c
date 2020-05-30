@@ -685,7 +685,7 @@ MtfContext *mtf_get_ctx_if_not_found_by_inline (
 
     //fprintf (stderr, "New context: dict_id=%.8s in did_i=%u \n", dict_id_printable (dict_id).id, did_i);
     ASSERT (*num_dict_ids+1 < MAX_DICTS, 
-            "Error: number of dictionary types is greater than MAX_DICTS=%u", MAX_DICTS);
+            "Error: number of dictionaries is greater than MAX_DICTS=%u", MAX_DICTS);
 
     mtf_initialize_ctx (ctx, dt, did_i, dict_id, dict_id_to_did_i_map);
 

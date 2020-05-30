@@ -62,6 +62,7 @@ typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;
 typedef const struct Buffer *ConstBufferP;
 typedef struct Structured *StructuredP;
+typedef const struct Structured *ConstStructuredP;
 typedef struct MtfContext *MtfContextP;
 typedef struct MtfNode *MtfNodeP;
 typedef const struct MtfNode *ConstMtfNodeP;
