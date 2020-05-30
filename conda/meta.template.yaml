@@ -42,8 +42,8 @@ requirements:
     - bzip2
 
 test:
-  source_files: 
-    - test-file.vcf
+#  source_files: 
+#    - test-file.vcf
 
   commands:
     {% set genozip_executables = [
@@ -53,7 +53,8 @@ test:
       "genols"
     ] %}
     {% for executable in genozip_executables %}
-    - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
+    - genozip
+#    - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
     {% endfor %}
     - which genozip.exe  # [win]
     - genozip --password abc --test --quiet test-file.vcf 2>&1  
