@@ -174,9 +174,10 @@ void piz_reconstruct_structured_do (VBlock *vb, const Structured *st, const char
 
             const StructuredItem *item = &st->items[i];
             if (item->dict_id.num) // not a prefix-only item
-                piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, item->dict_id)->did_i, item->seperator);
-            else
-                RECONSTRUCT1 (item->seperator);
+                piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, item->dict_id)->did_i, 0);
+            
+            if (item->seperator[0]) RECONSTRUCT1 (item->seperator[0]);
+            if (item->seperator[1]) RECONSTRUCT1 (item->seperator[1]);
         }
 
         if (st->repsep[0]) RECONSTRUCT1 (st->repsep[0]);

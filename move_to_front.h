@@ -41,7 +41,8 @@
 typedef struct StructuredItem {
         DictIdType dict_id;  
         uint8_t did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
-        char seperator;
+        char seperator[2];
+        uint8_t ffu;
 } StructuredItem;
 
 typedef struct Structured {
@@ -51,6 +52,15 @@ typedef struct Structured {
     char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
     StructuredItem items[MAX_SUBFIELDS];
 } Structured;
+
+// identical to Structured, but with only one item
+typedef struct MiniStructured {
+    uint32_t repeats;     // number of "repeats" (array elements)
+    uint8_t num_items;    // must be 1
+    uint8_t flags;
+    char repsep[2];       // repeat seperator - two bytes that appear at the end of each repeat (ignored if 0)
+    StructuredItem items[1];
+} MiniStructured;
 
 #pragma pack()
 #define sizeof_structured(st) (sizeof(st) - sizeof((st).items) + (st).num_items * sizeof((st).items[0]))

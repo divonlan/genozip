@@ -177,12 +177,12 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictIdType subfield_dict_id,
         .num_items   = 6, 
         .flags       = 0,
         .repsep      = {0,0},
-        .items       = { { .dict_id = {.id="@RNAME" }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as primary is often sorted, and mixing will ruin its b250 compression
-                         { .dict_id = {.id="@POS"   }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as these are local-stored random numbers anyway - no advantage for mixing, and it would obscure the stats
-                         { .dict_id = {.id="@STRAND"}, .seperator = ',', .did_i = DID_I_NONE},
-                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = ',', .did_i = DID_I_NONE}, // we mix with primary - CIGAR tends to be a rather large dictionary, so better not have two copies of it
-                         { .dict_id = {.id="@MAPQ"  }, .seperator = ',', .did_i = DID_I_NONE},  // we don't mix with primary as primary often has a small number of values, and mixing will ruin its b250 compression
-                         { .dict_id = {.id="NM:i"   }, .seperator = ';', .did_i = DID_I_NONE} } // we mix together with the NM option field
+        .items       = { { .dict_id = {.id="@RNAME" }, .seperator = {','}, .did_i = DID_I_NONE},  // we don't mix with primary as primary is often sorted, and mixing will ruin its b250 compression
+                         { .dict_id = {.id="@POS"   }, .seperator = {','}, .did_i = DID_I_NONE},  // we don't mix with primary as these are local-stored random numbers anyway - no advantage for mixing, and it would obscure the stats
+                         { .dict_id = {.id="@STRAND"}, .seperator = {','}, .did_i = DID_I_NONE},
+                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = {','}, .did_i = DID_I_NONE}, // we mix with primary - CIGAR tends to be a rather large dictionary, so better not have two copies of it
+                         { .dict_id = {.id="@MAPQ"  }, .seperator = {','}, .did_i = DID_I_NONE},  // we don't mix with primary as primary often has a small number of values, and mixing will ruin its b250 compression
+                         { .dict_id = {.id="NM:i"   }, .seperator = {';'}, .did_i = DID_I_NONE} } // we mix together with the NM option field
     };
 
     DEC_SSF(rname); DEC_SSF(pos); DEC_SSF(strand); DEC_SSF(cigar); DEC_SSF(mapq); DEC_SSF(nm); 
@@ -237,16 +237,16 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
     // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
     // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
     // See: http://bio-bwa.sourceforge.net/bwa.shtml
-    static const Structured structured_XA= {
+    static const Structured structured_XA = {
         .repeats     = 0, 
         .num_items   = 5, 
         .flags       = 0,
         .repsep      = {0,0},
-        .items       = { { .dict_id = {.id="@RNAME"  }, .seperator = ',', .did_i = DID_I_NONE },
-                         { .dict_id = {.id="@STRAND" }, .seperator = 0,   .did_i = DID_I_NONE },
-                         { .dict_id = {.id="@POS"    }, .seperator = ',', .did_i = DID_I_NONE },
-                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = ',', .did_i = DID_I_NONE},
-                         { .dict_id = {.id="NM:i"    }, .seperator = ';', .did_i = DID_I_NONE } }     
+        .items       = { { .dict_id = {.id="@RNAME"  }, .seperator = {','}, .did_i = DID_I_NONE },
+                         { .dict_id = {.id="@STRAND" }, .seperator = { 0 }, .did_i = DID_I_NONE },
+                         { .dict_id = {.id="@POS"    }, .seperator = {','}, .did_i = DID_I_NONE },
+                         { .dict_id = {.id={'C'&0x3f,'I','G','A','R'}}, .seperator = {','}, .did_i = DID_I_NONE},
+                         { .dict_id = {.id="NM:i"    }, .seperator = {';'}, .did_i = DID_I_NONE } }     
     };
 
     Structured xa = structured_XA;
@@ -635,9 +635,11 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     while (separator != '\n') {
         GET_MAYBE_LAST_ITEM ("OPTIONAL-subfield");
 
-        st.items[st.num_items].dict_id   = sam_seg_optional_field (vb, dl, field_start, field_len);
-        st.items[st.num_items].seperator = '\t';
-        st.items[st.num_items].did_i     = DID_I_NONE; // seg always puts NONE, PIZ changes it
+        StructuredItem *si = &st.items[st.num_items];
+        si->dict_id      = sam_seg_optional_field (vb, dl, field_start, field_len);
+        si->seperator[0] = '\t';
+        si->seperator[1] = 0;
+        si->did_i        = DID_I_NONE; // seg always puts NONE, PIZ changes it
         st.num_items++;
 
         ASSSEG (st.num_items <= MAX_SUBFIELDS, field_start, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);

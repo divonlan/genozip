@@ -33,36 +33,6 @@ void fast_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
     *unused_len    = 0;
 }   
 
-// returns true if section is to be skipped reading / uncompressing
-bool fast_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
-{
-    if (!vb) return false; // we don't skip reading any SEC_DICT sections
-
-    bool is_fastq = (vb->data_type==DT_FASTQ);
-
-    if (is_fastq && flag_header_one && // note that piz_read_global_area rewrites --header-only as flag_header_one
-        (dict_id.num == dict_id_fields[FASTQ_SEQ] || dict_id.num == dict_id_fields[FASTQ_QUAL]))
-        return true;
-        
-    if (!is_fastq && flag_header_one && 
-        (dict_id.num == dict_id_FASTA_SEQ || dict_id.num == dict_id_FASTA_COMMENT))
-        return true;
-
-    uint64_t desc_dict_id = is_fastq ? dict_id_fields[FASTQ_DESC] : dict_id_FASTA_DESC;
-
-    // when grepping by I/O thread - skipping all sections but DESC
-    if (vb && flag_grep && (vb->grep_stages == GS_TEST) && 
-        dict_id.num != desc_dict_id && !dict_id_is_fast_desc_sf (dict_id))
-        return true;
-
-    // if grepping, compute thread doesn't need to decompressed DESC again
-    if (vb && flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
-        (dict_id.num == desc_dict_id || dict_id_is_fast_desc_sf (dict_id)))
-        return true;
-
-    return false;
-}
-
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
 static bool fast_piz_test_grep (VBlockFAST *vb)

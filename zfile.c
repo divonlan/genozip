@@ -232,14 +232,14 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.dict_id                 = ctx->dict_id;
     header.flags                   = ctx->flags;
-    header.ltype              = ctx->ltype;
+    header.ltype                   = ctx->ltype;
             
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
 static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictIdType dict_id)
 {
-    static struct { DataType dt; uint64_t *dict_id_num; CompGetLineCallback *func; } callbacks[] = LOCAL_COMPRESSOR_CALLBACKS;
+    static struct { DataType dt; const uint64_t *dict_id_num; CompGetLineCallback *func; } callbacks[] = LOCAL_COMPRESSOR_CALLBACKS;
 
     for (unsigned i=0; i < sizeof(callbacks)/sizeof(callbacks[0]); i++)
         if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == dict_id.num) 

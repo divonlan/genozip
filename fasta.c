@@ -101,6 +101,28 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
     return next_field;
 }
 
+// returns true if section is to be skipped reading / uncompressing
+bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
+{
+    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+
+    // note that piz_read_global_area rewrites --header-only as flag_header_one
+    if (flag_header_one && (dict_id.num == dict_id_FASTA_SEQ || dict_id.num == dict_id_FASTA_COMMENT))
+        return true;
+
+    // when grepping by I/O thread - skipping all sections but DESC
+    if (vb && flag_grep && (vb->grep_stages == GS_TEST) && 
+        dict_id.num != dict_id_FASTA_DESC && !dict_id_is_fast_desc_sf (dict_id))
+        return true;
+
+    // if grepping, compute thread doesn't need to decompressed DESC again
+    if (vb && flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
+        (dict_id.num == dict_id_FASTA_DESC || dict_id_is_fast_desc_sf (dict_id)))
+        return true;
+
+    return false;
+}
+
 // this is used for end-of-lines of a sequence line, that are not the last line of the sequence. we skip reconstructing
 // the newline if the user selected --sequencial
 void fasta_piz_special_SEQ (VBlock *vb_, MtfContext *ctx, const char *snip, unsigned snip_len)

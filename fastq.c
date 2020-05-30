@@ -36,7 +36,13 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     const char *next_field, *field_start=field_start_line;
     unsigned field_len=0;
     char separator;
-
+/*
+    MiniStructured st = { .repeats=1, .num_items=1, .flags=0, .repsep={0,0},
+                          .items = { { .dict_id = dict_id_FASTQ_DESC, .did_i = DID_I_NONE, .seperator={0, '\n'} },
+                                     { .dict_id = dict_id_FASTQ_SEQ,  .did_i = DID_I_NONE, .seperator={0, '\n'} },
+                                     { .dict_id = dict_id_FASTQ_PLUS, .did_i = DID_I_NONE, .seperator={0, '\n'} },
+                                     { .dict_id = dict_id_FASTQ_QUAL, .did_i = DID_I_NONE, .seperator={0, 'n'} } } };
+*/
     int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - field_start_line);
 
     // the leading @ - just verify it (it will be included in D0ESC subfield)
@@ -104,6 +110,29 @@ void fastq_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
     if (flag_optimize_QUAL) optimize_phred_quality_string (*line_qual_data, *line_qual_len);
+}
+
+// returns true if section is to be skipped reading / uncompressing
+bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
+{
+    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+
+    // note that piz_read_global_area rewrites --header-only as flag_header_one
+    if (flag_header_one && 
+        (dict_id.num == dict_id_fields[FASTQ_SEQ] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTQ_PLUS]))
+        return true;
+        
+    // when grepping by I/O thread - skipping all sections but DESC
+    if (vb && flag_grep && (vb->grep_stages == GS_TEST) && 
+        dict_id.num != dict_id_fields[FASTQ_DESC] && !dict_id_is_fast_desc_sf (dict_id))
+        return true;
+
+    // if grepping, compute thread doesn't need to decompressed DESC again
+    if (vb && flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
+        (dict_id.num == dict_id_fields[FASTQ_DESC] || dict_id_is_fast_desc_sf (dict_id)))
+        return true;
+
+    return false;
 }
 
 void fastq_piz_reconstruct_vb (VBlockFAST *vb)

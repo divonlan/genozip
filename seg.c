@@ -398,7 +398,8 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
         StructuredItem *si = &st.items[i];
         InfoItem *ii  = &info_items[i];
         si->dict_id   = ii->dict_id;
-        si->seperator = ';';
+        si->seperator[0] = ';'; 
+        si->seperator[1] = 0; 
         si->did_i     = DID_I_NONE; // this must be NONE, it is used only by PIZ
 
         // add to the prefixes
@@ -512,7 +513,8 @@ void seg_compound_field (VBlock *vb,
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
-                st.items[sf_i].seperator = field[i];
+                st.items[sf_i].seperator[0] = field[i];
+                st.items[sf_i].seperator[1] = 0;
                 snip = &field[i+1];
                 snip_len = 0;
             }
@@ -533,7 +535,7 @@ void seg_array_field (VBlock *vb, DictIdType dict_id, const char *value, unsigne
     int str_len = (int)value_len; // must be int, not unsigned, for the for loop
     
     Structured st = { .num_items = 1, .flags = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT, 
-                      .repsep = {0,0}, .items = { { .seperator = ',', .did_i = DID_I_NONE } } };
+                      .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
     DictIdType arr_dict_id = dict_id_make ("XX_ARRAY", 8);
     arr_dict_id.id[0]      = FLIP_CASE (dict_id.id[0]);
     arr_dict_id.id[1]      = FLIP_CASE (dict_id.id[1]);
