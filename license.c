@@ -148,6 +148,10 @@ static void license_exit_if_not_confirmed (const char *response)
 }
 
 // load license if it exists, or register a new one
+
+// IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+// and might put you personally as well as your organization at legal and financial risk.
+// Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 uint32_t license_get (void)
 {
     uint32_t license_num = licence_retrieve_locally();
@@ -155,7 +159,7 @@ uint32_t license_get (void)
 
     // UI flow to generate a new license for the user
 
-    // if we stdin or stderr is redirected - we cannot ask the user an interactive question
+    // if stdin or stderr is redirected - we cannot ask the user an interactive question
     ASSERT (isatty(0) && isatty(2), "%s: Use of genozip is free, but requires registration. Please run: genozip --register", global_cmd);
 
     fprintf (stderr, "Welcome to genozip!\n\n"

@@ -332,7 +332,7 @@ bool comp_compress_lzma (VBlock *vb,
 
     // option 1 - compress contiguous data
     if (uncompressed) {
-        uint64_t data_compressed_len64 = (uint64_t)*compressed_len - LZMA_PROPS_SIZE;
+        SizeT data_compressed_len64 = (SizeT)*compressed_len - LZMA_PROPS_SIZE;
         res = LzmaEnc_MemEncode (lzma_handle, 
                                 (uint8_t *)compressed + LZMA_PROPS_SIZE, &data_compressed_len64, 
                                 (uint8_t *)uncompressed, uncompressed_len,
@@ -568,7 +568,7 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
         ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
         ELzmaStatus status;
         //uint64_t uncompressed_len64 = uncompressed->len;
-        uint64_t compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
+        SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
         
         SRes ret = LzmaDecode ((uint8_t *)uncompressed->data, &uncompressed->len, 
                                (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
