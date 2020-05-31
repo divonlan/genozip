@@ -6,8 +6,9 @@
 #include "genozip.h"
 #include "aes.h"
 #include "crypt.h"
-#include "vb.h"
+#include "vblock.h"
 #include "md5.h"
+#include "strings.h"
 
 static char *password = NULL;
 
@@ -71,13 +72,15 @@ unsigned crypt_max_padding_len()
 // 256 bit AES is a concatenation of 2 MD5 hashes of the password - each one of length 128 bit
 // each hash is a hash of the password concatenated with a constant string
 // we add data_len to the hash to give it a near-uniqueness for each section
-static void crypt_generate_aes_key (VariantBlock *vb,                
+static void crypt_generate_aes_key (VBlock *vb,                
                                     uint32_t vb_i, SectionType sec_type, bool is_header, // used to generate an aes key unique to each block
                                     uint8_t *aes_key /* out */)
 {
     const char *salt   = "frome";     
     const char *pepper = "vaughan";   
     static unsigned pw_len=0, salt_len=0, pepper_len=0;
+
+    ASSERT0 (password, "Error in crypt_generate_aes_key - password is NULL");
 
     if (!pw_len) { // first call
         pw_len     = strlen (password);
@@ -111,7 +114,7 @@ static void crypt_generate_aes_key (VariantBlock *vb,
 }
 
 // we generate a different key for each block by salting the password with vb_i, sec_type and is_header
-void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len, 
+void crypt_do (VBlock *vb, uint8_t *data, unsigned data_len, 
                uint32_t vb_i, SectionType sec_type, bool is_header)  // used to generate an aes key unique to each block
 {
     // generate an AES key just for this one section - combining the pasword with vb_i and sec_i
@@ -128,7 +131,7 @@ void crypt_do (VariantBlock *vb, uint8_t *data, unsigned data_len,
     //fprintf (stderr, "AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
 }
 
-void crypt_continue (VariantBlock *vb, uint8_t *data, unsigned data_len)
+void crypt_continue (VBlock *vb, uint8_t *data, unsigned data_len)
 {
     //fprintf (stderr, "continue: data_len=%u\n", data_len);
     aes_xcrypt_buffer (vb, data, data_len);
@@ -147,6 +150,11 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }
 
+const char *encryption_name (unsigned encryption_type)
+{
+    static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
+    return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));
+}
 
 #define V1_CRYPT
-#include "v1.c"
+#include "vcf_v1.c"

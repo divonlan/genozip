@@ -9,51 +9,16 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/genozip-debug.exe",
+            //"program": "${workspaceFolder}/genozip-opt.exe",
+            //"program": "${workspaceFolder}/genozip.exe",
             //"program": "${workspaceFolder}/genocat-debug.exe",
             //"program": "${workspaceFolder}/genounzip-debug.exe",
+            //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
-            //"program": "${workspaceFolder}/genozip.exe",
+            //"program": "${workspaceFolder}/genols-debug.exe",
 
-            "args":["junk.vcf.xz", "-f"],
-            //"args":["test-file.vcf", "-fS1"]
-            //"args": ["ftp://ftp.ncbi.nlm.nih.gov/1000genomes/ftp/release/20130502/ALL.chrY.phase3_integrated_v1b.20130502.genotypes.vcf.gz", "-f"],
-            //"args": ["file:///c:/users/user/projects/genozip/x.bcf.gz", "-f"],
-
-            // for benchmark files used in the paper
-
-            // benchmark file1:
-            // file1 can be downloaded here: ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
-            //"args": ["-f", "-t", "--show-content", "--show-memory", "--show-time", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf"],
-            //"args": ["-f", "-z", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf", "-f"],
-            //"args": ["-f", "-d", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.genozip", "-o", "data/ALL.chr22.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.test.vcf"],
-            
-            // benchmark file2:
-            // file2 can be downloaded here: ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/
-            //"args": ["-t", "--show-content", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz"],
-            //"args": ["-f", "-z", "--show-memory", "--show-time", "--show-content", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz"],
-            //"args": ["-f", "-d", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip", "-o", "ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.test.vcf"],
-            
-            //"args": ["-f", "-z", "-m", "data/minimal.vcf", "data/minimal copy.vcf", "-o", "xxx.vcf.genozip"],
-
-            // test file
-            //"args": ["-f", "-z", "data/ALL.chr1.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz", "-o", "data/junk.vcf.genozip"],
-            //"args": ["-f", "-d", "data/ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip", "-o", "ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.test.vcf"],
-
-            //"args": ["-t", "test-file.vcf", "--quiet", "--password", "abc", "--show-time"],            
-            //"args": ["-z", "-f", "test-file.vcf", "--password", "abc", "-m"],
-            //"args": ["-d", "-f", "test-file.vcf.genozip", "-o", "test-file.test.vcf", "-m"],
-            //"args": ["-z", "-f", "data/chr1-1line.vcf", "-ojjj.vcf.genozip"],
-            //"args": ["-d", "-f", "data/chr1-1line.vcf.genozip", "-o", "data/chr1-1line.test.vcf"],
-            //"args": ["-z", "-f", "data/minimal.vcf", "--show-content"],
-            //"args": ["-d", "-f", "data/minimal.vcf.genozip", "-o", "data/minimal.test.vcf"],
-            //"args": ["-t", "data/file2.1vb.vcf",  "--show-content"],
-            //"args": ["-z", "-f", "data/file2.1vb.vcf", "--show-time", "--show-content"],
-            //"args": ["-d", "-f", "data/file2.1vb.vcf.genozip", "-o", "data/file2.1vb.test.vcf"],
-            //"args": ["-z", "-f", "data/USW_Chr2L_1_23011544.vcf", "--show-content"],  // from data/USW_Chr2L_1_23011544.vcf.genotype
-            //"args": ["-d", "-f", "data/USW_Chr2L_1_23011544.vcf.genozip", "-o", "data/USW_Chr2L_1_23011544.test.vcf"], 
-            //"args": ["-z", "-f", "data/output_Chr3L_1_23011544.vcf", "--show-content"],  // from data/USW_Chr2L_1_23011544.vcf.genotype
-            
-           // "args": ["-t", "data/file2.gto-issue.vcf", "--show-content"],
+            "args":["minimal.fq", "-fW"],
+            //"args":["backward-compatibility-test/test-file.3.0.12.vcf.genozip", "-t"],
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

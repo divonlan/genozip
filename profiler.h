@@ -15,14 +15,14 @@
 #endif
 
 typedef struct {
-    int64_t wallclock, read, compute, compressor, write, zfile_read_one_vb, piz_get_variant_data_line, 
-        piz_get_haplotype_data_line, piz_get_format_info,
-        piz_initialize_sample_iterators, piz_get_line_subfields, piz_merge_line, 
-        piz_get_phase_data_line, piz_get_genotype_data_line, zfile_uncompress_section,
-        piz_reconstruct_line_components, squeeze, piz_decode_pos, buf_alloc, vcffile_read_vcf_header, vcffile_read_variant_block,
-        seg_all_data_lines, zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
-        zip_generate_genotype_sections, zip_generate_phase_sections, zip_generate_variant_data_section,
-        mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx_one_dict_id, gl_optimize_dictionary,
+    int64_t wallclock, read, compute, compressor, write, piz_read_one_vb, vcf_piz_get_variant_data_line, 
+        vcf_piz_get_haplotype_data_line,
+        vcf_piz_initialize_sample_iterators, piz_get_line_subfields, vcf_piz_reconstruct_samples, 
+        vcf_piz_get_phase_data_line, vcf_piz_reconstruct_genotype_data_line, zfile_uncompress_section,
+        piz_reconstruct_vb, buf_alloc, txtfile_read_header, txtfile_read_vblock,
+        seg_all_data_lines, vcf_zip_generate_haplotype_sections, sample_haplotype_data, count_alt_alleles,
+        zip_generate_genotype_sections, vcf_zip_generate_phase_sections, zip_generate_variant_data_section,
+        mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx_one_dict_id,
         md5,zfile_compress_dictionary_data,
         lock_mutex_compress_dict, lock_mutex_zf_ctx,
         tmp1, tmp2, tmp3, tmp4, tmp5;

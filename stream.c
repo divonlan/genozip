@@ -107,14 +107,19 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 {
     int cmd_line_len = 0;
     for (int i=0; i < argc; i++)
-        if (argv[i]) cmd_line_len += strlen (argv[i]) + 1; // +1 for the space (or \0) after
+        if (argv[i]) cmd_line_len += strlen (argv[i]) + 3; // +1 for the space (or \0) after +2 for the quotes
 
     char *cmd_line = malloc (cmd_line_len);
-    char *fmt_tmpl = "%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s"; // # of %s = MAX_ARGC
-    char fmt[MAX_ARGC * 3];
+    char *fmt_tmpl = "%s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s"; // # of %s = MAX_ARGC
+    char fmt[MAX_ARGC * 7];
     strcpy (fmt, fmt_tmpl);
-    fmt[argc*3 - 1] = '\0'; // cut short the fmt string
-    sprintf (cmd_line, fmt, argv[0], argv[1], argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8], argv[9], argv[10], argv[11], argv[12], argv[13], argv[14], argv[15], argv[16], argv[17], argv[18], argv[19], argv[20], argv[21], argv[22], argv[23], argv[24], argv[25], argv[26], argv[27], argv[28], argv[29]);
+    fmt[argc*7 - 1] = '\0'; // cut short the fmt string
+
+    // surround each argument with quotes just in case it contains spaces
+#   define Q(i) argv[i] ? "\"" : "", argv[i], argv[i] ? "\"" : ""
+    sprintf (cmd_line, fmt, Q(0), Q(1), Q(2), Q(3), Q(4), Q(5), Q(6), Q(7), Q(8), Q(9), Q(10), Q(11), Q(12), Q(13), Q(14), 
+             Q(15), Q(16), Q(17), Q(18), Q(19), Q(20), Q(21), Q(22), Q(23), Q(24), Q(25), Q(26), Q(27), Q(28), Q(29));
+#   undef Q
 
     STARTUPINFO startup_info;
     memset (&startup_info, 0, sizeof startup_info);
@@ -169,10 +174,10 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
  
     else if (genozip_to_stream_stdin) { // redirect child stdin from a pipe to genozip
         dup2 (genozip_to_stream_stdin[0], STDIN_FILENO);
-        CLOSE (genozip_to_stream_stdin[1], "genozip_to_stream_stdin[1]"); // child closes writing side of the pipe  
+        CLOSE (genozip_to_stream_stdin[1], "genozip_to_stream_stdin[1]", false); // child closes writing side of the pipe  
     }
 
-    else CLOSE (STDIN_FILENO, "STDIN_FILENO"); // no stdin for child
+    else CLOSE (STDIN_FILENO, "STDIN_FILENO", true); // no stdin for child. quiet bc stdin may already be closed - if we just finished reading txt input from redirected stdin
 
     // determine what happens to the child's stdout
 
@@ -181,7 +186,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
  
     else if (stream_stdout_to_genozip) {   // redirect child stdout to a pipe to genozip
         dup2 (stream_stdout_to_genozip[1], STDOUT_FILENO);
-        CLOSE (stream_stdout_to_genozip[0], "stream_stdout_to_genozip[0]"); // child closes reading side of the pipe  
+        CLOSE (stream_stdout_to_genozip[0], "stream_stdout_to_genozip[0]", false); // child closes reading side of the pipe  
     }
     else {
         // stdout continues to go to be shared with genozip (e.g. the terminal)
@@ -192,7 +197,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
     if (stream_stderr_to_genozip) { // redirect child stdout to a pipe to genozip
         dup2 (STDERR_FILENO, 3); // keep the original stderr in fd=3 in case we can't execute and need to report an error
         dup2 (stream_stderr_to_genozip[1], STDERR_FILENO);
-        CLOSE (stream_stderr_to_genozip[0], "stream_stderr_to_genozip[0]"); // child closes reading side of the pipe
+        CLOSE (stream_stderr_to_genozip[0], "stream_stderr_to_genozip[0]", false); // child closes reading side of the pipe
     } 
     else {
         // stderr continues to go to be shared with genozip (e.g. the terminal)
@@ -267,17 +272,17 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     // store our side of the pipe, and close the side used by the child
     if (from_stream_stdout) {
         stream->from_stream_stdout = fdopen (stream_stdout_to_genozip[0], READ);
-        CLOSE (stream_stdout_to_genozip[1], "stream_stdout_to_genozip[1]");
+        CLOSE (stream_stdout_to_genozip[1], "stream_stdout_to_genozip[1]", false);
     }
 
     if (from_stream_stderr) {
         stream->from_stream_stderr = fdopen (stream_stderr_to_genozip[0], READ);
-        CLOSE (stream_stderr_to_genozip[1], "stream_stderr_to_genozip[1]");
+        CLOSE (stream_stderr_to_genozip[1], "stream_stderr_to_genozip[1]", false);
     }
 
     if (to_stream_stdin) {
         stream->to_stream_stdin    = fdopen (genozip_to_stream_stdin[1], WRITE);
-        CLOSE (genozip_to_stream_stdin[0], "genozip_to_stream_stdin[0]");
+        CLOSE (genozip_to_stream_stdin[0], "genozip_to_stream_stdin[0]", false);
     }
 
     return stream;

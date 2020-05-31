@@ -9,13 +9,13 @@
 #include <stdint.h>
 #include "genozip.h"
 
-extern int32_t random_access_get_last_chrom_node_index (VariantBlockP vb);
-extern void random_access_update_chrom (VariantBlockP vb, uint32_t vb_line_i, int32_t chrom_node_index);
-extern void random_access_update_pos (VariantBlockP vb, int32_t this_pos);
-extern void random_access_merge_in_vb (VariantBlockP vb);
+extern int32_t random_access_get_last_chrom_node_index (VBlockP vb);
+extern void random_access_update_chrom (VBlockP vb, int32_t chrom_node_index);
+extern void random_access_update_pos (VBlockP vb, uint8_t did_i_pos);
+extern void random_access_merge_in_vb (VBlockP vb);
 extern void BGEN_random_access (void);
 extern unsigned random_access_sizeof_entry(void);
-extern void random_access_show_index(void);
+extern void random_access_show_index(bool from_zip);
 extern bool random_access_is_vb_included (uint32_t vb_i, BufferP region_ra_intersection_matrix);
 extern int32_t random_access_get_last_included_vb_i (void);
 

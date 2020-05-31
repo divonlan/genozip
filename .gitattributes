@@ -1,0 +1,14 @@
+# Set the default behavior, in case people don't have core.autocrlf set.
+* text=auto
+
+# Declare our textual formats as binary so we can check in test files with Unix or Windows style end-of-lines
+*.vcf binary
+*.sam binary
+*.gff3 binary
+*.gvf binary
+genome_*.txt binary
+*.fa binary
+*.fasta binary
+*.fq binary
+*.fastq binary
+*.genozip binary

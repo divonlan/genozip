@@ -3,7 +3,7 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "make all (optimized)",
+            "label": "Make Optimized",
             "command": "make",
             "args": [
                 "all"
@@ -24,7 +24,7 @@
         },
         {
             "type": "shell",
-            "label": "make genozip-debug",
+            "label": "Make Debug",
             "command": "make.exe",
             "args": [
                 "debug"
@@ -45,7 +45,28 @@
         },
         {
             "type": "shell",
-            "label": "make clean",
+            "label": "Make Opt - compiler debug info and optimizations",
+            "command": "make",
+            "args": [
+                "opt"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Clean All",
             "command": "make.exe",
             "args": [
                 "clean"
@@ -66,7 +87,7 @@
         },
         {
             "type": "shell",
-            "label": "make clean-debug",
+            "label": "Clean Debug",
             "command": "make.exe",
             "args": [
                 "clean-debug"
@@ -86,6 +107,45 @@
             }
         },
         {
+            "type": "shell",
+            "label": "Clean Optimized",
+            "command": "make.exe",
+            "args": [
+                "clean-optimized"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Test",
+            "command": "./test.sh",
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+       {
             "type": "shell",
             "label": "Distribution - conda + windows installer + mac store",
             "command": "make.exe",

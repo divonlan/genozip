@@ -14,7 +14,7 @@ endif
 LDFLAGS     += -lpthread -lm
 
 ifdef IS_CONDA 
-	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1
+	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
 
 	ifeq ($(OS),Windows_NT)
@@ -27,34 +27,43 @@ else
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1
 endif 
 
-ifeq ($(CC),gcc)
-	CFLAGS += -Ofast -std=gnu99
-else
-	CFLAGS += -O2
-endif
 
-MY_SRCS = genozip.c base250.c move_to_front.c vcf_header.c zip.c piz.c gloptimize.c buffer.c random_access.c sections.c\
-	      vcffile.c squeeze.c zfile.c segregate.c profiler.c file.c vb.c dispatcher.c crypt.c aes.c md5.c bzlib_mod.c\
-		  regions.c samples.c optimize.c dict_id.c hash.c gtshark.c stream.c url.c
+MY_SRCS = genozip.c base250.c move_to_front.c strings.c stats.c arch.c license.c data_types.c \
+          zip.c piz.c seg.c zfile.c   \
+		  vcf_zip.c vcf_piz.c vcf_seg.c vcf_zfile.c vcf_gloptimize.c vcf_vblock.c vcf_gtshark.c vcf_squeeze.c vcf_samples.c vcf_header.c \
+          sam_zip.c sam_piz.c sam_shared.c \
+		  fasta.c fastq.c fast_shared.c \
+		  gff3.c me23.c \
+		  buffer.c random_access.c sections.c compressor.c base64.c \
+	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
+		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c
 
 CONDA_COMPATIBILITY_SRCS = compatibility/visual_c_pthread.c compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/mac_gettime.c
 
 ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/crc32.c zlib/adler32.c   
 
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
-                           
+
+LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
+
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = aes.h dispatcher.h gloptimize.h optimize.h profiler.h dict_id.h vcffile.h zip.h v1.c \
-             base250.h endianness.h md5.h sections.h text_help.h vcf_header.h hash.h stream.h url.h \
-             buffer.h file.h move_to_front.h segregate.h text_license.h version.h gtshark.h \
-             crypt.h genozip.h piz.h squeeze.h vb.h zfile.h random_access.h regions.h samples.h \
+CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h vcf_v1.c \
+             base250.h endianness.h md5.h sections.h section_types.h text_help.h strings.h hash.h stream.h url.h \
+             buffer.h file.h move_to_front.h seg.h text_license.h version.h compressor.h stats.h \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
+			 arch.h license.h data_types.h base64.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
              compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \
              compatibility/visual_c_pthread.h \
-             compatibility/mac_gettime.h  
+             compatibility/mac_gettime.h  \
+			 zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
+			 zlib/zlib.h zlib/zutil.h \
+			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
+			 lzma/Precomp.h lzma/Threads.h
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/visual_c_pthread.c
@@ -64,7 +73,9 @@ ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
 	LDFLAGS += -static -static-libgcc
+	LZMA_SRCS += lzma/Threads.c lzma/LzFindMt.c
 else
+	CFLAGS += -D_7ZIP_ST
     uname := $(shell uname -s)
     ifeq ($(uname),Linux)
 # Linux
@@ -78,25 +89,36 @@ endif
 
 ifndef IS_CONDA 
 # local - static link everything
-SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS)
+SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS)
 else 
 # conda - use packages for bzip2
-SRCS = $(MY_SRCS) $(ZLIB_SRCS)
+SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS)
 endif
 
 OBJS       := $(SRCS:.c=.o)
 DEBUG_OBJS := $(SRCS:.c=.debug-o)
+OPT_OBJS   := $(SRCS:.c=.opt-o) # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 
 DEPS       := $(SRCS:.c=.d)
 
-EXECUTABLES = genozip$(EXE) genounzip$(EXE) genocat$(EXE) genols$(EXE)
-
+EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
+OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
 
-all: $(EXECUTABLES) LICENSE.non-commercial.txt
+ifeq ($(CC),gcc)
+	OPTFLAGS += -Ofast -std=gnu99
+else
+	OPTFLAGS += -O2
+endif
 
-debug : CFLAGS  += -DDEBUG -g -O0
+all   : CFLAGS += $(OPTFLAGS) 
+all   : $(EXECUTABLES) LICENSE.non-commercial.txt
+
+debug : CFLAGS += -DDEBUG -g -O0
 debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
+
+opt   : CFLAGS += -g $(OPTFLAGS)
+opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
 
@@ -112,11 +134,19 @@ debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
+%.opt-o: %.c %.d
+	@echo "Compiling $< (opt)"
+	@$(CC) -c -o $@ $< $(CFLAGS)
+
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
  
 genozip-debug$(EXE): $(DEBUG_OBJS)
+	@echo Linking $@
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+genozip-opt$(EXE): $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -126,6 +156,11 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@ln $^ $@
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
+	@echo Hard linking $@
+	@rm -f $@ 
+	@ln $^ $@
+
+genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
 	@ln $^ $@
@@ -158,8 +193,8 @@ ifeq ($(OS),Windows_NT)
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
-# the genozip file header SectionHeaderVCFHeader.genozip_version
-increment-version: $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+# the genozip file header SectionHeaderTxtHeader.genozip_version
+increment-version: $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@bash increment-version.sh
@@ -170,7 +205,7 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push 
@@ -188,13 +223,6 @@ conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 		sed s/__VERSION__/$(version)/g | \
 		grep -v "^#" \
 		> $@
-
-junk:
-	(tmpl=`cat conda/meta.template.yaml` ; desc=`sed "s/<.\{1,3\}>//g" README.md | grep -v "<!" | sed 's/^/    /'` ; echo $${tmpl/__README_MD__/$$desc} > junk) 
-	#	sed s/__SHA256__/$(shell openssl sha256 .archive.tar.gz | cut -d= -f2 | cut -c2-)/ | \
-	#	sed s/__VERSION__/$(version)/g | \
-	#	grep -v "^#" \
-	#	> $@
 
 #CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
 CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
@@ -345,13 +373,21 @@ mac/.from_remote_timestamp: mac/genozip_installer.pkg
 
 endif # Darwin
 
-clean:
-	@echo Cleaning up
-	@rm -f $(DEPS) $(OBJS) $(EXECUTABLES) $(WINDOWS_INSTALLER_OBJS)
+test:
+	@cat test.sh | tr -d "\r" | bash -
 
 clean-debug:
 	@echo Cleaning up debug
-	@rm -f $(DEPS) $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) 
+	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) *.debug-o
+	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) *.opt-o
 
-.PHONY: clean clean-debug clean-all git-pull macos mac/.remote_mac_timestamp
+clean-optimized:
+	@echo Cleaning up optimized
+	@rm -f $(OBJS) $(EXECUTABLES) *.o
+
+clean: clean-debug clean-optimized
+	@echo Cleaning up
+	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d
+
+.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp
 

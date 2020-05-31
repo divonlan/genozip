@@ -42,8 +42,8 @@ requirements:
     - bzip2
 
 test:
-  source_files: 
-    - test-file.vcf
+#  source_files: 
+#    - test-file.vcf
 
   commands:
     {% set genozip_executables = [
@@ -52,11 +52,11 @@ test:
       "genocat",
       "genols"
     ] %}
-    {% for executable in genozip_executables %}
-    - test -f ${PREFIX}/bin/{{ executable }}  # [unix]
-    {% endfor %}
-    - which genozip.exe  # [win]
-    - genozip --password abc --test --quiet test-file.vcf 2>&1  
+#    {% for executable in genozip_executables %}
+#    - genozip --help
+#    {% endfor %}
+#    - which genozip.exe  # [win]
+    - genozip --help
 
 about:
   home: https://github.com/divonlan/genozip
@@ -67,7 +67,7 @@ about:
   license_file: 
     - LICENSE.non-commercial.txt
     - LICENSE.commercial.txt
-  summary: Compressor for VCF genomic files, up to 5x better than gzip and faster too
+  summary: Compressor for genomic files (VCF/BCF, SAM/BAM, fastq, fasta, GVF, 23andMe), up to 5x better than gzip and faster too
   description: |
 __README_MD__
 

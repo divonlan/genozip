@@ -5,7 +5,7 @@
 // public domain". All modifications are (c) 2020 Divon Lan and are subject to license.
 
 #include "genozip.h" 
-#include "vb.h"
+#include "vblock.h"
 #include "aes.h"
 
 #define Nk (AES_KEYLEN/4)
@@ -185,7 +185,7 @@ static void aes_cipher(AesStateType* state, const uint8_t* aes_round_key)
 }
 
 // Symmetrical operation: same function for encrypting as for decrypting. Note any IV/nonce should never be reused with the same key 
-void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
+void aes_xcrypt_buffer (VBlock *vb, uint8_t *data, uint32_t length)
 {
     AesStateType buffer; 
 
@@ -211,7 +211,7 @@ void aes_xcrypt_buffer (VariantBlock *vb, uint8_t *data, uint32_t length)
     }
 }
 
-void aes_initialize (VariantBlock *vb, const uint8_t* key)
+void aes_initialize (VBlock *vb, const uint8_t* key)
 {
     static const uint8_t iv_ad_120[AES_BLOCKLEN] = { 0, 1, 2, 10, 11, 12, 20, 21, 22, 100, 101, 102, 110, 111, 112, 120 };
 

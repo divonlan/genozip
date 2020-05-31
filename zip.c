@@ -6,70 +6,104 @@
 #include <math.h>
 #include "genozip.h"
 #include "profiler.h"
-#include "vb.h"
+#include "vblock.h"
 #include "buffer.h"
 #include "file.h"
 #include "zfile.h"
-#include "vcffile.h"
-#include "vcf_header.h"
-#include "segregate.h"
-#include "vb.h"
+#include "txtfile.h"
+#include "vblock.h"
 #include "dispatcher.h"
 #include "move_to_front.h"
 #include "zip.h"
+#include "seg.h"
 #include "base250.h"
-#include "random_access.h"
 #include "endianness.h"
-
-static uint32_t global_samples_per_block = 0; 
-
-void zip_set_global_samples_per_block (const char *num_samples_str)
-{
-    unsigned len = strlen (num_samples_str);
-    for (unsigned i=0; i < len; i++) 
-        ASSERT (num_samples_str[i] >= '0' && num_samples_str[i] <= '9', "Error: invalid argument of --sblock: %s. Expecting an integer number between 1 and 65535", num_samples_str);
-
-    global_samples_per_block = atoi (num_samples_str);
-
-    ASSERT (global_samples_per_block >= 1 && global_samples_per_block <= 65535, "Error: invalid argument of --sblock: %s. Expecting a number between 1 and 65535", num_samples_str);
-}
+#include "random_access.h"
+#include "dict_id.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_file)
 {
     const char *runtime = dispatcher_ellapsed_time (dispatcher, false);
     double z_bytes   = (double)z_file->disk_so_far;
-    double vcf_bytes = (double)z_file->vcf_data_so_far_concat;
-    double ratio     = vcf_bytes / z_bytes;
+    double txt_bytes = (double)z_file->txt_data_so_far_concat;
+    double ratio     = txt_bytes / z_bytes;
 
     if (flag_concat) { // in concat, we don't show the compression ratio for files except for the last one
 
-        static uint64_t vcf_file_disk_size_concat = 0;
+        static uint64_t txt_file_disk_size_concat = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
-        if (!vcf_file_disk_size_concat) // first concat file
-            source_file_type = vcf_file->type;
-        else if (source_file_type != vcf_file->type) // heterogenous source file types
+        if (!txt_file_disk_size_concat) // first concat file
+            source_file_type = txt_file->type;
+        else if (source_file_type != txt_file->type) // heterogenous source file types
             source_file_type = UNKNOWN_FILE_TYPE;
 
-        vcf_file_disk_size_concat += vcf_file->disk_size;
+        txt_file_disk_size_concat += txt_file->disk_size;
 
         fprintf (stderr, "Done (%s)                                     \n", runtime);
 
-        if (is_last_file)
-            fprintf (stderr, "Time: %s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
-                        dispatcher_ellapsed_time (dispatcher, true), ratio, 
-                        source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[vcf_file->type],
-                        (double)vcf_file_disk_size_concat / z_bytes); // compression vs .gz/.bz2/.bcf/.xz... size
+        if (is_last_file) {
+            double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+
+            if (txt_file->comp_alg == COMP_PLN || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+                fprintf (stderr, "Time: %s, %s compression ratio: %1.1f           \n", 
+                            dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio);
+            else
+                fprintf (stderr, "Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
+                            dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio, 
+                            source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
+                            ratio2); // compression vs .gz/.bz2/.bcf/.xz... size
+        }
     }
     else {
-        double ratio2 = (double)vcf_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+        double ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-        if (vcf_file->type == VCF || vcf_file->type == STDIN || ratio2 < 1)  // source file was plain VCF or ratio2 is low (nothing to brag about)
+        if (txt_file->comp_alg == COMP_PLN || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
             fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
         
-        else // source was .vcf.gz or .vcf.bgz or .vcf.bz2
-            fprintf (stderr, "Done (%s, VCF compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
-                     runtime, ratio, file_exts[vcf_file->type], ratio2);
+        else // source was compressed
+            fprintf (stderr, "Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
+                     runtime, dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2);
+    }
+}
+
+// after segging - if any context appears to contain only singleton snips (eg a unique ID),
+// we move it to local instead of needlessly cluttering the global dictionary
+static void zip_handle_unique_words_ctxs (VBlock *vb)
+{
+    for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
+        MtfContext *ctx = &vb->contexts[did_i];
+    
+        if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
+        if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
+        if (ctx->mtf.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
+        if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
+
+        // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
+        if ((ctx->flags & CTX_FL_NO_STONS) || ctx->ltype != CTX_LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
+
+        buf_move (vb, &ctx->local, vb, &ctx->dict);
+        buf_free (&ctx->mtf);
+        buf_free (&ctx->mtf_i);
+    }
+}
+
+// generate & write b250 data for all primary fields of this data type
+void zip_generate_and_compress_ctxs (VBlock *vb)
+{
+    // generate & write b250 data for all primary fields
+    for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
+        MtfContext *ctx = &vb->contexts[did_i];
+
+        if (ctx->mtf_i.len && 
+            (vb->data_type != DT_VCF || !dict_id_is_vcf_format_sf (ctx->dict_id))) { // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
+            
+            zip_generate_b250_section (vb, ctx);
+            zfile_compress_b250_data (vb, ctx, COMP_BZ2);
+        }
+
+        if (ctx->local.len)
+            zfile_compress_local_data (vb, ctx);
     }
 }
 
@@ -77,44 +111,64 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 // Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
-static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
+void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 {
-    buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 5-numeral.
+    ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%s", ctx->name);
+
+    buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
                1.1, "ctx->b250_buf", 0);
 
     bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
 
     if (show) 
-        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %.*s: ", vb->variant_block_i, DICT_ID_LEN, dict_id_printable(ctx->dict_id).id);
+        bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
     int32_t prev = -1; 
     for (unsigned i=0; i < ctx->mtf_i.len; i++) {
-        MtfNode *node = mtf_node (ctx, ((const uint32_t *)ctx->mtf_i.data)[i], NULL, NULL);
 
-        uint32_t n            = node->word_index.n;
-        unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
-        uint8_t *numerals     = node->word_index.encoded.numerals;
+        uint32_t node_index = *ENT(uint32_t, ctx->mtf_i, i);
+
+        if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
+
+            MtfNode *node = mtf_node_vb (ctx, node_index, NULL, NULL);
+
+            uint32_t n            = node->word_index.n;
+            unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
+            uint8_t *numerals     = node->word_index.encoded.numerals;
+            
+            bool one_up = (n == prev + 1) && (ctx->dict_id.num != dict_id_fields[VCF_GT]) && (i > 0);
+
+            if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
+                NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
+                if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
+            }
+
+            else {
+                memcpy (AFTERENT (char, ctx->b250), numerals, num_numerals);
+                ctx->b250.len += num_numerals;
+                if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", i, n)
+            }
+            prev = n;
+        }
+
+        else if (node_index == WORD_INDEX_MISSING_SF) {
+            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_MISSING_SF;
+            prev = node_index;
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", i)
+        }
         
-        bool one_up = (n == prev + 1) && (ctx->b250_section_type != SEC_GENOTYPE_DATA) && (i > 0);
-
-        if (one_up) // note: we can't do SEC_GENOTYPE_DATA bc we can't PIZ it as many GT data types are in the same section 
-            ((uint8_t *)ctx->b250.data)[ctx->b250.len++] = (uint8_t)BASE250_ONE_UP;
-
-        else {
-            memcpy (&ctx->b250.data[ctx->b250.len], numerals, num_numerals);
-            ctx->b250.len += num_numerals;
+        else if (node_index == WORD_INDEX_EMPTY_SF) {
+            NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_EMPTY_SF;
+            prev = node_index;
+            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", i)
         }
 
-        if (show) {
-            if (one_up) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", i)
-            else        bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", i, n)
-        }
-
-        prev = n;
+        else ABORT ("Error in zip_generate_b250_section: invalid node_index=%u", node_index);        
     }
+
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n")
-        fprintf (stderr, "%.*s", vb->show_b250_buf.len, vb->show_b250_buf.data);
+        fprintf (stderr, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
 
@@ -122,407 +176,8 @@ static void zip_generate_b250_section (VariantBlock *vb, MtfContext *ctx)
         fwrite (ctx->b250.data, 1, ctx->b250.len, stdout);
 }
 
-#define SBL(line_i,sb_i) ((line_i) * vb->num_sample_blocks + (sb_i))
 
-static unsigned zip_get_genotype_vb_start_len (VariantBlock *vb)
-{
-    buf_alloc (vb, &vb->genotype_section_lens_buf, sizeof(unsigned) * vb->num_sample_blocks, 1, "section_lens_buf", 0);
-    unsigned section_0_len = 0; // all sections are the same length except the last that might be shorter
-
-    // offsets into genotype data of individual lines
-    buf_alloc (vb, &vb->gt_sb_line_starts_buf, 
-               vb->num_lines * vb->num_sample_blocks * sizeof(uint32_t*), 
-               0, "gt_sb_line_starts_buf", vb->variant_block_i);
-    uint32_t **gt_sb_line_starts = (uint32_t**)vb->gt_sb_line_starts_buf.data; 
-    
-    // each entry is the length of a single line in a sample block
-    buf_alloc (vb, &vb->gt_sb_line_lengths_buf, 
-               vb->num_lines * vb->num_sample_blocks * sizeof(unsigned), 
-               0, "gt_sb_line_lengths_buf", vb->variant_block_i);
-    unsigned *gt_sb_line_lengths = (unsigned *)vb->gt_sb_line_lengths_buf.data; 
-    
-    // calculate offsets and lengths of genotype data of each sample block
-    for (uint32_t line_i=0; line_i < vb->num_lines; line_i++) {
-
-        uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, &vb->data_lines.zip[line_i]);        
-        unsigned format_mtf_i = vb->data_lines.zip[line_i].format_mtf_i;
-        SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[format_mtf_i];
-        
-        for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
-
-            unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
-
-            gt_sb_line_starts[SBL(line_i, sb_i)] = 
-                &gt_data[global_samples_per_block * sb_i * format_mapper->num_subfields];
-
-            unsigned num_subfields_in_sample_line = format_mapper->num_subfields * num_samples_in_sb; // number of uint32_t
-            gt_sb_line_lengths[SBL(line_i, sb_i)] = num_subfields_in_sample_line;
-
-            if (!sb_i) section_0_len += num_subfields_in_sample_line;
-        }
-    }
-
-    return section_0_len; // in subfields (uint32_t)
-}
-
-// split genotype data to sample groups, within a sample group genotypes are separated by a tab
-static void zip_generate_genotype_one_section (VariantBlock *vb, unsigned sb_i)
-{
-    START_TIMER;
-
-    // build sample block genetype data
-    uint8_t *dst_next = (uint8_t *)vb->genotype_one_section_data.data;
-    
-    // move the GT items from the line data to the permuted data - with each 
-    // sample block of gt data containing the data in TRANSPOSED order - i.e. first
-    // the gt data for all the variants for sample 1, then all of samples 2 etc.
-    unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i);
-    for (unsigned sample_i=0; sample_i < num_samples_in_sb; sample_i++) {
-
-        if (flag_show_gt_nodes) fprintf (stderr, "sample=%u (vb_i=%u sb_i=%u):\n", sb_i * global_samples_per_block + sample_i + 1, vb->variant_block_i, sb_i);
-
-        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-
-            if (flag_show_gt_nodes) fprintf (stderr, "  L%u: ", line_i);
-
-            ZipDataLine *dl = &vb->data_lines.zip[line_i];
-
-            SubfieldMapper *format_mapper = &((SubfieldMapper *)vb->format_mapper_buf.data)[dl->format_mtf_i];
-
-            unsigned **sb_lines = (uint32_t**)vb->gt_sb_line_starts_buf.data;
-            unsigned *this_line = sb_lines[SBL(line_i, sb_i)];
-            
-            // lookup word indices in the global dictionary for all the subfields
-            const uint8_t *dst_start = dst_next;
-
-            int num_subfields = format_mapper->num_subfields;
-            ASSERT (num_subfields >= 0, "Error: format_mapper->num_subfields=%d", format_mapper->num_subfields);
-
-            // if this VB has subfields in some line, but not in this line, then we have filled it in seg_complete_missing_lines(), 
-            // therefore we have 1 fake subfield
-            if (vb->num_format_subfields > 0 && num_subfields==0) num_subfields = 1;
-
-            for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
-            
-                uint32_t node_index = this_line[format_mapper->num_subfields * sample_i + sf];
-
-                if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
-
-                    MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
-                    MtfNode *node = mtf_node (ctx, node_index, NULL, NULL);
-                    Base250 index = node->word_index;
-
-                    if (flag_show_gt_nodes) fprintf (stderr, "%.*s:%u ", DICT_ID_LEN, dict_id_printable (ctx->dict_id).id, index.n);
-
-                    base250_copy (dst_next, index);
-                    dst_next += base250_len (index.encoded.numerals);
-                }
-                else if (node_index == WORD_INDEX_MISSING_SF) {
-                    *(dst_next++) = BASE250_MISSING_SF;
-                }
-                else {  // node_index == WORD_INDEX_EMPTY_SF
-                    *(dst_next++) = BASE250_EMPTY_SF;
-                }
-            }
-
-            vb->genotype_one_section_data.len += dst_next - dst_start;
-            
-            if (flag_show_gt_nodes) fprintf (stderr, "\n");
-        }
-    }
-
-    COPY_TIMER (vb->profile.zip_generate_genotype_sections)
-}
-
-// split phase data to sample groups, in each group is a string of / | or -
-static void zip_generate_phase_sections (VariantBlock *vb)
-{   
-    START_TIMER;
-
-    // we allocate memory for the Buffer array only once the first time this VariantBlock
-    // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
-    if (!vb->phase_sections_data) 
-        vb->phase_sections_data = (Buffer *)calloc (vb->num_sample_blocks, sizeof(Buffer)); // allocate once, never free
-
-    for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
-
-        unsigned num_samples_in_sb = vb_num_samples_in_sb (vb, sb_i); 
-    
-        // allocate memory for phase data for each sample block - one character per sample
-        buf_alloc (vb, &vb->phase_sections_data[sb_i], vb->num_lines * num_samples_in_sb, 
-                   0, "phase_sections_data", vb->variant_block_i);
-
-        // build sample block genetype data
-        char *next = vb->phase_sections_data[sb_i].data;
-        
-        for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-            
-            ZipDataLine *dl = &vb->data_lines.zip[line_i];
-            if (dl->phase_type == PHASE_MIXED_PHASED) 
-                memcpy (next, &PHASE_DATA(vb,dl)[sb_i * num_samples_in_sb], num_samples_in_sb);
-            else
-                memset (next, (char)dl->phase_type, num_samples_in_sb);
-
-            next += num_samples_in_sb;
-        }
-        vb->phase_sections_data[sb_i].len = num_samples_in_sb * vb->num_lines;
-    }
-          
-    // add back the phase data bytes that weren't actually "saved"
-    COPY_TIMER (vb->profile.zip_generate_phase_sections)
-}
-
-typedef struct {
-    int num_alt_alleles;
-    unsigned index_in_original_line;
-    unsigned index_in_sorted_line;
-} HaploTypeSortHelperIndex;
-
-static int sort_by_alt_allele_comparator(const void *p, const void *q)  
-{ 
-    int l = ((HaploTypeSortHelperIndex *)p)->num_alt_alleles; 
-    int r = ((HaploTypeSortHelperIndex *)q)->num_alt_alleles;  
-    return (l - r); 
-}
-
-static int sort_by_original_index_comparator(const void *p, const void *q)  
-{ 
-    int l = ((HaploTypeSortHelperIndex *)p)->index_in_original_line; 
-    int r = ((HaploTypeSortHelperIndex *)q)->index_in_original_line;  
-    return (l - r); 
-}
-
-static HaploTypeSortHelperIndex *zip_construct_ht_permutation_helper_index (VariantBlock *vb)
-{
-    START_TIMER; 
-
-    buf_alloc (vb, &vb->helper_index_buf, vb->num_haplotypes_per_line * sizeof(HaploTypeSortHelperIndex), 0,
-               "helper_index_buf", vb->variant_block_i);
-    buf_zero (&vb->helper_index_buf);
-    HaploTypeSortHelperIndex *helper_index = (HaploTypeSortHelperIndex *)vb->helper_index_buf.data;
-
-    // build index array 
-    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
-        helper_index[ht_i].index_in_original_line = ht_i;
-
-    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) {
-        for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line; ht_i++) {
-
-            // we count as alt alleles : 1 - 99 (ascii 49 to 147)
-            //             ref alleles : 0 . (unknown) - (missing) * (ploidy padding)
-            //char one_ht = vb->data_lines.zip[line_i].haplotype_data.data[ht_i];
-            
-            char *haplotype_data = HAPLOTYPE_DATA (vb, &vb->data_lines.zip[line_i]);
-            char one_ht = haplotype_data[ht_i];
-            if (one_ht >= '1')
-                helper_index[ht_i].num_alt_alleles++;
-        }
-    }
-    COPY_TIMER (vb->profile.count_alt_alleles);
-
-    return helper_index;
-}
-
-// sort haplogroups by alt allele count within the variant group, create an index for it, and split
-// it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
-static void zip_generate_haplotype_sections (VariantBlock *vb)
-{
-    START_TIMER;
-
-    // we allocate memory for the Buffer array only once the first time this VariantBlock
-    // is used. Subsequent blocks reusing the memory will have the same number of samples (by VCF spec)
-    if (!vb->haplotype_sections_data) 
-        vb->haplotype_sections_data = (Buffer *)calloc (vb->num_sample_blocks, sizeof(Buffer)); // allocate once, never free
-    
-    // create a permutation index for the whole variant block, and permuted haplotypes for each sample block        
-    buf_alloc (vb, &vb->haplotype_permutation_index, vb->num_haplotypes_per_line * sizeof(uint32_t), 
-               0, "haplotype_permutation_index", vb->variant_block_i);
-
-    HaploTypeSortHelperIndex *helper_index = zip_construct_ht_permutation_helper_index (vb);
-
-    // set dl->haplotype_ptr for all lines (for effeciency in the time loop below)
-    for (unsigned line_i=0; line_i < vb->num_lines; line_i++) 
-        vb->data_lines.zip[line_i].haplotype_ptr = HAPLOTYPE_DATA (vb, &vb->data_lines.zip[line_i]);
-
-    // now build per-sample-block haplotype array, picking haplotypes by the order of the helper index array
-    for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
-
-        unsigned num_haplotypes_in_sample_block = 
-            vb->ploidy * vb_num_samples_in_sb (vb, sb_i); 
-
-        unsigned helper_index_sb_i = sb_i * vb->num_samples_per_block * vb->ploidy;
-
-        // sort the portion of the helper index related to this sample block. We sort by number of alt alleles.
-        if (!flag_gtshark) // gtshark does better without sorting
-            qsort (&helper_index[helper_index_sb_i], num_haplotypes_in_sample_block, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
-
-        // allocate memory for haplotype data for each sample block - one character per haplotype
-        buf_alloc (vb, &vb->haplotype_sections_data[sb_i], vb->num_lines * num_haplotypes_in_sample_block, 
-                   0, "haplotype_sections_data", vb->variant_block_i);
-
-        // build sample block haplptype data - 
-        // -- using the helper index to access the haplotypes in sorted order
-        // -- transposing the array
-        char *next = vb->haplotype_sections_data[sb_i].data;
-        
-        {   // this loop, tested with 1KGP data, takes up to 1/5 of total compute time, so its highly optimized
-            START_TIMER;
-
-            for (unsigned ht_i=0; ht_i < num_haplotypes_in_sample_block; ht_i++) {
-                
-                unsigned haplotype_data_char_i = helper_index[helper_index_sb_i + ht_i].index_in_original_line;
-                const char **ht_data_ptr = &vb->data_lines.zip[0].haplotype_ptr; // this pointer moves sizeof(ZipDataLine) bytes each iteration - i.e. to the exact same field in the next line
-
-                for (unsigned line_i=0; line_i < vb->num_lines; line_i++, ht_data_ptr += sizeof(ZipDataLine)/sizeof(char*)) 
-                    *(next++) = (*ht_data_ptr)[haplotype_data_char_i];
-            }
-            COPY_TIMER (vb->profile.sample_haplotype_data);
-        }
-        vb->haplotype_sections_data[sb_i].len = num_haplotypes_in_sample_block * vb->num_lines;
-    }
-
-    // final step - build the reverse index that will allow access by the original index to the sorted array
-    // this will be included in the genozip file
-    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
-        helper_index[ht_i].index_in_sorted_line = ht_i;
-
-    // sort array back to its original order
-    qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_original_index_comparator);
-
-    // construct file index
-    unsigned *hp_index = (unsigned *)vb->haplotype_permutation_index.data;
-    for (unsigned ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
-        hp_index[ht_i] = helper_index[ht_i].index_in_sorted_line;
-
-    buf_free (&vb->helper_index_buf);
-
-    COPY_TIMER (vb->profile.zip_generate_haplotype_sections);
-}
-
-// this function receives all lines of a variant block and processes them
-// in memory to the compressed format. This thread then terminates the I/O thread writes the output.
-static void zip_compress_one_vb (VariantBlock *vb)
-{ 
-    START_TIMER;
-
-    // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need
-    // to wait for our merge. that is because our dictionaries are sorted
-    if (vb->variant_block_i == 1) mtf_vb_1_lock(vb);
-
-    // allocate memory for the final compressed data of this vb. allocate 20% of the 
-    // vb size on the original file - this is normally enough. if not, we will realloc downstream
-    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
-
-    // initalize variant block data (everything else is initialzed to 0 via calloc)
-    vb->phase_type = PHASE_UNKNOWN;  // phase type of this block
-    vb->num_samples_per_block = global_samples_per_block;
-    vb->num_sample_blocks = ceil((float)global_num_samples / (float)vb->num_samples_per_block);
-
-    unsigned max_genotype_section_len=0; // length in subfields
-
-    // clone global dictionaries while granted exclusive access to the global dictionaries
-    mtf_clone_ctx (vb);
-
-    // split each lines in this variant block to its components
-    seg_all_data_lines (vb);
-
-    // for the first vb only - sort dictionaries so that the most frequent entries get single digit
-    // base-250 indices. This can be done only before any dictionary is written to disk, but likely
-    // beneficial to all vbs as they are likely to more-or-less have the same frequent entries
-    if (vb->variant_block_i == 1) {
-        mtf_sort_dictionaries_vb_1(vb);
-
-        // for a VCF file that's compressed (and hence we don't know the size of VCF content a-priori) AND we know the
-        // compressed file size (eg a local gz/bz2 file or a compressed file on a ftp server) - we now estimate the 
-        // vcf_data_size_single that will be used for the global_hash and the progress indicator
-        vcffile_estimate_vcf_data_size (vb);
-    }
-
-    // if block has haplotypes - handle them now
-    if (vb->has_haplotype_data)
-        zip_generate_haplotype_sections (vb); 
-
-    // if block has genetype data 
-    if (vb->has_genotype_data) 
-        // calculate starts, lengths and allocate memory
-        max_genotype_section_len = zip_get_genotype_vb_start_len (vb); // length in subfields
-
-    // if block has phase data - handle it
-    if (vb->phase_type == PHASE_MIXED_PHASED) 
-        zip_generate_phase_sections (vb);
-
-    //unsigned variant_data_header_pos = vb->z_data.len;
-    zfile_compress_vb_header (vb); // variant data header + ht index
-
-    // merge new words added in this vb into the z_file.mtf_ctx, ahead of zip_generate_b250_section() and
-    // zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
-    // all this is done while holding exclusive access to the z_file dictionaries.
-    mtf_merge_in_vb_ctx(vb);
-
-    // now, we merge vb->ra_buf into z_file->ra_buf
-    random_access_merge_in_vb (vb);
-
-    // generate & write b250 data for all fields (CHROM to FORMAT)
-    for (VcfFields f=CHROM ; f <= FORMAT ; f++) {
-        MtfContext *ctx = &vb->mtf_ctx[f];
-        zip_generate_b250_section (vb, ctx);
-        zfile_compress_b250_data (vb, ctx);
-    }
-
-    // generate & write b250 data for all INFO subfields
-    uint32_t num_info_subfields=0;
-    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
-                
-        MtfContext *ctx = &vb->mtf_ctx[did_i];
-        
-        if (ctx->dict_section_type == SEC_INFO_SUBFIELD_DICT && ctx->mtf_i.len) {
-            zip_generate_b250_section (vb, ctx);
-            zfile_compress_b250_data (vb, ctx);
-            num_info_subfields++;
-        }
-    }
-    ASSERT (num_info_subfields <= MAX_SUBFIELDS, "Error: vb_i=%u has %u INFO subfields, which exceeds the maximum of %u",
-            vb->variant_block_i, num_info_subfields, MAX_SUBFIELDS);
-
-    // compress the sample data - genotype, haplotype and phase sections. genotype data is generated here too.
-    for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
-        
-        if (vb->has_genotype_data) {
-
-            // in the worst case scenario, each subfield is represnted by 4 bytes in Base250
-            buf_alloc (vb, &vb->genotype_one_section_data, max_genotype_section_len * MAX_BASE250_NUMERALS, 1, "genotype_one_section_data", sb_i);
-
-            // we compress each section at a time to save memory
-            zip_generate_genotype_one_section (vb, sb_i); 
-
-            zfile_compress_section_data (vb, SEC_GENOTYPE_DATA, &vb->genotype_one_section_data);
-
-            buf_free (&vb->genotype_one_section_data);
-        }
-
-        if (vb->phase_type == PHASE_MIXED_PHASED)
-            zfile_compress_section_data (vb, SEC_PHASE_DATA, &vb->phase_sections_data[sb_i]);
-
-        if (vb->has_haplotype_data) {
-            if (!flag_gtshark)
-                zfile_compress_section_data (vb, SEC_HAPLOTYPE_DATA, &vb->haplotype_sections_data[sb_i]);
-            else 
-                zfile_compress_haplotype_data_gtshark (vb, &vb->haplotype_sections_data[sb_i], sb_i);
-        }
-    }
-
-    // update z_data in memory (its not written to disk yet)
-    //zfile_update_compressed_vb_header (vb, variant_data_header_pos, num_info_subfields);
-    
-    COPY_TIMER (vb->profile.compute);
-
-    // tell dispatcher this thread is done and can be joined. 
-    // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
-    // this this operation needn't be atomic, but it likely is anyway
-    vb->is_processed = true; 
-}
-
-static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf, bool update_vcf_file, bool is_z_data)
+static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_txt_file, bool is_z_data)
 {
     START_TIMER;
 
@@ -536,18 +191,10 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
     z_file->disk_so_far += (int64_t)data_buf->len;
     
     if (is_z_data) {
-        if (update_vcf_file) vcf_file->num_lines += (int64_t)vb->num_lines; // lines in this VCF file
-        z_file->num_lines                        += (int64_t)vb->num_lines; // lines in all concatenated VCF files in this z_file
-        z_file->vcf_data_so_far_single           += (int64_t)vb->vb_data_size;
-        z_file->vcf_data_so_far_concat           += (int64_t)vb->vb_data_size;
-    }
-
-    // update section stats
-    for (unsigned sec_i=1; sec_i < NUM_SEC_TYPES; sec_i++) {
-        if (update_vcf_file) vcf_file->section_bytes[sec_i]  += vb->vcf_section_bytes[sec_i];
-        z_file->num_sections[sec_i]     += vb->z_num_sections[sec_i];
-        z_file->section_bytes[sec_i]    += vb->z_section_bytes[sec_i];
-        z_file->section_entries[sec_i]  += vb->z_section_entries[sec_i];
+        if (update_txt_file) txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
+        z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all concatenated files in this z_file
+        z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
+        z_file->txt_data_so_far_concat           += (int64_t)vb->vb_data_size;
     }
 
     // this function holds the mutex and hence has a non-trival performance penalty. we call
@@ -557,55 +204,140 @@ static void zip_output_processed_vb (VariantBlock *vb, Buffer *section_list_buf,
     if (flag_show_headers && buf_is_allocated (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);
 
-    if (flag_show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Write genozip data done", -1, vb->vblock_i);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
 static void zip_write_global_area (const Md5Hash *single_component_md5)
 {
-    // output dictionaries to disk
+    // output dictionaries (inc. aliases) to disk - they are in the "processed" data of evb
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, false);  
    
-    // compress all random access records into evb->z_data
-    if (flag_show_index) random_access_show_index();
-    
-    BGEN_random_access(); // make ra_buf into big endian
+    // add dict_id aliases list, if we have one
+    Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
+    if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
-    z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
+    // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
+    if (DTPZ(has_random_access)) {
 
-    zfile_compress_section_data (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf);
+        if (flag_show_index) random_access_show_index(true);
+        
+        BGEN_random_access(); // make ra_buf into big endian
+
+        z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
+
+        zfile_compress_section_data_alg (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
+    }
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
-    zfile_compress_genozip_header (DATA_TYPE_VCF, single_component_md5);    
+    zfile_compress_genozip_header (single_component_md5);    
 
     // output to disk random access and genozip header sections to disk
     zip_output_processed_vb (evb, NULL, false, true);  
 }
 
-// this is the main dispatcher function. It first processes the VCF header, then proceeds to read 
+// entry point for compute thread
+static void zip_compress_one_vb (VBlock *vb)
+{
+    START_TIMER; 
+
+    // if we're vb_i=1 lock, and unlock only when we're done merging. all other vbs need  
+    // to wait for our merge. that is because our dictionaries are sorted 
+    if (vb->vblock_i == 1) mtf_vb_1_lock(vb); 
+
+    // allocate memory for the final compressed data of this vb. allocate 20% of the
+    // vb size on the original file - this is normally enough. if not, we will realloc downstream
+    buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
+
+    // clone global dictionaries while granted exclusive access to the global dictionaries
+    mtf_clone_ctx (vb);
+
+    // split each line in this variant block to its components
+    seg_all_data_lines (vb);
+
+    // identify dictionaries that contain almost only unique words (eg a unique id) and move the data from dict to local
+    zip_handle_unique_words_ctxs (vb);
+
+    // for the first vb only - sort dictionaries so that the most frequent entries get single digit
+    // base-250 indices. This can be done only before any dictionary is written to disk, but likely
+    // beneficial to all vbs as they are likely to more-or-less have the same frequent entries
+    if (vb->vblock_i == 1) {
+        mtf_sort_dictionaries_vb_1(vb);
+
+        // for a file that's compressed (and hence we don't know the size of content a-priori) AND we know the
+        // compressed file size (eg a local gz/bz2 file or a compressed file on a ftp server) - we now estimate the 
+        // txt_data_size_single that will be used for the global_hash and the progress indicator
+        txtfile_estimate_txt_data_size (vb);
+    }
+
+    if (vb->data_type == DT_VCF)
+        vcf_zip_generate_ht_gt_compress_vb_header (vb);
+    else
+        zfile_compress_generic_vb_header (vb); // vblock header
+
+    // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section() and
+    // vcf_zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
+    // all this is done while holding exclusive access to the z_file dictionaries.
+    mtf_merge_in_vb_ctx(vb);
+
+    // merge in random access - IF it is used
+    if (DTP(has_random_access)) 
+        random_access_merge_in_vb (vb);
+
+    // optimize FORMAT/GL data in local (we have already optimized the data in dict elsewhere)
+    if (vb->data_type == DT_VCF) {
+        uint8_t gl_did_i =  mtf_get_existing_did_i (vb, (DictIdType)dict_id_FORMAT_GL);
+        if (gl_did_i != DID_I_NONE) 
+            gl_optimize_local (vb, &vb->contexts[gl_did_i].local);
+    }
+
+    // generate & compress b250 and local data for all ctxs 
+    zip_generate_and_compress_ctxs (vb);
+
+    // compress data-type specific sections
+    if (DTP(compress)) DTP(compress)(vb);
+
+    // tell dispatcher this thread is done and can be joined.
+    // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
+    // this this operation needn't be atomic, but it likely is anyway
+    vb->is_processed = true; 
+
+    COPY_TIMER (vb->profile.compute);
+}
+
+// this is the main dispatcher function. It first processes the txt header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_last_file)
+void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_last_file)
 {
-    static unsigned last_variant_block_i = 0; // used if we're concatenating files - the variant_block_i will continue from one file to the next
-    if (!flag_concat) last_variant_block_i = 0; // reset if we're not concatenating
+    static DataType last_data_type = DT_NONE;
+    static unsigned last_vblock_i = 0; // used if we're concatenating files - the vblock_i will continue from one file to the next
+    if (!flag_concat) last_vblock_i = 0; // reset if we're not concatenating
+
+    // we cannot concatenate files of different type
+    ASSERT (!flag_concat || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
+            "%s: cannot concatenate %s because it is a %s file, whereas the previous file was a %s",
+             global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
+    last_data_type =  txt_file->data_type;
 
     // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, last_variant_block_i, false, is_last_file, vcf_basename);
+    Dispatcher dispatcher = dispatcher_init (max_threads, last_vblock_i, false, is_last_file, txt_basename);
 
-    dict_id_initialize();
+    dict_id_initialize(z_file->data_type);
 
-    unsigned vcf_line_i = 1; // the next line to be read (first line = 1)
+    unsigned txt_line_i = 1; // the next line to be read (first line = 1)
     
-    // read the vcf header, assign the global variables, and write the compressed header to the GENOZIP file
-    off64_t vcf_header_header_pos = z_file->disk_so_far;
-    bool success = vcf_header_vcf_to_genozip (&vcf_line_i);
+    // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
+    off64_t txt_header_header_pos = z_file->disk_so_far;
+    bool success = txtfile_header_to_genozip (&txt_line_i);
     if (!success) goto finish;
 
-    mtf_initialize_mutex();
+    mtf_initialize_for_zip();
+
+    if (z_file->data_type == DT_VCF) vcf_zip_initialize();
 
     uint32_t max_lines_per_vb=0;
 
@@ -613,7 +345,7 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
     // 1. In there is a new variant block avaialble, and a compute thread available to take it - dispatch it
     // 2. If there is no new variant block available, but input is not exhausted yet - read one
     // 3. Wait for the first thread (by sequential order) to complete the compute and output the results
-    VariantBlock *next_vb;
+    VBlock *next_vb;
     do {
         next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
@@ -622,22 +354,23 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
         if (has_vb_ready_to_compute && has_free_thread) 
             dispatcher_compute (dispatcher, zip_compress_one_vb);
-
+        
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
            
-            VariantBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); // this will block until one is available
+            VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
 
             // update z_data in memory (its not written to disk yet)
-            zfile_update_compressed_vb_header (processed_vb, vcf_line_i);
+            DTPZ(update_header)(processed_vb, txt_line_i); 
 
-            max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->num_lines);
-            vcf_line_i += processed_vb->num_lines;
+            max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
+            txt_line_i += (uint32_t)processed_vb->lines.len;
 
             zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, true);
-
+            z_file->num_vbs++;
+            
             dispatcher_finalize_one_vb (dispatcher);
         }        
         
@@ -645,44 +378,43 @@ void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_las
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
             next_vb = dispatcher_generate_next_vb (dispatcher, 0);
-
-            if (flag_show_threads) dispatcher_show_time ("Read VCF data", -1, next_vb->variant_block_i);
+            if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);
             
-            vcffile_read_variant_block (next_vb);
+            txtfile_read_vblock (next_vb);
 
-            if (flag_show_threads) dispatcher_show_time ("Read VCF data done", -1, next_vb->variant_block_i);
+            if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
 
-            if (next_vb->vcf_data.len)  // we found some data 
+            if (next_vb->txt_data.len)  // we found some data 
                 next_vb->ready_to_dispatch = true;
             else {
                 // this vb has no data
                 dispatcher_input_exhausted (dispatcher);
                 
                 // update to the conclusive size. it might have been 0 (eg STDIN if HTTP) or an estimate (if compressed)
-                vcf_file->vcf_data_size_single = vcf_file->vcf_data_so_far_single; 
+                txt_file->txt_data_size_single = txt_file->txt_data_so_far_single; 
 
                 dispatcher_finalize_one_vb (dispatcher); 
             }
         }
     } while (!dispatcher_is_done (dispatcher));
 
-    // go back and update some fields in the vcf header's section header and genozip header -
+    // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5;
-    if (z_file && z_file->type == VCF_GENOZIP && vcf_header_header_pos >= 0) 
-        success = zfile_update_vcf_header_section_header (vcf_header_header_pos, max_lines_per_vb, &single_component_md5);
+    if (z_file && !z_file->redirected && txt_header_header_pos >= 0) 
+        success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
-    // if this a non-concatenated file, or the last vcf component of a concatenated file - write the genozip header, random access and dictionaries
+    // if this a non-concatenated file, or the last component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);
 
     if (!flag_quiet) zip_display_compression_ratio (dispatcher, is_last_file);
 
 finish:
     z_file->disk_size              = z_file->disk_so_far;
-    z_file->vcf_data_so_far_single = 0;
+    z_file->txt_data_so_far_single = 0;
     evb->z_data.len                = 0;
     evb->z_next_header_i           = 0;
     memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));
 
-    dispatcher_finish (&dispatcher, &last_variant_block_i);
+    dispatcher_finish (&dispatcher, &last_vblock_i);
 }

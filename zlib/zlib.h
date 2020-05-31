@@ -88,7 +88,7 @@ typedef struct z_stream_s {
     uInt     avail_in;  /* number of bytes available at next_in */
 
     z_off64_t total_in;  /* total number of input bytes read so far */ // modified by Divon Lan (was: uLong)
-    z_off64_t total_ever_in; /* total number of input bytes ever - across concatenated gzip sections (as in bgzip). added by Divon Lan */
+    uLongLong total_ever_in; /* total number of input bytes ever - across concatenated gzip sections (as in bgzip). added by Divon Lan */
     Bytef    *next_out; /* next output byte will go here */
     uInt     avail_out; /* remaining free space at next_out */
     uLong    total_out; /* total number of bytes output so far */
@@ -1841,7 +1841,7 @@ ZEXTERN int ZEXPORT gzgetc_ OF((gzFile file));  /* backward compatibility */
    ZEXTERN z_off64_t ZEXPORT gzseek64 OF((gzFile, z_off64_t, int));
    ZEXTERN z_off64_t ZEXPORT gztell64 OF((gzFile));
    ZEXTERN z_off64_t ZEXPORT gzoffset64 OF((gzFile));
-   ZEXTERN z_off64_t ZEXPORT gzconsumed64 OF((gzFile)); // added by Divon Lan
+   ZEXTERN uLongLong ZEXPORT gzconsumed64 OF((gzFile)); // added by Divon Lan
    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off64_t));
    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off64_t));
 #endif

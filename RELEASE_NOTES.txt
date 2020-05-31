@@ -111,4 +111,23 @@
 4.0.11
 - bug fixes
 
+5.0.5
+- Updated license
+- Added user registration
+- Added full support for compressing SAM/BAM, FASTQ, FASTA, GVF and 23andMe files
+- Compression improvements for VCF files with any of these:
+    1. lots of non-GT FORMAT subfields 
+    2. ID data 
+    3. END INFO subfield 
+    4. MIN_DP FORMAT subfield
+- Added genounzip output options: --bcf for VCF files and --bam for SAM files
+- Added --input-type - tell genozip what type of file this is - if re-directing or file has non-standard extension
+- Added --stdin-size - tell genozip the size of a redirected input file, for faster execution
+- Added --show-index for genounzip and genocat - see index embedded in a genozip file
+- Added --fast option for (a lot) faster compression, with (somewhat) reduced compression ratio
+- Added --grep for genocat FASTQ
+- Added --debug-progress and --show-hash, useful mostly for genozip developers
+- Reduce default vblock from 128MB to 16MB
+- Cancel option --strip
+list
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)

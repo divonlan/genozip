@@ -16,22 +16,22 @@
 
 #include "genozip.h"
 #include "dispatcher.h"
-#include "vb.h"
+#include "vblock.h"
 #include "file.h"
 #include "profiler.h"
 
 typedef struct {
     pthread_t thread_id;
-    VariantBlock *vb;
-    void (*func)(VariantBlock *);
+    VBlock *vb;
+    void (*func)(VBlock *);
 } Thread;
 
 typedef struct {
     unsigned max_vb_id_so_far; 
     Buffer compute_threads_buf;
     Thread *compute_threads;
-    VariantBlock *next_vb; // next vb to be dispatched
-    VariantBlock *processed_vb; // last vb for which caller got the processing results
+    VBlock *next_vb; // next vb to be dispatched
+    VBlock *processed_vb; // last vb for which caller got the processing results
 
     bool input_exhausted;
 
@@ -116,9 +116,13 @@ static void dispatcher_show_start (DispatcherData *dd)
 {
     if (!dd->show_progress) return; 
 
-    const char *progress = (command == ZIP && vcf_file->type == STDIN) ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
+    const char *progress = (command == ZIP && txt_file->redirected) ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
     
-    fprintf (stderr, "%s%s %s: %s", dd->test_mode ? "testing " : "", global_cmd, dd->filename, progress); 
+    if (dd->test_mode) 
+        fprintf (stderr, "testing: %s%s --test %s : %s", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
+                 dd->filename, progress); 
+    else
+        fprintf (stderr, "%s %s : %s", global_cmd, dd->filename, progress); 
              
     dd->last_len = strlen (progress); // so dispatcher_show_progress knows how many characters to erase
 }
@@ -127,7 +131,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     
-    if (!dd->show_progress) return; 
+    if (!dd->show_progress && !flag_debug_progress) return; 
 
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -136,28 +140,28 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 
     uint64_t total=0, sofar=0;
     
-    // case: genozip of plain vcf files (including if decompressed by an external compressor) 
-    // - we go by the amount of VCF content processed 
-    if (command == ZIP && vcf_file->disk_size && file_is_plain_vcf (vcf_file)) { 
-        total = vcf_file->vcf_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
-        sofar = z_file->vcf_data_so_far_single;
+    // case: genozip of plain txt files (including if decompressed by an external compressor) 
+    // - we go by the amount of txt content processed 
+    if (command == ZIP && txt_file->disk_size && file_is_plain_or_ext_decompressor (txt_file)) { 
+        total = txt_file->txt_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
+        sofar = z_file->txt_data_so_far_single;
     } 
     
-    // case: UNZIP: always ; ZIP: locally decompressed files - .vcf.gz .vcf.bgz .vcf.bz2 - 
+    // case: UNZIP: always ; ZIP: locally decompressed files - eg .vcf.gz or .fq.bz2 - 
     // we go by the physical disk size and how much has been consumed from it so far
     else if (command == UNZIP || 
-             (command == ZIP && (vcf_file->type == VCF_GZ || vcf_file->type == VCF_BGZ || vcf_file->type == VCF_BZ2))) {
-        File *input_file  = (command == ZIP ? vcf_file : z_file);
+             (command == ZIP && file_is_read_via_int_decompressor (txt_file))) {
+        File *input_file  = (command == ZIP ? txt_file : z_file);
         total = input_file->disk_size; 
         sofar = input_file->disk_so_far; 
     } 
         
     // case: we have no idea what is the disk size of the VCF file - for example, because its STDIN, or because
     // its coming from a URL that doesn't provide the size
-    else if (command == ZIP && !vcf_file->disk_size)
+    else if (command == ZIP && !txt_file->disk_size)
         return; // we can't show anything if we don't know the file size
 
-    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u vcf_file->type=%u", command, vcf_file->type);
+    else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u txt_file->type=%s", command, ft_name (txt_file->type));
 
     double percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
@@ -191,11 +195,13 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
             char time_str[70], progress[100];
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             dispatcher_human_time (secs, time_str);
-
             sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
 
             // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
-            fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
+            if (!flag_debug_progress)
+                fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
+            else
+                fprintf (stderr, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d\n", (unsigned)percent, time_str, sofar, total, seconds_so_far);
 
             dd->last_len = strlen (progress);
         }
@@ -223,7 +229,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
         ever_time_initialized = true;
     }
 
-    dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the variant_block_i will continue from one file to the next
+    dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the vblock_i will continue from one file to the next
     dd->max_threads   = max_threads;
     dd->test_mode     = test_mode;
     dd->is_last_file  = is_last_file;
@@ -256,7 +262,7 @@ void dispatcher_resume (Dispatcher dispatcher)
 
     dd->input_exhausted = false;
     dd->last_len        = 2;
-    dd->filename        = vcf_file->name;
+    dd->filename        = txt_file->name;
     
     dispatcher_show_start (dd);    
 }
@@ -269,8 +275,8 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     if (flag_show_time) 
         profiler_print_report (&evb->profile, 
-                               dd->max_threads, dd->max_vb_id_so_far,
-                               dd->filename, dd->next_vb_i);
+                               dd->max_threads, dd->max_vb_id_so_far+1,
+                               dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty
 
     // must be before vb_cleanup_memory() 
     if (flag_show_memory) buf_display_memory_usage (false, dd->max_threads, dd->max_vb_id_so_far);    
@@ -279,11 +285,14 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
-    if (!flag_concat && !dd->is_last_file) vb_cleanup_memory(); 
+    if (!flag_concat && !dd->is_last_file) {
+        vb_cleanup_memory(); 
+        vb_release_vb (evb);
+    }
+    
+    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent concatented files
 
-    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing variant_block_i count between subsequent concatented files
-
-    free (dd);
+    FREE (dd);
 
     *dispatcher = NULL;
 }
@@ -297,7 +306,7 @@ static void *dispatcher_thread_entry (void *thread_)
     return NULL;
 }
 
-VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
+VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -311,7 +320,7 @@ VariantBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
     return dd->next_vb;
 }
 
-void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
+void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     Thread *th = &dd->compute_threads[dd->next_thread_to_dispatched];
@@ -319,11 +328,11 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VariantBlock *))
     th->vb = dd->next_vb;
     th->func = func;
 
-    if (flag_show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Start compute", dd->next_thread_to_dispatched, th->vb->vblock_i);
 
     if (dd->max_threads > 1) {
         unsigned err = pthread_create(&th->thread_id, NULL, dispatcher_thread_entry, th);
-        ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->variant_block_i, err);
+        ASSERT (!err, "Error: failed to create thread for next_vb_i=%u, err=%u", dd->next_vb->vblock_i, err);
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;
     }
@@ -348,7 +357,7 @@ bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final)
     return my_is_final || (th->vb && th->vb->is_processed);
 }
 
-VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
+VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -356,13 +365,13 @@ VariantBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final
 
     Thread *th = &dd->compute_threads[dd->next_thread_to_be_joined];
 
-    if (flag_show_threads) dispatcher_show_time ("Wait for thread", dd->next_thread_to_be_joined, th->vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Wait for thread", dd->next_thread_to_be_joined, th->vb->vblock_i);
 
     if (dd->max_threads > 1) 
         // wait for thread to complete (possibly it completed already)
         pthread_join(th->thread_id, NULL);
 
-    if (flag_show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->variant_block_i);
+    if (flag_show_threads) dispatcher_show_time ("Join (end compute)", dd->next_thread_to_be_joined, th->vb->vblock_i);
 
     dd->processed_vb = th->vb;
     
@@ -379,10 +388,24 @@ bool dispatcher_has_free_thread (Dispatcher dispatcher)
     return dd->num_running_compute_threads < MAX(1, dd->max_threads);
 }
 
-VariantBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
+VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->next_vb;
+}
+
+void dispatcher_abandon_next_vb (Dispatcher dispatcher)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+
+    if (!dd->next_vb) return;
+
+    buf_test_overflows(dd->next_vb); 
+
+    if (flag_show_time) profiler_add (&evb->profile, &dd->next_vb->profile);
+
+    vb_release_vb (dd->next_vb); 
+    dd->next_vb = NULL;
 }
 
 void dispatcher_finalize_one_vb (Dispatcher dispatcher)
@@ -394,10 +417,10 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
         buf_test_overflows(dd->processed_vb); // just to be safe, this isn't very expensive
         buf_test_overflows(evb); 
 
-        if (flag_show_time) 
-            profiler_add (&evb->profile, &dd->processed_vb->profile);
+        if (flag_show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
 
-        vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+        vb_release_vb (dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+        dd->processed_vb = NULL;
     }
 
     dispatcher_show_progress (dispatcher);
@@ -408,7 +431,8 @@ void dispatcher_input_exhausted (Dispatcher dispatcher)
     DispatcherData *dd = (DispatcherData *)dispatcher;
     dd->input_exhausted = true;
 
-    vb_release_vb (&dd->next_vb);
+    vb_release_vb (dd->next_vb);
+    dd->next_vb = NULL;
 
     dd->next_vb_i--; // we didn't use this vb_i
 }    

@@ -1,37 +1,33 @@
 // ------------------------------------------------------------------
-//   vcf_header.c
+//   header_vcf.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "genozip.h"
+#include "vcf_private.h"
 #include "zfile.h"
-#include "vcffile.h"
-#include "vcf_header.h"
-#include "vb.h"
+#include "txtfile.h"
+#include "vblock.h"
 #include "crypt.h"
 #include "version.h"
 #include "endianness.h"
 #include "file.h"
-#include "samples.h"
+#include "dispatcher.h"
+#include "txtfile.h"
+#include "strings.h"
 
-uint32_t global_num_samples              = 0; // number of samples in the file
-uint32_t global_number_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that global_num_samples if --samples is used
-uint32_t global_max_memory_per_vb        = 0; // ZIP only: used for reading VCF data
+// Globals
+uint32_t global_vcf_num_samples           = 0; // number of samples in the file
+uint32_t global_vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that global_vcf_num_samples if --samples is used
+Buffer global_vcf_header_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
 
-Buffer global_vcf_header_line = EMPTY_BUFFER; // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
-
-// global - this names go into the dictionary names on disk. to preserve backward compatibility, they should not be changed.
-const char *vcf_field_names[] = { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT" };
-
-// PIZ: called before reading each genozip file
-void vcf_header_initialize()
+void vcf_header_initialize (void)
 {
-    global_num_samples              = 0;
-    global_number_displayed_samples = 0;
+    global_vcf_num_samples           = 0;
+    global_vcf_num_displayed_samples = 0;
     buf_free (&global_vcf_header_line);
 }
 
-static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffer *vcf_header)
+bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken
 
@@ -47,7 +43,7 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
         
             // if first vcf file - copy the header to the global
             if (!buf_is_allocated (&global_vcf_header_line)) {
-                buf_copy (vb, &global_vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "global_vcf_header_line", 0);
+                buf_copy (evb, &global_vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "global_vcf_header_line", 0);
                 vcf_header_line_filename = filename;
             }
 
@@ -62,20 +58,21 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
                                  "%.*s"
                                  "=======================================\n", 
                          global_cmd, filename, vcf_header_line_filename,
-                         vcf_header_line_filename, global_vcf_header_line.len, global_vcf_header_line.data,
-                         filename, vcf_header->len-i, &vcf_header->data[i]);
+                         vcf_header_line_filename, (uint32_t)global_vcf_header_line.len, global_vcf_header_line.data,
+                         filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
                 return false;
             }
 
             //count samples
-            global_num_samples = (tab_count >= 9) ? tab_count-8 : 0; // note: a VCF file without samples would have tab_count==7 (8 fields) and is perfectly legal
-            global_number_displayed_samples = global_num_samples;
-
-            ASSERT0 (tab_count != 8, "Error: invalid VCF file - field header line contains a FORMAT field but no samples");
+            global_vcf_num_samples = (tab_count >= 9) ? tab_count-8 : 0; 
+            // note: a VCF file without samples may or may not have a "FORMAT" in the header, i.e. tab_count==7 or 8 (8 or 9 fields).
+            // however, even if it has a FORMAT in the header, it won't have a FORMAT column in the data
+            
+            global_vcf_num_displayed_samples = global_vcf_num_samples;
 
             ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 
-            // if --samples is used, update vcf_header and global_number_displayed_samples
+            // if --samples is used, update vcf_header and global_vcf_num_displayed_samples
             if (flag_samples) samples_digest_vcf_header (vcf_header);
 
             return true; 
@@ -84,40 +81,6 @@ static bool vcf_header_set_globals(VariantBlock *vb, const char *filename, Buffe
 
     ABORT ("Error: invalid VCF file - it does not contain a field header line; tab_count=%u", tab_count+1);
     return false; // avoid complication warnings
-}
-
-// ZIP: reads VCF header and writes its compressed form to the GENOZIP file. returns num_samples.
-bool vcf_header_vcf_to_genozip (uint32_t *vcf_line_i)
-{    
-    z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
-
-    bool is_first_vcf = !buf_is_allocated (&global_vcf_header_line); 
-
-    vcffile_read_vcf_header (is_first_vcf); // reads into evb->vcf_data and evb->num_lines
-    
-    *vcf_line_i += evb->num_lines;
-
-    // case - vcf header was found 
-    if (evb->vcf_data.len) {
-
-        bool can_concatenate = vcf_header_set_globals(evb, vcf_file->name, &evb->vcf_data);
-        if (!can_concatenate) { 
-            // this is the second+ file in a concatenation list, but its samples are incompatible
-            buf_free (&evb->vcf_data);
-            return false;
-        }
-
-        if (z_file) zfile_write_vcf_header (&evb->vcf_data, is_first_vcf); // we write all headers in concat mode too, to support --split
-
-        vcf_file->section_bytes[SEC_VCF_HEADER] = evb->vcf_data.len;
-        z_file  ->section_bytes[SEC_VCF_HEADER] = evb->z_section_bytes[SEC_VCF_HEADER]; // comes from zfile_compress
-        z_file  ->num_sections [SEC_VCF_HEADER]++;
-        z_file  ->num_vcf_components_so_far++; // when compressing
-    }
-
-    buf_free (&evb->vcf_data);
-    
-    return true; // everything's good
 }
 
 // genocat: remove FORMAT and sample names from the vcf header line, in case of --drop-genotypes
@@ -147,67 +110,5 @@ void vcf_header_keep_only_last_line (Buffer *vcf_header_buf)
         }
 }
 
-// PIZ: returns offset of header within data, EOF if end of file
-bool vcf_header_genozip_to_vcf (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
-{
-    z_file->disk_at_beginning_of_this_vcf_file = z_file->disk_so_far;
-    static Buffer vcf_header_section = EMPTY_BUFFER;
-
-    int header_offset = zfile_read_section (evb, 0, NO_SB_I, &vcf_header_section, "vcf_header_section", 
-                                            sizeof(SectionHeaderVCFHeader), SEC_VCF_HEADER, SEEK_NONE);
-    if (header_offset == EOF) {
-        buf_free (&vcf_header_section);
-        return false; // empty file (or in case of split mode - no more components) - not an error
-    }
-
-    // handle the GENOZIP header of the VCF header section
-    SectionHeaderVCFHeader *header = (SectionHeaderVCFHeader *)vcf_header_section.data;
-
-    ASSERT (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderVCFHeader)), 
-            "Error: invalid VCF header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderVCFHeader));
-
-    // in split mode - we open the output VCF file of the component
-    if (flag_split) {
-        ASSERT0 (!vcf_file, "Error: not expecting vcf_file to be open already in split mode");
-        vcf_file = file_open (header->vcf_filename, WRITE, VCF);
-        vcf_file->vcf_data_size_single = BGEN64 (header->vcf_data_size);
-    }
-
-    bool first_vcf = !buf_is_allocated (&global_vcf_header_line);
-
-    vcf_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
-
-    if (first_vcf || flag_split) 
-        z_file->num_lines = BGEN64 (header->num_lines);
-
-    if (flag_split) *digest = header->md5_hash_single; // override md5 from genozip header
-        
-    // now get the text of the VCF header itself
-    static Buffer vcf_header_buf = EMPTY_BUFFER;
-    zfile_uncompress_section (evb, header, &vcf_header_buf, "vcf_header_buf", SEC_VCF_HEADER);
-
-    bool can_concatenate = vcf_header_set_globals (evb, z_file->name, &vcf_header_buf);
-    if (!can_concatenate) {
-        buf_free (&vcf_header_section);
-        buf_free (&vcf_header_buf);
-        return false;
-    }
-
-    if (flag_drop_genotypes) vcf_header_trim_header_line (&vcf_header_buf); // drop FORMAT and sample names
-
-    if (flag_header_one) vcf_header_keep_only_last_line (&vcf_header_buf);  // drop lines except last (with field and samples name)
-
-    // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if ((first_vcf || flag_split) && !flag_no_header)
-        vcffile_write_to_disk (&vcf_header_buf);
-    
-    buf_free (&vcf_header_section);
-    buf_free (&vcf_header_buf);
-
-    z_file->num_vcf_components_so_far++;
-
-    return true;
-}
-
 #define V1_VCF_HEADER // select the vcf_header functions of v1.c
-#include "v1.c"
+#include "vcf_v1.c"
