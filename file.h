@@ -7,15 +7,12 @@
 #define FILE_INCLUDED
 
 #ifndef _MSC_VER // Microsoft compiler
-#include <inttypes.h>
-#include <stdbool.h>
 #include <pthread.h>
 #else
-#include "compatibility/visual_c_stdint.h"
-#include "compatibility/visual_c_stdbool.h"
 #include "compatibility/visual_c_pthread.h"
 #endif
 
+#include "genozip.h"
 #include "buffer.h"
 #include "sections.h"
 #include "move_to_front.h"

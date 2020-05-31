@@ -4,16 +4,7 @@
 // The original source, as specified there, is "This is free and unencumbered software released into the public domain - June 2013 waterjuice.org". 
 // All modifications are (c) 2020 Divon Lan and are subject to license.
 
-#include <stdio.h>
 #include <memory.h>
-#ifndef _MSC_VER // Microsoft compiler
-#include <inttypes.h>
-#include <stdbool.h>
-#else
-#include "compatibility/visual_c_stdint.h"
-#include "compatibility/visual_c_stdbool.h"
-#endif
-
 #include "genozip.h"
 #include "md5.h"
 #include "endianness.h"

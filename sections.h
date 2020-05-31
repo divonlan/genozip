@@ -6,14 +6,6 @@
 #ifndef SECTIONS_INCLUDED
 #define SECTIONS_INCLUDED
 
-#ifndef _MSC_VER // Microsoft compiler
-#include <inttypes.h>
-#include <stdbool.h>
-#else
-#include "compatibility/visual_c_stdint.h"
-#include "compatibility/visual_c_stdbool.h"
-#endif
-
 #include "genozip.h"
 #include "section_types.h"
 #include "md5.h"

@@ -8,13 +8,7 @@
 #ifndef SECTION_TYPES_INCLUDED
 #define SECTION_TYPES_INCLUDED
 
-#ifndef _MSC_VER // Microsoft compiler
-#include <inttypes.h>
-#include <stdbool.h>
-#else
-#include "compatibility/visual_c_stdint.h"
-#include "compatibility/visual_c_stdbool.h"
-#endif
+#include "genozip.h"
 
 // note: the numbering of the sections cannot be modified, for backward compatibility
 typedef enum {

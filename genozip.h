@@ -12,11 +12,11 @@
 #include <string.h>
 #ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
-#include <stdbool.h>
+//#include <stdbool.h>
 #include <unistd.h>
 #else
 #include "compatibility/visual_c_stdint.h"
-#include "compatibility/visual_c_stdbool.h"
+//#include "compatibility/visual_c_stdbool.h"
 #include "compatibility/visual_c_unistd.h"
 #include "compatibility/visual_c_misc_funcs.h"
 #endif
@@ -117,6 +117,10 @@ extern VBlockP evb;
 #define MIN(a, b) (((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
 #endif
+
+typedef _Bool bool;
+#define true 1
+#define false 0
 
 #define SPECIAL(dt,num,name,func) \
     extern void func (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len); \
