@@ -118,6 +118,7 @@ extern VBlockP evb;
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
 #endif
 
+// we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
 typedef _Bool bool;
 #define true 1
 #define false 0
