@@ -9,7 +9,7 @@
 <!-- 2. copied as HTML to the Mac installer                                                             -->
 <!-- 3. copied into meta.yaml, after removing all the HTML stuff                                        -->
 <!--                                                                                                    -->
-<h1>genozip</h1><br>
+<h1>genozip</h1><br> 
 <b>genozip</b> is a compressor for genomic files - it compresses VCF/BCF, SAM/BAM, fastq, fasta, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --input --help').<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
