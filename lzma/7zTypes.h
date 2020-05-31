@@ -9,6 +9,7 @@
 #endif
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifndef EXTERN_C_BEGIN
 #ifdef __cplusplus
@@ -67,51 +68,24 @@ typedef unsigned char Byte;
 typedef short Int16;
 typedef unsigned short UInt16;
 
-#ifdef _LZMA_UINT32_IS_ULONG
-typedef long Int32;
-typedef unsigned long UInt32;
-#else
-typedef int Int32;
-typedef unsigned int UInt32;
-#endif
+typedef int32_t Int32;
+typedef uint32_t UInt32;
 
-#ifdef _SZ_NO_INT_64
-
-/* define _SZ_NO_INT_64, if your compiler doesn't support 64-bit integers.
-   NOTES: Some code will work incorrectly in that case! */
-
-typedef long Int64;
-typedef unsigned long UInt64;
-
-#else
+typedef int64_t Int64;
+typedef uint64_t UInt64;
 
 #if defined(_MSC_VER) || defined(__BORLANDC__)
-typedef __int64 Int64;
-typedef unsigned __int64 UInt64;
 #define UINT64_CONST(n) n
 #else
-typedef long long int Int64;
-typedef unsigned long long int UInt64;
 #define UINT64_CONST(n) n ## ULL
 #endif
 
-#endif
-
-typedef UInt64 SizeT; // Divon change - always 64bit
-/*
-#ifdef _LZMA_NO_SYSTEM_SIZE_T
-typedef UInt32 SizeT;
-typedef UInt64 SizeT; // Divon change - default to 64bit
-#else
-typedef size_t SizeT;
-#endif
-*/
+typedef uint64_t SizeT; // Divon change - always 64bit
 
 typedef int BoolInt;
-/* typedef BoolInt Bool; */
+
 #define True 1
 #define False 0
-
 
 #ifdef _WIN32
 #define MY_STD_CALL __stdcall

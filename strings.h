@@ -7,6 +7,9 @@
 #define STRINGS_INCLUDED
 
 #include <stdint.h>
+#ifndef _MSC_VER // Microsoft compiler
+#include <stdbool.h>
+#endif
 
 #define IS_DIGIT(c)   ((c)>='0' && (c)<='9')
 #define IS_CLETTER(c) ((c)>='A' && (c)<='Z')
