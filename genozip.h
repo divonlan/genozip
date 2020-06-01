@@ -12,11 +12,9 @@
 #include <string.h>
 #ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
-//#include <stdbool.h>
 #include <unistd.h> 
 #else
 #include "compatibility/visual_c_stdint.h"
-//#include "compatibility/visual_c_stdbool.h"
 #include "compatibility/visual_c_unistd.h"
 #include "compatibility/visual_c_misc_funcs.h"
 #endif

@@ -56,7 +56,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h \
-             compatibility/visual_c_getopt.h compatibility/visual_c_stdbool.h compatibility/visual_c_unistd.h \
+             compatibility/visual_c_getopt.h compatibility/visual_c_unistd.h \
              compatibility/visual_c_gettime.h compatibility/visual_c_stdint.h compatibility/visual_c_misc_funcs.h \
              compatibility/visual_c_pthread.h \
              compatibility/mac_gettime.h  \
