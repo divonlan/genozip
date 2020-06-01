@@ -20,7 +20,7 @@ extern void str_to_lowercase (char *s);
 extern char *str_size (int64_t size, char *str /* out */);
 extern char *str_uint_commas (int64_t n, char *str /* out */);
 extern unsigned str_int (int64_t n, char *str /* out */);
-extern bool str_is_int (const char *str, unsigned str_len);
+extern _Bool str_is_int (const char *str, unsigned str_len);
 
 #define POINTER_STR_LEN 19
 extern char *str_pointer (const void *p, char *str /* POINTER_STR_LEN bytes allocated by caller*/);
@@ -29,18 +29,18 @@ extern const char *type_name (unsigned item,
                               const char * const *name, // the address in which a pointer to name is found, if item is in range
                               unsigned num_names);
 
-extern void str_print_null_seperated_data (const char *data, unsigned len, bool add_newline);
+extern void str_print_null_seperated_data (const char *data, unsigned len, _Bool add_newline);
 
 extern int str_print_text (const char **text, unsigned num_lines,
                            const char *wrapped_line_prefix, 
                            const char *newline_separator, 
                            unsigned line_width /* 0=calcuate optimal */);
 
-typedef bool (*ResponseVerifier) (char *response, unsigned response_size, const char *verifier_param);
+typedef _Bool (*ResponseVerifier) (char *response, unsigned response_size, const char *verifier_param);
 extern void str_query_user (const char *query, char *response, unsigned response_size, ResponseVerifier verifier, const char *verifier_param);
 
 // ResponseVerifier functions
-extern bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n);
-extern bool str_verify_not_empty (char *response, unsigned response_size, const char *unused);
+extern _Bool str_verify_y_n (char *response, unsigned response_size, const char *y_or_n);
+extern _Bool str_verify_not_empty (char *response, unsigned response_size, const char *unused);
 
 #endif
