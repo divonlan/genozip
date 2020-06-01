@@ -11,7 +11,7 @@
 <!--                                                                                                    -->
 <h1>genozip</h1><br> 
 <br>
-(also available on <b>conda</b> and <b>Docker Hub</b>)
+(also available on <b>Conda</b> and <b>Docker Hub</b>)<br>
 <br>
 <b>genozip</b> is a compressor for genomic files - it compresses VCF/BCF, SAM/BAM, fastq, fasta, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --input --help').<br>
 <br>
