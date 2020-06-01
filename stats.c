@@ -144,7 +144,7 @@ typedef struct {
 
 static int stats_sort_by_total_comp_size(const void *a, const void *b)  
 { 
-    return ((StatsByLine*)b)->total_comp_size - ((StatsByLine*)a)->total_comp_size;
+    return (((StatsByLine*)b)->total_comp_size > ((StatsByLine*)a)->total_comp_size) ? 1 : -1; // use comparison (>) and not minus (-) as the retun value is only 32 bit
 }
 
 void stats_show_sections (void)
