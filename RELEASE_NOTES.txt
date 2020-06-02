@@ -132,5 +132,5 @@
 list
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)
 
-5.0.6
+5.0.7
 - bug fixes
