@@ -131,3 +131,6 @@
 - Cancel option --strip
 list
 Note: some versions numbers are skipped due to failed conda builds (every build attempt consumes a version number)
+
+5.0.6
+- bug fixes
