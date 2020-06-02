@@ -287,6 +287,10 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
         piz_reconstruct_from_ctx (vb, base_ctx->did_i, 0);
         break;
     
+    case SNIP_DONT_STORE:
+        store = false; // override CTX_FL_STORE_VALUE and fall through
+        snip++; snip_len--;
+        
     default: {
         bool reconstruct = true;
 
@@ -409,14 +413,14 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
 
         if (section_i == vb->z_section_headers.len) break; // no more sections left
 
-        SectionHeaderCtx *header = (SectionHeaderCtx *)(vb->z_data.data + section_index[section_i]);
+        SectionHeaderCtx *header = (SectionHeaderCtx *)ENT (char, vb->z_data, section_index[section_i]);
 
         // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
         bool is_local = header->h.section_type == SEC_LOCAL;
         if (section_type_is_b250 (header->h.section_type) || is_local) {
             MtfContext *ctx = mtf_get_ctx (vb, header->dict_id);
         
-            ctx->flags      = is_v5_or_above ? header->flags : 0; // flags and ltype were introduced in v5, before that this field, in b250, was used for something else (not 0)
+            ctx->flags = is_v5_or_above ? header->flags : 0; // flags and ltype were introduced in v5, before that this field, in b250, was used for something else (not 0)
             ctx->ltype = is_v5_or_above ? header->ltype : 0;
 
             zfile_uncompress_section (vb, header, is_local ? &ctx->local : &ctx->b250, 
@@ -463,10 +467,13 @@ static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
 
     // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
     while (section_type_is_b250 ((*next_sl)->section_type) || (*next_sl)->section_type == SEC_LOCAL) {
-        *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len++) = vb->z_data.len; 
+        *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len) = vb->z_data.len; 
 
-        zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
-                            (*next_sl)->section_type, *next_sl);
+        int32_t ret = zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
+                                          (*next_sl)->section_type, *next_sl); // returns 0 if section is skipped
+
+        if (ret) vb->z_section_headers.len++;
+
         (*next_sl)++;                             
     }
 }

@@ -136,7 +136,8 @@ void zfile_uncompress_section (VBlock *vb,
     
     bool expecting_vb_i = !section_type_is_dictionary (expected_section_type) && expected_section_type != SEC_TXT_HEADER;
     ASSERT (vblock_i == vb->vblock_i || !expecting_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
-             "Error: bad vblock_i: in file=%u in vb=%u", vblock_i, vb->vblock_i);
+             "Error in zfile_uncompress_section: bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
+             vblock_i, vb->vblock_i, st_name (expected_section_type));
 
     // decrypt data (in-place) if needed
     if (data_encrypted_len) {
@@ -352,12 +353,12 @@ void *zfile_read_from_disk (VBlock *vb, Buffer *buf, unsigned len, bool fail_qui
 
 // read section header - called from the I/O thread, but for a specific VB
 // returns offset of header within data, EOF if end of file
-int zfile_read_section (VBlock *vb, 
-                        uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
-                        uint32_t sb_i,          // sample block number, NO_SB_I if this section type is not related to vcf samples
-                        Buffer *data, const char *buf_name, // buffer to append 
-                        unsigned header_size, SectionType expected_sec_type,
-                        const SectionListEntry *sl)   // NULL for no seeking
+int32_t zfile_read_section (VBlock *vb, 
+                            uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
+                            uint32_t sb_i,          // sample block number, NO_SB_I if this section type is not related to vcf samples
+                            Buffer *data, const char *buf_name, // buffer to append 
+                            unsigned header_size, SectionType expected_sec_type,
+                            const SectionListEntry *sl)   // NULL for no seeking
 {
     ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u, sb_i=%d",
             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i, sb_i);

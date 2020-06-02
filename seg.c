@@ -131,6 +131,18 @@ void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id, uint32
 
 #define MAX_POS 0xffffffff // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
 
+uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
+{
+    ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
+
+    uint8_t chrom_did_i = DTF(chrom);
+    uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, chrom_did_i, chrom_str_len+1);
+
+    random_access_update_chrom ((VBlockP)vb, chrom_node_index);
+
+    return chrom_node_index;
+}
+
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
 // (if allow_nonsense) or errors
 int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool allow_nonsense)
@@ -147,18 +159,6 @@ int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool
     return -1; // bad number
 }
 
-uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
-{
-    ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
-
-    uint8_t chrom_did_i = DTF(chrom);
-    uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, chrom_did_i, chrom_str_len+1);
-
-    random_access_update_chrom ((VBlockP)vb, chrom_node_index);
-
-    return chrom_node_index;
-}
-
 void seg_pos_field (VBlock *vb, 
                     uint8_t snip_did_i,    // mandatory: the ctx the snip belongs to
                     uint8_t base_did_i,    // mandatory: base for delta
@@ -173,8 +173,11 @@ void seg_pos_field (VBlock *vb,
 
     // < 0  -  caller allows a non-valid-number and this is indeed a non-valid-number, just store the string
     // == 0 - special case where pos=0, e.g. "not available" in SAM_PNEXT. we just store it verbatim
+    // In both cases, we store as SNIP_DONT_STORE so that piz doesn't update last_value after reading this value
     if (this_pos <= 0) { 
-        seg_by_ctx (vb, pos_str, pos_len, snip_ctx, pos_len + account_for_separator, NULL); 
+        SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
+        seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, pos_len + account_for_separator, NULL); 
+        SAFE_RESTORE (1);
 
         snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
         return;

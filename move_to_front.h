@@ -31,6 +31,7 @@
 #define SNIP_OTHER_DELTA         '\5'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictIdType dict_id, int32_t delta, bool update_other} in base64)
 #define SNIP_SPECIAL             '\6'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION         '\7'   // Get the data from another dict_id (can be in b250, local...)
+#define SNIP_DONT_STORE          '\11'  // Reconcstruct the following value, but don't store it in last_value (overriding CTX_FL_STORE_VALUE)
 
 // structured snip: it starts with SNIP_STRUCTURED, following by a base64 of a big endian Structured
 #pragma pack(1)
