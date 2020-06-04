@@ -113,8 +113,8 @@ extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
 
 extern void buf_print (Buffer *buf, bool add_newline);
 
-extern void buf_test_overflows (void *vb);
-extern void buf_test_overflows_all_vbs (void);
+extern void buf_test_overflows (void *vb, const char *msg);
+extern void buf_test_overflows_all_vbs (const char *msg);
 
 //extern int64_t buf_vb_memory_consumption (ConstVBlockP vb);
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);

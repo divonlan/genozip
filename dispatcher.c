@@ -53,6 +53,7 @@ typedef struct {
     const char *filename;
 } DispatcherData;
 
+// variables that persist across multiple dispatchers run sequentially
 static TimeSpecType profiler_timer; // wallclock
 static bool ever_time_initialized = false;
 static TimeSpecType ever_time;
@@ -400,7 +401,7 @@ void dispatcher_abandon_next_vb (Dispatcher dispatcher)
 
     if (!dd->next_vb) return;
 
-    buf_test_overflows(dd->next_vb); 
+    buf_test_overflows(dd->next_vb, "dispatcher_abandon_next_vb"); 
 
     if (flag_show_time) profiler_add (&evb->profile, &dd->next_vb->profile);
 
@@ -414,8 +415,8 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
 
     if (dd->processed_vb) {
 
-        buf_test_overflows(dd->processed_vb); // just to be safe, this isn't very expensive
-        buf_test_overflows(evb); 
+        buf_test_overflows(dd->processed_vb, "dispatcher_finalize_one_vb"); // just to be safe, this isn't very expensive
+        buf_test_overflows(evb, "dispatcher_finalize_one_vb"); 
 
         if (flag_show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
 

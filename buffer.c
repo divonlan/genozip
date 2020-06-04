@@ -75,24 +75,32 @@ static inline void buf_reset (Buffer *buf)
     buf->vb = save_vb;
 }
 
-static inline bool buf_has_overflowed (const Buffer *buf)
+static inline bool buf_has_overflowed (const Buffer *buf, const char *msg)
 {
-    ASSERT (buf->memory != (char *)0x777, "Error in buf_has_overflowed: malloc didn't assign, very weird! buffer %s size=%"PRIu64,
-            buf_desc(buf), buf->size);
+    // an evb buffer is currently being allocated by another thread, and hence memory is not set yet. for example,
+    // global_hash_prime is realloced by all threads (under mutex protection)
+    if (buf->vb && buf->vb->id==-1 && buf->memory == (char *)0x777) return false;
+
+    ASSERT (buf->memory != (char *)0x777, "%s: Error in buf_has_overflowed: buf->memory=0x777 - malloc didn't assign - likely due to a buffer overflow overrunning the OS memory management data. buffer %s size=%"PRIu64,
+            msg, buf_desc(buf), buf->size);
 
     return *((uint64_t*)(buf->memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP;
 }
 
-static inline bool buf_has_underflowed (const Buffer *buf)
+static inline bool buf_has_underflowed (const Buffer *buf, const char *msg)
 {
-    ASSERT (buf->memory != (char *)0x777, "Error in buf_has_underflowed: malloc didn't assign, very weird! buffer %s size=%"PRIu64,
-            buf_desc(buf), buf->size);
+    // an evb buffer is currently being allocated by another thread, and hence memory is not set yet. for example,
+    // global_hash_prime is realloced by all threads (under mutex protection)
+    if (buf->vb && buf->vb->id==-1 && buf->memory == (char *)0x777) return false;
+
+    ASSERT (buf->memory != (char *)0x777, "%s: Error in buf_has_underflowed: buf->memory=0x777 - malloc didn't assign - likely due to a buffer overflow overrunning the OS memory management data. buffer %s size=%"PRIu64,
+            msg, buf_desc(buf), buf->size);
 
     return *(uint64_t*)buf->memory != UNDERFLOW_TRAP;
 }
 
 // not thread-safe, used in emergency 
-static void buf_find_underflow_culprit (const char *memory)
+static void buf_find_underflow_culprit (const char *memory, const char *msg)
 {
     VBlockPool *vb_pool = vb_get_pool();
     char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN], s3[POINTER_STR_LEN];
@@ -110,7 +118,7 @@ static void buf_find_underflow_culprit (const char *memory)
 
             if (buf) {
                 char *after_buf = buf->memory + buf->size + overhead_size;
-                if (after_buf <= memory && (after_buf + 100 > memory) && buf_has_overflowed (buf)) {
+                if (after_buf <= memory && (after_buf + 100 > memory) && buf_has_overflowed (buf, msg)) {
                     char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                     fprintf (stderr,
                             "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
@@ -126,8 +134,8 @@ static void buf_find_underflow_culprit (const char *memory)
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it
-static bool buf_test_overflows_do (const VBlock *vb, bool primary);
-static void buf_test_overflows_all_other_vb(const VBlock *caller_vb)
+static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *msg);
+static void buf_test_overflows_all_other_vb(const VBlock *caller_vb, const char *msg)
 {
     // IMPORTANT: this function is not thread safe as it checks OTHER thread's memories which
     // may be dealloced as it checking them causing weird errors.
@@ -140,12 +148,12 @@ static void buf_test_overflows_all_other_vb(const VBlock *caller_vb)
     for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
         VBlock *vb = (vb_i == -1) ? evb : vb_pool->vb[vb_i]; 
         if (vb == caller_vb) continue; // skip caller's VB
-        buf_test_overflows_do (vb, false);
+        buf_test_overflows_do (vb, false, msg);
     }
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it
-static bool buf_test_overflows_do (const VBlock *vb, bool primary)
+static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *msg)
 {
     if (!vb) return false;
 
@@ -163,50 +171,50 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary)
         if (buf->memory) {
 
             if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
-                        fprintf (stderr, "%sMemory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u\n",
-                        nl[primary], vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3),
+                        fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u\n",
+                        nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3),
                         buf_desc (buf), buf->vb->vblock_i, buf_i);
                 corruption = true;
             }
             if (buf->type < BUF_UNALLOCATED || buf->type > BUF_OVERLAY) {
-                fprintf (stderr, "%sMemory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", 
-                         nl[primary], vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (!buf->name) {
-                fprintf (stderr, "%sMemory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", 
-                         nl[primary], vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
                 corruption = true;
             }
             else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
                 fprintf (stderr, 
                         str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
-                         "%sMemory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%s memory=%s name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%s\n", 
-                         nl[primary], vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, str_pointer(buf,s1), str_pointer(buf->memory,s2), buf_desc(buf), str_pointer(buf->data,s3));
+                         "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%s memory=%s name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%s\n", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, str_pointer(buf,s1), str_pointer(buf->memory,s2), buf_desc(buf), str_pointer(buf->data,s3));
                 corruption = true;
             }
-            else if (buf_has_underflowed(buf)) {
+            else if (buf_has_underflowed(buf, msg)) {
                 fprintf (stderr, 
-                        "%sMemory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3), 
+                        "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
+                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3), 
                         buf_desc (buf), buf->vb->vblock_i, buf_i, 
                         buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
 
-                buf_find_underflow_culprit (buf->memory);
+                buf_find_underflow_culprit (buf->memory, msg);
 
-                if (primary) buf_test_overflows_all_other_vb (vb);
+                if (primary) buf_test_overflows_all_other_vb (vb, msg);
                 primary = false;
 
                 corruption = true;
             }
-            else if (buf_has_overflowed(buf)) {
+            else if (buf_has_overflowed(buf, msg)) {
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
-                        "%sMemory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], vb ? vb->id : -999, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3), 
+                        "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
+                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3), 
                         buf_desc (buf), buf->vb->vblock_i, buf_i, of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                 
-                if (primary) buf_test_overflows_all_other_vb (vb);
+                if (primary) buf_test_overflows_all_other_vb (vb, msg);
                 primary = false;
 
                 corruption = true;
@@ -220,15 +228,15 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary)
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it
-void buf_test_overflows (void *vb)
+void buf_test_overflows (void *vb, const char *msg)
 {
-    buf_test_overflows_do ((ConstVBlockP)vb, true);
+    buf_test_overflows_do ((ConstVBlockP)vb, true, msg);
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it
-void buf_test_overflows_all_vbs (void)
+void buf_test_overflows_all_vbs (const char *msg)
 {
-    buf_test_overflows_all_other_vb (NULL);
+    buf_test_overflows_all_other_vb (NULL, msg);
 }
 
 typedef struct {

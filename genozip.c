@@ -71,7 +71,7 @@ static char *threads_str  = NULL;
 
 void exit_on_error(void) 
 {
-    buf_test_overflows_all_vbs();
+    buf_test_overflows_all_vbs("exit_on_error");
 
     url_kill_curl();
     file_kill_external_compressors(); 
@@ -233,7 +233,6 @@ finish:
 }
 static void main_genounzip (const char *z_filename,
                             const char *txt_filename, 
-                            unsigned max_threads,
                             bool is_last_file)
 {
     txtfile_header_initialize();
@@ -288,7 +287,7 @@ static void main_genounzip (const char *z_filename,
     bool piz_successful;
     unsigned num_components=0;
     do {
-        piz_successful = piz_dispatcher (basename, max_threads, num_components==0, is_last_file);
+        piz_successful = piz_dispatcher (basename, num_components==0, is_last_file);
         if (piz_successful) num_components++;
     } while (flag_split && piz_successful); 
 
@@ -330,7 +329,6 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 
 static void main_genozip (const char *txt_filename, 
                           char *z_filename,
-                          unsigned max_threads,
                           bool is_first_file, bool is_last_file,
                           char *exec_name)
 {
@@ -397,7 +395,7 @@ static void main_genozip (const char *txt_filename,
     else ABORT0 ("Error: No output channel");
     
     const char *basename = file_basename (txt_filename, false, "(stdin)", NULL, 0);
-    zip_dispatcher (basename, max_threads, is_last_file);
+    zip_dispatcher (basename, is_last_file);
 
     if (flag_show_sections && is_last_file) stats_show_sections();
 
@@ -774,10 +772,10 @@ int main (int argc, char **argv)
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
         
         switch (command) {
-            case ZIP   : main_genozip (next_input_file, out_filename, global_max_threads, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); 
+            case ZIP   : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); 
                          break;
             
-            case UNZIP : main_genounzip (next_input_file, out_filename, global_max_threads, file_i==num_files-1); break;
+            case UNZIP : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;
             
             case LIST  : main_genols  (next_input_file, false, NULL, false); break;
             
