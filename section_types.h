@@ -47,6 +47,9 @@ typedef enum {
     SEC_DICT = 31, SEC_B250 = 32, SEC_LOCAL = 33, 
     SEC_DICT_ID_ALIASES = 34,
 
+    // add in v6
+    SEC_SAM_REFERENCE = 35,
+
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
 
@@ -74,11 +77,14 @@ typedef enum {
     {"SEC_HT_GTSHARK_X_ALLELE",        },\
     \
     {"SEC_DICT", }, {"SEC_B250", }, {"SEC_LOCAL", }, { "SEC_DICT_ID_ALIASES", },\
+    {"SEC_SAM_REFERENCE",},\
 }
 
-#define section_type_is_dictionary(s) ((s) == SEC_DICT                 || (s) == SEC_VCF_FRMT_SF_DICT_legacy || (s) == SEC_VCF_CHROM_DICT_legacy  || (s) == SEC_VCF_POS_DICT_legacy    || \
-                                       (s) == SEC_VCF_ID_DICT_legacy   || (s) == SEC_VCF_REFALT_DICT_legacy  || (s) == SEC_VCF_QUAL_DICT_legacy   || (s) == SEC_VCF_FILTER_DICT_legacy || \
-                                       (s) == SEC_VCF_INFO_DICT_legacy || (s) == SEC_VCF_FORMAT_DICT_legacy  || (s) == SEC_VCF_INFO_SF_DICT_legacy)
+static inline bool section_type_is_dictionary (SectionType s) {
+    return ((s) == SEC_DICT                 || (s) == SEC_VCF_FRMT_SF_DICT_legacy || (s) == SEC_VCF_CHROM_DICT_legacy  || (s) == SEC_VCF_POS_DICT_legacy    || 
+            (s) == SEC_VCF_ID_DICT_legacy   || (s) == SEC_VCF_REFALT_DICT_legacy  || (s) == SEC_VCF_QUAL_DICT_legacy   || (s) == SEC_VCF_FILTER_DICT_legacy || 
+            (s) == SEC_VCF_INFO_DICT_legacy || (s) == SEC_VCF_FORMAT_DICT_legacy  || (s) == SEC_VCF_INFO_SF_DICT_legacy);
+}
 
 #define section_type_is_b250(s)  ((s)==SEC_B250 || (section_type_is_dictionary((s)-1) && (s) != SEC_VCF_GT_DATA /* one exception */))
 

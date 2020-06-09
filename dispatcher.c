@@ -284,6 +284,10 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 
     buf_destroy (&dd->compute_threads_buf); // we need to destroy (not marely free) because we are about to free dd
 
+    // note: we can only test evb when no compute thread is running as compute threads might modify evb buffers
+    // mid-way through test causing a buffer to have an inconsiset state and for buf_test_overflows to therefore report an error
+    buf_test_overflows(evb, "dispatcher_finish"); 
+
     // free memory allocations that assume subsequent files will have the same number of samples.
     // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
     if (!flag_concat && !dd->is_last_file) {
@@ -416,7 +420,6 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
     if (dd->processed_vb) {
 
         buf_test_overflows(dd->processed_vb, "dispatcher_finalize_one_vb"); // just to be safe, this isn't very expensive
-        buf_test_overflows(evb, "dispatcher_finalize_one_vb"); 
 
         if (flag_show_time) profiler_add (&evb->profile, &dd->processed_vb->profile);
 
@@ -450,4 +453,48 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     return dd->input_exhausted;
+}
+
+void dispatcher_fan_out_task (const char *task_name, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
+{
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, false, true, task_name);
+    do {
+        VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
+        bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
+        bool has_free_thread = dispatcher_has_free_thread (dispatcher);
+
+        // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
+        if (has_vb_ready_to_compute && has_free_thread)
+            dispatcher_compute (dispatcher, compute);
+        
+        // PRIORITY 2: output completed vbs, so they can be released and re-used
+        else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
+                 (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
+           
+            VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); // this will block until one is available
+            if (!processed_vb) continue; // no running compute threads 
+
+            if (output) output (processed_vb);
+            
+            dispatcher_finalize_one_vb (dispatcher);
+        }        
+        
+        // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - get one range
+        else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
+
+            next_vb = dispatcher_generate_next_vb (dispatcher, 0);
+
+            prepare (next_vb);
+
+            if (!next_vb->ready_to_dispatch) {
+                dispatcher_input_exhausted (dispatcher);
+                dispatcher_finalize_one_vb (dispatcher); 
+            }
+        }
+
+        // if no condition was met, we're either done, or we still have some threads processing that are not done yet.
+        // we wait a bit to avoid a tight busy loop
+        else usleep (5000); 
+
+    } while (!dispatcher_is_done (dispatcher));
 }

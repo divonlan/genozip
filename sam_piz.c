@@ -11,17 +11,22 @@
 #include "dict_id.h"
 
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
-void sam_piz_special_CIGAR (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
+void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
 {
-    vb->seq_len = sam_seq_len_from_cigar (snip, snip_len);
+    VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    if (snip[snip_len-1] == '*') 
-        RECONSTRUCT1 ('*');
-    else
-        RECONSTRUCT (snip, snip_len);
+    sam_analyze_cigar (snip, snip_len, &vb->seq_len, &vb->ref_consumed);
+
+    if (snip[snip_len-1] == '*') { // change back eg "151*" -> "*"
+        snip = &snip[snip_len-1];
+        snip_len = 1;
+    }
+
+    RECONSTRUCT (snip, snip_len);
+    vb->last_cigar = snip;
 }   
 
-void sam_piz_special_TLEN (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
+void sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
 {
     ASSERT0 (snip_len, "Error in sam_piz_special_TLEN: snip_len=0");
 
@@ -33,14 +38,14 @@ void sam_piz_special_TLEN (VBlock *vb, MtfContext *ctx, const char *snip, unsign
     RECONSTRUCT_INT (tlen_val);
 }
 
-void sam_piz_special_AS (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
+void sam_piz_special_AS (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
 {
     RECONSTRUCT_INT (vb->seq_len - atoi (snip));
 }
 
 // logic: snip is eg "119C" (possibly also "") - we reconstruct the original, eg "119C31" 
 // by concating a number which is (seq_len - partial_seq_len_by_md_field)
-void sam_piz_special_MD (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
+void sam_piz_special_MD (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
 {
     if (snip_len) RECONSTRUCT (snip, snip_len);
 
@@ -50,11 +55,11 @@ void sam_piz_special_MD (VBlock *vb, MtfContext *ctx, const char *snip, unsigned
 
 // BI is a delta from the BD. Note: if BD doesn't appear on this line, then the snip is LOOKUP and not SPECIAL
 // and we won't arrive at this function
-void sam_piz_special_BI (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
+void sam_piz_special_BI (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
 {
     ASSERT (ctx->next_local + snip_len <= ctx->local.len, "Error reading txt_line=%u: unexpected end of BI data", vb->line_i);
 
-    MtfContext *BD_ctx = mtf_get_ctx (vb, (DictIdType)dict_id_OPTION_BD);
+    Context *BD_ctx = mtf_get_ctx (vb, (DictId)dict_id_OPTION_BD);
     char *bi_dst = AFTERENT (char, vb->txt_data);
     const char *bd_txt = ENT (char, BD_ctx->local, (uint32_t)BD_ctx->last_value);
     const char *bi_txt = ENT (char, ctx->local, ctx->next_local);

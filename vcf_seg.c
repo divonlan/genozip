@@ -34,11 +34,11 @@ void vcf_seg_initialize (VBlock *vb_)
 }             
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
-static DictIdType vcf_seg_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
+static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
 {
     unsigned i=0; for (; i < *len && (*str)[i] != ':' && (*str)[i] != '\t' && (*str)[i] != '\n'; i++);
 
-    DictIdType dict_id = dict_id_vcf_format_sf (dict_id_make (*str, i));
+    DictId dict_id = dict_id_vcf_format_sf (dict_id_make (*str, i));
 
     *str += i+1;
     *len -= i+1;
@@ -73,12 +73,12 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
             ASSSEG (format_mapper.num_subfields < MAX_SUBFIELDS, field_start,
                     "Error: FORMAT field has too many subfields, the maximum allowed is %u (excluding GT)",  MAX_SUBFIELDS);
 
-            DictIdType subfield = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
+            DictId subfield = vcf_seg_get_format_subfield (&str, (unsigned *)&len);
 
             ASSSEG (dict_id_is_vcf_format_sf (subfield), field_start,
                     "Error: string %.*s in the FORMAT field is not a legal subfield", DICT_ID_LEN, subfield.id);
 
-            MtfContext *ctx = mtf_get_ctx (vb, subfield);
+            Context *ctx = mtf_get_ctx (vb, subfield);
             
             format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
         } 
@@ -147,7 +147,7 @@ static void vcf_seg_store (VBlock *vb,
 }
 
 
-static bool vcf_seg_special_info_subfields(VBlockP vb_, DictIdType dict_id, 
+static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id, 
                                            const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
@@ -345,7 +345,7 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
 
         // move next to the beginning of the subfield data, if there is any
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data, has_13);
-        MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
+        Context *ctx = MAPPER_CTX (format_mapper, sf);
 
         if (cell_gt_data && ctx->dict_id.num == dict_id_FORMAT_DP) {
             ctx->flags |= CTX_FL_STORE_VALUE; // this ctx is used a base for a delta 
@@ -510,7 +510,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     random_access_update_pos (vb_, VCF_POS);
 
     GET_NEXT_ITEM ("ID");
-    seg_id_field (vb_, (DictIdType)dict_id_fields[VCF_ID], field_start, field_len, true);
+    seg_id_field (vb_, (DictId)dict_id_fields[VCF_ID], field_start, field_len, true);
 
     // REF + ALT
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:

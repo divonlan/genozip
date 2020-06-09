@@ -17,7 +17,7 @@
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {
-    DictIdType dict_id = DICT_ID_NONE;
+    DictId dict_id = DICT_ID_NONE;
 
     if      (header->section_type == SEC_DICT ) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
     else if (header->section_type == SEC_B250 ) dict_id = ((SectionHeaderCtx        *)header)->dict_id;
@@ -113,22 +113,36 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
 }
 
 // dictionary section iterator. returns true if another dictionary was found.
-bool sections_get_next_dictionary (SectionListEntry **sl_ent) // if *sl_ent==NULL - initialize cursor
+bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, IsSectionTypeFunc is_sec_type) // if *sl_ent==NULL - initialize cursor
 {
     // case: first time
     if (! *sl_ent) {
-        z_file->sl_dir_cursor = 0;
-        while (z_file->sl_dir_cursor < z_file->section_list_buf.len) {
-            *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_dir_cursor++);
-            if (section_type_is_dictionary((*sl_ent)->section_type)) 
+        *cursor = 0;
+        while (*cursor < (uint32_t)z_file->section_list_buf.len) {
+            *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
+            if (is_sec_type((*sl_ent)->section_type)) 
                 return true;
         }
     }
         
-    if (z_file->sl_dir_cursor == z_file->section_list_buf.len) return false; // we're
+    if (*cursor == z_file->section_list_buf.len) return false; 
 
-    *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_dir_cursor++);
-    return section_type_is_dictionary((*sl_ent)->section_type);
+    *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
+    return is_sec_type((*sl_ent)->section_type);
+}
+
+bool sections_seek_to (SectionType st)
+{
+    SectionListEntry *sl=NULL;
+    unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
+        sl = ENT (SectionListEntry, z_file->section_list_buf, i);
+        if (sl->section_type == st) {
+            file_seek (z_file, sl->offset, SEEK_SET, false);
+            return true; // section found
+        }
+    }
+
+    return false; // section not found
 }
 
 // called by PIZ I/O : vcf_zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset

@@ -16,7 +16,8 @@ extern void dispatcher_pause (Dispatcher dispatcher);
 extern void dispatcher_resume (Dispatcher dispatcher);
 extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i);
 
-extern void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP));
+typedef void (*DispatcherFunc)(VBlockP);
+extern void dispatcher_compute (Dispatcher dispatcher, DispatcherFunc func);
 extern VBlockP dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i);       
 extern bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final);                                  
 extern VBlockP dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final);
@@ -29,5 +30,6 @@ extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
 extern const char *dispatcher_ellapsed_time (Dispatcher dispatcher, bool ever);
+extern void dispatcher_fan_out_task (const char *task_name, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
 
 #endif

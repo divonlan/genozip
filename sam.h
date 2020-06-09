@@ -13,6 +13,7 @@ COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_seq)
 COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_qual)
 COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_bd)
 COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_bi)
+extern void sam_zip_initialize (void);
 
 // SEG Stuff
 extern void sam_seg_initialize (VBlockP vb);
@@ -22,6 +23,13 @@ extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md
 
 // PIZ Stuff
 extern void sam_piz_reconstruct_vb ();
+
+// Reference ranges stuff
+extern void sam_ref_compress_ref (void);
+extern void sam_ref_read_all_ranges (void);
+extern void sam_ref_import (const char *filename);
+extern void sam_ref_cleanup_memory (VBlockP vb);
+extern void sam_ref_reconstruct (VBlockP vb, ContextP ctx);
 
 // VB stuff
 extern void sam_vb_release_vb();

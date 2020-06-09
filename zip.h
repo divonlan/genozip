@@ -9,8 +9,11 @@
 #include "genozip.h"
 #include "compressor.h"
 
-extern void zip_dispatcher (const char *vcf_basename, unsigned max_threads, bool is_last_file);
-extern void zip_generate_b250_section (VBlockP vb, MtfContextP ctx);
+extern void zip_dispatcher (const char *vcf_basename, bool is_last_file);
+extern void zip_generate_b250_section (VBlockP vb, ContextP ctx);
+
+typedef enum { PD_VBLOCK_DATA, PD_DICT_DATA, PD_SAM_REF_DATA } ProcessedDataType;
+extern void zip_output_processed_vb (VBlockP vb, BufferP section_list_buf, bool update_txt_file, ProcessedDataType pd_type);
 
 // --------------------------------------------------
 // utilities for use by zip_*_compress_one_vb

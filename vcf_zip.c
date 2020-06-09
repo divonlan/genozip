@@ -124,7 +124,7 @@ static void vcf_zip_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
 
                 if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
 
-                    MtfContext *ctx = MAPPER_CTX (format_mapper, sf);
+                    Context *ctx = MAPPER_CTX (format_mapper, sf);
                     MtfNode *node = mtf_node_vb (ctx, node_index, NULL, NULL);
                     Base250 index = node->word_index;
 

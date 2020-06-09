@@ -166,14 +166,19 @@ VBlock *vb_get_vb (unsigned vblock_i)
     return vb;
 }
 
-// free memory allocations that assume subsequent files will have the same number of samples.
+// free memory allocations between files, when compressing or decompressing multiple genozip files
 void vb_cleanup_memory (void)
 {
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
         VBlock *vb = pool->vb[vb_i];
-        if (vb && vb->data_type != DT_NONE && DTPZ(cleanup_memory))
+        if (vb && 
+            vb->data_type == z_file->data_type && // skip VBs that were initialized by a previous file of a different data type and not used by this file
+            DTPZ(cleanup_memory)) 
             DTPZ(cleanup_memory)(vb);
     }
+
+    if (z_file->data_type != DT_NONE && DTPZ(cleanup_memory))
+        DTPZ(cleanup_memory)(evb);
 }
 
 // NOT thread safe, use only in execution-terminating messages

@@ -27,10 +27,10 @@ extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_typ
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);
 
-extern void zfile_compress_dictionary_data (VBlockP vb, MtfContextP ctx, 
+extern void zfile_compress_dictionary_data (VBlockP vb, ContextP ctx, 
                                             uint32_t num_words, const char *data, uint32_t num_chars);
-extern void zfile_compress_b250_data  (VBlockP vb, MtfContextP ctx, CompressionAlg comp_alg);
-extern void zfile_compress_local_data (VBlockP vb, MtfContextP ctx);
+extern void zfile_compress_b250_data  (VBlockP vb, ContextP ctx, CompressionAlg comp_alg);
+extern void zfile_compress_local_data (VBlockP vb, ContextP ctx);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
 #define SEEK_NONE ((uint64_t)-1)
@@ -41,7 +41,7 @@ extern int32_t zfile_read_section (VBlockP vb, uint32_t original_vb_i, uint32_t 
                                    ConstSectionListEntryP sl); 
 
 extern void zfile_uncompress_section (VBlockP vb, void *section_header, 
-                                      BufferP uncompressed_data, const char *uncompressed_data_buf_name,
+                                      void *uncompressed_data, const char *uncompressed_data_buf_name,
                                       SectionType expected_section_type);
 
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */);

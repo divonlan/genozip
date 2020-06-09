@@ -92,7 +92,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;                   // in v1, the section_type was SEC_DICTIONARY, in v2 is is the specific SEC_*_DICT
     uint32_t num_snips;                // number of items in dictionary
-    DictIdType dict_id;           
+    DictId dict_id;           
 } SectionHeaderDictionary; 
 
 typedef struct {
@@ -100,13 +100,13 @@ typedef struct {
     uint8_t ltype;                 // CTX_*  note: in v2-v4 flags/ltype/ffu was "uint32_t num_b250_items"
     uint8_t flags;    
     uint16_t ffu;
-    DictIdType dict_id;           
+    DictId dict_id;           
 } SectionHeaderCtx;         
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct SectionListEntry {
     uint64_t offset;                   // offset of this section in the file
-    DictIdType dict_id;                // used if this section is a DICT or a B250 section
+    DictId dict_id;                // used if this section is a DICT or a B250 section
     uint32_t vblock_i;
     uint8_t section_type;
     uint8_t unused[3];                 // padding
@@ -143,6 +143,12 @@ typedef struct {
     uint16_t haplotype_index_checksum;
     uint16_t unused3;                  // new in v2: padding / ffu
 } SectionHeaderVbHeaderVCF; 
+
+typedef struct {
+    SectionHeader h;
+    uint32_t first_pos, last_pos;      // first and last pos within chrom of this range         
+    uint32_t chrom_word_index;         // index in context->word_list of the chrom of this reference range    
+} SectionHeaderSAMReference;
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
@@ -224,10 +230,14 @@ extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
 extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
-extern bool sections_get_next_dictionary(SectionListEntry **sl_ent);
+
+typedef bool (*IsSectionTypeFunc)(SectionType);
+extern bool sections_get_next_section_of_type(SectionListEntry **sl_ent, uint32_t *cursor, IsSectionTypeFunc is_sec_type);
+
 extern bool sections_has_more_components(void);
 extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st);
 extern SectionListEntry *sections_vb_first (uint32_t vb_i);
+extern bool sections_seek_to (SectionType st);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

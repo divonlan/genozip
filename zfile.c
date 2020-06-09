@@ -30,7 +30,7 @@ static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHi
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
 {
-    DictIdType dict_id = {0};
+    DictId dict_id = {0};
     char flags[10], ltype[10];
     bool has_flags = false;
 
@@ -97,13 +97,13 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 // when we get here, the header is already unencrypted zfile_`one_section
 void zfile_uncompress_section (VBlock *vb,
                                void *section_header_p,
-                               Buffer *uncompressed_data,
-                               const char *uncompressed_data_buf_name,
+                               void *uncompressed_data, // Buffer * or char *
+                               const char *uncompressed_data_buf_name, // a name if Buffer, NULL if char *
                                SectionType expected_section_type) 
 {
     START_TIMER;
 
-    DictIdType dict_id = {0};
+    DictId dict_id = {0};
     if (section_type_is_dictionary (expected_section_type))
         dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
     else if (section_type_is_b250 (expected_section_type))
@@ -134,7 +134,9 @@ void zfile_uncompress_section (VBlock *vb,
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error in zfile_uncompress_section: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
-    bool expecting_vb_i = !section_type_is_dictionary (expected_section_type) && expected_section_type != SEC_TXT_HEADER;
+    bool expecting_vb_i = !section_type_is_dictionary (expected_section_type) && 
+                          expected_section_type != SEC_TXT_HEADER && expected_section_type != SEC_SAM_REFERENCE;
+                          
     ASSERT (vblock_i == vb->vblock_i || !expecting_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
              "Error in zfile_uncompress_section: bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
              vblock_i, vb->vblock_i, st_name (expected_section_type));
@@ -149,12 +151,17 @@ void zfile_uncompress_section (VBlock *vb,
 
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
-        buf_alloc (vb, uncompressed_data, data_uncompressed_len + 1, 1.1, uncompressed_data_buf_name, 0); // +1 for \0
-        uncompressed_data->len = data_uncompressed_len;
+        if (uncompressed_data_buf_name) { // we're decompressing into a buffer
+            BufferP uncompressed_buf = (BufferP)uncompressed_data;
+            buf_alloc (vb, uncompressed_buf, data_uncompressed_len + 1, 1.1, uncompressed_data_buf_name, 0); // +1 for \0
+            uncompressed_buf->len = data_uncompressed_len;
+            uncompressed_data = uncompressed_buf->data;
+        }
 
-        comp_uncompress (vb, comp_alg, (char*)section_header + compressed_offset, data_compressed_len, uncompressed_data);
+        comp_uncompress (vb, comp_alg, (char*)section_header + compressed_offset, data_compressed_len, 
+                         uncompressed_data, data_uncompressed_len);
     }
-
+ 
     if (flag_show_b250 && section_type_is_b250 (expected_section_type)) 
         zfile_show_b250_section (section_header_p, uncompressed_data);
     
@@ -185,7 +192,7 @@ static void zfile_get_metadata(char *metadata)
 }
 
 // ZIP: called by compute threads, while holding the compress_dictionary_data_mutex
-void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx, 
+void zfile_compress_dictionary_data (VBlock *vb, Context *ctx, 
                                      uint32_t num_words, const char *data, uint32_t num_chars)
 {
     START_TIMER;
@@ -197,7 +204,7 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
     header.h.section_type          = SEC_DICT;
     header.h.data_uncompressed_len = BGEN32 (num_chars);
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary));
-    header.h.sec_compression_alg  = COMP_BZ2;
+    header.h.sec_compression_alg   = COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.num_snips               = BGEN32 (num_words);
@@ -219,7 +226,7 @@ void zfile_compress_dictionary_data (VBlock *vb, MtfContext *ctx,
 //printf ("End compress dict vb_i=%u did_i=%u\n", vb->vblock_i, ctx->did_i);
 }
 
-void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_alg)
+void zfile_compress_b250_data (VBlock *vb, Context *ctx, CompressionAlg comp_alg)
 {
     SectionHeaderCtx header;
     memset (&header, 0, sizeof(header)); // safety
@@ -238,7 +245,7 @@ void zfile_compress_b250_data (VBlock *vb, MtfContext *ctx, CompressionAlg comp_
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
-static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictIdType dict_id)
+static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictId dict_id)
 {
     static struct { DataType dt; const uint64_t *dict_id_num; CompGetLineCallback *func; } callbacks[] = LOCAL_COMPRESSOR_CALLBACKS;
 
@@ -249,7 +256,7 @@ static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictIdTy
     return NULL;
 }
 
-void zfile_compress_local_data (VBlock *vb, MtfContext *ctx)
+void zfile_compress_local_data (VBlock *vb, Context *ctx)
 {   
     SectionHeaderCtx header;
     memset (&header, 0, sizeof(header)); // safety
@@ -285,17 +292,17 @@ void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type,
     SectionHeader header;
     memset (&header, 0, sizeof(header)); // safety
 
-    header.magic                   = BGEN32 (GENOZIP_MAGIC);
-    header.section_type            = section_type;
-    header.data_uncompressed_len   = BGEN32 (section_data ? section_data->len : total_len);
-    header.compressed_offset       = BGEN32 (sizeof(header));
-    header.sec_compression_alg = comp_alg;
-    header.vblock_i                = BGEN32 (vb->vblock_i);
-    header.section_i               = BGEN16 (vb->z_next_header_i++);
+    header.magic                 = BGEN32 (GENOZIP_MAGIC);
+    header.section_type          = section_type;
+    header.data_uncompressed_len = BGEN32 (section_data ? section_data->len : total_len);
+    header.compressed_offset     = BGEN32 (sizeof(header));
+    header.sec_compression_alg   = comp_alg;
+    header.vblock_i              = BGEN32 (vb->vblock_i);
+    header.section_i             = BGEN16 (vb->z_next_header_i++);
     
     vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
     vb->z_data.param = vb->vblock_i;
-    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
+    comp_compress (vb, &vb->z_data, false, &header, 
                    section_data ? section_data->data : NULL, 
                    callback);
 }
@@ -444,11 +451,11 @@ int32_t zfile_read_section (VBlock *vb,
 
 void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom)
 {
-    SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_dictionary() will reset cursor 
+    SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_section_of_type() will reset cursor 
 
     mtf_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
 
-    while (sections_get_next_dictionary (&sl_ent)) {
+    while (sections_get_next_section_of_type (&sl_ent, &z_file->sl_dir_cursor, section_type_is_dictionary)) {
 
         if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
 
@@ -470,7 +477,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
     // output the dictionaries if we're asked to
     if (flag_show_dict || dict_id_show_one_dict.num) {
         for (uint32_t did_i=0; did_i < z_file->num_dict_ids; did_i++) {
-            MtfContext *ctx = &z_file->contexts[did_i];
+            Context *ctx = &z_file->contexts[did_i];
 
 #define MAX_PRINTABLE_DICT_LEN 100000
 

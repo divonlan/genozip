@@ -303,11 +303,11 @@ static inline void vcf_v1_piz_decode_pos (VBlockVCF *vb, const char *str,
 }
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
-static DictIdType v1_piz_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
+static DictId v1_piz_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
 {
     unsigned i=0; for (; i < *len && (*str)[i] != ':' && (*str)[i] != '\n'; i++);
 
-    DictIdType dict_id = dict_id_vcf_format_sf (dict_id_make (*str, MIN (i, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
+    DictId dict_id = dict_id_vcf_format_sf (dict_id_make (*str, MIN (i, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
 
     *str += i+1;
     *len -= i+1;
@@ -429,7 +429,7 @@ static void v1_piz_get_line_subfields (VBlockVCF *vb, unsigned line_i, // line i
     const char *after = subfields_start + subfields_len;
     for (unsigned i=0; i < MAX_SUBFIELDS; i++) {
         uint32_t len = after - subfields_start;
-        DictIdType subfield = v1_piz_get_format_subfield (&subfields_start, &len);
+        DictId subfield = v1_piz_get_format_subfield (&subfields_start, &len);
 
         // the dictionaries were already read, so all subfields are expected to have a ctx
         unsigned did_i=0 ; for (; did_i < z_file->num_dict_ids; did_i++) 

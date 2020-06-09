@@ -21,8 +21,9 @@ static int *count_per_section = NULL;
 #define OVERHEAD_SEC_GENOZIP_HDR -2
 #define OVERHEAD_SEC_TXT_HDR     -3
 #define OVERHEAD_SEC_RA_INDEX    -4
+//#define OVERHEAD_SEC_REFERENCE   -5
 #define LAST_OVERHEAD            -4
-static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec /* option 2*/, 
+static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
                              double format_proportion /* only needed for FORMAT subfields - number of words of this dict_id in gt_data divided by all words in gt_data */)
 {
@@ -37,7 +38,19 @@ static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec
 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
         
-        if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
+        // we put all the SEQ derived data in a single stats line for easy comparison (reference in dict, the +- section SEQ in b250, and the unique non-ref sequence stretchs in local)
+        if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ]) { // must be before SEC_LOCAL
+            if (section->dict_id.num == dict_id_SAM_SQnonref)
+                *local_compressed_size += (section+1)->offset - section->offset;
+            else if (section->section_type == SEC_SAM_REFERENCE)
+                *dict_compressed_size += (section+1)->offset - section->offset;
+            else if (section->dict_id.num == dict_id_fields[SAM_SEQ])
+                *b250_compressed_size += (section+1)->offset - section->offset;
+        }
+
+        else if (dict_id.num == dict_id_SAM_SQnonref) {} // ^ already handle above
+
+        else if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
             *dict_compressed_size += (section+1)->offset - section->offset;
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_B250)
@@ -82,6 +95,9 @@ static void stats_get_sizes (DictIdType dict_id /* option 1 */, int overhead_sec
             *local_compressed_size += (section+1)->offset - section->offset - sizeof (SectionHeaderVbHeaderVCF); // section header already accounted for
             count_per_section[i]--; // we already counted SEC_VB_HEADER above. this is just accounting for the squeeze payload
         }
+
+//        else if (section->section_type == SEC_SAM_REFERENCE && overhead_sec == OVERHEAD_SEC_REFERENCE) 
+//            *local_compressed_size += (section+1)->offset - section->offset;
         
         else count_per_section[i]--; // acually... not count_per_section!
     }
@@ -128,7 +144,7 @@ static void initialize_vcf_gt_data_tracker (void)
 
     for (uint32_t i=0; i < z_file->num_dict_ids; i++) { 
 
-        const MtfContext *ctx = &z_file->contexts[i];
+        const Context *ctx = &z_file->contexts[i];
         if (dict_id_is_vcf_format_sf (ctx->dict_id))
             vcf_gt_data_tracker.words_total += ctx->mtf_i.len;
     }
@@ -161,7 +177,7 @@ void stats_show_sections (void)
 
     for (int i=LAST_OVERHEAD; i < (int)z_file->num_dict_ids; i++) { 
 
-        MtfContext *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
+        Context *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
 
         // for FORMAT subfields, we compress all of them together in GT_DATA, because they are often correlated
         // we allocate their compressed size as the proportion of GT_DATA words that are of this subfield
@@ -196,6 +212,7 @@ void stats_show_sections (void)
         else if (i==OVERHEAD_SEC_VB_HDR)      strcpy (s->name, "VBlock hdrs");
         else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
         else if (i==OVERHEAD_SEC_RA_INDEX)    strcpy (s->name, "--regions index");
+//        else if (i==OVERHEAD_SEC_REFERENCE)   strcpy (s->name, "reference seq");
 
         /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 

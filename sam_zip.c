@@ -16,6 +16,18 @@
 
 static Structured structured_QNAME;
 
+// called by I/O thread 
+void sam_zip_initialize (void)
+{
+    sam_ref_zip_initialize();
+
+    // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
+    random_access_alloc_ra_buf (evb, 0);
+
+    // read external reference if needed
+    //...
+}
+
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
 void sam_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
                                        char **line_seq_data, uint32_t *line_seq_len,  // out 
@@ -105,12 +117,16 @@ void sam_seg_initialize (VBlock *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[SAM_RNAME].flags     = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[SAM_SEQ].flags       = CTX_FL_LOCAL_LZMA;
-    vb->contexts[SAM_SEQ].ltype       = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].ltype      = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_TLEN].flags      = CTX_FL_STORE_VALUE;
-    vb->contexts[SAM_OPTIONAL].flags  = CTX_FL_STRUCTURED;
+    vb->contexts[SAM_RNAME].flags    = CTX_FL_NO_STONS; // needs b250 node_index for random access
+    //vb->contexts[SAM_SEQ].flags      = CTX_FL_LOCAL_LZMA;
+    vb->contexts[SAM_SEQ].ltype      = CTX_LT_SEQUENCE_REF;
+    vb->contexts[SAM_QUAL].ltype     = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_TLEN].flags     = CTX_FL_STORE_VALUE;
+    vb->contexts[SAM_OPTIONAL].flags = CTX_FL_STRUCTURED;
+
+    Context *ctx = mtf_get_ctx (vb, (DictId)dict_id_SAM_SQnonref);
+    ctx->ltype = CTX_LT_SEQUENCE;
+    ctx->flags = CTX_FL_LOCAL_LZMA;
 }
 
 // TLEN - 3 cases: 
@@ -122,8 +138,7 @@ static inline void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
     ASSSEG (tlen_len, tlen, "%s: empty TLEN", global_cmd);
     ASSSEG (str_is_int (tlen, tlen_len), tlen, "%s: expecting TLEN to be an integer", global_cmd);
 
-    MtfContext *ctx = &vb->contexts[SAM_TLEN];
-    ctx->flags = CTX_FL_STORE_VALUE;
+    Context *ctx = &vb->contexts[SAM_TLEN];
 
     int64_t tlen_value = (int64_t)strtoull (tlen, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
     
@@ -166,7 +181,7 @@ static inline int sam_seg_get_next_subitem (const char *str, int str_len, char s
 #define DEC_SSF(ssf) const char *ssf; \
                      int ssf##_len;
 
-static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictIdType subfield_dict_id, 
+static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id, 
                                     const char *field, unsigned field_len, const char *field_name)
 {
     // OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
@@ -213,7 +228,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictIdType subfield_dict_id,
         seg_by_dict_id (vb, mapq,   mapq_len,   structured_SA_OA.items[4].dict_id, 1 + mapq_len);
         seg_by_dict_id (vb, nm,     nm_len,     structured_SA_OA.items[5].dict_id, 1 + nm_len);
         
-        MtfContext *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
+        Context *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
         pos_ctx->flags = CTX_FL_LOCAL_LZMA;
         pos_ctx->ltype = CTX_LT_UINT32;
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
@@ -273,10 +288,15 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_by_dict_id (vb, pos,    1,         structured_XA.items[1].dict_id, 1); // strand is first character of pos
         seg_by_dict_id (vb, cigar,  cigar_len, structured_XA.items[3].dict_id, 1 + cigar_len);
         seg_by_dict_id (vb, nm,     nm_len,    structured_XA.items[4].dict_id, 1 + nm_len);
-        seg_add_to_local_uint32 ((VBlockP)vb, mtf_get_ctx (vb, structured_XA.items[2].dict_id), pos_value, pos_len); // +1 for seperator, -1 for strand
+        
+        Context *pos_ctx = mtf_get_ctx (vb, structured_XA.items[2].dict_id);
+        pos_ctx->ltype = CTX_LT_UINT32;
+        pos_ctx->flags = CTX_FL_LOCAL_LZMA;
+
+        seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
 
-    seg_structured_by_dict_id (vb, (DictIdType)dict_id_OPTION_XA, &xa, 1 /* \t */);
+    seg_structured_by_dict_id (vb, (DictId)dict_id_OPTION_XA, &xa, 1 /* \t */);
     return;
 
 error:
@@ -285,7 +305,7 @@ error:
     // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
     ASSSEG (!xa.repeats, field, "Invalid format in repeat #%u of field XA. snip: %.*s", xa.repeats+1, field_len, field);
 
-    seg_by_dict_id (vb, field, field_len, (DictIdType)dict_id_OPTION_XA, field_len + 1 /* \t */); 
+    seg_by_dict_id (vb, field, field_len, (DictId)dict_id_OPTION_XA, field_len + 1 /* \t */); 
 }
 
 uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len)
@@ -338,7 +358,7 @@ static inline bool sam_seg_get_shortened_MD (const char *md_str, unsigned md_str
 
 // AS and XS are values (at least as set by BWA) at most the seq_len, and AS is often equal to it. we modify
 // it to be new_value=(value-seq_len) 
-static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictIdType dict_id, 
+static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictId dict_id, 
                                      const char *snip, unsigned snip_len)
 {
     bool positive_delta = true;
@@ -385,14 +405,14 @@ static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_st
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
-static DictIdType sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len)
+static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len)
 {
     ASSSEG0 (field_len, field, "Error: line invalidly ends with a tab");
 
     ASSSEG (field_len >= 6 && field[2] == ':' && field[4] == ':', field, "Error: invalid optional field format: %.*s",
             field_len, field);
 
-    DictIdType dict_id = sam_dict_id_optnl_sf (dict_id_make (field, 4));
+    DictId dict_id = sam_dict_id_optnl_sf (dict_id_make (field, 4));
     const char *value = &field[5]; // the "abcdefg" part of "MX:Z:abcdefg"
     unsigned value_len = field_len - 5;
 
@@ -435,7 +455,7 @@ static DictIdType sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, con
         dl->bd_data_start = value - vb->txt_data.data;
         dl->bd_data_len   = value_len;
 
-        MtfContext *ctx = mtf_get_ctx (vb, dict_id);
+        Context *ctx = mtf_get_ctx (vb, dict_id);
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
         ctx->ltype      = CTX_LT_SEQUENCE;
@@ -450,7 +470,7 @@ static DictIdType sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, con
         dl->bi_data_start = value - vb->txt_data.data;
         dl->bi_data_len   = value_len;
 
-        MtfContext *ctx = mtf_get_ctx (vb, dict_id);
+        Context *ctx = mtf_get_ctx (vb, dict_id);
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
         ctx->ltype      = CTX_LT_SEQUENCE;
@@ -566,11 +586,11 @@ static void sam_seg_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
                 dl->seq_len, dl->qual_data_len, dl->qual_data_len, qual);    
     }
 
-    MtfContext *seq_ctx = &vb->contexts[SAM_SEQ];
+    Context *seq_ctx = &vb->contexts[SAM_SEQ];
     seq_ctx->local.len += dl->seq_data_len;  // used by zfile_compress_local_data
     seq_ctx->txt_len   += dl->seq_data_len  + 1; // byte counts for --show-sections - +1 for terminating \t
 
-    MtfContext *qual_ctx = &vb->contexts[SAM_QUAL];
+    Context *qual_ctx = &vb->contexts[SAM_QUAL];
     qual_ctx->local.len += dl->qual_data_len;
     qual_ctx->txt_len   += dl->qual_data_len + 1;
 }
@@ -595,17 +615,22 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     SEG_NEXT_ITEM (SAM_FLAG);
 
     GET_NEXT_ITEM ("RNAME");
+    const char *rname_start = field_start;
     seg_chrom_field (vb_, field_start, field_len);
+    unsigned rname_len = field_len;
 
     GET_NEXT_ITEM ("POS");
-    seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, true);
+    int64_t this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, true);
     random_access_update_pos (vb_, SAM_POS);
 
     SEG_NEXT_ITEM (SAM_MAPQ);
 
     // CIGAR - if CIGAR is "*" and we wait to get the length from SEQ or QUAL
     GET_NEXT_ITEM ("CIGAR");
-    dl->seq_len = sam_seq_len_from_cigar (field_start, field_len);
+    sam_analyze_cigar (field_start, field_len, &dl->seq_len, NULL);
+    const char *cigar_start = field_start;
+    unsigned cigar_len = field_len;
+
     if (dl->seq_len) sam_seg_cigar_field (vb, field_start, field_len); // not "*" - all good!
 
     GET_NEXT_ITEM ("RNEXT");
@@ -619,7 +644,15 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
 
     // SEQ & QUAL
     dl->seq_data_start = next_field - vb->txt_data.data;
+    char *seq_start = (char *)next_field;
     next_field = seg_get_next_item (vb, next_field, &len, false, true, false, &dl->seq_data_len, &separator, NULL, "SEQ");
+
+    // calculate diff vs. reference (self or imported) - only if aligned (pos!=0) and CIGAR and SEQ values are available
+    if (*cigar_start != '*' && this_pos && *seq_start != '*') { // note: this_pos might be 0 and still have SEQ, eg in case of an unaligned SAM 
+        SAFE_ASSIGN (1, &cigar_start[cigar_len], '\0');
+        sam_ref_refy_one_seq (vb_, seq_start, dl->seq_data_len, this_pos, cigar_start, rname_start, rname_len);
+        SAFE_RESTORE (1);
+    }
 
     dl->qual_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, true, true, false, &dl->qual_data_len, &separator, has_13, "QUAL");

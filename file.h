@@ -259,7 +259,7 @@ typedef struct File {
     unsigned num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
     
     uint8_t dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
-    MtfContext contexts[MAX_DICTS];     // a merge of dictionaries of all VBs
+    Context contexts[MAX_DICTS];     // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
     Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file
 

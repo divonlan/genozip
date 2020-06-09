@@ -20,7 +20,7 @@
 # 14. Increase in ploidy mid-line
 # 15. Positive, negative and zero POS field deltas
 # 16. Change in CHROM value between lines
-# 17. Format and info subfield names that exceed 8 characters (DictIdType size)
+# 17. Format and info subfield names that exceed 8 characters (DictId size)
 # 18. Lines with different ploidy types: HAPLO, PHASED, NOT_PHASED and MIXED 
 # 19. No FORMAT and samples in a line, despite file having samples
 # 20. Extreme POS values (0 and ‭2147483647‬ == 0x7ffffff)

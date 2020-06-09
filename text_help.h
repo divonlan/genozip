@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "vcf.h"
 
 static const char *help_genozip[] = {
     "",

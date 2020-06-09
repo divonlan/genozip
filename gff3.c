@@ -45,14 +45,14 @@ static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool 
 // The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
-static void gff3_seg_array_of_struct (VBlock *vb, MtfContext *subfield_ctx, 
+static void gff3_seg_array_of_struct (VBlock *vb, Context *subfield_ctx, 
                                       Structured st, 
                                       const char *snip, unsigned snip_len)
 {
     bool is_last_entry = false;
 
     // get ctx's
-    MtfContext *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
+    Context *ctxs[MAX_ENST_ITEMS] = {}; // an array of length num_items_in_struct (pointer to start of sub-array in vb->contexts)
     for (unsigned i=0; i < st.num_items; i++) 
         ctxs[i] = mtf_get_ctx (vb, st.items[i].dict_id); 
 
@@ -79,7 +79,7 @@ static void gff3_seg_array_of_struct (VBlock *vb, MtfContext *subfield_ctx,
                 seg_by_dict_id (vb, snip, item_len, ctxs[item_i]->dict_id, item_len + (st.items[item_i].seperator[0] != 0) + (st.items[item_i].seperator[1] != 0));
             else {
                 is_last_entry = (snip_len - item_len == 0);
-                seg_id_field ((VBlockP)vb, (DictIdType)dict_id_ENSTid, snip, item_len, !is_last_entry);
+                seg_id_field ((VBlockP)vb, (DictId)dict_id_ENSTid, snip, item_len, !is_last_entry);
             }
     
             snip     += item_len + 1 - is_last_entry; // 1 for either the , or the ' ' (except in the last item of the last entry)
@@ -111,11 +111,11 @@ badly_formatted:
     seg_by_dict_id (vb, saved_snip, saved_snip_len, subfield_ctx->dict_id, saved_snip_len); 
 }                           
 
-static bool gff3_seg_special_info_subfields (VBlockP vb, DictIdType dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip)
+static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip)
 {
     // ID - this is a sequential number (at least in GRCh37/38)
     if (dict_id.num == dict_id_ATTR_ID) {
-        MtfContext *ctx = mtf_get_ctx (vb, dict_id);
+        Context *ctx = mtf_get_ctx (vb, dict_id);
         seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, *this_value, *this_value_len, false);
         ctx->flags &= ~CTX_FL_LOCAL_LZMA; // cancel flag set by  seg_pos_field - use BZ2 instead - it compresses better in this case
         return false; // do not add to dictionary/b250 - we already did it
@@ -192,7 +192,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictIdType dict_id, con
         dict_id.num == dict_id_ATTR_ancestral_allele) {
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
-        MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_ATTR_Reference_seq); 
+        Context *ctx = mtf_get_ctx (vb, (DictId)dict_id_ATTR_Reference_seq); 
         ctx->flags |= CTX_FL_LOCAL_LZMA;
 
         seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);

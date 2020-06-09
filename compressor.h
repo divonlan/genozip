@@ -20,7 +20,7 @@ extern void comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
 
 extern void comp_uncompress (VBlockP vb, CompressionAlg alg, 
                              const char *compressed_data, uint32_t compressed_data_len,
-                             BufferP uncompressed_data);
+                             char *uncompressed_data, uint64_t uncompressed_len);
 
 // a hacky addition to bzip2
 extern uint64_t BZ2_consumed (void *bz_file);

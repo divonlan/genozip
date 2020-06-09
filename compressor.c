@@ -540,7 +540,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
 void comp_uncompress (VBlock *vb, CompressionAlg alg, 
                       const char *compressed, uint32_t compressed_len,
-                      Buffer *uncompressed)
+                      char *uncompressed_data, uint64_t uncompressed_len)
 {
     switch (alg) {
 
@@ -555,8 +555,8 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
 
         strm.next_in   = (char *)compressed;
         strm.avail_in  = compressed_len;
-        strm.next_out  = uncompressed->data;
-        strm.avail_out = uncompressed->len;
+        strm.next_out  = uncompressed_data;
+        strm.avail_out = uncompressed_len;
 
         ret = BZ2_bzDecompress (&strm);
         ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "Error: BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", BZ2_errstr(ret), strm.avail_in, strm.avail_out);
@@ -570,7 +570,7 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
         //uint64_t uncompressed_len64 = uncompressed->len;
         SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
         
-        SRes ret = LzmaDecode ((uint8_t *)uncompressed->data, &uncompressed->len, 
+        SRes ret = LzmaDecode ((uint8_t *)uncompressed_data, &uncompressed_len, 
                                (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
                                (uint8_t *)compressed, LZMA_PROPS_SIZE, 
                                LZMA_FINISH_END, &status, &alloc_stuff);
@@ -581,7 +581,7 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
         break;
     }
     case COMP_PLN:
-        memcpy (uncompressed->data, compressed, compressed_len);
+        memcpy (uncompressed_data, compressed, compressed_len);
         break;
 
     default:

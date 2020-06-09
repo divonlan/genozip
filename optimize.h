@@ -15,7 +15,7 @@ extern bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap
 
 extern bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
 
-extern bool optimize_vcf_format (DictIdType dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
+extern bool optimize_vcf_format (DictId dict_id, const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);
 
 extern void optimize_phred_quality_string (char *str, unsigned len);
 

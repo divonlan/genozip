@@ -113,7 +113,7 @@ void fastq_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
 }
 
 // returns true if section is to be skipped reading / uncompressing
-bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
+bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
 

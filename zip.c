@@ -72,7 +72,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 static void zip_handle_unique_words_ctxs (VBlock *vb)
 {
     for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
-        MtfContext *ctx = &vb->contexts[did_i];
+        Context *ctx = &vb->contexts[did_i];
     
         if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
         if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
@@ -93,7 +93,7 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
 {
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
-        MtfContext *ctx = &vb->contexts[did_i];
+        Context *ctx = &vb->contexts[did_i];
 
         if (ctx->mtf_i.len && 
             (vb->data_type != DT_VCF || !dict_id_is_vcf_format_sf (ctx->dict_id))) { // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
@@ -111,7 +111,7 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
 // Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
-void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
+void zip_generate_b250_section (VBlock *vb, Context *ctx)
 {
     ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%s", ctx->name);
 
@@ -177,11 +177,11 @@ void zip_generate_b250_section (VBlock *vb, MtfContext *ctx)
 }
 
 
-static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_txt_file, bool is_z_data)
+void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_txt_file, ProcessedDataType pd_type)
 {
     START_TIMER;
 
-    Buffer *data_buf = is_z_data ? &vb->z_data : &z_file->dict_data;
+    Buffer *data_buf = (pd_type == PD_DICT_DATA) ? &z_file->dict_data : &vb->z_data;
 
     if (section_list_buf) sections_list_concat (vb, section_list_buf);
 
@@ -190,7 +190,7 @@ static void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool 
 
     z_file->disk_so_far += (int64_t)data_buf->len;
     
-    if (is_z_data) {
+    if (pd_type == PD_VBLOCK_DATA) {
         if (update_txt_file) txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
         z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all concatenated files in this z_file
         z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
@@ -212,14 +212,22 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
 {
     // output dictionaries (inc. aliases) to disk - they are in the "processed" data of evb
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
-        zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, false);  
+        zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, PD_DICT_DATA);  
    
+    // In SAM, output reference
+    if (z_file->data_type == DT_SAM)
+        sam_ref_compress_ref();
+
     // add dict_id aliases list, if we have one
     Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) {
+
+        // if we stored file-wide ranges (reference-free SAM does) - merge them now into random_access
+        if (buf_is_allocated (&evb->ra_buf))
+            random_access_merge_in_evb();
 
         if (flag_show_index) random_access_show_index(true);
         
@@ -234,7 +242,7 @@ static void zip_write_global_area (const Md5Hash *single_component_md5)
     zfile_compress_genozip_header (single_component_md5);    
 
     // output to disk random access and genozip header sections to disk
-    zip_output_processed_vb (evb, NULL, false, true);  
+    zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
 }
 
 // entry point for compute thread
@@ -287,7 +295,7 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // optimize FORMAT/GL data in local (we have already optimized the data in dict elsewhere)
     if (vb->data_type == DT_VCF) {
-        uint8_t gl_did_i =  mtf_get_existing_did_i (vb, (DictIdType)dict_id_FORMAT_GL);
+        uint8_t gl_did_i =  mtf_get_existing_did_i (vb, (DictId)dict_id_FORMAT_GL);
         if (gl_did_i != DID_I_NONE) 
             gl_optimize_local (vb, &vb->contexts[gl_did_i].local);
     }
@@ -310,7 +318,7 @@ static void zip_compress_one_vb (VBlock *vb)
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_last_file)
+void zip_dispatcher (const char *txt_basename, bool is_last_file)
 {
     static DataType last_data_type = DT_NONE;
     static unsigned last_vblock_i = 0; // used if we're concatenating files - the vblock_i will continue from one file to the next
@@ -322,11 +330,13 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
              global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
     last_data_type =  txt_file->data_type;
 
-    // normally max_threads would be the number of cores available - we allow up to this number of compute threads, 
+    // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (max_threads, last_vblock_i, false, is_last_file, txt_basename);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, last_vblock_i, false, is_last_file, txt_basename);
 
     dict_id_initialize(z_file->data_type);
+
+    if (z_file->data_type == DT_SAM) sam_zip_initialize(); // TO DO - add to data_types
 
     unsigned txt_line_i = 1; // the next line to be read (first line = 1)
     
@@ -342,7 +352,7 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
     uint32_t max_lines_per_vb=0;
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
-    // 1. In there is a new variant block avaialble, and a compute thread available to take it - dispatch it
+    // 1. If there is a new variant block avaialble, and a compute thread available to take it - dispatch it
     // 2. If there is no new variant block available, but input is not exhausted yet - read one
     // 3. Wait for the first thread (by sequential order) to complete the compute and output the results
     VBlock *next_vb;
@@ -354,7 +364,7 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
         if (has_vb_ready_to_compute && has_free_thread) 
             dispatcher_compute (dispatcher, zip_compress_one_vb);
-        
+
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
@@ -368,7 +378,7 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;
 
-            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, true);
+            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
             z_file->num_vbs++;
             
             dispatcher_finalize_one_vb (dispatcher);
@@ -396,6 +406,9 @@ void zip_dispatcher (const char *txt_basename, unsigned max_threads, bool is_las
                 dispatcher_finalize_one_vb (dispatcher); 
             }
         }
+        else  // nothing for us to do right now, just wait
+            usleep (100000); // 100ms
+
     } while (!dispatcher_is_done (dispatcher));
 
     // go back and update some fields in the txt header's section header and genozip header -

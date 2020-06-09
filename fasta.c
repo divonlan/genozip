@@ -19,7 +19,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_FASTA_SEQ);
+    Context *ctx = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ);
     ctx->flags  = CTX_FL_LOCAL_LZMA;
     ctx->ltype  = CTX_LT_SEQUENCE;
 }
@@ -48,10 +48,10 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
     // note: we store the DESC structured in its own ctx rather than just directly in LINEMETA, to make it easier to grep
     if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
         // we segment using / | : and " " as separators. 
-        seg_compound_field ((VBlockP)vb, mtf_get_ctx (vb, (DictIdType)dict_id_FASTA_DESC), 
+        seg_compound_field ((VBlockP)vb, mtf_get_ctx (vb, (DictId)dict_id_FASTA_DESC), 
                             line_start, line_len, &vb->desc_mapper, structured_DESC, true, 0);
         
-        seg_prepare_snip_other (SNIP_REDIRECTION, (DictIdType)dict_id_FASTA_DESC, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_FASTA_DESC, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_DESC;
@@ -64,10 +64,10 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
     // case: comment line - stored in the comment buffer
     else if (*line_start == ';' || !line_len) {
-        seg_add_to_local_text ((VBlockP)vb, mtf_get_ctx (vb, (DictIdType)dict_id_FASTA_COMMENT), 
+        seg_add_to_local_text ((VBlockP)vb, mtf_get_ctx (vb, (DictId)dict_id_FASTA_COMMENT), 
                                line_start, line_len, line_len); 
 
-        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictIdType)dict_id_FASTA_COMMENT, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_COMMENT, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_COMMENT;
@@ -83,11 +83,11 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         DATA_LINE (vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
         DATA_LINE (vb->line_i)->seq_len        = line_len;
 
-        MtfContext *seq_ctx = mtf_get_ctx (vb, (DictIdType)dict_id_FASTA_SEQ);
+        Context *seq_ctx = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ);
         seq_ctx->local.len += line_len;
         seq_ctx->txt_len   += line_len;
 
-        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictIdType)dict_id_FASTA_SEQ, line_len, &special_snip[3], &special_snip_len);
+        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_SEQ, line_len, &special_snip[3], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_SEQ;
@@ -102,7 +102,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 }
 
 // returns true if section is to be skipped reading / uncompressing
-bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
+bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
 
@@ -125,7 +125,7 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
 
 // this is used for end-of-lines of a sequence line, that are not the last line of the sequence. we skip reconstructing
 // the newline if the user selected --sequencial
-void fasta_piz_special_SEQ (VBlock *vb_, MtfContext *ctx, const char *snip, unsigned snip_len)
+void fasta_piz_special_SEQ (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
@@ -148,7 +148,7 @@ void fasta_piz_special_SEQ (VBlock *vb_, MtfContext *ctx, const char *snip, unsi
         piz_reconstruct_one_snip (vb_, ctx, snip+1, snip_len-1);    
 }
 
-void fasta_piz_special_COMMENT (VBlock *vb_, MtfContext *ctx, const char *snip, unsigned snip_len)
+void fasta_piz_special_COMMENT (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 
@@ -180,7 +180,7 @@ bool fasta_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_any_
     return ret;
 }
 
-void fasta_piz_special_DESC (VBlock *vb_, MtfContext *ctx, const char *snip, unsigned snip_len)
+void fasta_piz_special_DESC (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
 

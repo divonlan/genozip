@@ -23,6 +23,8 @@
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
 #define OVERFLOW_TRAP  0x776F6C667265766FULL // "OVERFLOW" - inserted at the end of each memory block to detected overflows
 
+#define BUFFER_BEING_MODIFIED ((char*)0x777)
+
 static const unsigned overhead_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
 static pthread_mutex_t overlay_mutex; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
@@ -77,26 +79,28 @@ static inline void buf_reset (Buffer *buf)
 
 static inline bool buf_has_overflowed (const Buffer *buf, const char *msg)
 {
-    // an evb buffer is currently being allocated by another thread, and hence memory is not set yet. for example,
-    // global_hash_prime is realloced by all threads (under mutex protection)
-    if (buf->vb && buf->vb->id==-1 && buf->memory == (char *)0x777) return false;
+    // memory==BUFFER_BEING_MODIFIED if an evb buffer is currently being allocated by another thread, and hence memory is not set yet.
+    // for example, global_hash_prime is realloced by all threads (under mutex protection)
+    // note: memory can become 0x777 at this point, even though we've tested it before at it was not yet
+    char *memory = buf->memory;
+    if (buf->vb && buf->vb->id==-1 && memory == BUFFER_BEING_MODIFIED) return false;
 
-    ASSERT (buf->memory != (char *)0x777, "%s: Error in buf_has_overflowed: buf->memory=0x777 - malloc didn't assign - likely due to a buffer overflow overrunning the OS memory management data. buffer %s size=%"PRIu64,
+    ASSERT (memory != BUFFER_BEING_MODIFIED, "%s: Error in buf_has_overflowed: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
             msg, buf_desc(buf), buf->size);
 
-    return *((uint64_t*)(buf->memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP;
+    return *((uint64_t*)(memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
 
 static inline bool buf_has_underflowed (const Buffer *buf, const char *msg)
 {
-    // an evb buffer is currently being allocated by another thread, and hence memory is not set yet. for example,
-    // global_hash_prime is realloced by all threads (under mutex protection)
-    if (buf->vb && buf->vb->id==-1 && buf->memory == (char *)0x777) return false;
+    // see comment in buf_has_overflowed
+    char *memory = buf->memory;
+    if (buf->vb && buf->vb->id==-1 && memory == BUFFER_BEING_MODIFIED) return false;
 
-    ASSERT (buf->memory != (char *)0x777, "%s: Error in buf_has_underflowed: buf->memory=0x777 - malloc didn't assign - likely due to a buffer overflow overrunning the OS memory management data. buffer %s size=%"PRIu64,
+    ASSERT (memory != BUFFER_BEING_MODIFIED, "%s: Error in buf_has_underflowed: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
             msg, buf_desc(buf), buf->size);
 
-    return *(uint64_t*)buf->memory != UNDERFLOW_TRAP;
+    return *(uint64_t*)memory != UNDERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
 
 // not thread-safe, used in emergency 
@@ -159,39 +163,44 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
 
     const Buffer *buf_list = &vb->buffer_list;
 
-    bool corruption = false;
+    int corruption = 0;
+    const Buffer *buf; // declare outside, so it is observable in the debugger in case of a crash
     for (unsigned buf_i=0; buf_i < buf_list->len; buf_i++) {
 
-        const Buffer *buf = ((Buffer **)buf_list->data)[buf_i];
+// IMPORTANT NOTE regarding evb: testing evb might FAIL and should not be done in production! this is another thread thread
+// can modify its buffers (under mutex protection) concurrently with this test, causing in consistent state between eg data and memory
+// we attempt to prevent many of the cases by not checking buffers that are BUFFER_BEING_MODIFIED at the onset, but they still may
+// become BUFFER_BEING_MODIFIED mid way through the test
+
+        buf = ((Buffer **)buf_list->data)[buf_i];
 
         if (!buf) continue; // buf was 'buf_destroy'd
 
         static const char *nl[2] = {"", "\n\n"};
         char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN], s3[POINTER_STR_LEN];
-        if (buf->memory) {
+        if (buf->memory && buf->memory != BUFFER_BEING_MODIFIED) {
 
             if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
                         fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u\n",
                         nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, bt_str(buf), str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+overhead_size-1,s3),
                         buf_desc (buf), buf->vb->vblock_i, buf_i);
-                corruption = true;
+                corruption = 1;
             }
             if (buf->type < BUF_UNALLOCATED || buf->type > BUF_OVERLAY) {
                 fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type\n", 
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
-                corruption = true;
+                corruption = 2;
             }
             else if (!buf->name) {
                 fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name\n", 
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf, s1), buf_i);
-                corruption = true;
+                corruption = 3;
             }
-            else if (buf->data && buf->data != buf->memory + sizeof(uint64_t)) {
+            else if (buf->data && (buf->data != buf->memory + sizeof(uint64_t))) {
                 fprintf (stderr, 
-                        str_pointer(buf,s1), str_pointer(buf->memory,s2), str_pointer(buf->memory+buf->size+2*sizeof(uint64_t)-1,s3), buf->name, buf->param,
                          "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%s memory=%s name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%s\n", 
                          nl[primary], msg, vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, str_pointer(buf,s1), str_pointer(buf->memory,s2), buf_desc(buf), str_pointer(buf->data,s3));
-                corruption = true;
+                corruption = 4;
             }
             else if (buf_has_underflowed(buf, msg)) {
                 fprintf (stderr, 
@@ -205,7 +214,7 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
                 if (primary) buf_test_overflows_all_other_vb (vb, msg);
                 primary = false;
 
-                corruption = true;
+                corruption = 5;
             }
             else if (buf_has_overflowed(buf, msg)) {
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
@@ -217,12 +226,12 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
                 if (primary) buf_test_overflows_all_other_vb (vb, msg);
                 primary = false;
 
-                corruption = true;
+                corruption = 6;
             }
         }
     }
     
-    ASSERT0 (!primary || !corruption, "Aborting due to memory corruption"); // primary will exit on corruption
+    ASSERT (!primary || !corruption, "Aborting due to memory corruption #%u", corruption); // primary will exit on corruption
 
     return corruption;
 }
@@ -344,7 +353,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
     buf->vb = vb; // successfully added to buf list
 }
 
-static void buf_init (Buffer *buf, uint64_t size, uint64_t old_size, 
+static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_size, 
                       const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
     // set some parameters before allocation so they can go into the error message in case of failure
@@ -357,7 +366,7 @@ static void buf_init (Buffer *buf, uint64_t size, uint64_t old_size,
     } 
     ASSERT (buf->name, "Error: buffer has no name. func=%s:%u", buf->func, buf->code_line);
 
-    if (!buf->memory) {
+    if (!memory) {
 #ifdef DEBUG
         buf_display_memory_usage (true, 0, 0);
 #endif 
@@ -367,13 +376,17 @@ static void buf_init (Buffer *buf, uint64_t size, uint64_t old_size,
                str_uint_commas (size + overhead_size, s), buf_desc(buf));
     }
 
-    buf->data        = buf->memory + sizeof (uint64_t);
+    buf->data        = memory + sizeof (uint64_t);
     buf->size        = size;
     buf->overlayable = false;
 
-    *(uint64_t *)buf->memory        = UNDERFLOW_TRAP;        // underflow protection
+    *(uint64_t *)memory        = UNDERFLOW_TRAP;        // underflow protection
     *(uint64_t *)(buf->data + size) = OVERFLOW_TRAP;         // overflow prortection (underflow protection was copied with realloc)
     *(uint16_t *)(buf->data + size + sizeof (uint64_t)) = 1; // counter of buffers that use of this memory (0 or 1 main buffer + any number of overlays)
+
+    // only when we're done initializing - we update memory - that buf_test_overflow running concurrently doesn't test
+    // half-initialized buffers
+    __atomic_store_n (&buf->memory, memory, __ATOMIC_RELAXED); 
 }
 
 // allocates or enlarges buffer
@@ -396,7 +409,7 @@ uint64_t buf_alloc_do (VBlock *vb,
 
     // case 1: we have enough memory already
     if (requested_size <= buf->size) {
-        if (!buf->data) buf_init (buf, buf->size, buf->size, func, code_line, name, param);
+        if (!buf->data) buf_init (buf, buf->memory, buf->size, buf->size, func, code_line, name, param);
         goto finish;
     }
 
@@ -441,29 +454,33 @@ uint64_t buf_alloc_do (VBlock *vb,
             else {
                 // buffer is overlayable - but no current overlayers - regular realloc - however,
                 // still within mutex to prevent another thread from overlaying while we're at it
-                buf->memory = (char *)buf_low_level_realloc (buf->memory, new_size + overhead_size, func, code_line);
-                buf_init (buf, new_size, old_size, func, code_line, name, param);
+                char *old_memory = buf->memory;
+                __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
+                char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + overhead_size, func, code_line);
+                buf_init (buf, new_memory, new_size, old_size, func, code_line, name, param);
             }
             buf->overlayable = true; // renew this, as it was reset by buf_init
             pthread_mutex_unlock (&overlay_mutex);
         }
 
         else { // non-overlayable buffer - regular realloc without mutex
-            buf->memory = (char *)buf_low_level_realloc (buf->memory, new_size + overhead_size, func, code_line);
-            buf_init (buf, new_size, old_size, func, code_line, name, param);
+            char *old_memory = buf->memory;
+            __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
+            char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + overhead_size, func, code_line);
+            buf_init (buf, new_memory, new_size, old_size, func, code_line, name, param);
         }
     }
 
     // case 3: we need to allocate memory - buffer is not yet allocated, so no need to copy data
     else {
-        buf->memory = (char *)0x777; // catch a very weird situation that happens sometimes when memory overflows, where the next statement doesn't assign
-        buf->memory = (char *)malloc (new_size + overhead_size);
-        ASSERT (buf->memory != (char *)0x777, "Error: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
+        __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
+        char *memory = (char *)malloc (new_size + overhead_size);
+        ASSERT (memory != BUFFER_BEING_MODIFIED, "Error: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
                 buf_desc(buf), new_size);
 
         buf->type   = BUF_REGULAR;
 
-        buf_init (buf, new_size, 0, func, code_line, name, param);
+        buf_init (buf, memory, new_size, 0, func, code_line, name, param);
         buf_add_to_buffer_list(vb, buf);
     }
 

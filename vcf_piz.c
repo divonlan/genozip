@@ -22,7 +22,7 @@
 static Buffer piz_format_mapper_buf = EMPTY_BUFFER; //global array, initialized by I/O thread and immitable thereafter
 
 // returns true if section is to be skipped reading / uncompressing
-bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
+bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if ((flag_drop_genotypes || flag_gt_only) && 
         (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id_is_vcf_format_sf (dict_id) || st == SEC_VCF_GT_DATA ||
@@ -37,7 +37,7 @@ bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id)
 // It populates piz_format_mapper_buf with info about each unique format type in this vb (SubfieldMapper structure)
 static void vcf_piz_map_format_subfields (VBlock *vb)
 {    
-    MtfContext *format_ctx = &z_file->contexts[VCF_FORMAT];
+    Context *format_ctx = &z_file->contexts[VCF_FORMAT];
 
     // initialize
     buf_free (&piz_format_mapper_buf); // in case it was allocated by a previous file
@@ -75,7 +75,7 @@ static void vcf_piz_map_format_subfields (VBlock *vb)
             const char *start = &format_snip[colons[sf_i + format_has_gt_subfield] + 1];
             unsigned len = colons[sf_i + format_has_gt_subfield + 1] - colons[sf_i + format_has_gt_subfield] - 1;
 
-            DictIdType dict_id = dict_id_vcf_format_sf (dict_id_make (start, is_v5_or_above ? len : MIN (len, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
+            DictId dict_id = dict_id_vcf_format_sf (dict_id_make (start, is_v5_or_above ? len : MIN (len, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
 
             // get the did_i of this subfield. note: the context will be new (exist in the VB but not z_file) did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
@@ -95,7 +95,7 @@ static void vcf_piz_initialize_sample_iterators (VBlockVCF *vb)
     ARRAY (SubfieldMapper, formats, piz_format_mapper_buf);
 
     // Get the FORMAT type (format_mtf_i) in each line of the VB, by traversing the FORMAT b250 data
-    MtfContext *format_ctx = &vb->contexts[VCF_FORMAT];
+    Context *format_ctx = &vb->contexts[VCF_FORMAT];
     for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
         vb->line_i = vb->first_line + line_i;
         DATA_LINE (line_i)->format_mtf_i = mtf_get_next_snip ((VBlockP)vb, format_ctx, NULL, NULL, NULL);
@@ -176,7 +176,7 @@ static void vcf_piz_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
 
             for (unsigned sf_i=0; sf_i < line_format_info->num_subfields; sf_i++) {
 
-                MtfContext *sf_ctx = MAPPER_CTX (line_format_info, sf_i);
+                Context *sf_ctx = MAPPER_CTX (line_format_info, sf_i);
 
                 ASSERT (sf_ctx || *sample_iterator[sample_i].next_b250 == BASE250_MISSING_SF, 
                         "Error: line_format_info->ctx[sf_i=%u] for line %u sample %u (counting from 1) is dict_id=0, indicating that this subfield has no value in the vb in any sample or any line. And yet, it does...", 
@@ -601,7 +601,7 @@ static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
     unsigned section_i = piz_uncompress_all_ctxs ((VBlockP)vb);
 
     // de-optimize FORMAT/GL data in local (we have already de-optimized the data in dict elsewhere)
-    uint8_t gl_did_i =  mtf_get_existing_did_i ((VBlockP)vb, (DictIdType)dict_id_FORMAT_GL);
+    uint8_t gl_did_i =  mtf_get_existing_did_i ((VBlockP)vb, (DictId)dict_id_FORMAT_GL);
     if (gl_did_i != DID_I_NONE) 
         gl_deoptimize (vb->contexts[gl_did_i].local.data, vb->contexts[gl_did_i].local.len);
 

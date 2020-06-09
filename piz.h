@@ -8,7 +8,7 @@
 
 #include "genozip.h"
 
-extern bool piz_dispatcher (const char *z_basename, unsigned max_threads, bool is_first_vcf_component, bool is_last_file);
+extern bool piz_dispatcher (const char *z_basename, bool is_first_vcf_component, bool is_last_file);
 
 extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);
@@ -52,7 +52,7 @@ extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_s
 
 extern uint32_t piz_uncompress_all_ctxs (VBlockP vb);
 
-extern void piz_map_compound_field (VBlockP vb, bool (*predicate)(DictIdType), SubfieldMapperP mapper);
+extern void piz_map_compound_field (VBlockP vb, bool (*predicate)(DictId), SubfieldMapperP mapper);
 
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb
@@ -61,15 +61,15 @@ extern void piz_map_compound_field (VBlockP vb, bool (*predicate)(DictIdType), S
 extern uint32_t piz_reconstruct_from_ctx_do (VBlockP vb, uint8_t did_i, char sep);
 #define piz_reconstruct_from_ctx(vb,did_i,sep) piz_reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep))
 
-extern void piz_reconstruct_one_snip (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len);
+extern void piz_reconstruct_one_snip (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
 
-typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, uint8_t did_i, DictIdType dict_id);
+typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, uint8_t did_i, DictId dict_id);
 
 extern void piz_reconstruct_structured_do (VBlockP vb, ConstStructuredP st, const char *prefixes, uint32_t prefixes_len);
 
 typedef struct PizSubfieldMapper {
     uint8_t num_subfields;        
-    DictIdType dict_id[MAX_SUBFIELDS];
+    DictId dict_id[MAX_SUBFIELDS];
 } PizSubfieldMapper;
 
 #define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0

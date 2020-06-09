@@ -14,31 +14,31 @@
 #include "genozip.h"
 #include "data_types.h"
 
-extern DictIdType dict_id_make (const char *str, unsigned str_len);
-extern DictIdType dict_id_make_v2to4 (const char *str, unsigned str_len);
+extern DictId dict_id_make (const char *str, unsigned str_len);
+extern DictId dict_id_make_v2to4 (const char *str, unsigned str_len);
 
-static inline DictIdType dict_id_field (DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
-static inline DictIdType dict_id_type_1(DictIdType dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
-static inline DictIdType dict_id_type_2(DictIdType dict_id) { return dict_id; } // no change - keep Msb 01
+static inline DictId dict_id_field (DictId dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
+static inline DictId dict_id_type_1(DictId dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11
+static inline DictId dict_id_type_2(DictId dict_id) { return dict_id; } // no change - keep Msb 01
 
 #define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_printable (dict_id).num)
-static inline bool dict_id_is_field (DictIdType dict_id) { return ((dict_id.id[0] >> 6) == 0); } // 2 MSb of first byte determine dictionary type
-static inline bool dict_id_is_type_1(DictIdType dict_id) { return ((dict_id.id[0] >> 6) == 3); }
-static inline bool dict_id_is_type_2(DictIdType dict_id) { return ((dict_id.id[0] >> 6) == 1); }
+static inline bool dict_id_is_field (DictId dict_id) { return ((dict_id.id[0] >> 6) == 0); } // 2 MSb of first byte determine dictionary type
+static inline bool dict_id_is_type_1(DictId dict_id) { return ((dict_id.id[0] >> 6) == 3); }
+static inline bool dict_id_is_type_2(DictId dict_id) { return ((dict_id.id[0] >> 6) == 1); }
 
 
-static inline DictIdType dict_id_printable(DictIdType dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
-#define DICT_ID_NONE ((DictIdType)(uint64_t)0)
+static inline DictId dict_id_printable(DictId dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
+#define DICT_ID_NONE ((DictId)(uint64_t)0)
 
-typedef struct { DictIdType alias, dst; } DictIdAlias;
+typedef struct { DictId alias, dst; } DictIdAlias;
 extern const DictIdAlias *dict_id_aliases;
 uint32_t dict_id_num_aliases;
 
 extern BufferP dict_id_create_aliases_buf (void);
 extern void dict_id_read_aliases (void) ;
 
-extern DictIdType dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
-extern DictIdType dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
+extern DictId dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
+extern DictId dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
 
 extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 
@@ -68,7 +68,8 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 
                 // our own
                 dict_id_OPTION_STRAND, dict_id_OPTION_RNAME, dict_id_OPTION_POS, dict_id_OPTION_CIGAR,  dict_id_OPTION_MAPQ,
-                
+                dict_id_SAM_SQnonref,
+
                 // GVF attributes - standard
                 dict_id_ATTR_ID, dict_id_ATTR_Variant_seq, dict_id_ATTR_Reference_seq, dict_id_ATTR_Variant_freq,
 
@@ -108,11 +109,11 @@ extern void dict_id_initialize (DataType data_type);
 
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
 // candidate is a specific dict_id that we test for its matching of the template
-extern bool dict_id_is_match (DictIdType template, DictIdType candidate);
+extern bool dict_id_is_match (DictId template, DictId candidate);
 
-extern const char *dict_id_display_type (DataType dt, DictIdType dict_id);
+extern const char *dict_id_display_type (DataType dt, DictId dict_id);
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages
-extern const char *err_dict_id (DictIdType dict_id);
+extern const char *err_dict_id (DictId dict_id);
 
 #endif

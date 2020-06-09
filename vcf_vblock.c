@@ -110,6 +110,8 @@ void vcf_vb_cleanup_memory (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
+    if (vb_ == evb) return; // nothing to cleanup in evb with VCF
+
     vcf_vb_free_buffer_array (&vb->genotype_sections_data, vb->num_sample_blocks);
     vcf_vb_free_buffer_array (&vb->haplotype_sections_data, vb->num_sample_blocks);
     vcf_vb_free_buffer_array (&vb->phase_sections_data, vb->num_sample_blocks);

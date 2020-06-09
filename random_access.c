@@ -24,14 +24,9 @@ void random_access_initialize(void)
     ra_mutex_initialized = true;
 }
 
-// ZIP only: called from vcf_seg_chrom_field when the CHROM changed - this might be a new chrom, or
-// might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
-void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
+// ZIP only
+void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
 {
-    ASSERT (chrom_node_index >= 0, "Error in random_access_update_chrom: chrom_node_index=%d in vb_i=%u", 
-            chrom_node_index, vb->vblock_i);
-
-    // make sure ra_buf is big enough
     uint64_t old_len = vb->ra_buf.len;
     uint64_t new_len = chrom_node_index+1;
     if (new_len > old_len) {
@@ -39,6 +34,16 @@ void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
         memset (ENT (RAEntry, vb->ra_buf, old_len), 0, (new_len - old_len) * sizeof (RAEntry));
         vb->ra_buf.len = new_len;
     }
+}
+
+// ZIP only: called from vcf_seg_chrom_field when the CHROM changed - this might be a new chrom, or
+// might be an exiting chrom if the VB is not sorted. we maitain one ra field per chrom per vb
+void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index)
+{
+    ASSERT (chrom_node_index >= 0, "Error in random_access_update_chrom: chrom_node_index=%d in vb_i=%u", 
+            chrom_node_index, vb->vblock_i);
+
+    random_access_alloc_ra_buf (vb, chrom_node_index); // make sure ra_buf is big enough
 
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, chrom_node_index);
     if (!ra_ent->vblock_i) { // first occurance of this chrom
@@ -66,6 +71,13 @@ void random_access_update_pos (VBlock *vb, uint8_t did_i_pos)
     else if (this_pos > ra_ent->max_pos) ra_ent->max_pos = this_pos;
 }
 
+// ZIP for SAM only: update last reference pos implied by the CIGAR string
+void random_access_update_last_pos (VBlock *vb, uint32_t last_pos)
+{
+    RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, vb->chrom_node_index);
+    if (last_pos > ra_ent->max_pos) ra_ent->max_pos = last_pos;
+}
+
 // called by ZIP compute thread, while holding the z_file mutex: merge in the VB's ra_buf in the global z_file one
 // note: the order of the merge is not necessarily the sequential order of VBs
 void random_access_merge_in_vb (VBlock *vb)
@@ -76,7 +88,7 @@ void random_access_merge_in_vb (VBlock *vb)
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
-    MtfContext *chrom_ctx = &vb->contexts[DTF(chrom)];
+    Context *chrom_ctx = &vb->contexts[DTF(chrom)];
     ASSERT0 (chrom_ctx, "Error in random_access_merge_in_vb: cannot find chrom_ctx");
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
@@ -91,9 +103,46 @@ void random_access_merge_in_vb (VBlock *vb)
         dst_ra->chrom_index = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
         dst_ra->min_pos     = src_ra[i].min_pos;
         dst_ra->max_pos     = src_ra[i].max_pos;
+
+        // If we're collecting ranges from the entire file, for SAM references, take this opportunity and update evb random access. we're not merging it
+        // into z_file yet - we will do at the end of the file
+        if (buf_is_allocated (&evb->ra_buf)) {
+            random_access_alloc_ra_buf (evb, chrom_node->word_index.n); // make sure ra_buf is big enough
+
+            RAEntry *ra_ent = ENT (RAEntry, evb->ra_buf, chrom_node->word_index.n); // for evb ra_bufs, we store them directly with word_index instead of node_index
+
+            ra_ent->chrom_index = chrom_node->word_index.n;
+            if (!ra_ent->min_pos) { // first line this chrom is encountered in this vb - initialize pos
+                ra_ent->min_pos = dst_ra->min_pos;
+                ra_ent->max_pos = dst_ra->max_pos;
+            }
+
+            if (dst_ra->min_pos < ra_ent->min_pos) ra_ent->min_pos = dst_ra->min_pos; 
+            
+            if (dst_ra->max_pos > ra_ent->max_pos) ra_ent->max_pos = dst_ra->max_pos;
+        }
     }
 
     pthread_mutex_unlock (&ra_mutex);
+}
+
+// ZIP: called by zip_write_global_area() to merge the file-wide ranges (used for SAM references)
+void random_access_merge_in_evb (void)
+{
+    buf_alloc (evb, &z_file->ra_buf, (z_file->ra_buf.len + evb->ra_buf.len) * sizeof(RAEntry), 2, "z_file->ra_buf", 0);
+    ARRAY (RAEntry, src_ra, evb->ra_buf);
+
+    for (unsigned i=0; i < evb->ra_buf.len; i++) {
+        
+        if (!src_ra[i].min_pos) continue; // chrom node_index=i has no range in this vb (could happen in SAM if a line has a RNAME but no POS)
+
+        RAEntry *dst_ra = &NEXTENT (RAEntry, z_file->ra_buf);
+
+        dst_ra->vblock_i    = 0; // not a vblock
+        dst_ra->chrom_index = src_ra[i].chrom_index; // note: in EVB we store the word_index directly, no need to convert from the node_index
+        dst_ra->min_pos     = src_ra[i].min_pos;
+        dst_ra->max_pos     = src_ra[i].max_pos;
+    }
 }
 
 // PIZ I/O thread: check if for the given VB,
@@ -147,6 +196,19 @@ int32_t random_access_get_last_included_vb_i (void)
     return last_vb_i;
 }
 
+// PIZ I/O thread
+uint32_t random_access_get_vb0_max_pos (uint32_t chrom_word_index)
+{
+    ARRAY (RAEntry, ra, z_file->ra_buf);
+
+    for (int i=z_file->ra_buf.len-1; i >= 0; i--) // go in reverse order as vb_i=0 is expected to be at the end
+        if (ra[i].chrom_index == chrom_word_index)
+            return ra[i].max_pos;
+
+    ABORT ("Error in random_access_get_vb0_max_pos: There is no RA entry for chrom_word_index=%u", chrom_word_index); // no ra for this chrom index
+    return 0; // silence compiler warning
+}
+
 // Called by PIZ I/O thread (piz_read_global_area) and ZIP I/O thread (zip_write_global_area)
 void BGEN_random_access()
 {
@@ -171,7 +233,7 @@ void random_access_show_index (bool from_zip)
     
     ARRAY (RAEntry, ra, z_file->ra_buf);
 
-    MtfContext *ctx = &z_file->contexts[DTFZ(chrom)];
+    Context *ctx = &z_file->contexts[DTFZ(chrom)];
 
     for (unsigned i=0; i < z_file->ra_buf.len; i++) {
         

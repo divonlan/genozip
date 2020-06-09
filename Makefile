@@ -31,7 +31,7 @@ endif
 MY_SRCS = genozip.c base250.c move_to_front.c strings.c stats.c arch.c license.c data_types.c \
           zip.c piz.c seg.c zfile.c   \
 		  vcf_zip.c vcf_piz.c vcf_seg.c vcf_zfile.c vcf_gloptimize.c vcf_vblock.c vcf_gtshark.c vcf_squeeze.c vcf_samples.c vcf_header.c \
-          sam_zip.c sam_piz.c sam_shared.c \
+          sam_zip.c sam_piz.c sam_shared.c sam_ref.c \
 		  fasta.c fastq.c fast_shared.c \
 		  gff3.c me23.c \
 		  buffer.c random_access.c sections.c compressor.c base64.c \
@@ -107,14 +107,16 @@ OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE) 
 
 ifeq ($(CC),gcc)
 	OPTFLAGS += -Ofast -std=gnu99
+	DEBUGFLAGS += -std=gnu99 -DDEBUG -g -O0
 else
 	OPTFLAGS += -O2
+	DEBUGFLAGS += -DDEBUG -g -O0
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
 all   : $(EXECUTABLES) LICENSE.non-commercial.txt
 
-debug : CFLAGS += -DDEBUG -g -O0
+debug : CFLAGS += $(DEBUGFLAGS)
 debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 
 opt   : CFLAGS += -g $(OPTFLAGS)

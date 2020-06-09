@@ -85,7 +85,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     uint32_t num_dict_ids;            /* total number of dictionaries of all types */\
-    MtfContext contexts[MAX_DICTS];    \
+    Context contexts[MAX_DICTS];    \
     uint8_t dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\

@@ -24,7 +24,9 @@
 // -----------------
 #define GENOZIP_EXT ".genozip"
 
-// default max amount of VCF data in each variant block. this is user-configurable with --vblock
+#define MAX_POS 0xffffffff // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
+
+// default max amount of txt data in each variant block. this is user-configurable with --vblock
 #define TXT_DATA_PER_VB_DEFAULT "16" // MB in default mode
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
 
@@ -32,20 +34,6 @@
 #define MAX_DICTS     253   // 254 is for future use and 255 is DID_I_NONE
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
-
-// ------------------------
-// VCF stuff
-// ------------------------
-
-// default max number of samples in each sample block within a variant block. user configurable with --sblock
-#define VCF_SAMPLES_PER_VBLOCK "4096" 
-
-#define VCF_MAX_PLOIDY     100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
-#if VCF_MAX_PLOIDY > 65535
-#error "VCF_MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeaderVCF.ploidy and VBlockVCF.ploidy are uint16_t"
-#endif
-
-#define VCF_MAX_ALLELE_VALUE   99 // the code currently allows for 2-digit alleles.
 
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
@@ -61,7 +49,7 @@ typedef struct Buffer *BufferP;
 typedef const struct Buffer *ConstBufferP;
 typedef struct Structured *StructuredP;
 typedef const struct Structured *ConstStructuredP;
-typedef struct MtfContext *MtfContextP;
+typedef struct Context *ContextP;
 typedef struct MtfNode *MtfNodeP;
 typedef const struct MtfNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
@@ -72,11 +60,11 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
 #pragma pack(push, 1) // structures that are part of the genozip format are packed.
 #define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/GFF3 specs don't limit the field name (tag) length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
-typedef union DictIdType {
+typedef union DictId {
     uint64_t num;            // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN]; // \0-padded IDs 
     uint16_t map_key;        // we use the first two bytes as they key into vb/z_file->dict_id_mapper
-} DictIdType;
+} DictId;
 #pragma pack(pop)
 
 // global parameters - set before any thread is created, and never change
@@ -95,7 +83,7 @@ extern int command;
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
-           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions,
+           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions, flag_reference,
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads,
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only,
            flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_register,
@@ -122,7 +110,7 @@ typedef _Bool bool;
 #define false 0
 
 #define SPECIAL(dt,num,name,func) \
-    extern void func (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len); \
+    extern void func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len); \
     static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
 
 #define COMPRESSOR_CALLBACK(func) \

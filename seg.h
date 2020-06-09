@@ -21,7 +21,7 @@ extern const char *seg_get_next_item (void *vb, const char *str, int *str_len,
                                       const char *item_name);
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
 
-extern uint32_t seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, MtfContextP ctx, uint32_t add_bytes, bool *is_new);
+extern uint32_t seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
 #define seg_by_dict_id(vb,str,len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, str, len, mtf_get_ctx (vb, dict_id), add_bytes, NULL)
 #define seg_by_did_i_ex(vb,str,len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, is_new);
 #define seg_by_did_i(vb,str,len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, NULL);
@@ -31,38 +31,38 @@ extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chr
 extern int64_t seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, bool allow_nonsense);
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
-extern void seg_pos_field (VBlockP vb, 
-                           uint8_t snip_did_i,    // mandatory: the ctx the snip belongs to
-                           uint8_t base_did_i,    // mandatory: base for delta
-                           bool allow_non_number,      // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
-                           const char *pos_str, unsigned pos_len, 
-                           bool account_for_separator);
+extern int64_t seg_pos_field (VBlockP vb, 
+                              uint8_t snip_did_i,    // mandatory: the ctx the snip belongs to
+                              uint8_t base_did_i,    // mandatory: base for delta
+                              bool allow_non_number,      // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+                              const char *pos_str, unsigned pos_len, 
+                              bool account_for_separator);
 
-extern void seg_id_field (VBlockP vb, DictIdType dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
+extern void seg_id_field (VBlockP vb, DictId dict_id, const char *id_snip, unsigned id_snip_len, bool account_for_separator);
 
-typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictIdType dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip);
+typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip);
 
-extern void seg_structured_by_ctx (VBlockP vb, MtfContextP ctx, StructuredP st, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
+extern void seg_structured_by_ctx (VBlockP vb, ContextP ctx, StructuredP st, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
 #define seg_structured_by_dict_id(vb,dict_id,st,add_bytes) seg_structured_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), st, NULL, 0, add_bytes)
 
 extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields,
                             const char *info_str, unsigned info_len, bool reconstruct);
 
-extern void seg_add_to_local_text   (VBlockP vb, MtfContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
-extern void seg_add_to_local_fixed  (VBlockP vb, MtfContextP ctx, const void *data, unsigned data_len);
-extern void seg_add_to_local_uint8  (VBlockP vb, MtfContextP ctx, uint8_t  value, unsigned add_bytes);
-extern void seg_add_to_local_uint16 (VBlockP vb, MtfContextP ctx, uint16_t value, unsigned add_bytes);
-extern void seg_add_to_local_uint32 (VBlockP vb, MtfContextP ctx, uint32_t value, unsigned add_bytes);
-extern void seg_add_to_local_uint64 (VBlockP vb, MtfContextP ctx, uint64_t value, unsigned add_bytes);
+extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
+extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data, unsigned data_len);
+extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
+extern void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes);
+extern void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
+extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes);
 
 extern void seg_initialize_compound_structured (VBlockP vb, char *name_template, Structured *st);
-extern void seg_compound_field (VBlockP vb, MtfContextP field_ctx, const char *field, unsigned field_len, 
+extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
                                 SubfieldMapperP mapper, Structured st, bool ws_is_sep, unsigned add_for_eol);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
-extern void seg_array_field (VBlockP vb, DictIdType dict_id, const char *value, unsigned value_len, SegOptimize optimize);
+extern void seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, SegOptimize optimize);
 
-extern void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id, uint32_t lookup_len, 
+extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, uint32_t lookup_len, 
                                     char *snip, unsigned *snip_len);
 
 // ------------------
@@ -87,7 +87,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictIdType other_dict_id,
 
 // create extendent field contexts in the correct order of the fields
 #define EXTENDED_FIELD_CTX(extended_field, dict_id_num) { \
-    MtfContext *ctx = mtf_get_ctx (vb, (DictIdType)dict_id_num); \
+    Context *ctx = mtf_get_ctx (vb, (DictId)dict_id_num); \
     ASSERT (ctx->did_i == extended_field, "Error: expecting ctx->did_i=%u to be %u", ctx->did_i, extended_field); \
     dict_id_fields[ctx->did_i] = ctx->dict_id.num; \
 }

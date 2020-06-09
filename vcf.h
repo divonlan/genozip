@@ -8,6 +8,17 @@
 
 #include "genozip.h"
 #include "md5.h"
+#include "section_types.h"
+
+// default max number of samples in each sample block within a variant block. user configurable with --sblock
+#define VCF_SAMPLES_PER_VBLOCK "4096" 
+
+#define VCF_MAX_PLOIDY 100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
+#if VCF_MAX_PLOIDY > 65535
+#error "VCF_MAX_PLOIDY cannot go beyond 65535 as SectionHeaderVbHeaderVCF.ploidy and VBlockVCF.ploidy are uint16_t"
+#endif
+
+#define VCF_MAX_ALLELE_VALUE 99 // the code currently allows for 2-digit alleles.
 
 // SEG stuff
 extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
@@ -23,7 +34,7 @@ extern void vcf_zip_generate_ht_gt_compress_vb_header (VBlockP vb_);
 extern bool vcf_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern bool vcf_v1_piz_read_one_vb();// v1 compatibility
 extern void vcf_piz_uncompress_vb(); // no parameter - implicit casting of VBlockP to VBlockVCFP
-extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id);
+extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 
 // ZFILE stuff
 extern void vcf_zfile_compress_vb_header (VBlockP vb);

@@ -15,14 +15,25 @@ typedef struct {
     uint32_t seq_len;        // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 } ZipDataLineSAM;
 
+typedef struct Range *RangeP; 
+
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
-    SubfieldMapper qname_mapper;         // ZIP & PIZ
-    Buffer optional_mapper_buf;          // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->contexts[SAM_OPTIONAL].mtf
+    SubfieldMapper qname_mapper; // ZIP & PIZ
+    Buffer optional_mapper_buf;  // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->contexts[SAM_OPTIONAL].mtf
+    const char *last_cigar;      // PIZ
+    unsigned ref_consumed;       // PIZ
+    RangeP range;                // ZIP: used for compressing the reference ranges
 } VBlockSAM;
+
+typedef VBlockSAM *VBlockSAMP;
 
 #define DATA_LINE(i) ENT (ZipDataLineSAM, vb->lines, i)
 
-extern uint32_t sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
+extern void sam_analyze_cigar (const char *cigar, unsigned cigar_len, unsigned *seq_consumed, unsigned *ref_consumed);
+
+extern void sam_ref_zip_initialize (void);
+extern void sam_ref_refy_one_seq (VBlock *vb, char *seq, uint32_t seq_len, uint32_t pos, const char *cigar,
+                                  const char *chrom_name, unsigned chrom_name_len);
 
 #endif

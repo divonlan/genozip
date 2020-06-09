@@ -35,7 +35,8 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_ZM=0,
   
          // private genozip dict
-         dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0; 
+         dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0,
+         dict_id_SAM_SQnonref=0; 
 
 // FASTA stuff
 uint64_t dict_id_FASTA_DESC=0, dict_id_FASTA_SEQ=0, dict_id_FASTA_COMMENT=0;
@@ -52,9 +53,9 @@ uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_s
 // our stuff used in multiple data types
 uint64_t dict_id_WindowsEOL=0;         
 
-DictIdType dict_id_make(const char *str, unsigned str_len) 
+DictId dict_id_make(const char *str, unsigned str_len) 
 { 
-    DictIdType dict_id = DICT_ID_NONE; 
+    DictId dict_id = DICT_ID_NONE; 
 
     if (!str_len) str_len = strlen (str);
 
@@ -73,9 +74,9 @@ DictIdType dict_id_make(const char *str, unsigned str_len)
 }
 
 // for backward compatability
-DictIdType dict_id_make_v2to4 (const char *str, unsigned str_len) 
+DictId dict_id_make_v2to4 (const char *str, unsigned str_len) 
 { 
-    DictIdType dict_id = {0}; 
+    DictId dict_id = {0}; 
     memcpy (dict_id.id, str, MIN (str_len, DICT_ID_LEN)); 
     return dict_id;
 }
@@ -168,6 +169,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_BI = sam_dict_id_optnl_sf (dict_id_make ("BI:Z", 4)).num; // not used in newer versions of GATK
 
         // our private dictionary for + or 0 strands
+        dict_id_SAM_SQnonref  = dict_id_field        (dict_id_make ("SQnonref",8)).num;
         dict_id_OPTION_STRAND = sam_dict_id_optnl_sf (dict_id_make ("@STRAND", 7)).num;
         dict_id_OPTION_RNAME  = sam_dict_id_optnl_sf (dict_id_make ("@RNAME",  6)).num;
         dict_id_OPTION_POS    = sam_dict_id_optnl_sf (dict_id_make ("@POS",    4)).num;
@@ -222,8 +224,8 @@ Buffer *dict_id_create_aliases_buf (void)
     DictIdAlias *next = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
         if (aliases_def[i].dt == z_file->data_type) {
-            next->alias = (DictIdType)*aliases_def[i].dict_id_alias;
-            next->dst   = (DictIdType)*aliases_def[i].dict_id_dst;
+            next->alias = (DictId)*aliases_def[i].dict_id_alias;
+            next->dst   = (DictId)*aliases_def[i].dict_id_dst;
             next++;
         }
 
@@ -233,10 +235,8 @@ Buffer *dict_id_create_aliases_buf (void)
 // PIZ I/O thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
-    // we just finished reading all the dictionaries, so the sl_dir_cursor should be pointing to our section (+1)
-    SectionListEntry *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, z_file->sl_dir_cursor - 1);
-
-    if (sl_ent->section_type != SEC_DICT_ID_ALIASES) return;
+    bool has_aliases_section = sections_seek_to (SEC_DICT_ID_ALIASES);
+    if (!has_aliases_section) return;
 
     static Buffer compressed_aliases = EMPTY_BUFFER;
 
@@ -252,17 +252,16 @@ void dict_id_read_aliases (void)
     dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);
 }
 
-
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
 // candidate is a specific dict_id that we test for its matching of the template
-bool dict_id_is_match (DictIdType template, DictIdType candidate)
+bool dict_id_is_match (DictId template, DictId candidate)
 {
     if (!template.num) return true;
 
     if (template.num == candidate.num) return true;
 
     // template if it is 0 except for the 2 MSb of byte 0 - i.e. we're searching for a type of dict_id rather than a specific one
-    DictIdType copy = template;
+    DictId copy = template;
     copy.id[0] &= 0x3f; // remove the two MSb */
 
     if (!copy.num && ((template.id[0] & 0xc0) == (candidate.id[0] & 0xc0)))
@@ -271,7 +270,7 @@ bool dict_id_is_match (DictIdType template, DictIdType candidate)
     return false;
 }
 
-const char *dict_id_display_type (DataType dt, DictIdType dict_id)
+const char *dict_id_display_type (DataType dt, DictId dict_id)
 {
     if (dict_id_is_field  (dict_id)) return dt_props[dt].stat_dict_types[0];
     if (dict_id_is_type_1 (dict_id)) return dt_props[dt].stat_dict_types[1]; 
@@ -282,7 +281,7 @@ const char *dict_id_display_type (DataType dt, DictIdType dict_id)
 }
 
 // print the dict_id - NOT thread safe, for use in execution-termination messages
-const char *err_dict_id (DictIdType dict_id)
+const char *err_dict_id (DictId dict_id)
 {
     static char s[DICT_ID_LEN+1];
     sprintf (s, "%.*s", DICT_ID_LEN, dict_id.num ? (char*)dict_id_printable(dict_id).id : "<null>");

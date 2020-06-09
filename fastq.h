@@ -19,7 +19,7 @@ extern const char *fastq_seg_txt_line();
 // PIZ Stuff
 extern bool fast_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern void fastq_piz_reconstruct_vb();
-extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictIdType dict_id);
+extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 
 // VBlock stuff
 extern void fast_vb_release_vb();

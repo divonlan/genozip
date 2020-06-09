@@ -22,14 +22,15 @@
 #include "strings.h"
 #include "seg.h"
 #include "dict_id.h"
+#include "sam.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 // Special values:
 // "-" - negated previous value
 // ""  - negated previous delta
 static int64_t piz_reconstruct_from_delta (VBlock *vb, 
-                                           MtfContext *my_ctx,   // use and store last_delta
-                                           MtfContext *base_ctx, // get last_value
+                                           Context *my_ctx,   // use and store last_delta
+                                           Context *base_ctx, // get last_value
                                            const char *delta_snip, unsigned delta_snip_len) 
 {
     ASSERT (delta_snip, "Error in piz_reconstruct_from_delta: delta_snip is NULL. vb_i=%u", vb->vblock_i);
@@ -43,20 +44,20 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
     else 
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
-    int64_t new_value = base_ctx->last_value + my_ctx->last_delta;    
+    int64_t new_value = base_ctx->last_value + my_ctx->last_delta;  
     RECONSTRUCT_INT (new_value);
 
     return new_value;
 }
 
-static uint32_t piz_reconstruct_from_local_text (VBlock *vb, MtfContext *ctx)
+static uint32_t piz_reconstruct_from_local_text (VBlock *vb, Context *ctx)
 {
     uint32_t start = ctx->next_local; 
     ARRAY (char, data, ctx->local);
 
     while (ctx->next_local < ctx->local.len && data[ctx->next_local] != SNIP_SEP) ctx->next_local++;
     ASSERT (ctx->next_local < ctx->local.len, 
-            "Error reconstructing txt_line=%u: unexpected end of CTX_LT_TEXT data in %s (len=%u)", vb->line_i, ctx->name, (uint32_t)ctx->local.len); \
+            "Error reconstructing txt_line=%u: unexpected end of ctx->local data in %s (len=%u)", vb->line_i, ctx->name, (uint32_t)ctx->local.len);
 
     char *snip = &data[start];
     uint32_t snip_len = ctx->next_local - start; 
@@ -73,7 +74,7 @@ static uint32_t piz_reconstruct_from_local_text (VBlock *vb, MtfContext *ctx)
 // NOT TESTED YET
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-static int64_t piz_reconstruct_from_local_int (VBlock *vb, MtfContext *ctx, char seperator /* 0 if none */)
+static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */)
 {
     unsigned width = ctx_lt_sizeof_one[ctx->ltype];
     bool is_signed = ctx_lt_is_signed [ctx->ltype];
@@ -112,7 +113,7 @@ static int64_t piz_reconstruct_from_local_int (VBlock *vb, MtfContext *ctx, char
 
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from seq_len.
-static void piz_reconstruct_from_local_sequence (VBlock *vb, MtfContext *ctx, const char *snip, unsigned snip_len)
+static void piz_reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
 {
     ASSERT0 (ctx, "Error in piz_reconstruct_from_local_sequence: ctx is NULL");
 
@@ -206,16 +207,16 @@ static void piz_reconstruct_structured (VBlock *vb, const char *snip, unsigned s
                                    has_prefixes ? snip_len - (b64_len+1) : 0);
 }
 
-static MtfContext *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
+static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
 {
-    unsigned b64_len = base64_sizeof (DictIdType);
+    unsigned b64_len = base64_sizeof (DictId);
     ASSERT (b64_len + 1 <= *snip_len, "Error in piz_get_other_ctx_from_snip: snip_len=%u but expecting it to be >= %u",
             *snip_len, b64_len + 1);
 
-    DictIdType dict_id;
+    DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
 
-    MtfContext *other_ctx = mtf_get_ctx (vb, dict_id);
+    Context *other_ctx = mtf_get_ctx (vb, dict_id);
 
     *snip     += b64_len + 1;
     *snip_len -= b64_len + 1;
@@ -223,13 +224,13 @@ static MtfContext *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, u
     return other_ctx;
 }
 
-void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *snip, unsigned snip_len)
+void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, unsigned snip_len)
 {
     if (!snip_len) return; // nothing to do
     
     int64_t new_value=0;
     bool have_new_value = false;
-    MtfContext *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
+    Context *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
     bool store = (snip_ctx->flags & CTX_FL_STORE_VALUE);
 
     switch (snip[0]) {
@@ -244,7 +245,7 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
             // we are request to reconstruct from another ctx
             base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
 
-        // case 1: LOCAL is not SEQUENCE - we reconstruct this snip before adding the looked up data
+        // case 1: LOCAL is not CTX_LT_SEQUENCE - we reconstruct this snip before adding the looked up data
         if (snip_len && !(base_ctx->ltype == CTX_LT_SEQUENCE)) RECONSTRUCT (snip, snip_len);
         
         if (base_ctx->ltype >= CTX_LT_INT8 && base_ctx->ltype <= CTX_LT_UINT64) {
@@ -252,10 +253,14 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
             have_new_value = true;
         }
 
-        // case 2: LOCAL is SEQ_QUAL - the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
+        // case 2: CTX_LT_SEQUENCE  - the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
         else if (base_ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
 
+/*        // case 2: CTX_LT_SEQUENCE_REF
+        else if (base_ctx->ltype == CTX_LT_SEQUENCE_REF) 
+            sam_ref_reconstruct (vb, base_ctx, snip, snip_len);
+*/
         else piz_reconstruct_from_local_text (vb, base_ctx); // this will call us back recursively with the snip retrieved
                 
         break;
@@ -326,9 +331,12 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
     }
     }
 
-    // update last_value in *base_ctx* if *snip_ctx* tell us to
-    if (have_new_value && store) 
-        base_ctx->last_value = new_value; 
+    // update last_value if needed
+    if (have_new_value && store) {
+        ASSERT (base_ctx == snip_ctx, "Error in piz_reconstruct_one_snip: attempted to udpate value when base_ctx=%s differs from snip_ctx=%s. Are these supposed to be aliases?",
+                base_ctx->name, snip_ctx->name);
+        base_ctx->last_value = new_value;
+    } 
 
     snip_ctx->last_line_i = vb->line_i;
 }
@@ -336,32 +344,28 @@ void piz_reconstruct_one_snip (VBlock *vb, MtfContext *snip_ctx, const char *sni
 // returns reconstructed length
 uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
 {
-    MtfContext *ctx = &vb->contexts[did_i];
+    Context *ctx = &vb->contexts[did_i];
 
     ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "Error in piz_reconstruct_from_ctx: ctx not initialized (dict_id=0)");
 
     // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
-    if (!ctx->dict_id.num) {
-        did_i = ctx->did_i;
-        ctx = &vb->contexts[ctx->did_i];
-    }
+    if (!ctx->dict_id.num) 
+        ctx = &vb->contexts[ctx->did_i]; // ctx->did_i is different than did_i if its an alias
 
     uint64_t start = vb->txt_data.len;
 
     // case: we have dictionary data
     if (ctx->b250.len) {         
         DECLARE_SNIP;
-        uint32_t word_index = LOAD_SNIP(did_i); 
-        piz_reconstruct_one_snip (vb, &vb->contexts[did_i], snip, snip_len);        
+        uint32_t word_index = LOAD_SNIP(ctx->did_i); 
+        piz_reconstruct_one_snip (vb, ctx, snip, snip_len);        
 
         // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
-        if (flag_regions) {
-            if (ctx->did_i == DTF(chrom)) 
-                vb->chrom_node_index = word_index;
+        if (did_i == DTF(chrom)) // test original did_i, not the alias target
+            vb->chrom_node_index = word_index;
 
-            else if (ctx->did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, (uint32_t)ctx->last_value)) 
-                vb->dont_show_curr_line = true;
-        }
+        if (flag_regions && did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, (uint32_t)ctx->last_value)) 
+            vb->dont_show_curr_line = true;
     }
     
     // case: all data is only in local
@@ -371,6 +375,9 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         
         else if (ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
+        
+        else if (ctx->ltype == CTX_LT_SEQUENCE_REF) 
+            sam_ref_reconstruct (vb, ctx);
         
         else if (ctx->ltype == CTX_LT_TEXT)
             piz_reconstruct_from_local_text (vb, ctx);
@@ -389,7 +396,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
     return (uint32_t)(vb->txt_data.len - start);
 }
 
-void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictIdType), SubfieldMapper *mapper)
+void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictId), SubfieldMapper *mapper)
 {
     mapper->num_subfields = 0;
 
@@ -418,7 +425,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
         // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
         bool is_local = header->h.section_type == SEC_LOCAL;
         if (section_type_is_b250 (header->h.section_type) || is_local) {
-            MtfContext *ctx = mtf_get_ctx (vb, header->dict_id);
+            Context *ctx = mtf_get_ctx (vb, header->dict_id);
         
             ctx->flags = is_v5_or_above ? header->flags : 0; // flags and ltype were introduced in v5, before that this field, in b250, was used for something else (not 0)
             ctx->ltype = is_v5_or_above ? header->ltype : 0;
@@ -498,7 +505,8 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     if (!flag_header_only) {
         
         // read random access, but only if we are going to need it
-        if (flag_regions || flag_show_index) {
+        bool need_random_access = flag_regions || flag_show_index || (z_file->data_type == DT_SAM && !flag_reference);
+        if (need_random_access) {
             zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
             // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
@@ -528,7 +536,10 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
         // read dictionaries (this also seeks to the start of the dictionaries)
         if (last_vb_i >= 0)
-            zfile_read_all_dictionaries (last_vb_i, flag_regions ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
+            zfile_read_all_dictionaries (last_vb_i, need_random_access ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
+
+        if (z_file->data_type == DT_SAM)
+            sam_ref_read_all_ranges();
 
         // read dict_id aliases, if there are any
         dict_id_read_aliases();
@@ -587,8 +598,7 @@ static void enforce_v1_limitations (bool is_first_component)
 }
 
 // returns true is successfully outputted a txt file
-bool piz_dispatcher (const char *z_basename, unsigned max_threads, 
-                     bool is_first_component, bool is_last_file)
+bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_last_file)
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
@@ -598,7 +608,7 @@ bool piz_dispatcher (const char *z_basename, unsigned max_threads,
     if (flag_split && !sections_has_more_components()) return false; // no more components
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (max_threads, 0, flag_test, is_last_file, z_basename);
+        dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_basename);
     
     // read genozip header
     Md5Hash original_file_digest;

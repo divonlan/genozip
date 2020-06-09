@@ -14,6 +14,9 @@ void sam_vb_release_vb (VBlockSAM *vb)
 {
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     buf_free (&vb->optional_mapper_buf);
+    vb->range = NULL;
+    vb->last_cigar = NULL;
+    vb->ref_consumed = 0;
 }
 
 void sam_vb_destroy_vb (VBlockSAM *vb)
@@ -23,41 +26,60 @@ void sam_vb_destroy_vb (VBlockSAM *vb)
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string
 // A CIGAR looks something like: "109S19M23S", See: https://samtools.github.io/hts-specs/SAMv1.pdf 
-uint32_t sam_seq_len_from_cigar (const char *cigar, unsigned cigar_len)
+void sam_analyze_cigar (const char *cigar, unsigned cigar_len, 
+                        unsigned *seq_consumed, unsigned *ref_consumed) // optional outs
 {
+    if (seq_consumed) *seq_consumed = 0;
+    if (ref_consumed) *ref_consumed = 0;
+
     // ZIP case: if the CIGAR is "*", we later get the length from SEQ and store it as eg "151*". 
     // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*"
-    if (cigar_len == 1 && cigar[0] == '*') return 0;
+    if (cigar_len == 1 && cigar[0] == '*') return;
 
-    unsigned seq_len=0, n=0;
-
+    unsigned n=0;
     for (unsigned i=0; i < cigar_len; i++) {
+
+        // bits - 1=digit 2=consumes_seq 4=consumes_ref 8=error
+        static const uint8_t cigar_lookup[256] = {
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, // ASCII 0-15
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, // ASCII 16-31
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, // ASCII 32-47  '*' consumes sequences
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 8, 8, 6, 8, 8, // ASCII 48-63  '0'-'9' are digits, '=' consumes both
+            8, 8, 8, 8, 4, 8, 8, 8, 0, 2, 8, 8, 8, 6, 4, 8, // ASCII 64-79  'D', 'N' - referece only, 'I' - sequence only, 'H' - none, 'M' - both
+            0, 8, 8, 2, 8, 8, 8, 8, 6, 8, 8, 8, 8, 8, 8, 8, // ASCII 80-95  'P' - none, 'S' - sequence only, 'X' - both
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, // ASCII 96-111  
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, // ASCII 112-127 
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, // ASCII 128-255
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+            8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8 };
+
         char c = cigar[i];
-        if (IS_DIGIT (c)) 
+        char lookup = cigar_lookup[(uint8_t)c];
+
+        ASSERT (lookup != 8, "Error: Invalid CIGAR in %s: invalid operation %c. CIGAR=%.*s", 
+                txt_name, cigar[i], cigar_len, cigar);
+
+        if (lookup == 1) 
             n = n*10 + (c - '0');
         
-        else if (c=='M' || c=='I' || c=='S' || c=='=' || c=='X' || c=='*') { // these "consume" sequences
+        else {
             ASSERT (n, "Error: Invalid CIGAR in %s: operation %c not preceded by a number. CIGAR=%.*s", 
                     txt_name, c, cigar_len, cigar);
-            seq_len += n;
+            
+            if ((lookup & 2) && seq_consumed) *seq_consumed += n;
+            if ((lookup & 4) && ref_consumed) *ref_consumed += n;
+
             n = 0;
         }
-
-        else if (c=='D' || c=='N' || c=='H' || c=='P') { // these don't consume sequence
-            ASSERT (n, "Error: Invalid CIGAR in %s: operation %c not preceded by a number. CIGAR=%.*s", 
-                    txt_name, c, cigar_len, cigar);
-            n = 0;
-        }
-
-        else ABORT ("Error: Invalid CIGAR in %s: invalid operation %c. CIGAR=%.*s", 
-                    txt_name, c, cigar_len, cigar);
     }                          
 
     ASSERT (!n, "Error: Invalid CIGAR in %s: expecting it to end with an operation character. CIGAR=%.*s", 
             txt_name, cigar_len, cigar);
 
-    ASSERT (seq_len, "Error: Invalid CIGAR in %s: CIGAR implies 0-length SEQ. CIGAR=%.*s", 
-            txt_name, cigar_len, cigar);
-
-    return seq_len;
+    ASSERT (!seq_consumed || *seq_consumed, "Error: Invalid CIGAR in %s: CIGAR implies 0-length SEQ. CIGAR=%.*s", txt_name, cigar_len, cigar);
 }
