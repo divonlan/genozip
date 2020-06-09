@@ -21,8 +21,8 @@ static int *count_per_section = NULL;
 #define OVERHEAD_SEC_GENOZIP_HDR -2
 #define OVERHEAD_SEC_TXT_HDR     -3
 #define OVERHEAD_SEC_RA_INDEX    -4
-//#define OVERHEAD_SEC_REFERENCE   -5
 #define LAST_OVERHEAD            -4
+
 static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
                              double format_proportion /* only needed for FORMAT subfields - number of words of this dict_id in gt_data divided by all words in gt_data */)
@@ -44,11 +44,11 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
                 *local_compressed_size += (section+1)->offset - section->offset;
             else if (section->section_type == SEC_SAM_REFERENCE)
                 *dict_compressed_size += (section+1)->offset - section->offset;
-            else if (section->dict_id.num == dict_id_fields[SAM_SEQ])
+            else // section->dict_id.num == dict_id_fields[SAM_SEQ]
                 *b250_compressed_size += (section+1)->offset - section->offset;
         }
 
-        else if (dict_id.num == dict_id_SAM_SQnonref) {} // ^ already handle above
+        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_SAM_SQnonref) {} // ^ already handle above
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
             *dict_compressed_size += (section+1)->offset - section->offset;
@@ -96,9 +96,6 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
             count_per_section[i]--; // we already counted SEC_VB_HEADER above. this is just accounting for the squeeze payload
         }
 
-//        else if (section->section_type == SEC_SAM_REFERENCE && overhead_sec == OVERHEAD_SEC_REFERENCE) 
-//            *local_compressed_size += (section+1)->offset - section->offset;
-        
         else count_per_section[i]--; // acually... not count_per_section!
     }
 
@@ -117,7 +114,7 @@ static void stats_check_count (uint64_t all_comp_total)
         if (!count_per_section[i]) 
             fprintf (stderr, "Section not counted: %s section_i=%u\n", st_name (sections[i].section_type), i);
         else if (count_per_section[i] > 1 && ENT (SectionListEntry, z_file->section_list_buf, i)->section_type != SEC_VCF_GT_DATA) // note: SEC_VCF_GT_DATA is expected to have 1 count per FORMAT dict. to do: verify this.
-            fprintf (stderr, "Section overcounted: %s section_i=%u counted %u times\n", st_name (sections[i].section_type), i, count_per_section[i]);
+            fprintf (stderr, "Section overcounted: %s section_i=%u dict=%.8s counted %u times\n", st_name (sections[i].section_type), i, dict_id_printable (sections[i].dict_id).id, count_per_section[i]);
 
     char s1[20], s2[20];
     ASSERTW (false, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
