@@ -134,3 +134,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 5.0.7
 - bug fixes
+
+5.0.8
+- fix bug with compressing VCF / GVF with an INFO / ATTRS field of '.'

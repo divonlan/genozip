@@ -341,7 +341,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
                     ASSSEG (this_name_len > 0 || reconstruct, info_str, "Error: %s field contains a = or ; without a preceding subfield name", field_name);
 
                 if (this_name_len > 0 && !bug_v2v3_situation) { 
-                    ASSSEG (this_name[0] >= 64 && this_name[0] <= 127, info_str,
+                    ASSSEG ((this_name[0] >= 64 && this_name[0] <= 127) || this_name[0] == '.', info_str,
                             "Error: %s field contains a name %.*s starting with an illegal character", field_name, this_name_len, this_name);
 
                     InfoItem *ii = &info_items[st.num_items];
