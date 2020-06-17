@@ -455,9 +455,10 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
     return dd->input_exhausted;
 }
 
-void dispatcher_fan_out_task (const char *task_name, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
+void dispatcher_fan_out_task (const char *task_name, bool test_mode, 
+                              DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, false, true, task_name);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, test_mode, true, task_name);
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;

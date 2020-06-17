@@ -30,6 +30,6 @@ extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
 extern const char *dispatcher_ellapsed_time (Dispatcher dispatcher, bool ever);
-extern void dispatcher_fan_out_task (const char *task_name, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
+extern void dispatcher_fan_out_task (const char *task_name, bool test_mode, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
 
 #endif

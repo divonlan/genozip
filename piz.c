@@ -505,7 +505,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     if (!flag_header_only) {
         
         // read random access, but only if we are going to need it
-        bool need_random_access = flag_regions || flag_show_index || (z_file->data_type == DT_SAM && !flag_reference);
+        bool need_random_access = flag_regions || flag_show_index || (z_file->data_type == DT_SAM && !flag_reference /* expecting internal reference */);
         if (need_random_access) {
             zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
@@ -538,8 +538,10 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
         if (last_vb_i >= 0)
             zfile_read_all_dictionaries (last_vb_i, need_random_access ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
 
-        if (z_file->data_type == DT_SAM)
+        if (z_file->data_type == DT_SAM) {
             sam_ref_read_all_ranges();
+            if (!flag_quiet) fprintf (stderr, flag_test ? "Success\n" : "Done\n");
+        }
 
         // read dict_id aliases, if there are any
         dict_id_read_aliases();
@@ -606,9 +608,6 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     SectionListEntry *sl_ent = NULL;
     
     if (flag_split && !sections_has_more_components()) return false; // no more components
-
-    if (!dispatcher) 
-        dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_basename);
     
     // read genozip header
     Md5Hash original_file_digest;
@@ -624,6 +623,9 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5 or --test", z_name);
     }
+
+    if (!dispatcher) 
+        dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_basename);
 
     // case: we couldn't open the file because we didn't know what type it is - open it now
     if (!flag_split && !txt_file->file) file_open_txt (txt_file);

@@ -21,14 +21,17 @@
 #include "random_access.h"
 #include "dict_id.h"
 
-static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_file)
+static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_component)
 {
+    if (flag_quiet) return; 
+
     const char *runtime = dispatcher_ellapsed_time (dispatcher, false);
     double z_bytes   = (double)z_file->disk_so_far;
     double txt_bytes = (double)z_file->txt_data_so_far_concat;
     double ratio     = txt_bytes / z_bytes;
 
-    if (flag_concat) { // in concat, we don't show the compression ratio for files except for the last one
+    // in concat, or when we store the refernce, we don't show the compression ratio for files except for the last one
+    if (flag_concat || flag_store_ref) { 
 
         static uint64_t txt_file_disk_size_concat = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
@@ -42,7 +45,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_last_f
 
         fprintf (stderr, "Done (%s)                                     \n", runtime);
 
-        if (is_last_file) {
+        if (is_final_component) {
             double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
 
             if (txt_file->comp_alg == COMP_PLN || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
@@ -208,15 +211,17 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
-static void zip_write_global_area (const Md5Hash *single_component_md5)
+static void zip_write_global_area (Dispatcher dispatcher, const Md5Hash *single_component_md5)
 {
     // output dictionaries (inc. aliases) to disk - they are in the "processed" data of evb
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, PD_DICT_DATA);  
    
-    // In SAM, output reference
-    if (z_file->data_type == DT_SAM)
+    // output reference, if needed
+    if (flag_store_ref) {
         sam_ref_compress_ref();
+        zip_display_compression_ratio (dispatcher, true); // Done for reference + final compression ratio calculation
+    }
 
     // add dict_id aliases list, if we have one
     Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
@@ -418,9 +423,16 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-concatenated file, or the last component of a concatenated file - write the genozip header, random access and dictionaries
-    if (is_last_file || !flag_concat) zip_write_global_area (&single_component_md5);
+    if (is_last_file || !flag_concat) {
+        
+        if (flag_store_ref) zip_display_compression_ratio (dispatcher, false); // Done for the file (if reference is to be written by zip_write_global_area)
 
-    if (!flag_quiet) zip_display_compression_ratio (dispatcher, is_last_file);
+        zip_write_global_area (dispatcher, &single_component_md5);
+
+        if (!flag_store_ref) zip_display_compression_ratio (dispatcher, true); // Done for the file (if no reference - inc. global area in compression ratio)
+    }
+    else  // non-last file in concat mode
+        zip_display_compression_ratio (dispatcher, false);
 
 finish:
     z_file->disk_size              = z_file->disk_so_far;

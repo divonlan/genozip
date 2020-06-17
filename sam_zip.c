@@ -24,8 +24,9 @@ void sam_zip_initialize (void)
     // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
     random_access_alloc_ra_buf (evb, 0);
 
-    // read external reference if needed
-    //...
+    // if there is no external reference provided, then we create our internal one, and store it
+    // (if an external reference IS provided, the user can decide whether to store it or not, with --store-reference)
+    if (!flag_reference) flag_store_ref = true;
 }
 
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)

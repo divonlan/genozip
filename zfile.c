@@ -612,7 +612,7 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
         if (flag_concat) {
             md5_finalize (&z_file->md5_ctx_concat, &header.md5_hash_concat);
             if (flag_md5 && z_file->num_txt_components_so_far > 1 && !flag_quiet) 
-                fprintf (stderr, "Concatenated VCF MD5 = %s\n", md5_display (&header.md5_hash_concat, false));
+                fprintf (stderr, "Concatenated %s MD5 = %s\n", dt_name (z_file->data_type), md5_display (&header.md5_hash_concat, false));
         } 
         else 
             header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file

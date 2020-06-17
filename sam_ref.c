@@ -243,7 +243,10 @@ void sam_ref_read_all_ranges (void)
     ref_range_cursor = 0;
 
     // decompress reference using Dispatcher
-    dispatcher_fan_out_task ("Internal reference sequence", sam_ref_read_one_range, sam_ref_uncompress_one_range, NULL);
+    dispatcher_fan_out_task ("Internal reference sequence", flag_test, 
+                             sam_ref_read_one_range, 
+                             sam_ref_uncompress_one_range, 
+                             NULL);
 }
 
 // ------------------------------------
@@ -520,7 +523,12 @@ static void sam_ref_compress_one_range (VBlockP vb_)
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
 static uint32_t next_range_i=0;
-static void sam_ref_output_one_range (VBlockP vb) { zip_output_processed_vb (vb, &vb->section_list_buf, false, PD_SAM_REF_DATA); }
+
+static void sam_ref_output_one_range (VBlockP vb) 
+{ 
+    zip_output_processed_vb (vb, &vb->section_list_buf, false, PD_SAM_REF_DATA); 
+}
+
 static void sam_ref_prepare_range_for_compress (VBlockP vb)
 {
     // find next occupied range
@@ -552,7 +560,10 @@ void sam_ref_compress_ref (void)
 
     next_range_i=0; // can be initialized multiple times if we're compressing multiple SAMs - but not concurrently
 
-    dispatcher_fan_out_task ("Internal reference sequence", sam_ref_prepare_range_for_compress, sam_ref_compress_one_range, sam_ref_output_one_range);
+    dispatcher_fan_out_task ("Internal reference sequence", false, 
+                             sam_ref_prepare_range_for_compress, 
+                             sam_ref_compress_one_range, 
+                             sam_ref_output_one_range);
 }
 
 /*                // case: ref exists but is different than SEQ - replace base with 1, 2 or 3 - 1 being the most frequent SNP etc. This reduces the alphabet from
