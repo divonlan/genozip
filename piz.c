@@ -12,7 +12,7 @@
 #include "base250.h"
 #include "base64.h"
 #include "dispatcher.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "file.h"
 #include "endianness.h"
 #include "piz.h"
@@ -22,7 +22,8 @@
 #include "strings.h"
 #include "seg.h"
 #include "dict_id.h"
-#include "sam.h"
+#include "reference.h"
+#include "fasta.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 // Special values:
@@ -259,7 +260,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
 
 /*        // case 2: CTX_LT_SEQUENCE_REF
         else if (base_ctx->ltype == CTX_LT_SEQUENCE_REF) 
-            sam_ref_reconstruct (vb, base_ctx, snip, snip_len);
+            ref_reconstruct (vb, base_ctx, snip, snip_len);
 */
         else piz_reconstruct_from_local_text (vb, base_ctx); // this will call us back recursively with the snip retrieved
                 
@@ -297,27 +298,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         snip++; snip_len--;
         
     default: {
-        bool reconstruct = true;
-
-        // case: backward compatability: pizzing a v4 and below VCF file 
-        if (!is_v5_or_above) {
-            //all snips in the POS ctx are deltas
-            if (snip_ctx->dict_id.num == dict_id_fields[VCF_POS]) {
-                new_value = piz_reconstruct_from_delta (vb, snip_ctx, snip_ctx, snip, snip_len); 
-                have_new_value = true;
-                store = true; // hard coded store value - flags were only introduced in v5
-                break;
-            }
-
-            // INFO up to v4 is given as a string of names "DP=AC=JK;AC=AS" (= for a valueful field (inc. valueful 
-            // final field), ; after a non-final valueless field) - we generate the Structured and then reconstruct from it
-            else if (snip_ctx->dict_id.num == dict_id_fields[VCF_INFO]) {
-                seg_info_field (vb, NULL, snip, snip_len, true); // this will reconstruct too
-                reconstruct = false; 
-            }
-        }
-    
-        if (reconstruct) RECONSTRUCT (snip, snip_len); // simple reconstruction
+        RECONSTRUCT (snip, snip_len); // simple reconstruction
 
         if (store) {
             char *after;
@@ -364,7 +345,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         if (did_i == DTF(chrom)) // test original did_i, not the alias target
             vb->chrom_node_index = word_index;
 
-        if (flag_regions && did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, (uint32_t)ctx->last_value)) 
+        if (flag_regions && did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, ctx->last_value)) 
             vb->dont_show_curr_line = true;
     }
     
@@ -377,7 +358,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
         
         else if (ctx->ltype == CTX_LT_SEQUENCE_REF) 
-            sam_ref_reconstruct (vb, ctx);
+            sam_piz_reconstruct_seq (vb, ctx);
         
         else if (ctx->ltype == CTX_LT_TEXT)
             piz_reconstruct_from_local_text (vb, ctx);
@@ -422,16 +403,14 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
 
         SectionHeaderCtx *header = (SectionHeaderCtx *)ENT (char, vb->z_data, section_index[section_i]);
 
-        // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
         bool is_local = header->h.section_type == SEC_LOCAL;
-        if (section_type_is_b250 (header->h.section_type) || is_local) {
+        if (header->h.section_type == SEC_B250 || is_local) {
             Context *ctx = mtf_get_ctx (vb, header->dict_id);
-        
-            ctx->flags = is_v5_or_above ? header->flags : 0; // flags and ltype were introduced in v5, before that this field, in b250, was used for something else (not 0)
-            ctx->ltype = is_v5_or_above ? header->ltype : 0;
+            ctx->flags = header->flags;
+            ctx->ltype = header->ltype;
 
             zfile_uncompress_section (vb, header, is_local ? &ctx->local : &ctx->b250, 
-                                      is_local ? "contexts.local" : "contexts.b250", header->h.section_type); // type is SEC_B250 starting v5, but potentially other VCF B250 in v1-v4
+                                      is_local ? "contexts.local" : "contexts.b250", header->h.section_type); 
             section_i++;
         }    
 
@@ -456,6 +435,10 @@ static void piz_uncompress_one_vb (VBlock *vb)
         vb->longest_line_len = BGEN32 (header->longest_line_len);
         if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ 
 
+        if (flag_show_vblocks) 
+            fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
+                     vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
+
         buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
 
         piz_uncompress_all_ctxs (vb);
@@ -472,8 +455,7 @@ static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
     mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids);
 
-    // note: since v5, all b250 files are SEC_B250, but files compressed with v2-v4 will have SEC_VCF_*_B250
-    while (section_type_is_b250 ((*next_sl)->section_type) || (*next_sl)->section_type == SEC_LOCAL) {
+    while ((*next_sl)->section_type == SEC_B250 || (*next_sl)->section_type == SEC_LOCAL) {
         *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len) = vb->z_data.len; 
 
         int32_t ret = zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
@@ -490,9 +472,9 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 {
     DataType data_type = zfile_read_genozip_header (original_file_digest);
     
-    dict_id_initialize (data_type); // must run after zfile_read_genozip_header that sets z_file->data_type; needed by V1 too
+    dict_id_initialize (data_type); // must run after zfile_read_genozip_header that sets z_file->data_type
 
-    if (data_type == DT_VCF_V1 || data_type == DT_NONE) return data_type;
+    if (data_type == DT_NONE) return data_type;
     
     // for FASTA and FASTQ we convert a "header_only" flag to "header_one" as flag_header_only has some additional logic
     // that doesn't work for FAST
@@ -501,11 +483,18 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
         flag_header_one  = true;
     }
 
+    // check if the genozip file includes a reference
+    if (sections_has_reference()) {
+        ASSERTW (flag_reference == REF_NONE || flag_reference == REF_STORED, // it will be REF_STORED in the 2nd+ file
+        "Note: --reference option is ignored - %s does not require a reference to be uncompressed", z_name);
+        flag_reference = REF_STORED;
+    }
+
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
         
         // read random access, but only if we are going to need it
-        bool need_random_access = flag_regions || flag_show_index || (z_file->data_type == DT_SAM && !flag_reference /* expecting internal reference */);
+        bool need_random_access = flag_regions || flag_show_index || flag_fasta_sequential || flag_reference != REF_NONE;
         if (need_random_access) {
             zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
@@ -534,13 +523,17 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
         // get the last vb_i that included in the regions - returns -1 if no vb has the requested regions
         int32_t last_vb_i = flag_regions ? random_access_get_last_included_vb_i() : 0;
 
-        // read dictionaries (this also seeks to the start of the dictionaries)
+        // read dictionaries
         if (last_vb_i >= 0)
             zfile_read_all_dictionaries (last_vb_i, need_random_access ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
 
-        if (z_file->data_type == DT_SAM) {
-            sam_ref_read_all_ranges();
-            if (!flag_quiet) fprintf (stderr, flag_test ? "Success\n" : "Done\n");
+        // give the reference FASTA CONTIG dictionary to the reference module
+        if (ref_flag_reading_reference)
+            ref_consume_ref_fasta_global_area();
+
+        if (flag_reference == REF_STORED) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
+            ref_uncompress_all_ranges();
+            if (!flag_quiet) fprintf (stderr, (flag_test && !ref_flag_reading_reference) ? "Success\n" : "Done\n");
         }
 
         // read dict_id aliases, if there are any
@@ -579,34 +572,14 @@ static bool piz_read_one_vb (VBlock *vb)
     return ok_to_compute;
 }
 
-static void enforce_v1_limitations (bool is_first_component)
-{
-    #define ENFORCE(flag,lflag) ASSERT (!(flag), "Error: %s option is not supported because %s was compressed with genozip version 1", (lflag), z_name);
-    
-    ENFORCE(flag_test, "--test");
-    ENFORCE(flag_split, "--split");
-    ENFORCE(flag_regions, "--regions");
-    ENFORCE(flag_samples, "--samples");
-    ENFORCE(flag_show_b250, "--show-b250");
-    ENFORCE(flag_show_dict, "--show-dict");
-    ENFORCE(dict_id_show_one_b250.num, "--show-one-b250");
-    ENFORCE(dict_id_show_one_dict.num, "--show-one-dict");
-    ENFORCE(dict_id_dump_one_b250.num, "--dump-one-b250");
-    ENFORCE(flag_show_gheader, "--show-gheader");
-    ENFORCE(flag_show_index, "--show-index");
-    ENFORCE(flag_show_headers, "--show-headers");
-    ENFORCE(flag_drop_genotypes, "--drop-genotypes");
-    ENFORCE(flag_gt_only, "--flag_gt_only");
-}
-
 // returns true is successfully outputted a txt file
 bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_last_file)
 {
     // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
-    bool piz_successful = false;
     SectionListEntry *sl_ent = NULL;
-    
+    bool piz_successful = true;
+
     if (flag_split && !sections_has_more_components()) return false; // no more components
     
     // read genozip header
@@ -617,8 +590,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     if (is_first_component) {
         data_type = piz_read_global_area (&original_file_digest);
 
-        if (data_type != DT_VCF_V1)  // genozip v2+ - move cursor past first txt header
-            ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
+        ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
 
         ASSERT (!flag_test || !md5_is_zero (original_file_digest), 
                 "Error testing %s: --test cannot be used with this file, as it was not compressed with --md5 or --test", z_name);
@@ -628,23 +600,18 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
         dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_basename);
 
     // case: we couldn't open the file because we didn't know what type it is - open it now
-    if (!flag_split && !txt_file->file) file_open_txt (txt_file);
+    if (!flag_split && !ref_flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
 
     if (data_type == DT_NONE) goto finish;
 
-    if (!is_v2_or_above) enforce_v1_limitations (is_first_component); // genozip_version will be 0 for v1, bc we haven't read the vcf header yet
-
     // read and write txt header. in split mode this also opens txt_file
-    piz_successful = (data_type != DT_VCF_V1) ? txtfile_genozip_to_txt_header (&original_file_digest)
-                                              : vcf_v1_header_genozip_to_vcf (&original_file_digest);
+    piz_successful = txtfile_genozip_to_txt_header (&original_file_digest);
     
-    ASSERT (piz_successful || !is_first_component, "Error: failed to read %s header in %s", 
-            dt_name (z_file->data_type), z_name);
+    ASSERT (piz_successful || !is_first_component, "Error: failed to read %s header in %s", dt_name (z_file->data_type), z_name);
 
     if (!piz_successful || flag_header_only) goto finish;
 
-    if (flag_split) 
-        dispatcher_resume (dispatcher); // accept more input 
+    if (flag_split) dispatcher_resume (dispatcher); // accept more input 
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
@@ -656,48 +623,44 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
         if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher)) {
 
             bool still_more_data = false, grepped_out = false;
-            if (is_v2_or_above) {
-                
-                bool skipped_vb;
-                static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
-                SectionType header_type = sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix);
-                switch (header_type) {
-                    case SEC_VB_HEADER: {
+            bool skipped_vb;
+            static Buffer region_ra_intersection_matrix = EMPTY_BUFFER; // we will move the data to the VB when we get it
+            SectionType header_type = sections_get_next_header_type (&sl_ent, &skipped_vb, &region_ra_intersection_matrix);
+            switch (header_type) {
+                case SEC_VB_HEADER: {
 
-                        // if we skipped VBs or we skipped the sample sections in the last vb (flag_drop_genotypes), we need to seek forward 
-                        if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); 
+                    // if we skipped VBs or we skipped the sample sections in the last vb (flag_drop_genotypes), we need to seek forward 
+                    if (skipped_vb || flag_drop_genotypes) file_seek (z_file, sl_ent->offset, SEEK_SET, false); 
 
-                        VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
-                        
-                        if (region_ra_intersection_matrix.data) {
-                            buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix", next_vb->vblock_i);
-                            buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
-                        }
-                        
-                        // read one VB's genozip data
-                        grepped_out = !piz_read_one_vb (next_vb);
-
-                        if (grepped_out) dispatcher_abandon_next_vb (dispatcher); 
-
-                        still_more_data = true; // not eof yet
-
-                        break;
+                    VBlock *next_vb = dispatcher_generate_next_vb (dispatcher, sl_ent->vblock_i);
+                    
+                    if (region_ra_intersection_matrix.data) {
+                        buf_copy (next_vb, &next_vb->region_ra_intersection_matrix, &region_ra_intersection_matrix, 0,0,0, "region_ra_intersection_matrix", next_vb->vblock_i);
+                        buf_free (&region_ra_intersection_matrix); // note: copy & free rather than move - so memory blocks are preserved for VB re-use
                     }
+                    
+                    // read one VB's genozip data
+                    grepped_out = !piz_read_one_vb (next_vb);
 
-                    case SEC_TXT_HEADER: // 2nd+ txt header of a concatenated file
-                        if (!flag_split) {
-                            txtfile_genozip_to_txt_header (NULL); // skip 2nd+ txt header if concatenating
-                            continue;
-                        }
-                        break; // eof if splitting
-                    
-                    case SEC_NONE: 
-                        break; 
-                    
-                    default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));
+                    if (grepped_out) dispatcher_abandon_next_vb (dispatcher); 
+
+                    still_more_data = true; // not eof yet
+
+                    break;
                 }
+
+                case SEC_TXT_HEADER: // 2nd+ txt header of a concatenated file
+                    if (!flag_split) {
+                        txtfile_genozip_to_txt_header (NULL); // skip 2nd+ txt header if concatenating
+                        continue;
+                    }
+                    break; // eof if splitting
+                
+                case SEC_NONE: 
+                    break; 
+                
+                default: ABORT ("Error in piz_dispatcher: unexpected section_type=%s", st_name (header_type));
             }
-            else still_more_data = vcf_v1_piz_read_one_vb (dispatcher_generate_next_vb (dispatcher, 0));  // genozip v1
             
             if (still_more_data) {
                 if (!grepped_out) 
@@ -717,7 +680,9 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
         else { // if (dispatcher_has_processed_vb (dispatcher, NULL)) {
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
 
-            txtfile_write_one_vblock (processed_vb);
+            // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
+            if (!ref_flag_reading_reference) txtfile_write_one_vblock (processed_vb);
+
             z_file->num_vbs++;
             
             z_file->txt_data_so_far_single += processed_vb->vb_data_size; 
@@ -748,7 +713,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
                     md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
             exit (1);
         }
-        else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file, or its a v1 files might be without md5
+        else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file
                      "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
                      txt_file->name, md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type), 
                      md5_display (&original_file_digest, false));
@@ -760,7 +725,6 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
         fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher, false));
 
 finish:
-
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
     if (!flag_split || !piz_successful) 
         dispatcher_finish (&dispatcher, NULL);

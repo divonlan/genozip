@@ -10,7 +10,7 @@
 #include "zfile.h"
 #include "seg.h"
 #include "vblock.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "zip.h"
 #include "base250.h"
 #include "endianness.h"

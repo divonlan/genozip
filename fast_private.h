@@ -16,7 +16,7 @@ typedef struct {
 } ZipDataLineFAST;
 
 // IMPORTANT: if changing fields in VBlockFAST, also update vb_fast_release_vb 
-typedef struct VBlockFAST { // for FASTA and FASTQ
+typedef struct VBlockFAST {     // for FASTA and FASTQ
     VBLOCK_COMMON_FIELDS
     SubfieldMapper desc_mapper; // FASTA and FASTQ - ZIP & PIZ
 

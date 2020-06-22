@@ -8,15 +8,17 @@
 
 #include "genozip.h"
 
-extern void hash_alloc_global (VBlock *merging_vb, Context *zf_ctx, const Context *first_merging_vb_ctx);
+extern uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zf_ctx, ConstContextP first_merging_vb_ctx);
 
-typedef enum { HASH_NEW_OK_SINGLETON_IN_VB, HASH_NEW_OK_NOT_SINGLETON, HASH_MUST_EXIST } HashGlobalGetEntryMode; 
-extern int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
-                                      MtfNode **old_node);
+extern void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries);
 
-extern int32_t hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
+typedef enum { HASH_NEW_OK_SINGLETON_IN_VB, HASH_NEW_OK_NOT_SINGLETON, HASH_READ_ONLY } HashGlobalGetEntryMode; 
+extern int32_t hash_global_get_entry (ContextP zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
+                                      MtfNodeP *old_node);
+
+extern int32_t hash_get_entry_for_seg (VBlockP segging_vb, ContextP vb_ctx,
                                        const char *snip, unsigned snip_len, 
                                        int32_t new_mtf_i_if_no_old_one,
-                                       MtfNode **node);
+                                       MtfNodeP *node);
 
 #endif

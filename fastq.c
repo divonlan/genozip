@@ -5,7 +5,7 @@
 
 #include "fast_private.h"
 #include "seg.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "file.h"
 #include "strings.h"
 #include "piz.h"

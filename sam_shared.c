@@ -14,7 +14,6 @@ void sam_vb_release_vb (VBlockSAM *vb)
 {
     memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
     buf_free (&vb->optional_mapper_buf);
-    vb->range = NULL;
     vb->last_cigar = NULL;
     vb->ref_consumed = 0;
 }

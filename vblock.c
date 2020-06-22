@@ -7,9 +7,10 @@
 // it means a block of lines from the text file. 
 
 #include "genozip.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "vblock.h"
 #include "file.h"
+#include "reference.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;
@@ -27,11 +28,16 @@ void vb_release_vb (VBlock *vb)
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
     vb->num_dict_ids = 0;
-    vb->chrom_node_index = vb->seq_len = 0; 
+    vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
     vb->dont_show_curr_line = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
+    vb->range = NULL;
+    vb->chrom_name = NULL;
+
+    vb->prev_range = NULL;
+    vb->prev_range_chrom_node_index = vb->prev_range_range_i = 0;
     
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
@@ -166,7 +172,7 @@ VBlock *vb_get_vb (unsigned vblock_i)
     return vb;
 }
 
-// free memory allocations between files, when compressing or decompressing multiple genozip files
+// free memory allocations between files, when compressing multiple non-concatenated files or decompressing multiple files
 void vb_cleanup_memory (void)
 {
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
@@ -179,6 +185,8 @@ void vb_cleanup_memory (void)
 
     if (z_file->data_type != DT_NONE && DTPZ(cleanup_memory))
         DTPZ(cleanup_memory)(evb);
+
+    ref_cleanup_memory();
 }
 
 // NOT thread safe, use only in execution-terminating messages

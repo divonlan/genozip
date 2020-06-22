@@ -19,7 +19,7 @@
 #include <math.h>
 #include "genozip.h"
 #include "vcf_private.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "zfile.h"
 
 #define MAX_GL_LEN 12 /* we support numbers as long as -0.1234567890 but not longer */
@@ -57,7 +57,7 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
             ASSERT (*gl_len <= MAX_GL_LEN, "Optimized gl subfield is %u characters exceeding allowed maximum of %u: %.*s", 
                     *gl_len, MAX_GL_LEN, *gl_len, start);
 
-            if (data[-1] != ',' && data[-1] != ':' && data[-1] != PIZ_SNIP_SEP) return -1; // not an optimized GL - series of 0s should have been termianted by a , or : or SNIP_SEP
+            if (data[-1] != ',' && data[-1] != ':' && data[-1] != SNIP_SEP) return -1; // not an optimized GL - series of 0s should have been termianted by a , or : or SNIP_SEP
             *gl_start = start;
 
             continue;
@@ -70,7 +70,7 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
         data += 3;
 
         double divisor = 10.0;
-        while (*data != ':' && *data != ',' && *data != PIZ_SNIP_SEP) {
+        while (*data != ':' && *data != ',' && *data != SNIP_SEP) {
             gl -= (*(data++) - '0') / divisor; // -= because we are growing a negative number
             divisor *= 10;
         }
@@ -79,7 +79,7 @@ static inline int gl_optimize_get_missing_gl_int(char *data,
 
         data++; // skip separator
 
-    } while (data[-1] != ':' && data[-1] != PIZ_SNIP_SEP);
+    } while (data[-1] != ':' && data[-1] != SNIP_SEP);
 
     if (! *gl_len) return -1; // there is no optimed value here
 
@@ -220,10 +220,10 @@ void gl_deoptimize (char *data, int len)
             gl_start[0] = '-';
         }
         // move to next dictionary entry - after snip
-        char sep = PIZ_SNIP_SEP; // open macro to local var
+        char sep = SNIP_SEP; // open macro to local var
         do { data++; len--; } while (data[-1] != sep && len);
         
-        ASSERT0 (data[-1] == PIZ_SNIP_SEP, "Error in gl_deoptimize: missing seperator at end of dictionary");
+        ASSERT0 (data[-1] == SNIP_SEP, "Error in gl_deoptimize: missing seperator at end of dictionary");
     }
 }
 

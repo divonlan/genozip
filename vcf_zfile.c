@@ -91,11 +91,11 @@ void vcf_zfile_compress_haplotype_data_gtshark (VBlock *vb_, const Buffer *haplo
     vb->gtshark_exceptions_line_i.len *= sizeof (uint32_t);
     vb->gtshark_exceptions_ht_i.len   *= sizeof (uint16_t);
 
-    zfile_compress_section_data     (vb_, SEC_HT_GTSHARK_X_LINE,   &vb->gtshark_exceptions_line_i);
-    zfile_compress_section_data     (vb_, SEC_HT_GTSHARK_X_HTI,    &vb->gtshark_exceptions_ht_i);
-    zfile_compress_section_data     (vb_, SEC_HT_GTSHARK_X_ALLELE, &vb->gtshark_exceptions_allele);
-    zfile_compress_section_data_alg (vb_, SEC_HT_GTSHARK_DB_DB,    &vb->gtshark_db_db_data, 0, 0, COMP_PLN);
-    zfile_compress_section_data_alg (vb_, SEC_HT_GTSHARK_DB_GT,    &vb->gtshark_db_gt_data, 0, 0, COMP_PLN);
+    zfile_compress_section_data     (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_exceptions_line_i);
+    zfile_compress_section_data     (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_exceptions_ht_i);
+    zfile_compress_section_data     (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_exceptions_allele);
+    zfile_compress_section_data_alg (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_db_db_data, 0, 0, COMP_PLN);
+    zfile_compress_section_data_alg (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_db_gt_data, 0, 0, COMP_PLN);
 
     // free buffers - they will be needed by the next section
     buf_free (&vb->gtshark_exceptions_line_i);
@@ -104,6 +104,3 @@ void vcf_zfile_compress_haplotype_data_gtshark (VBlock *vb_, const Buffer *haplo
     buf_free (&vb->gtshark_db_db_data);
     buf_free (&vb->gtshark_db_gt_data);
 }
-
-#define V1_ZFILE // select the zfile functions of v1.c
-#include "vcf_v1.c"

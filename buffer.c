@@ -12,6 +12,7 @@
 #include "buffer.h"
 #include "vblock.h"
 #include "strings.h"
+#include "reference.h"
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
@@ -248,12 +249,6 @@ void buf_test_overflows_all_vbs (const char *msg)
     buf_test_overflows_all_other_vb (NULL, msg);
 }
 
-typedef struct {
-    const char *name;
-    uint64_t bytes; 
-    unsigned buffers;
-} MemStats;
-
 static int buf_stats_sort_by_bytes(const void *a, const void *b)  
 { 
     return ((MemStats*)a)->bytes < ((MemStats*)b)->bytes ? 1 : -1;
@@ -309,6 +304,10 @@ void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned 
             num_buffers++;
         }
     }
+
+    // add non-Buffer reference memory
+    if (flag_reference != REF_NONE) 
+        stats[num_stats++] = ref_memory_consumption();
 
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);
@@ -639,21 +638,21 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
     memset (buf, 0, sizeof (Buffer)); // reset to factory defaults
 }
 
-void buf_copy_do (VBlock *vb, Buffer *dst, const Buffer *src, 
+void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src, 
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
                   const char *func, unsigned code_line,
                   const char *name, unsigned param)
 {
-    ASSERT0 (src->data, "Error in buf_copy: src->data is NULL");
+    ASSERT (src->data, "Error in buf_copy call from %s:%u: src->data is NULL", func, code_line);
     
     ASSERT (!max_entries || src_start_entry < src->len, 
-            "Error buf_copy of %s: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src), src_start_entry, src->len);
+            "Error buf_copy of %s called from %s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src), func, code_line, src_start_entry, src->len);
 
     uint64_t num_entries = max_entries ? MIN (max_entries, src->len - src_start_entry) : src->len - src_start_entry;
     if (!bytes_per_entry) bytes_per_entry=1;
     
-    buf_alloc_do (vb, dst, num_entries * bytes_per_entry, 1, func, code_line,
+    buf_alloc_do (dst_vb, dst, num_entries * bytes_per_entry, 1, func, code_line,
                   name ? name : src->name, name ? param : src->param); // use realloc rather than malloc to allocate exact size
 
     memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);

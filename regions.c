@@ -6,7 +6,7 @@
 #include "genozip.h"
 #include "regions.h"
 #include "buffer.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "vblock.h"
 #include "file.h"
 #include "strings.h"
@@ -14,14 +14,14 @@
 // region as parsed from the --regions option
 typedef struct {
     const char *chrom;        // NULL means all chromosomes (i.e. not a specific chromosome)
-    uint32_t start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
-    uint32_t end_pos;         // the region searched will include both the start and the end
+    int64_t start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
+    int64_t end_pos;         // the region searched will include both the start and the end
 } Region;
 
 // region of a specific chromosome
 typedef struct {
-    uint32_t start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
-    uint32_t end_pos;         // the region searched will include both the start and the end
+    int64_t start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
+    int64_t end_pos;         // the region searched will include both the start and the end
 } Chreg; // = Chromosome Region
 
 static Buffer regions_buf = EMPTY_BUFFER; // all regions together
@@ -34,7 +34,7 @@ static bool is_negative_regions = false; // true if the user used ^ to negate th
 typedef enum {RPT_SINGLTON, RPT_START_ONLY, RPT_END_ONLY, RPT_BOTH_START_END} RegionPosType;
 
 static bool regions_parse_pos (const char *str, 
-                               RegionPosType *type, uint32_t *start_pos, uint32_t *end_pos) // optional outs - only if case of true
+                               RegionPosType *type, int64_t *start_pos, int64_t *end_pos) // optional outs - only if case of true
 {
     unsigned len = strlen (str);
 
@@ -299,7 +299,7 @@ void regions_transform_negative_to_positive_complement()
 // PIZ: we calculate which regions (specified in the command line -r/-R) intersect with 
 // the ra (=a range of a single chrome within a vb) (represented by the parameters of this funciton) - 
 // filling in a bytemap of the intersection, and returning true if there is any intersection at all
-bool regions_get_ra_intersection (uint32_t chrom_word_index, uint32_t min_pos, uint32_t max_pos,
+bool regions_get_ra_intersection (uint32_t chrom_word_index, int64_t min_pos, int64_t max_pos,
                                   char *intersection_array) // optional out
 {
     if (!flag_regions) return true; // nothing to do
@@ -322,7 +322,7 @@ bool regions_get_ra_intersection (uint32_t chrom_word_index, uint32_t min_pos, u
 
 // PIZ: check if a (chrom,pos) that comes from a specific line, is included in any positive region of
 // a specific ra (i.e. chromosome)
-bool regions_is_site_included (uint32_t chrom_word_index, uint32_t pos)
+bool regions_is_site_included (uint32_t chrom_word_index, int64_t pos)
 {
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];
@@ -333,7 +333,7 @@ bool regions_is_site_included (uint32_t chrom_word_index, uint32_t pos)
     return false;
 }
 
-unsigned regions_max_num_chregs(void) 
+unsigned regions_max_num_chregs (void) 
 { 
     static int result = 0; // initialize
 
@@ -354,8 +354,8 @@ void regions_display(const char *title)
 
         for (unsigned reg_i = 0; reg_i < regions_buf.len; reg_i++) {
             Region *reg = &((Region *)regions_buf.data)[reg_i];
-            fprintf (stderr, "chrom=%s start=%u end=%u\n", 
-                    reg->chrom ? reg->chrom : "ALL", reg->start_pos, reg->end_pos); 
+            fprintf (stderr, "chrom=%s start=%"PRId64" end=%"PRId64"\n", 
+                     reg->chrom ? reg->chrom : "ALL", reg->start_pos, reg->end_pos); 
         }
     }
 
@@ -365,7 +365,7 @@ void regions_display(const char *title)
         for (unsigned chr_i = 0; chr_i < num_chroms; chr_i++)
             for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len; chreg_i++) {
                 Chreg *chreg = ENT (Chreg, chregs[chr_i], chreg_i);
-                fprintf (stderr, "chrom_word_index=%d start=%u end=%u\n", chr_i, chreg->start_pos, chreg->end_pos); 
+                fprintf (stderr, "chrom_word_index=%d start=%"PRId64" end=%"PRId64"\n", chr_i, chreg->start_pos, chreg->end_pos); 
             }
     }
 }

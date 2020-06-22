@@ -73,21 +73,9 @@ DictId dict_id_make(const char *str, unsigned str_len)
     return dict_id;
 }
 
-// for backward compatability
-DictId dict_id_make_v2to4 (const char *str, unsigned str_len) 
-{ 
-    DictId dict_id = {0}; 
-    memcpy (dict_id.id, str, MIN (str_len, DICT_ID_LEN)); 
-    return dict_id;
-}
-
 void dict_id_initialize (DataType data_type) 
 {   
     ASSERT0 (data_type != DT_NONE, "Error in dict_id_initialize: data_type is DT_NONE");
-
-    // note: data_type can be DT_VCF_V1 when coming from PIZ if the file is truly a v1,
-    // or if it is a truncated genozip file or not a genozip file at all.
-    if (data_type == DT_VCF_V1) data_type = DT_VCF;
 
     for (int f=0; f < dt_fields[data_type].num_fields; f++) {
         const char *field_name = dt_fields[data_type].names[f];
@@ -235,11 +223,12 @@ Buffer *dict_id_create_aliases_buf (void)
 // PIZ I/O thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
-    bool has_aliases_section = sections_seek_to (SEC_DICT_ID_ALIASES);
-    if (!has_aliases_section) return;
+    if (!sections_seek_to (SEC_DICT_ID_ALIASES)) return; // no aliases section
 
     static Buffer compressed_aliases = EMPTY_BUFFER;
 
+    buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
+    
     zfile_read_section (evb, 0, NO_SB_I, &dict_id_aliases_buf, "dict_id_aliases_buf", 
                         sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
 

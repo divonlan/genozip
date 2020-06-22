@@ -92,12 +92,12 @@ extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
 
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_allocated ((buf_p)) && (buf_p)->size >= requested_size)
 
-extern void buf_copy_do (VBlockP vb, Buffer *dst, const Buffer *src, uint64_t bytes_per_entry,
+extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_t bytes_per_entry,
                          uint64_t src_start_entry, uint64_t max_entries, // if 0 copies the entire buffer
                          const char *func, uint32_t code_line,
                          const char *name, uint32_t param);
-#define buf_copy(vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name,param) \
-  buf_copy_do ((VBlockP)(vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(name),(param))
+#define buf_copy(dst_vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name,param) \
+  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(name),(param))
 
 extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 
@@ -116,7 +116,12 @@ extern void buf_print (Buffer *buf, bool add_newline);
 extern void buf_test_overflows (void *vb, const char *msg);
 extern void buf_test_overflows_all_vbs (const char *msg);
 
-//extern int64_t buf_vb_memory_consumption (ConstVBlockP vb);
+typedef struct {
+    const char *name;
+    uint64_t bytes; 
+    unsigned buffers;
+} MemStats;
+
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
 
 #define buf_zero(buf_p) { memset ((buf_p)->data, 0, (buf_p)->size); }

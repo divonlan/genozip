@@ -134,3 +134,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 5.0.7
 - bug fixes
+
+6.0.0
+- Added compress against reference for SAM - new options --reference and --reference
+- Removed backward compatability with versions v1 and v5. Use genozip version 5 to decompress files of all previous versions.

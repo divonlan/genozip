@@ -5,10 +5,91 @@
 
 #include "sam_private.h"
 #include "seg.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "piz.h"
 #include "strings.h"
 #include "dict_id.h"
+#include "reference.h"
+
+// PIZ: SEQ contains : 
+// '-' - data should be taken from the reference (-) 
+// '.' - data should be taken from SQnonref.local (.)
+// other - verbatim (this happens if there is no reference, eg unaligned BAM)
+void sam_piz_reconstruct_seq (VBlock *vb_, Context *seq_ctx)
+{
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+    ASSERT0 (seq_ctx, "Error in ref_reconstruct: seq_ctx is NULL");
+
+    if (piz_is_skip_section (vb, SEC_LOCAL, seq_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
+
+    Context *nonref_ctx = mtf_get_ctx (vb, (DictId)dict_id_SAM_SQnonref);
+    const char *nonref = &nonref_ctx->local.data[nonref_ctx->next_local]; // possibly, this VB has no nonref (i.e. everything is ref), in which cse nonref would be an invalid pointer. That's ok, as it will not be accessed.
+    const char *nonref_start = nonref;
+    const char *seq = &seq_ctx->local.data[seq_ctx->next_local];
+    unsigned subcigar_len = 0;
+    char cigar_op;
+    
+    // case where seq is '*' (rewritten as ' ' by the zip callback)
+    if (seq[0] == ' ') {
+        RECONSTRUCT1 ('*');
+        seq_ctx->last_value = seq_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
+        seq_ctx->next_local++; // only 1
+        return;
+    }
+
+    // get pointer to ref @ last chrom and pos. ref[0] is the base at POS.
+    const char *ref = NULL;
+    if (vb->last_cigar[0] != '*') 
+        ref = ref_get_ref (vb_, (uint32_t)vb->contexts[SAM_POS].last_value, vb->ref_consumed);
+
+    unsigned seq_consumed=0, ref_consumed=0;
+    while (seq_consumed < vb->seq_len) {
+        
+        if (!subcigar_len) {
+            subcigar_len = strtod (vb->last_cigar, (char **)&vb->last_cigar); // get number and advance next_cigar
+            cigar_op = *(vb->last_cigar++);
+
+            // case: Deletion or Skipping - skip some of the reference
+            if (cigar_op == 'D' || cigar_op == 'N') {
+                ref_consumed += subcigar_len;
+                subcigar_len = 0;
+                continue;
+            } 
+
+            // case: hard clipping - just ignore this subcigar
+            if (cigar_op == 'H' || cigar_op == 'P') {
+                subcigar_len = 0;
+                continue;
+            }
+        }
+
+        char c = seq[seq_consumed++];
+
+        if (c == '-') {
+            ASSERT0 (ref, "SEQ shows -, but ref is unavailable (eg bc entire chromosome is POS=0 or CIGAR=* or SEQ=*");
+            RECONSTRUCT1 (ref[ref_consumed++]); 
+        }
+
+        else if (c == '.') {
+            RECONSTRUCT1 (*nonref);
+            nonref++; // consume non-ref even if not reconstructing this seq
+
+            // advance ref if this is a SNP (but not in case of 'I' or 'S')
+            if (cigar_op == 'M' || cigar_op == '=' || cigar_op == 'X') ref_consumed++; 
+        }
+        
+        // in case of SAM having CIGAR='*' or POS=0 (eg unaligned BAM), we just copy verbatim
+        else RECONSTRUCT1 (c); 
+
+
+        subcigar_len--;
+    }
+
+    seq_ctx->last_value = seq_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
+    seq_ctx->next_local += vb->seq_len;
+    
+    nonref_ctx->next_local += (uint32_t)(nonref - nonref_start);
+}
 
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it
 void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
@@ -99,4 +180,3 @@ void sam_piz_reconstruct_vb (VBlockSAM *vb)
         if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
     }
 }
- 

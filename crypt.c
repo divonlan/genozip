@@ -155,6 +155,3 @@ const char *encryption_name (unsigned encryption_type)
     static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
     return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));
 }
-
-#define V1_CRYPT
-#include "vcf_v1.c"

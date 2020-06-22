@@ -15,7 +15,6 @@
 #include "data_types.h"
 
 extern DictId dict_id_make (const char *str, unsigned str_len);
-extern DictId dict_id_make_v2to4 (const char *str, unsigned str_len);
 
 static inline DictId dict_id_field (DictId dict_id) { dict_id.id[0] = dict_id.id[0] & 0x3f; return dict_id; } // set 2 Msb to 00
 static inline DictId dict_id_type_1(DictId dict_id) { dict_id.id[0] = dict_id.id[0] | 0xc0; return dict_id; } // set 2 Msb to 11

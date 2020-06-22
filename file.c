@@ -14,13 +14,14 @@
 #include <bzlib.h>
 #include "zlib/zlib.h"
 #include "genozip.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "file.h"
 #include "stream.h"
 #include "url.h"
 #include "compressor.h"
 #include "vblock.h"
 #include "strings.h"
+#include "reference.h"
 
 // globals
 File *z_file   = NULL;
@@ -279,8 +280,8 @@ bool file_open_txt (File *file)
 
     switch (file->comp_alg) { 
         case COMP_PLN:
-            // don't actually open the file if we're just testing in genounzip
-            if (flag_test && file->mode == WRITE) return true;
+            // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
+            if ((flag_test || ref_flag_reading_reference) && file->mode == WRITE) return true;
 
             file->file = file->is_remote ? url_open (NULL, file->name) : fopen (file->name, file->mode);
             break;
@@ -410,10 +411,10 @@ static void file_initialize_z_file_data (File *file)
                   buf_add_to_buffer_list (evb, &file->buf);
     INIT (dict_data);
     INIT (ra_buf);
+    INIT (ra_max_pos_by_chrom);
     INIT (section_list_buf);
     INIT (section_list_dict_buf);
     INIT (unconsumed_txt);
-    INIT (v1_next_vcf_header);
 }
 #undef INIT
 
@@ -483,7 +484,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         return NULL; 
     }
 
-    ASSERT (mode != READ  || file_exists, "%s: cannot open %s for reading: %s", global_cmd, filename, error);
+    ASSERT (mode != READ  || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
 
     if (mode == WRITE && file_exists && !flag_force && !(supertype==TXT_FILE && flag_test))
         file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
@@ -582,9 +583,9 @@ void file_close (File **file_p,
 
         buf_destroy (&file->dict_data);
         buf_destroy (&file->ra_buf);
+        buf_destroy (&file->ra_max_pos_by_chrom);
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->section_list_dict_buf);
-        buf_destroy (&file->v1_next_vcf_header);
         buf_destroy (&file->unconsumed_txt);
 
         if (file->name) FREE (file->name);
@@ -595,6 +596,8 @@ void file_close (File **file_p,
 
 size_t file_write (File *file, const void *data, unsigned len)
 {
+    if (!len) return 0; // nothing to do
+
     size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file); // use fwrite - let libc manage write buffers for us
 
     // if we're streaming our genounzip/genocat/genols output to another process and that process has 
@@ -719,7 +722,7 @@ uint64_t file_get_size (const char *filename)
     struct stat64 st;
     
     int ret = stat64(filename, &st);
-    ASSERT (!ret, "Error: failed accessing %s: %s", filename, strerror(errno));
+    ASSERT (!ret, "Error: failed accessing '%s': %s", filename, strerror(errno));
     
     return st.st_size;
 }

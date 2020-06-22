@@ -6,7 +6,7 @@
 #include "genozip.h"
 #include "base250.h"
 #include "endianness.h"
-#include "move_to_front.h"
+#include "context.h"
 
 // Used by ZIP only
 Base250 base250_encode (uint32_t n) // number to encode
@@ -43,6 +43,3 @@ uint32_t base250_decode (const uint8_t **str)
             return (*str)[-4] * 16777216 + (*str)[-3] * 65536 + (*str)[-2] * 256 + (*str)[-1]; // careful not to use BGEN32 as string might not be aligned to word boundary
     }
 }
-
-#define V1_BASE250
-#include "vcf_v1.c"

@@ -10,7 +10,7 @@
 #include "buffer.h"
 #include "profiler.h"
 #include "aes.h"
-#include "move_to_front.h"
+#include "context.h"
 
 #ifndef DID_I_NONE // also defined in move_to_front.h
 #define DID_I_NONE   255
@@ -53,12 +53,15 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     GrepStages grep_stages;    /* PIZ: tell piz_is_skip_section what to skip in case of --grep */\
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
+    RangeP range;              /* ZIP: used for compressing the reference ranges */ \
     \
     ProfilerRec profile; \
     \
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
-    int32_t chrom_node_index;  /* ZIP and PIZ: index into ra_buf:ZIP: used by random_access_update_chrom/random_access_update_pos to sync between them, PIZ: store the chrom when it is encountered */\
+    int32_t chrom_node_index;  /* ZIP and PIZ: index and name of chrom of the current line */ \
+    const char *chrom_name;    \
+    unsigned chrom_name_len; \
     uint32_t seq_len;          /* PIZ only - last calculated seq_len (as defined by each data_type) */\
     \
     /* regions & filters */ \
@@ -87,6 +90,11 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t num_dict_ids;            /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
     uint8_t dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
+    \
+    /* ZIP only: reference range lookup caching */ \
+    RangeP prev_range; /* previous range returned by ref_get_range */ \
+    uint32_t prev_range_range_i; /* range_i used to calculate previous range */ \
+    uint32_t prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;                   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\

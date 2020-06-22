@@ -8,6 +8,7 @@
 #include "endianness.h"
 #include "piz.h"
 #include "dict_id.h"
+#include "reference.h"
 
 Structured structured_DESC;
 

@@ -142,3 +142,13 @@ bool arch_am_i_in_docker (void)
     return true;
 }
 
+// initialize mutex, if its not initialized already
+void mutex_initialize (pthread_mutex_t *mutex, bool *initialized)
+{
+    if (*initialized) return;
+
+    unsigned ret = pthread_mutex_init (mutex, NULL);
+    ASSERT (!ret, "Error: pthread_mutex_init failed: %s", strerror (ret));
+
+    *initialized = true;
+}

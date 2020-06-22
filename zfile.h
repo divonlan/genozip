@@ -16,7 +16,9 @@ extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (const Md5Hash *single_component_md5);
 extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,
                                       uint64_t *num_items_concat, Md5Hash *md5_hash_concat, 
-                                      char *created, unsigned created_len, Md5Hash *license_hash);
+                                      char *created, unsigned created_len, Md5Hash *license_hash,
+                                      char *ref_filename, unsigned ref_filename_len,  // caller allocates space 
+                                      Md5Hash *ref_file_md5);
 
 extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
                                              BufferP section_data, CompGetLineCallback callback, uint32_t total_len, 
@@ -57,6 +59,6 @@ extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_li
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
 
-extern bool is_v2_or_above, is_v3_or_above, is_v4_or_above, is_v5_or_above;
+extern bool is_v6_or_above;
 
 #endif

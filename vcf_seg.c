@@ -6,7 +6,7 @@
 #include <math.h>
 #include "vcf_private.h"
 #include "seg.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "random_access.h"
 #include "optimize.h"
 #include "file.h"
@@ -530,7 +530,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     else
         GET_MAYBE_LAST_ITEM (DTF(names)[VCF_INFO]); // may or may not have a FORMAT field
 
-    seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len, false);
+    seg_info_field (vb_, vcf_seg_special_info_subfields, field_start, field_len);
 
     if (separator != '\n') { // has a FORMAT field
 

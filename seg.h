@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include "genozip.h"
 #include "section_types.h"
-#include "move_to_front.h"
+#include "context.h"
 
 extern void seg_all_data_lines (VBlockP vb); 
 
@@ -45,8 +45,7 @@ typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictId dict_id, const char *
 extern void seg_structured_by_ctx (VBlockP vb, ContextP ctx, StructuredP st, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
 #define seg_structured_by_dict_id(vb,dict_id,st,add_bytes) seg_structured_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), st, NULL, 0, add_bytes)
 
-extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields,
-                            const char *info_str, unsigned info_len, bool reconstruct);
+extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len);
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data, unsigned data_len);

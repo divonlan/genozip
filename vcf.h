@@ -32,7 +32,6 @@ extern void vcf_zip_generate_ht_gt_compress_vb_header (VBlockP vb_);
 
 // PIZ stuff
 extern bool vcf_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
-extern bool vcf_v1_piz_read_one_vb();// v1 compatibility
 extern void vcf_piz_uncompress_vb(); // no parameter - implicit casting of VBlockP to VBlockVCFP
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 
@@ -62,12 +61,6 @@ extern bool vcf_is_sb_included (void *vb_, uint32_t sb_i);
 extern const char *gl_optimize_dictionary (VBlockP vb, ConstBufferP dict, ConstMtfNodeP nodes, uint64_t dict_start_char, unsigned num_words);
 extern void gl_optimize_local (VBlockP vb, BufferP local);
 extern void gl_deoptimize (char *data, int len);
-
-// backward compatibility stuff
-extern bool vcf_v1_header_genozip_to_vcf (Md5Hash *digest);
-extern bool vcf_v1_header_get_vcf_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,uint64_t *num_items_concat,
-                                          Md5Hash  *md5_hash_concat, char *created, unsigned created_len);
-extern void piz_vcf_v4_line_eol (VBlockP vb, bool has_13);
 
 // global parameters - set before any thread is created
 extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;

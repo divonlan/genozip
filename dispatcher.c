@@ -141,7 +141,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 
     uint64_t total=0, sofar=0;
     
-    // case: genozip of plain txt files (including if decompressed by an external compressor) 
+    // case: ZIP of plain txt files (including if decompressed by an external compressor) 
     // - we go by the amount of txt content processed 
     if (command == ZIP && txt_file->disk_size && file_is_plain_or_ext_decompressor (txt_file)) { 
         total = txt_file->txt_data_size_single; // if its a physical plain VCF file - this is the file size. if not - its an estimate done after the first VB
@@ -161,7 +161,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     // its coming from a URL that doesn't provide the size
     else if (command == ZIP && !txt_file->disk_size)
         return; // we can't show anything if we don't know the file size
-
+    
     else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u txt_file->type=%s", command, ft_name (txt_file->type));
 
     double percent;
@@ -174,7 +174,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
     // in split mode - dispatcher is not done if there's another component after this one
-    bool done = (dispatcher_is_done (dispatcher)) && (!flag_split || !buf_is_allocated (&z_file->v1_next_vcf_header));
+    bool done = dispatcher_is_done (dispatcher);
 
     // case: we've reached 99% prematurely... we under-estimated the time
     if (!done && percent > 99 && (dd->last_seconds_so_far < seconds_so_far)) {
@@ -189,8 +189,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     // case: we're making progress... show % and time remaining
     else if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
 
-        if (!dispatcher_is_done (dispatcher) ||
-            (flag_split && buf_is_allocated (&z_file->v1_next_vcf_header))) { 
+        if (!dispatcher_is_done (dispatcher)) { 
 
             // time remaining
             char time_str[70], progress[100];
@@ -341,8 +340,9 @@ void dispatcher_compute (Dispatcher dispatcher, void (*func)(VBlockP))
 
         dd->next_thread_to_dispatched = (dd->next_thread_to_dispatched + 1) % dd->max_threads;
     }
-    else func(dd->next_vb); // single thread
-                    
+    else  
+        func(dd->next_vb); // single thread
+
     dd->next_vb = NULL;
     dd->num_running_compute_threads++;
 }
@@ -455,8 +455,9 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
     return dd->input_exhausted;
 }
 
-void dispatcher_fan_out_task (const char *task_name, bool test_mode, 
-                              DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
+// returns the number of VBs successfully outputted
+uint32_t dispatcher_fan_out_task (const char *task_name, bool test_mode, 
+                                  DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
     Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, test_mode, true, task_name);
     do {
@@ -498,4 +499,6 @@ void dispatcher_fan_out_task (const char *task_name, bool test_mode,
         else usleep (5000); 
 
     } while (!dispatcher_is_done (dispatcher));
+
+    return ((DispatcherData *)dispatcher)->next_vb_i - 1;
 }

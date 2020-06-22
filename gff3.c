@@ -6,7 +6,7 @@
 #include "genozip.h"
 #include "seg.h"
 #include "vblock.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "random_access.h"
 #include "file.h"
 #include "strings.h"
@@ -239,7 +239,7 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
     SEG_NEXT_ITEM (GFF3_PHASE);
 
     GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
-    seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len, false);
+    seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len);
 
     SEG_EOL (GFF3_EOL, false);
 

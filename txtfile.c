@@ -21,6 +21,7 @@
 #include "strings.h"
 #include "endianness.h"
 #include "crypt.h"
+#include "reference.h"
 #include "zlib/zlib.h"
 
 static bool is_first_txt = true; 
@@ -396,21 +397,22 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
     ASSERT (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
             "Error: invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
 
-    // in split mode - we open the output txt file of the component
-    if (flag_split) {
-        ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode");
+    // 1. in split mode - we open the output txt file of the component
+    // 2. when reading a reference file - we create txt_file here (but don't actually open the physical file)
+    if (flag_split || ref_flag_reading_reference) {
+        ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode or when reading reference");
         txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
-        txt_file->txt_data_size_single = BGEN64 (header->txt_data_size);       
     }
 
-    txt_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
+    txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
+    txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
 
     if (is_first_txt || flag_split) 
         z_file->num_lines = BGEN64 (header->num_lines);
 
     if (flag_split) *digest = header->md5_hash_single; // override md5 from genozip header
         
-    // now get the text of the VCF header itself
+    // now get the text of the txt header itself
     static Buffer header_buf = EMPTY_BUFFER;
     zfile_uncompress_section (evb, header, &header_buf, "header_buf", SEC_TXT_HEADER);
 
@@ -428,7 +430,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
     if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if ((is_first_txt || flag_split) && !flag_no_header)
+    if ((is_first_txt || flag_split) && !flag_no_header && !ref_flag_reading_reference)
         txtfile_write_to_disk (&header_buf);
     
     buf_free (&header_section);

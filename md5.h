@@ -20,6 +20,8 @@ typedef union {
     uint32_t words[4];
     uint64_t ulls[2];
 } Md5Hash;
+#define MD5HASH_NONE { .ulls = { 0, 0 } };
+extern const Md5Hash MD5HASH_none;
 
 #pragma pack(pop)
 
@@ -40,6 +42,5 @@ extern const char *md5_display (const Md5Hash *digest, bool prefix_space);
 
 #define md5_is_equal(digest1,digest2) ((digest1).ulls[0] == (digest2).ulls[0] && (digest1).ulls[1] == (digest2).ulls[1])
 #define md5_is_zero(digest) (!(digest).ulls[0] && !(digest).ulls[1])
-#define md5_set_zero(digest) { (digest)->ulls[0] = (digest)->ulls[1] = 0; }
 
 #endif

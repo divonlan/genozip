@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "crypt.h"
 #include "dict_id.h"
+#include "reference.h"
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
@@ -36,17 +37,17 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     Buffer *buf;
     char *name;
     VBlockP alc_vb;
-    if (!vb->vblock_i) {  // case 1 - vcf header, random access, genotype header
-        buf    = &z_file->section_list_buf;
-        alc_vb = evb; // z_file buffer goes to evb
-        name   = "z_file->section_list_buf";
-        offset = z_file->disk_so_far + vb->z_data.len;
-    }
-    else if (header->section_type == SEC_DICT) {          // case 2 - dictionaries
+    if (header->section_type == SEC_DICT) {          // case 1 - dictionaries
         buf    = &z_file->section_list_dict_buf;
         alc_vb = evb; // z_file buffer goes to evb
         name   = "z_file->section_list_dict_buf";
         offset = z_file->dict_data.len;
+    }
+    else if (!vb->vblock_i) {  // case 2 - vcf header, random access, genotype header
+        buf    = &z_file->section_list_buf;
+        alc_vb = evb; // z_file buffer goes to evb
+        name   = "z_file->section_list_buf";
+        offset = z_file->disk_so_far + vb->z_data.len;
     }
     else {                       // case 3 - VB content
         buf    = &vb->section_list_buf;
@@ -113,14 +114,14 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
 }
 
 // dictionary section iterator. returns true if another dictionary was found.
-bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, IsSectionTypeFunc is_sec_type) // if *sl_ent==NULL - initialize cursor
+bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st) // if *sl_ent==NULL - initialize cursor
 {
     // case: first time
     if (! *sl_ent) {
         *cursor = 0;
         while (*cursor < (uint32_t)z_file->section_list_buf.len) {
             *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
-            if (is_sec_type((*sl_ent)->section_type)) 
+            if ((*sl_ent)->section_type == st) 
                 return true;
         }
     }
@@ -128,7 +129,7 @@ bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cur
     if (*cursor == z_file->section_list_buf.len) return false; 
 
     *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
-    return is_sec_type((*sl_ent)->section_type);
+    return (*sl_ent)->section_type == st;
 }
 
 bool sections_seek_to (SectionType st)
@@ -159,6 +160,15 @@ SectionListEntry *sections_vb_first (uint32_t vb_i)
     return sl;
 }
 
+bool sections_has_reference(void)
+{
+    for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
+        if (ENT (SectionListEntry, z_file->section_list_buf, i)->section_type == SEC_REFERENCE)
+            return true; // found
+
+    return false;
+}
+
 // called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
 bool sections_has_more_components()
 {
@@ -178,10 +188,12 @@ void BGEN_sections_list()
 
 void sections_show_gheader (SectionHeaderGenozipHeader *header)
 {
+    if (ref_flag_reading_reference) return; // don't show gheaders of reference file
+    
     unsigned num_sections = BGEN32 (header->num_sections);
     char size_str[50];
 
-    fprintf (stderr, "Below are the contents of the genozip header. This is the output of --show-gheader:\n");
+    fprintf (stderr, "Contents of the genozip header (output of --show-gheader) of %s:\n", z_name);
     fprintf (stderr, "  genozip_version: %u\n",         header->genozip_version);
     fprintf (stderr, "  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
     fprintf (stderr, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
@@ -193,6 +205,8 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     fprintf (stderr, "  md5_hash_concat: %s\n",         md5_display (&header->md5_hash_concat, false));
     fprintf (stderr, "  created: %*s\n",                -FILE_METADATA_LEN, header->created);
     fprintf (stderr, "  license_hash: %s\n",            md5_display (&header->license_hash, false));
+    fprintf (stderr, "  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
+    fprintf (stderr, "  reference file hash: %s\n",     md5_display (&header->ref_file_md5, false));
 
     fprintf (stderr, "  sections:\n");
 

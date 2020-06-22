@@ -16,7 +16,7 @@ bool vcf_vb_has_haplotype_data (VBlockP vb) { return ((VBlockVCFP)vb)->has_haplo
 void vcf_vb_release_vb (VBlockVCF *vb) 
 {
     vb->ploidy = vb->num_haplotypes_per_line = 0;
-    vb->has_genotype_data = vb->has_haplotype_data = vb->v4_line_has_13 = false;
+    vb->has_genotype_data = vb->has_haplotype_data = false;
     vb->phase_type = PHASE_UNKNOWN;
     vb->max_gt_line_len = vb->max_genotype_section_len = 0;
 
@@ -48,12 +48,6 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     buf_free(&vb->gtshark_exceptions_ht_i);
     buf_free(&vb->gtshark_exceptions_allele);
     buf_free(&vb->gtshark_vcf_data);
-
-    // backward compatibility with genozip v1
-    buf_free(&vb->v1_subfields_start_buf);        
-    buf_free(&vb->v1_subfields_len_buf);
-    buf_free(&vb->v1_num_subfields_buf);
-    buf_free(&vb->v1_variant_data_section_data);
 }
 
 void vcf_vb_destroy_vb (VBlockVCF *vb)
@@ -87,10 +81,6 @@ void vcf_vb_destroy_vb (VBlockVCF *vb)
     buf_destroy (&vb->gtshark_exceptions_ht_i);
     buf_destroy (&vb->gtshark_exceptions_allele);
     buf_destroy (&vb->gtshark_vcf_data);
-    buf_destroy (&vb->v1_subfields_start_buf);        
-    buf_destroy (&vb->v1_subfields_len_buf);
-    buf_destroy (&vb->v1_num_subfields_buf);
-    buf_destroy (&vb->v1_variant_data_section_data);
 }
 
 // freeing arrays of buffers allocated by calloc 

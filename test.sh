@@ -5,6 +5,8 @@ output=test-output
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
 
+ref=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.genozip
+
 # -----------------
 # platform settings
 # -----------------
@@ -103,14 +105,22 @@ for file in ${files[@]}; do
         cmp_2_files $file $output
     fi
 
-    test_header "$file - concat & split"
+    test_header "$file - non-concatenated multiple files"
     file1=copy1.$file
     file2=copy2.$file
     cp $file $file1
     cp $file $file2
+    ./genozip $file1 $file2 -ft || exit 1
+    ./genounzip ${file1}.genozip ${file2}.genozip -t || exit 1
+    rm $file1 $file2 ${file1}.genozip ${file2}.genozip
+
+    test_header "$file - concat & split"
+    file1=copy1.$file
+    file2=copy2.$file
+    cp $file $file1
+    cat $file | sed 's/PRFX/FILE2/g' > $file2
     ./genozip $file1 $file2 -ft -o ${output}.genozip || exit 1
     ./genounzip ${output}.genozip -O -t || exit 1
-    ls  cop*
     rm $file1 $file2
 
     test_header "$file --optimize - NOT checking correctness, just that it doesn't crash"
@@ -149,17 +159,17 @@ test_count_genocat_lines test-file.fq "--header-one" 2
 test_count_genocat_lines test-file.fq "--grep 8160" 4
 test_count_genocat_lines test-file.fq "--grep 8160 --header-only" 1
 
-files=`ls backward-compatibility-test/*.genozip` 
-for file in $files; do
-    test_header "$file - backward compatability test"
-
-    if [ `basename $file .vcf.genozip` = test-file.1.1.3 ]; then # in v1 we didn't have the -t option
-        ./genounzip ${file} -fo $output || exit 1
-        cmp_2_files backward-compatibility-test/test-file.1.1.3.vcf $output
-    else
-        ./genounzip -t $file || exit 1
-    fi
-done
+#files=`ls backward-compatibility-test/*.genozip` 
+#for file in $files; do
+#    test_header "$file - backward compatability test"
+#
+#    if [ `basename $file .vcf.genozip` = test-file.1.1.3 ]; then # in v1 we didn't have the -t option
+#        ./genounzip ${file} -fo $output || exit 1
+#        cmp_2_files backward-compatibility-test/test-file.1.1.3.vcf $output
+#    else
+#        ./genounzip -t $file || exit 1
+#    fi
+#done
 
 if `command -v gtshark >& /dev/null`; then
     test_header "test-file.vcf --gtshark"
@@ -180,10 +190,24 @@ if `command -v samtools >& /dev/null`; then
     rm bam-test.input.bam bam-test.output.bam
 fi
 
-test_header "Testing subsets (~3 VBs) or real world files
-"
-rm -f test-data/*.genozip
-./genozip -ft test-data/* || exit 1
+test_header "Testing subsets (~3 VBs) or real world files"
+rm -f td/*.genozip
+./genozip -ft td/* || exit 1
+
+test_header "Testing multiple SAM with --reference"
+echo "Note: '$ref' needs to be up to date with the latest genozip format"
+rm -f td/*.genozip
+./genozip -f --md5 --reference $ref td/test.transfly-unsorted.sam td/test.transfly-sorted.sam || exit 1
+./genounzip -t -e $ref td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
+
+test_header "Testing multiple SAM with --REFERENCE" # we don't use transfly-unsorted because the stored reference is ~ the entire reference - takes a long time to compress
+file1=copy1.test-file.sam
+file2=copy2.test-file.sam
+cp td/test.transfly-sorted.sam $file1
+cp td/test.transfly-sorted.sam $file2
+./genozip -f --md5 --REFERENCE $ref $file1 $file2 || exit 1
+./genounzip ${file1}.genozip ${file2}.genozip -t || exit 1
+rm $file1 $file2 ${file1}.genozip ${file2}.genozip
 
 printf "\nALL GOOD!\n"
 

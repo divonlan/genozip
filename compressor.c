@@ -417,7 +417,7 @@ bool comp_error (VBlock *vb, const char *uncompressed, uint32_t uncompressed_len
 
 #define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
 
-// compresses data - either a conitguous block or one line at a time. If both are NULL that there is no data to compress.
+// compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                     SectionHeader *header, 
                     const char *uncompressed_data, // option 1 - compress contiguous data

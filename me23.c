@@ -6,7 +6,7 @@
 #include "genozip.h"
 #include "seg.h"
 #include "vblock.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "file.h"
 #include "random_access.h"
 #include "endianness.h"

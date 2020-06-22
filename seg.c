@@ -7,7 +7,7 @@
 #include "profiler.h"
 #include "seg.h"
 #include "vblock.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "endianness.h"
 #include "file.h"
 #include "strings.h"
@@ -136,7 +136,7 @@ uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_
     uint8_t chrom_did_i = DTF(chrom);
     uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, chrom_did_i, chrom_str_len+1);
 
-    random_access_update_chrom ((VBlockP)vb, chrom_node_index);
+    random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
 
     return chrom_node_index;
 }
@@ -151,7 +151,7 @@ int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool
     if (value >= 0 && value <= MAX_POS && ((unsigned)(after - snip) == snip_len))
         return value; // all good
 
-    ASSSEG (allow_nonsense, snip, "Error: position field must be an integer number between 0 and %u, seeing: %.*s", 
+    ASSSEG (allow_nonsense, snip, "Error: position field must be an integer number between 0 and %"PRId64", seeing: %.*s", 
             MAX_POS, snip_len, snip);
 
     return -1; // bad number
@@ -294,11 +294,8 @@ static int sort_by_subfield_name (const void *a, const void *b)
     return strncmp (ina->start, inb->start, MIN (ina->len, inb->len));
 }
 
-// used to seg INFO fields in VCF and ATTRS in GFF3, and also to piz INFO fields of v2-v4 files for
-// backward compatability
-void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
-                     const char *info_str, unsigned info_len,
-                     bool reconstruct) // if true, we reconstruct instead of segging - used for backward compatability in piz_reconstruct_one_snip
+// used to seg INFO fields in VCF and ATTRS in GFF3
+void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len)
 {
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
@@ -321,29 +318,9 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
 
                 bool valueful = (c == '=');
 
-                // in genozip genozip v2 and v3 we had a bug where when there was an INFO subfield with a value following one or more
-                // subfields without a value, then the dictionary name of included the names of the valueless subfields
-                // example: I2=a;N1;N2;I3=x - the name of the 2nd dictionary was "N1;N2;I3"
-                bool bug_v2v3_situation = !is_v4_or_above && !valueful && i < info_len;
+                ASSSEG (this_name_len > 0, info_str, "Error: %s field contains a = or ; without a preceding subfield name", field_name);
 
-                bool v4_windows_eol = reconstruct && is_v4_or_above && (this_name[this_name_len-1] == '\t' || this_name[this_name_len-1] == '#'); // this is v4 exactly as reconstruct doesn't occur for v5+
-
-                if (v4_windows_eol) { 
-                    // "\t" v4 indication of Windows-style when last name was valueful
-                    if (this_name[this_name_len-1] == '\t') {
-                        piz_vcf_v4_line_eol (vb, true);
-                        this_name_len--; // remove the \t
-                    }
-                    // "\t#" v4 indication of Windows-style when last name was valueless
-                    else { 
-                        this_name_len -= 2; // remove the "\t#"
-                        piz_vcf_v4_line_eol (vb, true);
-                    }
-                }
-                else
-                    ASSSEG (this_name_len > 0 || reconstruct, info_str, "Error: %s field contains a = or ; without a preceding subfield name", field_name);
-
-                if (this_name_len > 0 && !bug_v2v3_situation) { 
+                if (this_name_len > 0) { 
                     ASSSEG ((this_name[0] >= 64 && this_name[0] <= 127) || this_name[0] == '.', info_str,
                             "Error: %s field contains a name %.*s starting with an illegal character '%c' (ASCII %u)", 
                             field_name, this_name_len, this_name, this_name[0], this_name[0]);
@@ -351,26 +328,23 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
                     InfoItem *ii = &info_items[st.num_items];
                     ii->start    = this_name; 
                     ii->len      = this_name_len + valueful; // include the '=' if there is one 
-                    ii->dict_id  = valueful ? dict_id_type_1 (is_v5_or_above ? dict_id_make (this_name, this_name_len) 
-                                                                             : dict_id_make_v2to4 (this_name, this_name_len)) 
+                    ii->dict_id  = valueful ? dict_id_type_1 (dict_id_make (this_name, this_name_len)) 
                                             : DICT_ID_NONE;
 
                     this_value = &info_str[i+1]; 
                     this_value_len = -valueful; // if there is a '=' to be skipped, start from -1
                     reading_name = false; 
                 }
-                else if (bug_v2v3_situation) 
-                    this_name_len++; // include the ';' in the name in v2v3 bug
             }
             else this_name_len++; // don't count the = or ; in the len
         }
         
         if (!reading_name) {
 
-            if (c == ';' || reconstruct) { // end of value
+            if (c == ';') { // end of value
                 // If its a valueful item, seg it (either special or regular)
                 DictId dict_id = info_items[st.num_items].dict_id;
-                if (dict_id.num && !reconstruct) { 
+                if (dict_id.num) { 
                     char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];                
                     bool not_yet_segged = seg_special_subfields (vb, dict_id, &this_value, (unsigned *)&this_value_len, optimized_snip);
                         
@@ -420,11 +394,8 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields,
         total_names_len += ii->len;
     }
 
-    if (reconstruct)
-        piz_reconstruct_structured_do (vb, &st, &prefixes[1], prefixes_len-1); // this is used for backward compatability when pizzing files v4 or older 
-    else 
-        seg_structured_by_ctx (vb, &vb->contexts[info_field], &st, prefixes, prefixes_len, 
-                               total_names_len /* names inc. = */ + (st.num_items-1) /* the ;s */ + 1 /* \t or \n */);
+    seg_structured_by_ctx (vb, &vb->contexts[info_field], &st, prefixes, prefixes_len, 
+                            total_names_len /* names inc. = */ + (st.num_items-1) /* the ;s */ + 1 /* \t or \n */);
 }
 
 void seg_structured_by_ctx (VBlock *vb, Context *ctx, Structured *st, 
@@ -668,7 +639,9 @@ static uint32_t seg_estimate_num_lines (VBlock *vb)
     // get first line length
     uint32_t len=0; for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
 
-    ASSSEG0 (len < vb->txt_data.len, vb->txt_data.data, "Error: cannot find a newline in the entire vb");
+    char s[30];
+    ASSSEG (len < vb->txt_data.len, vb->txt_data.data, "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
+            str_uint_commas (global_max_memory_per_vb, s));
 
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
 }

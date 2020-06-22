@@ -8,7 +8,7 @@
 #include "txtfile.h"
 #include "seg.h"
 #include "base250.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "file.h"
 #include "endianness.h"
 #include "piz.h"
@@ -25,8 +25,7 @@ static Buffer piz_format_mapper_buf = EMPTY_BUFFER; //global array, initialized 
 bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if ((flag_drop_genotypes || flag_gt_only) && 
-        (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id_is_vcf_format_sf (dict_id) || st == SEC_VCF_GT_DATA ||
-        st == SEC_VCF_FORMAT_B250_legacy || st == SEC_VCF_FORMAT_DICT_legacy || st == SEC_VCF_FRMT_SF_DICT_legacy))
+        (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id_is_vcf_format_sf (dict_id) || st == SEC_VCF_GT_DATA))
         return true;
 
     return false;
@@ -75,7 +74,7 @@ static void vcf_piz_map_format_subfields (VBlock *vb)
             const char *start = &format_snip[colons[sf_i + format_has_gt_subfield] + 1];
             unsigned len = colons[sf_i + format_has_gt_subfield + 1] - colons[sf_i + format_has_gt_subfield] - 1;
 
-            DictId dict_id = dict_id_vcf_format_sf (dict_id_make (start, is_v5_or_above ? len : MIN (len, DICT_ID_LEN))); // up to v4, we took the (at most) first 8 characters
+            DictId dict_id = dict_id_vcf_format_sf (dict_id_make (start, len)); 
 
             // get the did_i of this subfield. note: the context will be new (exist in the VB but not z_file) did_i can be NIL if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
@@ -193,7 +192,7 @@ static void vcf_piz_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
                 if (sf_ctx && snip_len && sf_ctx->dict_id.num == dict_id_FORMAT_DP) 
                     dp_value = atoi (snip);
                 // ...and if its an MIN_DP - calculate it 
-                else if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_MIN_DP && snip_len && is_v5_or_above) {
+                else if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_MIN_DP && snip_len) {
                     int32_t delta = atoi (snip);
                     snip_len = str_int (dp_value - delta, min_dp); // note: we dp_value==0 if no DP subfield preceeds DP_MIN, that's fine
                     snip = min_dp;
@@ -266,8 +265,7 @@ static const char **vcf_piz_get_ht_columns_data (VBlockVCF *vb)
     buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 7), 1, "ht_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
 
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
-    // note: in genozip v1 haplotype columns were permuted across the entire samples, as of v2 they are permuted
-    // only within their own sample block
+    // note: haplotype columns are permuted only within their own sample block
     ARRAY (const char *, ht_columns_data, vb->ht_columns_data); 
     ARRAY (const unsigned, permutatation_index, vb->haplotype_permutation_index);
     
@@ -529,11 +527,7 @@ static void vcf_piz_reconstruct_vb (VBlockVCF *vb)
             }
         }
 
-        if (is_v5_or_above)
-            piz_reconstruct_from_ctx (vb, VCF_EOL, 0);
-        else
-            // v4_line_has_13 is either updated on every line by seg_info_field or never at all and remains false
-            RECONSTRUCT (vb->v4_line_has_13 ? "\r\n" : "\n", 1 + vb->v4_line_has_13); 
+        piz_reconstruct_from_ctx (vb, VCF_EOL, 0);
 
         // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
         if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
@@ -661,21 +655,21 @@ static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
             else { // gtshark
 
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_exceptions_line_i, 
-                                          "gtshark_exceptions_line_i", SEC_HT_GTSHARK_X_LINE);
+                                          "gtshark_exceptions_line_i", SEC_VCF_HT_GTSHARK);
                 vb->gtshark_exceptions_line_i.len /= sizeof (uint32_t);
 
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_exceptions_ht_i, 
-                                          "gtshark_exceptions_ht_i", SEC_HT_GTSHARK_X_HTI);
+                                          "gtshark_exceptions_ht_i", SEC_VCF_HT_GTSHARK);
                 vb->gtshark_exceptions_ht_i.len /= sizeof (uint16_t);
 
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_exceptions_allele, 
-                                          "gtshark_exceptions_allele", SEC_HT_GTSHARK_X_ALLELE);
+                                          "gtshark_exceptions_allele", SEC_VCF_HT_GTSHARK);
 
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_db_db_data, 
-                                          "gtshark_db_db_data", SEC_HT_GTSHARK_DB_DB);
+                                          "gtshark_db_db_data", SEC_VCF_HT_GTSHARK);
 
                 zfile_uncompress_section ((VBlockP)vb, vb->z_data.data + section_index[section_i++], &vb->gtshark_db_gt_data, 
-                                          "gtshark_db_gt_data", SEC_HT_GTSHARK_DB_GT);
+                                          "gtshark_db_gt_data", SEC_VCF_HT_GTSHARK);
 
                 gtshark_uncompress_haplotype_data (vb, sb_i);
             }
@@ -692,18 +686,9 @@ static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
 // in memory to the uncompressed format. This thread then terminates the I/O thread writes the output.
 void vcf_piz_uncompress_vb (VBlockVCFP vb)
 {
-    if (is_v2_or_above) {
-        vcf_piz_uncompress_all_sections (vb);
-        vcf_piz_reconstruct_vb (vb);
-    }
-
-    // v1
-    else { 
-        vcf_v1_piz_uncompress_all_sections (vb);
-        vcf_v1_piz_reconstruct_vb (vb);
-    }
+    vcf_piz_uncompress_all_sections (vb);
+    vcf_piz_reconstruct_vb (vb);
 }
-
 
 bool vcf_piz_read_one_vb (VBlock *vb_, SectionListEntry *sl)
 { 
@@ -740,24 +725,12 @@ bool vcf_piz_read_one_vb (VBlock *vb_, SectionListEntry *sl)
         if (vb_header->num_haplotypes_per_line != 0 && !vb_header->is_gtshark) 
             READ_SB_SECTION (SEC_VCF_HT_DATA,         SectionHeader, sb_i);
 
-        if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) {
-            READ_SB_SECTION (SEC_HT_GTSHARK_X_LINE,   SectionHeader, sb_i);
-            READ_SB_SECTION (SEC_HT_GTSHARK_X_HTI,    SectionHeader, sb_i);
-            READ_SB_SECTION (SEC_HT_GTSHARK_X_ALLELE, SectionHeader, sb_i);
-            READ_SB_SECTION (SEC_HT_GTSHARK_DB_DB,    SectionHeader, sb_i);
-            READ_SB_SECTION (SEC_HT_GTSHARK_DB_GT,    SectionHeader, sb_i);
-        }
+        if (vb_header->num_haplotypes_per_line != 0 && vb_header->is_gtshark) 
+            for (unsigned i=0; i < 5; i++) // read the 5 gtshark sections
+                READ_SB_SECTION (SEC_VCF_HT_GTSHARK,  SectionHeader, sb_i);
     }
     
     #undef vb_header
 
     return true;
 }
-
-void piz_vcf_v4_line_eol (VBlockP vb, bool has_13) 
-{
-    ((VBlockVCFP)vb)->v4_line_has_13 = has_13;
-}
-
-#define V1_PIZ // select the piz functions of v1.c
-#include "vcf_v1.c"

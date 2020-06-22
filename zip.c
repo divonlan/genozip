@@ -13,13 +13,14 @@
 #include "txtfile.h"
 #include "vblock.h"
 #include "dispatcher.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "zip.h"
 #include "seg.h"
 #include "base250.h"
 #include "endianness.h"
 #include "random_access.h"
 #include "dict_id.h"
+#include "reference.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_component)
 {
@@ -31,7 +32,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
     double ratio     = txt_bytes / z_bytes;
 
     // in concat, or when we store the refernce, we don't show the compression ratio for files except for the last one
-    if (flag_concat || flag_store_ref) { 
+    if (flag_concat || flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) { 
 
         static uint64_t txt_file_disk_size_concat = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
@@ -218,8 +219,8 @@ static void zip_write_global_area (Dispatcher dispatcher, const Md5Hash *single_
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, PD_DICT_DATA);  
    
     // output reference, if needed
-    if (flag_store_ref) {
-        sam_ref_compress_ref();
+    if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) {
+        ref_compress_ref();
         zip_display_compression_ratio (dispatcher, true); // Done for reference + final compression ratio calculation
     }
 
@@ -230,9 +231,8 @@ static void zip_write_global_area (Dispatcher dispatcher, const Md5Hash *single_
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) {
 
-        // if we stored file-wide ranges (reference-free SAM does) - merge them now into random_access
-        if (buf_is_allocated (&evb->ra_buf))
-            random_access_merge_in_evb();
+        // sort RA, update entries that don't yet have a chrom_index
+        random_access_finalize_entries();
 
         if (flag_show_index) random_access_show_index(true);
         
@@ -425,11 +425,13 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     // if this a non-concatenated file, or the last component of a concatenated file - write the genozip header, random access and dictionaries
     if (is_last_file || !flag_concat) {
         
-        if (flag_store_ref) zip_display_compression_ratio (dispatcher, false); // Done for the file (if reference is to be written by zip_write_global_area)
+        if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) 
+            zip_display_compression_ratio (dispatcher, false); // Done for the file (if reference is to be written by zip_write_global_area)
 
         zip_write_global_area (dispatcher, &single_component_md5);
 
-        if (!flag_store_ref) zip_display_compression_ratio (dispatcher, true); // Done for the file (if no reference - inc. global area in compression ratio)
+        if (flag_reference == REF_NONE || flag_reference == REF_EXTERNAL) 
+            zip_display_compression_ratio (dispatcher, true); // Done for the file (if no stored reference - ratio includes global area in compression ratio)
     }
     else  // non-last file in concat mode
         zip_display_compression_ratio (dispatcher, false);

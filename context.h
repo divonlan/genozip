@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   move_to_front.h
+//   context.h
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
@@ -23,7 +23,6 @@
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
 #define SNIP_SEP                 '\0'   // Seperator between snips - both for dict and local 
-#define PIZ_SNIP_SEP             (is_v5_or_above ? SNIP_SEP : '\t') // PIZ_SNIP_SEP must be used instead of SNIP_SEP, if there's any chance the code might be executed for PIZ of a VCF of an older version.
 #define SNIP_LOOKUP              '\1'   // Lookup from local 
 #define SNIP_OTHER_LOOKUP        '\2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
 #define SNIP_STRUCTURED          '\3'   // Appears as first character in the SNIP, followed by a specification of a structured field
@@ -122,9 +121,9 @@ typedef struct Context {
     // ----------------------------
     const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
     uint8_t did_i;             // the index of this ctx within the array vb->contexts
-    uint8_t ltype;        // CTX_LT_*
+    uint8_t ltype;             // CTX_LT_*
     uint8_t flags;             // CTX_*
-    DictId dict_id;        // which dict_id is this MTF dealing with
+    DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. 
     Buffer local;              // VB: Data private to this VB that is not in the dictionary

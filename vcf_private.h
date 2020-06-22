@@ -106,13 +106,6 @@ typedef struct VBlockVCF {
     Buffer gtshark_exceptions_ht_i;   // ZIP & PIZ: delta-encoded (within the line) list of ht_i. For each exception line, there's the list of its ht_i's followed by a 0.
     Buffer gtshark_exceptions_allele; // ZIP & PIZ: each index (including terminating 0) corresponding to the index in exception_ht_i_offset
     Buffer gtshark_vcf_data;          // PIZ only
-
-    // backward compatibility with older versions
-    Buffer v1_variant_data_section_data;  // all fields until FORMAT, newline-separated, \0-termianted. .len includes the terminating \0 (used for decompressed V1 files)
-    Buffer v1_subfields_start_buf;        // v1 only: these 3 are used by vcf_piz_reconstruct_vb
-    Buffer v1_subfields_len_buf;
-    Buffer v1_num_subfields_buf;
-    bool   v4_line_has_13;
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;
@@ -138,12 +131,6 @@ extern void vcf_zfile_compress_haplotype_data_gtshark (VBlockP vb, ConstBufferP 
 // GTshark stuff
 extern void gtshark_compress_haplotype_data (VBlockVCFP vb, ConstBufferP section_data, unsigned sb_i);
 extern void gtshark_uncompress_haplotype_data (VBlockVCFP vb, unsigned sb_i);
-
-// v1
-extern int vcf_v1_zfile_read_section (VBlockP vb, BufferP data, const char *buf_name, unsigned header_size, 
-                                     SectionType expected_sec_type, bool allow_eof);
-extern void vcf_v1_piz_uncompress_all_sections (VBlockVCFP vb); 
-extern void vcf_v1_piz_reconstruct_vb (VBlockVCFP vb);
 
 #endif
 

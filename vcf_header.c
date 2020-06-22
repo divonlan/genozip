@@ -109,6 +109,3 @@ void vcf_header_keep_only_last_line (Buffer *vcf_header_buf)
             break;
         }
 }
-
-#define V1_VCF_HEADER // select the vcf_header functions of v1.c
-#include "vcf_v1.c"

@@ -15,7 +15,7 @@
 #include "genozip.h"
 #include "buffer.h"
 #include "sections.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "aes.h"
 
 // VCF file variations
@@ -240,7 +240,6 @@ typedef struct File {
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 
     // Used for READING GENOZIP files
-    Buffer v1_next_vcf_header;         // genozip v1 only: next VCF header - used when reading in --split mode
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
     uint32_t num_components;           // set from genozip header
 
@@ -261,6 +260,7 @@ typedef struct File {
     uint8_t dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
     Context contexts[MAX_DICTS];     // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
+    Buffer ra_max_pos_by_chrom;        // max_pos of each from according to RA. An array of uint32_t indexed by chrom_word_index.
     Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file
 
     // section list - used for READING and WRITING genozip files

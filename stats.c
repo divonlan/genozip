@@ -11,6 +11,7 @@
 #include "file.h"
 #include "vblock.h"
 #include "txtfile.h"
+#include "reference.h"
 
 // VCF: used for allocating compressed SEC_VCF_GT_DATA bytes to the ctxs that contributed to it, pro-rated by the number
 // of words each ctx contributed
@@ -21,7 +22,8 @@ static int *count_per_section = NULL;
 #define OVERHEAD_SEC_GENOZIP_HDR -2
 #define OVERHEAD_SEC_TXT_HDR     -3
 #define OVERHEAD_SEC_RA_INDEX    -4
-#define LAST_OVERHEAD            -4
+#define OVERHEAD_SEC_REFERENCE   -5 // used only for REF_EXT_STORE
+#define LAST_OVERHEAD            -5
 
 static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
@@ -35,64 +37,68 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
 
         SectionListEntry *section = ENT (SectionListEntry, z_file->section_list_buf, i);
+        int64_t sec_size = (section+1)->offset - section->offset;
 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
         
         // we put all the SEQ derived data in a single stats line for easy comparison (reference in dict, the +- section SEQ in b250, and the unique non-ref sequence stretchs in local)
         if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ]) { // must be before SEC_LOCAL
             if (section->dict_id.num == dict_id_SAM_SQnonref)
-                *local_compressed_size += (section+1)->offset - section->offset;
-            else if (section->section_type == SEC_SAM_REFERENCE)
-                *dict_compressed_size += (section+1)->offset - section->offset;
-            else // section->dict_id.num == dict_id_fields[SAM_SEQ]
-                *b250_compressed_size += (section+1)->offset - section->offset;
+                *local_compressed_size += sec_size;
+            else if (section->section_type == SEC_REFERENCE && flag_reference == REF_INTERNAL)
+                *dict_compressed_size += sec_size;
+            else if (section->dict_id.num == dict_id_fields[SAM_SEQ])
+                *b250_compressed_size += sec_size;
         }
+
+        else if (overhead_sec == OVERHEAD_SEC_REFERENCE && (flag_reference == REF_EXT_STORE || z_file->data_type != DT_SAM) && section->section_type == SEC_REFERENCE)
+            *dict_compressed_size += sec_size;
 
         else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_SAM_SQnonref) {} // ^ already handle above
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
-            *dict_compressed_size += (section+1)->offset - section->offset;
+            *dict_compressed_size += sec_size;
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_B250)
-            *b250_compressed_size += (section+1)->offset - section->offset;
+            *b250_compressed_size += sec_size;
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_LOCAL)
-            *local_compressed_size += (section+1)->offset - section->offset;
+            *local_compressed_size += sec_size;
 
         else if (section->section_type == SEC_VB_HEADER && overhead_sec == OVERHEAD_SEC_VB_HDR)
             *local_compressed_size += (z_file->data_type == DT_VCF) ? sizeof (SectionHeaderVbHeaderVCF) // payload is haplotype index which goes to VCF_GT
-                                                                    : (section+1)->offset - section->offset;
+                                                                    : sec_size;
 
         else if (section->section_type == SEC_GENOZIP_HEADER && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
             *local_compressed_size += z_file->disk_size - section->offset;
 
         else if (section->section_type == SEC_DICT_ID_ALIASES && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
-            *local_compressed_size += (section+1)->offset - section->offset;
+            *local_compressed_size += sec_size;
 
         else if (section->section_type == SEC_TXT_HEADER && overhead_sec == OVERHEAD_SEC_TXT_HDR)
-            *local_compressed_size += (section+1)->offset - section->offset;
+            *local_compressed_size += sec_size;
 
         else if (section->section_type == SEC_RANDOM_ACCESS && overhead_sec == OVERHEAD_SEC_RA_INDEX)
-            *local_compressed_size += (section+1)->offset - section->offset;
+            *local_compressed_size += sec_size;
         
         else if ((section->section_type == SEC_VCF_HT_DATA && dict_id.num == dict_id_fields[VCF_GT]) ||
                  (section->section_type == SEC_VCF_PHASE_DATA && dict_id.num == dict_id_fields[VCF_GT]))
-            *local_compressed_size += (section+1)->offset - section->offset;
+            *local_compressed_size += sec_size;
             
         // we allocate the size of SEC_VCF_GT_DATA by the proportion of words due to this FORMAT dict_id
         else if (section->section_type == SEC_VCF_GT_DATA && dict_id_is_vcf_format_sf (dict_id)) {
 
             if (vcf_gt_data_tracker.words_so_far != vcf_gt_data_tracker.words_total) {
-                uint64_t increment = (uint64_t)(format_proportion * (double)((section+1)->offset - section->offset));
+                uint64_t increment = (uint64_t)(format_proportion * (double)(sec_size));
                 *b250_compressed_size += increment;
                 vcf_gt_data_tracker.comp_bytes_so_far += increment;
             }
             else
-                total_gt_data += ((section+1)->offset - section->offset);
+                total_gt_data += sec_size;
         }
 
         else if (z_file->data_type == DT_VCF && section->section_type == SEC_VB_HEADER && dict_id.num == dict_id_fields[VCF_GT]) {// squeezed index is part of GT data
-            *local_compressed_size += (section+1)->offset - section->offset - sizeof (SectionHeaderVbHeaderVCF); // section header already accounted for
+            *local_compressed_size += sec_size - sizeof (SectionHeaderVbHeaderVCF); // section header already accounted for
             count_per_section[i]--; // we already counted SEC_VB_HEADER above. this is just accounting for the squeeze payload
         }
 
@@ -126,6 +132,13 @@ static void stats_show_file_metadata (void)
     fprintf (stderr, "\n\n");
     if (txt_file->name) fprintf (stderr, "%s file name: %s\n", dt_name (z_file->data_type), txt_file->name);
     
+    if (flag_reference == REF_INTERNAL && z_file->data_type == DT_SAM)
+        fprintf (stderr, "Reference: Internal (size appears in the 'SEQ' line, 'comp dict' column)\n");
+    else if (flag_reference == REF_EXTERNAL)
+        fprintf (stderr, "Reference: %s (not stored in genozip file)\n", ref_filename);
+    else if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE)
+        fprintf (stderr, "Reference: %s (size appears in 'Reference' line)\n", ref_filename);
+
     char ls[30];
     if (z_file->data_type == DT_VCF) 
         fprintf (stderr, "Individuals: %u   ", global_vcf_num_samples);
@@ -196,7 +209,10 @@ void stats_show_sections (void)
 
         txt_len = ctx ? ctx->txt_len : (i==OVERHEAD_SEC_TXT_HDR ? txtfile_get_last_header_len() : 0);
 
-        all_comp_dict   += dict_compressed_size;
+        bool is_dict_a_reference = (i == OVERHEAD_SEC_REFERENCE) || // reference appreas in "comp_dict" of "Reference" line
+                                   (ctx && z_file->data_type == DT_SAM && ctx->dict_id.num == dict_id_fields[SAM_SEQ]); // reference appreas in "comp_dict" of "SEQ" line
+        
+        if (!is_dict_a_reference) all_comp_dict += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;
         all_comp_b250   += b250_compressed_size;
         all_comp_data   += local_compressed_size;
@@ -209,7 +225,7 @@ void stats_show_sections (void)
         else if (i==OVERHEAD_SEC_VB_HDR)      strcpy (s->name, "VBlock hdrs");
         else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
         else if (i==OVERHEAD_SEC_RA_INDEX)    strcpy (s->name, "--regions index");
-//        else if (i==OVERHEAD_SEC_REFERENCE)   strcpy (s->name, "reference seq");
+        else if (i==OVERHEAD_SEC_REFERENCE)   strcpy (s->name, "Reference");
 
         /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 
@@ -225,8 +241,13 @@ void stats_show_sections (void)
         /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
         }
         else 
-            s->did_i[0] = s->words[0] = s->hash[0] = s->uncomp_dict[0] = s->comp_dict[0] = '-';
+            s->did_i[0] = s->words[0] = s->hash[0] = s->uncomp_dict[0] = '-';
         
+        if (ctx || is_dict_a_reference)
+        /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
+        else 
+            s->comp_dict[0] = '-';
+
         /* txt            */ str_size (txt_len, s->txt);
         /* comp b250      */ str_size (b250_compressed_size, s->comp_b250);
         /* comp data      */ str_size (local_compressed_size, s->comp_data);

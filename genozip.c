@@ -38,11 +38,12 @@
 #include "license.h"
 #include "vcf.h"
 #include "dict_id.h"
+#include "reference.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
 ExeType exe_type;
-int command = -1;  // must be static or global to initialize list_options 
+CommandType command = NO_COMMAND;  // must be static or global to initialize list_options 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
@@ -51,7 +52,7 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file d
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
-    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_reference=0, flag_store_ref=0,
+    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_reference=REF_NONE, flag_show_reference=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0,
@@ -198,10 +199,12 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
     uint64_t txt_data_size, num_lines;
     uint32_t num_samples;
-    Md5Hash md5_hash_concat, license_hash;
+    Md5Hash md5_hash_concat, license_hash, ref_file_md5;
     char created[FILE_METADATA_LEN];
+    char ref_file_name[REF_FILENAME_LEN];
     bool success = zfile_get_genozip_header (&txt_data_size, &num_samples, &num_lines, 
-                                             &md5_hash_concat, created, FILE_METADATA_LEN, &license_hash);
+                                             &md5_hash_concat, created, FILE_METADATA_LEN, &license_hash,
+                                             ref_file_name, REF_FILENAME_LEN, &ref_file_md5);
     if (!success) goto finish;
 
     double ratio = z_file->disk_size ? ((double)txt_data_size / (double)z_file->disk_size) : 0;
@@ -210,6 +213,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     str_size (txt_data_size, txt_size_str);
     str_uint_commas (num_lines, num_lines_str);
     str_uint_commas (num_samples, indiv_str);
+    
+    // TODO: have an option to print ref_file_name and ref_file_md5
     
     bufprintf (evb, &str_buf, ratio < 100 ? item_format_2 : item_format_1, indiv_str, num_lines_str, 
                z_size_str, txt_size_str, ratio, 
@@ -266,7 +271,7 @@ static void main_genounzip (const char *z_filename,
 
     // get output FILE 
     if (txt_filename) {
-        ASSERT0 (!txt_file || flag_concat, "Error: txt_file is open but not in concat mode");
+        ASSERT0 (!txt_file || flag_concat, "Error: txt_file is unexpectedly already open"); // note: in concat mode, we expect it to be open for 2nd+ file
 
         if (!txt_file)  // in concat mode, for second file onwards, txt_file is already open
             txt_file = file_open (txt_filename, WRITE, TXT_FILE, z_file->data_type);
@@ -319,6 +324,8 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
                                   flag_show_memory ? "--show-memory" : SKIP_ARG,
                                   flag_show_time   ? "--show-time"   : SKIP_ARG,
                                   threads_str      ? "--threads"     : SKIP_ARG,
+                                  flag_reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
+                                  flag_reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
                                   threads_str      ? threads_str     : SKIP_ARG,
                                   NULL);
 
@@ -541,8 +548,8 @@ int main (int argc, char **argv)
         #define _r  {"regions",       required_argument, 0, 'r'                }
         #define _tg {"targets",       required_argument, 0, 't'                }
         #define _s  {"samples",       required_argument, 0, 's'                }
-        #define _T  {"reference",     required_argument, 0, 'T'                }
-        #define _TT {"store-reference",no_argument,      &flag_store_ref,     1}
+        #define _e  {"reference",     required_argument, 0, 'e'                }
+        #define _E  {"REFERENCE",     required_argument, 0, 'E'                }
         #define _g  {"grep",          required_argument, 0, 'g'                }
         #define _G  {"drop-genotypes",no_argument,       &flag_drop_genotypes,1}
         #define _H1 {"no-header",     no_argument,       &flag_no_header,    1 }
@@ -570,6 +577,7 @@ int main (int argc, char **argv)
         #define _sr {"show-gheader",  no_argument,       &flag_show_gheader, 1 }  
         #define _sT {"show-threads",  no_argument,       &flag_show_threads, 1 }  
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks, 1 }  
+        #define _sR {"show-reference",no_argument,       &flag_show_reference, 1 }  
         #define _dm {"debug-memory",  no_argument,       &flag_debug_memory, 1 }  
         #define _dp {"debug-progress",no_argument,       &flag_debug_progress, 1 }  
         #define _ds {"debug-no-singletons",no_argument,  &flag_debug_no_singletons, 1 }  
@@ -577,18 +585,18 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _T, _TT,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _T,                                                   _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                                                 _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,          _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr,              _dm, _dp,                                                                   _fs, _g,      _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _T,                                                                                                          _st, _sm,                             _dm,                                                                                      _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg,      _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                        _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                             _dm,                                                                                             _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:Oo:p:B:S:9KWFT:", // genozip
-            "czfhLqQt^V@:Oo:p:mT:",               // genounzip
-            "hLVp:qf",                            // genols
-            "hLV@:p:qQ1r:t:s:H1Go:fg:T:"          // genocat
+            "i:I:cdfhlLqQt^Vzm@:Oo:p:B:S:9KWFe:E:", // genozip
+            "czfhLqQt^V@:Oo:p:me:",                 // genounzip
+            "hLVp:qf",                              // genols
+            "hLV@:p:qQ1r:t:s:H1Go:fg:e:"            // genocat
         };
 
         int option_index = -1;
@@ -619,9 +627,10 @@ int main (int argc, char **argv)
             case 'K' : flag_gtshark       = 1      ; break;
             case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
                        // fall through for genocat -r
-            case 'r' : flag_regions   = true; regions_add     (optarg); break;
-            case 's' : flag_samples   = true; vcf_samples_add (optarg); break;
-            case 'T' : flag_reference = true; sam_ref_import  (optarg); break;
+            case 'r' : flag_regions       = 1      ; regions_add     (optarg); break;
+            case 's' : flag_samples       = 1      ; vcf_samples_add (optarg); break;
+            case 'e' : flag_reference     = REF_EXTERNAL  ; ref_set_reference (optarg); break;
+            case 'E' : flag_reference     = REF_EXT_STORE ; ref_set_reference (optarg); break;
             case 'm' : flag_md5           = 1      ; break;
             case 'O' : flag_split         = 1      ; break;
             case 'G' : flag_drop_genotypes= 1      ; break;
@@ -712,8 +721,9 @@ int main (int argc, char **argv)
 
     // deal with final setting of flag_quiet that suppresses warnings 
     
-    // don't show progress or warning when outputing to the termial
-    if (flag_stdout && isatty(1)) flag_quiet=true; 
+    // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
+    // because often it will be piped and ultimately go the terminal)
+    if (flag_stdout) flag_quiet=true; 
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
@@ -762,6 +772,10 @@ int main (int argc, char **argv)
     if (command == VERSION) { main_print_version();   return 0; }
     if (command == LICENSE) { license_display();      return 0; }
     if (command == HELP)    { main_print_help (true); return 0; }
+
+    // import external reference if needed
+    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) 
+        ref_read_external_reference(); 
 
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 

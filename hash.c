@@ -6,7 +6,7 @@
 #include <math.h>
 #include "genozip.h"
 #include "buffer.h"
-#include "move_to_front.h"
+#include "context.h"
 #include "file.h"
 #include "vblock.h"
 #include "hash.h"
@@ -46,8 +46,8 @@ static uint32_t hash_next_size_up (uint64_t size)
     return hash_sizes[NUM_HASH_SIZES-1]; // the maximal size
 }
 
-// this is called when the first VB is merging - after its mtf and dict have been moved to zf_ctx.
-// Now we need to populate hash. 
+// this is called when allocing memory for global hash - it copies pre-exiting mtf data, for example, when copying in a
+// reference contig dictionary  
 static void hash_populate_from_mtf (Context *zf_ctx)
 {
     uint32_t len = zf_ctx->mtf.len;
@@ -55,8 +55,6 @@ static void hash_populate_from_mtf (Context *zf_ctx)
 
     for (uint32_t i=0; i < len; i++) {
         MtfNode *node = ENT (MtfNode, zf_ctx->mtf, i);
-        //bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == CTX_LT_TEXT) && !(vb_ctx->flags & CTX_FL_NO_STONS)); // is singleton in this VB
-
         const char *snip = ENT (const char, zf_ctx->dict, node->char_index);
         hash_global_get_entry (zf_ctx, snip, node->snip_len, HASH_NEW_OK_NOT_SINGLETON, NULL /* the snip is not in the hash for sure */); 
     }
@@ -227,7 +225,7 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
 // goes up (because of the need to traverse linked lists) during the bottleneck time. Coversely, if the hash
 // table size is too big, it both consumes a lot memory, as well as slows down the search time as the dictionary
 // is less likely to fit into the CPU memory caches
-void hash_alloc_global (VBlock *merging_vb, Context *zf_ctx, const Context *first_merging_vb_ctx)
+uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zf_ctx, const Context *first_merging_vb_ctx)
 {
     // note on txt_data_size_single: if its a physical plain txt file - this is the file size. 
     // if not - its an estimate done after the first VB by txtfile_estimate_txt_data_size
@@ -319,8 +317,6 @@ void hash_alloc_global (VBlock *merging_vb, Context *zf_ctx, const Context *firs
     // at a low rate throughout. We add words at 10% of what we viewed in n3 - for the entire file
     if (n3_lines) estimated_entries += n3_density * estimated_num_lines * 0.10;
 
-    zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
-
     if (flag_show_hash) {
         char s1[30], s2[30];
  
@@ -334,8 +330,15 @@ void hash_alloc_global (VBlock *merging_vb, Context *zf_ctx, const Context *firs
                  "n2_n3_lines=%s vb_ctx->mtf.len=%u est_entries=%d hashsize=%s\n", 
                  first_merging_vb_ctx->name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
                  str_uint_commas ((uint64_t)n2_n3_lines, s2), (uint32_t)first_merging_vb_ctx->mtf.len, (int)estimated_entries, 
-                 str_uint_commas (zf_ctx->global_hash_prime, s1)); 
+                 str_uint_commas (hash_next_size_up (estimated_entries * 5), s1)); 
     }
+
+    return (uint32_t)estimated_entries;
+}
+
+void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries)
+{
+    zf_ctx->global_hash_prime = hash_next_size_up (estimated_entries * 5);
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof(GlobalHashEnt) * zf_ctx->global_hash_prime * 1.5, 1,  // 1.5 - leave some room for extensions
                "z_file->contexts->global_hash", zf_ctx->did_i);
@@ -391,12 +394,12 @@ int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_
             // and accessing it. we make sure that the setting of g_hashent->merge_num is atomic and the other threads will at all times either
             // see NIL or merge_num - both of which indicate the this entry is effectively NIL as they have an older merge_num
 
-            ASSERT (mode != HASH_MUST_EXIST, "Error in hash_global_get_entry 1: unable to find snip %.*s in hash table of %s", 
-                    snip_len, snip, zf_ctx->name);
+            if (mode != HASH_READ_ONLY) {
+                g_hashent->next = NO_NEXT;
+                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NIL)
+                __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
+            }
 
-            g_hashent->next = NO_NEXT;
-            g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NIL)
-            __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
             if (old_node) *old_node = NULL; // no old node
             if (mode == HASH_NEW_OK_SINGLETON_IN_VB) zf_ctx->num_singletons++;
             return g_hashent->node_index;
@@ -424,8 +427,10 @@ int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_
     }
 
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
-    ASSERT (mode != HASH_MUST_EXIST, "Error in hash_global_get_entry 2: unable to find snip %.*s in hash table of %s", 
-            snip_len, snip, zf_ctx->name);
+    if (mode == HASH_READ_ONLY) {
+        if (old_node) *old_node = NULL; // we don't have an old node
+        return NIL;
+    }
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof (GlobalHashEnt) * (1 + zf_ctx->global_hash.len), 2, 
                "z_file->contexts->global_hash", zf_ctx->did_i);

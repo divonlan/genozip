@@ -24,7 +24,7 @@
 // -----------------
 #define GENOZIP_EXT ".genozip"
 
-#define MAX_POS 0xffffffff // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
+#define MAX_POS 0x00000000ffffffffLL // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
 
 // default max amount of txt data in each variant block. this is user-configurable with --vblock
 #define TXT_DATA_PER_VB_DEFAULT "16" // MB in default mode
@@ -50,11 +50,13 @@ typedef const struct Buffer *ConstBufferP;
 typedef struct Structured *StructuredP;
 typedef const struct Structured *ConstStructuredP;
 typedef struct Context *ContextP;
+typedef const struct Context *ConstContextP;
 typedef struct MtfNode *MtfNodeP;
 typedef const struct MtfNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
 typedef struct SectionListEntry *SectionListEntryP;
 typedef const struct SectionListEntry *ConstSectionListEntryP;
+typedef struct Range *RangeP;
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
@@ -72,19 +74,15 @@ extern uint32_t global_max_threads, global_max_memory_per_vb;
 extern const char *global_cmd;            // set once in main()
 extern ExeType exe_type;
 
-#define ZIP        'z'
-#define UNZIP      'd'
-#define LIST       'l'
-#define LICENSE    'L'
-#define VERSION    'V'
-#define HELP       'h'
-extern int command;
+
+typedef enum { NO_COMMAND=-1, ZIP='z', UNZIP='d', LIST='l', LICENSE='L', VERSION='V', HELP='h' } CommandType;
+extern CommandType command;
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers,
-           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions, flag_reference, flag_store_ref,
-           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads,
+           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions, flag_reference,
+           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_show_reference,
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only,
            flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_register,
            flag_debug_progress, flag_show_hash, flag_debug_memory, flag_debug_no_singletons,
