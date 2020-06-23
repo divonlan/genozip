@@ -575,7 +575,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
             exit (0);
         }
 
-        ASSERT (sections_has_reference() || flag_reference == REF_EXTERNAL, 
+        ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL, 
                 "Error: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
                 header->ref_filename);
 

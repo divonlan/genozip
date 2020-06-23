@@ -533,7 +533,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             ref_consume_ref_fasta_global_area();
 
         if (flag_reference == REF_STORED) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
-            ref_uncompress_all_ranges();
+            ref_uncompress_all_stored_ranges();
             if (!flag_quiet) fprintf (stderr, (flag_test && !ref_flag_reading_reference) ? "Success\n" : "Done\n");
         }
 

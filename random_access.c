@@ -228,17 +228,6 @@ bool random_access_is_vb_included (uint32_t vb_i,
 
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
 
-
-/*
-    static const RAEntry *next_ra = NULL;
-    ASSERT0 ((vb_i==1) == !next_ra, "Error: expecting next_ra==NULL iff vb_i==1");
-    if (!next_ra) next_ra = (const RAEntry *)z_file->ra_buf.data; // initialize static on first call
-
-    bool vb_is_included=false;
-    for (unsigned ra_i=0; 
-         ra_i < z_file->ra_buf.len && next_ra->vblock_i == vb_i;
-         ra_i++, next_ra++) {
-*/
     bool vb_is_included = false;
     for (unsigned ra_i=0; ra->vblock_i == vb_i; ra_i++, ra++) {
         if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos,
@@ -267,7 +256,7 @@ int32_t random_access_get_last_included_vb_i (void)
     return last_vb_i;
 }
 
-// PIZ I/O thread: ref_uncompress_all_ranges->ref_read_one_range. looks at vb_i=0 which is the final vb in RA, and includes
+// PIZ I/O thread: ref_uncompress_all_stored_ranges->ref_read_one_stored_range. looks at vb_i=0 which is the final vb in RA, and includes
 // all chroms present in the file, with the file-wide min/max pos
 int64_t random_access_max_pos_of_chrom (uint32_t chrom_word_index)
 {

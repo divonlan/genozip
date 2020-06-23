@@ -42,7 +42,7 @@ typedef struct Range {
 } Range;
 
 extern void ref_compress_ref (void);
-extern void ref_uncompress_all_ranges (void);
+extern void ref_uncompress_all_stored_ranges (void);
 extern void ref_set_reference (const char *filename);
 extern void ref_set_md5 (Md5Hash md5);
 extern void ref_read_external_reference (void);

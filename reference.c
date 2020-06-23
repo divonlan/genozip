@@ -93,7 +93,11 @@ const char *ref_get_ref (VBlockP vb, uint64_t pos, uint32_t ref_consumed)
     return &r->ref[pos];
 }
 
-static void ref_uncompress_one_range (VBlockP vb)
+// ----------------------------------------------------------
+// PIZ: read and uncompress stored ranges (if no --reference)
+// ----------------------------------------------------------
+
+static void ref_uncompress_one_stored_range (VBlockP vb)
 {
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
 
@@ -106,7 +110,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     const MtfWord *word = ENT (const MtfWord, ctx->word_list, ref_i);
 
     Range *r = ENT (Range, ranges, ref_i);
-    ASSERT (last_pos <= r->last_pos, "Error in ref_uncompress_one_range: ref range out of bounds for ref_i=%u chrom=%.*s: first_pos=%"PRId64" last_pos=%"PRId64" but range->last_pos=%"PRId64,
+    ASSERT (last_pos <= r->last_pos, "Error in ref_uncompress_one_stored_range: ref range out of bounds for ref_i=%u chrom=%.*s: first_pos=%"PRId64" last_pos=%"PRId64" but range->last_pos=%"PRId64,
             ref_i, word->snip_len, ENT (char, ctx->dict, word->char_index), first_pos, last_pos, r->last_pos);
 
     char *uncompressed_data = &r->ref[first_pos];
@@ -130,7 +134,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                 next_com -= 3; // skip gap length
             }
             else {
-                ASSERT (next_ref >= r->ref, "Error in ref_uncompress_one_range: next_ref out of range when uncompacting chrom=%.*s, first_pos=%"PRId64" last_pos=%"PRId64,
+                ASSERT (next_ref >= r->ref, "Error in ref_uncompress_one_stored_range: next_ref out of range when uncompacting chrom=%.*s, first_pos=%"PRId64" last_pos=%"PRId64,
                         word->snip_len, ENT (char, ctx->dict, word->char_index), first_pos, last_pos);
 
                 *(next_ref--) = *next_com;
@@ -149,7 +153,7 @@ static uint64_t ref_calc_chrom_ref_size (uint64_t max_pos)
     return (((max_pos+1) + (REF_NUM_SITES_PER_RANGE-1)) / REF_NUM_SITES_PER_RANGE) * REF_NUM_SITES_PER_RANGE;
 }
 
-static void ref_read_one_range (VBlockP vb)
+static void ref_read_one_stored_range (VBlockP vb)
 {
     if (sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE)) {
         
@@ -165,16 +169,16 @@ static void ref_read_one_range (VBlockP vb)
             // note: the OS lazy-allocation will only actually allocate memory blocks that are actually used 
             r->ref_size = r->last_pos + 1;
             r->ref = malloc (r->ref_size);
-            ASSERT (r->ref, "Error in ref_read_one_range: failed to allocated %"PRId64" bytes", r->ref_size); 
+            ASSERT (r->ref, "Error in ref_read_one_stored_range: failed to allocated %"PRId64" bytes", r->ref_size); 
         }
 
         vb->ready_to_dispatch = true;
     }
 }
 
-void ref_uncompress_all_ranges (void)
+void ref_uncompress_all_stored_ranges (void)
 {
-    ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_uncompress_all_ranges: expecting ranges to be unallocated");
+    ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_uncompress_all_stored_ranges: expecting ranges to be unallocated");
     
     ranges.len = z_file->contexts[DTFZ(chrom)].word_list.len;
     buf_alloc (evb, &ranges, ranges.len * sizeof(Range), 1, "ranges", 0);
@@ -185,8 +189,8 @@ void ref_uncompress_all_ranges (void)
 
     // decompress reference using Dispatcher
     dispatcher_fan_out_task ("Reading reference from genozip file", flag_test, 
-                             ref_read_one_range, 
-                             ref_uncompress_one_range, 
+                             ref_read_one_stored_range, 
+                             ref_uncompress_one_stored_range, 
                              NULL);
 }
 
