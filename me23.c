@@ -59,10 +59,10 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
 
 void me23_piz_reconstruct_vb (VBlock *vb)
 {
-    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
+    for (vb->line_i=vb->first_line; vb->line_i < vb->first_line + vb->lines.len; vb->line_i++) {
 
         uint32_t txt_data_start = vb->txt_data.len;
-        vb->line_i = vb->first_line + vb_line_i;
+        vb->dont_show_curr_line = false; 
 
         piz_reconstruct_from_ctx (vb, ME23_ID,    '\t');
         piz_reconstruct_from_ctx (vb, ME23_CHROM, '\t');

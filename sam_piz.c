@@ -159,6 +159,7 @@ void sam_piz_reconstruct_vb (VBlockSAM *vb)
     for (vb->line_i=vb->first_line; vb->line_i < vb->first_line + vb->lines.len; vb->line_i++) {
 
         uint32_t txt_data_start = vb->txt_data.len;
+        vb->dont_show_curr_line = false; 
 
         piz_reconstruct_from_ctx (vb, SAM_QNAME,    '\t');
         piz_reconstruct_from_ctx (vb, SAM_FLAG,     '\t');

@@ -495,6 +495,7 @@ static void vcf_piz_reconstruct_vb (VBlockVCF *vb)
 
         vb->line_i = vb->first_line + vb_line_i;
         uint64_t txt_data_start = vb->txt_data.len;
+        vb->dont_show_curr_line = false; 
 
         // re-construct fields CHROM to FORMAT, including INFO subfields into vb->txt_data
         piz_reconstruct_from_ctx (vb, VCF_CHROM,  '\t');
