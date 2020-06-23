@@ -163,6 +163,8 @@ static const char *help_genozip_developer[] = {
     "",
     "   Z    --show-hash       See raw numbers that feed into determining the size of the global hash tables (calculated after the completion of vblock_i=1)",
     "",
+    "   ZUC  --show-aliases    See contents of SEC_DICT_ID_ALIASES section",
+    "",
     "   ZUCL --debug-memory    Buffer allocations and destructions",
     "",
     "   ZUC  --debug-progress  See raw numbers that feed into the progress indicator",

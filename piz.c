@@ -370,8 +370,8 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
     else if (ctx->did_i == DTF(eol))
         RECONSTRUCT1('\n');
 
-    else ABORT("Error in piz_reconstruct_from_ctx_do: ctx %s has no data (b250 or local) in vb_i=%u line_i=%u", 
-                ctx->name, vb->vblock_i, vb->line_i);
+    else ABORT("Error in piz_reconstruct_from_ctx_do: ctx %s has no data (b250 or local) in vb_i=%u line_i=%u did_i=%u ctx->did=%u ctx->dict_id=%s", 
+                ctx->name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, err_dict_id (ctx->dict_id));
 
     if (sep) RECONSTRUCT1 (sep); 
 
@@ -534,7 +534,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
         if (flag_reference == REF_STORED) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
             ref_uncompress_all_stored_ranges();
-            if (!flag_quiet) fprintf (stderr, (flag_test && !ref_flag_reading_reference) ? "Success\n" : "Done\n");
+            if (!flag_quiet) fprintf (stderr, (flag_test && !ref_flag_reading_reference) ? "Success                    \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n" : "Done                       \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n");
         }
 
         // read dict_id aliases, if there are any

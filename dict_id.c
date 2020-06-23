@@ -195,18 +195,28 @@ void dict_id_initialize (DataType data_type)
     }
 }
 
+static void dict_id_show_aliases (void)
+{
+    fprintf (stderr, "Contents of SEC_DICT_ID_ALIASES section:\n");
+    for (unsigned i=0; i < dict_id_num_aliases; i++) 
+        fprintf (stderr, "alias=%.*s dst=%.*s\n", 
+                    DICT_ID_LEN, dict_id_printable (dict_id_aliases[i].alias).id,
+                    DICT_ID_LEN, dict_id_printable (dict_id_aliases[i].dst).id);
+}
+
 // called by ZIP I/O thread for writing to global section
 Buffer *dict_id_create_aliases_buf (void)
 {
     static struct { DataType dt; uint64_t *dict_id_alias; uint64_t *dict_id_dst; } aliases_def[] = DICT_ID_ALIASES;
 
     // count
-    dict_id_aliases_buf.len = 0;
+    dict_id_num_aliases = 0;
     for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
         if (aliases_def[i].dt == z_file->data_type)
-            dict_id_aliases_buf.len += sizeof (DictIdAlias);
+            dict_id_num_aliases++;
 
     // build global alias reference, which will be immutable until the end of this z_file
+    dict_id_aliases_buf.len = dict_id_num_aliases * sizeof (DictIdAlias);
     buf_alloc (evb, &dict_id_aliases_buf, dict_id_aliases_buf.len, 1, "dict_id_aliases_buf", 0);
 
     DictIdAlias *next = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
@@ -216,6 +226,8 @@ Buffer *dict_id_create_aliases_buf (void)
             next->dst   = (DictId)*aliases_def[i].dict_id_dst;
             next++;
         }
+
+    if (flag_show_aliases) dict_id_show_aliases();
 
     return &dict_id_aliases_buf;
 }
@@ -229,16 +241,22 @@ void dict_id_read_aliases (void)
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 
-    zfile_read_section (z_file, evb, 0, NO_SB_I, &dict_id_aliases_buf, "dict_id_aliases_buf", 
+    zfile_read_section (z_file, evb, 0, NO_SB_I, &compressed_aliases, "dict_id_aliases_buf", 
                         sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
 
-    SectionHeader *header = (SectionHeader *)dict_id_aliases_buf.data;
+    SectionHeader *header = (SectionHeader *)compressed_aliases.data;
     zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", SEC_DICT_ID_ALIASES);
 
     buf_destroy (&compressed_aliases);
 
     dict_id_aliases = FIRSTENT (DictIdAlias, dict_id_aliases_buf);
     dict_id_num_aliases = dict_id_aliases_buf.len / sizeof (DictIdAlias);
+
+    for (unsigned i=0; i < dict_id_num_aliases; i++) 
+        ASSERT0 (dict_id_aliases[i].dst.id[0] && dict_id_aliases[i].alias.id[0], 
+                 "Error in dict_id_read_aliases: corrupted aliases buffer")
+    
+    if (flag_show_aliases) dict_id_show_aliases();
 }
 
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id

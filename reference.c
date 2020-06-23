@@ -192,6 +192,8 @@ void ref_uncompress_all_stored_ranges (void)
                              ref_read_one_stored_range, 
                              ref_uncompress_one_stored_range, 
                              NULL);
+
+    buf_test_overflows_all_vbs ("ref_uncompress_all_stored_ranges");
 }
 
 // ------------------------------------
