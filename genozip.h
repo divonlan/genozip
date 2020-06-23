@@ -24,7 +24,7 @@
 // -----------------
 #define GENOZIP_EXT ".genozip"
 
-#define MAX_POS 0x00000000ffffffffLL // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
+#define MAX_POS ((int64_t)0xffffffff) // maximum allowed value for POS (constraint: fit into uint32 ctx.local)
 
 // default max amount of txt data in each variant block. this is user-configurable with --vblock
 #define TXT_DATA_PER_VB_DEFAULT "16" // MB in default mode

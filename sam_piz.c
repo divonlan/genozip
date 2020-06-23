@@ -27,7 +27,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *seq_ctx)
     const char *nonref_start = nonref;
     const char *seq = &seq_ctx->local.data[seq_ctx->next_local];
     unsigned subcigar_len = 0;
-    char cigar_op;
+    char cigar_op=0;
     
     // case where seq is '*' (rewritten as ' ' by the zip callback)
     if (seq[0] == ' ') {
