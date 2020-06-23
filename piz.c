@@ -363,14 +363,15 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         else if (ctx->ltype == CTX_LT_TEXT)
             piz_reconstruct_from_local_text (vb, ctx);
 
-        else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u", ctx->ltype, ctx->name, vb->vblock_i);
+        else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }
 
     // case: the entire VB was just \n - so seg dropped the ctx
     else if (ctx->did_i == DTF(eol))
         RECONSTRUCT1('\n');
 
-    else ABORT("Error in piz_reconstruct_from_ctx_do: ctx %s has no data (b250 or local) in vb_i=%u", ctx->name, vb->vblock_i);
+    else ABORT("Error in piz_reconstruct_from_ctx_do: ctx %s has no data (b250 or local) in vb_i=%u line_i=%u", 
+                ctx->name, vb->vblock_i, vb->line_i);
 
     if (sep) RECONSTRUCT1 (sep); 
 
@@ -458,7 +459,7 @@ static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
     while ((*next_sl)->section_type == SEC_B250 || (*next_sl)->section_type == SEC_LOCAL) {
         *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len) = vb->z_data.len; 
 
-        int32_t ret = zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
+        int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
                                           (*next_sl)->section_type, *next_sl); // returns 0 if section is skipped
 
         if (ret) vb->z_section_headers.len++;
@@ -505,7 +506,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             regions_transform_negative_to_positive_complement();
 
             SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS);
-            zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, ra_sl);
+            zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, ra_sl);
 
             zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
 
@@ -551,7 +552,7 @@ static bool piz_read_one_vb (VBlock *vb)
 
     SectionListEntry *sl = sections_vb_first (vb->vblock_i); 
 
-    int vb_header_offset = zfile_read_section (vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
+    int vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
                                                z_file->data_type == DT_VCF ? sizeof (SectionHeaderVbHeaderVCF) : sizeof (SectionHeaderVbHeader), 
                                                SEC_VB_HEADER, sl++); 
 

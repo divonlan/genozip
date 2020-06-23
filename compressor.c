@@ -16,6 +16,7 @@
 #include "zfile.h"
 #include "file.h"
 #include "strings.h"
+#include "reference.h"
 
 // -----------------------------------------------------
 // memory functions that serve the compression libraries
@@ -444,7 +445,8 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     bool is_encrypted = false;
     unsigned encryption_padding_reserve = 0;
 
-    if (header->section_type != SEC_GENOZIP_HEADER) { // genozip header is never encrypted
+    if (header->section_type != SEC_GENOZIP_HEADER &&  // genozip header is never encrypted
+        !(header->section_type == SEC_REFERENCE && flag_reference == REF_EXT_STORE)) { // external reference copied over is never encrypted
         is_encrypted = crypt_get_encrypted_len (&compressed_offset, &header_padding); // set to 0 if no encryption
         encryption_padding_reserve = crypt_max_padding_len(); // padding for the body
     }
@@ -511,7 +513,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         if (data_uncompressed_len) 
             crypt_pad ((uint8_t*)&z_data->data[z_data->len + compressed_offset], data_encrypted_len, data_padding);
 
-        // encrypt the header - we use vb_i and section_i to generate a different AES key for each section
+        // encrypt the header - we use vb_i, section_type and is_header to generate a different AES key for each section
         uint32_t vb_i  = BGEN32 (header->vblock_i);
 
         // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB in zfile_update_compressed_vb_header() 
@@ -542,6 +544,8 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
                       const char *compressed, uint32_t compressed_len,
                       char *uncompressed_data, uint64_t uncompressed_len)
 {
+    ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
+
     switch (alg) {
 
     case COMP_BZ2: {

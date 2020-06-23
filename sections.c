@@ -113,7 +113,7 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
     return SEC_NONE; // no more headers
 }
 
-// dictionary section iterator. returns true if another dictionary was found.
+// section iterator. returns true if another section of this type was found.
 bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st) // if *sl_ent==NULL - initialize cursor
 {
     // case: first time
@@ -162,10 +162,14 @@ SectionListEntry *sections_vb_first (uint32_t vb_i)
 
 bool sections_has_reference(void)
 {
-    for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
-        if (ENT (SectionListEntry, z_file->section_list_buf, i)->section_type == SEC_REFERENCE)
+    for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the reference sections are near the end
+        SectionType st = ENT (SectionListEntry, z_file->section_list_buf, i)->section_type;
+        if (st == SEC_REFERENCE)
             return true; // found
-
+        else if (st == SEC_DICT)
+            return false; // we arrived at a SEC_DICT without seeing any reference, so there isn't any
+    }
+    
     return false;
 }
 

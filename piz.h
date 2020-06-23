@@ -24,7 +24,7 @@ extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_s
     START_TIMER; \
     vbblock_type *vb = (vbblock_type *)vb_; \
     SectionListEntryP sl = sections_vb_first (vb->vblock_i); \
-    int vb_header_offset = zfile_read_section (vb_, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", \
+    int vb_header_offset = zfile_read_section (z_file, vb_, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", \
                                                sizeof(sec_type_vb_header), SEC_VB_HEADER, sl++); \
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);\
     mtf_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ \
@@ -34,7 +34,7 @@ extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_s
 
 #define READ_SB_SECTION(sec,header_type,sb_i) \
     { NEXTENT (unsigned, vb->z_section_headers) = (uint32_t)vb->z_data.len; \
-      zfile_read_section ((VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
+      zfile_read_section (z_file, (VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
 
 #define READ_SECTION(sec,header_type,is_optional) {  \
     if (!(is_optional) || sl->section_type == (sec)) \

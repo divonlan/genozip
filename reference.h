@@ -33,11 +33,12 @@ typedef struct Range {
     uint32_t range_i;
     uint32_t num_set;             // number of bases set in this range
     uint32_t uncompressed_len;    // final length of range ready for compression
-    int64_t first_pos, last_pos;  
+    int64_t first_pos, last_pos;  // [first_pos,last_pos] include all set locii in ZIP-INTERNAL (might also include locii that were not set) or entire data read from the reference in ZIP-EXTERNAL and PIZ
     uint64_t ref_size;            // number of bytes allocated to ref (at most REF_NUM_SITES_PER_RANGE)
     bool is_compacted;
-    bool is_accessed;             // has this range been encountered in the file (if not, we won't store it)
     pthread_mutex_t mutex;
+
+    bool is_accessed;             // has this range been encountered in the file (if not, we won't store it)
 } Range;
 
 extern void ref_compress_ref (void);

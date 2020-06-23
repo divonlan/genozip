@@ -11,7 +11,6 @@
 #include "md5.h"
 #include "compressor.h"
 
-extern void *zfile_read_from_disk (VBlockP vb, BufferP buf, unsigned len, bool fail_quietly_if_not_enough_data);
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (const Md5Hash *single_component_md5);
 extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,
@@ -37,7 +36,7 @@ extern void zfile_compress_local_data (VBlockP vb, ContextP ctx);
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
 #define SEEK_NONE ((uint64_t)-1)
 #define NO_SB_I ((uint32_t)-1)
-extern int32_t zfile_read_section (VBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */
+extern int32_t zfile_read_section (File *file, VBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */
                                    BufferP data /* buffer to append */, const char *buf_name,
                                    unsigned header_size, SectionType expected_sec_type,
                                    ConstSectionListEntryP sl); 

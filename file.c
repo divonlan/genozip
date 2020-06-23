@@ -205,13 +205,15 @@ bool file_open_txt (File *file)
                         file_printname (file));
             }
             else {
-                ASSERT (file->data_type != DT_NONE || !file_has_ext (file->name, ".genozip"), 
+                ASSERT (!file_has_ext (file->name, ".genozip"), 
                         "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
 
-                ASSERT (file->data_type != DT_NONE, "%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
-                        global_cmd, file_printname (file),  file_compressible_extensions());
+                ABORT ("%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
+                       global_cmd, file_printname (file),  file_compressible_extensions());
             }
         }
+
+        ASSERT0 (!flag_make_reference || file->data_type == DT_FASTA, "Error: --make-reference can only be used with FASTA files");
     }
     else { // WRITE - data_type is already set by file_open
 
@@ -455,7 +457,7 @@ static bool file_open_z (File *file)
 
 File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */)
 {
-    ASSERT0 (filename, "Error: filename is null");
+    ASSERT0 (filename, "Error in file_open: filename is null");
 
     File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
@@ -661,7 +663,7 @@ bool file_seek (File *file, int64_t offset,
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
                 bool soft_fail)
 {
-    ASSERT0 (file == z_file, "Error: file_seek only works for z_file");
+    ASSERT0 (file->supertype == Z_FILE, "Error: file_seek only works for Z_FILE supertype");
 
     // check if we can just move the read buffers rather than seeking
     if (file->mode == READ && file->z_next_read != file->z_last_read && whence == SEEK_SET) {

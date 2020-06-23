@@ -49,7 +49,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%u vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-6u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%u vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              has_flags ? "flags=" : "", has_flags ? flags : "", has_flags ? "ltype=" : "", has_flags ? ltype : "", 
              header->sec_compression_alg,
@@ -300,7 +300,7 @@ void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type,
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
 // this doesn't make a big difference for SSD, but makes a huge difference for HD
 // return true if data was read as requested, false if file has reached EOF and error otherwise
-void *zfile_read_from_disk (VBlock *vb, Buffer *buf, unsigned len, bool fail_quietly_if_not_enough_data)
+static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, unsigned len, bool fail_quietly_if_not_enough_data)
 {
     START_TIMER;
 
@@ -313,32 +313,32 @@ void *zfile_read_from_disk (VBlock *vb, Buffer *buf, unsigned len, bool fail_qui
 
     while (len) {
 
-        if (z_file->z_next_read == z_file->z_last_read) { // nothing left in read_buffer - replenish it from disk
+        if (file->z_next_read == file->z_last_read) { // nothing left in read_buffer - replenish it from disk
 
-            if (z_file->z_last_read != READ_BUFFER_SIZE && !memcpyied) return NULL; // EOF reached last time, nothing more to read
+            if (file->z_last_read != READ_BUFFER_SIZE && !memcpyied) return NULL; // EOF reached last time, nothing more to read
 
-            if (z_file->z_last_read != READ_BUFFER_SIZE && memcpyied && fail_quietly_if_not_enough_data) return NULL; // partial read = quiet error as requested
+            if (file->z_last_read != READ_BUFFER_SIZE && memcpyied && fail_quietly_if_not_enough_data) return NULL; // partial read = quiet error as requested
             
-            ASSERT (z_file->z_last_read == READ_BUFFER_SIZE, 
+            ASSERT (file->z_last_read == READ_BUFFER_SIZE, 
                     "Error: end-of-file while reading %s, read %u bytes, but wanted to read %u bytes", 
                     z_name, memcpyied, len_save);
 
-            z_file->z_last_read = fread (z_file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)z_file->file);
-            z_file->z_next_read = 0;
-            z_file->disk_so_far += z_file->z_last_read;
+            file->z_last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)file->file);
+            file->z_next_read = 0;
+            file->disk_so_far += file->z_last_read;
 
-            ASSERT (z_file->z_last_read || !memcpyied, "Error: data requested could not be read bytes_so_far=%"PRIu64"", z_file->disk_so_far);
-            if (!z_file->z_last_read) {
+            ASSERT (file->z_last_read || !memcpyied, "Error: data requested could not be read bytes_so_far=%"PRIu64"", file->disk_so_far);
+            if (!file->z_last_read) {
                 COPY_TIMER (vb->profile.read);
                 return NULL; // file is exhausted - nothing read
             }
         }
 
-        unsigned memcpy_len = MIN (len, z_file->z_last_read - z_file->z_next_read);
+        unsigned memcpy_len = MIN (len, file->z_last_read - file->z_next_read);
 
-        buf_add (buf, z_file->read_buffer + z_file->z_next_read, memcpy_len);
+        buf_add (buf, file->read_buffer + file->z_next_read, memcpy_len);
         len                 -= memcpy_len;
-        z_file->z_next_read += memcpy_len;
+        file->z_next_read += memcpy_len;
 
         memcpyied += memcpy_len;
     }
@@ -350,7 +350,8 @@ void *zfile_read_from_disk (VBlock *vb, Buffer *buf, unsigned len, bool fail_qui
 
 // read section header - called from the I/O thread, but for a specific VB
 // returns offset of header within data, EOF if end of file
-int32_t zfile_read_section (VBlock *vb, 
+int32_t zfile_read_section (File *file,
+                            VBlock *vb, 
                             uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
                             uint32_t sb_i,          // sample block number, NO_SB_I if this section type is not related to vcf samples
                             Buffer *data, const char *buf_name, // buffer to append 
@@ -360,7 +361,7 @@ int32_t zfile_read_section (VBlock *vb,
     ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u, sb_i=%d",
             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i, sb_i);
 
-    if (sl && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
+    if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
 
     if (sb_i != NO_SB_I && !vcf_is_sb_included(vb, sb_i)) return 0; // skip section if this sample block is excluded by --samples
 
@@ -371,9 +372,9 @@ int32_t zfile_read_section (VBlock *vb,
     buf_alloc (vb, data, header_offset + header_size, 2, buf_name, 1);
     
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
-    if (sl) file_seek (z_file, sl->offset, SEEK_SET, false);
+    if (sl) file_seek (file, sl->offset, SEEK_SET, false);
 
-    SectionHeader *header = zfile_read_from_disk (vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
+    SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
 
     // case: we're done! no more concatenated files
     if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
@@ -390,7 +391,7 @@ int32_t zfile_read_section (VBlock *vb,
         ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
                 "Error: password provided, but file %s is not encrypted", z_name);
 
-        crypt_do (vb, (uint8_t*)header, header_size, original_vb_i, expected_sec_type, true); // negative section_i for a header
+        crypt_do (vb, (uint8_t*)header, header_size, original_vb_i, expected_sec_type, true); 
     
         is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC; // update after decryption
     }
@@ -420,7 +421,7 @@ int32_t zfile_read_section (VBlock *vb,
 
     // read section data - but only if header size is as expected
     if (data_len && compressed_offset == header_size) {
-        ASSERT (zfile_read_from_disk (vb, data, data_len, false), 
+        ASSERT (zfile_read_from_disk (file, vb, data, data_len, false), 
                 "Error: failed to read section data, section_type=%s: %s", st_name(header->section_type), strerror (errno));
     }
 
@@ -445,7 +446,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
         if (piz_is_skip_sectionz (sl_ent->section_type, sl_ent->dict_id)) continue;
         
-        zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type, sl_ent);    
+        zfile_read_section (z_file, evb, sl_ent->vblock_i, NO_SB_I, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type, sl_ent);    
 
         // update dictionaries in z_file->contexts with dictionary data 
         mtf_integrate_dictionary_fragment (evb, evb->z_data.data);
@@ -502,7 +503,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     unsigned sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
                                           (unsigned)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
     
-    ret = zfile_read_section (evb, 0, NO_SB_I, &evb->z_data, "genozip_header", sizeof_genozip_header, SEC_GENOZIP_HEADER, &dummy_sl);
+    ret = zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "genozip_header", sizeof_genozip_header, SEC_GENOZIP_HEADER, &dummy_sl);
 
     ASSERT0 (ret != EOF, "Error: unexpected EOF when reading genozip header");
     
@@ -560,7 +561,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     // case: we are reading the reference file itself
     if (ref_flag_reading_reference) {
-        ASSERT (!md5_is_zero (header->md5_hash_concat), "Error: %s cannot be used a reference file because it lacks an MD5 - a reference must be genozipped using either --md5 or --test",
+        ASSERT (header->h.flags & SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
                 ref_filename);
 
         ref_set_md5 (header->md5_hash_concat); 
@@ -574,11 +575,13 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
             exit (0);
         }
 
-        ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL, "Error: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
+        ASSERT (sections_has_reference() || flag_reference == REF_EXTERNAL, 
+                "Error: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
                 header->ref_filename);
 
         // just warn, don't fail - there are use cases where the user might do this on purpose
-        ASSERTW (md5_is_equal (header->ref_file_md5, ref_md5), "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
+        ASSERTW (flag_reference == REF_NONE || flag_reference == REF_INTERNAL || md5_is_equal (header->ref_file_md5, ref_md5), 
+                 "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
                  "If these two files contain a different sequence in the genomic regions contained in the compressed file, then \n"
                  "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
                  "Reference you are using now: %s MD5=%s\n"
@@ -622,7 +625,11 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
     header.ref_file_md5            = ref_md5;
     
-    if (ref_filename) strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
+    if (flag_make_reference && z_file->data_type == DT_FASTA) 
+        header.h.flags = SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE;
+
+    if (ref_filename)   
+        strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
 
     uint32_t license_num_bgen = BGEN32 (license_get());
     md5_do (&license_num_bgen, sizeof (int32_t), &header.license_hash);

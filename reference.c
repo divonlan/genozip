@@ -5,6 +5,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include <pthread.h>
+#include <errno.h>
 #include "reference.h"
 #include "buffer.h"
 #include "strings.h"
@@ -20,20 +21,27 @@
 #include "context.h"
 #include "hash.h"
 #include "arch.h"
+#include "sections.h"
+#include "profiler.h"
 
 static Buffer ranges = EMPTY_BUFFER;      // ZIP: a buffer containing a array of REF_NUM_RANGES Range's - each allocated on demand. PIZ - containing one element per chrom.
 static CommandType ref_primary_command;   // the command that caused us to read the reference - either ZIP or UNZIP
 
 // data derived from the external reference FASTA's CONTIG context
-static Buffer contig_dict  = EMPTY_BUFFER;
-static Buffer contig_words = EMPTY_BUFFER;
-static Buffer contig_maxes = EMPTY_BUFFER; // an array of int64 - the max_pos of each contig
+static Buffer contig_dict               = EMPTY_BUFFER;
+static Buffer contig_words              = EMPTY_BUFFER;
+static Buffer contig_maxes              = EMPTY_BUFFER; // an array of int64 - the max_pos of each contig
 static Buffer contig_words_sorted_index = EMPTY_BUFFER; // an array of uint32 of indexes into contig_words - sorted by alphabetical order of the snip in contig_dict
+static Buffer ref_file_ra               = EMPTY_BUFFER;
+static Buffer ref_file_section_list     = EMPTY_BUFFER;
 
 // globals
 bool ref_flag_reading_reference = false;
 const char *ref_filename = NULL; // filename of external reference file
 Md5Hash ref_md5 = MD5HASH_NONE;
+
+#define SAVE_FLAG(flag) int save_##flag = flag ; flag=0
+#define RESTORE_FLAG(flag) flag = save_##flag
 
 // called by mtf_copy_reference_contig_to_chrom_ctx when initializing ZIP for a new file using a pre-loaded external reference
 void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_words)
@@ -145,7 +153,8 @@ static void ref_read_one_range (VBlockP vb)
 {
     if (sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE)) {
         
-        zfile_read_section (evb, sl_ent->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderReference), sl_ent->section_type, sl_ent);    
+        zfile_read_section (z_file, evb, sl_ent->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
+                            sizeof(SectionHeaderReference), sl_ent->section_type, sl_ent);    
         
         // allocate memory for entire chrom reference if this is the first range of this chrom
         uint32_t chrom_word_index = BGEN32 (((SectionHeaderReference *)vb->z_data.data)->chrom_word_index);
@@ -344,20 +353,20 @@ void ref_set_ref_from_external_data (VBlock *vb, uint64_t start_pos,
 // case 2: ZIP: in SAM, when reading an SEQ field ahead of committing it to the refernece (REF_INTERNAL)
 Range *ref_get_range (VBlockP vb, uint32_t range_i, RgrMode mode, uint32_t reduced_size /* 0=default */)
 {
+    // case: we're asking for the same range as the previous one (for example, subsequent line in a sorted SAM)
+    if (vb && vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index && vb->prev_range_range_i == range_i)
+        return vb->prev_range;
+
     // sanity checks
     ASSERT0 (vb->chrom_name, "Error in ref_get_range: vb->chrom_name=NULL");
 
-    if (flag_reference == REF_EXTERNAL) {
+    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
         const MtfWord *word = ENT (const MtfWord, contig_words, vb->chrom_node_index);
         const char *snip = ENT (const char, contig_dict, word->char_index);
         ASSERT (word->snip_len == vb->chrom_name_len && !memcmp (snip, vb->chrom_name, word->snip_len),
                 "Error in ref_get_range: vb->chrom=%.*s but contig_words[vb->chrom_node_index=%u]=%.*s",
                 vb->chrom_name_len, vb->chrom_name, vb->chrom_node_index, word->snip_len, snip);
     }
-
-    // case: we're asking for the same range as the previous one (for example, subsequent line in a sorted SAM)
-    if (vb && vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index && vb->prev_range_range_i == range_i)
-        return vb->prev_range;
 
     // one_chrom_ranges_buf is an array of indeces into ranges - one index per range of size REF_NUM_SITES_PER_RANGE
     // note: in case of REF_INTERNAL, we can get hash conflicts, but in case of REF_EXTERNAL, it is guaranteed that there are no conflicts
@@ -428,9 +437,119 @@ finalize:
 // Compressing ranges into SEC_REFERENCE sections
 // ----------------------------------------------
 
-static void ref_copy_compressed_sections_from_reference_file()
+static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, SectionListEntry **sl)
 {
+    // get section list entry from ref_file_section_list - which will be used by zfile_read_section to seek to the correct offset
+    while (*sl < AFTERENT (SectionListEntry, ref_file_section_list) && 
+           !((*sl)->vblock_i == ra->vblock_i && (*sl)->section_type == SEC_LOCAL && (*sl)->dict_id.num == dict_id_FASTA_SEQ)) 
+        (*sl)++;
 
+    ASSERT (*sl < AFTERENT (SectionListEntry, ref_file_section_list), "Error in ref_copy_one_compressed_section: cannot find FASTA_SEQ of vb_i=%u in section list of reference file", ra->vblock_i);
+
+    static Buffer ref_seq_section = EMPTY_BUFFER;
+
+    SAVE_FLAG (flag_show_headers);
+    zfile_read_section (ref_file, evb, ra->vblock_i, NO_SB_I, &ref_seq_section, "ref_seq_section", sizeof (SectionHeaderCtx), SEC_LOCAL, *sl);
+    RESTORE_FLAG (flag_show_headers);
+
+    SectionHeaderCtx *ref_seq_section_header = (SectionHeaderCtx *)ref_seq_section.data;
+
+    SectionHeaderReference z_ref_section_header;
+    memset (&z_ref_section_header, 0, sizeof(z_ref_section_header)); // safety
+
+    z_ref_section_header.h.vblock_i              = 0; // we don't belong to any VB and there is no encryption of external ref
+    z_ref_section_header.h.section_i             = 0; // we don't belong to any VB
+    z_ref_section_header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
+    z_ref_section_header.h.section_type          = SEC_REFERENCE;
+    z_ref_section_header.h.data_uncompressed_len = ref_seq_section_header->h.data_uncompressed_len; // already big endian
+    z_ref_section_header.h.data_compressed_len   = ref_seq_section_header->h.data_compressed_len;
+    z_ref_section_header.h.compressed_offset     = BGEN32 (sizeof(z_ref_section_header));
+    z_ref_section_header.h.sec_compression_alg   = ref_seq_section_header->h.sec_compression_alg;
+    z_ref_section_header.chrom_word_index        = BGEN32 (ra->chrom_index);
+    z_ref_section_header.first_pos               = BGEN64 (ra->min_pos);
+    z_ref_section_header.last_pos                = BGEN64 (ra->max_pos); 
+
+    const char *body_start = ref_seq_section.data + BGEN32 (ref_seq_section_header->h.compressed_offset);
+    uint32_t body_len = ref_seq_section.len       - BGEN32 (ref_seq_section_header->h.compressed_offset);
+
+    // Write header and body of the reference to z_file
+    // Note on encryption: reference sections originating from an external reference are never encrypted - not
+    // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
+    START_TIMER;
+    file_write (z_file, &z_ref_section_header, sizeof (z_ref_section_header));
+    file_write (z_file, body_start, body_len); // write body (already compressed from the reference fasta genozip)
+    COPY_TIMER (evb->profile.write);
+
+    // "manually" add the reference section to the section list - normally it is added in comp_compress()
+    sections_add_to_list (evb, &z_ref_section_header.h);
+
+    z_file->disk_so_far += sizeof (z_ref_section_header) + body_len;   // length of GENOZIP data writen to disk
+
+    buf_free (&ref_seq_section);
+}
+
+static void ref_copy_compressed_sections_from_reference_file (void)
+{
+    SectionListEntry *sl = FIRSTENT (SectionListEntry, ref_file_section_list);
+    ARRAY (RAEntry, ra, ref_file_ra);
+
+unsigned count=0;
+for (unsigned i=0; i<ranges.len; i++) if (ENT(Range, ranges, i)->is_accessed) count+= ENT(Range, ranges, i)->last_pos - ENT(Range, ranges, i)->first_pos+1;
+printf ("BEFORE: count=%u bytes\n", count);
+
+    File *ref_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);
+
+    // note: in a FASTA file compressed with --make-reference, there is exactly one RA per VB (a contig or part of a contig)
+    // we go one RA at a time and:
+    // 1. If the entire RA is covered by accessed ranges - we copy the compressed reference section directly from the ref FASTA
+    // 2. If we copied from the FASTA, we mark those region covered by the RA as "unaccessed", so that we don't compress it later
+    for (uint32_t i=0; i < ref_file_ra.len; i++) {
+        uint32_t first_range_i = (uint32_t)(ra[i].min_pos / REF_NUM_SITES_PER_RANGE);
+        uint32_t last_range_i = (uint32_t)(ra[i].max_pos / REF_NUM_SITES_PER_RANGE);
+
+        bool all_ranges_accessed = true;
+        for (uint32_t range_i=first_range_i ; range_i <= last_range_i ; range_i++) {
+            
+            // check this range was used by this file
+            evb->chrom_node_index = ra[i].chrom_index;
+            uint32_t range_id = ref_range_id_by_word_index (evb, range_i);
+            Range *r = ENT (Range, ranges, range_id);
+
+            if (!r->is_accessed) {
+                all_ranges_accessed = false;
+                break;
+            }
+        }
+
+        // if this entire RA is covered, just copy the corresponding FASTA section to our file, and
+        // mark all the ranges as is_accessed=false indicated they don't need to be compressed individually
+        if (all_ranges_accessed) {
+            ref_copy_one_compressed_section (ref_file, &ra[i], &sl);
+
+            for (uint32_t range_i=first_range_i ; range_i <= last_range_i ; range_i++) {
+                evb->chrom_node_index = ra[i].chrom_index;
+                uint32_t range_id = ref_range_id_by_word_index (evb, range_i);
+                Range *r = ENT (Range, ranges, range_id);
+
+                // if the remaining set area of range is entirely included in this ra - we don't need to compress it at all
+                if (r->first_pos >= ra[i].min_pos && r->last_pos <= ra[i].max_pos)
+                    r->is_accessed = false;
+
+                // if the remaining set area of range is only patially included in this ra - shrink the set area to only the remaining.
+                // note: that ref contigs always start at pos 1 and the RAs are in order
+                else if (r->last_pos > ra[i].max_pos)
+                    r->first_pos = ra[i].max_pos + 1;
+
+                else if (r->first_pos < ra[i].min_pos)
+                    r->last_pos = ra[i].min_pos - 1;
+            }
+        }
+    }
+count=0;
+for (unsigned i=0; i<ranges.len; i++) if (ENT(Range, ranges, i)->is_accessed) count+= ENT(Range, ranges, i)->last_pos - ENT(Range, ranges, i)->first_pos+1;
+printf ("AFTER: count=%u bytes\n", count);
+
+    file_close (&ref_file, false);
 }
 
 static uint32_t ref_compact_ref (Range *r)
@@ -474,12 +593,13 @@ static void ref_compress_one_range (VBlockP vb, const char *data,
     SectionHeaderReference header;
     memset (&header, 0, sizeof(header)); // safety
 
+    header.h.vblock_i              = 0; // reference doesn't belong to any VB (consequence: in case of encryption of internal reference, all reference sections are encrypted with the same AES key, that's fine.)
+    header.h.section_i             = 0; 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.section_type          = SEC_REFERENCE;
     header.h.data_uncompressed_len = BGEN32 (uncompressed_len);
     header.h.compressed_offset     = BGEN32 (sizeof(header));
     header.h.sec_compression_alg   = COMP_LZMA;
-    header.h.section_i             = BGEN16 (section_i);
     header.chrom_word_index        = BGEN32 (chrom_word_index);
     header.first_pos               = BGEN64 (first_pos);
     header.last_pos                = BGEN64 (last_pos); 
@@ -546,7 +666,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
 
         if (!r->uncompressed_len) { // possibly already handled in previous VB, if it was the last range and didn't make it due to going oversize
         
-            // if this ref is sparse (eg due to a low coverage sample), we compact it
+            // if this ref is sparse (eg due to a low coverage sample), we compact it (only happens for REF_INTERNAL, bc for external r->num_set is always the entire range)
             if ((double)(r->last_pos - r->first_pos + 1) / (double)r->num_set >= 1.5) { 
                 r->uncompressed_len = ref_compact_ref (r);
                 r->is_compacted = true;
@@ -570,7 +690,8 @@ void ref_compress_ref (void)
 
     // copy already-compressed SEQ sections from the FASTA genozip reference, but only such sections that are entirely
     // covered by ranges with is_accessed=true. we mark these ranges affected as is_accessed=false.
-    ref_copy_compressed_sections_from_reference_file ();
+    if (flag_reference == REF_EXT_STORE)
+         ref_copy_compressed_sections_from_reference_file ();
 
     // proceed to compress all ranges that remain with is_accessed=true
     next_range_i=0; // can be initialized multiple times if we're compressing multiple non-concatenated SAMs - but not concurrently
@@ -676,6 +797,9 @@ void ref_consume_ref_fasta_global_area (void)
     
     random_access_max_pos_of_chrom (0); // initialize if not already initialized
     buf_copy (evb, &contig_maxes, &z_file->ra_max_pos_by_chrom, sizeof (int64_t), 0, 0, "contig_maxes", 0);
+    buf_copy (evb, &ref_file_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_file_ra", 0);
+
+    buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
 
     // contig_words_sorted_index - an array of uint32 of indexes into contig_words - sorted by alphabetical order of the snip in contig_dict
     buf_alloc (evb, &contig_words_sorted_index, sizeof(uint32_t) * contig_words.len, 1, "contig_words_sorted_index", 0);

@@ -55,7 +55,7 @@ int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_op
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_reference=REF_NONE, flag_show_reference=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
-    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0,
+    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0, flag_make_reference=0,
 
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
     flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0;
@@ -469,10 +469,7 @@ void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
 
     unsigned len = strlen (mem_size_mb_str);
     ASSERT (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
-
-    for (unsigned i=0; i < len; i++) {
-        ASSERT (IS_DIGIT (mem_size_mb_str[i]), err_msg, mem_size_mb_str);
-    }
+    ASSERT (strspn (mem_size_mb_str, "0123456789") == len, err_msg, mem_size_mb_str);
 
     unsigned mem_size_mb = atoi (mem_size_mb_str);
     ASSERT (mem_size_mb <= 2048, err_msg, mem_size_mb_str);
@@ -509,86 +506,87 @@ int main (int argc, char **argv)
     // process command line options
     while (1) {
 
-        #define _i  {"input-type",    required_argument, 0, 'i'                }
-        #define _I  {"stdin-size",    required_argument, 0, 'I'                }
-        #define _c  {"stdout",        no_argument,       &flag_stdout,       1 }
-        #define _d  {"decompress",    no_argument,       &command, UNZIP       }
-        #define _f  {"force",         no_argument,       &flag_force,        1 }
-        #define _h  {"help",          no_argument,       &command, HELP        }
-        #define _l  {"list",          no_argument,       &command, LIST        }
-        #define _L1 {"license",       no_argument,       &command, LICENSE     } // US spelling
-        #define _L2 {"licence",       no_argument,       &command, LICENSE     } // British spelling
-        #define _q  {"quiet",         no_argument,       &flag_quiet,        1 }
-        #define _Q  {"noisy",         no_argument,       &flag_noisy,        1 }
-        #define _DL {"replace",       no_argument,       &flag_replace,      1 }
-        #define _V  {"version",       no_argument,       &command, VERSION     }
-        #define _z  {"bgzip",         no_argument,       &flag_bgzip,        1 }
-        #define _zb {"bam",           no_argument,       &flag_bam,          1 }
-        #define _zc {"bcf",           no_argument,       &flag_bcf,          1 }
-        #define _m  {"md5",           no_argument,       &flag_md5,          1 }
-        #define _t  {"test",          no_argument,       &flag_test,         1 }
-        #define _fa {"fast",          no_argument,       &flag_fast,         1 }
-        #define _9  {"optimize",      no_argument,       &flag_optimize,     1 } // US spelling
-        #define _99 {"optimise",      no_argument,       &flag_optimize,     1 } // British spelling
-        #define _9s {"optimize-sort", no_argument,       &flag_optimize_sort,1 }
-        #define _9P {"optimize-PL",   no_argument,       &flag_optimize_PL,  1 }
-        #define _9G {"optimize-GL",   no_argument,       &flag_optimize_GL,  1 }
-        #define _9g {"optimize-GP",   no_argument,       &flag_optimize_GP,  1 }
-        #define _9V {"optimize-VQSLOD", no_argument,     &flag_optimize_VQSLOD, 1 }
-        #define _9Q {"optimize-QUAL", no_argument,       &flag_optimize_QUAL,1 } 
-        #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,  1 }
-        #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,  1 }
-        #define _gt {"gtshark",       no_argument,       &flag_gtshark,      1 } 
-        #define _th {"threads",       required_argument, 0, '@'                }
-        #define _O  {"split",         no_argument,       &flag_split,        1 }
-        #define _o  {"output",        required_argument, 0, 'o'                }
-        #define _p  {"password",      required_argument, 0, 'p'                }
-        #define _B  {"vblock",        required_argument, 0, 'B'                }
-        #define _S  {"sblock",        required_argument, 0, 'S'                }
-        #define _r  {"regions",       required_argument, 0, 'r'                }
-        #define _tg {"targets",       required_argument, 0, 't'                }
-        #define _s  {"samples",       required_argument, 0, 's'                }
-        #define _e  {"reference",     required_argument, 0, 'e'                }
-        #define _E  {"REFERENCE",     required_argument, 0, 'E'                }
-        #define _g  {"grep",          required_argument, 0, 'g'                }
-        #define _G  {"drop-genotypes",no_argument,       &flag_drop_genotypes,1}
-        #define _H1 {"no-header",     no_argument,       &flag_no_header,    1 }
-        #define _H0 {"header-only",   no_argument,       &flag_header_only,  1 }
-        #define _1  {"header-one",    no_argument,       &flag_header_one,   1 }
-        #define _GT {"GT-only",       no_argument,       &flag_gt_only,      1 }
-        #define _Gt {"gt-only",       no_argument,       &flag_gt_only,      1 }
+        #define _i  {"input-type",    required_argument, 0, 'i'                    }
+        #define _I  {"stdin-size",    required_argument, 0, 'I'                    }
+        #define _c  {"stdout",        no_argument,       &flag_stdout,           1 }
+        #define _d  {"decompress",    no_argument,       &command, UNZIP           }
+        #define _f  {"force",         no_argument,       &flag_force,            1 }
+        #define _h  {"help",          no_argument,       &command, HELP            }
+        #define _l  {"list",          no_argument,       &command, LIST            }
+        #define _L1 {"license",       no_argument,       &command, LICENSE         } // US spelling
+        #define _L2 {"licence",       no_argument,       &command, LICENSE         } // British spelling
+        #define _q  {"quiet",         no_argument,       &flag_quiet,            1 }
+        #define _Q  {"noisy",         no_argument,       &flag_noisy,            1 }
+        #define _DL {"replace",       no_argument,       &flag_replace,          1 }
+        #define _V  {"version",       no_argument,       &command, VERSION         }
+        #define _z  {"bgzip",         no_argument,       &flag_bgzip,            1 }
+        #define _zb {"bam",           no_argument,       &flag_bam,              1 }
+        #define _zc {"bcf",           no_argument,       &flag_bcf,              1 }
+        #define _m  {"md5",           no_argument,       &flag_md5,              1 }
+        #define _t  {"test",          no_argument,       &flag_test,             1 }
+        #define _fa {"fast",          no_argument,       &flag_fast,             1 }
+        #define _9  {"optimize",      no_argument,       &flag_optimize,         1 } // US spelling
+        #define _99 {"optimise",      no_argument,       &flag_optimize,         1 } // British spelling
+        #define _9s {"optimize-sort", no_argument,       &flag_optimize_sort,    1 }
+        #define _9P {"optimize-PL",   no_argument,       &flag_optimize_PL,      1 }
+        #define _9G {"optimize-GL",   no_argument,       &flag_optimize_GL,      1 }
+        #define _9g {"optimize-GP",   no_argument,       &flag_optimize_GP,      1 }
+        #define _9V {"optimize-VQSLOD", no_argument,     &flag_optimize_VQSLOD,  1 }
+        #define _9Q {"optimize-QUAL", no_argument,       &flag_optimize_QUAL,    1 } 
+        #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,      1 }
+        #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,      1 }
+        #define _gt {"gtshark",       no_argument,       &flag_gtshark,          1 } 
+        #define _th {"threads",       required_argument, 0,     '@'                }
+        #define _O  {"split",         no_argument,       &flag_split,            1 }
+        #define _o  {"output",        required_argument, 0, 'o'                    }
+        #define _p  {"password",      required_argument, 0, 'p'                    }
+        #define _B  {"vblock",        required_argument, 0, 'B'                    }
+        #define _S  {"sblock",        required_argument, 0, 'S'                    }
+        #define _r  {"regions",       required_argument, 0, 'r'                    }
+        #define _tg {"targets",       required_argument, 0, 't'                    }
+        #define _s  {"samples",       required_argument, 0, 's'                    }
+        #define _e  {"reference",     required_argument, 0, 'e'                    }
+        #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
+        #define _me {"make-reference",no_argument,       &flag_make_reference,   1 }
+        #define _g  {"grep",          required_argument, 0, 'g'                    }
+        #define _G  {"drop-genotypes",no_argument,       &flag_drop_genotypes,   1 }
+        #define _H1 {"no-header",     no_argument,       &flag_no_header,        1 }
+        #define _H0 {"header-only",   no_argument,       &flag_header_only,      1 }
+        #define _1  {"header-one",    no_argument,       &flag_header_one,       1 }
+        #define _GT {"GT-only",       no_argument,       &flag_gt_only,          1 }
+        #define _Gt {"gt-only",       no_argument,       &flag_gt_only,          1 }
         #define _fs {"sequential",    no_argument,       &flag_fasta_sequential, 1 }  
-        #define _rg {"register",      no_argument,       &flag_register,     1 }
-        #define _ss {"show-sections", no_argument,       &flag_show_sections,1 } 
-        #define _sd {"show-dict",     no_argument,       &flag_show_dict,    1 } 
-        #define _d1 {"show-one-dict", required_argument, 0, '3'                }
-        #define _d2 {"show-dict-one", required_argument, 0, '3'                }
-        #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes,1 } 
-        #define _s2 {"show-b250",     no_argument,       &flag_show_b250,    1 } 
-        #define _s5 {"show-one-b250", required_argument, 0, '2'                }
-        #define _s6 {"show-b250-one", required_argument, 0, '2'                }
-        #define _s7 {"dump-one-b250", required_argument, 0, '5'                }
-        #define _s8 {"dump-b250-one", required_argument, 0, '5'                }
-        #define _sa {"show-alleles",  no_argument,       &flag_show_alleles, 1 }
-        #define _st {"show-time",     no_argument,       &flag_show_time   , 1 } 
-        #define _sm {"show-memory",   no_argument,       &flag_show_memory , 1 } 
-        #define _sh {"show-headers",  no_argument,       &flag_show_headers, 1 } 
-        #define _si {"show-index",    no_argument,       &flag_show_index  , 1 } 
-        #define _sr {"show-gheader",  no_argument,       &flag_show_gheader, 1 }  
-        #define _sT {"show-threads",  no_argument,       &flag_show_threads, 1 }  
-        #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks, 1 }  
-        #define _sR {"show-reference",no_argument,       &flag_show_reference, 1 }  
-        #define _dm {"debug-memory",  no_argument,       &flag_debug_memory, 1 }  
-        #define _dp {"debug-progress",no_argument,       &flag_debug_progress, 1 }  
+        #define _rg {"register",      no_argument,       &flag_register,         1 }
+        #define _ss {"show-sections", no_argument,       &flag_show_sections,    1 } 
+        #define _sd {"show-dict",     no_argument,       &flag_show_dict,        1 } 
+        #define _d1 {"show-one-dict", required_argument, 0, '3'                    }
+        #define _d2 {"show-dict-one", required_argument, 0, '3'                    }
+        #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes,    1 } 
+        #define _s2 {"show-b250",     no_argument,       &flag_show_b250,        1 } 
+        #define _s5 {"show-one-b250", required_argument, 0, '2'                    }
+        #define _s6 {"show-b250-one", required_argument, 0, '2'                    }
+        #define _s7 {"dump-one-b250", required_argument, 0, '5'                    }
+        #define _s8 {"dump-b250-one", required_argument, 0, '5'                    }
+        #define _sa {"show-alleles",  no_argument,       &flag_show_alleles,     1 }
+        #define _st {"show-time",     no_argument,       &flag_show_time   ,     1 } 
+        #define _sm {"show-memory",   no_argument,       &flag_show_memory ,     1 } 
+        #define _sh {"show-headers",  no_argument,       &flag_show_headers,     1 } 
+        #define _si {"show-index",    no_argument,       &flag_show_index  ,     1 } 
+        #define _sr {"show-gheader",  no_argument,       &flag_show_gheader,     1 }  
+        #define _sT {"show-threads",  no_argument,       &flag_show_threads,     1 }  
+        #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks,     1 }  
+        #define _sR {"show-reference",no_argument,       &flag_show_reference,   1 }  
+        #define _dm {"debug-memory",  no_argument,       &flag_debug_memory,     1 }  
+        #define _dp {"debug-progress",no_argument,       &flag_debug_progress,   1 }  
         #define _ds {"debug-no-singletons",no_argument,  &flag_debug_no_singletons, 1 }  
-        #define _dh {"show-hash",    no_argument,        &flag_show_hash,   1 }  
-        #define _00 {0, 0, 0, 0                                                }
+        #define _dh {"show-hash",    no_argument,        &flag_show_hash,        1 }  
+        #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg,      _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                        _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                             _dm,                                                                                             _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg,      _me, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                             _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                             _dm,                                                                                                  _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -716,6 +714,8 @@ int main (int argc, char **argv)
     ASSERT (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
     ASSERT (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
     ASSERT (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
+    ASSERT (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
+    ASSERT (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
 
@@ -739,6 +739,15 @@ int main (int argc, char **argv)
     // default values, if not overridden by the user
     if (!flag_vblock) genozip_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
     if (!flag_sblock) vcf_zip_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
+
+    // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
+    // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
+    if (flag_make_reference) {
+        ASSERT (!crypt_have_password(), "%s: option --make-reference is incompatable with %s", global_cmd, OT("password", "p"));
+
+        flag_md5 = true;
+        if (!flag_vblock) genozip_set_global_max_memory_per_vb("1");
+    }
 
     // if --optimize was selected, all optimizations are turned on
     if (flag_optimize)

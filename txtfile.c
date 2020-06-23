@@ -222,26 +222,49 @@ void txtfile_read_vblock (VBlock *vb)
         vb->txt_data.len += bytes_one_read;
     }
 
-    // drop the final partial line which we will move to the next vb
-    for (int32_t i=vb->txt_data.len-1; i >= 0; i--) {
+    uint32_t unconsumed_len=0;
+    
+    // case: FASTA reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
+    if (flag_make_reference) {
+        bool data_found = false;
+        ARRAY (char, txt, vb->txt_data);
+        for (unsigned i=0; i < vb->txt_data.len; i++) {
+            // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
+            ASSERT (txt[i] != ';', "Error: reference file %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
+        
+            // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
+            // everything following to the next VB
+            if (data_found && txt[i]=='>' && txt[i-1]=='\n') {
+                unconsumed_len = vb->txt_data.len - i;
+                break;
+            }                
 
-        if (vb->txt_data.data[i] == '\n') {
-
-            // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
-            if (txt_file->data_type == DT_FASTQ && !txtfile_fastq_is_end_of_line (vb, i)) continue;
-
-            // case: still have some unconsumed data, that we wish  to pass to the next vb
-            uint32_t unconsumed_len = vb->txt_data.len-1 - i;
-            if (unconsumed_len) {
-
-                // the unconcusmed data is for the next vb to read 
-                buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 1, // evb, because dst buffer belongs to File
-                          vb->txt_data.len - unconsumed_len, unconsumed_len, "txt_file->unconsumed_txt", vb->vblock_i);
-
-                vb->txt_data.len -= unconsumed_len;
-            }
-            break;
+            if (!data_found && (txt[i] != '\n' && txt[i] != '\r')) data_found = true; // anything, except for empty lines, is considered data
         }
+
+    }
+
+    // we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
+    if (!unconsumed_len) {
+        for (int32_t i=vb->txt_data.len-1; i >= 0; i--) {
+
+            if (vb->txt_data.data[i] == '\n') {
+
+                // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
+                if (txt_file->data_type == DT_FASTQ && !txtfile_fastq_is_end_of_line (vb, i)) continue;
+
+                unconsumed_len = vb->txt_data.len-1 - i;
+                break;
+            }
+        }
+    }
+
+    // if we have some unconsumed data, pass it to the next vb
+    if (unconsumed_len) {
+        buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, 1, // evb, because dst buffer belongs to File
+                vb->txt_data.len - unconsumed_len, unconsumed_len, "txt_file->unconsumed_txt", vb->vblock_i);
+
+        vb->txt_data.len -= unconsumed_len;
     }
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
@@ -384,7 +407,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
     static Buffer header_section = EMPTY_BUFFER;
 
-    int header_offset = zfile_read_section (evb, 0, NO_SB_I, &header_section, "header_section", 
+    int header_offset = zfile_read_section (z_file, evb, 0, NO_SB_I, &header_section, "header_section", 
                                             sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, NULL);
     if (header_offset == EOF) {
         buf_free (&header_section);

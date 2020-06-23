@@ -30,9 +30,10 @@ typedef struct SectionHeader {
     uint16_t section_i;              // section within VB - 0 for Variant Data
     uint8_t  section_type;          
     uint8_t  sec_compression_alg : 4; // one of CompressionAlg
-    uint8_t  unused              : 4;
+    uint8_t  flags               : 4; // section-type specific flags SEC_FLAG_*
 } SectionHeader; 
 
+#define SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE 0x01
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
@@ -50,7 +51,7 @@ typedef struct {
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
     Md5Hash  license_hash;            // MD5(license_num)
-#define REF_FILENAME_LEN 256
+#define REF_FILENAME_LEN 255
     char ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
     Md5Hash ref_file_md5;             // SectionHeaderGenozipHeader.md5_hash_concat of the reference FASTA genozip file
 } SectionHeaderGenozipHeader;
@@ -136,7 +137,7 @@ typedef struct {
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct SectionListEntry {
     uint64_t offset;           // offset of this section in the file
-    DictId dict_id;            // used if this section is a DICT or a B250 section
+    DictId dict_id;            // used if this section is a DICT, LOCAL or a B250 section
     uint32_t vblock_i;
     uint8_t section_type;
     uint8_t unused[3];         
@@ -163,10 +164,10 @@ extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
-extern SectionType sections_get_next_header_type(SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
+extern SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
 
 typedef bool (*IsSectionTypeFunc)(SectionType);
-extern bool sections_get_next_section_of_type(SectionListEntry **sl_ent, uint32_t *cursor, SectionType st);
+extern bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st);
 
 extern bool sections_has_more_components(void);
 extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st);

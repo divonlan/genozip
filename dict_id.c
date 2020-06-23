@@ -83,6 +83,7 @@ void dict_id_initialize (DataType data_type)
     }
 
     dict_id_WindowsEOL = dict_id_type_1 (dict_id_make ("#", 1)).num; 
+    dict_id_FASTA_SEQ  = dict_id_field (dict_id_make ("SEQ", 3)).num; // we always need this, as it is used by reference.c
 
     switch (data_type) { 
     case DT_VCF:
@@ -168,7 +169,6 @@ void dict_id_initialize (DataType data_type)
 
     case DT_FASTA:
         dict_id_FASTA_DESC    = dict_id_field (dict_id_make ("DESC",    4)).num;
-        dict_id_FASTA_SEQ     = dict_id_field (dict_id_make ("SEQ",     3)).num;
         dict_id_FASTA_COMMENT = dict_id_field (dict_id_make ("COMMENT", 7)).num;
         break;
 
@@ -228,8 +228,8 @@ void dict_id_read_aliases (void)
     static Buffer compressed_aliases = EMPTY_BUFFER;
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
-    
-    zfile_read_section (evb, 0, NO_SB_I, &dict_id_aliases_buf, "dict_id_aliases_buf", 
+
+    zfile_read_section (z_file, evb, 0, NO_SB_I, &dict_id_aliases_buf, "dict_id_aliases_buf", 
                         sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
 
     SectionHeader *header = (SectionHeader *)dict_id_aliases_buf.data;

@@ -702,7 +702,8 @@ static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, uint32_t
         else {} 
     }
 
-    // update range
+    // update range - keep track of the genomic region within the range that has been accessed
+    // [first_pos,last_pos] include all accessed locii
     if (!range_mutex_is_locked) mutex_lock (range->mutex); // lock now, if not already locked before
 
     uint32_t last_pos = (range_i * REF_NUM_SITES_PER_RANGE) + next_ref - 1;
