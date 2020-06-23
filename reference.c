@@ -497,10 +497,6 @@ static void ref_copy_compressed_sections_from_reference_file (void)
     SectionListEntry *sl = FIRSTENT (SectionListEntry, ref_file_section_list);
     ARRAY (RAEntry, ra, ref_file_ra);
 
-unsigned count=0;
-for (unsigned i=0; i<ranges.len; i++) if (ENT(Range, ranges, i)->is_accessed) count+= ENT(Range, ranges, i)->last_pos - ENT(Range, ranges, i)->first_pos+1;
-printf ("BEFORE: count=%u bytes\n", count);
-
     File *ref_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);
 
     // note: in a FASTA file compressed with --make-reference, there is exactly one RA per VB (a contig or part of a contig)
@@ -549,9 +545,6 @@ printf ("BEFORE: count=%u bytes\n", count);
             }
         }
     }
-count=0;
-for (unsigned i=0; i<ranges.len; i++) if (ENT(Range, ranges, i)->is_accessed) count+= ENT(Range, ranges, i)->last_pos - ENT(Range, ranges, i)->first_pos+1;
-printf ("AFTER: count=%u bytes\n", count);
 
     file_close (&ref_file, false);
 }

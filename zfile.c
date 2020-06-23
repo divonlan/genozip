@@ -623,13 +623,14 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     header.num_items_concat        = BGEN64 (z_file->num_lines);
     header.num_sections            = BGEN32 (num_sections); 
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
-    header.ref_file_md5            = ref_md5;
     
     if (flag_make_reference && z_file->data_type == DT_FASTA) 
         header.h.flags = SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE;
 
-    if (ref_filename)   
+    if (flag_reference == REF_EXTERNAL) {   
         strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
+        header.ref_file_md5 = ref_md5;
+    }
 
     uint32_t license_num_bgen = BGEN32 (license_get());
     md5_do (&license_num_bgen, sizeof (int32_t), &header.license_hash);
