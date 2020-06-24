@@ -121,7 +121,7 @@ typedef struct {
 } SectionHeaderVbHeaderVCF; 
 
 typedef struct {
-    SectionHeader h;                   
+    SectionHeader h;           // we use h.flags to store the first 4 bits of ctx->flags, also stored in SectionHeaderCtx. This is because VCF FORMAT contexts have no SectionHeaderCtx.
     uint32_t num_snips;        // number of items in dictionary
     DictId dict_id;           
 } SectionHeaderDictionary; 
@@ -129,7 +129,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint8_t ltype;             // CTX_*
-    uint8_t flags;    
+    uint8_t flags;             // CTX_FL_*
     uint16_t ffu;
     DictId dict_id;           
 } SectionHeaderCtx;         

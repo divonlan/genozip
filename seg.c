@@ -119,14 +119,14 @@ const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigne
     return 0; // avoid compiler warning - never reaches here
 }
 
-void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, uint32_t lookup_len, /*ignored if 0 */
+void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
                              char *snip, unsigned *snip_len) // out
 {
     snip[0] = snip_code;
     *snip_len = 1 + base64_encode (other_dict_id.id, DICT_ID_LEN, &snip[1]);
 
-    if (lookup_len)
-        *snip_len += str_int (lookup_len, &snip[*snip_len]);
+    if (has_parameter)
+        *snip_len += str_int (parameter, &snip[*snip_len]);
 }
 
 uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
@@ -228,7 +228,7 @@ int64_t seg_pos_field (VBlock *vb,
             total_len = 1;
         }
         else 
-            seg_prepare_snip_other (SNIP_OTHER_DELTA, base_ctx->dict_id, 0, pos_delta_str, &total_len);
+            seg_prepare_snip_other (SNIP_OTHER_DELTA, base_ctx->dict_id, false, 0, pos_delta_str, &total_len);
 
         unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
         total_len += delta_len;

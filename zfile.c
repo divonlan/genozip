@@ -197,6 +197,7 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
     header.h.sec_compression_alg   = COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
+    header.h.flags                 = ctx->flags & 0x0f; // 4 bits
     header.num_snips               = BGEN32 (num_words);
     header.dict_id                 = ctx->dict_id;
 

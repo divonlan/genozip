@@ -35,7 +35,9 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
                                            const char *delta_snip, unsigned delta_snip_len) 
 {
     ASSERT (delta_snip, "Error in piz_reconstruct_from_delta: delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    
+    ASSERT (base_ctx->flags & CTX_FL_STORE_VALUE, "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have CTX_FL_STORE_VALUE",
+            base_ctx->name);
+
     if (delta_snip_len == 1 && delta_snip[0] == '-')
         my_ctx->last_delta = -2 * base_ctx->last_value; // negated previous value
 
@@ -310,11 +312,8 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
     }
 
     // update last_value if needed
-    if (have_new_value && store) {
-        ASSERT (base_ctx == snip_ctx, "Error in piz_reconstruct_one_snip: attempted to udpate value when base_ctx=%s differs from snip_ctx=%s. Are these supposed to be aliases?",
-                base_ctx->name, snip_ctx->name);
-        base_ctx->last_value = new_value;
-    } 
+    if (have_new_value && store) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
+        snip_ctx->last_value = new_value;
 
     snip_ctx->last_line_i = vb->line_i;
 }

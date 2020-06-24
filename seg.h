@@ -61,7 +61,7 @@ extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *fiel
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 extern void seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, SegOptimize optimize);
 
-extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, uint32_t lookup_len, 
+extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
                                     char *snip, unsigned *snip_len);
 
 // ------------------

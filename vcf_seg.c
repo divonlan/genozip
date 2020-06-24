@@ -213,16 +213,19 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         vb->vb_data_size -= (int)(*this_value_len) - (int)optimized_snip_len;
         *this_value = optimized_snip;
         *this_value_len = optimized_snip_len;
-        return true; // procede with adding to dictionary/b250
     }
 
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
-    if (dict_id.num == dict_id_INFO_END) {
+    else if (dict_id.num == dict_id_INFO_END) {
         seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, false); // END is an alias of POS
         return false; // do not add to dictionary/b250 - we already did it
     }
 
-    return true; // all other cases -  procedue with adding to dictionary/b250
+    // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_genotype_area)
+    else if (dict_id.num == dict_id_INFO_DP) 
+        mtf_get_ctx (vb_, (DictId)dict_id_INFO_DP)->last_value = atoi (*this_value);
+
+    return true; // procedue with adding to dictionary/b250
 }
 
 static void vcf_seg_increase_ploidy_one_line (VBlockVCF *vb, char *line_ht_data, unsigned new_ploidy, unsigned num_samples)
@@ -387,12 +390,13 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
                                   bool *has_13)
 {
     SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, dl->format_mtf_i);
+    char snip[100]; // more than enough for the base64
+    unsigned snip_len;
+    Context *dp_ctx = NULL, *info_dp_ctx = NULL;
     
     int optimized_cell_gt_data_len = cell_gt_data_len;
 
     bool end_of_cell = !cell_gt_data_len;
-
-    int32_t dp_value = 0;
 
     for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
 
@@ -400,9 +404,11 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
         unsigned len = end_of_cell ? 0 : seg_snip_len_tnc (cell_gt_data, has_13);
         Context *ctx = MAPPER_CTX (format_mapper, sf);
 
+        // just initialize DP stuff, we're going to seg DP a bit later
         if (cell_gt_data && ctx->dict_id.num == dict_id_FORMAT_DP) {
-            ctx->flags |= CTX_FL_STORE_VALUE; // this ctx is used a base for a delta 
-            dp_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
+            dp_ctx = ctx;
+            info_dp_ctx = mtf_get_existing_ctx ((VBlockP)vb, (DictId)dict_id_INFO_DP);
+            ctx->last_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
         }
 
         uint32_t node_index;
@@ -427,15 +433,28 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
             optimize_vector_2_sig_dig (cell_gt_data, len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
 
+        // case: DP - if there is an INFO/DP too, and it is the same - we store a delta of 0 
+        // (this usually means there's one sample) - if they are not the same don't delta
+        else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_DP && info_dp_ctx &&
+                 ctx->last_value == info_dp_ctx->last_value) {
+
+            info_dp_ctx->flags |= CTX_FL_STORE_VALUE | CTX_FL_NO_STONS;
+            ctx        ->flags |= CTX_FL_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
+            seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_INFO_DP, true, 0, snip, &snip_len);
+
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, NULL); 
+        }
+
         // if case MIN_DP subfield - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
-        else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_MIN_DP) {
+        else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_MIN_DP && dp_ctx) {
             int32_t min_dp_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
-            int32_t delta = dp_value - min_dp_value; // expected to be 0 or positive integer (may be negative if no DP preceeds)
-            char delta_str[30];
-            unsigned delta_str_len = str_int (delta, delta_str);
-            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, delta_str, delta_str_len, NULL); 
-            ctx->flags |= CTX_FL_NO_STONS;  /* currently handled uglyly by vcf_piz_reconstruct_genotype_data_line which doesn't allow lookup */ 
+            int32_t delta = min_dp_value - (int32_t)dp_ctx->last_value; // expected to be a negative number
+            seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_FORMAT_DP, true, delta, snip, &snip_len);
+            
+            node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, NULL); 
+            ctx   ->flags |= CTX_FL_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
+            dp_ctx->flags |= CTX_FL_STORE_VALUE | CTX_FL_NO_STONS;
         }
 
         else
@@ -498,7 +517,6 @@ static void vcf_seg_update_vb_from_dl (VBlockVCF *vb, ZipDataLineVCF *dl)
               dl->phase_type  == PHASE_MIXED_PHASED)
         vb->phase_type = PHASE_MIXED_PHASED;    
 }
-
 
 // complete haplotype and genotypes of lines that don't have them, if we found out that some
 // other line has them, and hence all lines in the vb must have them

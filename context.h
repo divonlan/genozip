@@ -107,13 +107,18 @@ extern const int ctx_lt_sizeof_one[NUM_CTX_LT];
 extern const bool ctx_lt_is_signed[NUM_CTX_LT];
 extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 
-#define CTX_FL_NO_STONS    0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
-#define CTX_FL_LOCAL_LZMA  0x02 // compress local with lzma
-#define CTX_FL_STORE_VALUE 0x04 // the values of this ctx are uint32_t, and are a basis for a delta calculation (by this field or another one)
-#define CTX_FL_STRUCTURED  0x08 // snips usually contain Structured
-#define CTX_FL_POS         0x03 // A POS field that stores a delta vs. a different field
-#define CTX_FL_POS_BASE    0x07 // A POS field that is the base for delta calculations (with itself and/or other fields)
-#define CTX_FL_ID          0x03 // An ID field that is split between a numeric component in local and a textual component in b250
+// flags that if set in seg, will be passed on to piz
+#define CTX_FL_STORE_VALUE 0x01 // the values of this ctx are uint32_t, and are a basis for a delta calculation (by this field or another one)
+#define CTX_FL_STRUCTURED  0x02 // snips usually contain Structured
+
+// these flags, if used by VCF FORMAT contexts, will not be passed on to piz (limitation is only for FORMAT contexts - since they don't fit in SectionHeaderDictionary.h.flags)
+#define CTX_FL_NO_STONS    0x10 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
+#define CTX_FL_LOCAL_LZMA  0x20 // compress local with lzma
+
+// combination flags for convenience
+#define CTX_FL_POS         (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // A POS field that stores a delta vs. a different field
+#define CTX_FL_POS_BASE    (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA | CTX_FL_STORE_VALUE) // A POS field that is the base for delta calculations (with itself and/or other fields)
+#define CTX_FL_ID          (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // An ID field that is split between a numeric component in local and a textual component in b250
 
 typedef struct Context {
     // ----------------------------
@@ -208,6 +213,7 @@ static inline Context *mtf_get_ctx_do (Context *contexts, DataType dt, uint8_t *
 
 extern uint8_t mtf_get_existing_did_i (VBlockP vb, DictId dict_id);
 extern uint8_t mtf_get_existing_did_i_from_z_file (DictId dict_id);
+extern ContextP mtf_get_existing_ctx (VBlockP vb, DictId dict_id); // returns NULL if context doesn't exist
 
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);

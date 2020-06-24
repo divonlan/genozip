@@ -55,7 +55,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         seg_compound_field ((VBlockP)vb, mtf_get_ctx (vb, (DictId)dict_id_FASTA_DESC), 
                             line_start, line_len, &vb->desc_mapper, structured_DESC, true, 0);
         
-        seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_FASTA_DESC, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_DESC;
@@ -82,7 +82,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         seg_add_to_local_text ((VBlockP)vb, mtf_get_ctx (vb, (DictId)dict_id_FASTA_COMMENT), 
                                line_start, line_len, line_len); 
 
-        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_COMMENT, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_COMMENT, false, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_COMMENT;
@@ -102,7 +102,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         seq_ctx->local.len += line_len;
         seq_ctx->txt_len   += line_len;
 
-        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_SEQ, line_len, &special_snip[3], &special_snip_len);
+        seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_SEQ, true, (int32_t)line_len, &special_snip[3], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_SEQ;

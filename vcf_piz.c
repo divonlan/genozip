@@ -172,8 +172,6 @@ static void vcf_piz_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
 
             const char *snip = NULL; // will be set to a pointer into a dictionary
             
-            uint32_t dp_value=0;  // used for calculating MIN_DP = dp_value + delta.
-
             for (unsigned sf_i=0; sf_i < line_format_info->num_subfields; sf_i++) {
 
                 Context *sf_ctx = MAPPER_CTX (line_format_info, sf_i);
@@ -187,17 +185,6 @@ static void vcf_piz_reconstruct_genotype_data_line (VBlockVCF *vb, unsigned vb_l
 
                 unsigned snip_len;
                 mtf_get_next_snip ((VBlockP)vb, sf_ctx, &sample_iterator[sample_i], &snip, &snip_len);
-
-                // handle MIN_DP : if its a DP, store it...
-                char min_dp[30];
-                if (sf_ctx && snip_len && sf_ctx->dict_id.num == dict_id_FORMAT_DP) 
-                    dp_value = atoi (snip);
-                // ...and if its an MIN_DP - calculate it 
-                else if (sf_ctx && sf_ctx->dict_id.num == dict_id_FORMAT_MIN_DP && snip_len) {
-                    int32_t delta = atoi (snip);
-                    snip_len = str_int (dp_value - delta, min_dp); // note: we dp_value==0 if no DP subfield preceeds DP_MIN, that's fine
-                    snip = min_dp;
-                }
 
                 if (snip && snip_len && is_line_included) { // it can be a valid empty subfield if snip="" and snip_len=0
                 

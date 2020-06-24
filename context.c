@@ -660,13 +660,21 @@ uint8_t mtf_get_existing_did_i_from_z_file (DictId dict_id)
 uint8_t mtf_get_existing_did_i (VBlockP vb, DictId dict_id)
 {
     uint8_t did_i = vb->dict_id_to_did_i_map[dict_id.map_key];
-    if (did_i != DID_I_NONE && vb->contexts[did_i].dict_id.num == dict_id.num) return did_i;
+    if (did_i == DID_I_NONE || vb->contexts[did_i].dict_id.num == dict_id.num) return did_i;
 
+    // a different dict_id is in the map, perhaps a hash-clash...
     for (did_i=0; did_i < vb->num_dict_ids; did_i++) 
         if (dict_id.num == vb->contexts[did_i].dict_id.num) return did_i;
 
     return DID_I_NONE; // not found
 }
+
+ContextP mtf_get_existing_ctx (VBlockP vb, DictId dict_id) 
+{
+    uint8_t did_i = mtf_get_existing_did_i(vb, dict_id); 
+    return (did_i == DID_I_NONE) ? NULL : &vb->contexts[did_i]; 
+}
+
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
@@ -735,12 +743,13 @@ void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */,
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         const char *fname  = dt_fields[dt].names[f];
         DictId dict_id = dict_id_field (dict_id_make (fname, strlen(fname)));
-
-        // check if its an alias
         Context *dst_ctx  = NULL;
-        for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
-            if (dict_id.num == dict_id_aliases[alias_i].alias.num) 
-                dst_ctx = mtf_get_zf_ctx (dict_id_aliases[alias_i].dst);
+
+        // check if its an alias (PIZ only)
+        if (command != ZIP && dict_id_aliases) 
+            for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
+                if (dict_id.num == dict_id_aliases[alias_i].alias.num) 
+                    dst_ctx = mtf_get_zf_ctx (dict_id_aliases[alias_i].dst);
 
         if (!dst_ctx) // normal field, not an alias
             mtf_initialize_ctx (&contexts[f], dt, f, dict_id, dict_id_to_did_i_map);
@@ -784,7 +793,8 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
     Context *zf_ctx = mtf_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, header->dict_id);
-    
+    zf_ctx->flags = header->h.flags;
+
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
     unsigned dict_old_len = zf_ctx->dict.len;
@@ -839,6 +849,7 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
             
             vb_ctx->did_i   = did_i;
             vb_ctx->dict_id = zf_ctx->dict_id;
+            vb_ctx->flags   = zf_ctx->flags;
             memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
             if (vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] == DID_I_NONE)
