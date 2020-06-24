@@ -258,10 +258,6 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         else if (base_ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
 
-/*        // case 2: CTX_LT_SEQUENCE_REF
-        else if (base_ctx->ltype == CTX_LT_SEQUENCE_REF) 
-            ref_reconstruct (vb, base_ctx, snip, snip_len);
-*/
         else piz_reconstruct_from_local_text (vb, base_ctx); // this will call us back recursively with the snip retrieved
                 
         break;
@@ -308,6 +304,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
             // this can happen for example when seg_pos_field stores a "nonsense" snip.
             have_new_value = (after == snip + snip_len);
         }
+
         snip_ctx->last_delta = 0; // delta is 0 since we didn't calculate delta
     }
     }
@@ -342,8 +339,11 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         piz_reconstruct_one_snip (vb, ctx, snip, snip_len);        
 
         // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
-        if (did_i == DTF(chrom)) // test original did_i, not the alias target
+        if (did_i == DTF(chrom)) { // test original did_i, not the alias target
             vb->chrom_node_index = word_index;
+            vb->chrom_name       = snip; // used for reconstruction from external reference
+            vb->chrom_name_len   = snip_len;
+        }
 
         if (flag_regions && did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, ctx->last_value)) 
             vb->dont_show_curr_line = true;

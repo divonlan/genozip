@@ -598,7 +598,7 @@ static void sam_seg_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
     qual_ctx->txt_len   += dl->qual_data_len + 1;
 }
 
-static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, uint32_t pos, const char *cigar, 
+static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, int64_t pos, const char *cigar, 
                                const char *chrom_name, unsigned chrom_name_len)
 {
     uint32_t range_i = (uint32_t)(pos / REF_NUM_SITES_PER_RANGE);
@@ -610,7 +610,7 @@ static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, uint32_t
     
     // if using an external reference, a NULL range means there is no reference for this chrom/range_i combo (in case of 
     // an internal reference, we will create it)
-    ASSSEG (range || flag_reference == REF_INTERNAL, chrom_name, "Error: in read RNAME=\"%.*s\" POS=%u - some or all of the read is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
+    ASSSEG (range || flag_reference == REF_INTERNAL, chrom_name, "Error: in read RNAME=\"%.*s\" POS=%"PRId64" - some or all of the read is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
             chrom_name_len, chrom_name, pos, chrom_name_len, chrom_name, ref_max_pos_of_chrom (vb->chrom_node_index), ref_filename);
 
     // this range cannot be diffed against a reference, as the hash entry for this range is unfortunately already occupied by another range
@@ -621,7 +621,7 @@ static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, uint32_t
         return; 
     }
 
-    uint32_t next_ref  = pos - range_i * REF_NUM_SITES_PER_RANGE;
+    uint32_t next_ref  = (uint32_t)(pos - range_i * REF_NUM_SITES_PER_RANGE);
 
     const char *next_cigar = cigar;
     uint32_t i=0;
@@ -660,7 +660,7 @@ static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, uint32_t
                 
                 else if (!ref_value) { // no ref yet for this site - we will be the ref (only possible with internal reference)
 
-                    ASSSEG (flag_reference == REF_INTERNAL, chrom_name, "Error2 in read RNAME=\"%.*s\" POS=%u - some or all of the read is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
+                    ASSSEG (flag_reference == REF_INTERNAL, chrom_name, "Error2 in read RNAME=\"%.*s\" POS=%"PRId64" - some or all of the read is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
                             chrom_name_len, chrom_name, pos, chrom_name_len, chrom_name, ref_max_pos_of_chrom (vb->chrom_node_index), ref_filename);
 
                     range->ref[next_ref] = seq[i];
@@ -706,7 +706,7 @@ static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, uint32_t
     // [first_pos,last_pos] include all accessed locii
     if (!range_mutex_is_locked) mutex_lock (range->mutex); // lock now, if not already locked before
 
-    uint32_t last_pos = (range_i * REF_NUM_SITES_PER_RANGE) + next_ref - 1;
+    int64_t last_pos = (range_i * REF_NUM_SITES_PER_RANGE) + next_ref - 1;
     if (flag_reference == REF_INTERNAL) {
         if (pos < range->first_pos)     range->first_pos = pos;
         if (last_pos > range->last_pos) range->last_pos  = last_pos;
@@ -719,13 +719,13 @@ static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, uint32_t
     // call recursively with remaining sequence and next ref range 
     if (i < seq_len) {
 
-        ASSSEG (last_pos < MAX_POS, cigar, "%s: Error: reference pos, considering POS=%u and the consumed reference impied by CIGAR=%s, exceeds MAX_POS=%"PRId64,
+        ASSSEG (last_pos < MAX_POS, cigar, "%s: Error: reference pos, considering POS=%"PRId64" and the consumed reference impied by CIGAR=%s, exceeds MAX_POS=%"PRId64,
                 global_cmd, pos, cigar, MAX_POS);
 
         char updated_cigar[100];
         if (subcigar_len) sprintf (updated_cigar, "%u%c%s", subcigar_len, cigar_op, next_cigar);
 
-        sam_seg_seq_field (vb, seq + i, seq_len - i, (range_i+1) * REF_NUM_SITES_PER_RANGE,
+        sam_seg_seq_field (vb, seq + i, seq_len - i, (int64_t)(range_i+1) * REF_NUM_SITES_PER_RANGE,
                            subcigar_len ? updated_cigar : next_cigar, 
                            chrom_name, chrom_name_len);
     }

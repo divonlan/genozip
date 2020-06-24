@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "zip.h"
 #include "dict_id.h"
+#include "reference.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
@@ -32,6 +33,58 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->contexts[VCF_FORMAT].flags = CTX_FL_NO_STONS;
     vb->contexts[VCF_INFO]  .flags = CTX_FL_NO_STONS;
 }             
+
+// optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
+static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char vcf_ref, char vcf_alt)
+{
+    char new_ref=0, new_alt=0;
+
+    // if we have a reference, we use it
+    if (flag_reference != REF_NONE) {
+        int64_t pos = vb->contexts[VCF_POS].last_value;
+
+        uint32_t range_i = (uint32_t)(pos / REF_NUM_SITES_PER_RANGE);
+        Range *range = ref_get_range (vb, range_i, RGR_MUST_EXIST, 0);
+        
+        // a NULL range means there is no reference for this chrom/range_i combo
+        ASSSEG (range, start_line, "Error: in CHROM=\"%.*s\" POS=%"PRId64" - this position is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
+                vb->chrom_name_len, vb->chrom_name, pos, vb->chrom_name_len, vb->chrom_name, ref_max_pos_of_chrom (vb->chrom_node_index), ref_filename);
+
+        char ref = range->ref[pos - range_i * REF_NUM_SITES_PER_RANGE];
+
+        if (vcf_ref == ref) new_ref = '-'; // this should always be the case...
+        if (vcf_alt == ref) new_alt = '-'; 
+    }
+
+    // replace the most common SNP with +
+    // based on counting simple SNPs from from chr22 of 1000 genome project phase 3:
+    // G to: A=239681 C=46244 T=44084
+    // C to: T=238728 G=46508 A=43685
+    // A to: G=111967 C=30006 T=26335
+    // T to: C=111539 G=29504 A=25599
+
+    if      (vcf_alt == 'A' && vcf_ref == 'G') new_alt = '+';
+    else if (vcf_alt == 'C' && vcf_ref == 'T') new_alt = '+';
+    else if (vcf_alt == 'G' && vcf_ref == 'A') new_alt = '+';
+    else if (vcf_alt == 'T' && vcf_ref == 'C') new_alt = '+';
+
+    // if anything was done, we create a "special" snip
+    if (new_ref || new_alt) {
+        char refalt_special[4] = { SNIP_SPECIAL, VCF_SPECIAL_REFALT };
+        refalt_special[2] = new_ref ? new_ref : vcf_ref;
+        refalt_special[3] = new_alt ? new_alt : vcf_alt;
+
+        seg_by_did_i (vb, refalt_special, sizeof(refalt_special), VCF_REFALT, 4 /* 2 characters and 2 tabs */);
+    }
+    // if not - just the normal snip
+    else {
+        char refalt_normal[3] = { 0, '\t', 0 };
+        refalt_normal[0] = vcf_ref;
+        refalt_normal[2] = vcf_alt;
+
+        seg_by_did_i (vb, refalt_normal, sizeof(refalt_normal), VCF_REFALT, 4 /* 2 characters and 2 tabs */);
+    }
+}
 
 // traverses the FORMAT field, gets ID of subfield, and moves to the next subfield
 static DictId vcf_seg_get_format_subfield (const char **str, uint32_t *len) // remaining length of line 
@@ -516,10 +569,16 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.
     GET_NEXT_ITEM ("REF");
+    
     unsigned alt_len=0;
     const char *alt_start = next_field;
     next_field = seg_get_next_item (vb, alt_start, &len, false, true, false, &alt_len, &separator, NULL, "ALT");
-    seg_by_did_i (vb, field_start, field_len + alt_len + 1, VCF_REFALT, field_len + alt_len + 2);
+
+    // optimize ref/alt in the common case of single-character
+    if (field_len == 1 && alt_len == 1) 
+        vcf_seg_optimize_ref_alt (vb_, field_start_line, *field_start, *alt_start);
+    else
+        seg_by_did_i (vb, field_start, field_len + alt_len + 1, VCF_REFALT, field_len + alt_len + 2);
 
     SEG_NEXT_ITEM (VCF_QUAL);
     SEG_NEXT_ITEM (VCF_FILTER);

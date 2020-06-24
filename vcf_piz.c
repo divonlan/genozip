@@ -16,6 +16,7 @@
 #include "random_access.h"
 #include "dict_id.h"
 #include "strings.h"
+#include "reference.h"
 
 #define DATA_LINE(i) ENT (PizDataLineVCF, vb->lines, i)
 
@@ -453,6 +454,39 @@ static void vcf_piz_reconstruct_samples (VBlockVCF *vb, unsigned vb_line_i)
 
     COPY_TIMER (vb->profile.vcf_piz_reconstruct_samples);
 }
+
+// REFALT - reconstruct from reference and/or common SNPs
+void vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
+{
+    ASSERT (snip_len==2, "Error in vcf_piz_special_REFALT: expecting snip_len=2 but seeing %u", snip_len);
+
+    // snip is 3 characters - REF, \t, ALT
+    char ref_alt[3] = { 0, '\t', 0 };
+    char ref = 0;
+        
+    // recover ref
+    if (snip[0] == '-') {
+        ref = *ref_get_ref (vb, (uint32_t)vb->contexts[VCF_POS].last_value, 0);
+        ref_alt[0] = ref;
+    }
+    else 
+        ref_alt[0] = snip[0];
+
+    // recover alt
+    if (snip[1] == '-') 
+        ref_alt[0] = ref ? ref : *ref_get_ref (vb, (uint32_t)vb->contexts[VCF_POS].last_value, 0);
+
+    else if (snip[1] == '+') { // common snp
+        if      (ref_alt[0] == 'A') ref_alt[2] = 'G';
+        else if (ref_alt[0] == 'C') ref_alt[2] = 'T';
+        else if (ref_alt[0] == 'G') ref_alt[2] = 'A';
+        else if (ref_alt[0] == 'T') ref_alt[2] = 'C';
+    }
+    else
+        ref_alt[2] = snip[1];
+
+    RECONSTRUCT (ref_alt, sizeof (ref_alt));
+}   
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block

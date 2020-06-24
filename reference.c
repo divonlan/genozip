@@ -82,9 +82,17 @@ MemStats ref_memory_consumption (void)
     return stats;
 }
 
+static uint32_t ref_get_alternative_chrom_name (VBlockP vb); // forward
+
 const char *ref_get_ref (VBlockP vb, uint64_t pos, uint32_t ref_consumed)
 {
-    Range *r = ENT (Range, ranges, vb->chrom_node_index);
+    // if the chrom is not in the reference and it is numeric only, attempt to change it eg "22"->"chr22"
+    uint32_t index = vb->chrom_node_index < ranges.len ? vb->chrom_node_index : ref_get_alternative_chrom_name (vb);
+
+    ASSERT (index < ranges.len, "Error in ref_get_ref: vb->chrom_node_index=%u is out of range: ranges.len=%u",
+            index, (uint32_t)ranges.len);
+
+    Range *r = ENT (Range, ranges, index);
     if (!r->ref) return NULL; // this can if entire chromosome is verbatim, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
     ASSERT (pos + ref_consumed - 1 <= r->last_pos, "Error in ref_get_ref: out of range reconstructing txt_line_i=%u: pos=%"PRId64" ref_consumed=%u but range->last_pos=%"PRId64,
@@ -354,6 +362,24 @@ void ref_set_ref_from_external_data (VBlock *vb, uint64_t start_pos,
         ref_set_ref_from_external_data_piz (vb, start_pos, data);
 }
 
+static uint32_t ref_get_alternative_chrom_name (VBlockP vb)
+{
+    if (vb->chrom_name_len > 2 || !str_is_int (vb->chrom_name, vb->chrom_name_len))  // we only handle 1 or 2 digit chrom names
+        goto fail;
+
+    char chr_chrom[5] = "chr";
+    chr_chrom[3] = vb->chrom_name[0];
+    chr_chrom[4] = (vb->chrom_name_len == 2 ? vb->chrom_name[0] : 0);
+
+    int32_t alternative_chrom_word_index = ref_get_contig_word_index (chr_chrom, vb->chrom_name_len+3); 
+    if (alternative_chrom_word_index == NIL) goto fail;
+
+    return (uint32_t)alternative_chrom_word_index;
+
+fail:
+    return vb->chrom_node_index;
+}
+
 // ZIP: Allocated and initializes the ref and mutex buffers for the given chrom/range
 // case 1: ZIP: called when reading an external sequence ahead of committing it to the reference (REF_EXTERNAL/REF_EXT_STORE)
 // case 2: ZIP: in SAM, when reading an SEQ field ahead of committing it to the refernece (REF_INTERNAL)
@@ -366,18 +392,24 @@ Range *ref_get_range (VBlockP vb, uint32_t range_i, RgrMode mode, uint32_t reduc
     // sanity checks
     ASSERT0 (vb->chrom_name, "Error in ref_get_range: vb->chrom_name=NULL");
 
-    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-        const MtfWord *word = ENT (const MtfWord, contig_words, vb->chrom_node_index);
-        const char *snip = ENT (const char, contig_dict, word->char_index);
-        ASSERT (word->snip_len == vb->chrom_name_len && !memcmp (snip, vb->chrom_name, word->snip_len),
-                "Error in ref_get_range: vb->chrom=%.*s but contig_words[vb->chrom_node_index=%u]=%.*s",
-                vb->chrom_name_len, vb->chrom_name, vb->chrom_node_index, word->snip_len, snip);
+    uint32_t save_chrom_index = vb->chrom_node_index;
+
+    if (!ref_flag_reading_reference && (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)) {
+
+        // if the chrom is not in the reference and it is numeric only, attempt to change it eg "22"->"chr22"
+        if (vb->chrom_node_index >= contig_words.len)
+            vb->chrom_node_index = ref_get_alternative_chrom_name (vb); // change temporarily just for ref_range_id_by_word_index()
+        
+        ASSERT (vb->chrom_node_index < contig_words.len, "Error in ref_get_range: chrom \"%.*s\" is not found in the reference file %s",
+                MIN (vb->chrom_name_len, 100), vb->chrom_name, ref_filename);
     }
 
     // one_chrom_ranges_buf is an array of indeces into ranges - one index per range of size REF_NUM_SITES_PER_RANGE
     // note: in case of REF_INTERNAL, we can get hash conflicts, but in case of REF_EXTERNAL, it is guaranteed that there are no conflicts
     uint32_t range_id = (flag_reference == REF_INTERNAL) ? ref_range_id_by_hash (vb, range_i)
                                                          : ref_range_id_by_word_index (vb, range_i);
+
+    vb->chrom_node_index = save_chrom_index; // restore
 
     ASSERT (range_id < REF_NUM_SITES_PER_RANGE, "Error in ref_get_range: range_id=%u expected to be smaller than %u", range_id, REF_NUM_SITES_PER_RANGE);
     Range *range = ENT (Range, ranges, range_id);
