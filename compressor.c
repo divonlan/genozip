@@ -16,7 +16,6 @@
 #include "zfile.h"
 #include "file.h"
 #include "strings.h"
-#include "reference.h"
 
 // -----------------------------------------------------
 // memory functions that serve the compression libraries
@@ -453,10 +452,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     // if there's no data to compress, or its too small, don't compress
     if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION) 
-        header->sec_compression_alg = COMP_PLN;
+        header->sec_compression_alg = COMP_NONE;
 
     uint32_t est_compressed_len = 
-        (header->sec_compression_alg != COMP_PLN) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
+        (header->sec_compression_alg != COMP_NONE) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
@@ -584,7 +583,7 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
 
         break;
     }
-    case COMP_PLN:
+    case COMP_NONE:
         memcpy (uncompressed_data, compressed, compressed_len);
         break;
 

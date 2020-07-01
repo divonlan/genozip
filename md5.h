@@ -13,7 +13,7 @@
 #endif
 
 // Md5Hash must be packed as it appears in a Section in the Genozip file format (will only be meaningful on CPUs with more than 128 bit though...)
-#pragma pack(push, 1) 
+#pragma pack(1) 
 
 typedef union { 
     uint8_t  bytes[16]; 
@@ -23,7 +23,7 @@ typedef union {
 #define MD5HASH_NONE { .ulls = { 0, 0 } };
 extern const Md5Hash MD5HASH_none;
 
-#pragma pack(pop)
+#pragma pack()
 
 typedef struct {
     uint32_t     lo, hi;

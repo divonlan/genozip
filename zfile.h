@@ -7,7 +7,7 @@
 #define ZFILE_INCLUDED
 
 #include "genozip.h"
-#include "section_types.h"
+#include "sections.h"
 #include "md5.h"
 #include "compressor.h"
 

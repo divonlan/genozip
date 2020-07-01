@@ -21,7 +21,7 @@ void fast_vb_release_vb (VBlockFAST *vb)
     vb->contig_grepped_out = false;
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
 }
-
+   
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
 void fast_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
                                         char **line_seq_data, uint32_t *line_seq_len,  // out 

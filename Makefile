@@ -28,8 +28,8 @@ else
 endif 
 
 
-MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c \
-          zip.c piz.c seg.c zfile.c reference.c  \
+MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c \
+          zip.c piz.c seg.c zfile.c reference.c \
 		  vcf_zip.c vcf_piz.c vcf_seg.c vcf_zfile.c vcf_gloptimize.c vcf_vblock.c vcf_gtshark.c vcf_squeeze.c vcf_samples.c vcf_header.c \
           sam_zip.c sam_piz.c sam_shared.c  \
 		  fasta.c fastq.c fast_shared.c \
@@ -50,8 +50,8 @@ CONDA_DEVS = Makefile .gitignore test-file.vcf
 
 CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 
-CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h \
-             base250.h endianness.h md5.h sections.h section_types.h text_help.h strings.h hash.h stream.h url.h \
+CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h \
+             base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h \
              buffer.h file.h context.h seg.h text_license.h version.h compressor.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reference.h \
 			 arch.h license.h data_types.h base64.h \
@@ -63,7 +63,8 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/zlib.h zlib/zutil.h \
 			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
-			 lzma/Precomp.h lzma/Threads.h
+			 lzma/Precomp.h lzma/Threads.h 
+			 
 
 ifeq ($(CC),cl)
 	MY_SRCS += compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/visual_c_pthread.c

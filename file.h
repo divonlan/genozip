@@ -139,40 +139,40 @@ extern const char *file_exts[];
 // IMPORTANT: these values CANNOT BE CHANGED as they are part of the genozip file - 
 // they go in SectionHeader.sec_compression_alg and also SectionHeaderTxtHeader.compression_type
 #define NUM_COMPRESSION_ALGS 9
-typedef enum { COMP_UNKNOWN=-1, COMP_PLN=0 /* plain - no compression */, 
+typedef enum { COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */, 
                COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8 } CompressionAlg; 
 #define COMPRESSED_FILE_VIEWER { "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
                                  "bcftools -Ov --version", "samtools view -h -OSAM", "N/A", "unzip -p" }
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file
-#define TXT_IN_FT_BY_DT  { { { VCF,       COMP_PLN, VCF_GENOZIP   }, { VCF_GZ,   COMP_GZ,  VCF_GENOZIP   }, { VCF_BGZ, COMP_GZ,  VCF_GENOZIP },\
+#define TXT_IN_FT_BY_DT  { { { VCF,       COMP_NONE, VCF_GENOZIP   }, { VCF_GZ,   COMP_GZ,  VCF_GENOZIP   }, { VCF_BGZ, COMP_GZ,  VCF_GENOZIP },\
                              { VCF_BZ2,   COMP_BZ2, VCF_GENOZIP   }, { VCF_XZ,   COMP_XZ,  VCF_GENOZIP   },\
                              { BCF,       COMP_BCF, VCF_GENOZIP   }, { BCF_GZ,   COMP_BCF, VCF_GENOZIP   }, { BCF_BGZ, COMP_BCF, VCF_GENOZIP }, {0, 0, 0} },\
-                           { { SAM,       COMP_PLN, SAM_GENOZIP   }, { SAM_GZ,   COMP_GZ,  SAM_GENOZIP   }, { SAM_BGZ, COMP_GZ,  SAM_GENOZIP },\
+                           { { SAM,       COMP_NONE, SAM_GENOZIP   }, { SAM_GZ,   COMP_GZ,  SAM_GENOZIP   }, { SAM_BGZ, COMP_GZ,  SAM_GENOZIP },\
                              { SAM_BZ2,   COMP_BZ2, SAM_GENOZIP   }, { SAM_XZ,   COMP_XZ,  SAM_GENOZIP   },\
                              { BAM,       COMP_BAM, SAM_GENOZIP   },                                        { 0, 0, 0 }, },\
-                           { { FASTQ,     COMP_PLN, FASTQ_GENOZIP }, { FASTQ_GZ, COMP_GZ,  FASTQ_GENOZIP },\
+                           { { FASTQ,     COMP_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, COMP_GZ,  FASTQ_GENOZIP },\
                              { FASTQ_BZ2, COMP_BZ2, FASTQ_GENOZIP }, { FASTQ_XZ, COMP_XZ,  FASTQ_GENOZIP },\
-                             { FQ,        COMP_PLN, FQ_GENOZIP    }, { FQ_GZ,    COMP_GZ,  FQ_GENOZIP    },\
+                             { FQ,        COMP_NONE, FQ_GENOZIP    }, { FQ_GZ,    COMP_GZ,  FQ_GENOZIP    },\
                              { FQ_BZ2,    COMP_BZ2, FQ_GENOZIP    }, { FQ_XZ,    COMP_XZ,  FQ_GENOZIP    }, { 0, 0, 0 } },\
-                           { { FASTA,     COMP_PLN, FASTA_GENOZIP }, { FASTA_GZ, COMP_GZ,  FASTA_GENOZIP },\
+                           { { FASTA,     COMP_NONE, FASTA_GENOZIP }, { FASTA_GZ, COMP_GZ,  FASTA_GENOZIP },\
                              { FASTA_BZ2, COMP_BZ2, FASTA_GENOZIP }, { FASTA_XZ, COMP_XZ,  FASTA_GENOZIP },\
-                             { FAA,       COMP_PLN, FAA_GENOZIP   }, { FAA_GZ,   COMP_GZ,  FAA_GENOZIP   },\
+                             { FAA,       COMP_NONE, FAA_GENOZIP   }, { FAA_GZ,   COMP_GZ,  FAA_GENOZIP   },\
                              { FAA_BZ2,   COMP_BZ2, FAA_GENOZIP   }, { FAA_XZ,   COMP_XZ,  FAA_GENOZIP   },\
-                             { FFN,       COMP_PLN, FFN_GENOZIP   }, { FFN_GZ,   COMP_GZ,  FFN_GENOZIP   },\
+                             { FFN,       COMP_NONE, FFN_GENOZIP   }, { FFN_GZ,   COMP_GZ,  FFN_GENOZIP   },\
                              { FFN_BZ2,   COMP_BZ2, FFN_GENOZIP   }, { FFN_XZ,   COMP_XZ,  FFN_GENOZIP   },\
-                             { FNN,       COMP_PLN, FNN_GENOZIP   }, { FNN_GZ,   COMP_GZ,  FNN_GENOZIP   },\
+                             { FNN,       COMP_NONE, FNN_GENOZIP   }, { FNN_GZ,   COMP_GZ,  FNN_GENOZIP   },\
                              { FNN_BZ2,   COMP_BZ2, FNN_GENOZIP   }, { FNN_XZ,   COMP_XZ,  FNN_GENOZIP   },\
-                             { FNA,       COMP_PLN, FNA_GENOZIP   }, { FNA_GZ,   COMP_GZ,  FNA_GENOZIP   },\
+                             { FNA,       COMP_NONE, FNA_GENOZIP   }, { FNA_GZ,   COMP_GZ,  FNA_GENOZIP   },\
                              { FNA_BZ2,   COMP_BZ2, FNA_GENOZIP   }, { FNA_XZ,   COMP_XZ,  FNA_GENOZIP   },\
-                             { FA,        COMP_PLN, FA_GENOZIP    }, { FA_GZ,    COMP_GZ,  FA_GENOZIP    },\
+                             { FA,        COMP_NONE, FA_GENOZIP    }, { FA_GZ,    COMP_GZ,  FA_GENOZIP    },\
                              { FA_BZ2,    COMP_BZ2, FA_GENOZIP    }, { FA_XZ,    COMP_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
-                           {/* { GFF3,      COMP_PLN, GFF3_GENOZIP  }, { GFF3_GZ,  COMP_GZ,  GFF3_GENOZIP  },\
+                           {/* { GFF3,      COMP_NONE, GFF3_GENOZIP  }, { GFF3_GZ,  COMP_GZ,  GFF3_GENOZIP  },\
                              { GFF3_BZ2,  COMP_BZ2, GFF3_GENOZIP  }, { GFF3_XZ,  COMP_XZ,  GFF3_GENOZIP  },*/ \
-                             { GVF,       COMP_PLN, GVF_GENOZIP   }, { GVF_GZ,   COMP_GZ,  GVF_GENOZIP   },\
+                             { GVF,       COMP_NONE, GVF_GENOZIP   }, { GVF_GZ,   COMP_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   COMP_BZ2, GVF_GENOZIP   }, { GVF_XZ,   COMP_XZ,  GVF_GENOZIP   }, { 0, 0, 0 } },\
-                           { { ME23,      COMP_PLN, ME23_GENOZIP  }, { ME23_ZIP, COMP_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
+                           { { ME23,      COMP_NONE, ME23_GENOZIP  }, { ME23_ZIP, COMP_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
 
 // Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting
@@ -208,7 +208,7 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 
 #define file_is_written_via_ext_compressor(file) (file->comp_alg == COMP_BCF || file->comp_alg == COMP_GZ)
 
-#define file_is_plain_or_ext_decompressor(file) (file->comp_alg == COMP_PLN || file_is_read_via_ext_decompressor(file))
+#define file_is_plain_or_ext_decompressor(file) (file->comp_alg == COMP_NONE || file_is_read_via_ext_decompressor(file))
 
 typedef struct File {
     void *file;
@@ -260,7 +260,7 @@ typedef struct File {
     uint8_t dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
     Context contexts[MAX_DICTS];     // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
-    Buffer ra_max_pos_by_chrom;        // max_pos of each from according to RA. An array of uint32_t indexed by chrom_word_index.
+    Buffer ra_min_max_by_chrom;        // max_pos of each from according to RA. An array of uint32_t indexed by chrom_word_index.
     Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file
 
     // section list - used for READING and WRITING genozip files

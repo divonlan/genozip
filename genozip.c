@@ -43,7 +43,10 @@
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
 ExeType exe_type;
-CommandType command = NO_COMMAND;  // must be static or global to initialize list_options 
+
+// primary_command vs command: primary_command is what the user typed on the command line. command is what is 
+// running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
+CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
@@ -52,14 +55,15 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file d
 int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
-    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_reference=REF_NONE, flag_show_reference=0,
+    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, 
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
-    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0, flag_make_reference=0,
-
+    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0,
+    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
     flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0;
 
+ReferenceType flag_reference = REF_NONE;
 
 uint64_t flag_stdin_size = 0;
 char *flag_grep = NULL;
@@ -78,7 +82,7 @@ void exit_on_error(void)
     file_kill_external_compressors(); 
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
-    if (command == ZIP && z_file && z_file->name) {
+    if (primary_command == ZIP && z_file && z_file->name) {
         char *save_name = malloc (strlen (z_file->name)+1);
         strcpy (save_name, z_file->name);
 
@@ -331,6 +335,9 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
     int exit_code = stream_wait_for_exit (test);
+
+    primary_command = TEST_AFTER_ZIP; // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
+
     ASSERT (!exit_code, "genozip test exited with status %d\n", exit_code);
 }
 
@@ -509,7 +516,7 @@ int main (int argc, char **argv)
         #define _i  {"input-type",    required_argument, 0, 'i'                    }
         #define _I  {"stdin-size",    required_argument, 0, 'I'                    }
         #define _c  {"stdout",        no_argument,       &flag_stdout,           1 }
-        #define _d  {"decompress",    no_argument,       &command, UNZIP           }
+        #define _d  {"decompress",    no_argument,       &command, PIZ           }
         #define _f  {"force",         no_argument,       &flag_force,            1 }
         #define _h  {"help",          no_argument,       &command, HELP            }
         #define _l  {"list",          no_argument,       &command, LIST            }
@@ -584,8 +591,8 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg,      _me,      _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                             _sA, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,      _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _00 };
         static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                             _dm,                                                                                                       _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
@@ -606,7 +613,7 @@ int main (int argc, char **argv)
         is_short[c] = (option_index == -1); // true if user provided a short option - eg -c rather than --stdout
 
         switch (c) {
-            case UNZIP : case LIST : case LICENSE : 
+            case PIZ : case LIST : case LICENSE : 
             case VERSION  : case HELP :
                 ASSERT(command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
                 command=c; 
@@ -691,8 +698,8 @@ int main (int argc, char **argv)
             return 0;
         }
 
-        else if (exe_type == EXE_GENOUNZIP) command = UNZIP;
-        else if (exe_type == EXE_GENOCAT) { command = UNZIP; flag_stdout = !out_filename ; }
+        else if (exe_type == EXE_GENOUNZIP) command = PIZ;
+        else if (exe_type == EXE_GENOCAT) { command = PIZ; flag_stdout = !out_filename ; }
         else command = ZIP; // default 
     }
 
@@ -706,8 +713,8 @@ int main (int argc, char **argv)
 
     // if flag_md5 we need to seek back and update the md5 in the txt header section - this is not possible with flag_stdout
     ASSERT (!flag_stdout      || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
-    ASSERT (!flag_test        || !out_filename || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
-    ASSERT (!flag_test        || !flag_replace || command != UNZIP, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
+    ASSERT (!flag_test        || !out_filename || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
+    ASSERT (!flag_test        || !flag_replace || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSERT (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
     ASSERT (!flag_header_only || !flag_no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
     ASSERT (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
@@ -715,6 +722,7 @@ int main (int argc, char **argv)
     ASSERT (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
     ASSERT (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
     ASSERT (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
+    ASSERT (!flag_test        || !flag_make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
     ASSERT (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
     ASSERT (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
 
@@ -727,9 +735,9 @@ int main (int argc, char **argv)
     if (flag_stdout) flag_quiet=true; 
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
-    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
+    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads || flag_show_reference ||
         dict_id_show_one_b250.num || dict_id_show_one_dict.num || dict_id_dump_one_b250.num || 
-        flag_show_alleles || flag_show_vblocks || (flag_show_index && command==UNZIP))
+        flag_show_alleles || flag_show_vblocks || (flag_show_index && command==PIZ))
         flag_quiet=true; // don't show progress
 
     // override these ^ if user chose to be --noisy
@@ -783,17 +791,19 @@ int main (int argc, char **argv)
     if (command == LICENSE) { license_display();      return 0; }
     if (command == HELP)    { main_print_help (true); return 0; }
 
+    primary_command = command;
+
     // import external reference if needed
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) 
         ref_read_external_reference(); 
-
+    
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
         char *next_input_file = optind < argc ? argv[optind++] : NULL;  // NULL means stdin
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
-        ASSERT (next_input_file || command != UNZIP, 
+        ASSERT (next_input_file || command != PIZ, 
                 "%s: filename(s) required (redirecting from stdin is not possible)", global_cmd);
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
@@ -802,7 +812,7 @@ int main (int argc, char **argv)
             case ZIP   : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); 
                          break;
             
-            case UNZIP : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;
+            case PIZ : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;
             
             case LIST  : main_genols  (next_input_file, false, NULL, false); break;
             

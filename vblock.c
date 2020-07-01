@@ -31,7 +31,7 @@ void vb_release_vb (VBlock *vb)
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
-    vb->dont_show_curr_line = false;    
+    vb->dont_show_curr_line = vb->range_needs_compacting = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->chrom_name = NULL;

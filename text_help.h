@@ -170,6 +170,8 @@ static const char *help_genozip_developer[] = {
     "   ZUCL --debug-memory    Buffer allocations and destructions",
     "",
     "   ZUC  --debug-progress  See raw numbers that feed into the progress indicator",
+    "",
+    "   Z    --show-reference  Show the ranges included the SEC_REFERENCE sections",    
 };
 
 static const char *help_genounzip[] = {

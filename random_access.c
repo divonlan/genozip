@@ -256,32 +256,43 @@ int32_t random_access_get_last_included_vb_i (void)
     return last_vb_i;
 }
 
-// PIZ I/O thread: ref_uncompress_all_stored_ranges->ref_read_one_stored_range. looks at vb_i=0 which is the final vb in RA, and includes
-// all chroms present in the file, with the file-wide min/max pos
-int64_t random_access_max_pos_of_chrom (uint32_t chrom_word_index)
+// PIZ I/O thread: gets min/max pos value for a particular chrom, across the entire file, by looking at the RA entries
+void random_access_pos_of_chrom (uint32_t chrom_word_index, int64_t *min_pos, int64_t *max_pos)
 {
-    Context *chrom_ctx = &z_file->contexts[DTFZ(chrom)];
-    ARRAY (RAEntry, ra, z_file->ra_buf);
+    typedef struct { int64_t min_pos, max_pos; } MinMax;
 
-    // first time here for this z_file - we initialize ra_max_pos_by_chrom
-    if (!buf_is_allocated (&z_file->ra_max_pos_by_chrom)) {
-        buf_alloc (evb, &z_file->ra_max_pos_by_chrom, chrom_ctx->word_list.len * sizeof (int64_t), 1, "z_file->ra_max_pos_by_chrom", 0);
-        buf_zero (&z_file->ra_max_pos_by_chrom);
-        z_file->ra_max_pos_by_chrom.len = chrom_ctx->word_list.len;
+    // first time here for this z_file - we initialize ra_min_max_by_chrom
+    if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
+        uint64_t num_chroms = z_file->contexts[DTFZ(chrom)].word_list.len;
 
-        ARRAY (int64_t, ra_max_pos_by_chrom, z_file->ra_max_pos_by_chrom);
+        buf_alloc (evb, &z_file->ra_min_max_by_chrom, num_chroms * sizeof (MinMax), 1, "z_file->ra_min_max_by_chrom", 0);
+        buf_zero (&z_file->ra_min_max_by_chrom); // safety
+        z_file->ra_min_max_by_chrom.len = num_chroms;
 
-        for (unsigned i=0; i < z_file->ra_buf.len; i++) 
-            if (ra_max_pos_by_chrom[ra[i].chrom_index] < ra[i].max_pos)
-                ra_max_pos_by_chrom[ra[i].chrom_index] = ra[i].max_pos;
+        // initialize
+        for (unsigned i=0; i < num_chroms; i++) { 
+            MinMax *mm = ENT (MinMax, z_file->ra_min_max_by_chrom, i);
+            mm->min_pos = RA_MISSING_RA_MIN;
+            mm->max_pos = RA_MISSING_RA_MAX;
+        }
+
+        // calculate min and max for each chrom by traversing the whole index (one entry per chrome per vb)
+        for (unsigned i=0; i < z_file->ra_buf.len; i++) {
+            RAEntry *ra = ENT (RAEntry, z_file->ra_buf, i);
+            MinMax *mm = ENT (MinMax, z_file->ra_min_max_by_chrom, ra->chrom_index);
+            mm->max_pos = MAX (mm->max_pos, (int64_t)ra->max_pos);
+            mm->min_pos = MIN (mm->min_pos, (int64_t)ra->min_pos);
+        }
     }
 
-    return *ENT (int64_t, z_file->ra_max_pos_by_chrom, chrom_word_index);
+    MinMax *mm = ENT (MinMax, z_file->ra_min_max_by_chrom, chrom_word_index);
+    if (min_pos) *min_pos = mm->min_pos;
+    if (max_pos) *max_pos = mm->max_pos;
 }
 
 // FASTA PIZ compute thread when consuming a reference FASTA
 // sets vb->{chrom_name,chrom_name_len,chrom_node_index} and returns start_pos
-void random_access_get_first_chrom_of_vb (VBlockP vb, int64_t *start_pos)
+void random_access_get_first_chrom_of_vb (VBlockP vb, int64_t *first_pos, int64_t *last_pos)
 {
     Context *ctx = &z_file->contexts[DTFZ(chrom)];
     ASSERT (ctx->word_list.len, "Error in random_access_get_first_chrom_of_vb: word_list of %s is empty", ctx->name);
@@ -293,7 +304,8 @@ void random_access_get_first_chrom_of_vb (VBlockP vb, int64_t *start_pos)
     vb->chrom_name       = ENT (const char, ctx->dict, chrom_word->char_index);
     vb->chrom_name_len   = chrom_word->snip_len;
     vb->chrom_node_index = ra->chrom_index;
-    *start_pos           = ra->min_pos;
+    *first_pos           = ra->min_pos;
+    *last_pos            = ra->max_pos;
 }
 
 // FASTA PIZ
@@ -355,3 +367,11 @@ void random_access_show_index (bool from_zip)
     }
 }
 
+void random_access_get_ra_info (uint32_t vblock_i, int32_t *chrom_index, int64_t *min_pos, int64_t *max_pos)
+{
+    const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
+
+    *chrom_index = ra->chrom_index;
+    *min_pos     = ra->min_pos;
+    *max_pos     = ra->max_pos;
+}

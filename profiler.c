@@ -68,7 +68,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     static const char *os ="Unknown OS";
 #endif
 
-    fprintf (stderr, "\n%s PROFILER:\n", command == ZIP ? "ZIP" : "UNZIP");
+    fprintf (stderr, "\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
     fprintf (stderr, "OS=%s\n", os);
 #ifdef DEBUG
     fprintf (stderr, "Build=Debug\n");

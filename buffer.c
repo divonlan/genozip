@@ -13,6 +13,7 @@
 #include "vblock.h"
 #include "strings.h"
 #include "reference.h"
+#include "bit_array.h"
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
@@ -56,7 +57,7 @@ char *buf_display (const Buffer *buf)
     static char str[200]; // NOT thread-safe
 
     char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN];
-    sprintf (str, "Buffer %s (%u): size=%"PRIu64" len=%"PRIu64" data=%s memory=%s",
+    sprintf (str, "Buffer %s (%"PRId64"): size=%"PRIu64" len=%"PRIu64" data=%s memory=%s",
              buf->name, buf->param, buf->size, buf->len, str_pointer(buf->data, s1), str_pointer(buf->memory,s2));
     return str;    
 }
@@ -65,7 +66,7 @@ char *buf_display (const Buffer *buf)
 const char *buf_desc (const Buffer *buf)
 {
     static char desc[300];
-    sprintf (desc, "%s:%u allocated in %s:%u by vb_i=%d", 
+    sprintf (desc, "%s:%"PRId64" allocated in %s:%u by vb_i=%d", 
              buf->name ? buf->name : "(no name)", buf->param, buf->func, buf->code_line, (buf->vb ? buf->vb->vblock_i : -999));
     return desc;
 }
@@ -353,7 +354,7 @@ void buf_add_to_buffer_list (VBlock *vb, Buffer *buf)
 }
 
 static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_size, 
-                      const char *func, uint32_t code_line, const char *name, uint32_t param)
+                      const char *func, uint32_t code_line, const char *name, int64_t param)
 {
     // set some parameters before allocation so they can go into the error message in case of failure
     buf->func        = func;
@@ -396,7 +397,7 @@ uint64_t buf_alloc_do (VBlock *vb,
                        uint64_t requested_size,
                        double grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
                        const char *func, uint32_t code_line,
-                       const char *name, uint32_t param)      
+                       const char *name, int64_t param)      
 {
     START_TIMER;
 
@@ -494,7 +495,7 @@ finish:
 
 // an overlay buffer is a buffer using some of the memory of another buffer - it doesn't have its own memory
 void buf_overlay_do (VBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line,
-                     const char *name, uint32_t param)
+                     const char *name, int64_t param)
 {
     // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
     if (overlaid_buf->type == BUF_REGULAR && overlaid_buf->data == NULL && overlaid_buf->memory) {
@@ -559,6 +560,7 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
             
             buf->data = NULL; 
             buf->len = 0;
+            buf->param = 0;
             buf->overlayable = false;
             
             // name, param, memory and size are not changed
@@ -642,7 +644,7 @@ void buf_copy_do (VBlock *dst_vb, Buffer *dst, const Buffer *src,
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
                   const char *func, unsigned code_line,
-                  const char *name, unsigned param)
+                  const char *name, int64_t param)
 {
     ASSERT (src->data, "Error in buf_copy call from %s:%u: src->data is NULL", func, code_line);
     
@@ -718,3 +720,18 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
 
     return new;
 }
+
+void buf_add_bit (Buffer *buf, int64_t new_bit) 
+{
+    BitArray *bar = buf_get_bitmap (buf);
+
+    ASSERT (bar->num_of_bits < buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
+    bar->num_of_bits++;     
+    if (bar->num_of_bits % 64 == 1) { // starting a new word                
+        bar->num_of_words++;
+        bar->words[bar->num_of_words-1] = new_bit; // LSb is as requested, other 63 bits are 0
+    } 
+    else
+        bit_array_assign (bar, bar->num_of_bits-1, new_bit);  
+}
+ 

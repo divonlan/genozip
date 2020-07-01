@@ -43,7 +43,8 @@
         "text_license.h": "c",
         "deque": "c",
         "unordered_map": "c",
-        "vector": "c"
+        "vector": "c",
+        "reference.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
 }

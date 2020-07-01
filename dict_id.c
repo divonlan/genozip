@@ -35,8 +35,7 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_ZM=0,
   
          // private genozip dict
-         dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0,
-         dict_id_SAM_SQnonref=0; 
+         dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0; 
 
 // FASTA stuff
 uint64_t dict_id_FASTA_DESC=0, dict_id_FASTA_SEQ=0, dict_id_FASTA_COMMENT=0;
@@ -158,7 +157,6 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_BI = sam_dict_id_optnl_sf (dict_id_make ("BI:Z", 4)).num; // not used in newer versions of GATK
 
         // our private dictionary for + or 0 strands
-        dict_id_SAM_SQnonref  = dict_id_field        (dict_id_make ("SQnonref",8)).num;
         dict_id_OPTION_STRAND = sam_dict_id_optnl_sf (dict_id_make ("@STRAND", 7)).num;
         dict_id_OPTION_RNAME  = sam_dict_id_optnl_sf (dict_id_make ("@RNAME",  6)).num;
         dict_id_OPTION_POS    = sam_dict_id_optnl_sf (dict_id_make ("@POS",    4)).num;

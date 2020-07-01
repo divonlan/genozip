@@ -54,6 +54,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
+    bool range_needs_compacting; /* ZIP: I/O thread telling compute thread to compact this range while compressing it */ \
     \
     ProfilerRec profile; \
     \
@@ -62,8 +63,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     int32_t chrom_node_index;  /* ZIP and PIZ: index and name of chrom of the current line */ \
     const char *chrom_name;    \
     unsigned chrom_name_len; \
-    uint32_t seq_len;          /* PIZ only - last calculated seq_len (as defined by each data_type) */\
-    \
+    uint32_t seq_len;          /* PIZ - last calculated seq_len (as defined by each data_type) */\
+                               \
     /* regions & filters */ \
     Buffer region_ra_intersection_matrix;  /* PIZ: a byte matrix - each row represents an ra in this vb, and each column is a region specieid in the command. the cell contains 1 if this ra intersects with this region */\
     \
@@ -76,7 +77,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* file data */\
     Buffer z_data;                    /* all headers and section data as read from disk */\
     \
-    Buffer txt_data;                  /* ZIP only: txt_data as read from disk - either the VCF header (in evb) or the VB data lines */\
+    Buffer txt_data;                  /* ZIP only: txt_data as read from disk - either the txt header (in evb) or the VB data lines */\
     uint32_t txt_data_next_offset;    /* we re-use txt_data memory to overlay stuff in segregate */\
     Buffer txt_data_spillover;        /* when re-using txt_data, if it is too small, we spill over to this buffer */\
     \
@@ -92,7 +93,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* ZIP only: reference range lookup caching */ \
-    RangeP prev_range; /* previous range returned by ref_get_range */ \
+    RangeP prev_range; /* previous range returned by ref_zip_get_locked_range */ \
     uint32_t prev_range_range_i; /* range_i used to calculate previous range */ \
     uint32_t prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \

@@ -28,7 +28,7 @@ void vcf_zfile_compress_vb_header (VBlock *vb_)
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
     vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
     vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
-    vb_header.h.sec_compression_alg   = COMP_PLN; // in versions 2-4 it was (needlessly) compressed with bzlib
+    vb_header.h.sec_compression_alg   = COMP_NONE; // in versions 2-4 it was (needlessly) compressed with bzlib
     vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.phase_type              = (char)vb->phase_type; 
     vb_header.has_genotype_data       = vb->has_genotype_data;
@@ -94,8 +94,8 @@ void vcf_zfile_compress_haplotype_data_gtshark (VBlock *vb_, const Buffer *haplo
     zfile_compress_section_data     (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_exceptions_line_i);
     zfile_compress_section_data     (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_exceptions_ht_i);
     zfile_compress_section_data     (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_exceptions_allele);
-    zfile_compress_section_data_alg (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_db_db_data, 0, 0, COMP_PLN);
-    zfile_compress_section_data_alg (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_db_gt_data, 0, 0, COMP_PLN);
+    zfile_compress_section_data_alg (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_db_db_data, 0, 0, COMP_NONE);
+    zfile_compress_section_data_alg (vb_, SEC_VCF_HT_GTSHARK, &vb->gtshark_db_gt_data, 0, 0, COMP_NONE);
 
     // free buffers - they will be needed by the next section
     buf_free (&vb->gtshark_exceptions_line_i);

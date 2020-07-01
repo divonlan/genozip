@@ -356,7 +356,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         else if (ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
         
-        else if (ctx->ltype == CTX_LT_SEQUENCE_REF) 
+        else if (ctx->ltype == CTX_LT_SEQ_BITMAP) 
             sam_piz_reconstruct_seq (vb, ctx);
         
         else if (ctx->ltype == CTX_LT_TEXT)
@@ -364,6 +364,10 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
 
         else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }
+
+    // in case of CTX_LT_SEQ_BITMAP, it is it is ok if the bitmap is empty and all the data is in SEQNOREF (e.g. unaligned SAM)
+    else if (ctx->ltype == CTX_LT_SEQ_BITMAP && (ctx+1)->local.len)
+        sam_piz_reconstruct_seq (vb, ctx);
 
     // case: the entire VB was just \n - so seg dropped the ctx
     else if (ctx->did_i == DTF(eol))
@@ -406,11 +410,18 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
         bool is_local = header->h.section_type == SEC_LOCAL;
         if (header->h.section_type == SEC_B250 || is_local) {
             Context *ctx = mtf_get_ctx (vb, header->dict_id);
-            ctx->flags = header->flags;
+            ctx->flags = header->h.flags;
             ctx->ltype = header->ltype;
 
             zfile_uncompress_section (vb, header, is_local ? &ctx->local : &ctx->b250, 
                                       is_local ? "contexts.local" : "contexts.b250", header->h.section_type); 
+
+            if (is_local) {
+                ctx->local.len /= ctx_lt_sizeof_one[ctx->ltype];
+
+                if (ctx->ltype == CTX_LT_SEQ_BITMAP)
+                    ctx->local.param = ctx->local.len * 64; // number of bits. note: this might be higher than the number of bits on the ZIP side, since we are rounding up the word boundary
+            }            
             section_i++;
         }    
 
@@ -472,9 +483,9 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 {
     DataType data_type = zfile_read_genozip_header (original_file_digest);
     
-    dict_id_initialize (data_type); // must run after zfile_read_genozip_header that sets z_file->data_type
+    if (data_type == DT_NONE) return DT_NONE;
 
-    if (data_type == DT_NONE) return data_type;
+    dict_id_initialize (data_type); // must run after zfile_read_genozip_header that sets z_file->data_type
     
     // for FASTA and FASTQ we convert a "header_only" flag to "header_one" as flag_header_only has some additional logic
     // that doesn't work for FAST
@@ -484,7 +495,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     }
 
     // check if the genozip file includes a reference
-    if (sections_has_reference()) {
+    if (!flag_reading_reference && (sections_has_reference() || (DT_SAM && flag_reference != REF_EXTERNAL))) { // edge case for SAM zipped with REF_INTERNAL but no reference (eg unaligned) - it is still REF_STORED
         ASSERTW (flag_reference == REF_NONE || flag_reference == REF_STORED, // it will be REF_STORED in the 2nd+ file
         "Note: --reference option is ignored - %s does not require a reference to be uncompressed", z_name);
         flag_reference = REF_STORED;
@@ -528,12 +539,12 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             zfile_read_all_dictionaries (last_vb_i, need_random_access ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
 
         // give the reference FASTA CONTIG dictionary to the reference module
-        if (ref_flag_reading_reference)
+        if (flag_reading_reference)
             ref_consume_ref_fasta_global_area();
 
-        if (flag_reference == REF_STORED) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
-            ref_uncompress_all_stored_ranges();
-            if (!flag_quiet) fprintf (stderr, (flag_test && !ref_flag_reading_reference) ? "Success                    \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n" : "Done                       \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n");
+        if (flag_reference == REF_STORED || flag_reading_reference) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
+            ref_uncompress_all_ranges();
+            if (!flag_quiet) fprintf (stderr, (flag_test && !flag_reading_reference) ? "Success                    \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n" : "Done                       \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n");
         }
 
         // read dict_id aliases, if there are any
@@ -558,8 +569,8 @@ static bool piz_read_one_vb (VBlock *vb)
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     mtf_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
-    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(char*), 0, "z_section_headers", 1); // room for section headers  
-    NEXTENT (unsigned, vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
+    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(int), 0, "z_section_headers", 1); // room for section headers  
+    NEXTENT (int, vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
 
     // read all b250 and local of all fields and subfields
     piz_read_all_ctxs (vb, &sl);
@@ -589,6 +600,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     static DataType data_type = DT_NONE; 
     if (is_first_component) {
         data_type = piz_read_global_area (&original_file_digest);
+        if (data_type == DT_NONE) goto finish;
 
         ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
 
@@ -600,9 +612,8 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
         dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_basename);
 
     // case: we couldn't open the file because we didn't know what type it is - open it now
-    if (!flag_split && !ref_flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
+    if (!flag_split && !flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
 
-    if (data_type == DT_NONE) goto finish;
 
     // read and write txt header. in split mode this also opens txt_file
     piz_successful = txtfile_genozip_to_txt_header (&original_file_digest);
@@ -681,7 +692,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL); 
 
             // read of a normal file - output uncompressed block (unless we're reading a reference - we don't need to output it)
-            if (!ref_flag_reading_reference) txtfile_write_one_vblock (processed_vb);
+            if (!flag_reading_reference) txtfile_write_one_vblock (processed_vb);
 
             z_file->num_vbs++;
             
@@ -726,9 +737,9 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
 
 finish:
     // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
-    if (!flag_split || !piz_successful) 
-        dispatcher_finish (&dispatcher, NULL);
-    else
+    if (!flag_split || !piz_successful) {
+        if (dispatcher) dispatcher_finish (&dispatcher, NULL);
+    } else
         dispatcher_pause (dispatcher);
 
     return piz_successful;

@@ -14,6 +14,7 @@
 #include "zip.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "arch.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
@@ -40,20 +41,22 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
     char new_ref=0, new_alt=0;
 
     // if we have a reference, we use it
-    if (flag_reference != REF_NONE) {
+    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
         int64_t pos = vb->contexts[VCF_POS].last_value;
 
-        uint32_t range_i = (uint32_t)(pos / REF_NUM_SITES_PER_RANGE);
-        Range *range = ref_get_range (vb, range_i, RGR_MUST_EXIST, 0);
-        
-        // a NULL range means there is no reference for this chrom/range_i combo
-        ASSSEG (range, start_line, "Error: in CHROM=\"%.*s\" POS=%"PRId64" - this position is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
-                vb->chrom_name_len, vb->chrom_name, pos, vb->chrom_name_len, vb->chrom_name, ref_max_pos_of_chrom (vb->chrom_node_index), ref_filename);
+        Range *range = ref_zip_get_locked_range (vb, pos);
+        uint32_t index_within_range = pos - range->first_pos;
 
-        char ref = range->ref[pos - range_i * REF_NUM_SITES_PER_RANGE];
+        ref_assert_nucleotide_available (range, pos);
+        char ref = ref_get_nucleotide (range, index_within_range);
 
         if (vcf_ref == ref) new_ref = '-'; // this should always be the case...
         if (vcf_alt == ref) new_alt = '-'; 
+
+        if (flag_reference == REF_EXT_STORE)
+            bit_array_set (&range->is_set, index_within_range);
+
+        mutex_unlock (range->mutex);
     }
 
     // replace the most common SNP with +

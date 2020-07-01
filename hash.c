@@ -20,7 +20,7 @@ typedef struct {
                               //               local_hash indeces started at LOCAL_HASH_OFFSET
 } LocalHashEnt;
 
-#pragma pack(push, hash, 4)
+#pragma pack(4)
 typedef struct {        
     int32_t node_index;       // index into Context.mtf or NIL
     uint32_t next;            // linked list - index into Context.global/local_hash or NIL
@@ -28,7 +28,7 @@ typedef struct {
                               // to a vb_ctx, that vb_ctx is permitted use the node_index value if this merge_num is <= vb_ctx->merge_num,
                               // otherwise, it should treat it as NIL.
 } GlobalHashEnt;
-#pragma pack (pop)
+#pragma pack()
 
 // get the size of the hash table - a primary number between roughly 0.5K and 8M that is close to size, or a bit bigger
 static uint32_t hash_next_size_up (uint64_t size)

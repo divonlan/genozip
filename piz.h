@@ -16,36 +16,6 @@ extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_s
 #define piz_is_skip_section(vb,st,dict_id) (vb->data_type != DT_NONE     && DTP(is_skip_secetion)  && DTP (is_skip_secetion)((VBlockP)(vb), (st), (dict_id)))
 #define piz_is_skip_sectionz(st,dict_id)   (z_file->data_type != DT_NONE && DTPZ(is_skip_secetion) && DTPZ(is_skip_secetion)(NULL, (st), (dict_id)))
 
-// ----------------------------------------------
-// utilities for use by piz_*_read_one_vb
-// ----------------------------------------------
-
-#define PREPARE_TO_READ(vbblock_type,max_sections,sec_type_vb_header)  \
-    START_TIMER; \
-    vbblock_type *vb = (vbblock_type *)vb_; \
-    SectionListEntryP sl = sections_vb_first (vb->vblock_i); \
-    int vb_header_offset = zfile_read_section (z_file, vb_, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", \
-                                               sizeof(sec_type_vb_header), SEC_VB_HEADER, sl++); \
-    ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);\
-    mtf_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ \
-    buf_alloc (vb, &vb->z_section_headers, (max_sections) * sizeof(char*), 0, "z_section_headers", 1); /* room for section headers */ \
-    *FIRSTENT (unsigned, vb->z_section_headers) = vb_header_offset; /* vb header is at index 0 */ \
-    vb->z_section_headers.len =1;
-
-#define READ_SB_SECTION(sec,header_type,sb_i) \
-    { NEXTENT (unsigned, vb->z_section_headers) = (uint32_t)vb->z_data.len; \
-      zfile_read_section (z_file, (VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
-
-#define READ_SECTION(sec,header_type,is_optional) {  \
-    if (!(is_optional) || sl->section_type == (sec)) \
-        READ_SB_SECTION(sec, header_type, NO_SB_I);  \
-}
-#define READ_DATA_SECTION(sec,is_optional) READ_SECTION((sec), SectionHeader, (is_optional))
-
-#define READ_DONE \
-    COPY_TIMER (vb->profile.piz_read_one_vb); \
-    vb->ready_to_dispatch = true; /* all good */ 
-
 // --------------------------------------------------
 // utilities for use by piz_*_uncompress_all_sections
 // --------------------------------------------------

@@ -338,7 +338,7 @@ static CompressionAlg vcf_zip_get_best_gt_compressor (VBlock *vb, Buffer *test_d
     
     if      (bzlib_comp_len < uncompressed_len && bzlib_comp_len < lzma_comp_len) best_gt_data_compressor = COMP_BZ2;
     else if (lzma_comp_len  < uncompressed_len && lzma_comp_len < bzlib_comp_len) best_gt_data_compressor = COMP_LZMA;
-    else                                                                          best_gt_data_compressor = COMP_PLN;
+    else                                                                          best_gt_data_compressor = COMP_NONE;
 
     buf_free (&compressed);
 

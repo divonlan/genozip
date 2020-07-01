@@ -25,6 +25,9 @@ extern void fast_vb_release_vb();
 extern unsigned fast_vb_size (void);
 extern unsigned fast_vb_zip_dl_size (void);
 
+// Make-reference stuff
+extern void fasta_make_ref_range (VBlockP vb);
+
 #define FASTA_SPECIAL { fasta_piz_special_SEQ, fasta_piz_special_COMMENT, fasta_piz_special_DESC }
 SPECIAL (FASTA, 0, SEQ, fasta_piz_special_SEQ);
 SPECIAL (FASTA, 1, COMMENT, fasta_piz_special_COMMENT);

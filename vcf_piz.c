@@ -449,27 +449,34 @@ void vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigne
 
     // snip is 3 characters - REF, \t, ALT
     char ref_alt[3] = { 0, '\t', 0 };
-    char ref = 0;
-        
-    // recover ref
-    if (snip[0] == '-') {
-        ref = *ref_get_ref (vb, (uint32_t)vb->contexts[VCF_POS].last_value, 0);
-        ref_alt[0] = ref;
+    char ref_value = 0;
+    
+    int64_t pos = vb->contexts[VCF_POS].last_value;
+
+    if (snip[0] == '-' || snip[1] == '-') { 
+        const Range *range = ref_piz_get_range (vb, pos, 1);
+        uint32_t idx = pos - range->first_pos;
+        ASSERT (ref_is_nucleotide_set (range, idx), "Error in vcf_piz_special_REFALT: reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
+        ref_value = ref_get_nucleotide (range, idx);
     }
+
+    // recover ref
+    if (snip[0] == '-') 
+        ref_alt[0] = ref_value;
     else 
         ref_alt[0] = snip[0];
 
     // recover alt
-    if (snip[1] == '-') 
-        ref_alt[0] = ref ? ref : *ref_get_ref (vb, (uint32_t)vb->contexts[VCF_POS].last_value, 0);
-
-    else if (snip[1] == '+') { // common snp
+    if (snip[1] == '+') { // the alt has the most common value for a SNP
         if      (ref_alt[0] == 'A') ref_alt[2] = 'G';
         else if (ref_alt[0] == 'C') ref_alt[2] = 'T';
         else if (ref_alt[0] == 'G') ref_alt[2] = 'A';
         else if (ref_alt[0] == 'T') ref_alt[2] = 'C';
     }
-    else
+    else if (snip[1] == '-')  // the alt has the reference value
+        ref_alt[2] = ref_value;
+
+    else // the alt is specified verbatim
         ref_alt[2] = snip[1];
 
     RECONSTRUCT (ref_alt, sizeof (ref_alt));
@@ -714,6 +721,10 @@ void vcf_piz_uncompress_vb (VBlockVCFP vb)
 
 bool vcf_piz_read_one_vb (VBlock *vb_, SectionListEntry *sl)
 { 
+#define READ_SB_SECTION(sec,header_type,sb_i) \
+    { NEXTENT (unsigned, vb->z_section_headers) = (uint32_t)vb->z_data.len; \
+      zfile_read_section (z_file, (VBlockP)vb, vb->vblock_i, sb_i, &vb->z_data, "z_data", sizeof(header_type), sec, sl++); }
+
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     // note - use a macro and not a variable bc vb_header changes when z_data gets realloced as we read more data
@@ -736,7 +747,7 @@ bool vcf_piz_read_one_vb (VBlock *vb_, SectionListEntry *sl)
         NEXTENT (bool, vb->is_sb_included) = samples_get_is_sb_included (num_samples_per_block, sb_i);
  
         // make sure we have enough space for the section pointers
-        buf_alloc_more (vb, &vb->z_section_headers, 3, 0, uint32_t, 2);
+        buf_alloc_more (vb, &vb->z_section_headers, 3, 0, int32_t, 2);
 
         if (vb_header->has_genotype_data)
             READ_SB_SECTION (SEC_VCF_GT_DATA,         SectionHeader, sb_i);

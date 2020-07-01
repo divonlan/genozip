@@ -51,13 +51,12 @@ SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
     { DT_SAM,  &dict_id_fields[SAM_RNEXT],     &dict_id_fields[SAM_RNAME]  }, \
     { DT_SAM,  &dict_id_OPTION_MC,             &dict_id_fields[SAM_CIGAR]  }, \
     { DT_SAM,  &dict_id_OPTION_OC,             &dict_id_fields[SAM_CIGAR]  }, \
-    { DT_SAM,  &dict_id_OPTION_E2,             &dict_id_fields[SAM_SEQ]    }, \
+    { DT_SAM,  &dict_id_OPTION_E2,             &dict_id_fields[SAM_SEQ_BITMAP] }, \
     { DT_SAM,  &dict_id_OPTION_U2,             &dict_id_fields[SAM_QUAL]   },
 
 #define SAM_LOCAL_COMPRESSOR_CALLBACKS  \
     { DT_SAM,   &dict_id_OPTION_BD,          sam_zip_get_start_len_line_i_bd    }, \
     { DT_SAM,   &dict_id_OPTION_BI,          sam_zip_get_start_len_line_i_bi    }, \
-    { DT_SAM,   &dict_id_fields[SAM_SEQ],    sam_zip_get_start_len_line_i_seq   }, \
     { DT_SAM,   &dict_id_fields[SAM_QUAL],   sam_zip_get_start_len_line_i_qual  }, 
 
 #endif

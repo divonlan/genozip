@@ -7,7 +7,7 @@
 #define CRYPT_INCLUDED
 
 #include "genozip.h"
-#include "section_types.h"
+#include "sections.h"
 
 // encryption types - these values are part of the genozip file format and cannot be easily changed
 #define NUM_ENCRYPTION_TYPES   2

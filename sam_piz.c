@@ -11,82 +11,86 @@
 #include "dict_id.h"
 #include "reference.h"
 
-// PIZ: SEQ contains : 
-// '-' - data should be taken from the reference (-) 
-// '.' - data should be taken from SQnonref.local (.)
-// other - verbatim (this happens if there is no reference, eg unaligned BAM)
-void sam_piz_reconstruct_seq (VBlock *vb_, Context *seq_ctx)
+// PIZ: SEQ reconstruction rules : 
+// '-' - data should be taken from the reference
+// '.' - data should be taken from SEQNOREF
+// if SEQ is '*' - stop after reconstructing the '*' regardless of CIGAR
+void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    ASSERT0 (seq_ctx, "Error in ref_reconstruct: seq_ctx is NULL");
+    ASSERT0 (bitmap_ctx, "Error in ref_reconstruct: bitmap_ctx is NULL");
 
-    if (piz_is_skip_section (vb, SEC_LOCAL, seq_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
+    BitArray *bitmap = buf_get_bitmap (&bitmap_ctx->local);
 
-    Context *nonref_ctx = mtf_get_ctx (vb, (DictId)dict_id_SAM_SQnonref);
-    const char *nonref = &nonref_ctx->local.data[nonref_ctx->next_local]; // possibly, this VB has no nonref (i.e. everything is ref), in which cse nonref would be an invalid pointer. That's ok, as it will not be accessed.
+    if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
+
+    Context *nonref_ctx      = bitmap_ctx + 1; // SEQNOREF is always one after SEQ
+    const char *nonref       = &nonref_ctx->local.data[nonref_ctx->next_local]; // possibly, this VB has no nonref (i.e. everything is ref), in which cse nonref would be an invalid pointer. That's ok, as it will not be accessed.
     const char *nonref_start = nonref;
-    const char *seq = &seq_ctx->local.data[seq_ctx->next_local];
-    unsigned subcigar_len = 0;
-    char cigar_op=0;
-    
-    // case where seq is '*' (rewritten as ' ' by the zip callback)
-    if (seq[0] == ' ') {
-        RECONSTRUCT1 ('*');
-        seq_ctx->last_value = seq_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
-        seq_ctx->next_local++; // only 1
+    unsigned subcigar_len    = 0;
+    char cigar_op            = 0;
+    const int64_t pos        = vb->contexts[SAM_POS].last_value;
+    const Range *range       = NULL;
+    unsigned seq_consumed=0, ref_consumed=0;
+
+    // case: missing pos - pos is 0 - in this case, the sequence is not encoded in the bitmap at all. we just copy it from SEQNOREF
+    if (!pos) {
+        RECONSTRUCT (nonref, vb->seq_len);
+        nonref_ctx->next_local += vb->seq_len;
         return;
     }
 
-    // get pointer to ref @ last chrom and pos. ref[0] is the base at POS.
-    const char *ref = NULL;
-    if (vb->last_cigar[0] != '*') 
-        ref = ref_get_ref (vb_, (uint32_t)vb->contexts[SAM_POS].last_value, vb->ref_consumed);
+    // case: missing sequence - sequence is '*' (which zip marked with a '-' in the cigar) - just reconstruct the '*'
+    if (*vb->last_cigar == '-') {
+        RECONSTRUCT1 ('*');
+        vb->last_cigar++; // skip the '-' so it doesn't affect a subsequent E2 on the same line
+        return;
+    }
 
-    unsigned seq_consumed=0, ref_consumed=0;
-    while (seq_consumed < vb->seq_len) {
+    const char *next_cigar = vb->last_cigar; // don't change vb->last_cigar as we may still need it, eg if we have an E2 optional field
+    range = ref_piz_get_range (vb_, pos, vb->ref_consumed);
+
+    //ref_print_subrange ("reference", range, 0, 0);
+    //bit_array_print_substr ("all", bitmap, 0, bitmap->num_of_bits, stderr, '1','0',true);
+    //bit_array_print_substr ("start from next_local", bitmap, bitmap_ctx->next_local, bitmap->num_of_bits-bitmap_ctx->next_local, stderr, '1','0',true);
+    
+    while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         
         if (!subcigar_len) {
-            subcigar_len = strtod (vb->last_cigar, (char **)&vb->last_cigar); // get number and advance next_cigar
-            cigar_op = *(vb->last_cigar++);
-
-            // case: Deletion or Skipping - skip some of the reference
-            if (cigar_op == 'D' || cigar_op == 'N') {
-                ref_consumed += subcigar_len;
-                subcigar_len = 0;
-                continue;
-            } 
-
-            // case: hard clipping - just ignore this subcigar
-            if (cigar_op == 'H' || cigar_op == 'P') {
-                subcigar_len = 0;
-                continue;
-            }
-        }
-
-        char c = seq[seq_consumed++];
-
-        if (c == '-') {
-            ASSERT0 (ref, "SEQ shows -, but ref is unavailable (eg bc entire chromosome is POS=0 or CIGAR=* or SEQ=*");
-            RECONSTRUCT1 (ref[ref_consumed++]); 
-        }
-
-        else if (c == '.') {
-            RECONSTRUCT1 (*nonref);
-            nonref++; // consume non-ref even if not reconstructing this seq
-
-            // advance ref if this is a SNP (but not in case of 'I' or 'S')
-            if (cigar_op == 'M' || cigar_op == '=' || cigar_op == 'X') ref_consumed++; 
-        }
+            subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
-        // in case of SAM having CIGAR='*' or POS=0 (eg unaligned BAM), we just copy verbatim
-        else RECONSTRUCT1 (c); 
+            cigar_op = cigar_lookup[(uint8_t)*(next_cigar++)];
+            ASSERT (cigar_op != CIGAR_INVALID, "Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+        }
 
+        if (cigar_op & CIGAR_CONSUMES_QUERY) {
+
+            if (cigar_op & CIGAR_CONSUMES_REFERENCE && 
+                bit_array_get_bit (bitmap, bitmap_ctx->next_local++) /* copy from reference */) {
+
+                uint32_t idx = pos + ref_consumed - range->first_pos;
+                ASSERT (ref_is_nucleotide_set (range, idx), "Error in sam_piz_reconstruct_seq: reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos + seq_consumed);
+
+                char ref = ref_get_nucleotide (range, idx);
+                RECONSTRUCT1 (ref); 
+            }
+            else 
+                RECONSTRUCT1 (*nonref++);
+
+            seq_consumed++;
+        }
+
+        if (cigar_op & CIGAR_CONSUMES_REFERENCE) 
+            ref_consumed++;
 
         subcigar_len--;
     }
 
-    seq_ctx->last_value = seq_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
-    seq_ctx->next_local += vb->seq_len;
+    ASSERT (seq_consumed == vb->seq_len,      "Error in sam_piz_reconstruct_seq: expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
+    ASSERT (ref_consumed == vb->ref_consumed, "Error in sam_piz_reconstruct_seq: expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
+
+    bitmap_ctx->last_value = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
+    //bitmap_ctx->next_local += vb->seq_len;
     
     nonref_ctx->next_local += (uint32_t)(nonref - nonref_start);
 }
@@ -96,14 +100,18 @@ void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigne
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    sam_analyze_cigar (snip, snip_len, &vb->seq_len, &vb->ref_consumed);
 
-    if (snip[snip_len-1] == '*') { // change back eg "151*" -> "*"
-        snip = &snip[snip_len-1];
-        snip_len = 1;
-    }
+    sam_analyze_cigar (snip, snip_len, &vb->seq_len, &vb->ref_consumed, NULL);
 
-    RECONSTRUCT (snip, snip_len);
+    if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
+        RECONSTRUCT1 ('*');
+    
+    else if (snip[0] == '-') // eg "-151M" or "-151*" - zip added the "-" to indicate a '*' SEQ field - we don't reconstruct it
+        RECONSTRUCT (snip + 1, snip_len - 1)
+
+    else
+        RECONSTRUCT (snip, snip_len);    
+
     vb->last_cigar = snip;
 }   
 
@@ -161,18 +169,18 @@ void sam_piz_reconstruct_vb (VBlockSAM *vb)
         uint32_t txt_data_start = vb->txt_data.len;
         vb->dont_show_curr_line = false; 
 
-        piz_reconstruct_from_ctx (vb, SAM_QNAME,    '\t');
-        piz_reconstruct_from_ctx (vb, SAM_FLAG,     '\t');
-        piz_reconstruct_from_ctx (vb, SAM_RNAME,    '\t');
-        piz_reconstruct_from_ctx (vb, SAM_POS,      '\t');
-        piz_reconstruct_from_ctx (vb, SAM_MAPQ,     '\t'); 
-        piz_reconstruct_from_ctx (vb, SAM_CIGAR,    '\t');
-        piz_reconstruct_from_ctx (vb, SAM_RNEXT,    '\t'); 
-        piz_reconstruct_from_ctx (vb, SAM_PNEXT,    '\t');
-        piz_reconstruct_from_ctx (vb, SAM_TLEN,     '\t');
-        piz_reconstruct_from_ctx (vb, SAM_SEQ,      '\t');
-        piz_reconstruct_from_ctx (vb, SAM_QUAL,     '\t');
-        piz_reconstruct_from_ctx (vb, SAM_OPTIONAL, 0   ); // the optional subfields (if there are any) provide the \t separators
+        piz_reconstruct_from_ctx (vb, SAM_QNAME,      '\t');
+        piz_reconstruct_from_ctx (vb, SAM_FLAG,       '\t');
+        piz_reconstruct_from_ctx (vb, SAM_RNAME,      '\t');
+        piz_reconstruct_from_ctx (vb, SAM_POS,        '\t');
+        piz_reconstruct_from_ctx (vb, SAM_MAPQ,       '\t'); 
+        piz_reconstruct_from_ctx (vb, SAM_CIGAR,      '\t');
+        piz_reconstruct_from_ctx (vb, SAM_RNEXT,      '\t'); 
+        piz_reconstruct_from_ctx (vb, SAM_PNEXT,      '\t');
+        piz_reconstruct_from_ctx (vb, SAM_TLEN,       '\t');
+        piz_reconstruct_from_ctx (vb, SAM_SEQ_BITMAP, '\t');
+        piz_reconstruct_from_ctx (vb, SAM_QUAL,       '\t');
+        piz_reconstruct_from_ctx (vb, SAM_OPTIONAL,   0   ); // the optional subfields (if there are any) provide the \t separators
 
         vb->txt_data.len--; // remove last \t (the line has ended either after QUAL or after the last OPTIONAL subfield)
         piz_reconstruct_from_ctx (vb, SAM_EOL, 0);

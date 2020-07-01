@@ -174,9 +174,11 @@ int64_t seg_pos_field (VBlock *vb,
     int64_t this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
     // < 0  -  caller allows a non-valid-number and this is indeed a non-valid-number, just store the string
-    // == 0 - special case where pos=0, e.g. "not available" in SAM_PNEXT. we just store it verbatim
+    // == 0 - 
+    //     for the primary pos field - we proceed as usual as we will need this value when reconstructing the reference
+    //     for non-primary - e.g. "not available" in SAM_PNEXT - we store "0" verbatim with SNIP_DONT_STORE
     // In both cases, we store as SNIP_DONT_STORE so that piz doesn't update last_value after reading this value
-    if (this_pos <= 0) { 
+    if (this_pos < 0 || (this_pos==0 && !(snip_ctx == base_ctx && base_did_i == DTF(pos)))) { 
         SAFE_ASSIGN (1, pos_str-1, SNIP_DONT_STORE);
         seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, pos_len + account_for_separator, NULL); 
         SAFE_RESTORE (1);
@@ -752,7 +754,7 @@ void seg_all_data_lines (VBlock *vb)
         buf_free (&eol_ctx->local);
     }
 
-    seg_verify_file_size (vb);
+    if (!flag_make_reference) seg_verify_file_size (vb);
 
     COPY_TIMER(vb->profile.seg_all_data_lines);
 }

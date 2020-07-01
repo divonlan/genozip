@@ -21,10 +21,15 @@ typedef struct Buffer {
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     
     const char *name; // name of allocator - used for memory debugging & statistics
-    uint32_t param;   // parameter provided by allocator - used for memory debugging & statistics
     uint64_t size;    // number of bytes allocated to memory
-    uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
+
+    //------------------------------------------------------------------------------------------------------
+    // these 3 fields can be overlayed with a BitArray - their order and size is identical to BitArray
     char *data;       // ==memory+8 if buffer is allocated or NULL if not
+    int64_t param;    // parameter provided by allocator 
+    uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
+    //------------------------------------------------------------------------------------------------------
+
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 
     // info on the allocator of this buffer
@@ -62,7 +67,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               uint64_t requested_size, 
                               double grow_at_least_factor, // grow more than new_size   
                               const char *func, uint32_t code_line,
-                              const char *name, uint32_t param); // for debugging
+                              const char *name, int64_t param);
 
 // efficient wrapper
 #define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) \
@@ -80,7 +85,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 
 #define buf_set_overlayable(buf) (buf)->overlayable = true
 
-extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line, const char *name, uint32_t param);
+extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, const char *func, uint32_t code_line, const char *name, int64_t param);
 #define buf_overlay(vb, overlaid_buf, regular_buf, name, param) \
     buf_overlay_do(vb, overlaid_buf, regular_buf, __FUNCTION__, __LINE__, name, param) 
 
@@ -95,7 +100,7 @@ extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
 extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_t bytes_per_entry,
                          uint64_t src_start_entry, uint64_t max_entries, // if 0 copies the entire buffer
                          const char *func, uint32_t code_line,
-                         const char *name, uint32_t param);
+                         const char *name, int64_t param);
 #define buf_copy(dst_vb,dst,src,bytes_per_entry,src_start_entry,max_entries,name,param) \
   buf_copy_do ((VBlockP)(dst_vb),(dst),(src),(bytes_per_entry),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(name),(param))
 
@@ -137,5 +142,10 @@ extern void *buf_low_level_realloc (void *p, size_t size, const char *func, uint
 
 extern const char *buf_desc (const Buffer *buf);
 
+// bitmap stuff
+extern void buf_add_bit (Buffer *buf, int64_t new_bit);
+#define buf_get_bitmap(buf) ((BitArray*)(&(buf)->data))
+#define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
+#define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 
 #endif

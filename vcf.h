@@ -8,7 +8,7 @@
 
 #include "genozip.h"
 #include "md5.h"
-#include "section_types.h"
+#include "sections.h"
 
 // default max number of samples in each sample block within a variant block. user configurable with --sblock
 #define VCF_SAMPLES_PER_VBLOCK "4096" 

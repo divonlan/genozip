@@ -31,27 +31,30 @@ static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHi
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
 {
-    if (ref_flag_reading_reference) return; // don't show headers of reference file
+    if (flag_reading_reference) return; // don't show headers of reference file
     
     DictId dict_id = {0};
-    char flags[10], ltype[10];
-    bool has_flags = false;
+    char flags[10] = "", ltype[10] = "";
+    bool has_ltype = false;
 
-    if (header->section_type == SEC_DICT) dict_id = ((SectionHeaderDictionary *)header)->dict_id;
+    if (header->section_type == SEC_DICT) 
+        dict_id = ((SectionHeaderDictionary *)header)->dict_id;
     
     else if (header->section_type == SEC_LOCAL || header->section_type == SEC_B250) {
         SectionHeaderCtx *header_ctx = (SectionHeaderCtx *)header;
         dict_id = header_ctx->dict_id;
-        str_int (header_ctx->flags, flags);
         str_int (header_ctx->ltype, ltype);
-        has_flags = true;
+        has_ltype = true;
     }
+
+    if (header->flags) 
+        str_int (header->flags, flags);
 
     char str[1000];
 
     sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%u vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
-             has_flags ? "flags=" : "", has_flags ? flags : "", has_flags ? "ltype=" : "", has_flags ? ltype : "", 
+             header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, 
              header->sec_compression_alg,
              BGEN32 (header->vblock_i), BGEN16 (header->section_i), 
              BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
@@ -97,7 +100,7 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
 }
 
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
-// when we get here, the header is already unencrypted zfile_`one_section
+// when we get here, the header is already unencrypted zfile_one_section
 void zfile_uncompress_section (VBlock *vb,
                                void *section_header_p,
                                void *uncompressed_data, // Buffer * or char *
@@ -229,8 +232,8 @@ void zfile_compress_b250_data (VBlock *vb, Context *ctx, CompressionAlg comp_alg
     header.h.sec_compression_alg   = comp_alg;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
+    header.h.flags                 = ctx->flags & 0x0f; // 4 bits
     header.dict_id                 = ctx->dict_id;
-    header.flags                   = ctx->flags;
     header.ltype                   = ctx->ltype;
             
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
@@ -261,8 +264,8 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
     header.h.sec_compression_alg   = (ctx->flags & CTX_FL_LOCAL_LZMA) ? COMP_LZMA : COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
+    header.h.flags                 = ctx->flags & 0x0f; // 4 bit
     header.dict_id                 = ctx->dict_id;
-    header.flags                   = ctx->flags;
     header.ltype                   = ctx->ltype;
 
     CompGetLineCallback *callback = zfile_get_local_data_callback (vb->data_type, ctx->dict_id);
@@ -436,7 +439,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 
     mtf_initialize_primary_field_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids);
 
-    while (sections_get_next_section_of_type (&sl_ent, &z_file->sl_dir_cursor, SEC_DICT)) {
+    while (sections_get_next_section_of_type (&sl_ent, &z_file->sl_dir_cursor, SEC_DICT, SEC_NONE)) {
 
         if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
 
@@ -479,13 +482,15 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
 // returns the file's data_type
 int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 {
+    DataType data_type = DT_NONE;
+
     // read the footer from the end of the file
     file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, false);
 
     SectionFooterGenozipHeader footer;
     int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);
     ASSERTW (ret == 1, "Skipping empty file %s", z_name);
-    if (!ret) return DT_NONE;
+    if (!ret) goto final;
     
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
     // note: this can also happen if the file is genozip v1, but I don't think there are any real v1 files in the wild
@@ -510,7 +515,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
-    DataType data_type = (DataType)(BGEN16 (header->data_type)); 
+    data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
     z_file->data_type = data_type; // update in case type was not know from file extension
     if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --split
@@ -560,20 +565,28 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
         if (exe_type == EXE_GENOCAT) exit(0); // in genocat, exit after showing the requested data
     }
 
-    // case: we are reading the reference file itself
-    if (ref_flag_reading_reference) {
+    // case: we are reading a file expected to be the reference file itself
+    if (flag_reading_reference) {
         ASSERT (header->h.flags & SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
                 ref_filename);
 
         ref_set_md5 (header->md5_hash_concat); 
     }
 
-    // case: we are reading a file that might be using an external reference
+    // case: we are reading a file that is not expected to be a reference file
     else {
-        if (flag_show_reference) {
+        // case: we are attempting to decompress a reference file - this is not supported
+        if ((header->h.flags & SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE) &&
+            !((flag_show_index || flag_show_reference) && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
+            WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
+            data_type = DT_NONE;
+            goto final;
+        }
+
+        if (flag_show_reference && !md5_is_zero (header->ref_file_md5)) {
             fprintf (stderr, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                      z_name, header->ref_filename, md5_display (&header->ref_file_md5, false));
-            exit (0);
+            if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-reference, we only show the reference, not the data
         }
 
         ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL, 
@@ -590,9 +603,9 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
                  z_name, ref_filename, md5_display (&ref_md5, false), 
                  header->ref_filename, md5_display (&header->ref_file_md5, false));
     }
-        
+    
+final:
     buf_free (&evb->z_data);
-
     return data_type;
 }
 
@@ -825,7 +838,7 @@ void zfile_compress_generic_vb_header (VBlock *vb)
     vb_header.h.compressed_offset   = BGEN32 (sizeof_header);
     vb_header.h.vblock_i            = BGEN32 (vb->vblock_i);
     vb_header.h.section_i           = BGEN16 (vb->z_next_header_i++); // always 0
-    vb_header.h.sec_compression_alg = COMP_PLN;
+    vb_header.h.sec_compression_alg = COMP_NONE;
     vb_header.num_lines             = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.vb_data_size          = BGEN32 (vb->vb_data_size);
     vb_header.longest_line_len      = BGEN32 (vb->longest_line_len);

@@ -21,32 +21,16 @@ static Structured structured_QNAME;
 // called by I/O thread 
 void sam_zip_initialize (void)
 {
-    // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_read_external_reference()
-    if (!flag_reference || flag_reference == REF_INTERNAL) ref_zip_initialize_ranges(); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
-
-    // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
-    random_access_alloc_ra_buf (evb, 0);
-
     // if there is no external reference provided, then we create our internal one, and store it
     // (if an external reference IS provided, the user can decide whether to store it or not, with --store-reference)
     if (flag_reference == REF_NONE) flag_reference = REF_INTERNAL;
+
+    // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_read_external_reference()
+    if (!flag_reference || flag_reference == REF_INTERNAL) ref_initialize_ranges (false); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
+
+    // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
+    random_access_alloc_ra_buf (evb, 0);
 }
-
-// callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
-void sam_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
-                                       char **line_seq_data, uint32_t *line_seq_len,  // out 
-                                       char **line_e2_data,  uint32_t *line_e2_len)
-{
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-    *line_seq_data = ENT (char, vb->txt_data, dl->seq_data_start);
-    *line_seq_len  = dl->seq_data_len;
-    *line_e2_data  = dl->e2_data_start ? ENT (char, vb->txt_data, dl->e2_data_start) : NULL;
-    *line_e2_len   = dl->e2_data_len;
-
-    // if SEQ is just "*" (i.e. unavailable) replace it by " " for consistency with QUAL (= simplify PIZ code)
-    if (dl->seq_data_len == 1 && (*line_seq_data)[0] == '*') 
-        *line_seq_data = " "; // pointer to static string
-}   
 
 // callback function for compress to get data of one line (called by comp_compress_bzlib)
 void sam_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i, 
@@ -121,15 +105,13 @@ void sam_seg_initialize (VBlock *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[SAM_RNAME].flags    = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[SAM_SEQ].ltype      = CTX_LT_SEQUENCE_REF;
-    vb->contexts[SAM_QUAL].ltype     = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_TLEN].flags     = CTX_FL_STORE_VALUE;
-    vb->contexts[SAM_OPTIONAL].flags = CTX_FL_STRUCTURED;
-
-    Context *ctx = mtf_get_ctx (vb, (DictId)dict_id_SAM_SQnonref);
-    ctx->ltype = CTX_LT_SEQUENCE;
-    ctx->flags = CTX_FL_LOCAL_LZMA;
+    vb->contexts[SAM_RNAME].flags      = CTX_FL_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[SAM_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP;
+    vb->contexts[SAM_SEQNOREF].flags   = CTX_FL_LOCAL_LZMA;
+    vb->contexts[SAM_SEQNOREF].ltype   = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].ltype       = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_VALUE;
+    vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
 }
 
 // TLEN - 3 cases: 
@@ -183,6 +165,186 @@ static inline int sam_seg_get_next_subitem (const char *str, int str_len, char s
 
 #define DEC_SSF(ssf) const char *ssf; \
                      int ssf##_len;
+
+// Creates a bitmap from seq data - exactly one bit per base that is mapped to the reference (e.g. not for INSERT bases)
+// - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SEQ_BITMAP whether this
+//   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
+//   bases that differ from the reference are stored in SAM_SEQNOREF
+// - Edge case: no POS (i.e. unaligned read) - we just store the sequence in SAM_SEQNOREF
+// - Edge case: no CIGAR (it is "*") - we just treat it as an M and compare to the reference
+// - Edge case: no SEQ (it is "*") - we '*' in SAM_SEQNOREF and indicate "different from reference" in the bitmap. We store a
+//   single entry, regardless of the number of entries indicated by CIGAR
+static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len, int64_t pos, const char *cigar, unsigned recursion_level)
+{
+    Context *bitmap_ctx = &vb->contexts[SAM_SEQ_BITMAP];
+    Context *nonref_ctx = &vb->contexts[SAM_SEQNOREF];
+
+    if (!recursion_level)
+        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
+
+    ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
+
+    // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
+    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + seq_len + sizeof(int64_t), vb->lines.len * seq_len / 5), CTX_GROWTH, 
+               buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
+    
+    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len, vb->lines.len * seq_len / 40), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+
+    // we can't compare to the reference if POS is 0: we store the seqeuence in SEQNOREF without an indication in the bitmap
+    if (!pos) {
+        buf_add (&nonref_ctx->local, seq, seq_len);
+        return; 
+    }
+
+    if (seq[0] == '*') return; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
+
+    Range *range = ref_zip_get_locked_range ((VBlockP)vb, pos);
+
+    // when using an external refernce, pos has to be within the reference range (we already checked pos ref_zip_get_locked_range, now we check the end pos)
+    int64_t final_seq_pos = pos + vb->ref_consumed - 1;
+    ASSSEG (flag_reference == REF_INTERNAL || final_seq_pos <= range->last_pos, cigar,
+            "Error: file has contig \"%.*s\", POS=%"PRId64" CIGAR=\"%s\", implying a final reference pos for this read at %"PRId64". However, the reference's last pos for this contig is %"PRId64,
+            range->chrom_name_len, range->chrom_name, pos, cigar, final_seq_pos, range->last_pos);
+
+    // Note: if range is NULL, it cannot be diffed against a reference, as the hash entry for this range is unfortunately already
+    // occupied by another range (can only happen with REF_INTERNAL). We treat this as if all the bases don't match the ref
+    if (!range) {
+        buf_add (&nonref_ctx->local, seq, seq_len);
+                
+        for (uint32_t i=0; i < vb->ref_and_seq_consumed; i++) 
+            buf_add_clear_bit (&bitmap_ctx->local); // not very efficient, but quiet rare
+
+        random_access_update_last_pos ((VBlockP)vb, pos + vb->ref_consumed - 1);
+
+        return; 
+    }    
+
+    uint32_t pos_index = pos - range->first_pos;
+    uint32_t next_ref = pos_index;
+
+    // if cigar is "*" we make it an M eg "151M"
+    char alt_cigar[30];
+    if (cigar[0] == '*' && cigar[1] == 0) {
+        sprintf (alt_cigar, "%uM", seq_len);
+        cigar = alt_cigar;
+        vb->ref_consumed = vb->ref_and_seq_consumed = seq_len;
+    }
+
+    const char *next_cigar = cigar;
+
+    uint32_t i=0;
+    int subcigar_len=0;
+    char cigar_op;
+
+    // get exact ref lengths to be consumed in this recursion level
+    uint32_t ref_len_this_level = MIN (vb->ref_consumed, range->last_pos - pos + 1);
+
+    uint32_t range_len = (range->last_pos - range->first_pos + 1);
+    
+    while (i < seq_len || next_ref < pos_index + ref_len_this_level) {
+
+        ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_len_this_level, "Error in sam_seg_seq_field: i or next_ref are out of range");
+
+        subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
+        
+        cigar_op = *(next_cigar++);
+
+        if (cigar_op == 'M' || cigar_op == '=' || cigar_op == 'X') { // alignment match or sequence match or mismatch
+
+            ASSERT (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
+                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u", cigar, seq_len);
+
+            while (subcigar_len && next_ref < pos_index + ref_len_this_level) {
+
+                // when we have an X we don't enter it into our internal ref, and we wait for a read with a = or M for that site,
+                // as we assume that on average, more reads will have the reference base, leading to better compression
+            
+                bool normal_base = (seq[i] == 'A' || seq[i] == 'C' || seq[i] == 'G' || seq[i] == 'T');
+
+                // case: we have not yet set a value for this site - we set it now. note: in ZIP, is_set means that the site
+                // will be needed for pizzing. With REF_INTERNAL, this is equivalent to saying we have set the ref value for the site
+                if (flag_reference == REF_INTERNAL && range && normal_base && !ref_is_nucleotide_set (range, next_ref)) { 
+                    ref_set_nucleotide (range, next_ref, seq[i]);
+                    bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
+                    buf_add_set_bit (&bitmap_ctx->local);
+                }
+
+                // case our seq is identical to the reference at this site
+                else if (range && normal_base && seq[i] == ref_get_nucleotide (range, next_ref)) {
+                    buf_add_set_bit (&bitmap_ctx->local); // we will need this site in the reference for pizzing
+                    bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
+                }
+                
+                // case: ref is set to a different value - we store our value in nonref_ctx
+                else {
+                    NEXTENT (char, nonref_ctx->local) = seq[i];
+                    buf_add_clear_bit (&bitmap_ctx->local);
+                } 
+
+                subcigar_len--;
+                next_ref++;
+                i++;
+                vb->ref_and_seq_consumed--;
+            }
+        } // end if 'M', '=', 'X'
+
+        // for Insertion or Soft clipping - this SEQ segment doesn't align with the reference - we leave it as is 
+        else if (cigar_op == 'I' || cigar_op == 'S') {
+
+            ASSSEG (subcigar_len > 0 && subcigar_len <= (seq_len - i), seq,
+                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u", cigar, seq_len);
+
+            buf_add (&nonref_ctx->local, &seq[i], subcigar_len);
+            i += subcigar_len;
+        }
+
+        // for Deletion or Skipping - we move the next_ref ahead
+        else if (cigar_op == 'D' || cigar_op == 'N') {
+            unsigned ref_consumed = MIN (subcigar_len, range_len - next_ref);
+
+            next_ref += ref_consumed;
+            subcigar_len -= ref_consumed;
+        }
+
+        // Hard clippping (H) or padding (P) we do nothing
+        else if (cigar_op == 'H' || cigar_op == 'P') {}
+
+        else {
+            ASSSEG (cigar_op, vb->last_cigar, "Error in sam_seg_seq_field: End of CIGAR reached but we still have %u reference and %u sequence bases to consume",
+                    pos_index + ref_len_this_level - next_ref, seq_len-i);        
+
+            ASSSEG (false, vb->last_cigar, "Error in sam_seg_seq_field: Invalid CIGAR op: '%c' (ASCII %u)", cigar_op, cigar_op);        
+        }
+
+        // case: we're at the end of the reference AND we want more of it
+        if (next_ref == pos_index + ref_len_this_level && subcigar_len) break;
+    }
+
+    if (range) mutex_unlock (range->mutex);       
+
+    uint32_t this_seq_last_pos = pos + (next_ref - pos_index) - 1;
+
+    // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
+    // in REF_EXTERNAL as each range is the entire contig
+    ASSERT (flag_reference == REF_INTERNAL || i == seq_len, "Error in sam_seg_seq_field: expecting i(%u) == seq_len(%u)", i, seq_len);
+
+    // case: we have reached the end of the current reference range, but we still have sequence left - 
+    // call recursively with remaining sequence and next reference range 
+    if (i < seq_len) {
+
+        ASSSEG (this_seq_last_pos <= MAX_POS, cigar, "%s: Error: POS=%"PRId64" and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64,
+                global_cmd, pos, cigar, MAX_POS);
+
+        vb->ref_consumed -= ref_len_this_level;
+
+        char updated_cigar[100];
+        if (subcigar_len) sprintf (updated_cigar, "%u%c%s", subcigar_len, cigar_op, next_cigar);
+
+        sam_seg_seq_field (vb, seq + i, seq_len - i, range->last_pos + 1, subcigar_len ? updated_cigar : next_cigar, recursion_level + 1);
+    }
+    else // update RA of the VB with last pos of this line as implied by the CIGAR string
+        random_access_update_last_pos ((VBlockP)vb, this_seq_last_pos);
+}
 
 static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id, 
                                     const char *field, unsigned field_len, const char *field_name)
@@ -335,8 +497,8 @@ uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_le
 // MD is shortened to replace the last number with a *, since it can be calculated knowing the length. The result is that
 // multiple MD values collapse to one, e.g. "MD:Z:119C30" and "MD:Z:119C31" both become "MD:Z:119C*" hence improving compression.
 // In the case where the MD is simply a number "151" and drop it altogether and keep just an empty string.
-static inline bool sam_seg_get_shortened_MD (const char *md_str, unsigned md_str_len, uint32_t seq_len
-,                                            char *new_md_str, unsigned *new_md_str_len)
+static inline bool sam_seg_get_shortened_MD (const char *md_str, unsigned md_str_len, uint32_t seq_len,
+                                             char *new_md_str, unsigned *new_md_str_len)
 {
     uint32_t seq_len_by_md = sam_seg_get_seq_len_by_MD_field (md_str, md_str_len);
 
@@ -509,10 +671,8 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
 
-        dl->e2_data_start = value - vb->txt_data.data;
-        dl->e2_data_len   = value_len;
-        vb->contexts[SAM_SEQ].txt_len   += value_len + 1; // +1 for \t
-        vb->contexts[SAM_SEQ].local.len += value_len;
+        int64_t this_pos = vb->contexts[SAM_POS].last_value;
+        sam_seg_seq_field (vb, (char *)value, value_len, this_pos, vb->last_cigar, 0); // remove const bc SEQ data is actually going to be modified
     }
 
     // U2 - QUAL data (note: U2 doesn't have a dictionary)
@@ -544,193 +704,54 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
     return dict_id;
 }
 
-static void sam_seg_cigar_field (VBlockSAM *vb, const char *cigar, unsigned cigar_len)
+static void sam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cigar_len,
+                                 const char *seq,  uint32_t seq_data_len, 
+                                 const char *qual, uint32_t qual_data_len)
 {
-    SAFE_ASSIGN (1, cigar-2, SNIP_SPECIAL);
-    SAFE_ASSIGN (2, cigar-1, SAM_SPECIAL_CIGAR);
+    bool qual_is_available = qual_data_len != 1 || *qual != '*';
+    bool seq_is_available  = seq_data_len != 1  || *seq  != '*';
 
-    seg_by_did_i (vb, cigar-2, cigar_len+2, SAM_CIGAR, cigar_len+1); 
+    ASSSEG (!(seq_is_available && *seq=='*'), seq, "seq=%.*s (seq_len=%u), but expecting a missing seq to be \"*\" only (1 character)", seq_data_len, seq, seq_data_len);
 
-    SAFE_RESTORE(1);
-    SAFE_RESTORE(2);
-}
+    char cigar_snip[100] = { SNIP_SPECIAL, SAM_SPECIAL_CIGAR };
+    unsigned cigar_snip_len=2;
 
-static void sam_seg_seq_qual_fields (VBlockSAM *vb, ZipDataLineSAM *dl)
-{
-    const char *seq  = &vb->txt_data.data[dl->seq_data_start];
-    const char *qual = &vb->txt_data.data[dl->qual_data_start];
+    // case: SEQ is "*" - we add a '-' to the CIGAR
+    if (!seq_is_available) cigar_snip[cigar_snip_len++] = '-';
 
-    bool seq_is_available  = dl->seq_data_len  != 1 || *seq  != '*';
-    bool qual_is_available = dl->qual_data_len != 1 || *qual != '*';
-
-    // handle the case where CIGAR is "*" and we get the dl->seq_len directly from SEQ or QUAL
+    // case: CIGAR is "*" - we get the dl->seq_len directly from SEQ or QUAL, and add the length to CIGAR eg "151*"
     if (!dl->seq_len) { // CIGAR is not available
-        ASSSEG (!seq_is_available || !qual_is_available || dl->seq_data_len==dl->qual_data_len, seq,
+        ASSSEG (!seq_data_len || !qual_is_available || seq_data_len==dl->qual_data_len, seq,
                 "Bad line: SEQ length is %u, QUAL length is %u, unexpectedly differ. SEQ=%.*s QUAL=%.*s", 
-                dl->seq_data_len, dl->qual_data_len, dl->seq_data_len, seq, dl->qual_data_len, qual);    
+                seq_data_len, dl->qual_data_len, seq_data_len, seq, dl->qual_data_len, qual);    
 
-        dl->seq_len = MAX (dl->seq_data_len, dl->qual_data_len); // one or both might be not available and hence =1
-    
-        char new_cigar[30];
-        new_cigar[0] = SNIP_SPECIAL;
-        new_cigar[1] = SAM_SPECIAL_CIGAR;
-        unsigned new_cigar_len = 3 + str_int (dl->seq_len, &new_cigar[2]);
-        new_cigar[new_cigar_len-1] = '*';
+        dl->seq_len = MAX (seq_data_len, dl->qual_data_len); // one or both might be not available and hence =1
 
-        seg_by_did_i (vb, new_cigar, new_cigar_len, SAM_CIGAR, 2 /* "*\t" */); 
+        cigar_snip_len += str_int (dl->seq_len, &cigar_snip[cigar_snip_len]);
     } 
     else { // CIGAR is available - just check the seq and qual lengths
-        ASSSEG (!seq_is_available || dl->seq_data_len == dl->seq_len, seq,
+        ASSSEG (!seq_is_available || seq_data_len == dl->seq_len, seq,
                 "Bad line: according to CIGAR, expecting SEQ length to be %u but it is %u. SEQ=%.*s", 
-                dl->seq_len, dl->seq_data_len, dl->seq_data_len, seq);
+                dl->seq_len, seq_data_len, seq_data_len, seq);
 
-        ASSSEG (!qual_is_available || dl->qual_data_len == dl->seq_len, qual,
+        ASSSEG (!qual_is_available || qual_data_len == dl->seq_len, qual,
                 "Bad line: according to CIGAR, expecting QUAL length to be %u but it is %u. QUAL=%.*s", 
                 dl->seq_len, dl->qual_data_len, dl->qual_data_len, qual);    
     }
 
-    Context *seq_ctx = &vb->contexts[SAM_SEQ];
-    seq_ctx->local.len += dl->seq_data_len;  // used by zfile_compress_local_data
-    seq_ctx->txt_len   += dl->seq_data_len  + 1; // byte counts for --show-sections - +1 for terminating \t
+    memcpy (&cigar_snip[cigar_snip_len], vb->last_cigar, last_cigar_len);
+
+    seg_by_did_i (vb, cigar_snip, cigar_snip_len + last_cigar_len, SAM_CIGAR, last_cigar_len+1); // +1 for \t
+}
+
+static void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len)
+{
+    dl->qual_data_start = qual - vb->txt_data.data;
+    dl->qual_data_len   = qual_data_len;
 
     Context *qual_ctx = &vb->contexts[SAM_QUAL];
     qual_ctx->local.len += dl->qual_data_len;
     qual_ctx->txt_len   += dl->qual_data_len + 1;
-}
-
-static void sam_seg_seq_field (VBlock *vb, char *seq, uint32_t seq_len, int64_t pos, const char *cigar, 
-                               const char *chrom_name, unsigned chrom_name_len)
-{
-    uint32_t range_i = (uint32_t)(pos / REF_NUM_SITES_PER_RANGE);
-    bool range_mutex_is_locked = false;
-
-    Context *nonref_ctx = mtf_get_ctx (vb, (DictId)dict_id_SAM_SQnonref);
-    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len, vb->lines.len * seq_len / 5), CTX_GROWTH, "mtf->local", nonref_ctx->did_i);
-    Range *range = ref_get_range (vb, range_i, flag_reference == REF_INTERNAL ? RGR_CAN_BE_NEW_OR_EXISTING : RGR_MUST_EXIST, 0);
-    
-    // if using an external reference, a NULL range means there is no reference for this chrom/range_i combo (in case of 
-    // an internal reference, we will create it)
-    ASSSEG (range || flag_reference == REF_INTERNAL, chrom_name, "Error: in read RNAME=\"%.*s\" POS=%"PRId64" - some or all of the read is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
-            chrom_name_len, chrom_name, pos, chrom_name_len, chrom_name, ref_max_pos_of_chrom (vb->chrom_node_index), ref_filename);
-
-    // this range cannot be diffed against a reference, as the hash entry for this range is unfortunately already occupied by another range
-    // (can only happen with REF_INTERNAL)
-    if (!range) {
-        buf_add (&nonref_ctx->local, seq, seq_len);
-        memset (seq, '.', seq_len);
-        return; 
-    }
-
-    uint32_t next_ref  = (uint32_t)(pos - range_i * REF_NUM_SITES_PER_RANGE);
-
-    const char *next_cigar = cigar;
-    uint32_t i=0;
-    int subcigar_len=0;
-    char cigar_op;
-
-    while (i < seq_len && next_ref < REF_NUM_SITES_PER_RANGE) {
-
-        subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
-        cigar_op = *(next_cigar++);
-
-        if (cigar_op == 'M' || cigar_op == '=' || cigar_op == 'X') { // alignment match or sequence match or mismatch
-
-            ASSERT (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
-                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u", cigar, seq_len);
-
-            while (subcigar_len && next_ref < REF_NUM_SITES_PER_RANGE) {
-
-                // note that our "ref" might be different than the alignment reference, therefore X and = are not an indication
-                // whether it matches our ref or not. However, if it is an X we don't enter it into our ref, and we wait
-                // for a read with a = or M for that site
-            
-                // tread saftey: if range->ref[next_ref] contains a non-zero value, then that value is final and immutable. if it does not yet contain
-                // a value, we need to grab the mutex to verify and potentially set it
-                char ref_value = range->ref[next_ref];
-
-                if (!ref_value && !range_mutex_is_locked) {
-                    mutex_lock (range->mutex); // lock on our first change to this ref
-                    range_mutex_is_locked = true;
-
-                    ref_value = range->ref[next_ref]; // check again - this time we are sure that if it is 0, it will not change as we locked the mutex
-                }
-
-                if (ref_value == seq[i]) 
-                    seq[i] = '-'; // ref
-                
-                else if (!ref_value) { // no ref yet for this site - we will be the ref (only possible with internal reference)
-
-                    ASSSEG (flag_reference == REF_INTERNAL, chrom_name, "Error2 in read RNAME=\"%.*s\" POS=%"PRId64" - some or all of the read is not covered by the reference. max_pos of \"%.*s\" is %"PRId64" in %s",
-                            chrom_name_len, chrom_name, pos, chrom_name_len, chrom_name, ref_max_pos_of_chrom (vb->chrom_node_index), ref_filename);
-
-                    range->ref[next_ref] = seq[i];
-                    range->num_set++;
-                    seq[i] = '-'; 
-                }
-
-                else {
-                    NEXTENT (char, nonref_ctx->local) = seq[i];
-                    seq[i] = '.';
-                } 
-
-                subcigar_len--;
-                next_ref++;
-                i++;
-            }
-        } // end if 'M', '=', 'X'
-
-        // for Insertion or Soft clipping - this SEQ segment doesn't align with the ref - we leave it as is 
-        else if (cigar_op == 'I' || cigar_op == 'S') {
-
-            ASSERT (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
-                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u", cigar, seq_len);
-
-            buf_add (&nonref_ctx->local, &seq[i], subcigar_len);
-            memset (&seq[i], '.', subcigar_len);
-            i += subcigar_len;
-        }
-
-        // for Deletion or Skipping - we move the next_ref ahead
-        else if (cigar_op == 'D' || cigar_op == 'N') {
-            unsigned ref_consumed = MIN (subcigar_len, REF_NUM_SITES_PER_RANGE - next_ref);
-
-            next_ref += ref_consumed;
-            subcigar_len -= ref_consumed;
-        }
-
-        // in other cases - Hard clippping (H) or padding (P) we do nothing
-        else {} 
-    }
-
-    // update range - keep track of the genomic region within the range that has been accessed
-    // [first_pos,last_pos] include all accessed locii
-    if (!range_mutex_is_locked) mutex_lock (range->mutex); // lock now, if not already locked before
-
-    int64_t last_pos = (range_i * REF_NUM_SITES_PER_RANGE) + next_ref - 1;
-    if (flag_reference == REF_INTERNAL) {
-        if (pos < range->first_pos)     range->first_pos = pos;
-        if (last_pos > range->last_pos) range->last_pos  = last_pos;
-    }
-    range->is_accessed = true;
-
-    mutex_unlock (range->mutex);       
-
-    // case: we have reached the end of the current ref range, but we still have sequence left - 
-    // call recursively with remaining sequence and next ref range 
-    if (i < seq_len) {
-
-        ASSSEG (last_pos < MAX_POS, cigar, "%s: Error: reference pos, considering POS=%"PRId64" and the consumed reference impied by CIGAR=%s, exceeds MAX_POS=%"PRId64,
-                global_cmd, pos, cigar, MAX_POS);
-
-        char updated_cigar[100];
-        if (subcigar_len) sprintf (updated_cigar, "%u%c%s", subcigar_len, cigar_op, next_cigar);
-
-        sam_seg_seq_field (vb, seq + i, seq_len - i, (int64_t)(range_i+1) * REF_NUM_SITES_PER_RANGE,
-                           subcigar_len ? updated_cigar : next_cigar, 
-                           chrom_name, chrom_name_len);
-    }
-    else // update RA of the VB with last pos of this line as implied by the CIGAR string
-        random_access_update_last_pos (vb, last_pos);
 }
 
 const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
@@ -753,23 +774,23 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     SEG_NEXT_ITEM (SAM_FLAG);
 
     GET_NEXT_ITEM ("RNAME");
-    const char *rname_start = field_start;
     seg_chrom_field (vb_, field_start, field_len);
-    unsigned rname_len = field_len;
+    bool rname_is_missing = (*field_start == '*' && field_len == 1);
 
     GET_NEXT_ITEM ("POS");
     int64_t this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, true);
+    ASSSEG (!(rname_is_missing && this_pos), field_start, "Error: RNAME=\"*\" - expecting POS to be 0 but it is %"PRId64, this_pos);
+
     random_access_update_pos (vb_, SAM_POS);
 
     SEG_NEXT_ITEM (SAM_MAPQ);
 
-    // CIGAR - if CIGAR is "*" and we wait to get the length from SEQ or QUAL
+    // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM ("CIGAR");
-    sam_analyze_cigar (field_start, field_len, &dl->seq_len, NULL);
-    const char *cigar_start = field_start;
-    unsigned cigar_len = field_len;
-
-    if (dl->seq_len) sam_seg_cigar_field (vb, field_start, field_len); // not "*" - all good!
+    sam_analyze_cigar (field_start, field_len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed);
+    vb->last_cigar = field_start;
+    unsigned last_cigar_len = field_len;
+    ((char *)vb->last_cigar)[field_len] = 0; // null-terminate CIGAR string
 
     GET_NEXT_ITEM ("RNEXT");
     seg_by_did_i (vb, field_start, field_len, SAM_RNAME, field_len+1); // add to RNAME dictionary
@@ -780,23 +801,20 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     GET_NEXT_ITEM ("TLEN");
     sam_seg_tlen_field (vb, field_start, field_len, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len);
 
-    // SEQ & QUAL
-    dl->seq_data_start = next_field - vb->txt_data.data;
-    char *seq_start = (char *)next_field;
-    next_field = seg_get_next_item (vb, next_field, &len, false, true, false, &dl->seq_data_len, &separator, NULL, "SEQ");
+    // SEQ 
+    GET_NEXT_ITEM ("SEQ");
 
     // calculate diff vs. reference (self or imported) - only if aligned (pos!=0) and CIGAR and SEQ values are available
-    if (*cigar_start != '*' && this_pos && *seq_start != '*') { // note: this_pos might be 0 and still have SEQ, eg in case of an unaligned SAM 
-        SAFE_ASSIGN (1, &cigar_start[cigar_len], '\0');
-        sam_seg_seq_field (vb_, seq_start, dl->seq_data_len, this_pos, cigar_start, rname_start, rname_len);
-        SAFE_RESTORE (1);
-    }
+    sam_seg_seq_field (vb, field_start, field_len, this_pos, vb->last_cigar, 0);
+    const char *seq = field_start;
+    uint32_t seq_data_len = field_len;
 
-    dl->qual_data_start = next_field - vb->txt_data.data;
-    next_field = seg_get_next_item (vb, next_field, &len, true, true, false, &dl->qual_data_len, &separator, has_13, "QUAL");
+    GET_MAYBE_LAST_ITEM ("QUAL");
+    sam_seg_qual_field (vb, dl, field_start, field_len); 
 
-    sam_seg_seq_qual_fields (vb, dl); // also updates cigar if it is "*"
-
+    // finally we can seg CIGAR now
+    sam_seg_cigar_field (vb, dl, last_cigar_len, seq, seq_data_len, field_start, field_len);
+    
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
     Structured st = { .repeats=1, .num_items=0, .flags=0 };
     char prefixes[MAX_SUBFIELDS * 6 + 2]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_STRUCTURED ; +2 for the initial SNIP_STRUCTURED

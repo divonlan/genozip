@@ -7,14 +7,55 @@
 #define SECTIONS_INCLUDED
 
 #include "genozip.h"
-#include "section_types.h"
 #include "md5.h"
+
+// note: the numbering of the sections cannot be modified, for backward compatibility
+typedef enum {
+    SEC_NONE           = -1, // doesn't appear in the file 
+
+    SEC_RANDOM_ACCESS   = 0,
+    SEC_DICT_ID_ALIASES = 1,
+    SEC_REFERENCE       = 2,
+    SEC_REF_IS_SET      = 3,
+    SEC_TXT_HEADER      = 4, 
+    SEC_VB_HEADER       = 5,
+    SEC_GENOZIP_HEADER  = 6, // SEC_GENOZIP_HEADER remains 6 as in v2-v5 to be able to read old versions' genozip header
+    SEC_DICT            = 7, 
+    SEC_B250            = 8, 
+    SEC_LOCAL           = 9, 
+
+    // vcf specific    
+    SEC_VCF_GT_DATA     = 10,  
+    SEC_VCF_PHASE_DATA  = 11,
+    SEC_VCF_HT_DATA     = 12,                               
+    SEC_VCF_HT_GTSHARK  = 13,
+
+    NUM_SEC_TYPES // fake section for counting
+} SectionType;
+
+// this data must be perfectly aligned with SectionType.
+#define SECTIONTYPE_ABOUT {  \
+    {"SEC_RANDOM_ACCESS"},   \
+    {"SEC_DICT_ID_ALIASES"}, \
+    {"SEC_REFERENCE"},       \
+    {"SEC_REF_IS_SET"},      \
+    {"SEC_TXT_HEADER"},      \
+    {"SEC_VB_HEADER"},       \
+    {"SEC_GENOZIP_HEADER"},  \
+    {"SEC_DICT"},            \
+    {"SEC_B250"},            \
+    {"SEC_LOCAL"},           \
+    {"SEC_VCF_GT_DATA"},     \
+    {"SEC_VCF_PHASE_DATA"},  \
+    {"SEC_VCF_HT_DATA"},     \
+    {"SEC_VCF_HT_GTSHARK"},  \
+}
 
 // Section headers - big endian
 
 #define GENOZIP_MAGIC 0x27052012
 
-#pragma pack(push, 1) // structures that are part of the genozip format are packed.
+#pragma pack(1) // structures that are part of the genozip format are packed.
 
 // section headers are encoded in Big Endian (see https://en.wikipedia.org/wiki/Endianness)
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
@@ -40,7 +81,7 @@ typedef struct {
     uint8_t  encryption_type;         // one of ENC_TYPE_*
     uint16_t data_type;               // one of DATA_TYPE_*
     uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
-    uint64_t uncompressed_data_size;  // data size of uncompressed file, if uncompressed as a single file
+    uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
     uint64_t num_items_concat;        // number of items in a concatenated file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt concatenated components in this file (1 if no concatenation)
@@ -129,8 +170,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint8_t ltype;             // CTX_*
-    uint8_t flags;             // CTX_FL_*
-    uint16_t ffu;
+    uint8_t ffu[3];
     DictId dict_id;           
 } SectionHeaderCtx;         
 
@@ -143,21 +183,28 @@ typedef struct SectionListEntry {
     uint8_t unused[3];         
 } SectionListEntry;
 
+// two ways of storing a range:
+// uncompacted - we will have one section, SEC_REFERENCE, containing the data, and first/last_pos containing the coordinates of this range
+// compacting we will have 2 sections:
+// - SEC_REF_IS_SET - containing a bitmap (1 bit per base), and chrom,first/last_pos containing the coordinates of this range
+// - SEC_REFERENCE - containing the compacted range (i.e. excluding bases that have a "0" in the bitmap), 
+//   with chrom,first_pos same as SEC_REF_IS_SET and last_pos set so that (last_pos-first_pos+1) = number of '1' bits in SEC_REF_IS_SET
+// SEC_REFERENCE (in both cases) contains 2 bits per base, and SEC_REF_IS_SET contains 1 bit per location.
 typedef struct {
     SectionHeader h;
-    int64_t first_pos, last_pos; // first and last pos within chrom of this range         
-    uint32_t chrom_word_index;   // index in context->word_list of the chrom of this reference range    
+    uint64_t first_pos, last_pos; // first and last pos within chrom of this range         
+    uint32_t chrom_word_index;    // index in context->word_list of the chrom of this reference range    
 } SectionHeaderReference;
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct {
-    uint32_t vblock_i;           // the vb_i in which this range appears
-    uint32_t chrom_index;        // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
-    int64_t min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
+    uint32_t vblock_i;            // the vb_i in which this range appears
+    uint32_t chrom_index;         // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
+    uint64_t min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
-#pragma pack(pop)
+#pragma pack()
 
 // zip stuff
 extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
@@ -167,7 +214,8 @@ extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 extern SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
 
 typedef bool (*IsSectionTypeFunc)(SectionType);
-extern bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st);
+extern bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st1, SectionType st2);
+extern SectionType sections_peek (uint32_t cursor);
 
 extern bool sections_has_more_components(void);
 extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st);

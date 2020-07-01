@@ -7,7 +7,7 @@
 #include "dict_id.h"
 #include "strings.h"
 #include "stats.h"
-#include "section_types.h"
+#include "sections.h"
 #include "file.h"
 #include "vblock.h"
 #include "txtfile.h"
@@ -42,19 +42,21 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
         
         // we put all the SEQ derived data in a single stats line for easy comparison (reference in dict, the +- section SEQ in b250, and the unique non-ref sequence stretchs in local)
-        if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ]) { // must be before SEC_LOCAL
-            if (section->dict_id.num == dict_id_SAM_SQnonref)
+        if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ_BITMAP]) { // must be before SEC_LOCAL
+            if (section->dict_id.num == dict_id_fields[SAM_SEQNOREF])
                 *local_compressed_size += sec_size;
-            else if (section->section_type == SEC_REFERENCE && flag_reference == REF_INTERNAL)
+            else if ((section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET) && flag_reference == REF_INTERNAL)
                 *dict_compressed_size += sec_size;
-            else if (section->dict_id.num == dict_id_fields[SAM_SEQ])
+            else if (section->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP])
                 *b250_compressed_size += sec_size;
         }
 
-        else if (overhead_sec == OVERHEAD_SEC_REFERENCE && (flag_reference == REF_EXT_STORE || z_file->data_type != DT_SAM) && section->section_type == SEC_REFERENCE)
+        else if (overhead_sec == OVERHEAD_SEC_REFERENCE && 
+                 (flag_reference == REF_EXT_STORE || z_file->data_type != DT_SAM) && 
+                 (section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET))
             *dict_compressed_size += sec_size;
 
-        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_SAM_SQnonref) {} // ^ already handle above
+        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQNOREF]) {} // ^ already handle above
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
             *dict_compressed_size += sec_size;
@@ -210,7 +212,7 @@ void stats_show_sections (void)
         txt_len = ctx ? ctx->txt_len : (i==OVERHEAD_SEC_TXT_HDR ? txtfile_get_last_header_len() : 0);
 
         bool is_dict_a_reference = (i == OVERHEAD_SEC_REFERENCE) || // reference appreas in "comp_dict" of "Reference" line
-                                   (ctx && z_file->data_type == DT_SAM && ctx->dict_id.num == dict_id_fields[SAM_SEQ]); // reference appreas in "comp_dict" of "SEQ" line
+                                   (ctx && z_file->data_type == DT_SAM && (ctx->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP] || ctx->dict_id.num == dict_id_fields[SAM_SEQNOREF])); // reference appreas in "comp_dict" of "SEQ" line
         
         if (!is_dict_a_reference) all_comp_dict += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;

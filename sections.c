@@ -13,7 +13,6 @@
 #include "strings.h"
 #include "crypt.h"
 #include "dict_id.h"
-#include "reference.h"
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
@@ -114,14 +113,14 @@ SectionType sections_get_next_header_type (SectionListEntry **sl_ent,
 }
 
 // section iterator. returns true if another section of this type was found.
-bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st) // if *sl_ent==NULL - initialize cursor
+bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st1, SectionType st2) // if *sl_ent==NULL - initialize cursor
 {
     // case: first time
     if (! *sl_ent) {
         *cursor = 0;
         while (*cursor < (uint32_t)z_file->section_list_buf.len) {
             *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
-            if ((*sl_ent)->section_type == st) 
+            if ((*sl_ent)->section_type == st1 || (*sl_ent)->section_type == st2) 
                 return true;
         }
     }
@@ -129,7 +128,15 @@ bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cur
     if (*cursor == z_file->section_list_buf.len) return false; 
 
     *sl_ent = ENT (SectionListEntry, z_file->section_list_buf, (*cursor)++);
-    return (*sl_ent)->section_type == st;
+    return (*sl_ent)->section_type == st1 || (*sl_ent)->section_type == st2;
+}
+
+// returns the next section's type without moving the cursor
+SectionType sections_peek (uint32_t cursor)
+{
+    if (cursor == z_file->section_list_buf.len) return SEC_NONE;
+
+    return ENT (SectionListEntry, z_file->section_list_buf, cursor)->section_type;
 }
 
 bool sections_seek_to (SectionType st)
@@ -192,7 +199,7 @@ void BGEN_sections_list()
 
 void sections_show_gheader (SectionHeaderGenozipHeader *header)
 {
-    if (ref_flag_reading_reference) return; // don't show gheaders of reference file
+    if (flag_reading_reference) return; // don't show gheaders of reference file
     
     unsigned num_sections = BGEN32 (header->num_sections);
     char size_str[50];

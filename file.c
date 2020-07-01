@@ -21,7 +21,6 @@
 #include "compressor.h"
 #include "vblock.h"
 #include "strings.h"
-#include "reference.h"
 
 // globals
 File *z_file   = NULL;
@@ -67,7 +66,7 @@ CompressionAlg file_get_comp_alg_by_txt_ft (DataType dt, FileType txt_ft, FileMo
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) return txt_in_ft_by_dt[dt][i].comp_alg;
 
-    return (mode == WRITE ? COMP_PLN : COMP_UNKNOWN);
+    return (mode == WRITE ? COMP_NONE : COMP_UNKNOWN);
 }
 
 DataType file_get_dt_by_z_ft (FileType z_ft)
@@ -281,9 +280,9 @@ bool file_open_txt (File *file)
     file->comp_alg = file_get_comp_alg_by_txt_ft (file->data_type, file->type, file->mode);
 
     switch (file->comp_alg) { 
-        case COMP_PLN:
+        case COMP_NONE:
             // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
-            if ((flag_test || ref_flag_reading_reference) && file->mode == WRITE) return true;
+            if ((flag_test || flag_reading_reference) && file->mode == WRITE) return true;
 
             file->file = file->is_remote ? url_open (NULL, file->name) : fopen (file->name, file->mode);
             break;
@@ -413,7 +412,7 @@ static void file_initialize_z_file_data (File *file)
                   buf_add_to_buffer_list (evb, &file->buf);
     INIT (dict_data);
     INIT (ra_buf);
-    INIT (ra_max_pos_by_chrom);
+    INIT (ra_min_max_by_chrom);
     INIT (section_list_buf);
     INIT (section_list_dict_buf);
     INIT (unconsumed_txt);
@@ -585,7 +584,7 @@ void file_close (File **file_p,
 
         buf_destroy (&file->dict_data);
         buf_destroy (&file->ra_buf);
-        buf_destroy (&file->ra_max_pos_by_chrom);
+        buf_destroy (&file->ra_min_max_by_chrom);
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->section_list_dict_buf);
         buf_destroy (&file->unconsumed_txt);

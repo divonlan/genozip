@@ -25,7 +25,7 @@ unzip:
 
 #include "genozip.h"
 #include "profiler.h"
-#include "section_types.h"
+#include "sections.h"
 #include "vcf.h"
 #include "base250.h"
 #include "vblock.h"
@@ -40,7 +40,7 @@ unzip:
 #include "arch.h"
 
 const char ctx_lt_to_sam_map[NUM_CTX_LT] = "\0cCsSiI\0\0f\0\0\0" ;
-const int ctx_lt_sizeof_one[NUM_CTX_LT]  = { 1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 1, 1 };
+const int ctx_lt_sizeof_one[NUM_CTX_LT]  = { 1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 1, 8 };
 const bool ctx_lt_is_signed[NUM_CTX_LT]  = { 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0 };
 const int64_t ctx_lt_min[NUM_CTX_LT]     = { 0, -128, 0, -16384, 0,    -2147483648, 0,         -0x8000000000000000LL, 0,                     0, 0, 0, 0 };
 const int64_t ctx_lt_max[NUM_CTX_LT]     = { 0, 127, 255, 16383, 32767, 2147483647, 4294967295, 0x7fffffffffffffffLL, 0xffffffffffffffffULL, 0, 0, 0, 0 };
@@ -390,26 +390,6 @@ static void mtf_initialize_ctx (Context *ctx, DataType dt, uint8_t did_i, DictId
     
     if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
         dict_id_to_did_i_map[dict_id.map_key] = did_i;
-/*
-    // ZIP set flags (in PIZ the flags are set from the b250/local section headers)
-    if (command == ZIP) {
-        static struct { DataType dt; uint64_t *dict_id_num; uint8_t ltype ; uint8_t flags; } flags_by_dict_id[] = FLAGS_BY_DICT_ID;
-        for (unsigned i=0; i < sizeof(flags_by_dict_id)/sizeof(flags_by_dict_id[0]); i++) {
-            if (flags_by_dict_id[i].dt == dt && *flags_by_dict_id[i].dict_id_num == dict_id.num) {
-                ctx->flags      = flags_by_dict_id[i].flags;
-                ctx->ltype = flags_by_dict_id[i].ltype;
-                break;
-            }
-
-            // CTX_FL_NO_STONS if ltype is not TEXT
-            if (ctx->ltype != CTX_LT_TEXT) ctx->flags |= CTX_FL_NO_STONS;
-
-            // CTX_FL_NO_STONS if ctx is chrom
-            if (ctx->did_i != DTFZ (chrom))     ctx->flags |= CTX_FL_NO_STONS;
-        }
-
-        if (flag_debug_no_singletons) ctx->flags |= CTX_FL_NO_STONS;
-    }*/
 }
 
 static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx); // forward declaration
@@ -811,13 +791,11 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     buf_set_overlayable (&zf_ctx->word_list);
 
     char *start = fragment.data;
-    char sep = SNIP_SEP; // local variable that can be optimized to a cpu register
-    
-    for (unsigned snip_i=0; snip_i < num_snips; snip_i++) {
+    for (uint32_t snip_i=0; snip_i < num_snips; snip_i++) {
 
         MtfWord *word = &NEXTENT (MtfWord, zf_ctx->word_list);
 
-        char *c=start; while (*c != sep) c++;
+        char *c=start; while (*c != SNIP_SEP) c++;
 
         word->snip_len   = c - start;
         word->char_index = dict_old_len + (start - fragment.data);
@@ -874,6 +852,18 @@ MtfNode *mtf_get_node_by_word_index (Context *ctx, uint32_t word_index)
 
     ABORT ("mtf_search_for_char_index_by_word_index failed to find word_index=%u in did_i=%u", word_index, ctx->did_i);
     return NULL; // never reaches here
+}
+
+const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, int32_t word_index, 
+                                        const char **snip, uint32_t *snip_len)
+{
+    MtfWord *word = ENT (MtfWord, *word_list, word_index);
+    const char *my_snip = ENT (const char, *dict, word->char_index);
+    
+    if (snip) *snip = my_snip;
+    if (snip_len) *snip_len = word->snip_len;
+
+    return my_snip; 
 }
 
 static Buffer *sorter_cmp_mtf = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues

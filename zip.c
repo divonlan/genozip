@@ -49,7 +49,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
         if (is_final_component) {
             double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
 
-            if (txt_file->comp_alg == COMP_PLN || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+            if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
                 fprintf (stderr, "Time: %s, %s compression ratio: %1.1f           \n", 
                             dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio);
             else
@@ -62,7 +62,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
     else {
         double ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-        if (txt_file->comp_alg == COMP_PLN || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+        if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
             fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
         
         else // source was compressed
@@ -106,7 +106,7 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
             zfile_compress_b250_data (vb, ctx, COMP_BZ2);
         }
 
-        if (ctx->local.len)
+        if (ctx->local.len || ctx->ltype == CTX_LT_SEQ_BITMAP) // bitmaps are always written, even if empty
             zfile_compress_local_data (vb, ctx);
     }
 }
@@ -217,9 +217,13 @@ static void zip_write_global_area (Dispatcher dispatcher, const Md5Hash *single_
     // output dictionaries (inc. aliases) to disk - they are in the "processed" data of evb
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
         zip_output_processed_vb (evb, &z_file->section_list_dict_buf, false, PD_DICT_DATA);  
-   
+
+    // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
+    if (DTPZ(has_random_access)) 
+        random_access_finalize_entries();
+
     // output reference, if needed
-    if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) {
+    if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference) {
         ref_compress_ref();
         zip_display_compression_ratio (dispatcher, true); // Done for reference + final compression ratio calculation
     }
@@ -305,8 +309,9 @@ static void zip_compress_one_vb (VBlock *vb)
             gl_optimize_local (vb, &vb->contexts[gl_did_i].local);
     }
 
-    // generate & compress b250 and local data for all ctxs 
-    zip_generate_and_compress_ctxs (vb);
+    // generate & compress b250 and local data for all ctxs (for reference files we don't output VBs)
+    if (!flag_make_reference)
+        zip_generate_and_compress_ctxs (vb);
 
     // compress data-type specific sections
     if (DTP(compress)) DTP(compress)(vb);
@@ -341,7 +346,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
     dict_id_initialize(z_file->data_type);
 
-    if (z_file->data_type == DT_SAM) sam_zip_initialize(); // TO DO - add to data_types
+    if (DTPZ(zip_initialize)) DTPZ(zip_initialize)();
 
     unsigned txt_line_i = 1; // the next line to be read (first line = 1)
     
@@ -383,7 +388,9 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;
 
-            zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
+            if (!flag_make_reference)
+                zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
+                
             z_file->num_vbs++;
             
             dispatcher_finalize_one_vb (dispatcher);

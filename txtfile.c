@@ -21,7 +21,6 @@
 #include "strings.h"
 #include "endianness.h"
 #include "crypt.h"
-#include "reference.h"
 #include "zlib/zlib.h"
 
 static bool is_first_txt = true; 
@@ -350,7 +349,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
         case COMP_ZIP: ratio = 3; break;
 
-        case COMP_PLN: ratio = 1; break;
+        case COMP_NONE: ratio = 1; break;
 
         default: ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
     }
@@ -422,7 +421,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
 
     // 1. in split mode - we open the output txt file of the component
     // 2. when reading a reference file - we create txt_file here (but don't actually open the physical file)
-    if (flag_split || ref_flag_reading_reference) {
+    if (flag_split || flag_reading_reference) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode or when reading reference");
         txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
     }
@@ -453,7 +452,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
     if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
     // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if ((is_first_txt || flag_split) && !flag_no_header && !ref_flag_reading_reference)
+    if ((is_first_txt || flag_split) && !flag_no_header && !flag_reading_reference)
         txtfile_write_to_disk (&header_buf);
     
     buf_free (&header_section);

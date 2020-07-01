@@ -10,7 +10,7 @@
 #include "genozip.h"
 #include "buffer.h"
 #include "base250.h"
-#include "section_types.h"
+#include "sections.h"
 #include "data_types.h"
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on mtf.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
@@ -88,6 +88,7 @@ typedef struct { // initialize with mtf_init_iterator()
 
 // these values and flags are part of the file format (in SectionHeaderCtx.flags) - so values cannot be changed easily
 // CTX_LT_* values are consistent with BAM optional 'B' types (and extend them)
+// IMPORTANT - if adding or chaging LTs, all ctx_lt_* arrays in context.c need to be updated
 #define CTX_LT_TEXT         0
 #define CTX_LT_INT8         1    
 #define CTX_LT_UINT8        2
@@ -100,18 +101,18 @@ typedef struct { // initialize with mtf_init_iterator()
 #define CTX_LT_FLOAT32      9    // ffu
 #define CTX_LT_FLOAT64      10   // ffu
 #define CTX_LT_SEQUENCE     11   // length of data extracted is determined by vb->seq_len
-#define CTX_LT_SEQUENCE_REF 12   // a series of .- indicating whether data should be taken from the reference (-) or SQnonref.local (.)
+#define CTX_LT_SEQ_BITMAP   12   // a bitmap indicating whether data should be taken from the reference 1 or SEQNOREF.local (0)
 #define NUM_CTX_LT          13
 extern const char ctx_lt_to_sam_map[NUM_CTX_LT];
 extern const int ctx_lt_sizeof_one[NUM_CTX_LT];
 extern const bool ctx_lt_is_signed[NUM_CTX_LT];
 extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 
-// flags that if set in seg, will be passed on to piz
+// flags written to the genozip file (4-bit header.h.flags)
 #define CTX_FL_STORE_VALUE 0x01 // the values of this ctx are uint32_t, and are a basis for a delta calculation (by this field or another one)
 #define CTX_FL_STRUCTURED  0x02 // snips usually contain Structured
 
-// these flags, if used by VCF FORMAT contexts, will not be passed on to piz (limitation is only for FORMAT contexts - since they don't fit in SectionHeaderDictionary.h.flags)
+// ZIP-only flags not written to the genozip file
 #define CTX_FL_NO_STONS    0x10 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
 #define CTX_FL_LOCAL_LZMA  0x20 // compress local with lzma
 
@@ -228,6 +229,9 @@ extern void mtf_destroy_context (Context *ctx);
 
 extern void mtf_vb_1_lock (VBlockP vb);
 extern MtfNode *mtf_get_node_by_word_index (Context *ctx, uint32_t word_index);
+extern const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, int32_t word_index, 
+                                               const char **snip, uint32_t *snip_len);
+
 extern void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids);
 
 #endif

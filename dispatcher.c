@@ -148,9 +148,9 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
         sofar = z_file->txt_data_so_far_single;
     } 
     
-    // case: UNZIP: always ; ZIP: locally decompressed files - eg .vcf.gz or .fq.bz2 - 
+    // case: PIZ: always ; ZIP: locally decompressed files - eg .vcf.gz or .fq.bz2 - 
     // we go by the physical disk size and how much has been consumed from it so far
-    else if (command == UNZIP || 
+    else if (command == PIZ || 
              (command == ZIP && file_is_read_via_int_decompressor (txt_file))) {
         File *input_file  = (command == ZIP ? txt_file : z_file);
         total = input_file->disk_size; 
@@ -500,5 +500,5 @@ uint32_t dispatcher_fan_out_task (const char *task_name, bool test_mode,
 
     } while (!dispatcher_is_done (dispatcher));
 
-    return ((DispatcherData *)dispatcher)->next_vb_i - 1;
+    return ((DispatcherData *)dispatcher)->next_vb_i;
 }
