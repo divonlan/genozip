@@ -345,7 +345,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
         case COMP_XZ:  ratio = is_no_ht_vcf ? 171 : 12.7; break;
 
-        case COMP_BAM: ratio = 4; break;
+        case COMP_BAM: ratio = 7; break;
 
         case COMP_ZIP: ratio = 3; break;
 

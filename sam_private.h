@@ -17,11 +17,11 @@ typedef struct {
 
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
-    SubfieldMapper qname_mapper; // ZIP & PIZ
-    Buffer optional_mapper_buf;  // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->contexts[SAM_OPTIONAL].mtf
-    const char *last_cigar;      // ZIP/PIZ: last CIGAR
-    unsigned ref_consumed;       // ZIP/PIZ: how many bp of reference are consumed according to the last_cigar
-    unsigned ref_and_seq_consumed; // ZIP: how many bp in the last seq consumes both ref and seq, according to CIGAR
+    SubfieldMapper qname_mapper;   // ZIP & PIZ
+    Buffer optional_mapper_buf;    // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->contexts[SAM_OPTIONAL].mtf
+    const char *last_cigar;        // ZIP/PIZ: last CIGAR
+    uint32_t ref_consumed;         // ZIP/PIZ: how many bp of reference are consumed according to the last_cigar
+    uint32_t ref_and_seq_consumed; // ZIP: how many bp in the last seq consumes both ref and seq, according to CIGAR
 } VBlockSAM;
 
 typedef VBlockSAM *VBlockSAMP;

@@ -29,6 +29,7 @@
 // default max amount of txt data in each variant block. this is user-configurable with --vblock
 #define TXT_DATA_PER_VB_DEFAULT "16" // MB in default mode
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
+extern void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str);
 
 #define MAX_SUBFIELDS 100   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME, SAM_OPTIONAL, GFF3_ATTRS subfield types that is supported in one line.
 #define MAX_DICTS     253   // 254 is for future use and 255 is DID_I_NONE
@@ -101,7 +102,7 @@ typedef enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't speci
 } ReferenceType;
 extern ReferenceType flag_reference;           
 
-extern char *flag_grep;
+extern char *flag_grep, *flag_show_is_set;
 extern uint64_t flag_stdin_size;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;

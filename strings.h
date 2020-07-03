@@ -8,6 +8,7 @@
 
 #include "genozip.h"
 
+#define IS_NUCLEOTIDE(c) ((c) == 'A' || (c) == 'T' || (c) == 'C' || (c) == 'G')
 #define IS_DIGIT(c)   ((c)>='0' && (c)<='9')
 #define IS_CLETTER(c) ((c)>='A' && (c)<='Z')
 #define IS_SLETTER(c) ((c)>='a' && (c)<='z')

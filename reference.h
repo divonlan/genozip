@@ -11,6 +11,7 @@
 #include "buffer.h"
 #include "md5.h"
 #include "bit_array.h"
+#include "compressor.h"
 
 // reference sequences - one per range of 1MB. ranges (chrom, pos) are mapped here with a hash function. In the rare case two unrelated ranges
 // are mapped to the same entry - only the first range will have a reference, and the other ones will not. this will hurt the compression ratio,
@@ -51,6 +52,7 @@ extern int64_t ref_min_max_of_chrom (int32_t chrom, bool get_max);
 extern Range *ref_zip_get_locked_range (VBlockP vb, int64_t pos);
 
 extern void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int64_t end_pos);
+extern void ref_print_is_set (const Range *r);
 
 // Make-reference stuff (ZIP of FASTA with --make-reference)
 extern void ref_make_ref_init (void);
@@ -70,17 +72,14 @@ extern Range *ref_make_ref_get_range (uint32_t vblock_i);
         "Error in %s:%u: reference is not set: chrom=%.*s pos=%"PRId64, __FUNCTION__, __LINE__, (range)->chrom_name_len, (range)->chrom_name, (pos))
 
 // note that the following work on idx and not pos! (idx is the index within the range)
-#define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      ref_encode[(uint8_t)value] & 1)       ;  \
-                                              bit_array_assign (&(range)->ref, (idx) * 2 + 1, (ref_encode[(uint8_t)value] & 2) >> 1) ; }
+#define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      actg_encode[(uint8_t)value] & 1)       ;  \
+                                              bit_array_assign (&(range)->ref, (idx) * 2 + 1, (actg_encode[(uint8_t)value] & 2) >> 1) ; }
 #define ref_is_nucleotide_set(range,idx)    ((bool)bit_array_get (&(range)->is_set, (idx)))
-#define ref_get_nucleotide(range,idx)   ref_decode[(bit_array_get (&(range->ref), (idx) * 2 + 1) << 1) | \
+#define ref_get_nucleotide(range,idx)   actg_decode[(bit_array_get (&(range->ref), (idx) * 2 + 1) << 1) | \
                                                     bit_array_get (&(range)->ref, (idx) * 2)]
 
 // globals
 extern const char *ref_filename;
 extern Md5Hash ref_md5;
-
-extern const char ref_decode[4];
-extern const uint8_t ref_encode[256];
 
 #endif

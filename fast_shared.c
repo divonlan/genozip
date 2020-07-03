@@ -28,8 +28,8 @@ void fast_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
                                         char **unused_data,  uint32_t *unused_len)
 {
     ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
-    *line_seq_data = ENT (char, vb->txt_data, dl->seq_data_start);
     *line_seq_len  = dl->seq_len;
+    *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
     *unused_data   = NULL;
     *unused_len    = 0;
 }   

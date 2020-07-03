@@ -495,7 +495,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     }
 
     // check if the genozip file includes a reference
-    if (!flag_reading_reference && (sections_has_reference() || (DT_SAM && flag_reference != REF_EXTERNAL))) { // edge case for SAM zipped with REF_INTERNAL but no reference (eg unaligned) - it is still REF_STORED
+    if (!flag_reading_reference && (sections_has_reference() || (z_file->data_type == DT_SAM && flag_reference != REF_EXTERNAL))) { // edge case for SAM zipped with REF_INTERNAL but no reference (eg unaligned) - it is still REF_STORED
         ASSERTW (flag_reference == REF_NONE || flag_reference == REF_STORED, // it will be REF_STORED in the 2nd+ file
         "Note: --reference option is ignored - %s does not require a reference to be uncompressed", z_name);
         flag_reference = REF_STORED;

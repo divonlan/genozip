@@ -10,6 +10,8 @@
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fast_zip_get_start_len_line_i_seq)
+extern void fasta_zip_initialize (void);
+extern void fasta_zip_callback (VBlockP vb);
 
 // SEG Stuff
 extern void fasta_seg_initialize();
@@ -25,8 +27,6 @@ extern void fast_vb_release_vb();
 extern unsigned fast_vb_size (void);
 extern unsigned fast_vb_zip_dl_size (void);
 
-// Make-reference stuff
-extern void fasta_make_ref_range (VBlockP vb);
 
 #define FASTA_SPECIAL { fasta_piz_special_SEQ, fasta_piz_special_COMMENT, fasta_piz_special_DESC }
 SPECIAL (FASTA, 0, SEQ, fasta_piz_special_SEQ);

@@ -297,7 +297,8 @@ void stats_show_sections (void)
 
     // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_size is 
     // missing, while txt_data_so_far_single is what was actually processed
-    ASSERTW (all_txt == txt_file->txt_data_so_far_single || flag_optimize, "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
+    ASSERTW (all_txt == txt_file->txt_data_so_far_single || flag_optimize || flag_make_reference, 
+             "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_uint_commas (all_txt, s1), str_uint_commas (txt_file->txt_data_size_single, s2), 
              (int32_t)(txt_file->txt_data_so_far_single - all_txt)); 
 }

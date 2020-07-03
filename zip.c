@@ -390,6 +390,8 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
             if (!flag_make_reference)
                 zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
+            else 
+                z_file->txt_data_so_far_concat += (int64_t)processed_vb->vb_data_size;
                 
             z_file->num_vbs++;
             

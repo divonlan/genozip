@@ -14,7 +14,6 @@
 #include "endianness.h"
 #include "crypt.h"
 #include "zfile.h"
-#include "file.h"
 #include "strings.h"
 
 // -----------------------------------------------------
@@ -70,7 +69,6 @@ static void comp_bzfree (void *vb_, void *addr)
 
 static void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size)
 {
-//printf ("vb=%u size=%d\n", ((VBlock *)alloc_stuff->vb)->vblock_i, (int)size);
     return comp_alloc ((VBlock *)alloc_stuff->vb, size, 1.15); // lzma 5th buffer (the largest) may vary in size between subsequent compressions
 }
 
@@ -126,7 +124,7 @@ uint64_t BZ2_consumed (void *bz_file)
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_compress_bzlib (VBlock *vb, 
+bool comp_compress_bzlib (VBlock *vb, CompressionAlg alg,
                           const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                           CompGetLineCallback callback,                        // option 2 - compress data one line at a tim
                           char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -173,7 +171,7 @@ bool comp_compress_bzlib (VBlock *vb,
             uint32_t avail_in_2;
             callback (vb, line_i, &strm.next_in, &strm.avail_in, &next_in_2, &avail_in_2);
 
-            if (!strm.avail_in && !strm.avail_out) continue; // this line has no SEQ data - move to next line (this happens eg in FASTA)
+            if (!strm.avail_in && !avail_in_2) continue; // this line has no SEQ data - move to next line (this happens eg in FASTA)
 
             bool final = (line_i == vb->lines.len - 1) && !avail_in_2;
 
@@ -217,6 +215,105 @@ bool comp_compress_bzlib (VBlock *vb,
     return success;
 }
 
+// -------------------------------------------------------------------------------------
+// acgt stuff
+// compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA.
+// It's about 25X faster and slightly better compression ratio than LZMA
+// -------------------------------------------------------------------------------------
+
+// decoder of 2bit encoding of nucleotides
+const char actg_decode[4] = { 'A', 'C', 'G', 'T' };
+
+// table to convert ASCII to ACGT encoding. A,C,G,T (lower and upper case) are encoded as 0,1,2,3 respectively, 
+// and everything else (including N) is encoded as 0
+const uint8_t actg_encode[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 16
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 32
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 48
+                                  0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,   // 64  A(65)->0 C(67)->1 G(71)->2
+                                  0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 80  T(84)->3
+                                  0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,   // 96  a(97)->0 c(99)->1 g(103)->2
+                                  0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 112 t(116)->3
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 128
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+
+// packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compress. Previous incomplete 64bit words in carry
+// are used at the beginning of the resulting array, and any uncomplete 64bit word at the end, is stored back in carry
+static void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned bits_consumed, bool do_lten, bool do_lten_partial_final_word)
+{
+    buf_alloc (vb, &vb->compressed, 
+               (vb->compressed.len + roundup_bits2words64 (data_len * 2)) * sizeof (uint64_t), // note: len is in words
+               2, buf_is_allocated (&vb->compressed) ? NULL : "compress", 0); // NULL if already allocated, to avoid overwriting param which is overlayed with BitArray->num_of_bits
+
+    BitArray *packed = buf_get_bitmap (&vb->compressed);
+
+    // remove consumed bits
+    if (bits_consumed)
+        bit_array_shift_right_shrink (packed, bits_consumed);
+
+    // increase bit array to accomodate data
+    uint64_t next_bit = packed->num_of_bits;
+    packed->num_of_bits += data_len * 2;
+    packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
+
+    // pack nucleotides - each character is packed into 2 bits
+    for (uint64_t i=0 ; i < data_len ; i++) {
+        ASSERT (IS_NUCLEOTIDE (data[i]), "Error in comp_acgt_pack: bit #%u is not a nucleotide: %c (ASCII %u)", (uint32_t)i, data[i], data[i]);
+
+        uint8_t encoding = actg_encode[(uint8_t)data[i]];
+        bit_array_assign (packed, next_bit, encoding & 1);
+        bit_array_assign (packed, next_bit + 1, (encoding & 2) >> 1);
+        next_bit += 2;
+    }
+
+    // note: we store in Little Endian unlike the rest of the data that is in Big Endian, because LTEN keeps the nucleotides in their
+    // original order, and improves compression ratio by about 2%
+    if (do_lten)
+        LTEN_bit_array (packed, do_lten_partial_final_word);
+}
+
+static void comp_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream)
+{
+    BitArray *packed = buf_get_bitmap (&vb->compressed);
+    uint64_t bits_remaining = packed->num_of_bits - instream->bits_consumed;
+
+    if (bits_remaining) { 
+        
+        ASSERT (bits_remaining >= 1 && bits_remaining <= 63, "Error in comp_acgt_pack_last_partial_word: Invalid bits_remaining%u", (uint32_t)bits_remaining);
+
+        bit_array_shift_right_shrink (packed, instream->bits_consumed);
+     
+        instream->bits_consumed = 0;
+        packed->num_of_bits  = packed->num_of_words = 0;
+        packed->words[0]     = LTEN64 (packed->words[0]);
+        instream->next_in_1  = (char *)packed->words; // last word
+        instream->avail_in_1 = sizeof (uint64_t);
+    }
+}
+
+static void comp_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t uncompressed_len)
+{
+    BitArray *packed = buf_get_bitmap (&vb->compressed);
+    packed->num_of_bits = uncompressed_len * 2;
+    packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
+
+    LTEN_bit_array (packed, true);
+
+    bit_array_clear_excess_bits_in_top_word (packed);
+
+    for (uint64_t i=0; i < uncompressed_len; i++) {
+        uint8_t encoding = bit_array_get (packed, i*2) + (bit_array_get (packed, i*2 + 1) << 1);
+        uncompressed_data[i] = actg_decode[encoding];
+    }
+}
+
 // -----------------------------------------------------
 // lzma stuff
 // -----------------------------------------------------
@@ -241,13 +338,15 @@ static const char *lzma_status (ELzmaStatus status)
     return ((unsigned)status <= 4) ? lzma_statuses[status] : "Unrecognized lzma status";
 }
 
+
 static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t *size)
 {
     ISeqInStream *instream = (ISeqInStream *)p; // discard the const
+    VBlockP vb = (VBlockP)instream->vb;
 
     // case: we're done serving all the data
     if (!instream->avail_in) {
-        *size = 0;
+        *size = 0; // we're done
         return SZ_OK;
     }
 
@@ -260,8 +359,29 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
                             &instream->next_in_1, &instream->avail_in_1,
                             &instream->next_in_2, &instream->avail_in_2);
 
+        if (instream->alg == COMP_ACGT && (instream->avail_in_1 || instream->avail_in_2)) {
+
+            // pack into vb->compressed
+            if (instream->avail_in_1) comp_acgt_pack (vb, instream->next_in_1, instream->avail_in_1, instream->bits_consumed, !instream->avail_in_2, false); 
+            if (instream->avail_in_2) comp_acgt_pack (vb, instream->next_in_2, instream->avail_in_2, 0, true, false); 
+
+            BitArray *packed = buf_get_bitmap (&vb->compressed);
+            instream->next_in_1  = (char*)packed->words;
+            instream->avail_in_1 = (packed->num_of_bits & ~(uint64_t)0x3f) / 8; // # of bytes - bits rounded down to the nearest word - possibly leaving some carry bits for next time (incomplete word)
+            instream->avail_in_2 = 0;
+
+            instream->bits_consumed = instream->avail_in_1 * 8; // whole 64b words - could be less than packed->num_of_bits
+        }
+
         instream->line_i++;
     }
+
+    // pack ACGT last partial byte, if there is one
+    if (instream->line_i == ((VBlockP)instream->vb)->lines.len && 
+        !instream->avail_in_1 && !instream->avail_in_2 &&
+        instream->alg == COMP_ACGT) 
+    
+        comp_acgt_pack_last_partial_word (vb, instream); // also does BGEN
 
     ASSERT (instream->avail_in_1 + instream->avail_in_2 <= instream->avail_in, 
             "Expecting avail_in_1=%u + avail_in_2=%u <= avail_in=%u but avail_in_1+avail_in_2=%u",
@@ -301,9 +421,9 @@ static size_t comp_lzma_data_out_callback (const ISeqOutStream *p, const void *b
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_compress_lzma (VBlock *vb, 
+bool comp_compress_lzma (VBlock *vb, CompressionAlg alg,
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                         CompGetLineCallback callback,                        // option 2 - compress data one line at a tim
+                         CompGetLineCallback callback,                        // option 2 - compress data one line at a time
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
@@ -330,12 +450,20 @@ bool comp_compress_lzma (VBlock *vb,
 
     bool success = true;
 
+    if (alg == COMP_ACGT) 
+        vb->compressed.len = vb->compressed.param = 0; // reset bit array num_of_words and num_of_bits 
+
     // option 1 - compress contiguous data
     if (uncompressed) {
+
+        if (alg == COMP_ACGT) 
+            comp_acgt_pack (vb, uncompressed, uncompressed_len, 0, true, true); // pack into the vb->compressed buffer
+
         SizeT data_compressed_len64 = (SizeT)*compressed_len - LZMA_PROPS_SIZE;
         res = LzmaEnc_MemEncode (lzma_handle, 
                                 (uint8_t *)compressed + LZMA_PROPS_SIZE, &data_compressed_len64, 
-                                (uint8_t *)uncompressed, uncompressed_len,
+                                (uint8_t *)(alg == COMP_LZMA ? uncompressed : vb->compressed.data),
+                                alg == COMP_LZMA ? uncompressed_len : vb->compressed.len * sizeof (int64_t),
                                 true, NULL, &alloc_stuff, &alloc_stuff);
         
         *compressed_len = (uint32_t)data_compressed_len64 + LZMA_PROPS_SIZE;
@@ -345,8 +473,10 @@ bool comp_compress_lzma (VBlock *vb,
 
         ISeqInStream instream =   { .Read          = comp_lzma_data_in_callback, 
                                     .vb            = vb,
+                                    .alg           = alg,
                                     .line_i        = 0,
                                     .avail_in      = uncompressed_len,
+                                    .bits_consumed = 0,
                                     .next_in_1     = NULL,
                                     .avail_in_1    = 0,
                                     .next_in_2     = NULL,
@@ -356,7 +486,7 @@ bool comp_compress_lzma (VBlock *vb,
         ISeqOutStream outstream = { .Write        = comp_lzma_data_out_callback,
                                     .next_out     = compressed + LZMA_PROPS_SIZE,
                                     .avail_out    = *compressed_len - LZMA_PROPS_SIZE};
-
+        
         res = LzmaEnc_Encode (lzma_handle, &outstream, &instream, NULL, &alloc_stuff, &alloc_stuff);        
 
         *compressed_len -= outstream.avail_out; 
@@ -379,7 +509,7 @@ bool comp_compress_lzma (VBlock *vb,
 // -----------------------------------------------------
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_compress_none (VBlock *vb, 
+bool comp_compress_none (VBlock *vb, CompressionAlg alg,
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                          CompGetLineCallback callback,                        // option 2 - compress data one line at a tim
                          char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -408,7 +538,7 @@ bool comp_compress_none (VBlock *vb,
     return true;
 }
 
-bool comp_error (VBlock *vb, const char *uncompressed, uint32_t uncompressed_len, CompGetLineCallback callback,
+bool comp_error (VBlock *vb, CompressionAlg alg, const char *uncompressed, uint32_t uncompressed_len, CompGetLineCallback callback,
                  char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
     ABORT0 ("Error in comp_compress: Unsupported section compression algorithm");
@@ -430,7 +560,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         header->sec_compression_alg = COMP_BZ2;
 
     static Compressor compressors[NUM_COMPRESSION_ALGS] = { 
-        comp_compress_none, comp_error, comp_compress_bzlib, comp_error, comp_error, comp_error, comp_error, comp_compress_lzma, comp_error };
+        comp_compress_none, comp_error, comp_compress_bzlib, comp_error, comp_error, comp_error, comp_error, comp_compress_lzma, comp_error, comp_compress_lzma };
 
     ASSERT (header->sec_compression_alg < NUM_COMPRESSION_ALGS, "Error in comp_compress: unsupported section compressor=%u", header->sec_compression_alg);
 
@@ -468,7 +598,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         bool success = 
-            compressors[header->sec_compression_alg](vb, uncompressed_data, data_uncompressed_len,
+            compressors[header->sec_compression_alg](vb, header->sec_compression_alg, uncompressed_data, data_uncompressed_len,
                                                      callback,  
                                                      &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
                                                      true);
@@ -481,7 +611,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
 
-            compressors[header->sec_compression_alg](vb, 
+            compressors[header->sec_compression_alg](vb, header->sec_compression_alg,
                                                      uncompressed_data, data_uncompressed_len,
                                                      callback,  
                                                      &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
@@ -570,7 +700,7 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
     case COMP_LZMA: {
         ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
         ELzmaStatus status;
-        //uint64_t uncompressed_len64 = uncompressed->len;
+
         SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
         
         SRes ret = LzmaDecode ((uint8_t *)uncompressed_data, &uncompressed_len, 
@@ -580,8 +710,35 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
 
         ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
                 "Error: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
+        break;
+    }
+    case COMP_ACGT: {
+        ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
+        ELzmaStatus status;
+
+        SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
+
+        uint64_t bitarray_size = roundup_bits2words64 (uncompressed_len * 2) * sizeof (uint64_t); // 4 nucleotides per byte, rounded up to whole 64b words
+        buf_alloc (vb, &vb->compressed, bitarray_size, 2, "compressed", 0);
+        
+        uint64_t expected_num_uncompressed_bytes = roundup_bits2words64 (uncompressed_len * 2) * sizeof (uint64_t); // 4 nucleotides per byte, rounded up to whole bytes
+        uint64_t actual_num_uncompressed_bytes = expected_num_uncompressed_bytes;
+        
+        SRes ret = LzmaDecode ((uint8_t *)vb->compressed.data, &actual_num_uncompressed_bytes, 
+                               (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
+                               (uint8_t *)compressed, LZMA_PROPS_SIZE, 
+                               LZMA_FINISH_END, &status, &alloc_stuff);
+
+        ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
+                "Error: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
+
+        ASSERT (expected_num_uncompressed_bytes == actual_num_uncompressed_bytes, "Error in comp_uncompress while decompressing ACGT: expected_num_uncompressed_bytes(%u) != actual_num_uncompressed_bytes(%u)",
+                (uint32_t)expected_num_uncompressed_bytes, (uint32_t)actual_num_uncompressed_bytes);
+                
+        comp_acgt_unpack (vb, uncompressed_data, uncompressed_len);
 
         break;
+
     }
     case COMP_NONE:
         memcpy (uncompressed_data, compressed, compressed_len);

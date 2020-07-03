@@ -11,6 +11,7 @@
 #include "profiler.h"
 #include "aes.h"
 #include "context.h"
+#include "bit_array.h"
 
 #ifndef DID_I_NONE // also defined in move_to_front.h
 #define DID_I_NONE   255
@@ -47,14 +48,14 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint64_t vb_position_txt_file; /* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
     int32_t vb_data_size;      /* ZIP: actual size of txt read file file ; PIZ: expected size of decompressed txt. Might be different than original if --optimize is used. */\
     uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
-    uint32_t longest_line_len; /* length of longest line of text line in this vb */\
+    uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     bool dont_show_curr_line;  /* PIZ only - line currently in reconstruction is grepped out due to --grep or --regions and should not be displayed */\
     GrepStages grep_stages;    /* PIZ: tell piz_is_skip_section what to skip in case of --grep */\
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
-    bool range_needs_compacting; /* ZIP: I/O thread telling compute thread to compact this range while compressing it */ \
+    uint32_t range_num_set_bits;  /* ZIP: I/O thread telling compute thread to how many bits are set in range.is_set */ \
     \
     ProfilerRec profile; \
     \
@@ -102,7 +103,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer show_b250_buf;                      /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
     Buffer section_list_buf;                   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     \
-    Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */
+    /* Compressor stuff */ \
+    Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ 
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

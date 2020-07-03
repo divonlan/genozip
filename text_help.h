@@ -171,7 +171,9 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --debug-progress  See raw numbers that feed into the progress indicator",
     "",
-    "   Z    --show-reference  Show the ranges included the SEC_REFERENCE sections",    
+    "   ZUC  --show-reference  Show the ranges included the SEC_REFERENCE sections",    
+    "",
+    "   UC   --show-is-set     <contig> Shows the contents of SEC_REF_IS_SET section for the given contig",    
 };
 
 static const char *help_genounzip[] = {

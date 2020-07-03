@@ -31,13 +31,13 @@ void vb_release_vb (VBlock *vb)
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
-    vb->dont_show_curr_line = vb->range_needs_compacting = false;    
+    vb->dont_show_curr_line = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->chrom_name = NULL;
 
     vb->prev_range = NULL;
-    vb->prev_range_chrom_node_index = vb->prev_range_range_i = 0;
+    vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
@@ -196,4 +196,18 @@ const char *err_vb_pos (void *vb)
     sprintf (s, "vb i=%u position in %s file=%"PRIu64, 
              ((VBlockP)vb)->vblock_i, dt_name (txt_file->data_type), ((VBlockP)vb)->vb_position_txt_file);
     return s;
+}
+
+void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str)
+{
+    const char *err_msg = "Error: invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The file will be read and processed in blocks of this number of megabytes.";
+
+    unsigned len = strlen (mem_size_mb_str);
+    ASSERT (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
+    ASSERT (strspn (mem_size_mb_str, "0123456789") == len, err_msg, mem_size_mb_str);
+
+    unsigned mem_size_mb = atoi (mem_size_mb_str);
+    ASSERT (mem_size_mb <= 2048, err_msg, mem_size_mb_str);
+
+    global_max_memory_per_vb = mem_size_mb * 1024 * 1024;
 }

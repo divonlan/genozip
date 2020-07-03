@@ -114,7 +114,8 @@ extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 
 // ZIP-only flags not written to the genozip file
 #define CTX_FL_NO_STONS    0x10 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
-#define CTX_FL_LOCAL_LZMA  0x20 // compress local with lzma
+#define CTX_FL_LOCAL_LZMA  0x20 // compress local with COMP_LZMA
+#define CTX_FL_LOCAL_ACGT  0x40 // compress local with COMP_ACGT
 
 // combination flags for convenience
 #define CTX_FL_POS         (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // A POS field that stores a delta vs. a different field

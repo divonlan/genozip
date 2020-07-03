@@ -331,10 +331,10 @@ static CompressionAlg vcf_zip_get_best_gt_compressor (VBlock *vb, Buffer *test_d
     uint32_t uncompressed_len = MIN (test_data->len, TEST_BLOCK_SIZE);
 
     uint32_t bzlib_comp_len = compressed.size;
-    comp_compress_bzlib (vb, test_data->data, uncompressed_len, NULL, compressed.data, &bzlib_comp_len, false);
+    comp_compress_bzlib (vb, COMP_BZ2, test_data->data, uncompressed_len, NULL, compressed.data, &bzlib_comp_len, false);
     
     uint32_t lzma_comp_len = compressed.size;
-    comp_compress_lzma (vb, test_data->data, uncompressed_len, NULL, compressed.data, &lzma_comp_len, false);
+    comp_compress_lzma (vb, COMP_LZMA, test_data->data, uncompressed_len, NULL, compressed.data, &lzma_comp_len, false);
     
     if      (bzlib_comp_len < uncompressed_len && bzlib_comp_len < lzma_comp_len) best_gt_data_compressor = COMP_BZ2;
     else if (lzma_comp_len  < uncompressed_len && lzma_comp_len < bzlib_comp_len) best_gt_data_compressor = COMP_LZMA;

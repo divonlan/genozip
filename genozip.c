@@ -67,10 +67,11 @@ ReferenceType flag_reference = REF_NONE;
 
 uint64_t flag_stdin_size = 0;
 char *flag_grep = NULL;
+char *flag_show_is_set = NULL;
 
 DictId dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
-           dict_id_show_one_dict = { 0 },  // argument of --show-dict-one
-           dict_id_dump_one_b250 = { 0 };  // argument of --dump-b250-one
+       dict_id_show_one_dict = { 0 },  // argument of --show-dict-one
+       dict_id_dump_one_b250 = { 0 };  // argument of --dump-b250-one
 
 static char *threads_str  = NULL;
 
@@ -470,20 +471,6 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
     FREE (basenames);    
 }
 
-void genozip_set_global_max_memory_per_vb (const char *mem_size_mb_str)
-{
-    const char *err_msg = "Error: invalid argument of --vblock: %s. Expecting an integer between 1 and 2048. The file will be read and processed in blocks of this number of megabytes.";
-
-    unsigned len = strlen (mem_size_mb_str);
-    ASSERT (len <= 4 || (len==1 && mem_size_mb_str[0]=='0'), err_msg, mem_size_mb_str);
-    ASSERT (strspn (mem_size_mb_str, "0123456789") == len, err_msg, mem_size_mb_str);
-
-    unsigned mem_size_mb = atoi (mem_size_mb_str);
-    ASSERT (mem_size_mb <= 2048, err_msg, mem_size_mb_str);
-
-    global_max_memory_per_vb = mem_size_mb * 1024 * 1024;
-}
-
 //#include "base64.h"
 int main (int argc, char **argv)
 {
@@ -583,6 +570,7 @@ int main (int argc, char **argv)
         #define _sT {"show-threads",  no_argument,       &flag_show_threads,     1 }  
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks,     1 }  
         #define _sR {"show-reference",no_argument,       &flag_show_reference,   1 }  
+        #define _sI {"show-is-set",   required_argument, 0, '~',                   }  
         #define _sA {"show-aliases",  no_argument,       &flag_show_aliases,     1 }  
         #define _dm {"debug-memory",  no_argument,       &flag_debug_memory,     1 }  
         #define _dp {"debug-progress",no_argument,       &flag_debug_progress,   1 }  
@@ -591,10 +579,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,      _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                             _dm,                                                                                                       _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                             _dm,                                                                                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -642,13 +630,14 @@ int main (int argc, char **argv)
             case 'G' : flag_drop_genotypes= 1      ; break;
             case 'H' : flag_no_header     = 1      ; break;
             case '1' : flag_header_one    = 1      ; break;
-            case '@' : threads_str  = optarg       ; break;
-            case 'o' : out_filename = optarg       ; break;
-            case 'g' : flag_grep    = optarg       ; break;
+            case '@' : threads_str      = optarg   ; break;
+            case 'o' : out_filename     = optarg   ; break;
+            case 'g' : flag_grep        = optarg   ; break;
+            case '~' : flag_show_is_set = optarg   ; break;
             case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '5' : dict_id_dump_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
             case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
-            case 'B' : genozip_set_global_max_memory_per_vb (optarg); 
+            case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
                        break;
             case 'S' : vcf_zip_set_global_samples_per_block (optarg); 
@@ -735,7 +724,7 @@ int main (int argc, char **argv)
     if (flag_stdout) flag_quiet=true; 
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
-    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads || flag_show_reference ||
+    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
         dict_id_show_one_b250.num || dict_id_show_one_dict.num || dict_id_dump_one_b250.num || 
         flag_show_alleles || flag_show_vblocks || (flag_show_index && command==PIZ))
         flag_quiet=true; // don't show progress
@@ -746,7 +735,7 @@ int main (int argc, char **argv)
     if (flag_test) flag_md5=true; // test requires md5
 
     // default values, if not overridden by the user
-    if (!flag_vblock) genozip_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
+    if (!flag_vblock) vb_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
     if (!flag_sblock) vcf_zip_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
 
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
@@ -755,7 +744,7 @@ int main (int argc, char **argv)
         ASSERT (!crypt_have_password(), "%s: option --make-reference is incompatable with %s", global_cmd, OT("password", "p"));
 
         flag_md5 = true;
-        if (!flag_vblock) genozip_set_global_max_memory_per_vb("1");
+        if (!flag_vblock) vb_set_global_max_memory_per_vb("1");
     }
 
     // if --optimize was selected, all optimizations are turned on

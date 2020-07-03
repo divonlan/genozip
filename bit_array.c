@@ -24,6 +24,7 @@
 #include <ctype.h>  // need for tolower()
 #include <errno.h>  // perror()
 //#include <sys/time.h> // for seeding random
+#include "endianness.h"
 
 // Windows includes
 #if defined(_WIN32)
@@ -372,6 +373,14 @@ static inline void _set_region(BitArray* bitarr, bit_index_t start,
 // Constructor
 //
 
+void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) // divon
+{
+  // zero the bits in the top word that are beyond nbits
+  bit_index_t top_bits = bits_in_top_word(bitarr->num_of_bits);
+  if (bitarr->num_of_words && top_bits < 64)
+    bitarr->words[bitarr->num_of_words-1] &= bitmask64 (top_bits);
+}
+
 // If cannot allocate memory, set errno to ENOMEM, return NULL
 BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits)
 {
@@ -381,9 +390,7 @@ BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits)
   ASSERT (bitarr->words, "Error in bit_array_alloc: failed to allocate %"PRId64" bytes", bitarr->num_of_words * sizeof(word_t));
 
   // zero the bits in the top word that are beyond nbits
-  bit_index_t top_bits = bits_in_top_word(bitarr->num_of_bits);
-  if (bitarr->num_of_words && top_bits < 64)
-    bitarr->words[bitarr->num_of_words-1] &= bitmask64 (top_bits);
+  bit_array_clear_excess_bits_in_top_word (bitarr);
   
   return bitarr;
 }
@@ -779,7 +786,8 @@ bit_index_t bit_array_hamming_distance(const BitArray* arr1,
 #define _next_bit_func_def(FUNC,GET) \
 char FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
 { \
-  assert(offset < bitarr->num_of_bits); \
+  ASSERT (offset < bitarr->num_of_bits, "Error in %s: expecting offset(%"PRId64") < bitarr->num_of_bits(%"PRId64")", \
+          #FUNC, offset, bitarr->num_of_bits); \
   if(bitarr->num_of_bits == 0 || offset >= bitarr->num_of_bits) { return 0; } \
  \
   /* Find first word that is greater than zero */ \
@@ -1471,6 +1479,38 @@ void bit_array_shift_right(BitArray* bitarr, bit_index_t shift_dist, char fill)
   _set_region(bitarr, cpy_length, shift_dist, action);
 }
 
+// Shift towards LSB / lower index
+void bit_array_shift_right_shrink(BitArray* bitarr, bit_index_t shift_dist) // added by divon
+{
+  if(shift_dist >= bitarr->num_of_bits)
+  {
+    bitarr->num_of_bits = bitarr->num_of_words = 0;
+    return;
+  }
+  else if(shift_dist == 0)
+  {
+    return;
+  }
+
+  bit_index_t cpy_length = bitarr->num_of_bits - shift_dist;
+  bit_array_copy(bitarr, 0, bitarr, shift_dist, cpy_length);
+
+  bitarr->num_of_bits -= shift_dist;
+  bitarr->num_of_words = roundup_bits2words64 (bitarr->num_of_bits);
+
+  bit_array_clear_excess_bits_in_top_word (bitarr);
+}
+
+// removes flanking bits on boths sides, shrinking bitarr
+void bit_array_remove_flanking (BitArray* bitarr, bit_index_t lsb_flanking, bit_index_t msb_flanking) // added by divon
+{
+  bit_index_t cpy_length = bitarr->num_of_bits - lsb_flanking;
+  bit_array_copy(bitarr, 0, bitarr, lsb_flanking, cpy_length);
+
+  bitarr->num_of_bits -= lsb_flanking + msb_flanking;
+  bitarr->num_of_words = roundup_bits2words64 (bitarr->num_of_bits);   
+}
+
 //
 // Cycle
 //
@@ -1630,3 +1670,10 @@ void bit_array_copy_from_buffer (BitArray* dst, bit_index_t dstindx, const Buffe
   bit_array_copy (dst, dstindx, &src, 0, num_of_bits);
 }
 
+void LTEN_bit_array (BitArray* bitarr, bool also_partial_topword)
+{
+  int64_t num_words = (bitarr->num_of_bits >> 6) + (also_partial_topword && (bitarr->num_of_bits & 0x3f) != 0);
+  
+  for (uint64_t i=0; i < num_words; i++)
+    bitarr->words[i] = LTEN64 (bitarr->words[i]);
+}

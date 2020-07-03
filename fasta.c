@@ -11,6 +11,19 @@
 #include "dict_id.h"
 #include "reference.h"
 #include "random_access.h"
+#include "strings.h"
+
+void fasta_zip_initialize (void) 
+{
+    if (flag_make_reference)
+        ref_make_ref_init();
+
+    else
+        // reduction in vblock so that a smaller amount of data is affected by contamination - this reduced
+        // compression of GRCh38 from 8 min to 1.5 min on my PC
+        if (!flag_vblock) vb_set_global_max_memory_per_vb ("1"); 
+    
+}
 
 void fasta_seg_initialize (VBlockFAST *vb)
 {
@@ -22,19 +35,19 @@ void fasta_seg_initialize (VBlockFAST *vb)
             structured_initialized = true;
         }
 
-        Context *ctx = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ);
-        ctx->flags  = CTX_FL_LOCAL_LZMA;
-        ctx->ltype  = CTX_LT_SEQUENCE;
+        vb->contexts[FASTA_LINEMETA].flags = CTX_FL_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
+        
+        Context *seq_ctx = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ);
+        seq_ctx->flags  = CTX_FL_LOCAL_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
+        seq_ctx->ltype  = CTX_LT_SEQUENCE;
     }
 
     vb->contexts[FASTA_CONTIG].flags = CTX_FL_NO_STONS; // needs b250 node_index for reference
 }
 
 // called during FASTA ZIP compute thread, from zip_compress_one_vb (as "compress")- converts the vb sequence into a range
-void fasta_make_ref_range (VBlockP vb)
+static void fasta_make_ref_range (VBlockP vb)
 {
-    if (!flag_make_reference) return; // nothing to do for regular fasta
-
     Range *r = ref_make_ref_get_range (vb->vblock_i);
     uint64_t seq_len = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ)->local.len;
 
@@ -46,7 +59,7 @@ void fasta_make_ref_range (VBlockP vb)
         
         const uint8_t *line_seq = ENT (uint8_t, vb->txt_data, DATA_LINE(line_i)->seq_data_start);
         for (uint64_t base_i=0; base_i < DATA_LINE(line_i)->seq_len; base_i++) {
-            uint8_t encoding = ref_encode[line_seq[base_i]];
+            uint8_t encoding = actg_encode[line_seq[base_i]];
             bit_array_assign (&r->ref, bit_i, encoding & 1);
             bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
             bit_i += 2;
@@ -54,6 +67,13 @@ void fasta_make_ref_range (VBlockP vb)
     }
 
     ASSERT (seq_len * 2 == bit_i, "Error in fasta_make_ref_range: Expecting SEQ.local.len (x2 = %"PRId64") == bit_i (%"PRId64")", seq_len * 2, bit_i);
+}
+
+void fasta_zip_callback (VBlockP vb_)
+{
+    // reference fasta - make the SEC_REFERENCE sections
+    if (flag_make_reference) 
+        fasta_make_ref_range (vb_);
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format
@@ -136,7 +156,17 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         seq_ctx->local.len += line_len;
 
         if (!flag_make_reference) {
-            seq_ctx->txt_len   += line_len;
+
+            // downgrade to LZMA compression if there is a non-nucleotide contamination of this VB's sequence data (eg an N)
+            if (seq_ctx->flags & CTX_FL_LOCAL_ACGT) { 
+                for (uint32_t i=0; i < line_len; i++)
+                    if (!IS_NUCLEOTIDE (line_start[i])) {
+                        seq_ctx->flags = CTX_FL_LOCAL_LZMA;
+                        break;
+                    }
+            }
+
+            seq_ctx->txt_len += line_len;
 
             seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_SEQ, true, (int32_t)line_len, &special_snip[3], &special_snip_len);
 

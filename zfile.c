@@ -261,7 +261,9 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
     header.h.section_type          = SEC_LOCAL;
     header.h.data_uncompressed_len = BGEN32 (ctx->local.len * local_len_multiplier); 
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx));
-    header.h.sec_compression_alg   = (ctx->flags & CTX_FL_LOCAL_LZMA) ? COMP_LZMA : COMP_BZ2;
+    header.h.sec_compression_alg   = (ctx->flags & CTX_FL_LOCAL_LZMA) ? COMP_LZMA : 
+                                     (ctx->flags & CTX_FL_LOCAL_ACGT) ? COMP_ACGT :
+                                     COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
     header.h.section_i             = BGEN16 (vb->z_next_header_i++);
     header.h.flags                 = ctx->flags & 0x0f; // 4 bit

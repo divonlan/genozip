@@ -174,7 +174,8 @@ static inline int sam_seg_get_next_subitem (const char *str, int str_len, char s
 // - Edge case: no CIGAR (it is "*") - we just treat it as an M and compare to the reference
 // - Edge case: no SEQ (it is "*") - we '*' in SAM_SEQNOREF and indicate "different from reference" in the bitmap. We store a
 //   single entry, regardless of the number of entries indicated by CIGAR
-static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len, int64_t pos, const char *cigar, unsigned recursion_level)
+static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len, int64_t pos, const char *cigar, 
+                               unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar)
 {
     Context *bitmap_ctx = &vb->contexts[SAM_SEQ_BITMAP];
     Context *nonref_ctx = &vb->contexts[SAM_SEQNOREF];
@@ -206,9 +207,10 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
             "Error: file has contig \"%.*s\", POS=%"PRId64" CIGAR=\"%s\", implying a final reference pos for this read at %"PRId64". However, the reference's last pos for this contig is %"PRId64,
             range->chrom_name_len, range->chrom_name, pos, cigar, final_seq_pos, range->last_pos);
 
-    // Note: if range is NULL, it cannot be diffed against a reference, as the hash entry for this range is unfortunately already
-    // occupied by another range (can only happen with REF_INTERNAL). We treat this as if all the bases don't match the ref
-    if (!range) {
+    // Cases where we don't consider the refernce and just copy the seq as-is
+    if (!range || // 1. if reference range is NULL as the hash entry for this range is unfortunately already occupied by another range (can only happen with REF_INTERNAL)
+        (cigar[0] == '*' && cigar[1] == 0)) { // 2. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
+
         buf_add (&nonref_ctx->local, seq, seq_len);
                 
         for (uint32_t i=0; i < vb->ref_and_seq_consumed; i++) 
@@ -216,20 +218,13 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
         random_access_update_last_pos ((VBlockP)vb, pos + vb->ref_consumed - 1);
 
+        if (range) mutex_unlock (range->mutex);
+        
         return; 
     }    
 
-    uint32_t pos_index = pos - range->first_pos;
-    uint32_t next_ref = pos_index;
-
-    // if cigar is "*" we make it an M eg "151M"
-    char alt_cigar[30];
-    if (cigar[0] == '*' && cigar[1] == 0) {
-        sprintf (alt_cigar, "%uM", seq_len);
-        cigar = alt_cigar;
-        vb->ref_consumed = vb->ref_and_seq_consumed = seq_len;
-    }
-
+    uint32_t pos_index     = pos - range->first_pos;
+    uint32_t next_ref      = pos_index;
     const char *next_cigar = cigar;
 
     uint32_t i=0;
@@ -252,14 +247,15 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
         if (cigar_op == 'M' || cigar_op == '=' || cigar_op == 'X') { // alignment match or sequence match or mismatch
 
             ASSERT (subcigar_len > 0 && subcigar_len <= (seq_len - i), 
-                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u", cigar, seq_len);
+                    "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u (recursion_level=%u level0: cigar=%s seq_len=%u)", 
+                    cigar, seq_len, recursion_level, level_0_cigar, level_0_seq_len);
 
             while (subcigar_len && next_ref < pos_index + ref_len_this_level) {
 
                 // when we have an X we don't enter it into our internal ref, and we wait for a read with a = or M for that site,
                 // as we assume that on average, more reads will have the reference base, leading to better compression
             
-                bool normal_base = (seq[i] == 'A' || seq[i] == 'C' || seq[i] == 'G' || seq[i] == 'T');
+                bool normal_base = IS_NUCLEOTIDE (seq[i]);
 
                 // case: we have not yet set a value for this site - we set it now. note: in ZIP, is_set means that the site
                 // will be needed for pizzing. With REF_INTERNAL, this is equivalent to saying we have set the ref value for the site
@@ -296,22 +292,25 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
             buf_add (&nonref_ctx->local, &seq[i], subcigar_len);
             i += subcigar_len;
+            subcigar_len = 0;
         }
 
         // for Deletion or Skipping - we move the next_ref ahead
         else if (cigar_op == 'D' || cigar_op == 'N') {
             unsigned ref_consumed = MIN (subcigar_len, range_len - next_ref);
 
-            next_ref += ref_consumed;
-            subcigar_len -= ref_consumed;
+            next_ref         += ref_consumed;
+            subcigar_len     -= ref_consumed;
         }
 
         // Hard clippping (H) or padding (P) we do nothing
         else if (cigar_op == 'H' || cigar_op == 'P') {}
 
         else {
-            ASSSEG (cigar_op, vb->last_cigar, "Error in sam_seg_seq_field: End of CIGAR reached but we still have %u reference and %u sequence bases to consume",
-                    pos_index + ref_len_this_level - next_ref, seq_len-i);        
+            ASSSEG (cigar_op, vb->last_cigar, "Error in sam_seg_seq_field: End of CIGAR reached but we still have %u reference and %u sequence bases to consume"
+                    "(cigar=%s pos=%"PRId64" recursion_level=%u level_0_cigar=%s level_0_seq_len=%u) (vb->ref_consumed=%d next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
+                    pos_index + ref_len_this_level - next_ref, seq_len-i,   cigar, pos, recursion_level, level_0_cigar, level_0_seq_len,
+                    vb->ref_consumed, next_ref, pos_index, ref_len_this_level, subcigar_len, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
 
             ASSSEG (false, vb->last_cigar, "Error in sam_seg_seq_field: Invalid CIGAR op: '%c' (ASCII %u)", cigar_op, cigar_op);        
         }
@@ -326,21 +325,24 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
     // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
     // in REF_EXTERNAL as each range is the entire contig
-    ASSERT (flag_reference == REF_INTERNAL || i == seq_len, "Error in sam_seg_seq_field: expecting i(%u) == seq_len(%u)", i, seq_len);
+    ASSERT (flag_reference == REF_INTERNAL || i == seq_len, "Error in sam_seg_seq_field: expecting i(%u) == seq_len(%u) pos=%"PRId64" range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level0: cigar=%s seq_len=%u)", 
+            i, seq_len, pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, cigar, recursion_level, level_0_cigar, level_0_seq_len);
 
     // case: we have reached the end of the current reference range, but we still have sequence left - 
     // call recursively with remaining sequence and next reference range 
     if (i < seq_len) {
 
-        ASSSEG (this_seq_last_pos <= MAX_POS, cigar, "%s: Error: POS=%"PRId64" and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64,
-                global_cmd, pos, cigar, MAX_POS);
+        ASSSEG (this_seq_last_pos <= MAX_POS, cigar, "%s: Error: POS=%"PRId64" and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64
+                " (next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
+                global_cmd, pos, cigar, MAX_POS, next_ref, pos_index, ref_len_this_level, subcigar_len, 
+                range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);
 
         vb->ref_consumed -= ref_len_this_level;
 
         char updated_cigar[100];
         if (subcigar_len) sprintf (updated_cigar, "%u%c%s", subcigar_len, cigar_op, next_cigar);
 
-        sam_seg_seq_field (vb, seq + i, seq_len - i, range->last_pos + 1, subcigar_len ? updated_cigar : next_cigar, recursion_level + 1);
+        sam_seg_seq_field (vb, seq + i, seq_len - i, range->last_pos + 1, subcigar_len ? updated_cigar : next_cigar, recursion_level + 1, level_0_seq_len, level_0_cigar);
     }
     else // update RA of the VB with last pos of this line as implied by the CIGAR string
         random_access_update_last_pos ((VBlockP)vb, this_seq_last_pos);
@@ -672,7 +674,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
                 txt_name, dl->seq_len, value_len, value_len, value);
 
         int64_t this_pos = vb->contexts[SAM_POS].last_value;
-        sam_seg_seq_field (vb, (char *)value, value_len, this_pos, vb->last_cigar, 0); // remove const bc SEQ data is actually going to be modified
+        sam_seg_seq_field (vb, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, vb->last_cigar); // remove const bc SEQ data is actually going to be modified
     }
 
     // U2 - QUAL data (note: U2 doesn't have a dictionary)
@@ -805,7 +807,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     GET_NEXT_ITEM ("SEQ");
 
     // calculate diff vs. reference (self or imported) - only if aligned (pos!=0) and CIGAR and SEQ values are available
-    sam_seg_seq_field (vb, field_start, field_len, this_pos, vb->last_cigar, 0);
+    sam_seg_seq_field (vb, field_start, field_len, this_pos, vb->last_cigar, 0, field_len, vb->last_cigar);
     const char *seq = field_start;
     uint32_t seq_data_len = field_len;
 

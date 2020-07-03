@@ -6,8 +6,17 @@
 #ifndef COMPRESSOR_INCLUDED
 #define COMPRESSOR_INCLUDED
 
+// IMPORTANT: these values CANNOT BE CHANGED as they are part of the genozip file - 
+// they go in SectionHeader.sec_compression_alg and also SectionHeaderTxtHeader.compression_type
+#define NUM_COMPRESSION_ALGS 10 // update compressors array in comp_compress if making any change 
+typedef enum { COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */, 
+               COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8, 
+               COMP_ACGT=9 // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and slightly better compression ratio than LZMA
+             } CompressionAlg; 
+#define COMPRESSED_FILE_VIEWER { "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
+                                 "bcftools -Ov --version", "samtools view -h -OSAM", "N/A", "unzip -p", "N/A" }
+
 #include "genozip.h"
-#include "file.h"
 
 typedef void CompGetLineCallback (VBlockP vb, uint32_t vb_line_i, 
                                   char **line_data_1, uint32_t *line_data_len_1,
@@ -26,6 +35,7 @@ extern void comp_uncompress (VBlockP vb, CompressionAlg alg,
 extern uint64_t BZ2_consumed (void *bz_file);
 
 typedef bool CompressorFunc (VBlockP vb, 
+                             CompressionAlg alg,
                              const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                              CompGetLineCallback callback,                        // option 2 - compress data one line at a tim
                              char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -33,5 +43,8 @@ typedef bool CompressorFunc (VBlockP vb,
 typedef CompressorFunc (*Compressor);
 
 CompressorFunc comp_compress_bzlib, comp_compress_lzma, comp_compress_none;
+
+extern const char actg_decode[4];
+extern const uint8_t actg_encode[256];
 
 #endif

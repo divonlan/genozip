@@ -175,6 +175,7 @@ struct BitArray
 //
 
 // Allocate using existing struct
+extern void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr); // divon
 extern BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits);
 extern void bit_array_dealloc(BitArray* bitarr);
 
@@ -183,6 +184,7 @@ extern void bit_array_copy_from_buffer (BitArray* dst, bit_index_t dstindx, cons
 // Get length of bit array
 extern bit_index_t bit_array_length(const BitArray* bit_arr);
 
+extern void LTEN_bit_array (BitArray* bitarr, bool also_partial_topword); // divon
 
 //
 // Macros
@@ -472,13 +474,13 @@ extern int bit_array_cmp_words(const BitArray *bitarr,
 // Shift, interleave, reverse
 //
 
-// Shift array left/right.  If fill is zero, filled with 0, otherwise 1
+// removes flanking bits on boths sides, shrinking bitarr (divon)
+void bit_array_remove_flanking (BitArray* bitarr, bit_index_t lsb_flanking, bit_index_t msb_flanking);
+
+// Shift array left/right.  
+void bit_array_shift_right_shrink (BitArray* bitarr, bit_index_t shift_dist);
 void bit_array_shift_right(BitArray* bitarr, bit_index_t shift_dist, char fill);
 void bit_array_shift_left (BitArray* bitarr, bit_index_t shift_dist, char fill);
-
-// shift left without losing any bits. Resizes bitarr.
-void bit_array_shift_left_extend(BitArray* bitarr, bit_index_t shift_dist,
-                                 char fill);
 
 // Cyclic shift
 void bit_array_cycle_right(BitArray* bitarr, bit_index_t dist);

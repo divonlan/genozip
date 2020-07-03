@@ -52,9 +52,11 @@ void sam_analyze_cigar (const char *cigar, unsigned cigar_len,
     if (ref_consumed) *ref_consumed = 0;
     if (seq_and_ref)  *seq_and_ref  = 0;
 
-    // ZIP case: if the CIGAR is "*", we later get the length from SEQ and store it as eg "151*". 
+    ASSERT (cigar[0] != '*' || cigar_len == 1, "Invalid CIGAR: %.*s", cigar_len, cigar); // a CIGAR start with '*' must have 1 character
+
+    // ZIP case: if the CIGAR is "*", later sam_seg_cigar_field uses the length from SEQ and store it as eg "151*". 
     // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*"
-    if (cigar_len == 1 && cigar[0] == '*') return;
+    if (cigar[0] == '*') return;
 
     // PIZ case: CIGAR string starts with '-' (indicating missing SEQ) - just skip the '-' for now
     if (*cigar == '-') {

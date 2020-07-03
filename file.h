@@ -17,6 +17,7 @@
 #include "sections.h"
 #include "context.h"
 #include "aes.h"
+#include "compressor.h"
 
 // VCF file variations
 #define VCF_           ".vcf"
@@ -135,14 +136,6 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,\
                    "stdin", "stdout" }
 extern const char *file_exts[];
-
-// IMPORTANT: these values CANNOT BE CHANGED as they are part of the genozip file - 
-// they go in SectionHeader.sec_compression_alg and also SectionHeaderTxtHeader.compression_type
-#define NUM_COMPRESSION_ALGS 9
-typedef enum { COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */, 
-               COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8 } CompressionAlg; 
-#define COMPRESSED_FILE_VIEWER { "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
-                                 "bcftools -Ov --version", "samtools view -h -OSAM", "N/A", "unzip -p" }
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file

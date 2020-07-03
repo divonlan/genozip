@@ -60,7 +60,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
             subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
             cigar_op = cigar_lookup[(uint8_t)*(next_cigar++)];
-            ASSERT (cigar_op != CIGAR_INVALID, "Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+            ASSERT (cigar_op != CIGAR_INVALID, "Error in sam_piz_reconstruct_seq: Invalid CIGAR op while reconstructing line %u: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
         }
 
         if (cigar_op & CIGAR_CONSUMES_QUERY) {
@@ -69,7 +69,13 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
                 bit_array_get_bit (bitmap, bitmap_ctx->next_local++) /* copy from reference */) {
 
                 uint32_t idx = pos + ref_consumed - range->first_pos;
-                ASSERT (ref_is_nucleotide_set (range, idx), "Error in sam_piz_reconstruct_seq: reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos + seq_consumed);
+
+                if (!ref_is_nucleotide_set (range, idx)) {
+                    ref_print_is_set (range);
+                    ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u: reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
+                           " (cigar=%s ref_consumed=%u seq_consumed=%u)",
+                           vb->line_i, range->chrom, range->chrom_name_len, range->chrom_name, pos + seq_consumed, range->first_pos, range->last_pos, vb->last_cigar, ref_consumed, seq_consumed);
+                }
 
                 char ref = ref_get_nucleotide (range, idx);
                 RECONSTRUCT1 (ref); 
