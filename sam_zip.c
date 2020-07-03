@@ -107,7 +107,7 @@ void sam_seg_initialize (VBlock *vb)
 
     vb->contexts[SAM_RNAME].flags      = CTX_FL_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP;
-    vb->contexts[SAM_SEQNOREF].flags   = CTX_FL_LOCAL_LZMA;
+    vb->contexts[SAM_SEQNOREF].flags   = CTX_FL_LOCAL_ACGT;
     vb->contexts[SAM_SEQNOREF].ltype   = CTX_LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype       = CTX_LT_SEQUENCE;
     vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_VALUE;

@@ -8,11 +8,16 @@
 
 // IMPORTANT: these values CANNOT BE CHANGED as they are part of the genozip file - 
 // they go in SectionHeader.sec_compression_alg and also SectionHeaderTxtHeader.compression_type
-#define NUM_COMPRESSION_ALGS 10 // update compressors array in comp_compress if making any change 
-typedef enum { COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */, 
-               COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8, 
-               COMP_ACGT=9 // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and slightly better compression ratio than LZMA
-             } CompressionAlg; 
+#define NUM_COMPRESSION_ALGS 11 // update compressors array in comp_compress if making any change 
+typedef enum { 
+    COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */,            
+    COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8, 
+    // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
+    // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complimentary 
+    // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt locations and verbatim for other characters
+    COMP_ACGT=9, COMP_NON_ACGT=10 
+} CompressionAlg; 
+
 #define COMPRESSED_FILE_VIEWER { "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
                                  "bcftools -Ov --version", "samtools view -h -OSAM", "N/A", "unzip -p", "N/A" }
 

@@ -275,6 +275,16 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
                    callback ? NULL : ctx->local.data, 
                    callback);
+
+    // for COMP_ACGT, if we discovered any non-A,G,C,T, then we need an additional section with COMP_NON_ACGT 
+    // that will have the correction needed
+    if ((ctx->flags & CTX_FL_LOCAL_ACGT) && vb->has_non_agct) {
+        header.h.sec_compression_alg = COMP_NON_ACGT;
+
+        comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
+                       callback ? NULL : ctx->local.data, 
+                       callback);
+    }
 }
 
 // compress section - two options for input data - 

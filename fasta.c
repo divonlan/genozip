@@ -17,12 +17,6 @@ void fasta_zip_initialize (void)
 {
     if (flag_make_reference)
         ref_make_ref_init();
-
-    else
-        // reduction in vblock so that a smaller amount of data is affected by contamination - this reduced
-        // compression of GRCh38 from 8 min to 1.5 min on my PC
-        if (!flag_vblock) vb_set_global_max_memory_per_vb ("1"); 
-    
 }
 
 void fasta_seg_initialize (VBlockFAST *vb)
@@ -156,15 +150,6 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         seq_ctx->local.len += line_len;
 
         if (!flag_make_reference) {
-
-            // downgrade to LZMA compression if there is a non-nucleotide contamination of this VB's sequence data (eg an N)
-            if (seq_ctx->flags & CTX_FL_LOCAL_ACGT) { 
-                for (uint32_t i=0; i < line_len; i++)
-                    if (!IS_NUCLEOTIDE (line_start[i])) {
-                        seq_ctx->flags = CTX_FL_LOCAL_LZMA;
-                        break;
-                    }
-            }
 
             seq_ctx->txt_len += line_len;
 

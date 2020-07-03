@@ -17,13 +17,10 @@
 #include <stdio.h>
 #include <limits.h> // ULONG_MAX
 #include <errno.h>
-//#include <signal.h> // needed for abort()
 #include <string.h> // memset()
-//#include <time.h> // needed for seeding rand()
 #include <unistd.h>  // need for getpid() for seeding rand number
 #include <ctype.h>  // need for tolower()
 #include <errno.h>  // perror()
-//#include <sys/time.h> // for seeding random
 #include "endianness.h"
 
 // Windows includes

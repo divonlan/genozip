@@ -104,7 +104,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer section_list_buf;                   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     \
     /* Compressor stuff */ \
-    Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ 
+    Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
+    bool has_non_agct;                         /* the last context compressed with COMP_ACGT has characters that are not A,C,G,T */
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

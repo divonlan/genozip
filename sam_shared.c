@@ -12,7 +12,7 @@
 const uint8_t cigar_lookup[256] = {
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, // ASCII 0-15
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, // ASCII 16-31
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 6, 8, 8, 8, 8, 8, // ASCII 32-47  '*' consumes both
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, // ASCII 32-47  '*' consumes query
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 8, 8, 6, 8, 8, // ASCII 48-63  '0'-'9' are digits, '=' consumes both
     8, 8, 8, 8, 4, 8, 8, 8, 0, 2, 8, 8, 8, 6, 4, 8, // ASCII 64-79  'D', 'N' - referece only, 'I' - query only, 'H' - none, 'M' - both
     0, 8, 8, 2, 8, 8, 8, 8, 6, 8, 8, 8, 8, 8, 8, 8, // ASCII 80-95  'P' - none, 'S' - query only, 'X' - both
