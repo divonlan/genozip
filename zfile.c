@@ -254,7 +254,8 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 {   
     SectionHeaderCtx header;
     memset (&header, 0, sizeof(header)); // safety
-
+    vb->has_non_agct = false;
+    
     unsigned local_len_multiplier  = ctx_lt_sizeof_one[ctx->ltype];
 
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);

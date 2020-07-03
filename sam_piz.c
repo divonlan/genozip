@@ -17,6 +17,8 @@
 // if SEQ is '*' - stop after reconstructing the '*' regardless of CIGAR
 void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
 {
+#define ROUNDUP_TO_NEAREST_4(x) ((uint32_t)(x) + 3) & ~((uint32_t)0x3)
+
     VBlockSAMP vb = (VBlockSAMP)vb_;
     ASSERT0 (bitmap_ctx, "Error in ref_reconstruct: bitmap_ctx is NULL");
 
@@ -36,7 +38,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
     // case: missing pos - pos is 0 - in this case, the sequence is not encoded in the bitmap at all. we just copy it from SEQNOREF
     if (!pos) {
         RECONSTRUCT (nonref, vb->seq_len);
-        nonref_ctx->next_local += vb->seq_len;
+        nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (vb->seq_len);
         return;
     }
 
@@ -96,9 +98,8 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
     ASSERT (ref_consumed == vb->ref_consumed, "Error in sam_piz_reconstruct_seq: expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
 
     bitmap_ctx->last_value = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
-    //bitmap_ctx->next_local += vb->seq_len;
     
-    nonref_ctx->next_local += (uint32_t)(nonref - nonref_start);
+    nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (nonref - nonref_start);
 }
 
 // CIGAR - calculate vb->seq_len from the CIGAR string, and if original CIGAR was "*" - recover it

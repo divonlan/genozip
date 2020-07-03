@@ -48,11 +48,14 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
     seg_add_to_local_fixed (vb, &vb->contexts[ME23_GENOTYPE], field_start, field_len); 
     vb->contexts[ME23_GENOTYPE].ltype = CTX_LT_SEQUENCE;
     
+    // note: we don't use ACGT because the genotype contains frequent "--" causing a large NON_AGCT section and making
+    // the compression gains negligible, but the execution time 50% higher
+    //vb->contexts[ME23_GENOTYPE].flags = CTX_FL_LOCAL_ACGT;
+    
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
     seg_by_did_i (vb, lookup, 2, ME23_GENOTYPE, field_len + 1);
 
     SEG_EOL (ME23_EOL, false);
-    //seg_by_did_i (vb, *has_13 ? "\r\n" : "\n", (*has_13) + 1, ME23_EOL, *has_13);
     
     return next_field;
 }

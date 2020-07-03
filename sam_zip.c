@@ -186,15 +186,15 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
 
     // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
-    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + seq_len + sizeof(int64_t), vb->lines.len * seq_len / 5), CTX_GROWTH, 
+    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + seq_len + 3 + sizeof(int64_t), vb->lines.len * seq_len / 5), CTX_GROWTH, 
                buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
     
-    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len, vb->lines.len * seq_len / 40), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 40), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
 
     // we can't compare to the reference if POS is 0: we store the seqeuence in SEQNOREF without an indication in the bitmap
     if (!pos) {
         buf_add (&nonref_ctx->local, seq, seq_len);
-        return; 
+        goto align_nonref_local; 
     }
 
     if (seq[0] == '*') return; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
@@ -220,7 +220,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
         if (range) mutex_unlock (range->mutex);
         
-        return; 
+        goto align_nonref_local; 
     }    
 
     uint32_t pos_index     = pos - range->first_pos;
@@ -346,6 +346,14 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     }
     else // update RA of the VB with last pos of this line as implied by the CIGAR string
         random_access_update_last_pos ((VBlockP)vb, this_seq_last_pos);
+
+align_nonref_local: {
+    // we align nonref_ctx->local to a 4-character boundary. this is because COMP_ACGT squeezes every 4 characters into a byte,
+    // before compressing it with LZMA. In sorted SAM, we want subsequent identical sequences to have the same byte alignment
+    // so that LZMA can catch their identicality.
+    uint64_t add_chars = (4 - (nonref_ctx->local.len & 3)) & 3;
+    if (add_chars) buf_add (&nonref_ctx->local, "AAA", add_chars); // add 1 to 3 As
+}
 }
 
 static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id, 
@@ -402,6 +410,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
     }
 
     seg_structured_by_dict_id (vb, subfield_dict_id, &sa_oa, 1 /* \t */);
+    
     return;
 
 error:

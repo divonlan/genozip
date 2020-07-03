@@ -207,14 +207,15 @@ static void ref_uncompress_one_range (VBlockP vb)
                 st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->first_pos), BGEN64 (header->last_pos), BGEN64 (header->last_pos) - BGEN64 (header->first_pos) + 1, 
                 BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
-    ASSERT (sec_start_within_contig >= 0 && ref_sec_last_pos <= r->last_pos, 
-            "Error in ref_uncompress_one_range: section range out of bounds for chrom=%d \"%s\": in SEC_REFERENCE being uncompressed: first_pos=%"PRId64" last_pos=%"PRId64" but in reference contig as initialized: first_pos=%"PRId64" last_pos=%"PRId64,
-            chrom, chrom_name, ref_sec_first_pos, ref_sec_last_pos, r->first_pos, r->last_pos);
-
     // case: if compacted, this SEC_REF_IS_SET sections contains r->is_set and its first/last_pos contain the coordinates
     // of the range, while the following SEC_REFERENCE section contains only the bases for which is_set is 1, 
     // first_pos=0 and last_pos=(num_1_bits_in_is_set-1)
     if (is_compacted) {
+
+        // if compacted, the section must be within the boundaries of the contig (this is not true if the section was copied with ref_copy_one_compressed_section)
+        ASSERT (sec_start_within_contig >= 0 && ref_sec_last_pos <= r->last_pos, 
+                "Error in ref_uncompress_one_range: section range out of bounds for chrom=%d \"%s\": in SEC_REFERENCE being uncompressed: first_pos=%"PRId64" last_pos=%"PRId64" but in reference contig as initialized: first_pos=%"PRId64" last_pos=%"PRId64,
+                chrom, chrom_name, ref_sec_first_pos, ref_sec_last_pos, r->first_pos, r->last_pos);
 
         ASSERT (uncomp_len == roundup_bits2words64 (ref_sec_len) * sizeof (uint64_t), "Error in ref_uncompress_one_range: when uncompressing SEC_REF_IS_SET: uncomp_len=%u inconsistent with len=%"PRId64, uncomp_len, ref_sec_len); 
 
@@ -284,6 +285,12 @@ static void ref_uncompress_one_range (VBlockP vb)
     LTEN_bit_array (packed, true);
 
     mutex_lock (r->mutex); // while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
+
+    // it is possible that the section goes beyond the boundaries of the contig, this can happen when we compressed with --REFERENCE
+    // and the section was copied in its entirety from the reference FASTA file (in ref_copy_one_compressed_section). 
+    // in this case, we copy from the section only the part needed
+
+TODO
 
     bit_array_copy_from_buffer (&r->ref, 
                                 (ref_sec_first_pos - r->first_pos) * 2, 
