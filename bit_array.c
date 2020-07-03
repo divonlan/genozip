@@ -1669,8 +1669,12 @@ void bit_array_copy_from_buffer (BitArray* dst, bit_index_t dstindx, const Buffe
 
 void LTEN_bit_array (BitArray* bitarr, bool also_partial_topword)
 {
+#ifndef __LITTLE_ENDIAN__
+
   int64_t num_words = (bitarr->num_of_bits >> 6) + (also_partial_topword && (bitarr->num_of_bits & 0x3f) != 0);
   
   for (uint64_t i=0; i < num_words; i++)
     bitarr->words[i] = LTEN64 (bitarr->words[i]);
+
+#endif
 }
