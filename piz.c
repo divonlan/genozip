@@ -444,7 +444,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
         vb->lines.len        = BGEN32 (header->num_lines);       
         vb->vb_data_size     = BGEN32 (header->vb_data_size);    
         vb->longest_line_len = BGEN32 (header->longest_line_len);
-        if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ 
+        if (flag_unbind) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ 
 
         if (flag_show_vblocks) 
             fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
@@ -586,17 +586,17 @@ static bool piz_read_one_vb (VBlock *vb)
 // returns true is successfully outputted a txt file
 bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_last_file)
 {
-    // static dispatcher - with flag_split, we use the same dispatcher when unzipping components
+    // static dispatcher - with flag_unbind, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
     SectionListEntry *sl_ent = NULL;
     bool piz_successful = true;
 
-    if (flag_split && !sections_has_more_components()) return false; // no more components
+    if (flag_unbind && !sections_has_more_components()) return false; // no more components
     
     // read genozip header
     Md5Hash original_file_digest;
 
-    // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --split, 
+    // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --unbind, 
     static DataType data_type = DT_NONE; 
     if (is_first_component) {
         data_type = piz_read_global_area (&original_file_digest);
@@ -612,17 +612,17 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
         dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_basename);
 
     // case: we couldn't open the file because we didn't know what type it is - open it now
-    if (!flag_split && !flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
+    if (!flag_unbind && !flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
 
 
-    // read and write txt header. in split mode this also opens txt_file
+    // read and write txt header. in unbind mode this also opens txt_file
     piz_successful = txtfile_genozip_to_txt_header (&original_file_digest);
     
     ASSERT (piz_successful || !is_first_component, "Error: failed to read %s header in %s", dt_name (z_file->data_type), z_name);
 
     if (!piz_successful || flag_header_only) goto finish;
 
-    if (flag_split) dispatcher_resume (dispatcher); // accept more input 
+    if (flag_unbind) dispatcher_resume (dispatcher); // accept more input 
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it
@@ -660,9 +660,9 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
                     break;
                 }
 
-                case SEC_TXT_HEADER: // 2nd+ txt header of a concatenated file
-                    if (!flag_split) {
-                        txtfile_genozip_to_txt_header (NULL); // skip 2nd+ txt header if concatenating
+                case SEC_TXT_HEADER: // 2nd+ txt header of a bound file
+                    if (!flag_unbind) {
+                        txtfile_genozip_to_txt_header (NULL); // skip 2nd+ txt header if binding
                         continue;
                     }
                     break; // eof if splitting
@@ -706,7 +706,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     // verify file integrity, if the genounzip compress was run with --md5 or --test
     if (flag_md5) {
         Md5Hash decompressed_file_digest;
-        md5_finalize (&txt_file->md5_ctx_concat, &decompressed_file_digest); // z_file might be a concatenation - this is the MD5 of the entire concatenation
+        md5_finalize (&txt_file->md5_ctx_bind, &decompressed_file_digest); // z_file might be a bound file - this is the MD5 of the entire bounding file
 
         if (md5_is_zero (original_file_digest) && !flag_quiet) 
             fprintf (stderr, "MD5 = %s Note: unable to compare this to the original file as file was not originally compressed with --md5\n", md5_display (&decompressed_file_digest, false));
@@ -730,14 +730,14 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
                      md5_display (&original_file_digest, false));
     }
 
-    if (flag_split) file_close (&txt_file, true); // close this component file
+    if (flag_unbind) file_close (&txt_file, true); // close this component file
 
     if (!flag_test && !flag_quiet) 
         fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher, false));
 
 finish:
-    // in split mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
-    if (!flag_split || !piz_successful) {
+    // in unbind mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here
+    if (!flag_unbind || !piz_successful) {
         if (dispatcher) dispatcher_finish (&dispatcher, NULL);
     } else
         dispatcher_pause (dispatcher);

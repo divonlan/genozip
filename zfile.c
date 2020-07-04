@@ -393,7 +393,7 @@ int32_t zfile_read_section (File *file,
 
     SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
 
-    // case: we're done! no more concatenated files
+    // case: we're done! no more bound files
     if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
 
     ASSERT (header, "Error in zfile_read_section: Failed to read data from file %s while expecting section type %s: %s", 
@@ -531,7 +531,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
     z_file->data_type = data_type; // update in case type was not know from file extension
-    if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --split
+    if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --unbind
     
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
             "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
@@ -564,7 +564,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     global_vcf_num_samples    = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
     z_file->genozip_version   = header->genozip_version;
     z_file->num_components    = BGEN32 (header->num_components);
-    *digest                   = header->md5_hash_concat; 
+    *digest                   = header->md5_hash_bound; 
 
     // global bools to help testing
     is_v6_or_above = (z_file->genozip_version >= 6);
@@ -583,7 +583,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
         ASSERT (header->h.flags & SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
                 ref_filename);
 
-        ref_set_md5 (header->md5_hash_concat); 
+        ref_set_md5 (header->md5_hash_bound); 
     }
 
     // case: we are reading a file that is not expected to be a reference file
@@ -645,9 +645,9 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_file->data_type);
     header.encryption_type         = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
-    header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_concat);
+    header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_bind);
     header.num_samples             = BGEN32 (global_vcf_num_samples);
-    header.num_items_concat        = BGEN64 (z_file->num_lines);
+    header.num_items_bind        = BGEN64 (z_file->num_lines);
     header.num_sections            = BGEN32 (num_sections); 
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
     
@@ -663,13 +663,13 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     md5_do (&license_num_bgen, sizeof (int32_t), &header.license_hash);
 
     if (flag_md5) {
-        if (flag_concat) {
-            md5_finalize (&z_file->md5_ctx_concat, &header.md5_hash_concat);
+        if (flag_bind) {
+            md5_finalize (&z_file->md5_ctx_bind, &header.md5_hash_bound);
             if (flag_md5 && z_file->num_txt_components_so_far > 1 && !flag_quiet) 
-                fprintf (stderr, "Concatenated %s MD5 = %s\n", dt_name (z_file->data_type), md5_display (&header.md5_hash_concat, false));
+                fprintf (stderr, "Concatenated %s MD5 = %s\n", dt_name (z_file->data_type), md5_display (&header.md5_hash_bound, false));
         } 
         else 
-            header.md5_hash_concat = *single_component_md5; // if not in concat mode - just copy the md5 of the single file
+            header.md5_hash_bound = *single_component_md5; // if not in bound mode - just copy the md5 of the single file
     }
 
     zfile_get_metadata (header.created);
@@ -711,8 +711,8 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
 // reads the the genozip header section's header from a GENOZIP file - used by main_list, returns true if successful
 bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
                                uint32_t *num_samples,
-                               uint64_t *num_items_concat,
-                               Md5Hash  *md5_hash_concat,
+                               uint64_t *num_items_bind,
+                               Md5Hash  *md5_hash_bound,
                                char *created, unsigned created_len, // caller allocates space 
                                Md5Hash  *license_hash,
                                char *ref_file_name, unsigned ref_file_name_len,  // caller allocates space 
@@ -744,8 +744,8 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
 
     *uncompressed_data_size = BGEN64 (header.uncompressed_data_size);
     *num_samples            = BGEN32 (header.num_samples);
-    *num_items_concat       = BGEN64 (header.num_items_concat);
-    *md5_hash_concat        = header.md5_hash_concat;
+    *num_items_bind       = BGEN64 (header.num_items_bind);
+    *md5_hash_bound        = header.md5_hash_bound;
     *license_hash           = header.license_hash;
     *ref_file_md5           = header.ref_file_md5;
 
@@ -789,7 +789,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
 
     z_file->disk_so_far            += txt_header_buf.len;   // length of GENOZIP data writen to disk
     z_file->txt_data_so_far_single += txt_header_text->len; // length of the original VCF header
-    z_file->txt_data_so_far_concat += txt_header_text->len;
+    z_file->txt_data_so_far_bind += txt_header_text->len;
 
     buf_free (&txt_header_buf); 
 
@@ -801,7 +801,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
 }
 
 // updating the VCF bytes of a GENOZIP file. If we're compressing a simple VCF file, we will know
-// the bytes upfront, but if we're concatenating or compressing a VCF.GZ, we will need to update it
+// the bytes upfront, but if we're binding or compressing a VCF.GZ, we will need to update it
 // when we're done. num_lines can only be known after we're done with this VCF component.
 // if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
 bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb,

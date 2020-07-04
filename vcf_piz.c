@@ -600,9 +600,9 @@ static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
         vb->has_haplotype_data = false;
     }
 
-    // in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
+    // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every vcf component
-    if (flag_split) 
+    if (flag_unbind) 
         vb->vblock_i = BGEN32 (header->h.vblock_i);
     
     // unsqueeze permutation index - if this VCF has samples, AND this vb has any haplotype data

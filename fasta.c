@@ -117,7 +117,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_name, chrom_name_len);
 
         ASSERT (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
-                flag_concat ? " (possibly in another FASTA being concatenated)" : "");
+                flag_bind ? " (possibly in another FASTA being bound)" : "");
             
         vb->last_line = FASTA_LINE_DESC;
     }

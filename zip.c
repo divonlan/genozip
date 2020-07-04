@@ -28,27 +28,27 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
 
     const char *runtime = dispatcher_ellapsed_time (dispatcher, false);
     double z_bytes   = (double)z_file->disk_so_far;
-    double txt_bytes = (double)z_file->txt_data_so_far_concat;
+    double txt_bytes = (double)z_file->txt_data_so_far_bind;
     double ratio     = txt_bytes / z_bytes;
 
-    // in concat, or when we store the refernce, we don't show the compression ratio for files except for the last one
-    if (flag_concat || flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) { 
+    // in bound, or when we store the refernce, we don't show the compression ratio for files except for the last one
+    if (flag_bind || flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) { 
 
-        static uint64_t txt_file_disk_size_concat = 0;
+        static uint64_t txt_file_disk_size_bind = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
-        if (!txt_file_disk_size_concat) // first concat file
+        if (!txt_file_disk_size_bind) // first bound file
             source_file_type = txt_file->type;
         else if (source_file_type != txt_file->type) // heterogenous source file types
             source_file_type = UNKNOWN_FILE_TYPE;
 
-        txt_file_disk_size_concat += txt_file->disk_size;
+        txt_file_disk_size_bind += txt_file->disk_size;
 
         if (!flag_quiet)
             fprintf (stderr, "Done (%s)                                     \n", runtime);
 
         if (is_final_component) {
-            double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+            double ratio2 = (double)txt_file_disk_size_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
 
             if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
                 fprintf (stderr, "Time: %s, %s compression ratio: %1.1f           \n", 
@@ -188,7 +188,7 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
 
     Buffer *data_buf = (pd_type == PD_DICT_DATA) ? &z_file->dict_data : &vb->z_data;
 
-    if (section_list_buf) sections_list_concat (vb, section_list_buf);
+    if (section_list_buf) sections_list_bind (vb, section_list_buf);
 
     file_write (z_file, data_buf->data, data_buf->len);
     COPY_TIMER (vb->profile.write);
@@ -197,9 +197,9 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
     
     if (pd_type == PD_VBLOCK_DATA) {
         if (update_txt_file) txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
-        z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all concatenated files in this z_file
+        z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
         z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
-        z_file->txt_data_so_far_concat           += (int64_t)vb->vb_data_size;
+        z_file->txt_data_so_far_bind           += (int64_t)vb->vb_data_size;
     }
 
     // this function holds the mutex and hence has a non-trival performance penalty. we call
@@ -332,12 +332,12 @@ static void zip_compress_one_vb (VBlock *vb)
 void zip_dispatcher (const char *txt_basename, bool is_last_file)
 {
     static DataType last_data_type = DT_NONE;
-    static unsigned last_vblock_i = 0; // used if we're concatenating files - the vblock_i will continue from one file to the next
-    if (!flag_concat) last_vblock_i = 0; // reset if we're not concatenating
+    static unsigned last_vblock_i = 0; // used if we're binding files - the vblock_i will continue from one file to the next
+    if (!flag_bind) last_vblock_i = 0; // reset if we're not binding
 
-    // we cannot concatenate files of different type
-    ASSERT (!flag_concat || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
-            "%s: cannot concatenate %s because it is a %s file, whereas the previous file was a %s",
+    // we cannot bind files of different type
+    ASSERT (!flag_bind || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
+            "%s: cannot bind %s because it is a %s file, whereas the previous file was a %s",
              global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
     last_data_type =  txt_file->data_type;
 
@@ -392,7 +392,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
             if (!flag_make_reference)
                 zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
             else 
-                z_file->txt_data_so_far_concat += (int64_t)processed_vb->vb_data_size;
+                z_file->txt_data_so_far_bind += (int64_t)processed_vb->vb_data_size;
                 
             z_file->num_vbs++;
             
@@ -432,8 +432,8 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     if (z_file && !z_file->redirected && txt_header_header_pos >= 0) 
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
-    // if this a non-concatenated file, or the last component of a concatenated file - write the genozip header, random access and dictionaries
-    if (is_last_file || !flag_concat) {
+    // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
+    if (is_last_file || !flag_bind) {
         
         if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) 
             zip_display_compression_ratio (dispatcher, false); // Done for the file (if reference is to be written by zip_write_global_area)
@@ -443,7 +443,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
         if (flag_reference == REF_NONE || flag_reference == REF_EXTERNAL) 
             zip_display_compression_ratio (dispatcher, true); // Done for the file (if no stored reference - ratio includes global area in compression ratio)
     }
-    else  // non-last file in concat mode
+    else  // non-last file in bound mode
         zip_display_compression_ratio (dispatcher, false);
 
 finish:

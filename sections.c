@@ -66,7 +66,7 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file sectinon list - just before 
 // writing those sections to the disk. we use the current disk position to update the offset
-void sections_list_concat (VBlock *vb, BufferP section_list_buf)
+void sections_list_bind (VBlock *vb, BufferP section_list_buf)
 {
     buf_alloc (evb, &z_file->section_list_buf, 
               (z_file->section_list_buf.len + section_list_buf->len) * sizeof(SectionListEntry), 2, 
@@ -180,7 +180,7 @@ bool sections_has_reference(void)
     return false;
 }
 
-// called by PIZ I/O when splitting a concatenated file - to know if there are any more VCF components remaining
+// called by PIZ I/O when splitting a bound file - to know if there are any more VCF components remaining
 bool sections_has_more_components()
 {
     return z_file->sl_cursor==0 || 
@@ -210,10 +210,10 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     fprintf (stderr, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
     fprintf (stderr, "  num_samples: %u\n",             BGEN32 (header->num_samples));
     fprintf (stderr, "  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size), size_str));
-    fprintf (stderr, "  num_items_concat: %"PRIu64"\n", BGEN64 (header->num_items_concat));
+    fprintf (stderr, "  num_items_bind: %"PRIu64"\n", BGEN64 (header->num_items_bind));
     fprintf (stderr, "  num_sections: %u\n",            num_sections);
     fprintf (stderr, "  num_components: %u\n",          BGEN32 (header->num_components));
-    fprintf (stderr, "  md5_hash_concat: %s\n",         md5_display (&header->md5_hash_concat, false));
+    fprintf (stderr, "  md5_hash_bound: %s\n",         md5_display (&header->md5_hash_bound, false));
     fprintf (stderr, "  created: %*s\n",                -FILE_METADATA_LEN, header->created);
     fprintf (stderr, "  license_hash: %s\n",            md5_display (&header->license_hash, false));
     fprintf (stderr, "  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);

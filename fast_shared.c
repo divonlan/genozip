@@ -46,9 +46,9 @@ static bool fast_piz_test_grep (VBlockFAST *vb)
     vb->vb_data_size     = BGEN32 (header->vb_data_size);
     vb->longest_line_len = BGEN32 (header->longest_line_len);
 
-    // in case of --split, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
+    // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every sam component
-    if (flag_split) vb->vblock_i = BGEN32 (header->h.vblock_i);
+    if (flag_unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
     
     // we only need room for one line for now 
     buf_alloc (vb, &vb->txt_data, vb->longest_line_len, 1.1, "txt_data", vb->vblock_i);

@@ -82,11 +82,11 @@ typedef struct {
     uint16_t data_type;               // one of DATA_TYPE_*
     uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
     uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
-    uint64_t num_items_concat;        // number of items in a concatenated file. "item" is data_type-dependent. For VCF, it is lines.
+    uint64_t num_items_bind;          // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
-    uint32_t num_components;          // number of txt concatenated components in this file (1 if no concatenation)
+    uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
 
-    Md5Hash  md5_hash_concat;         // md5 of original txt file, or 0s if no hash was calculated. if this is a concatenation - this is the md5 of the entire concatenation.
+    Md5Hash  md5_hash_bound;          // md5 of original txt file, or 0s if no hash was calculated. if this is a binding - this is the md5 of the entire bound file.
 
     uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
@@ -94,7 +94,7 @@ typedef struct {
     Md5Hash  license_hash;            // MD5(license_num)
 #define REF_FILENAME_LEN 255
     char ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
-    Md5Hash ref_file_md5;             // SectionHeaderGenozipHeader.md5_hash_concat of the reference FASTA genozip file
+    Md5Hash ref_file_md5;             // SectionHeaderGenozipHeader.md5_hash_bound of the reference FASTA genozip file
 } SectionHeaderGenozipHeader;
 
 // this footer appears AFTER the genozip header data, facilitating reading the genozip header in reverse from the end of the file
@@ -103,7 +103,7 @@ typedef struct {
     uint32_t magic;
 } SectionFooterGenozipHeader;
 
-// The text file header section appears once in the file (or multiple times in case of concatenation), and includes the VCF file header 
+// The text file header section appears once in the file (or multiple times in case of bound file), and includes the VCF file header 
 typedef struct {
     SectionHeader h;
     uint64_t txt_data_size;    // number of bytes in the original txt file. 
@@ -112,7 +112,7 @@ typedef struct {
     uint32_t num_samples;      // VCF only: number of samples in the original VCF file
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     uint8_t  compression_type; // compression type of original file, one of CompressionAlg 
-    Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of concatenatation with --md5. md5 of original single txt file.
+    Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
 
 #define TXT_FILENAME_LEN 256
     char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
@@ -123,7 +123,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint32_t first_line;       // line (starting from 1) of this vblock in the single VCF file
-                               // if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next concatenated file
+                               // if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next bound file
     uint32_t num_lines;        // number of records in this vblock
     
     // features of the data
@@ -138,7 +138,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;
     uint32_t first_line;               // line (starting from 1) of this variant block in the single VCF file
-                                       // if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next concatenated file
+                                       // if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next bound file
     uint32_t num_lines;                // number of variants in this block
     uint8_t phase_type;
     
@@ -208,7 +208,7 @@ typedef struct {
 
 // zip stuff
 extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
-extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
+extern void sections_list_bind (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
 extern SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);

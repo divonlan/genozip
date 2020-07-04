@@ -223,13 +223,13 @@ typedef struct File {
     int64_t txt_data_size_single;      // txt_file: size of the txt data. ZIP: if its a plain txt file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t txt_data_so_far_concat;    // z_file & ZIP only: txt data represented in the GENOZIP data written so far for all VCFs
-    int64_t num_lines;                 // z_file: number of lines in all txt files concatenated into this z_file
+    int64_t txt_data_so_far_bind;    // z_file & ZIP only: txt data represented in the GENOZIP data written so far for all VCFs
+    int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines in single txt file
 
-    // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support concatenation (and in the txt_file structure for piz)
-    Md5Context md5_ctx_concat;         // md5 context of txt file. in concat mode - of the resulting concatenated txt file
-    Md5Context md5_ctx_single;         // used only in concat mode - md5 of the single txt component
+    // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
+    Md5Context md5_ctx_bind;         // md5 context of txt file. in bound mode - of the resulting bound txt file
+    Md5Context md5_ctx_single;         // used only in bound mode - md5 of the single txt component
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 
     // Used for READING GENOZIP files
@@ -242,7 +242,7 @@ typedef struct File {
     SectionHeaderTxtHeader txt_header_first;         // store the first txt header - we might need to update it at the very end;
     uint8_t txt_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite txt_header with encryption padding
 
-    SectionHeaderTxtHeader txt_header_single;        // store the txt header of single component in concat mode
+    SectionHeaderTxtHeader txt_header_single;        // store the txt header of single component in bound mode
     uint8_t txt_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex

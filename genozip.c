@@ -52,7 +52,7 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
 
 // the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_concat=0, flag_md5=0, flag_split=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
+int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, 
@@ -214,11 +214,11 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
     uint64_t txt_data_size, num_lines;
     uint32_t num_samples;
-    Md5Hash md5_hash_concat, license_hash, ref_file_md5;
+    Md5Hash md5_hash_bound, license_hash, ref_file_md5;
     char created[FILE_METADATA_LEN];
     char ref_file_name[REF_FILENAME_LEN];
     bool success = zfile_get_genozip_header (&txt_data_size, &num_samples, &num_lines, 
-                                             &md5_hash_concat, created, FILE_METADATA_LEN, &license_hash,
+                                             &md5_hash_bound, created, FILE_METADATA_LEN, &license_hash,
                                              ref_file_name, REF_FILENAME_LEN, &ref_file_md5);
     if (!success) goto finish;
 
@@ -233,7 +233,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     bufprintf (evb, &str_buf, ratio < 100 ? item_format_2 : item_format_1, indiv_str, num_lines_str, 
                z_size_str, txt_size_str, ratio, 
-               md5_display (&md5_hash_concat, true),
+               md5_display (&md5_hash_bound, true),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
                z_filename, created);
@@ -272,7 +272,7 @@ static void main_genounzip (const char *z_filename,
     // skip this file if its size is 0
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
-    if (!txt_filename && (!flag_stdout || flag_bgzip || flag_bcf || flag_bam) && !flag_split) {
+    if (!txt_filename && (!flag_stdout || flag_bgzip || flag_bcf || flag_bam) && !flag_unbind) {
         txt_filename = (char *)malloc(fn_len + 10);
         ASSERT(txt_filename, "Error: failed to malloc txt_filename, len=%u", fn_len+10);
 
@@ -286,15 +286,15 @@ static void main_genounzip (const char *z_filename,
 
     // get output FILE 
     if (txt_filename) {
-        ASSERT0 (!txt_file || flag_concat, "Error: txt_file is unexpectedly already open"); // note: in concat mode, we expect it to be open for 2nd+ file
+        ASSERT0 (!txt_file || flag_bind, "Error: txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
 
-        if (!txt_file)  // in concat mode, for second file onwards, txt_file is already open
+        if (!txt_file)  // in bound mode, for second file onwards, txt_file is already open
             txt_file = file_open (txt_filename, WRITE, TXT_FILE, z_file->data_type);
     }
     else if (flag_stdout) { // stdout
         txt_file = file_open_redirect (WRITE, TXT_FILE, z_file->data_type); // STDOUT
     }
-    else if (flag_split) {
+    else if (flag_unbind) {
         // do nothing - the component files will be opened by txtfile_genozip_to_txt_header()
     }
     else {
@@ -303,18 +303,18 @@ static void main_genounzip (const char *z_filename,
     
     const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
     
-    // a loop for decompressing all components in split mode. in non-split mode, it collapses to one a single iteration.
+    // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
     bool piz_successful;
     unsigned num_components=0;
     do {
         piz_successful = piz_dispatcher (basename, num_components==0, is_last_file);
         if (piz_successful) num_components++;
-    } while (flag_split && piz_successful); 
+    } while (flag_unbind && piz_successful); 
 
-    if (!flag_concat && !flag_stdout && !flag_split) 
-        // don't close the concatenated file - it will close with the process exits
-        // don't close in split mode - piz_dispatcher() opens and closes each component
-        // don't close stdout - in concat mode, we might still need it for the next file
+    if (!flag_bind && !flag_stdout && !flag_unbind) 
+        // don't close the bound file - it will close with the process exits
+        // don't close in unbind mode - piz_dispatcher() opens and closes each component
+        // don't close stdout - in bound mode, we might still need it for the next file
         file_close (&txt_file, false); 
 
     file_close (&z_file, false);
@@ -377,12 +377,12 @@ static void main_genozip (const char *txt_filename,
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
  
-    ASSERT0 (flag_concat || !z_file, "Error: expecting z_file to be NULL in non-concat mode");
+    ASSERT0 (flag_bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
 
     // get output FILE
     if (!flag_stdout) {
 
-        if (!z_file) { // skip if we're the second file onwards in concatenation mode - nothing to do
+        if (!z_file) { // skip if we're the second file onwards in bind mode - nothing to do
 
             if (!z_filename) {
                 bool is_url = url_is_url (txt_filename);
@@ -428,7 +428,7 @@ static void main_genozip (const char *txt_filename,
 
     file_close (&txt_file, !is_last_file);
 
-    if ((is_last_file || !flag_concat) && !flag_stdout && z_file) 
+    if ((is_last_file || !flag_bind) && !flag_stdout && z_file) 
         file_close (&z_file, !is_last_file); 
 
     if (remove_txt_file) file_remove (txt_filename, true); 
@@ -436,7 +436,7 @@ static void main_genozip (const char *txt_filename,
     FREE ((void *)basename);
 
     // test the compression, if the user requested --test
-    if (flag_test && (!flag_concat || is_last_file)) main_test_after_genozip (exec_name, z_filename);
+    if (flag_test && (!flag_bind || is_last_file)) main_test_after_genozip (exec_name, z_filename);
 }
 
 static void main_list_dir(const char *dirname)
@@ -475,7 +475,7 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
 
     for (unsigned i=1; i < num_files; i++) 
         ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
-                 "Warning: two files with the same name '%s' - if you later split with 'genounzip --split %s', these files will overwrite each other", 
+                 "Warning: two files with the same name '%s' - if you later unbind with 'genounzip --unbind %s', these files will overwrite each other", 
                  &basenames[i * BASENAME_LEN], out_filename);
 
     FREE (basenames);    
@@ -540,8 +540,8 @@ int main (int argc, char **argv)
         #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,      1 }
         #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,      1 }
         #define _gt {"gtshark",       no_argument,       &flag_gtshark,          1 } 
-        #define _th {"threads",       required_argument, 0,     '@'                }
-        #define _O  {"split",         no_argument,       &flag_split,            1 }
+        #define _th {"threads",       required_argument, 0, '@'                    }
+        #define _u  {"unbind",        no_argument,       &flag_unbind,           1 }
         #define _o  {"output",        required_argument, 0, 'o'                    }
         #define _p  {"password",      required_argument, 0, 'p'                    }
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
@@ -589,16 +589,16 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th, _O, _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _O, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
         static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                             _dm,                                                                                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:Oo:p:B:S:9KWFe:E:", // genozip
-            "czfhLqQt^V@:Oo:p:me:",                 // genounzip
+            "i:I:cdfhlLqQt^Vzm@:o:p:B:S:9KWFe:E:",  // genozip
+            "czfhLqQt^V@:uo:p:me:",                 // genounzip
             "hLVp:qf",                              // genols
             "hLV@:p:qQ1r:t:s:H1Go:fg:e:"            // genocat
         };
@@ -636,7 +636,7 @@ int main (int argc, char **argv)
             case 'e' : flag_reference     = REF_EXTERNAL  ; ref_set_reference (optarg); break;
             case 'E' : flag_reference     = REF_EXT_STORE ; ref_set_reference (optarg); break;
             case 'm' : flag_md5           = 1      ; break;
-            case 'O' : flag_split         = 1      ; break;
+            case 'u' : flag_unbind        = 1      ; break;
             case 'G' : flag_drop_genotypes= 1      ; break;
             case 'H' : flag_no_header     = 1      ; break;
             case '1' : flag_header_one    = 1      ; break;
@@ -706,8 +706,8 @@ int main (int argc, char **argv)
     #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
 
     ASSINP (!flag_stdout      || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
-    ASSINP (!flag_stdout      || !flag_split,                       "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
-    ASSINP (!flag_split       || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
+    ASSINP (!flag_stdout      || !flag_unbind,                      "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("unbind", "u"));
+    ASSINP (!flag_unbind      || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("unbind",  "u"), OT("output", "o"));
     ASSINP (!flag_stdout      || !flag_replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
 
     // if flag_md5 we need to seek back and update the md5 in the txt header section - this is not possible with flag_stdout
@@ -768,15 +768,15 @@ int main (int argc, char **argv)
         flag_optimize = true;
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
-    // will overwrite each other if extracted with --split
+    // will overwrite each other if extracted with --unbind
     if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
 
     unsigned num_files = argc - optind;
     flag_multiple_files = (num_files > 1);
      
-    flag_concat = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
+    flag_bind = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
-    ASSINP (num_files <= 1 || flag_concat || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
+    ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

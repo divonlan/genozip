@@ -36,8 +36,8 @@ The command line options are similar to gzip and bcftools, so if you're familiar
 Note: there is no need for a separate indexing step or index file<br>
 <br>
 <b><i>Concatenating & splitting:</i></b><br>
-<b>genozip</b> <i>file1.vcf file2.vcf</i> -o <i>concat.vcf.genozip</i> <br>
-<b>genounzip</b> <i>concat.vcf.genozip</i> -O <br>
+<b>genozip</b> <i>file1.vcf file2.vcf</i> -o <i>bound.vcf.genozip</i> <br>
+<b>genounzip</b> <i>bound.vcf.genozip</i> -O <br>
 <br>
 <b><i>Calculating the MD5:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>

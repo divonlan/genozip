@@ -70,7 +70,7 @@ unsigned crypt_max_padding_len()
 }
 
 // 256 bit AES is a concatenation of 2 MD5 hashes of the password - each one of length 128 bit
-// each hash is a hash of the password concatenated with a constant string
+// each hash is a hash of the password bound with a constant string
 // we add data_len to the hash to give it a near-uniqueness for each section
 static void crypt_generate_aes_key (VBlock *vb,                
                                     uint32_t vb_i, SectionType sec_type, bool is_header, // used to generate an aes key unique to each block

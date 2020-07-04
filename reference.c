@@ -58,7 +58,7 @@ void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_wo
     *out_contig_words = &contig_words;
 }
 
-// free memory allocations between files, when compressing multiple non-concatenated files or decompressing multiple files
+// free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void ref_cleanup_memory(void)
 {
     if (flag_reference != REF_INTERNAL && flag_reference != REF_STORED) return; // we never cleanup external references as they can never change (the user can only specify one --reference)
@@ -813,7 +813,7 @@ static void ref_output_one_range (VBlockP vb)
 static void ref_prepare_range_for_compress (VBlockP vb)
 {
     static uint32_t next_range_i=0;
-    if (vb->vblock_i == 1) next_range_i=0; // initialize for once for non-concatenated file
+    if (vb->vblock_i == 1) next_range_i=0; // initialize for once for non-bound file
 
     // find next occupied range
     for (; !vb->ready_to_dispatch && next_range_i < ranges.len ; next_range_i++) {
@@ -997,7 +997,7 @@ static void ref_copy_chrom_data_from_z_file (void)
     // case: in REF_INTERNAL, we copy from the z_file context after we completed segging a file
     // note: we can't rely on chrom_ctx->mtf for the correct order as vb_i=1 resorted. rather, by mimicking the
     // word_list generation as done in PIZ, we guarantee that we will get the same chrom_index
-    // in case of multiple concatenated files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
+    // in case of multiple bound files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
     if (flag_reference == REF_INTERNAL) {
         contig_words.len = chrom_ctx->mtf.len;
         buf_alloc (evb, &contig_words, contig_words.len * sizeof (MtfWord), 1, "contig_words", 0);

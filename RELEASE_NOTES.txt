@@ -1,5 +1,5 @@
 1.1.3
-- --split option - required storing the VCF header of all files, and keeping md5 for both the concatenated file and each components
+- --unbind option - required storing the VCF header of all files, and keeping md5 for both the bound file and each component
 - Improvement in memory and thread management - to reduce memory consumption when compressing very large files (100s of GB to TBs)
 - Separate --help text for each command
 - Optimize MD5 performance (move to 32b and eliminate memory copying)

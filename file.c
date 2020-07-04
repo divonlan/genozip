@@ -547,7 +547,7 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
 }
 
 void file_close (File **file_p, 
-                 bool cleanup_memory) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with splitting concatenated files
+                 bool cleanup_memory) // optional - used to destroy buffers in the file is closed NOT near the end of the execution, eg when dealing with unbinding bound files
 {
     File *file = *file_p;
     *file_p = NULL;

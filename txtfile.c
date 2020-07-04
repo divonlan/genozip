@@ -31,8 +31,8 @@ uint32_t txtfile_get_last_header_len(void) { return last_txt_header_len; }
 static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
 {
     if (flag_md5) {
-        if (flag_concat && !is_2ndplus_txt_header)
-            md5_update (&z_file->md5_ctx_concat, data, len);
+        if (flag_bind && !is_2ndplus_txt_header)
+            md5_update (&z_file->md5_ctx_bind, data, len);
         
         md5_update (&z_file->md5_ctx_single, data, len);
     }
@@ -291,7 +291,7 @@ unsigned txtfile_write_to_disk (const Buffer *buf)
         }
     }
 
-    if (flag_md5) md5_update (&txt_file->md5_ctx_concat, buf->data, buf->len);
+    if (flag_md5) md5_update (&txt_file->md5_ctx_bind, buf->data, buf->len);
 
     txt_file->txt_data_so_far_single += buf->len;
     txt_file->disk_so_far            += buf->len;
@@ -375,19 +375,19 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     
     *txt_line_i += (uint32_t)evb->lines.len;
 
-    // for vcf, we need to check if the samples are the same before approving concatanation.
-    // other data types can concatenate without restriction
-    bool can_concatenate = (txt_file->data_type == DT_VCF) ? vcf_header_set_globals(txt_file->name, &evb->txt_data)
+    // for vcf, we need to check if the samples are the same before approving binding.
+    // other data types can bind without restriction
+    bool can_bindenate = (txt_file->data_type == DT_VCF) ? vcf_header_set_globals(txt_file->name, &evb->txt_data)
                                                            : true;
-    if (!can_concatenate) { 
-        // this is the second+ file in a concatenation list, but its samples are incompatible
+    if (!can_bindenate) { 
+        // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;
     }
 
     // we always write the txt_header section, even if we don't actually have a header, because the section
     // header contains the data about the file
-    if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in concat mode too, to support --split
+    if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     last_txt_header_len = evb->txt_data.len;
 
@@ -401,7 +401,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 }
 
 // PIZ: returns offset of header within data, EOF if end of file
-bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in concatenated file)
+bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
 {
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
     static Buffer header_section = EMPTY_BUFFER;
@@ -410,7 +410,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
                                             sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, NULL);
     if (header_offset == EOF) {
         buf_free (&header_section);
-        return false; // empty file (or in case of split mode - no more components) - not an error
+        return false; // empty file (or in case of unbind mode - no more components) - not an error
     }
 
     // handle the GENOZIP header of the txt header section
@@ -419,20 +419,20 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
     ASSERT (!digest || BGEN32 (header->h.compressed_offset) == crypt_padded_len (sizeof(SectionHeaderTxtHeader)), 
             "Error: invalid txt header's header size: header->h.compressed_offset=%u, expecting=%u", BGEN32 (header->h.compressed_offset), (unsigned)sizeof(SectionHeaderTxtHeader));
 
-    // 1. in split mode - we open the output txt file of the component
+    // 1. in unbind mode - we open the output txt file of the component
     // 2. when reading a reference file - we create txt_file here (but don't actually open the physical file)
-    if (flag_split || flag_reading_reference) {
-        ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in split mode or when reading reference");
+    if (flag_unbind || flag_reading_reference) {
+        ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in unbind mode or when reading reference");
         txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
     }
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
 
-    if (is_first_txt || flag_split) 
+    if (is_first_txt || flag_unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
 
-    if (flag_split) *digest = header->md5_hash_single; // override md5 from genozip header
+    if (flag_unbind) *digest = header->md5_hash_single; // override md5 from genozip header
         
     // now get the text of the txt header itself
     static Buffer header_buf = EMPTY_BUFFER;
@@ -440,8 +440,8 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
 
     bool is_vcf = (z_file->data_type == DT_VCF);
 
-    bool can_concatenate = is_vcf ? vcf_header_set_globals(z_file->name, &header_buf) : true;
-    if (!can_concatenate) {
+    bool can_bindenate = is_vcf ? vcf_header_set_globals(z_file->name, &header_buf) : true;
+    if (!can_bindenate) {
         buf_free (&header_section);
         buf_free (&header_buf);
         return false;
@@ -451,8 +451,8 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
 
     if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
-    // write vcf header if not in concat mode, or, in concat mode, we write the vcf header, only for the first genozip file
-    if ((is_first_txt || flag_split) && !flag_no_header && !flag_reading_reference)
+    // write vcf header if not in bound mode, or, in bound mode, we write the vcf header, only for the first genozip file
+    if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference)
         txtfile_write_to_disk (&header_buf);
     
     buf_free (&header_section);

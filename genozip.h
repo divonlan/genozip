@@ -82,7 +82,7 @@ typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LI
 extern CommandType command, primary_command;
 
 // flags set by user's command line options
-extern int flag_force, flag_quiet, flag_concat, flag_md5, flag_split, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
+extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers, flag_show_aliases,
            flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions, 
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_show_reference,

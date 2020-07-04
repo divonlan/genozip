@@ -173,7 +173,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     // need to update progress indicator, max once a second or if 100% is reached
     const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
-    // in split mode - dispatcher is not done if there's another component after this one
+    // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (dispatcher);
 
     // case: we've reached 99% prematurely... we under-estimated the time
@@ -230,7 +230,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
         ever_time_initialized = true;
     }
 
-    dd->next_vb_i     = previous_vb_i;  // used if we're concatenating files - the vblock_i will continue from one file to the next
+    dd->next_vb_i     = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
     dd->max_threads   = max_threads;
     dd->test_mode     = test_mode;
     dd->is_last_file  = is_last_file;
@@ -242,7 +242,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
     buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (!flag_split) dispatcher_show_start (dd); // note: for flag_split, we print this in dispatcher_resume() 
+    if (!flag_unbind) dispatcher_show_start (dd); // note: for flag_unbind, we print this in dispatcher_resume() 
 
     return dd;
 }
@@ -289,13 +289,13 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     buf_test_overflows(evb, "dispatcher_finish"); 
 
     // free memory allocations that assume subsequent files will have the same number of samples.
-    // (we assume this if the files are being concatenated). don't bother freeing (=same time) if this is the last file
-    if (!flag_concat && !dd->is_last_file) {
+    // (we assume this if the files are being bound). don't bother freeing (=same time) if this is the last file
+    if (!flag_bind && !dd->is_last_file) {
         vb_cleanup_memory(); 
         vb_release_vb (evb);
     }
     
-    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent concatented files
+    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent bound files
 
     FREE (dd);
 

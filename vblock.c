@@ -73,7 +73,7 @@ void vb_release_vb (VBlock *vb)
     // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used/
     //                   we have logic in vb_get_vb() to update its vb_i
     // vb->num_sample_blocks : we keep this value as it is needed by vb_cleanup_memory, and it doesn't change
-    //                         between VBs of a file or concatenated files.
+    //                         between VBs of a file or bound files.
     // vb->data_type : type of this vb 
 }
 
@@ -172,7 +172,7 @@ VBlock *vb_get_vb (unsigned vblock_i)
     return vb;
 }
 
-// free memory allocations between files, when compressing multiple non-concatenated files or decompressing multiple files
+// free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void vb_cleanup_memory (void)
 {
     for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {

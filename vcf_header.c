@@ -18,7 +18,7 @@
 // Globals
 uint32_t global_vcf_num_samples           = 0; // number of samples in the file
 uint32_t global_vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that global_vcf_num_samples if --samples is used
-Buffer global_vcf_header_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during concat
+Buffer global_vcf_header_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
 
 void vcf_header_initialize (void)
 {
@@ -47,8 +47,8 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
                 vcf_header_line_filename = filename;
             }
 
-            // ZIP only: subsequent files - if we're in concat mode just compare to make sure the header is the same
-            else if (flag_concat && 
+            // ZIP only: subsequent files - if we're in bound mode just compare to make sure the header is the same
+            else if (flag_bind && 
                      (vcf_header->len-i != global_vcf_header_line.len || memcmp (global_vcf_header_line.data, &vcf_header->data[i], global_vcf_header_line.len))) {
 
                 fprintf (stderr, "%s: skipping %s: it has a different VCF header line than %s, see below:\n"

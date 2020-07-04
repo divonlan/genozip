@@ -14,7 +14,7 @@
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
 extern void zfile_compress_genozip_header (const Md5Hash *single_component_md5);
 extern bool zfile_get_genozip_header (uint64_t *uncompressed_data_size, uint32_t *num_samples,
-                                      uint64_t *num_items_concat, Md5Hash *md5_hash_concat, 
+                                      uint64_t *num_items_bind, Md5Hash *md5_hash_bound, 
                                       char *created, unsigned created_len, Md5Hash *license_hash,
                                       char *ref_filename, unsigned ref_filename_len,  // caller allocates space 
                                       Md5Hash *ref_file_md5);
@@ -33,7 +33,7 @@ extern void zfile_compress_dictionary_data (VBlockP vb, ContextP ctx,
 extern void zfile_compress_b250_data  (VBlockP vb, ContextP ctx, CompressionAlg comp_alg);
 extern void zfile_compress_local_data (VBlockP vb, ContextP ctx);
 
-// returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_split)
+// returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_unbind)
 #define SEEK_NONE ((uint64_t)-1)
 #define NO_SB_I ((uint32_t)-1)
 extern int32_t zfile_read_section (FileP file, VBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */
