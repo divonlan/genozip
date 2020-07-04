@@ -44,7 +44,8 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
 
         txt_file_disk_size_concat += txt_file->disk_size;
 
-        fprintf (stderr, "Done (%s)                                     \n", runtime);
+        if (!flag_quiet)
+            fprintf (stderr, "Done (%s)                                     \n", runtime);
 
         if (is_final_component) {
             double ratio2 = (double)txt_file_disk_size_concat / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size

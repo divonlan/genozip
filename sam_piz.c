@@ -22,7 +22,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
     VBlockSAMP vb = (VBlockSAMP)vb_;
     ASSERT0 (bitmap_ctx, "Error in ref_reconstruct: bitmap_ctx is NULL");
 
-    BitArray *bitmap = buf_get_bitmap (&bitmap_ctx->local);
+    BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
@@ -75,8 +75,8 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
                 if (!ref_is_nucleotide_set (range, idx)) {
                     ref_print_is_set (range);
                     ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u: reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
-                           " (cigar=%s ref_consumed=%u seq_consumed=%u)",
-                           vb->line_i, range->chrom, range->chrom_name_len, range->chrom_name, pos + seq_consumed, range->first_pos, range->last_pos, vb->last_cigar, ref_consumed, seq_consumed);
+                           " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
+                           vb->line_i, range->chrom, range->chrom_name_len, range->chrom_name, pos + seq_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
                 }
 
                 char ref = ref_get_nucleotide (range, idx);

@@ -75,8 +75,22 @@ DictId dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
 
 static char *threads_str  = NULL;
 
-void exit_on_error(void) 
+static void print_call_stack (void) 
 {
+#ifndef _WIN32
+#   define STACK_DEPTH 15
+    void *array[STACK_DEPTH];
+    size_t size = backtrace(array, STACK_DEPTH);
+    
+    fprintf (stderr, "Call stack:\n");
+    backtrace_symbols_fd (array, size, STDERR_FILENO);
+#endif
+}
+
+void exit_on_error (bool show_stack) 
+{
+    if (false /* show_stack */) print_call_stack(); //this is useless - doesn't print function names
+
     buf_test_overflows_all_vbs("exit_on_error");
 
     url_kill_curl();
@@ -97,19 +111,15 @@ void exit_on_error(void)
         file_remove (save_name, true);
     }
 
-    exit(1);
+    abort();
 } 
 
 #ifndef _WIN32
 static void main_sigsegv_handler (int sig) 
 {
-#   define STACK_DEPTH 15
-    void *array[STACK_DEPTH];
-    size_t size = backtrace(array, STACK_DEPTH);
-    
-    fprintf (stderr, "\nError: segmentation fault. Call stack:\n");
-    backtrace_symbols_fd (array, size, STDERR_FILENO);
-    exit(1);
+    fprintf (stderr, "\nError: Segmentation fault\n");
+    //print_call_stack(); //this is useless - doesn't print function names
+    abort();
 }
 #endif
 
@@ -248,13 +258,13 @@ static void main_genounzip (const char *z_filename,
     txtfile_header_initialize();
     
     // get input FILE
-    ASSERT0 (z_filename, "Error: z_filename is NULL");
+    ASSINP0 (z_filename, "Error: z_filename is NULL");
 
     // we cannot work with a remote genozip file because the decompression process requires random access
-    ASSERT (!url_is_url (z_filename), 
+    ASSINP (!url_is_url (z_filename), 
             "%s: genozip files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
 
-    ASSERT (!txt_filename || !url_is_url (txt_filename), 
+    ASSINP (!txt_filename || !url_is_url (txt_filename), 
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, txt_filename);
 
     unsigned fn_len = strlen (z_filename);
@@ -339,7 +349,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
 
     primary_command = TEST_AFTER_ZIP; // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
 
-    ASSERT (!exit_code, "genozip test exited with status %d\n", exit_code);
+    ASSINP (!exit_code, "genozip test exited with status %d\n", exit_code);
 }
 
 static void main_genozip (const char *txt_filename, 
@@ -349,7 +359,7 @@ static void main_genozip (const char *txt_filename,
 {
     license_get(); // ask the user to register if she doesn't already have a license (note: only genozip requires registration - unzip,cat,ls do not)
 
-    ASSERT (!z_filename || !url_is_url (z_filename), 
+    ASSINP (!z_filename || !url_is_url (z_filename), 
             "%s: output files must be regular files, they cannot be a URL: %s", global_cmd, z_filename);
 
     // get input file
@@ -401,9 +411,9 @@ static void main_genozip (const char *txt_filename,
     else if (flag_stdout) { // stdout
 #ifdef _WIN32
         // this is because Windows redirection is in text (not binary) mode, meaning Windows edits the output stream...
-        ASSERT (isatty(1), "%s: redirecting binary output is not supported on Windows, use --output instead", global_cmd);
+        ASSINP (isatty(1), "%s: redirecting binary output is not supported on Windows, use --output instead", global_cmd);
 #endif
-        ASSERT (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
+        ASSINP (flag_force || !isatty(1), "%s: you must use --force to output a compressed file to the terminal", global_cmd);
 
         z_file = file_open_redirect (WRITE, Z_FILE, txt_file->data_type);
     } 
@@ -435,10 +445,10 @@ static void main_list_dir(const char *dirname)
     struct dirent *ent;
 
     dir = opendir (dirname);
-    ASSERT (dir, "Error: failed to open directory: %s", strerror (errno));
+    ASSINP (dir, "Error: failed to open directory: %s", strerror (errno));
 
     int ret = chdir (dirname);
-    ASSERT (!ret, "Error: failed to chdir(%s)", dirname);
+    ASSINP (!ret, "Error: failed to chdir(%s)", dirname);
 
     while ((ent = readdir(dir))) 
         if (!file_is_dir (ent->d_name))  // don't go down subdirectories recursively
@@ -447,7 +457,7 @@ static void main_list_dir(const char *dirname)
     closedir(dir);    
 
     ret = chdir ("..");
-    ASSERT0 (!ret, "Error: failed to chdir(..)");
+    ASSINP0 (!ret, "Error: failed to chdir(..)");
 }
 
 void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
@@ -603,7 +613,7 @@ int main (int argc, char **argv)
         switch (c) {
             case PIZ : case LIST : case LICENSE : 
             case VERSION  : case HELP :
-                ASSERT(command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
+                ASSINP (command<0 || command==c, "%s: can't have both -%c and -%c", global_cmd, command, c); 
                 command=c; 
                 break;
 
@@ -657,7 +667,7 @@ int main (int argc, char **argv)
                     threads_str = optarg;
 
                 else 
-                    ASSERT (long_options[exe_type][option_index].flag != &command || 
+                    ASSINP (long_options[exe_type][option_index].flag != &command || 
                             long_options[exe_type][option_index].val  == command ||
                             command < 0, 
                             "%s: can't have both --%s and -%c", global_cmd, long_options[exe_type][option_index].name, command);
@@ -695,25 +705,25 @@ int main (int argc, char **argv)
     // check for incompatabilities between flags
     #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
 
-    ASSERT (!flag_stdout      || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
-    ASSERT (!flag_stdout      || !flag_split,                       "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
-    ASSERT (!flag_split       || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
-    ASSERT (!flag_stdout      || !flag_replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
+    ASSINP (!flag_stdout      || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("output", "o"));
+    ASSINP (!flag_stdout      || !flag_split,                       "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("split", "O"));
+    ASSINP (!flag_split       || !out_filename,                     "%s: option %s is incompatable with %s", global_cmd, OT("split",  "O"), OT("output", "o"));
+    ASSINP (!flag_stdout      || !flag_replace,                     "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("replace", "^"));
 
     // if flag_md5 we need to seek back and update the md5 in the txt header section - this is not possible with flag_stdout
-    ASSERT (!flag_stdout      || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
-    ASSERT (!flag_test        || !out_filename || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
-    ASSERT (!flag_test        || !flag_replace || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
-    ASSERT (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
-    ASSERT (!flag_header_only || !flag_no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
-    ASSERT (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
-    ASSERT (!flag_quiet       || !flag_noisy,                       "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
-    ASSERT (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
-    ASSERT (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
-    ASSERT (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
-    ASSERT (!flag_test        || !flag_make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
-    ASSERT (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
-    ASSERT (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
+    ASSINP (!flag_stdout      || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
+    ASSINP (!flag_test        || !out_filename || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
+    ASSINP (!flag_test        || !flag_replace || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
+    ASSINP (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
+    ASSINP (!flag_header_only || !flag_no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
+    ASSINP (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
+    ASSINP (!flag_quiet       || !flag_noisy,                       "%s: option %s is incompatable with %s", global_cmd, OT("quiet", "q"), OT("noisy", "Q"));
+    ASSINP (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
+    ASSINP (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
+    ASSINP (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
+    ASSINP (!flag_test        || !flag_make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
+    ASSINP (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
+    ASSINP (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
 
@@ -741,7 +751,7 @@ int main (int argc, char **argv)
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
     if (flag_make_reference) {
-        ASSERT (!crypt_have_password(), "%s: option --make-reference is incompatable with %s", global_cmd, OT("password", "p"));
+        ASSINP (!crypt_have_password(), "%s: option --make-reference is incompatable with %s", global_cmd, OT("password", "p"));
 
         flag_md5 = true;
         if (!flag_vblock) vb_set_global_max_memory_per_vb("1");
@@ -766,12 +776,12 @@ int main (int argc, char **argv)
      
     flag_concat = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
-    ASSERT (num_files <= 1 || flag_concat || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
+    ASSINP (num_files <= 1 || flag_concat || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
         int ret = sscanf (threads_str, "%u", &global_max_threads);
-        ASSERT (ret == 1 && global_max_threads >= 1, "%s: %s requires an integer value of at least 1", global_cmd, OT("threads", "@"));
+        ASSINP (ret == 1 && global_max_threads >= 1, "%s: %s requires an integer value of at least 1", global_cmd, OT("threads", "@"));
     }
     else global_max_threads = arch_get_num_cores();
     
@@ -792,7 +802,7 @@ int main (int argc, char **argv)
         
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
 
-        ASSERT (next_input_file || command != PIZ, 
+        ASSINP (next_input_file || command != PIZ, 
                 "%s: filename(s) required (redirecting from stdin is not possible)", global_cmd);
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 

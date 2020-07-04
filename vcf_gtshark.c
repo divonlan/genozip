@@ -87,7 +87,7 @@ error:
         FCLOSE (file, gtshark_vcf_name);
         file_remove (gtshark_vcf_name, true);
     }
-    exit_on_error();
+    exit_on_error(true);
 }
 
 #define PIPE_MAX_BYTES 32768

@@ -129,16 +129,21 @@ extern void func (VBlockP vb, uint32_t vb_line_i, \
                   char **line_data_2, uint32_t *line_data_len_2);
                   
 // sanity checks
-extern void exit_on_error(void);
+extern void exit_on_error(bool show_stack);
 
-#define ASSERT(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(); }}
-#define ASSERT0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_on_error(); }}
+// check for a user error
+#define ASSINP(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false); }}
+#define ASSINP0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_on_error(false); }}
+
+// check for a bug - prints stack
+#define ASSERT(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }}
+#define ASSERT0(condition, string)           { if (!(condition)) { fprintf (stderr, "\n%s\n", string); exit_on_error(true); }}
 #define ASSERTW(condition, format, ...)      { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }}
 #define ASSERTW0(condition, string)          { if (!(condition) && !flag_quiet) { fprintf (stderr, "\n%s\n", string); } }
 #define RETURNW(condition, ret, format, ...) { if (!(condition)) { if (!flag_quiet) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }}
 #define RETURNW0(condition, ret, string)     { if (!(condition)) { if (!flag_quiet) { fprintf (stderr, "\n%s\n", string); } return ret; } }
-#define ABORT(format, ...)                   { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error();}
-#define ABORT0(string)                       { fprintf (stderr, "\n%s\n", string); exit_on_error();}
+#define ABORT(format, ...)                   { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true);}
+#define ABORT0(string)                       { fprintf (stderr, "\n%s\n", string); exit_on_error(true);}
 #define WARN(format, ...)                    { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); }
 #define WARN0(string)                        { fprintf (stderr, "\n%s\n", string); }
 #define ASSERTGOTO(condition, format, ...)   { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); goto error; }}

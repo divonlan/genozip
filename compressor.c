@@ -271,7 +271,7 @@ static void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, uns
                (vb->compressed.len + roundup_bits2words64 (data_len * 2)) * sizeof (uint64_t), // note: len is in words
                2, buf_is_allocated (&vb->compressed) ? NULL : "compress", 0); // NULL if already allocated, to avoid overwriting param which is overlayed with BitArray->num_of_bits
 
-    BitArray *packed = buf_get_bitmap (&vb->compressed);
+    BitArray *packed = buf_get_bitarray (&vb->compressed);
 
     // remove consumed bits
     if (bits_consumed)
@@ -301,7 +301,7 @@ static void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, uns
 
 static void comp_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream)
 {
-    BitArray *packed = buf_get_bitmap (&vb->compressed);
+    BitArray *packed = buf_get_bitarray (&vb->compressed);
     uint64_t bits_remaining = packed->num_of_bits - instream->bits_consumed;
 
     if (bits_remaining) { 
@@ -320,7 +320,7 @@ static void comp_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream
 
 static void comp_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t uncompressed_len)
 {
-    BitArray *packed = buf_get_bitmap (&vb->compressed);
+    BitArray *packed = buf_get_bitarray (&vb->compressed);
     packed->num_of_bits = uncompressed_len * 2;
     packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
 
@@ -443,7 +443,7 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
             if (instream->avail_in_1) comp_acgt_pack (vb, instream->next_in_1, instream->avail_in_1, instream->bits_consumed, !instream->avail_in_2, false); 
             if (instream->avail_in_2) comp_acgt_pack (vb, instream->next_in_2, instream->avail_in_2, 0, true, false); 
 
-            BitArray *packed = buf_get_bitmap (&vb->compressed);
+            BitArray *packed = buf_get_bitarray (&vb->compressed);
             instream->next_in_1  = (char*)packed->words;
             instream->avail_in_1 = (packed->num_of_bits & ~(uint64_t)0x3f) / 8; // # of bytes - bits rounded down to the nearest word - possibly leaving some carry bits for next time (incomplete word)
             instream->avail_in_2 = 0;

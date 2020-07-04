@@ -21,7 +21,7 @@ typedef struct Buffer {
     bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
     
     const char *name; // name of allocator - used for memory debugging & statistics
-    uint64_t size;    // number of bytes allocated to memory
+    uint64_t size;    // number of bytes available to the user (i.e. not including the allocated overhead)
 
     //------------------------------------------------------------------------------------------------------
     // these 3 fields can be overlayed with a BitArray - their order and size is identical to BitArray
@@ -144,7 +144,8 @@ extern const char *buf_desc (const Buffer *buf);
 
 // bitmap stuff
 extern void buf_add_bit (Buffer *buf, int64_t new_bit);
-#define buf_get_bitmap(buf) ((BitArray*)(&(buf)->data))
+extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits);
+#define buf_get_bitarray(buf) ((BitArray*)(&(buf)->data))
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 

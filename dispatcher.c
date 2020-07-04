@@ -208,7 +208,8 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     }
 
     // case: we're done - caller will print the "Done" message after finalizing the genozip header etc
-    else if (done) fprintf (stderr, "%.*s", dd->last_len, eraser); 
+    else if (done && !flag_quiet) 
+        fprintf (stderr, "%.*s", dd->last_len, eraser); 
 
     dd->last_percent = percent;
     dd->last_seconds_so_far = seconds_so_far;

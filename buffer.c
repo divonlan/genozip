@@ -721,9 +721,27 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
     return new;
 }
 
+// convert a Buffer from a z_file section whose len is in char to a bitarray
+BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits)
+{
+    ASSERT (roundup_bits2bytes (num_of_bits) <= buf->len, "Error in buf_zfile_buf_to_bitarray: num_of_bits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
+            num_of_bits, roundup_bits2bytes (num_of_bits), buf->len);
+
+    BitArray *bitarr = buf_get_bitarray (buf);
+    bitarr->num_of_bits = num_of_bits;
+    bitarr->num_of_words = roundup_bits2words64 (bitarr->num_of_bits);
+
+    ASSERT (roundup_bits2words64 (num_of_bits) * sizeof (int64_t) <= buf->size, "Error in buf_zfile_buf_to_bitarray: buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
+            buf->size, bitarr->num_of_words, bitarr->num_of_words * sizeof(uint64_t));
+
+    LTEN_bit_array (bitarr, true);
+
+    return bitarr;
+}
+
 void buf_add_bit (Buffer *buf, int64_t new_bit) 
 {
-    BitArray *bar = buf_get_bitmap (buf);
+    BitArray *bar = buf_get_bitarray (buf);
 
     ASSERT (bar->num_of_bits < buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
     bar->num_of_bits++;     

@@ -132,7 +132,7 @@ void zfile_uncompress_section (VBlock *vb,
     ASSERT (section_header->section_type == expected_section_type, "Error in zfile_uncompress_section: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
     bool expecting_vb_i = expected_section_type != SEC_DICT && 
-                          expected_section_type != SEC_TXT_HEADER && expected_section_type != SEC_REFERENCE;
+                          expected_section_type != SEC_TXT_HEADER && expected_section_type != SEC_REFERENCE && expected_section_type != SEC_REF_IS_SET;
                           
     ASSERT (vblock_i == vb->vblock_i || !expecting_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
              "Error in zfile_uncompress_section: bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
@@ -146,7 +146,7 @@ void zfile_uncompress_section (VBlock *vb,
 
         if (uncompressed_data_buf_name) { // we're decompressing into a buffer
             BufferP uncompressed_buf = (BufferP)uncompressed_data;
-            buf_alloc (vb, uncompressed_buf, data_uncompressed_len + 1, 1.1, uncompressed_data_buf_name, 0); // +1 for \0
+            buf_alloc (vb, uncompressed_buf, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name, 0); // add a 64b word for safety in case this buffer will be converted to a bitarray later
             uncompressed_buf->len = data_uncompressed_len;
             uncompressed_data = uncompressed_buf->data;
         }

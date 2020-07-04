@@ -115,7 +115,7 @@ void file_set_input_size (const char *size_str)
     unsigned len = strlen (size_str);
 
     for (unsigned i=0; i < len; i++) {
-        ASSERT (IS_DIGIT (size_str[i]), "%s: expecting the file size in bytes to be a positive integer: %s", global_cmd, size_str);
+        ASSINP (IS_DIGIT (size_str[i]), "%s: expecting the file size in bytes to be a positive integer: %s", global_cmd, size_str);
 
         flag_stdin_size = flag_stdin_size * 10 + (size_str[i] - '0'); 
     }
@@ -148,7 +148,7 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
 {
     fprintf (stderr, "%s: output file %s already exists: in the future, you may use --force to overwrite\n", global_cmd, filename);
     
-    if (!isatty(0) || !isatty(2)) exit_on_error(); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
+    if (!isatty(0) || !isatty(2)) exit_on_error(false); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
     
     // read all chars available on stdin, so that if we're processing multiple files - and we ask this question
     // for a subsequent file later - we don't get left overs of this response
@@ -169,7 +169,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name, char *s
     FILE *redirected_stdout_file = NULL;
     if (!flag_stdout) {
         redirected_stdout_file = fopen (file->name, file->mode); // exec_name will redirect its output to this file
-        ASSERT (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
+        ASSINP (redirected_stdout_file, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno));
     }
     char reason[100];
     sprintf (reason, "To output a %s file", file_exts[file->type]);
@@ -204,7 +204,7 @@ bool file_open_txt (File *file)
                         file_printname (file));
             }
             else {
-                ASSERT (!file_has_ext (file->name, ".genozip"), 
+                ASSINP (!file_has_ext (file->name, ".genozip"), 
                         "%s: cannot compress %s because it is already compressed", global_cmd, file_printname(file));
 
                 ABORT ("%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
@@ -212,7 +212,7 @@ bool file_open_txt (File *file)
             }
         }
 
-        ASSERT0 (!flag_make_reference || file->data_type == DT_FASTA, "Error: --make-reference can only be used with FASTA files");
+        ASSINP0 (!flag_make_reference || file->data_type == DT_FASTA, "Error: --make-reference can only be used with FASTA files");
     }
     else { // WRITE - data_type is already set by file_open
 
@@ -238,7 +238,7 @@ bool file_open_txt (File *file)
         else if (file->data_type == DT_NONE && z_file && z_file->data_type != DT_NONE) {
             file->data_type = z_file->data_type;
 
-            #define FORBID_THIS_FLAG(flag,dt) ASSERT (!flag_##flag, "%s: the --" #flag " flag cannot be used with files containing %s data like %s", global_cmd, dt, z_name);
+            #define FORBID_THIS_FLAG(flag,dt) ASSINP (!flag_##flag, "%s: the --" #flag " flag cannot be used with files containing %s data like %s", global_cmd, dt, z_name);
             
             switch (file->data_type) {
                 case DT_VCF : 
@@ -435,7 +435,7 @@ static bool file_open_z (File *file)
         file->data_type = file_get_dt_by_z_ft (file->type); // if we don't find it (DT_NONE), it will be determined after the genozip header is read
     }
     else { // WRITE - data_type is already set by file_open
-        ASSERT (file_has_ext (file->name, GENOZIP_EXT), "%s: file %s must have a " GENOZIP_EXT " extension", 
+        ASSINP (file_has_ext (file->name, GENOZIP_EXT), "%s: file %s must have a " GENOZIP_EXT " extension", 
                               global_cmd, file_printname (file));
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
@@ -456,7 +456,7 @@ static bool file_open_z (File *file)
 
 File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */)
 {
-    ASSERT0 (filename, "Error in file_open: filename is null");
+    ASSINP0 (filename, "Error in file_open: filename is null");
 
     File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
@@ -465,7 +465,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     bool file_exists;
 
     // is_remote is only possible in READ mode
-    ASSERT (mode != WRITE || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
+    ASSINP (mode != WRITE || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     const char *error = NULL;
@@ -485,7 +485,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         return NULL; 
     }
 
-    ASSERT (mode != READ  || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
+    ASSINP (mode != READ  || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
 
     if (mode == WRITE && file_exists && !flag_force && !(supertype==TXT_FILE && flag_test))
         file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
@@ -510,14 +510,14 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         default:       ABORT ("Error: invalid supertype: %u", supertype);
     }
 
-    ASSERT (success, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
+    ASSINP (success, "%s: cannot open file %s: %s", global_cmd, file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     return file;
 }
 
 File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_type /* only used for WRITE */)
 {
-    ASSERT (mode==WRITE || stdin_type != UNKNOWN_FILE_TYPE, 
+    ASSINP (mode==WRITE || stdin_type != UNKNOWN_FILE_TYPE, 
             "%s: to redirect from standard input use --input (or -i) with one of the supported file types:%s", 
             global_cmd, file_compressible_extensions());
 
@@ -525,7 +525,7 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
 
     file->file = (mode == READ) ? fdopen (STDIN_FILENO,  "rb")
                                 : fdopen (STDOUT_FILENO, "wb");
-    ASSERT (file->file, "%s: Failed to redirect %s: %s", global_cmd, (mode==READ ? "stdin" : "stdout"), strerror (errno));
+    ASSINP (file->file, "%s: Failed to redirect %s: %s", global_cmd, (mode==READ ? "stdin" : "stdout"), strerror (errno));
 
     file->supertype = supertype;
     
@@ -744,7 +744,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
     buf_alloc (vb, buf, size + add_string_terminator, 1, buf_name, buf_param);
 
     FILE *file = fopen (filename, "rb");
-    ASSERT (file, "Error: cannot open %s: %s", filename, strerror (errno));
+    ASSINP (file, "Error: cannot open %s: %s", filename, strerror (errno));
 
     size_t bytes_read = fread (buf->data, 1, size, file);
     ASSERT (bytes_read == (size_t)size, "Error reading file %s: %s", filename, strerror (errno));

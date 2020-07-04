@@ -21,7 +21,6 @@
 #include <unistd.h>  // need for getpid() for seeding rand number
 #include <ctype.h>  // need for tolower()
 #include <errno.h>  // perror()
-#include "endianness.h"
 
 // Windows includes
 #if defined(_WIN32)
@@ -29,7 +28,7 @@
 #endif
 
 #include "genozip.h"
-#include "buffer.h"
+#include "endianness.h"
 #include "bit_array.h"
 
 #define assert(x) ASSERT ((x), "Error in %s:%u: %s", __FUNCTION__, __LINE__, #x)
@@ -394,7 +393,7 @@ BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits)
 
 void bit_array_dealloc(BitArray* bitarr)
 {
-  FREE (bitarr->words);
+  free (bitarr->words);
   memset(bitarr, 0, sizeof(BitArray));
 }
 
@@ -545,7 +544,9 @@ void bit_array_toggle_bits(BitArray* bitarr, size_t n, ...)
 void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 {
   //assert(start + len <= bitarr->num_of_bits);
-  assert(start + len - 1 <= bitarr->num_of_bits); // divon fixed bug
+  ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_set_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
+          start, len, bitarr->num_of_bits); // divon fixed bug
+
   SET_REGION(bitarr, start, len);
   DEBUG_VALIDATE(bitarr);
 }
@@ -555,7 +556,9 @@ void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 void bit_array_clear_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 {
   //assert(start + len <= bitarr->num_of_bits);
-  assert(start + len - 1 <= bitarr->num_of_bits); // divon fixed bug
+  ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_clear_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
+          start, len, bitarr->num_of_bits); // divon fixed bug
+
   CLEAR_REGION(bitarr, start, len);
   DEBUG_VALIDATE(bitarr);
 }
@@ -563,7 +566,9 @@ void bit_array_clear_region(BitArray* bitarr, bit_index_t start, bit_index_t len
 // Toggle all the bits in a region
 void bit_array_toggle_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 {
-  //assert(start + len <= bitarr->num_of_bits);
+  ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_toggle_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
+          start, len, bitarr->num_of_bits); // divon fixed bug
+          
   assert(start + len - 1 <= bitarr->num_of_bits); // divon fixed bug
   TOGGLE_REGION(bitarr, start, len);
   DEBUG_VALIDATE(bitarr);
@@ -1652,19 +1657,6 @@ char* bit_array_word2str_rev(const void *ptr, size_t num_of_bits, char *str)
   }
   str[num_of_bits] = '\0';
   return str;
-}
-
-void bit_array_copy_from_buffer (BitArray* dst, bit_index_t dstindx, const Buffer *buf, bit_index_t num_of_bits) // added by divon
-{
-  ASSERT (roundup_bits2words64 (num_of_bits) * sizeof (uint64_t) == buf->len, "Error in bit_array_from_buffer: buf->len=%u inconsistent with num_of_bits=%u",
-          (uint32_t)buf->len, (uint32_t)num_of_bits);
-
-  BitArray src;
-  src.words        = (word_t*)buf->data;
-  src.num_of_bits  = num_of_bits;
-  src.num_of_words = roundup_bits2words64 (num_of_bits);
-
-  bit_array_copy (dst, dstindx, &src, 0, num_of_bits);
 }
 
 void LTEN_bit_array (BitArray* bitarr, bool also_partial_topword)

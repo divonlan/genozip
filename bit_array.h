@@ -10,10 +10,7 @@
 #ifndef BIT_ARRAY_INCLUDED
 #define BIT_ARRAY_INCLUDED
 
-#include <stdio.h>
-#include <inttypes.h>
-//#include <sched.h>
-#include "buffer.h"
+#include "genozip.h"
 
 //------------------------------------------------------------------
 // Macros 
@@ -145,8 +142,6 @@
 
 //------------------------------------------------------------------
 
-typedef struct BitArray BitArray;
-
 // 64 bit words
 typedef uint64_t word_t, word_addr_t, bit_index_t;
 typedef uint8_t word_offset_t; // Offset within a 64 bit word
@@ -162,13 +157,13 @@ extern "C" {
 // Structs
 //
 
-struct BitArray
+typedef struct BitArray
 {
   // These fields should not be changed or added to, as they map to Buffer
   word_t* words;            // maps to Buffer->data
   bit_index_t num_of_bits;  // maps to Buffer->param
   word_addr_t num_of_words; // maps to Buffer->len  ; round_up (num_of_bits / 64)
-};
+} BitArray;
 
 //
 // Basics: Constructor, destructor, get length, resize
@@ -178,8 +173,6 @@ struct BitArray
 extern void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr); // divon
 extern BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits);
 extern void bit_array_dealloc(BitArray* bitarr);
-
-extern void bit_array_copy_from_buffer (BitArray* dst, bit_index_t dstindx, const Buffer *buf, bit_index_t num_of_bits); // added by divon
 
 // Get length of bit array
 extern bit_index_t bit_array_length(const BitArray* bit_arr);
@@ -427,8 +420,8 @@ BitArray* bit_array_clone(const BitArray* bitarr);
 // Destination and source can be the same bit_array and
 // src/dst regions can overlap
 extern void bit_array_copy(BitArray* dst, bit_index_t dstindx,
-                    const BitArray* src, bit_index_t srcindx,
-                    bit_index_t length);
+                           const BitArray* src, bit_index_t srcindx,
+                           bit_index_t length);
 
 // copy all of src to dst. dst is resized to match src.
 extern void bit_array_copy_all(BitArray* dst, const BitArray* src);

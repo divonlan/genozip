@@ -66,8 +66,8 @@ void ref_cleanup_memory(void)
     if (buf_is_allocated (&ranges)) {
         ARRAY (Range, rng, ranges);
         for (unsigned i=0; i < ranges.len ; i++) {
-            if (rng[i].ref.words) bit_array_dealloc (&rng[i].ref);
-            if (rng[i].is_set.words) bit_array_dealloc (&rng[i].is_set);
+            if (rng[i].ref.words)    FREE (&rng[i].ref.words);
+            if (rng[i].is_set.words) FREE (&rng[i].is_set.words);
             if (primary_command == ZIP && flag_reference == REF_INTERNAL) 
                 FREE ((char *)rng[i].chrom_name); // allocated only in ZIP/REF_INTERNAL - otherwise a pointer into another Buffer
         }
@@ -173,7 +173,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     int64_t ref_sec_first_pos = (int64_t)BGEN64 (header->first_pos);
     int64_t ref_sec_last_pos  = (int64_t)BGEN64 (header->last_pos);
     int64_t ref_sec_len       = ref_sec_last_pos - ref_sec_first_pos + 1;
-    int64_t compacted_last_pos=0, compacted_ref_len=0;
+    int64_t compacted_last_pos=0, compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
 
     Context *ctx = &z_file->contexts[DTFZ(chrom)];
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_uncompress_one_range: chrom=%d out of range - ctx->word_list.len=%u",
@@ -222,11 +222,10 @@ static void ref_uncompress_one_range (VBlockP vb)
         // uncompress into r->is_set, via vb->compress
         zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", SEC_REF_IS_SET);
 
-        BitArray *packed = buf_get_bitmap (&vb->compressed);
-        LTEN_bit_array (packed, true);
+        BitArray *is_set = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len);
 
         mutex_lock (r->mutex); // while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
-        bit_array_copy_from_buffer (&r->is_set, sec_start_within_contig, &vb->compressed, ref_sec_len);
+        bit_array_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len);
         mutex_unlock (r->mutex);
 
         if (flag_show_is_set && !strcmp (chrom_name, flag_show_is_set)) ref_print_is_set (r);
@@ -251,29 +250,42 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
     
     // case: not compacted means that entire range is set
-    else 
+    else {
         ASSERT (uncomp_len == roundup_bits2words64 (ref_sec_len*2) * sizeof (uint64_t), "Error: uncomp_len=%u inconsistent with ref_len=%"PRId64, uncomp_len, ref_sec_len); 
 
-    // initialization of is_set:
-    // case 1: ZIP (reading an external reference) - we CLEAR is_set, and let seg set the bits that are to be
-    //    needed from the reference for pizzing (so we don't store the others)
-    //    note: in case of ZIP with REF_INTERNAL, we CLEAR the bits in ref_zip_get_locked_range
-    // case 2: PIZ, reading an uncompacted (i.e. complete) reference section - which is always the case when
-    //    reading an external reference and sometimes when reading an stored one - we SET all the bits as they are valid for pizzing
-    //    note: in case of PIZ, entire contigs are initialized to clear in ref_initialize_ranges as there might be
-    //    regions missing (not covered by SEC_REFERENCE sections)
-    // case 3: PIZ, reading a compacted reference (this only happens with stored references that original from 
-    //    internal references) - we receive the correct is_set in the SEC_REF_IS_SET section and don't change it
+        // initialization of is_set:
+        // case 1: ZIP (reading an external reference) - we CLEAR is_set, and let seg set the bits that are to be
+        //    needed from the reference for pizzing (so we don't store the others)
+        //    note: in case of ZIP with REF_INTERNAL, we CLEAR the bits in ref_zip_get_locked_range
+        // case 2: PIZ, reading an uncompacted (i.e. complete) reference section - which is always the case when
+        //    reading an external reference and sometimes when reading an stored one - we SET all the bits as they are valid for pizzing
+        //    note: in case of PIZ, entire contigs are initialized to clear in ref_initialize_ranges as there might be
+        //    regions missing (not covered by SEC_REFERENCE sections)
+        // case 3: PIZ, reading a compacted reference (this only happens with stored references that original from 
+        //    internal references) - we receive the correct is_set in the SEC_REF_IS_SET section and don't change it
 
-    if (primary_command == ZIP) { // case 1
-        mutex_lock (r->mutex); // while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
-        bit_array_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
-        mutex_unlock (r->mutex);
-    }
-    else if (primary_command == PIZ && !is_compacted) { // case 2
-        mutex_lock (r->mutex); 
-        bit_array_set_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is set
-        mutex_unlock (r->mutex);
+        if (primary_command == ZIP) { // case 1
+            mutex_lock (r->mutex); // while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
+            bit_array_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
+            mutex_unlock (r->mutex);
+        }
+        else if (primary_command == PIZ) { // case 2
+
+            // it is possible that the section goes beyond the boundaries of the contig, this can happen when we compressed with --REFERENCE
+            // and the section was copied in its entirety from the reference FASTA file (in ref_copy_one_compressed_section). 
+            // in this case, we copy from the section only the part needed
+            initial_flanking_len = (sec_start_within_contig < 0)    ? -sec_start_within_contig       : 0; // nucleotides in the section that are before the start of our contig
+            final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
+
+            mutex_lock (r->mutex); 
+
+            // set entire range, excluding flanking regions
+            bit_array_set_region (&r->is_set, 
+                                  MAX (sec_start_within_contig, 0), 
+                                  ref_sec_len - initial_flanking_len - final_flanking_len); 
+
+            mutex_unlock (r->mutex);
+        }
     }
 
     if (!uncomp_len) return;  // empty header - if it appears, it is the final header (eg in case of an unaligned SAM file)
@@ -281,24 +293,28 @@ static void ref_uncompress_one_range (VBlockP vb)
     // uncompress into r->ref, via vb->compress
     zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", SEC_REFERENCE);
 
-    BitArray *packed = buf_get_bitmap (&vb->compressed);
-    LTEN_bit_array (packed, true);
-
     mutex_lock (r->mutex); // while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
 
-    // it is possible that the section goes beyond the boundaries of the contig, this can happen when we compressed with --REFERENCE
-    // and the section was copied in its entirety from the reference FASTA file (in ref_copy_one_compressed_section). 
-    // in this case, we copy from the section only the part needed
-
-TODO
-
-    bit_array_copy_from_buffer (&r->ref, 
-                                (ref_sec_first_pos - r->first_pos) * 2, 
-                                &vb->compressed, 
-                                (is_compacted ? compacted_ref_len : ref_sec_len) * 2);
-
-    if (is_compacted) 
+    if (is_compacted) {
+        BitArray *ref = buf_zfile_buf_to_bitarray (&vb->compressed, compacted_ref_len * 2);
+        bit_array_copy (&r->ref, sec_start_within_contig * 2, ref, 0, compacted_ref_len * 2);
         ref_uncompact_ref (r, sec_start_within_contig, sec_end_within_contig, compacted_last_pos - r->first_pos);
+    }
+
+    else {
+        // it is possible that the section goes beyond the boundaries of the contig, this can happen when we compressed with --REFERENCE
+        // and the section was copied in its entirety from the reference FASTA file (in ref_copy_one_compressed_section). 
+        // in this case, we copy from the section only the part needed
+        int64_t initial_flanking_len = (sec_start_within_contig < 0)    ? -sec_start_within_contig       : 0; // nucleotides in the section that are before the start of our contig
+        int64_t final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
+
+        BitArray *ref = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len * 2);
+
+        // copy the section, excluding the flanking regions
+        bit_array_copy (&r->ref, MAX (sec_start_within_contig, 0) * 2, // dst
+                        ref, initial_flanking_len * 2, // src
+                        (ref_sec_len - initial_flanking_len - final_flanking_len) * 2); // len
+    }
 
     mutex_unlock (r->mutex);
 
@@ -643,10 +659,11 @@ static void ref_copy_compressed_sections_from_reference_file (void)
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
-        if ((double)bits_is_set / (double)ref_ra_len >= 0.95) {
-            ref_copy_one_compressed_section (ref_file, &ref_ra[i], &sl);
-            bit_array_clear_region (&r->is_set, intersect_min, intersect_len);
-        }
+// COMMENT OUT DEBUG
+//        if ((double)bits_is_set / (double)ref_ra_len >= 0.95) {
+//            ref_copy_one_compressed_section (ref_file, &ref_ra[i], &sl);
+//            bit_array_clear_region (&r->is_set, intersect_min, intersect_len);
+//        }
     }
 
     file_close (&ref_file, false);
@@ -1083,7 +1100,7 @@ void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int
 
 void ref_print_is_set (const Range *r)
 {
-    fprintf (stderr, "\n\nIS_SET for chrom %u \"%.*s [%"PRId64"-%"PRId64"] (format- startpos:len:value)\n", 
+    fprintf (stderr, "\n\nRegions set for chrom %u \"%.*s\" [%"PRId64"-%"PRId64"] according to range.is_set (format- \"first_pos-last_pos (len)\")\n", 
              r->chrom, r->chrom_name_len, r->chrom_name, r->first_pos, r->last_pos);
 
     if (!r->is_set.num_of_bits)
@@ -1094,15 +1111,20 @@ void ref_print_is_set (const Range *r)
         
         bool found = bit_array_find_next_clear_bit (&r->is_set, i, &next);
         if (!found) next = r->is_set.num_of_bits;
-        if (next > i) fprintf (stderr, "%"PRId64":%u:1\n", r->first_pos + i, (uint32_t)(next - i));
+        if (next > i) {
+            if (next - i > 1)
+                fprintf (stderr, "%"PRId64"-%"PRIu64"(%u)\t", r->first_pos + i, r->first_pos + next-1, (uint32_t)(next - i));
+            else
+                fprintf (stderr, "%"PRId64"(1)\t", r->first_pos + i);
+        }                   
         if (!found) break;
 
         i = next;
 
         found = bit_array_find_next_set_bit (&r->is_set, i, &next);
         if (!found) next = r->is_set.num_of_bits;
-        fprintf (stderr, "%"PRId64":%u:0\n", r->first_pos + i, (uint32_t)(next - i));
 
         i = next;
     }
+    fprintf (stderr, "\n");
 }
