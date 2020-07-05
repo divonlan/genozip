@@ -24,6 +24,7 @@
 #include "dict_id.h"
 #include "reference.h"
 #include "fasta.h"
+#include "progress.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 // Special values:
@@ -733,7 +734,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     if (flag_unbind) file_close (&txt_file, true); // close this component file
 
     if (!flag_test && !flag_quiet) 
-        fprintf (stderr, "Done (%s)           \n", dispatcher_ellapsed_time (dispatcher, false));
+        fprintf (stderr, "Done (%s)           \n", progress_ellapsed_time (false));
 
 finish:
     // in unbind mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

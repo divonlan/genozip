@@ -21,12 +21,13 @@
 #include "random_access.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "progress.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_component)
 {
     if (flag_quiet) return; 
 
-    const char *runtime = dispatcher_ellapsed_time (dispatcher, false);
+    const char *runtime = progress_ellapsed_time (false);
     double z_bytes   = (double)z_file->disk_so_far;
     double txt_bytes = (double)z_file->txt_data_so_far_bind;
     double ratio     = txt_bytes / z_bytes;
@@ -52,12 +53,12 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
 
             if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
                 fprintf (stderr, "Time: %s, %s compression ratio: %1.1f           \n", 
-                            dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio);
+                         progress_ellapsed_time (true), dt_name (z_file->data_type), ratio);
             else
                 fprintf (stderr, "Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
-                            dispatcher_ellapsed_time (dispatcher, true), dt_name (z_file->data_type), ratio, 
-                            source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
-                            ratio2); // compression vs .gz/.bz2/.bcf/.xz... size
+                         progress_ellapsed_time (true), dt_name (z_file->data_type), ratio, 
+                         source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
+                         ratio2); // compression vs .gz/.bz2/.bcf/.xz... size
         }
     }
     else {

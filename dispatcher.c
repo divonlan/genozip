@@ -3,7 +3,7 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include <time.h>
+
 #ifndef _MSC_VER // Microsoft compiler
 #include <pthread.h>
 #else
@@ -19,6 +19,7 @@
 #include "vblock.h"
 #include "file.h"
 #include "profiler.h"
+#include "progress.h"
 
 typedef struct {
     pthread_t thread_id;
@@ -41,22 +42,20 @@ typedef struct {
     unsigned num_running_compute_threads;
     unsigned next_vb_i;
     unsigned max_threads;
-    bool test_mode;
+//    bool test_mode;
     bool is_last_file;
 
     // progress indicator stuff
-    TimeSpecType start_time; 
+/*    TimeSpecType start_time; 
     bool show_progress;
     double last_percent;
     unsigned last_len;
-    unsigned last_seconds_so_far;
+    unsigned last_seconds_so_far;*/
     const char *filename;
 } DispatcherData;
 
 // variables that persist across multiple dispatchers run sequentially
 static TimeSpecType profiler_timer; // wallclock
-static bool ever_time_initialized = false;
-static TimeSpecType ever_time;
 
 void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i)
 {
@@ -81,8 +80,8 @@ void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_
     prev_thread_index = thread_index;
     prev_vb_i         = vb_i;
 }
-
-static void dispatcher_human_time (unsigned secs, char *str /* out */)
+/*
+static void dispatcher_human_time (unsigned secs, char *str)
 {
     unsigned hours = secs / 3600;
     unsigned mins  = (secs % 3600) / 60;
@@ -96,7 +95,7 @@ static void dispatcher_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-const char *dispatcher_ellapsed_time (Dispatcher dispatcher, bool ever)
+const char *progress_ellapsed_time (Dispatcher dispatcher, bool ever)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -127,18 +126,9 @@ static void dispatcher_show_start (DispatcherData *dd)
              
     dd->last_len = strlen (progress); // so dispatcher_show_progress knows how many characters to erase
 }
-
+*/
 static void dispatcher_show_progress (Dispatcher dispatcher)
 {
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-    
-    if (!dd->show_progress && !flag_debug_progress) return; 
-
-    TimeSpecType tb; 
-    clock_gettime(CLOCK_REALTIME, &tb); 
-    
-    int seconds_so_far = ((tb.tv_sec-dd->start_time.tv_sec)*1000 + (tb.tv_nsec-dd->start_time.tv_nsec) / 1000000) / 1000; 
-
     uint64_t total=0, sofar=0;
     
     // case: ZIP of plain txt files (including if decompressed by an external compressor) 
@@ -164,55 +154,10 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     
     else ABORT ("Error in dispatcher_show_progress: unsupported case: command=%u txt_file->type=%s", command, ft_name (txt_file->type));
 
-    double percent;
-    if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
-        percent = MIN (((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
-    else
-        percent = MIN (((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
-    
-    // need to update progress indicator, max once a second or if 100% is reached
-    const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (dispatcher);
 
-    // case: we've reached 99% prematurely... we under-estimated the time
-    if (!done && percent > 99 && (dd->last_seconds_so_far < seconds_so_far)) {
-        const char *progress = "Finalizing...";
-
-        // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
-        fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
-
-        dd->last_len = strlen (progress);
-    }
-
-    // case: we're making progress... show % and time remaining
-    else if (!done && percent && (dd->last_seconds_so_far < seconds_so_far)) { 
-
-        if (!dispatcher_is_done (dispatcher)) { 
-
-            // time remaining
-            char time_str[70], progress[100];
-            unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
-            dispatcher_human_time (secs, time_str);
-            sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
-
-            // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
-            if (!flag_debug_progress)
-                fprintf (stderr, "%.*s%s            %.12s", dd->last_len, eraser, progress, eraser);
-            else
-                fprintf (stderr, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d\n", (unsigned)percent, time_str, sofar, total, seconds_so_far);
-
-            dd->last_len = strlen (progress);
-        }
-    }
-
-    // case: we're done - caller will print the "Done" message after finalizing the genozip header etc
-    else if (done && !flag_quiet) 
-        fprintf (stderr, "%.*s", dd->last_len, eraser); 
-
-    dd->last_percent = percent;
-    dd->last_seconds_so_far = seconds_so_far;
+    progress_update (sofar, total, done);
 }
 
 Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
@@ -223,26 +168,18 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
     DispatcherData *dd = (DispatcherData *)calloc (1, sizeof(DispatcherData));
     ASSERT0 (dd, "failed to calloc DispatcherData");
 
-    clock_gettime(CLOCK_REALTIME, &dd->start_time); 
-
-    if (!ever_time_initialized) {
-        ever_time = dd->start_time;
-        ever_time_initialized = true;
-    }
-
-    dd->next_vb_i     = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
-    dd->max_threads   = max_threads;
-    dd->test_mode     = test_mode;
-    dd->is_last_file  = is_last_file;
-    dd->show_progress = !flag_quiet && !!isatty(2);
-    dd->filename      = filename;
+    dd->next_vb_i    = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
+    dd->max_threads  = max_threads;
+    dd->is_last_file = is_last_file;
+    dd->filename     = filename;
 
     vb_create_pool (MAX (2,max_threads+1 /* one for evb */));
 
     buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (!flag_unbind) dispatcher_show_start (dd); // note: for flag_unbind, we print this in dispatcher_resume() 
+    if (!flag_unbind) // note: for flag_unbind, we print this in dispatcher_resume() 
+        progress_new_component (filename, command == ZIP && txt_file->redirected, test_mode); 
 
     return dd;
 }
@@ -254,18 +191,15 @@ void dispatcher_pause (Dispatcher dispatcher)
     dd->next_vb_i--;
 }
 
-// reinit dispatcher, used when splitting a genozip to its vcf components, using a single dispatcher object
+// PIZ: reinit dispatcher, used when splitting a genozip to its components, using a single dispatcher object
 void dispatcher_resume (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
-    clock_gettime(CLOCK_REALTIME, &dd->start_time); 
-
     dd->input_exhausted = false;
-    dd->last_len        = 2;
     dd->filename        = txt_file->name;
     
-    dispatcher_show_start (dd);    
+    progress_new_component (dd->filename, false, -1);    
 }
 
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
