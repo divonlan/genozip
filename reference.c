@@ -246,7 +246,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                 "Error: uncomp_len=%u inconsistent with compacted_ref_len=%"PRId64, uncomp_len, compacted_ref_len); 
 
         ASSERT0 (BGEN32 (header->chrom_word_index) == chrom && BGEN64 (header->first_pos) == ref_sec_first_pos, // chrom should be the same between the two sections
-                 "Error in ref_uncompress_one_range: header mismatch between SEC_REF_IS_SET and SEC_REFERENCE sections");
+                "Error in ref_uncompress_one_range: header mismatch between SEC_REF_IS_SET and SEC_REFERENCE sections");
     }
     
     // case: not compacted means that entire range is set
@@ -269,10 +269,11 @@ static void ref_uncompress_one_range (VBlockP vb)
             bit_array_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
             mutex_unlock (r->mutex);
         }
+
         else if (primary_command == PIZ) { // case 2
 
             // it is possible that the section goes beyond the boundaries of the contig, this can happen when we compressed with --REFERENCE
-            // and the section was copied in its entirety from the reference FASTA file (in ref_copy_one_compressed_section). 
+            // and the section was copied in its entirety from the reference FASTA file (in ref_copy_one_compressed_section)
             // in this case, we copy from the section only the part needed
             initial_flanking_len = (sec_start_within_contig < 0)    ? -sec_start_within_contig       : 0; // nucleotides in the section that are before the start of our contig
             final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
@@ -286,9 +287,10 @@ static void ref_uncompress_one_range (VBlockP vb)
 
             mutex_unlock (r->mutex);
         }
+    
+        if (!uncomp_len) return;  // empty header - if it appears, it is the final header (eg in case of an unaligned SAM file)
     }
 
-    if (!uncomp_len) return;  // empty header - if it appears, it is the final header (eg in case of an unaligned SAM file)
 
     // uncompress into r->ref, via vb->compress
     zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", SEC_REFERENCE);
@@ -302,12 +304,6 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
 
     else {
-        // it is possible that the section goes beyond the boundaries of the contig, this can happen when we compressed with --REFERENCE
-        // and the section was copied in its entirety from the reference FASTA file (in ref_copy_one_compressed_section). 
-        // in this case, we copy from the section only the part needed
-        int64_t initial_flanking_len = (sec_start_within_contig < 0)    ? -sec_start_within_contig       : 0; // nucleotides in the section that are before the start of our contig
-        int64_t final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
-
         BitArray *ref = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len * 2);
 
         // copy the section, excluding the flanking regions
@@ -638,32 +634,29 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 // ZIP copying parts of external reference to fine - called by I/O thread from zip_write_global_area->ref_compress_ref
 static void ref_copy_compressed_sections_from_reference_file (void)
 {
-    SectionListEntry *sl = FIRSTENT (SectionListEntry, ref_file_section_list);
-    ARRAY (RAEntry, ref_ra, ref_file_ra);
-
+    ASSERT0 (primary_command == ZIP && flag_reference == REF_EXT_STORE, "Error in ref_copy_compressed_sections_from_reference_file: not expecting to be here");
     File *ref_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);
 
     // note: in a FASTA file compressed with --make-reference, there is exactly one RA per VB (a contig or part of a contig)
-    // we go one RA at a time and:
-    // 1. If the entire RA is covered by accessed ranges - we copy the compressed reference section directly from the ref FASTA
+    // and, since this is ZIP with EXT_STORE, also exactly one range per contig. We loop one RA at a time and:
+    // 1. If 95% of the ref file RA is set in the zfile contig range - we copy the compressed reference section directly from the ref FASTA
     // 2. If we copied from the FASTA, we mark those region covered by the RA as "is_set=0", so that we don't compress it later
+    SectionListEntry *sl = FIRSTENT (SectionListEntry, ref_file_section_list);
+    ARRAY (RAEntry, fasta_sec, ref_file_ra);
+
     for (uint32_t i=0; i < ref_file_ra.len; i++) {
 
-        Range *r = ENT (Range, ranges, ref_ra[i].chrom_index);
-        
-        int64_t intersect_min = MAX (r->first_pos, ref_ra[i].min_pos); 
-        int64_t intersect_max = MIN (r->last_pos,  ref_ra[i].max_pos); 
-        int64_t intersect_len = intersect_max - intersect_min + 1;
-        int64_t bits_is_set   = bit_array_num_bits_set_region (&r->is_set, intersect_min, intersect_len);
-        int64_t ref_ra_len    = ref_ra[i].max_pos - ref_ra[i].min_pos + 1;
+        Range *contig_r = ENT (Range, ranges, fasta_sec[i].chrom_index);
+        int64_t fasta_sec_start_in_contig_r = fasta_sec[i].min_pos - contig_r->first_pos; // the start of the FASTA section (a bit less than 1MB) within the full-contig range
+        int64_t fasta_sec_len = fasta_sec[i].max_pos - fasta_sec[i].min_pos + 1;
+        int64_t bits_is_set   = bit_array_num_bits_set_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
-// COMMENT OUT DEBUG
-//        if ((double)bits_is_set / (double)ref_ra_len >= 0.95) {
-//            ref_copy_one_compressed_section (ref_file, &ref_ra[i], &sl);
-//            bit_array_clear_region (&r->is_set, intersect_min, intersect_len);
-//        }
+        if ((double)bits_is_set / (double)fasta_sec_len >= 0.95) {
+            ref_copy_one_compressed_section (ref_file, &fasta_sec[i], &sl);
+            bit_array_clear_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
+        }
     }
 
     file_close (&ref_file, false);
@@ -840,6 +833,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
     }
 }
 
+// ZIP: compress and write reference sections. either compressed by us, or copied directly from the reference file.
 void ref_compress_ref (void)
 {
     if (!buf_is_allocated (&ranges)) return;
@@ -949,7 +943,7 @@ void ref_initialize_ranges (bool one_range_per_contig)
 
             r->chrom = i;      
 
-            random_access_pos_of_chrom (i, &r->first_pos, &r->last_pos); // in reference fasta.genozip if REF_EXTERNAL, file itself is REF_STORED
+            random_access_pos_of_chrom (i, &r->first_pos, &r->last_pos); // in reference fasta.genozip if REF_EXTERNAL, or in file itself is REF_STORED
             
             if (flag_reference == REF_STORED) {
                 Context *ctx = &z_file->contexts[DTFZ(chrom)];

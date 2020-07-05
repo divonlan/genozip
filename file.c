@@ -343,7 +343,7 @@ bool file_open_txt (File *file)
                                                     reason, 
                                                     bam ? "samtools" : "bcftools", // exec_name
                                                     "view", 
-                                                    "--threads", "8", 
+                                                    "--threads", "8", // in practice, samtools is able to consume 1.3 cores
                                                     bam ? "-OSAM" : "-Ov",
                                                     file->is_remote ? SKIP_ARG : file->name,    // local file name 
                                                     bam ? "-h" : "--no-version", // BAM: include header

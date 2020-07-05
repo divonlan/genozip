@@ -19,7 +19,7 @@ typedef enum {
 } CompressionAlg; 
 
 #define COMPRESSED_FILE_VIEWER { "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
-                                 "bcftools -Ov --version", "samtools view -h -OSAM", "N/A", "unzip -p", "N/A" }
+                                 "bcftools -Ov --version", "samtools view -h -OSAM --threads 2", "N/A", "unzip -p", "N/A" }
 
 #include "genozip.h"
 

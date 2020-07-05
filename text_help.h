@@ -52,7 +52,7 @@ static const char *help_genozip[] = {
     "",
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    
     "",
-    "   -o --output       <output-filename>. This option can also be used to bind multiple input files with the same individuals, into a single \"bound\" output file",
+    "   -o --output       <output-filename>. This option can also be used to bind multiple input files into a single genozip file. The files can be later unbound with 'genounzip --unbind'. To bind files, they must be of the same type (VCF, SAM etc) and if they are VCF files, they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files",
     "",
     "   -F --fast         Compress (a lot) faster, at the expense of a lower compression ratio. Files compressed with this option also uncompress faster. Compressing with this option also consumes substantially less memory.",
     "",
