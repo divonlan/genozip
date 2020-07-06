@@ -30,6 +30,8 @@ void vcf_zfile_compress_vb_header (VBlock *vb_)
     vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
     vb_header.h.sec_compression_alg   = COMP_NONE; // in versions 2-4 it was (needlessly) compressed with bzlib
     vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
+    vb_header.longest_line_len        = BGEN32 (vb->longest_line_len);
+    vb_header.md5_hash_so_far         = vb->md5_hash_so_far;
     vb_header.phase_type              = (char)vb->phase_type; 
     vb_header.has_genotype_data       = vb->has_genotype_data;
     vb_header.num_samples             = BGEN32 (global_vcf_num_samples);

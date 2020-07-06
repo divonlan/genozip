@@ -11,6 +11,7 @@
 #include "vblock.h"
 #include "file.h"
 #include "reference.h"
+#include "md5.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPool *pool = NULL;
@@ -35,9 +36,9 @@ void vb_release_vb (VBlock *vb)
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->chrom_name = NULL;
-
     vb->prev_range = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
+    vb->md5_hash_so_far = MD5HASH_none;
     
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));

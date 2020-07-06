@@ -80,53 +80,7 @@ void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_
     prev_thread_index = thread_index;
     prev_vb_i         = vb_i;
 }
-/*
-static void dispatcher_human_time (unsigned secs, char *str)
-{
-    unsigned hours = secs / 3600;
-    unsigned mins  = (secs % 3600) / 60;
-             secs  = secs % 60;
 
-    if (hours) 
-        sprintf (str, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
-    else if (mins)
-        sprintf (str, "%u %s %u %s", mins, mins==1 ? "minute" : "minutes", secs, secs==1 ? "second" : "seconds");
-    else 
-        sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
-}
-
-const char *progress_ellapsed_time (Dispatcher dispatcher, bool ever)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-
-    TimeSpecType tb; 
-    clock_gettime(CLOCK_REALTIME, &tb); 
-    
-    TimeSpecType start = ever ? ever_time : dd->start_time;
-
-    int seconds_so_far = ((tb.tv_sec - start.tv_sec)*1000 + (tb.tv_nsec - start.tv_nsec) / 1000000) / 1000; 
-
-    static char time_str[70];
-    dispatcher_human_time (seconds_so_far, time_str);
-
-    return time_str;
-}
-
-static void dispatcher_show_start (DispatcherData *dd)
-{
-    if (!dd->show_progress) return; 
-
-    const char *progress = (command == ZIP && txt_file->redirected) ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
-    
-    if (dd->test_mode) 
-        fprintf (stderr, "testing: %s%s --test %s : %s", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
-                 dd->filename, progress); 
-    else
-        fprintf (stderr, "%s %s : %s", global_cmd, dd->filename, progress); 
-             
-    dd->last_len = strlen (progress); // so dispatcher_show_progress knows how many characters to erase
-}
-*/
 static void dispatcher_show_progress (Dispatcher dispatcher)
 {
     uint64_t total=0, sofar=0;

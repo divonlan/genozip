@@ -598,7 +598,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
         if (flag_show_reference && !md5_is_zero (header->ref_file_md5)) {
             fprintf (stderr, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
-                     z_name, header->ref_filename, md5_display (&header->ref_file_md5, false));
+                     z_name, header->ref_filename, md5_display (header->ref_file_md5));
             if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-reference, we only show the reference, not the data
         }
 
@@ -613,8 +613,8 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
                  "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
                  "Reference you are using now: %s MD5=%s\n"
                  "Reference used to compress the file: %s MD5=%s\n", 
-                 z_name, ref_filename, md5_display (&ref_md5, false), 
-                 header->ref_filename, md5_display (&header->ref_file_md5, false));
+                 z_name, ref_filename, md5_display (ref_md5), 
+                 header->ref_filename, md5_display (header->ref_file_md5));
     }
     
 final:
@@ -647,7 +647,7 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     header.encryption_type         = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
     header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_bind);
     header.num_samples             = BGEN32 (global_vcf_num_samples);
-    header.num_items_bind        = BGEN64 (z_file->num_lines);
+    header.num_items_bound         = BGEN64 (z_file->num_lines);
     header.num_sections            = BGEN32 (num_sections); 
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
     
@@ -660,13 +660,13 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
     }
 
     uint32_t license_num_bgen = BGEN32 (license_get());
-    md5_do (&license_num_bgen, sizeof (int32_t), &header.license_hash);
+    header.license_hash = md5_do (&license_num_bgen, sizeof (int32_t));
 
     if (flag_md5) {
         if (flag_bind) {
-            md5_finalize (&z_file->md5_ctx_bind, &header.md5_hash_bound);
+            header.md5_hash_bound = md5_finalize (&z_file->md5_ctx_bound);
             if (flag_md5 && z_file->num_txt_components_so_far > 1 && !flag_quiet) 
-                fprintf (stderr, "Concatenated %s MD5 = %s\n", dt_name (z_file->data_type), md5_display (&header.md5_hash_bound, false));
+                fprintf (stderr, "Concatenated %s MD5 = %s\n", dt_name (z_file->data_type), md5_display (header.md5_hash_bound));
         } 
         else 
             header.md5_hash_bound = *single_component_md5; // if not in bound mode - just copy the md5 of the single file
@@ -711,7 +711,7 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
 // reads the the genozip header section's header from a GENOZIP file - used by main_list, returns true if successful
 bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
                                uint32_t *num_samples,
-                               uint64_t *num_items_bind,
+                               uint64_t *num_items_bound,
                                Md5Hash  *md5_hash_bound,
                                char *created, unsigned created_len, // caller allocates space 
                                Md5Hash  *license_hash,
@@ -744,7 +744,7 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
 
     *uncompressed_data_size = BGEN64 (header.uncompressed_data_size);
     *num_samples            = BGEN32 (header.num_samples);
-    *num_items_bind       = BGEN64 (header.num_items_bind);
+    *num_items_bound       = BGEN64 (header.num_items_bound);
     *md5_hash_bound        = header.md5_hash_bound;
     *license_hash           = header.license_hash;
     *ref_file_md5           = header.ref_file_md5;
@@ -817,11 +817,11 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
     curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
+    curr_header->md5_hash_single  = md5_finalize (&z_file->md5_ctx_single);
 
-    md5_finalize (&z_file->md5_ctx_single, &curr_header->md5_hash_single);
     *md5 = curr_header->md5_hash_single;
     if (flag_md5 && !flag_quiet) 
-        fprintf (stderr, "MD5 = %s\n", md5_display (&curr_header->md5_hash_single, false));
+        fprintf (stderr, "MD5 = %s\n", md5_display (curr_header->md5_hash_single));
 
     if (pos_of_current_vcf_header == 0) 
         z_file->txt_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 
@@ -855,6 +855,7 @@ void zfile_compress_generic_vb_header (VBlock *vb)
     vb_header.num_lines             = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.vb_data_size          = BGEN32 (vb->vb_data_size);
     vb_header.longest_line_len      = BGEN32 (vb->longest_line_len);
+    vb_header.md5_hash_so_far       = vb->md5_hash_so_far;
 
     // copy section header into z_data - to be eventually written to disk by the I/O thread. this section doesn't have data.
     vb->z_data.name  = "z_data"; // this is the first allocation of z_data - comp_compress requires that it is pre-named

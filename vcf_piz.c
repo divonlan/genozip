@@ -574,6 +574,8 @@ static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
 
     SectionHeaderVbHeaderVCF *header = (SectionHeaderVbHeaderVCF *)(vb->z_data.data + section_index[0]);
     vb->first_line              = BGEN32 (header->first_line);
+    vb->longest_line_len        = BGEN32 (header->longest_line_len);
+    vb->md5_hash_so_far         = header->md5_hash_so_far;
     vb->lines.len               = BGEN32 (header->num_lines);
     vb->phase_type              = (PhaseType)header->phase_type;
     vb->has_genotype_data       = header->has_genotype_data;

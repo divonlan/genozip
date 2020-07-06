@@ -12,6 +12,7 @@
 #include "vblock.h"
 
 const Md5Hash MD5HASH_none = MD5HASH_NONE;
+const Md5Context MD5CONTEXT_none = MD5CONTEXT_NONE;
 
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
 #define G( x, y, z )            ( (y) ^ ((z) & ((x) ^ (y))) )
@@ -23,11 +24,11 @@ const Md5Hash MD5HASH_none = MD5HASH_NONE;
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-void md5_display_ctx (const Md5Context *x) // we're make this non-static to avoid compiler warning that it is not being used
+void md5_display_ctx (const Md5Context *x) // for debugging
 {
     static unsigned iteration=1;
 
-    fprintf (stderr, "%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
+    fprintf (stderr, "\n%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
     for (unsigned i=0; i<64; i++) fprintf (stderr, "%2.2x", x->buffer.bytes[i]);
     fprintf (stderr, "\n");
 
@@ -207,12 +208,13 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len)
     memcpy (ctx->buffer.bytes, data, len);
 
 finish:
+    //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", md5_display (md5_snapshot (ctx)));
     //md5_display_ctx (ctx);
     COPY_TIMER (evb->profile.md5);
     return;
 }
 
-void md5_finalize (Md5Context *ctx, Md5Hash *digest)
+Md5Hash md5_finalize (Md5Context *ctx)
 {
     START_TIMER;
 
@@ -239,38 +241,45 @@ void md5_finalize (Md5Context *ctx, Md5Hash *digest)
     ctx->buffer.words[15] = LTEN32 (ctx->hi);
 
     md5_transform (ctx, ctx->buffer.bytes, 64);
-    digest->words[0] = LTEN32 (ctx->a);
-    digest->words[1] = LTEN32 (ctx->b);
-    digest->words[2] = LTEN32 (ctx->c);
-    digest->words[3] = LTEN32 (ctx->d);
+    Md5Hash digest = { .words = { LTEN32 (ctx->a), LTEN32 (ctx->a), LTEN32 (ctx->c), LTEN32 (ctx->d) } };
 
     memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
 
     COPY_TIMER (evb->profile.md5);
+
+    return digest;
 }
 
 // note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)
-void md5_do (const void *data, unsigned len, Md5Hash *digest)
+Md5Hash md5_do (const void *data, unsigned len)
 {
     Md5Context ctx;
     memset (&ctx, 0, sizeof(Md5Context));
 
     md5_update (&ctx, data, len);
 
-    md5_finalize (&ctx, digest);
+    return md5_finalize (&ctx);
 }
 
-const char *md5_display (const Md5Hash *digest, bool prefix_space)
+// get hash of data so far, without finalizing
+Md5Hash md5_snapshot (const Md5Context *ctx)
+{
+    // make a copy of ctx, and finalize it, keeping the original copy unfinalized
+    Md5Context ctx_copy = *ctx;
+    return md5_finalize (&ctx_copy);
+}
+
+const char *md5_display (const Md5Hash digest)
 {
     char *str = malloc (34); // we're going to leak this memory - nevermind, it is small and rare
 
-    const uint8_t *b = digest->bytes; 
+    const uint8_t *b = digest.bytes; 
     
-    if (!md5_is_zero (*digest))
-        sprintf (str, "%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", prefix_space ? " " : "",
+    if (!md5_is_zero (digest))
+        sprintf (str, "%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", 
                  b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
     else
-        sprintf (str, "%sN/A                             ", prefix_space ? " " : "");
+        sprintf (str, "N/A                             ");
     
     return str;
 }

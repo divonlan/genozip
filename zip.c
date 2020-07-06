@@ -25,12 +25,10 @@
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_component)
 {
-    if (flag_quiet) return; 
-
-    const char *runtime = progress_ellapsed_time (false);
     double z_bytes   = (double)z_file->disk_so_far;
     double txt_bytes = (double)z_file->txt_data_so_far_bind;
     double ratio     = txt_bytes / z_bytes;
+    double ratio2    = -1;
 
     // in bound, or when we store the refernce, we don't show the compression ratio for files except for the last one
     if (flag_bind || flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) { 
@@ -45,31 +43,20 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
 
         txt_file_disk_size_bind += txt_file->disk_size;
 
-        if (!flag_quiet)
-            fprintf (stderr, "Done (%s)                                     \n", runtime);
+        progress_finalize_component_time ("Done");
 
-        if (is_final_component) {
-            double ratio2 = (double)txt_file_disk_size_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
-
-            if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
-                fprintf (stderr, "Time: %s, %s compression ratio: %1.1f           \n", 
-                         progress_ellapsed_time (true), dt_name (z_file->data_type), ratio);
-            else
-                fprintf (stderr, "Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f\n", 
-                         progress_ellapsed_time (true), dt_name (z_file->data_type), ratio, 
-                         source_file_type == UNKNOWN_FILE_TYPE ? "the input files" : file_exts[txt_file->type],
-                         ratio2); // compression vs .gz/.bz2/.bcf/.xz... size
-        }
+        if (is_final_component) 
+            ratio2 = (double)txt_file_disk_size_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     }
-    else {
-        double ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+    else 
+        ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
+    if (ratio2 >= 0) {
         if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
-            fprintf (stderr, "Done (%s, compression ratio: %1.1f)           \n", runtime, ratio);
+            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio);
         
         else // source was compressed
-            fprintf (stderr, "Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)\n", 
-                     runtime, dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2);
+            progress_finalize_component_time_ratio_better (dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2);
     }
 }
 

@@ -123,17 +123,14 @@ void file_set_input_size (const char *size_str)
 
 void file_set_input_type (const char *type_str)
 {
-    char *ext = malloc (strlen (type_str) + 2); // +1 for . +1 for \0
+    char ext[strlen (type_str) + 2]; // +1 for . +1 for \0
     sprintf (ext, ".%s", type_str);
 
     str_to_lowercase (ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
 
     stdin_type = file_get_type (ext, false); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
 
-    if (file_get_data_type (stdin_type, true) != DT_NONE) {
-        free (ext);
-        return; // all good 
-    }
+    if (file_get_data_type (stdin_type, true) != DT_NONE) return; // all good 
 
     // the user's argument is not an accepted input file type - print error message
     ABORT ("%s: --input (or -i) must be ones of these: %s", global_cmd, file_compressible_extensions());

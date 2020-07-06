@@ -82,7 +82,7 @@ typedef struct {
     uint16_t data_type;               // one of DATA_TYPE_*
     uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
     uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
-    uint64_t num_items_bind;          // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
+    uint64_t num_items_bound;          // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
 
@@ -119,27 +119,28 @@ typedef struct {
 
 } SectionHeaderTxtHeader; 
 
+#define VB_HEADER_COMMON_FIELDS \
+    SectionHeader h;            \
+    uint32_t first_line;       /* line (starting from 1) of this vblock in the single VCF file */ \
+                               /* if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next bound file */ \
+    uint32_t num_lines;        /* number of records in this vblock */ \
+                                \
+    /* features of the data */  \
+    uint32_t vb_data_size;     /* size of vblock as it appears in the source file */ \
+    uint32_t z_data_bytes;     /* total bytes of this vblock in the genozip file including all sections and their headers */ \
+    uint32_t longest_line_len; /* length of the longest line in this vblock */ \
+                                \
+    Md5Hash md5_hash_so_far;   /* partial calculation of MD5 up to and including this VB */
+
 // A generic VB header - used for all data types but VCF
 typedef struct {
-    SectionHeader h;
-    uint32_t first_line;       // line (starting from 1) of this vblock in the single VCF file
-                               // if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next bound file
-    uint32_t num_lines;        // number of records in this vblock
-    
-    // features of the data
-    uint32_t vb_data_size;     // size of vblock as it appears in the source file
-    uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers
-    uint32_t longest_line_len; // length of the longest line in this vblock
-
-    uint32_t ffu;              // for future use
+    VB_HEADER_COMMON_FIELDS
 } SectionHeaderVbHeader; 
 
 // VCF VB header
 typedef struct {
-    SectionHeader h;
-    uint32_t first_line;               // line (starting from 1) of this variant block in the single VCF file
-                                       // if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next bound file
-    uint32_t num_lines;                // number of variants in this block
+    VB_HEADER_COMMON_FIELDS
+
     uint8_t phase_type;
     
     // flags
@@ -155,10 +156,8 @@ typedef struct {
     uint32_t num_samples_per_block;
     uint32_t max_gt_line_len;
 
-    uint32_t vb_data_size;             // size of variant block as it appears in the source file
-    uint32_t z_data_bytes;             // total bytes of this variant block in the genozip file including all sections and their headers
     uint16_t haplotype_index_checksum;
-    uint16_t unused3;                  
+    uint16_t unused;
 } SectionHeaderVbHeaderVCF; 
 
 typedef struct {
@@ -216,6 +215,7 @@ extern SectionType sections_get_next_header_type (SectionListEntry **sl_ent, boo
 typedef bool (*IsSectionTypeFunc)(SectionType);
 extern bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st1, SectionType st2);
 extern SectionType sections_peek (uint32_t cursor);
+extern uint32_t sections_count_sections (SectionType st);
 
 extern bool sections_has_more_components(void);
 extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st);

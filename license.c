@@ -30,7 +30,7 @@ static uint32_t license_generate_num(void)
     clock_gettime(CLOCK_REALTIME, &timer); 
 
     static Md5Hash md5;
-    md5_do (&timer, sizeof (timer), &md5);
+    md5 = md5_do (&timer, sizeof (timer));
     
     if (!md5.words[0]) return license_generate_num(); // chance of 1 in 4 billion that we will need to try again
 

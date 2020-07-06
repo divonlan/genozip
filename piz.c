@@ -445,6 +445,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
         vb->lines.len        = BGEN32 (header->num_lines);       
         vb->vb_data_size     = BGEN32 (header->vb_data_size);    
         vb->longest_line_len = BGEN32 (header->longest_line_len);
+        vb->md5_hash_so_far  = header->md5_hash_so_far;
         if (flag_unbind) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ 
 
         if (flag_show_vblocks) 
@@ -545,7 +546,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
         if (flag_reference == REF_STORED || flag_reading_reference) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
             ref_uncompress_all_ranges();
-            if (!flag_quiet) fprintf (stderr, (flag_test && !flag_reading_reference) ? "Success                    \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n" : "Done                       \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\n");
+            if (!flag_quiet) progress_finalize_component ((flag_test && !flag_reading_reference) ? "Success" : "Done");
         }
 
         // read dict_id aliases, if there are any
@@ -706,35 +707,40 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
 
     // verify file integrity, if the genounzip compress was run with --md5 or --test
     if (flag_md5) {
-        Md5Hash decompressed_file_digest;
-        md5_finalize (&txt_file->md5_ctx_bind, &decompressed_file_digest); // z_file might be a bound file - this is the MD5 of the entire bounding file
+        Md5Hash decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bounding file
+        char s[200]; 
 
-        if (md5_is_zero (original_file_digest) && !flag_quiet) 
-            fprintf (stderr, "MD5 = %s Note: unable to compare this to the original file as file was not originally compressed with --md5\n", md5_display (&decompressed_file_digest, false));
-        
+        if (md5_is_zero (original_file_digest)) { 
+            sprintf (s, "MD5 = %s", md5_display (decompressed_file_digest));
+            progress_finalize_component (s); 
+        }
+
         else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
-            if (flag_test && !flag_quiet) fprintf (stderr, "Success          \b\b\b\b\b\b\b\b\b\b\n\n");
+            if (flag_test) progress_finalize_component ("Success");
 
-            if (flag_md5 && !flag_quiet) 
-                fprintf (stderr, "MD5 = %s verified as identical to the original %s\n", 
-                         md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type));
+            if (flag_md5) {
+                sprintf (s, "MD5 = %s verified as identical to the original %s", 
+                         md5_display (decompressed_file_digest), dt_name (z_file->data_type));
+                progress_finalize_component (s); 
+            }
         }
         else if (flag_test) {
-            fprintf (stderr, "FAILED!!!          \b\b\b\b\b\b\b\b\b\b\nError: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip",
-                    md5_display (&original_file_digest, false), md5_display (&decompressed_file_digest, false));
-            exit (1);
+            progress_finalize_component ("FAILED!!!");
+            ABORT ("Error: MD5 of original file=%s is different than decompressed file=%s\nPlease contact bugs@genozip.com to help fix this bug in genozip\n",
+                   md5_display (original_file_digest), md5_display (decompressed_file_digest));
         }
+
         else ASSERT (md5_is_zero (original_file_digest), // its ok if we decompressed only a partial file
                      "File integrity error: MD5 of decompressed file %s is %s, but the original %s file's was %s", 
-                     txt_file->name, md5_display (&decompressed_file_digest, false), dt_name (txt_file->data_type), 
-                     md5_display (&original_file_digest, false));
+                     txt_file->name, md5_display (decompressed_file_digest), dt_name (txt_file->data_type), 
+                     md5_display (original_file_digest));
     }
 
     if (flag_unbind) file_close (&txt_file, true); // close this component file
 
-    if (!flag_test && !flag_quiet) 
-        fprintf (stderr, "Done (%s)           \n", progress_ellapsed_time (false));
+    if (!flag_test) 
+        progress_finalize_component_time ("Done");
 
 finish:
     // in unbind mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

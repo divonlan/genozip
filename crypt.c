@@ -91,7 +91,6 @@ static void crypt_generate_aes_key (VBlock *vb,
     buf_alloc (vb, &vb->spiced_pw, pw_len + sizeof (uint32_t) + sizeof (uint8_t) + sizeof (uint8_t) + salt_len + pepper_len, 1, "spiced_pw", 0);
     buf_add (&vb->spiced_pw, password, pw_len);
 
-    Md5Hash salty_hash, peppered_hash;
     uint8_t sec_type_byte  = (uint8_t)sec_type; // convert to a byte, as enum and bool might be represented differently by different compilers
     uint8_t is_header_byte = (uint8_t)is_header;
 
@@ -100,11 +99,11 @@ static void crypt_generate_aes_key (VBlock *vb,
     buf_add (&vb->spiced_pw, &sec_type_byte, sizeof (uint8_t));
     buf_add (&vb->spiced_pw, &is_header_byte, sizeof (uint8_t));
     buf_add (&vb->spiced_pw, salt, salt_len);
-    md5_do (vb->spiced_pw.data, vb->spiced_pw.len, &salty_hash);
+    Md5Hash salty_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
 
     // add some pepper
     buf_add (&vb->spiced_pw, pepper, pepper_len);
-    md5_do (vb->spiced_pw.data, vb->spiced_pw.len, &peppered_hash);
+    Md5Hash peppered_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
 
     // get hash
     memcpy (aes_key, salty_hash.bytes, sizeof(Md5Hash)); // first half of key
@@ -143,9 +142,8 @@ void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
     if (!padding_len) return; // nothing to do
 
     // use md5 to generate non-trival padding - the hash of the last 100 bytes of data
-    Md5Hash hash;
     unsigned src_len = MIN (data_len, 100);
-    md5_do (&data[data_len-src_len], src_len, &hash);
+    Md5Hash hash = md5_do (&data[data_len-src_len], src_len);
     
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }

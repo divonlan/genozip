@@ -98,7 +98,7 @@ void exit_on_error (bool show_stack)
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
     if (primary_command == ZIP && z_file && z_file->name) {
-        char *save_name = malloc (strlen (z_file->name)+1);
+        char save_name[strlen (z_file->name)+1];
         strcpy (save_name, z_file->name);
 
         // if we're not the main thread - cancel the main thread before closing z_file, so that the main 
@@ -177,8 +177,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     const char *head_format   = "\n%5s %11s %10s %10s %6s %s  %*s %s\n";
     const char *foot_format_1 = "\nTotal:            %10s %10s %5uX\n";
     const char *foot_format_2 = "\nTotal:            %10s %10s %5.1fX\n";
-    const char *item_format_1 = "%5s %11s %10s %10s %5uX %s  %s%s%*s %s\n";
-    const char *item_format_2 = "%5s %11s %10s %10s %5.1fX %s  %s%s%*s %s\n";
+    const char *item_format_1 = "%5s %11s %10s %10s %5uX  %s  %s%s%*s %s\n";
+    const char *item_format_2 = "%5s %11s %10s %10s %5.1fX  %s  %s%s%*s %s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -233,7 +233,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     bufprintf (evb, &str_buf, ratio < 100 ? item_format_2 : item_format_1, indiv_str, num_lines_str, 
                z_size_str, txt_size_str, ratio, 
-               md5_display (&md5_hash_bound, true),
+               md5_display (md5_hash_bound),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
                z_filename, created);
@@ -466,7 +466,7 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
     if (num_files <= 1) return; // nothing to do
 
     # define BASENAME_LEN 256
-    char *basenames = malloc (num_files * BASENAME_LEN);
+    char basenames[num_files * BASENAME_LEN];
 
     for (unsigned i=0; i < num_files; i++)
         file_basename (argv[optind + i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
@@ -477,8 +477,6 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
         ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
                  "Warning: two files with the same name '%s' - if you later unbind with 'genounzip --unbind %s', these files will overwrite each other", 
                  &basenames[i * BASENAME_LEN], out_filename);
-
-    FREE (basenames);    
 }
 
 //#include "base64.h"

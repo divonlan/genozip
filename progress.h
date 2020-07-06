@@ -11,7 +11,10 @@
 extern void progress_new_component (const char *component_name, bool txt_file_size_unknown, int test_mode);
 
 extern void progress_update (uint64_t sofar, uint64_t total, bool done);
-
-extern const char *progress_ellapsed_time (bool ever);
+extern void progress_udpate_status (const char *status);
+extern void progress_finalize_component (const char *status);
+extern void progress_finalize_component_time (const char *status);
+extern void progress_finalize_component_time_ratio (const char *me, double ratio);
+extern void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than);
 
 #endif

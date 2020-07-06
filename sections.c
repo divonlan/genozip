@@ -153,6 +153,17 @@ bool sections_seek_to (SectionType st)
     return false; // section not found
 }
 
+// count how many sections we have of a certain type
+uint32_t sections_count_sections (SectionType st)
+{
+    uint32_t count=0;
+    for (uint32_t i=0; i < z_file->section_list_buf.len; i++) 
+        if (ENT (SectionListEntry, z_file->section_list_buf, i)->section_type == st)
+            count++;
+
+    return count;
+}
+
 // called by PIZ I/O : vcf_zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
 SectionListEntry *sections_vb_first (uint32_t vb_i)
 {
@@ -210,14 +221,14 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     fprintf (stderr, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
     fprintf (stderr, "  num_samples: %u\n",             BGEN32 (header->num_samples));
     fprintf (stderr, "  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size), size_str));
-    fprintf (stderr, "  num_items_bind: %"PRIu64"\n", BGEN64 (header->num_items_bind));
+    fprintf (stderr, "  num_items_bound: %"PRIu64"\n", BGEN64 (header->num_items_bound));
     fprintf (stderr, "  num_sections: %u\n",            num_sections);
     fprintf (stderr, "  num_components: %u\n",          BGEN32 (header->num_components));
-    fprintf (stderr, "  md5_hash_bound: %s\n",         md5_display (&header->md5_hash_bound, false));
+    fprintf (stderr, "  md5_hash_bound: %s\n",          md5_display (header->md5_hash_bound));
     fprintf (stderr, "  created: %*s\n",                -FILE_METADATA_LEN, header->created);
-    fprintf (stderr, "  license_hash: %s\n",            md5_display (&header->license_hash, false));
+    fprintf (stderr, "  license_hash: %s\n",            md5_display (header->license_hash));
     fprintf (stderr, "  reference filename: %*s\n",     -REF_FILENAME_LEN, header->ref_filename);
-    fprintf (stderr, "  reference file hash: %s\n",     md5_display (&header->ref_file_md5, false));
+    fprintf (stderr, "  reference file hash: %s\n",     md5_display (header->ref_file_md5));
 
     fprintf (stderr, "  sections:\n");
 

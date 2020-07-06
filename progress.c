@@ -13,10 +13,10 @@
 
 static bool ever_start_time_initialized = false, test_mode, show_progress;
 static TimeSpecType ever_start_time, component_start_time;
-static unsigned last_len=0; // so progress_update knows how many characters to erase
 static double last_percent=0;
 static unsigned last_seconds_so_far=0;
 static const char *component_name=NULL;
+static unsigned last_len=0; // so we know how many characters to erase on next update
 
 static void progress_human_time (unsigned secs, char *str /* out */)
 {
@@ -32,7 +32,7 @@ static void progress_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-const char *progress_ellapsed_time (bool ever)
+static const char *progress_ellapsed_time (bool ever)
 {
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -62,8 +62,6 @@ void progress_new_component (const char *new_component_name,
 
         if (new_test_mode != -1) 
             test_mode = new_test_mode;
-        else
-            last_len = 2; // unbind mode
 
         show_progress  = !flag_quiet && !!isatty(2);
         component_name = new_component_name; 
@@ -71,15 +69,13 @@ void progress_new_component (const char *new_component_name,
 
     if (!show_progress) return; 
 
-    const char *progress = txt_file_size_unknown ? "Compressing...\b\b\b\b\b\b\b\b\b\b\b\b\b\b" : "0\%"; // we can't show % when compressing from stdin as we don't know the file size
-
     if (test_mode) 
-        fprintf (stderr, "testing: %s%s --test %s : %s", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
-                 new_component_name, progress); 
+        fprintf (stderr, "testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
+                 new_component_name); 
     else
-        fprintf (stderr, "%s %s : %s", global_cmd, new_component_name, progress); 
-             
-    last_len = strlen (progress); // so progress_update knows how many characters to erase
+        fprintf (stderr, "%s %s : ", global_cmd, new_component_name); 
+
+    progress_udpate_status (txt_file_size_unknown ? "Compressing..." : "0\%"); // // we can't show % when compressing from stdin as we don't know the file size
 }
 
 void progress_update (uint64_t sofar, uint64_t total, bool done)
@@ -98,17 +94,10 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
         percent = MIN (((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
     
     // need to update progress indicator, max once a second or if 100% is reached
-    const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 
     // case: we've reached 99% prematurely... we under-estimated the time
-    if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) {
-        const char *progress = "Finalizing...";
-
-        // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
-        fprintf (stderr, "%.*s%s            %.12s", last_len, eraser, progress, eraser);
-
-        last_len = strlen (progress);
-    }
+    if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) 
+        progress_udpate_status ("Finalizing...");
 
     // case: we're making progress... show % and time remaining
     else if (!done && percent && (last_seconds_so_far < seconds_so_far)) { 
@@ -116,25 +105,82 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
         if (!done) { 
 
             // time remaining
-            char time_str[70], progress[100];
+            char time_str[70], progress[200];
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             progress_human_time (secs, time_str);
-            sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
 
-            // note we have spaces at the end to make sure we erase the previous string, if it is longer than the current one
             if (!flag_debug_progress)
-                fprintf (stderr, "%.*s%s            %.12s", last_len, eraser, progress, eraser);
+                sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
             else
-                fprintf (stderr, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d\n", (unsigned)percent, time_str, sofar, total, seconds_so_far);
+                sprintf (progress, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", (unsigned)percent, time_str, sofar, total, seconds_so_far);            
 
-            last_len = strlen (progress);
+            progress_udpate_status (progress);
         }
     }
 
     // case: we're done - caller will print the "Done" message after finalizing the genozip header etc
-    else if (done && !flag_quiet) 
-        fprintf (stderr, "%.*s", last_len, eraser); 
+    else {}
 
     last_percent = percent;
     last_seconds_so_far = seconds_so_far;
 }
+
+void progress_udpate_status (const char *status)
+{
+    static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+    static const char *spaces = "                                                                      ";
+
+    if (!flag_quiet) 
+        fprintf (stderr, "%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+
+    last_len = strlen (status);
+
+    if (flag_debug_progress) { // if we're debugging progress, show every status on its own line
+        fprintf (stderr, "\n");
+        last_len = 0;
+    }
+}
+
+void progress_finalize_component (const char *status)
+{
+    progress_udpate_status (status);
+
+    if (!flag_quiet) fprintf (stderr, "\n");
+
+    component_name = NULL;
+    last_len = 0;
+}
+
+void progress_finalize_component_time (const char *status)
+{
+    char s[500];
+    sprintf (s, "%s (%s)", status, progress_ellapsed_time (false));
+    progress_finalize_component (s);
+}
+
+extern void progress_finalize_component_time_ratio (const char *me, double ratio)
+{
+    char s[500];
+
+    if (component_name)
+        sprintf (s, "Done (%s, compression ratio: %1.1f)", progress_ellapsed_time (false), ratio);
+    else
+        sprintf (s, "Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
+    
+    progress_finalize_component (s);
+}
+
+extern void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than)
+{
+    char s[500];
+
+    if (component_name) 
+        sprintf (s, "Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
+                progress_ellapsed_time (false), me, ratio, better_than, ratio_than);
+    else
+        sprintf (s, "Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f", 
+                progress_ellapsed_time (false), me, ratio, better_than, ratio_than);
+    
+    progress_finalize_component (s);
+}
+

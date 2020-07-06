@@ -228,7 +228,7 @@ typedef struct File {
                                        // txt_file: number of lines in single txt file
 
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
-    Md5Context md5_ctx_bind;         // md5 context of txt file. in bound mode - of the resulting bound txt file
+    Md5Context md5_ctx_bound;         // md5 context of txt file. in bound mode - of the resulting bound txt file
     Md5Context md5_ctx_single;         // used only in bound mode - md5 of the single txt component
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 

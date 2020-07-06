@@ -21,6 +21,7 @@
 #include "strings.h"
 #include "endianness.h"
 #include "crypt.h"
+#include "progress.h"
 #include "zlib/zlib.h"
 
 static bool is_first_txt = true; 
@@ -32,7 +33,7 @@ static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_
 {
     if (flag_md5) {
         if (flag_bind && !is_2ndplus_txt_header)
-            md5_update (&z_file->md5_ctx_bind, data, len);
+            md5_update (&z_file->md5_ctx_bound, data, len);
         
         md5_update (&z_file->md5_ctx_single, data, len);
     }
@@ -190,6 +191,10 @@ void txtfile_read_vblock (VBlock *vb)
 {
     START_TIMER;
 
+    Md5Context md5_after_block[global_max_memory_per_vb / READ_BUFFER_SIZE + 2];
+    char *block_start[global_max_memory_per_vb / READ_BUFFER_SIZE + 2];
+    uint32_t block_len[global_max_memory_per_vb / READ_BUFFER_SIZE + 2];
+
     uint64_t pos_before = 0;
     if (file_is_read_via_int_decompressor (txt_file))
         pos_before = file_tell (txt_file);
@@ -203,12 +208,12 @@ void txtfile_read_vblock (VBlock *vb)
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
-    while (vb->txt_data.len < global_max_memory_per_vb) {  // make sure there's at least READ_BUFFER_SIZE space available
+    uint32_t block_i=0 ; for (; vb->txt_data.len < global_max_memory_per_vb; block_i++) {  
 
-        uint32_t bytes_one_read = txtfile_read_block (&vb->txt_data.data[vb->txt_data.len], 
-                                                      MIN (READ_BUFFER_SIZE, global_max_memory_per_vb - vb->txt_data.len));
+        block_start[block_i] = &vb->txt_data.data[vb->txt_data.len];
+        block_len[block_i] = txtfile_read_block (block_start[block_i], MIN (READ_BUFFER_SIZE, global_max_memory_per_vb - vb->txt_data.len));
 
-        if (!bytes_one_read) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
+        if (!block_len[block_i]) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
             ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid input file %s - expecting it to end with a newline", txt_name);
             break;
         }
@@ -216,9 +221,10 @@ void txtfile_read_vblock (VBlock *vb)
         // note: we md_udpate after every block, rather on the complete data (vb or txt header) when its done
         // because this way the OS read buffers / disk cache get pre-filled in parallel to our md5
         // Note: we md5 everything we read - even unconsumed data
-        txtfile_update_md5 (&vb->txt_data.data[vb->txt_data.len], bytes_one_read, false);
+        txtfile_update_md5 (&vb->txt_data.data[vb->txt_data.len], block_len[block_i], false);
+        md5_after_block[block_i] = flag_bind ? z_file->md5_ctx_bound : z_file->md5_ctx_single;
 
-        vb->txt_data.len += bytes_one_read;
+        vb->txt_data.len += block_len[block_i];
     }
 
     uint32_t unconsumed_len=0;
@@ -264,7 +270,24 @@ void txtfile_read_vblock (VBlock *vb)
                 vb->txt_data.len - unconsumed_len, unconsumed_len, "txt_file->unconsumed_txt", vb->vblock_i);
 
         vb->txt_data.len -= unconsumed_len;
+
+        // complete the MD5 of all data up to and including this VB based on the last full block + the consumed part of the 
+        // last part-consumed-part-not-consumed block
+        
+        // find the block that is part-consumed-part-not-consumed block
+        uint32_t partial_block = block_i - 1;
+        uint32_t unincluded_len = unconsumed_len;
+        while (unincluded_len > block_len[partial_block]) unincluded_len -= block_len[partial_block--];
+        
+        // use the Md5Context of the last fully-consumed block as the basis, and update it with the consumed part of the partial block
+        Md5Context md5_ctx = partial_block ? md5_after_block[partial_block-1] : MD5CONTEXT_none; // copy context
+        md5_update (&md5_ctx, block_start[partial_block], block_len[partial_block] - unincluded_len);
+
+        vb->md5_hash_so_far = md5_snapshot (&md5_ctx);  
     }
+    else
+        // MD5 of all data up to and including this VB is just the total MD5 of the file so far (as there is no unconsumed data)
+        vb->md5_hash_so_far = md5_snapshot (flag_bind ? &z_file->md5_ctx_bound : &z_file->md5_ctx_single);
 
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
 
@@ -278,25 +301,23 @@ void txtfile_read_vblock (VBlock *vb)
 }
 
 // PIZ
-unsigned txtfile_write_to_disk (const Buffer *buf)
+static void txtfile_write_to_disk (const Buffer *buf)
 {
-    unsigned len = buf->len;
+    uint64_t len = buf->len;
     char *next = buf->data;
 
     if (!flag_test) {
         while (len) {
-            unsigned bytes_written = file_write (txt_file, next, len);
+            uint64_t bytes_written = file_write (txt_file, next, len);
             len  -= bytes_written;
             next += bytes_written;
         }
     }
 
-    if (flag_md5) md5_update (&txt_file->md5_ctx_bind, buf->data, buf->len);
+    if (flag_md5) md5_update (&txt_file->md5_ctx_bound, buf->data, buf->len);
 
     txt_file->txt_data_so_far_single += buf->len;
     txt_file->disk_so_far            += buf->len;
-
-    return buf->len;
 }
 
 void txtfile_write_one_vblock (VBlockP vb)
@@ -311,6 +332,17 @@ void txtfile_write_one_vblock (VBlockP vb)
             vb->vblock_i, (uint32_t)vb->lines.len, vb->first_line,
             str_uint_commas (vb->vb_data_size, s1), dt_name (txt_file->data_type), str_uint_commas (vb->txt_data.len, s2), 
             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
+
+    // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
+    if (flag_md5 && !md5_is_zero (vb->md5_hash_so_far)) {
+        Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
+        if (!md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far)) {
+            progress_udpate_status ("FAILED!!!");
+            ABORT ("MD5 of reconstructed vblock=%u (%s) differs from original file (%s). To see bad vblock:\n"
+                "head -n%u %s | tail -n%u", vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), 
+                vb->first_line + (uint32_t)vb->lines.len - 1, txt_name, (uint32_t)vb->lines.len);
+        }
+    }
 
     COPY_TIMER (vb->profile.write);
 }

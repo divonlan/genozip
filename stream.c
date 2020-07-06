@@ -109,7 +109,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
     for (int i=0; i < argc; i++)
         if (argv[i]) cmd_line_len += strlen (argv[i]) + 3; // +1 for the space (or \0) after +2 for the quotes
 
-    char *cmd_line = malloc (cmd_line_len);
+    char cmd_line[cmd_line_len];
     char *fmt_tmpl = "%s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s"; // # of %s = MAX_ARGC
     char fmt[MAX_ARGC * 7];
     strcpy (fmt, fmt_tmpl);

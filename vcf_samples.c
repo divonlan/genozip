@@ -29,7 +29,7 @@ void vcf_samples_add  (const char *samples_str)
 
     // make a copy of the string and leave the original one for error message. 
     // we don't free this memory as chrom fields in regions will be pointing to it
-    char *next_region_token = malloc (strlen (samples_str)+1); 
+    char *next_region_token = malloc (strlen (samples_str)+1); // heap memory, as cmd_samples_buf elements point into this
     strcpy (next_region_token, samples_str + is_negated); // drop the ^ if there is one
 
     while (1) {
