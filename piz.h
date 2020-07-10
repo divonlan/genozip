@@ -8,7 +8,7 @@
 
 #include "genozip.h"
 
-extern bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_last_file);
+extern bool piz_dispatcher (bool is_first_component, bool is_last_file);
 
 extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
                                int32_t *last_delta, char *pos_str, unsigned *pos_len);

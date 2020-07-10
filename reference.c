@@ -25,7 +25,8 @@
 #include "bit_array.h"
 #include "file.h"
 
-static Buffer ranges = EMPTY_BUFFER;      // ZIP: a buffer containing a array of REF_NUM_RANGES Range's - each allocated on demand. PIZ - containing one element per chrom.
+// ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
+static Buffer ranges                    = EMPTY_BUFFER; 
 
 // data derived from the external reference FASTA's CONTIG context
 static Buffer contig_dict               = EMPTY_BUFFER;
@@ -71,19 +72,38 @@ void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_wo
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void ref_cleanup_memory(void)
 {
-    if (flag_reference != REF_INTERNAL && flag_reference != REF_STORED) return; // we never cleanup external references as they can never change (the user can only specify one --reference)
-
-    if (buf_is_allocated (&ranges)) {
-        ARRAY (Range, rng, ranges);
-        for (unsigned i=0; i < ranges.len ; i++) {
-            if (rng[i].ref.words)    FREE (&rng[i].ref.words);
-            if (rng[i].is_set.words) FREE (&rng[i].is_set.words);
-            if (primary_command == ZIP && flag_reference == REF_INTERNAL) 
-                FREE ((char *)rng[i].chrom_name); // allocated only in ZIP/REF_INTERNAL - otherwise a pointer into another Buffer
+    if (flag_reference == REF_EXTERNAL) {
+        if (primary_command == ZIP) {
+            for (unsigned i=0; i < ranges.len ; i++) 
+                bit_array_clear_all (&ENT (Range, ranges, i)->is_set); // zip sets 1 to nucleotides used. we clear it for the next file.
         }
+        else {
+            // PIZ we never cleanup external references as they can never change (the user can only specify one --reference)
+        }
+    }
+    // case ZIP: REF_INTERNAL - we're done with ranges - free so next non-bound file can build its own
+    // case ZIP: REF_EXT_STORE - unfortunately we will need to re-read the FASTA as we damaged it with removing flanking regions
+    // case PIZ: REF_STORED - cleanup for next file with its own reference data
 
-        buf_free (&ranges);
+    else {
+        if (buf_is_allocated (&ranges)) {
+            ARRAY (Range, rng, ranges);
+            for (unsigned i=0; i < ranges.len ; i++) {
+                if (rng[i].ref.words)    FREE (rng[i].ref.words);
+                if (rng[i].is_set.words) FREE (rng[i].is_set.words);
+                if (primary_command == ZIP && flag_reference == REF_INTERNAL) 
+                    FREE ((char *)rng[i].chrom_name); // allocated only in ZIP/REF_INTERNAL - otherwise a pointer into another Buffer
+            }
+            buf_free (&ranges);
+        }
         buf_free (&region_to_set_list);
+
+        buf_free (&contig_dict);          
+        buf_free (&contig_words);
+        buf_free (&contig_maxes);
+        buf_free (&contig_words_sorted_index);
+        buf_free (&ref_file_ra);
+        buf_free (&ref_file_section_list);
     }
 }
 
@@ -137,40 +157,37 @@ const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t n
 // PIZ: read and uncompress stored ranges (originally produced with --REFERENCE or SAM internal reference)
 // -------------------------------------------------------------------------------------------------------
 
-// uncompact a region within ref
-static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, int64_t last_compacted_bit)
+// PIZ: uncompact a region within ref - called by compute thread of reading the reference
+static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, const BitArray *compacted)
 {
-    int64_t end_1_offset, len_1, end_0_offset, start_uncompacted, start_compacted; // signed so we can compare < 0 as we're working backwards
-
-    // we work in from end to start, as we are stretching ref 
-    end_1_offset      = last_bit; // we removed the flanking 0 regions in ref_compact_ref, so we know it ends with a 1
-    start_uncompacted = last_bit + 1;
-    start_compacted   = last_compacted_bit + 1;
+    uint64_t start_1_offset=first_bit, start_0_offset, len_1; // coordinates into r->is_set (in nucleotides)
+    uint64_t next_compacted=0; // coordinates into compacted (in nucleotides)
 
     while (1) {
         // find length of set region
-        bool has_any_bit = bit_array_find_prev_clear_bit (&r->is_set, end_1_offset, (uint64_t *)&end_0_offset);
-        if (!has_any_bit || end_0_offset < first_bit) 
-            break; // we're done - the first 1s region starts at first_bit
+        bool has_any_bit = bit_array_find_next_clear_bit (&r->is_set, start_1_offset, &start_0_offset);
+        if (!has_any_bit || start_0_offset > last_bit) 
+            start_0_offset = last_bit + 1; // this is the last region of 1s
 
-        len_1 = end_1_offset - end_0_offset;
-        ASSERT (len_1 > 0, "Error in ref_uncompact_ref: len_1 is not positive: end_0_offset=%"PRId64" end_1_offset=%"PRId64, end_0_offset, end_1_offset);
-
-        start_uncompacted -= len_1;
-        start_compacted   -= len_1;
-
-        ASSERT0 (start_uncompacted >= 0, "Error in ref_uncompact_ref: start_uncompacted underflow");
-        ASSERT0 (start_compacted   >= 0, "Error in ref_uncompact_ref: start_compacted underflow");
+        len_1 = start_0_offset - start_1_offset;
+        ASSERT (len_1 > 0, "Error in ref_uncompact_ref: len_1 is not positive: start_0_offset=%"PRId64" start_1_offset=%"PRId64" first_bit=%"PRId64" last_bit=%"PRId64, 
+                start_0_offset, start_1_offset, first_bit, last_bit);
 
         // do actual compacting - move set region to be directly after the previous set region (or at the begining if its the first)
-        bit_array_copy (&r->ref, start_uncompacted * 2, &r->ref, start_compacted * 2, len_1 * 2);
+        bit_array_copy (&r->ref, start_1_offset * 2, compacted, next_compacted * 2, len_1 * 2);
+        next_compacted += len_1;
+
+        if (start_0_offset > last_bit) break; // we're done (we always end with a region of 1s because we removed the flanking 0s during compacting)
 
         // skip the clear region
-        has_any_bit = bit_array_find_prev_set_bit (&r->is_set, end_0_offset, (uint64_t *)&end_1_offset); // there is always a clear section because the flanking regions now are 1 (as we removed the 0 flanking regions)
-        ASSERT0 (has_any_bit, "Error in ref_uncompact_ref: has_any_bit is false");
-
-        start_uncompacted -= (end_0_offset - end_1_offset);
+        has_any_bit = bit_array_find_next_set_bit (&r->is_set, start_0_offset, &start_1_offset); 
+        ASSERT0 (has_any_bit, "Error in ref_uncompact_ref: cannot find next set bit");
+        ASSERT (start_1_offset <= last_bit, "Error in ref_uncompact_ref: expecting start_1_offset(%"PRId64") <= last_bit(%"PRId64")",
+                start_1_offset, last_bit); // we removed the flanking regions, so there is always an 1 after a 0 within the region
     }
+
+    ASSERT (next_compacted * 2 == compacted->num_of_bits, "Error in ref_uncompact_ref: expecting next_compacted(%"PRId64") * 2 == compacted->num_of_bits(%"PRId64")",
+            next_compacted, compacted->num_of_bits);
 }
 
 // entry point of compute thread of reference decompression. this is called when pizzing a file with a stored reference.
@@ -294,6 +311,7 @@ static void ref_uncompress_one_range (VBlockP vb)
             initial_flanking_len = (sec_start_within_contig < 0)    ? -sec_start_within_contig       : 0; // nucleotides in the section that are before the start of our contig
             final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
 
+            bit_array_set_region (&r->is_set, MAX (sec_start_within_contig, 0), ref_sec_len - initial_flanking_len - final_flanking_len);
             // save the region we need to set, we will do the actual setting in ref_uncompress_all_ranges
             mutex_lock (region_to_set_list_mutex);
             RegionToSet *rts = &NEXTENT (RegionToSet, region_to_set_list);
@@ -312,9 +330,8 @@ static void ref_uncompress_one_range (VBlockP vb)
     mutex_lock (r->mutex); // while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
 
     if (is_compacted) {
-        BitArray *ref = buf_zfile_buf_to_bitarray (&vb->compressed, compacted_ref_len * 2);
-        bit_array_copy (&r->ref, sec_start_within_contig * 2, ref, 0, compacted_ref_len * 2);
-        ref_uncompact_ref (r, sec_start_within_contig, sec_end_within_contig, compacted_last_pos - r->first_pos);
+        const BitArray *compacted = buf_zfile_buf_to_bitarray (&vb->compressed, compacted_ref_len * 2);
+        ref_uncompact_ref (r, sec_start_within_contig, sec_end_within_contig, compacted);
     }
 
     else {
@@ -373,7 +390,8 @@ void ref_uncompress_all_ranges (void)
     buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list", 0);
 
     // decompress reference using Dispatcher
-    dispatcher_fan_out_task ("reading reference from genozip file", flag_test, 
+    dispatcher_fan_out_task (flag_reference == REF_EXTERNAL ? ref_filename : z_file->basename, 
+                             flag_reference == REF_EXTERNAL ? "Reading reference file..." : "Reading stored reference", flag_test, 
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
@@ -548,7 +566,7 @@ Range *ref_zip_get_locked_range (VBlockP vb, int64_t pos)  // out - index of pos
     // note: in case of REF_INTERNAL, we can get hash conflicts, but in case of REF_EXTERNAL, it is guaranteed that there are no conflicts
     uint32_t range_id = (flag_reference == REF_INTERNAL) ? ref_range_id_by_hash (vb, range_i) : vb->chrom_node_index;
 
-    ASSERT (range_id < ranges.len, "Error in ref_zip_get_locked_range: range_id=%u expected to be smaller than %u", range_id, (uint32_t)ranges.len);
+    ASSERT (range_id < ranges.len, "Error in ref_zip_get_locked_range: range_id=%u expected to be smaller than ranges.len=%u", range_id, (uint32_t)ranges.len);
     
     Range *range = ENT (Range, ranges, range_id);
     mutex_lock (range->mutex);
@@ -658,7 +676,9 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 // ZIP copying parts of external reference to fine - called by I/O thread from zip_write_global_area->ref_compress_ref
 static void ref_copy_compressed_sections_from_reference_file (void)
 {
-    ASSERT0 (primary_command == ZIP && flag_reference == REF_EXT_STORE, "Error in ref_copy_compressed_sections_from_reference_file: not expecting to be here");
+    ASSERT (primary_command == ZIP && flag_reference == REF_EXT_STORE, 
+            "Error in ref_copy_compressed_sections_from_reference_file: not expecting to be here: primary_command=%u flag_reference=%u", primary_command, flag_reference);
+
     File *ref_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);
 
     // note: in a FASTA file compressed with --make-reference, there is exactly one RA per VB (a contig or part of a contig)
@@ -877,7 +897,7 @@ void ref_compress_ref (void)
 
     // proceed to compress all ranges that have still have data in them after copying
     uint32_t num_vbs_dispatched = 
-        dispatcher_fan_out_task ("Writing reference to genozip file", false, 
+        dispatcher_fan_out_task (NULL, "Writing reference...", false, 
                                  ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  ref_output_one_range);
@@ -912,7 +932,7 @@ void ref_read_external_reference (void)
     ASSERT0 (ref_filename, "Error: ref_filename is NULL");
 
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
-    const char *basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
+    z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
         
     // save and reset some globals that after pizzing FASTA
     int save_flag_test         = flag_test        ; flag_test        = 0;
@@ -926,7 +946,7 @@ void ref_read_external_reference (void)
     CommandType save_command   = command;         ; command          = PIZ;
     flag_reading_reference = true; // tell fasta.c that this is a reference
     
-    bool piz_successful = piz_dispatcher (basename, true, false);
+    bool piz_successful = piz_dispatcher (true, false);
 
     // recover globals
     flag_reading_reference = false;
@@ -1052,7 +1072,6 @@ void ref_consume_ref_fasta_global_area (void)
     random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
     buf_copy (evb, &contig_maxes, &z_file->ra_min_max_by_chrom, sizeof (int64_t), 0, 0, "contig_maxes", 0);
     buf_copy (evb, &ref_file_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_file_ra", 0);
-
     buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
 }
 

@@ -436,6 +436,34 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
             optimize_vector_2_sig_dig (cell_gt_data, len, optimized_snip, &optimized_snip_len))
             EVAL_OPTIMIZED
 
+        // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
+        // or might be the same as the previous line
+        else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_PS) {
+
+            ctx->flags |= CTX_FL_STORE_VALUE | CTX_FL_NO_STONS;
+
+            char *ps_end;
+            int64_t ps_value = strtoull (cell_gt_data, &ps_end, 10);
+            if (ps_end - cell_gt_data != len) ps_value = 0; // PS is not an integer
+
+            if (ps_value && ps_value == ctx->last_value) { // same as previous line
+                const char copy_snip[] = { SNIP_SELF_DELTA, '0' };
+                node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, copy_snip, 2, NULL); 
+            }
+
+            else if (ps_value && 
+                     ps_value - vb->contexts[VCF_POS].last_value > -1000 && // if its a quite similar to POS 
+                     ps_value - vb->contexts[VCF_POS].last_value <  1000) { 
+                int32_t delta = ps_value - (int32_t)vb->contexts[VCF_POS].last_value; // expected to be a negative number
+                seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_fields[VCF_POS], true, delta, snip, &snip_len);
+                node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, NULL); 
+                ctx->last_value = ps_value;
+            }
+
+            else
+                node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, cell_gt_data, len, NULL);            
+        }
+
         // case: DP - if there is an INFO/DP too, and it is the same - we store a delta of 0 
         // (this usually means there's one sample) - if they are not the same don't delta
         else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_DP && info_dp_ctx &&

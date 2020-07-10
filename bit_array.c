@@ -424,7 +424,7 @@ void bit_array_ensure_size_critical(BitArray* bitarr, bit_index_t num_of_bits)
 // Get the value of a bit (returns 0 or 1)
 char bit_array_get_bit(const BitArray* bitarr, bit_index_t b)
 {
-  assert(b < bitarr->num_of_bits);
+  ASSERT (b < bitarr->num_of_bits, "Error in bit_array_get_bit: Expecting b(%"PRId64") < bitarr->num_of_bits(%"PRId64")", b, bitarr->num_of_bits);
   return bit_array_get(bitarr, b);
 }
 

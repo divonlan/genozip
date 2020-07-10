@@ -48,11 +48,11 @@ static const char *progress_ellapsed_time (bool ever)
 }
 
 void progress_new_component (const char *new_component_name, 
-                             bool txt_file_size_unknown,
+                             const char *status,
                              int new_test_mode) // true, false or -1 for unchanged
 {
     // (re) initialize if new component
-    if (new_component_name != component_name) { // pointer comparison
+    if (!component_name || strcmp (new_component_name, component_name)) {
         clock_gettime(CLOCK_REALTIME, &component_start_time); 
 
         if (!ever_start_time_initialized) {
@@ -63,19 +63,20 @@ void progress_new_component (const char *new_component_name,
         if (new_test_mode != -1) 
             test_mode = new_test_mode;
 
+        // if !show_progress - we don't show the advancing %, but we still show the filename, done status, compression ratios etc
         show_progress  = !flag_quiet && !!isatty(2);
         component_name = new_component_name; 
+
+        if (!flag_quiet) {
+            if (test_mode) 
+                fprintf (stderr, "testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
+                        new_component_name); 
+            else
+                fprintf (stderr, "%s %s : ", global_cmd, new_component_name); 
+        }
     }
 
-    if (!show_progress) return; 
-
-    if (test_mode) 
-        fprintf (stderr, "testing: %s%s --test %s : ", global_cmd, strstr (global_cmd, "genozip") ? " --decompress" : "", 
-                 new_component_name); 
-    else
-        fprintf (stderr, "%s %s : ", global_cmd, new_component_name); 
-
-    progress_udpate_status (txt_file_size_unknown ? "Compressing..." : "0\%"); // // we can't show % when compressing from stdin as we don't know the file size
+    progress_udpate_status (status); 
 }
 
 void progress_update (uint64_t sofar, uint64_t total, bool done)
@@ -127,11 +128,12 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
 
 void progress_udpate_status (const char *status)
 {
+    if (flag_quiet) return;
+
     static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static const char *spaces = "                                                                      ";
 
-    if (!flag_quiet) 
-        fprintf (stderr, "%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+    fprintf (stderr, "%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
 
     last_len = strlen (status);
 
@@ -143,44 +145,49 @@ void progress_udpate_status (const char *status)
 
 void progress_finalize_component (const char *status)
 {
+    if (flag_quiet) return;
+
     progress_udpate_status (status);
 
-    if (!flag_quiet) fprintf (stderr, "\n");
+    fprintf (stderr, "\n");
 
     component_name = NULL;
     last_len = 0;
 }
 
-void progress_finalize_component_time (const char *status)
-{
-    char s[500];
-    sprintf (s, "%s (%s)", status, progress_ellapsed_time (false));
-    progress_finalize_component (s);
+#define FINALIZE(format, ...) { \
+    char s[500]; \
+    sprintf (s, format, __VA_ARGS__);  \
+    if (!md5_is_zero (md5)) sprintf (&s[strlen(s)], "\tMD5 = %s", md5_display (md5)); \
+    progress_finalize_component (s);  \
 }
 
-extern void progress_finalize_component_time_ratio (const char *me, double ratio)
+void progress_finalize_component_time (const char *status, Md5Hash md5)
 {
-    char s[500];
+    FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
+}
 
+void progress_finalize_component_time_ratio (const char *me, double ratio, Md5Hash md5)
+{
     if (component_name)
-        sprintf (s, "Done (%s, compression ratio: %1.1f)", progress_ellapsed_time (false), ratio);
+        FINALIZE ("Done (%s, compression ratio: %1.1f)", progress_ellapsed_time (false), ratio)
     else
-        sprintf (s, "Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
-    
-    progress_finalize_component (s);
+        FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
 }
 
-extern void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than)
+void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than, Md5Hash md5)
 {
-    char s[500];
-
     if (component_name) 
-        sprintf (s, "Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
-                progress_ellapsed_time (false), me, ratio, better_than, ratio_than);
+        FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
+                  progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
     else
-        sprintf (s, "Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f", 
-                progress_ellapsed_time (false), me, ratio, better_than, ratio_than);
-    
-    progress_finalize_component (s);
+        FINALIZE ("Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f", 
+                  progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
 }
 
+void progress_concatenated_md5 (const char *me, Md5Hash md5)
+{
+    ASSERT0 (!component_name, "Error in progress_concatenated_md5: expecting component_name=NULL");
+
+    FINALIZE ("Concatenated %s", me);
+}

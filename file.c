@@ -549,6 +549,8 @@ void file_close (File **file_p,
     File *file = *file_p;
     *file_p = NULL;
 
+    if (!file) return; // nothing to do
+    
     if (file->file) {
 
         if (file->mode == READ && (file->comp_alg == COMP_GZ || file->comp_alg == COMP_BGZ)) {
@@ -586,7 +588,8 @@ void file_close (File **file_p,
         buf_destroy (&file->section_list_dict_buf);
         buf_destroy (&file->unconsumed_txt);
 
-        if (file->name) FREE (file->name);
+        if (file->name)     FREE (file->name);
+        if (file->basename) FREE ((char*)file->basename);
         
         FREE (file);
     }

@@ -23,15 +23,15 @@
 #include "reference.h"
 #include "progress.h"
 
-static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_component)
+static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)
 {
     double z_bytes   = (double)z_file->disk_so_far;
     double txt_bytes = (double)z_file->txt_data_so_far_bind;
     double ratio     = txt_bytes / z_bytes;
     double ratio2    = -1;
 
-    // in bound, or when we store the refernce, we don't show the compression ratio for files except for the last one
-    if (flag_bind || flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) { 
+    // in bind mode, we don't show compression ratio for files except for the last one
+    if (flag_bind) { 
 
         static uint64_t txt_file_disk_size_bind = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
@@ -43,20 +43,20 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, bool is_final_
 
         txt_file_disk_size_bind += txt_file->disk_size;
 
-        progress_finalize_component_time ("Done");
-
         if (is_final_component) 
             ratio2 = (double)txt_file_disk_size_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
+        else 
+            progress_finalize_component_time ("Done", md5);
     }
     else 
         ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
     if (ratio2 >= 0) {
         if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
-            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio);
+            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio, md5);
         
         else // source was compressed
-            progress_finalize_component_time_ratio_better (dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2);
+            progress_finalize_component_time_ratio_better (dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2, md5);
     }
 }
 
@@ -201,7 +201,7 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
-static void zip_write_global_area (Dispatcher dispatcher, const Md5Hash *single_component_md5)
+static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_component_md5)
 {
     // output dictionaries (inc. aliases) to disk - they are in the "processed" data of evb
     if (buf_is_allocated (&z_file->section_list_dict_buf)) // not allocated for vcf-header-only files
@@ -212,11 +212,9 @@ static void zip_write_global_area (Dispatcher dispatcher, const Md5Hash *single_
         random_access_finalize_entries();
 
     // output reference, if needed
-    if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference) {
+    if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference) 
         ref_compress_ref();
-        zip_display_compression_ratio (dispatcher, true); // Done for reference + final compression ratio calculation
-    }
-
+        
     // add dict_id aliases list, if we have one
     Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
@@ -331,7 +329,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
     // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, last_vblock_i, false, is_last_file, txt_basename);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, last_vblock_i, false, is_last_file, txt_basename, NULL);
 
     dict_id_initialize(z_file->data_type);
 
@@ -416,23 +414,18 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
     // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
-    Md5Hash single_component_md5;
+    Md5Hash single_component_md5 = MD5HASH_NONE;
     if (z_file && !z_file->redirected && txt_header_header_pos >= 0) 
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
-    if (is_last_file || !flag_bind) {
-        
-        if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE) 
-            zip_display_compression_ratio (dispatcher, false); // Done for the file (if reference is to be written by zip_write_global_area)
+    if (is_last_file || !flag_bind) 
+        zip_write_global_area (dispatcher, single_component_md5);
 
-        zip_write_global_area (dispatcher, &single_component_md5);
-
-        if (flag_reference == REF_NONE || flag_reference == REF_EXTERNAL) 
-            zip_display_compression_ratio (dispatcher, true); // Done for the file (if no stored reference - ratio includes global area in compression ratio)
-    }
-    else  // non-last file in bound mode
-        zip_display_compression_ratio (dispatcher, false);
+    zip_display_compression_ratio (dispatcher, flag_bind ? MD5HASH_none : single_component_md5, is_last_file || !flag_bind); // Done for reference + final compression ratio calculation
+    
+    if (flag_md5 && flag_bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
+        progress_concatenated_md5 (dt_name (z_file->data_type), md5_finalize (&z_file->md5_ctx_bound));
 
 finish:
     z_file->disk_size              = z_file->disk_so_far;

@@ -206,6 +206,7 @@ extern FileMode READ, WRITE; // this are pointers to static strings - so they ca
 typedef struct File {
     void *file;
     char *name;                        // allocated by file_open(), freed by file_close()
+    const char *basename;              // basename of name
     FileMode mode;
     FileSupertype supertype;            
     FileType type;
@@ -223,12 +224,12 @@ typedef struct File {
     int64_t txt_data_size_single;      // txt_file: size of the txt data. ZIP: if its a plain txt file, then its the disk_size. If not, we initially do our best to estimate the size, and update it when it becomes known.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t txt_data_so_far_bind;    // z_file & ZIP only: txt data represented in the GENOZIP data written so far for all VCFs
+    int64_t txt_data_so_far_bind;      // z_file & ZIP only: txt data represented in the GENOZIP data written so far for all VCFs
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines in single txt file
 
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
-    Md5Context md5_ctx_bound;         // md5 context of txt file. in bound mode - of the resulting bound txt file
+    Md5Context md5_ctx_bound;          // md5 context of txt file. in bound mode - of the resulting bound txt file
     Md5Context md5_ctx_single;         // used only in bound mode - md5 of the single txt component
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
 
@@ -251,7 +252,7 @@ typedef struct File {
     unsigned num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
     
     uint8_t dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
-    Context contexts[MAX_DICTS];     // a merge of dictionaries of all VBs
+    Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
     Buffer ra_min_max_by_chrom;        // max_pos of each from according to RA. An array of uint32_t indexed by chrom_word_index.
     Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file
@@ -267,10 +268,10 @@ typedef struct File {
 
 #   define READ_BUFFER_SIZE (1<<19)    // 512KB
     // Used for reading txt files
-    Buffer unconsumed_txt;         // excess data read from the txt file - moved to the next VB
+    Buffer unconsumed_txt;             // excess data read from the txt file - moved to the next VB
     
     // Used for reading genozip files
-    uint32_t z_next_read, z_last_read;     // indices into read_buffer for z_file
+    uint32_t z_next_read, z_last_read;   // indices into read_buffer for z_file
     char read_buffer[];                  // only allocated for mode=READ files   
 } File;
 

@@ -42,15 +42,8 @@ typedef struct {
     unsigned num_running_compute_threads;
     unsigned next_vb_i;
     unsigned max_threads;
-//    bool test_mode;
     bool is_last_file;
-
-    // progress indicator stuff
-/*    TimeSpecType start_time; 
     bool show_progress;
-    double last_percent;
-    unsigned last_len;
-    unsigned last_seconds_so_far;*/
     const char *filename;
 } DispatcherData;
 
@@ -115,25 +108,35 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 }
 
 Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
-                            bool test_mode, bool is_last_file, const char *filename)
+                            bool test_mode, bool is_last_file, 
+                            const char *filename, // filename, or NULL if filename is unchanged
+                            const char *status)   // fixed status, or NULL if we should show progress
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
     DispatcherData *dd = (DispatcherData *)calloc (1, sizeof(DispatcherData));
     ASSERT0 (dd, "failed to calloc DispatcherData");
 
-    dd->next_vb_i    = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
-    dd->max_threads  = max_threads;
-    dd->is_last_file = is_last_file;
-    dd->filename     = filename;
+    dd->next_vb_i     = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
+    dd->max_threads   = max_threads;
+    dd->is_last_file  = is_last_file;
+    dd->show_progress = !status;
+
+    if (filename)
+        dd->filename = filename;
 
     vb_create_pool (MAX (2,max_threads+1 /* one for evb */));
 
     buf_alloc (evb, &dd->compute_threads_buf, sizeof(Thread) * MAX (1, max_threads), 1, "compute_threads_buf", 0);
     dd->compute_threads = (Thread *)dd->compute_threads_buf.data;
 
-    if (!flag_unbind) // note: for flag_unbind, we print this in dispatcher_resume() 
-        progress_new_component (filename, command == ZIP && txt_file->redirected, test_mode); 
+    if (!flag_unbind && filename) // note: for flag_unbind (in main file), we print this in dispatcher_resume() 
+        progress_new_component (filename, 
+                                command == ZIP && txt_file->redirected ? "Compressing..." : "0\%", // we can't show % when compressing from stdin as we don't know the file size
+                                test_mode); 
+
+    if (status)
+        progress_udpate_status (status);
 
     return dd;
 }
@@ -153,7 +156,7 @@ void dispatcher_resume (Dispatcher dispatcher)
     dd->input_exhausted = false;
     dd->filename        = txt_file->name;
     
-    progress_new_component (dd->filename, false, -1);    
+    progress_new_component (dd->filename, "0\%", -1);    
 }
 
 void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
@@ -316,7 +319,8 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
         dd->processed_vb = NULL;
     }
 
-    dispatcher_show_progress (dispatcher);
+    if (dd->show_progress)
+        dispatcher_show_progress (dispatcher);
 }                           
 
 void dispatcher_input_exhausted (Dispatcher dispatcher)
@@ -345,10 +349,12 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
 }
 
 // returns the number of VBs successfully outputted
-uint32_t dispatcher_fan_out_task (const char *task_name, bool test_mode, 
+uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue with previous filename
+                                  const char *status,    // fixed status, or NULL if we should show progress
+                                  bool test_mode, 
                                   DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, test_mode, true, task_name);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, test_mode, true, filename, status);
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;

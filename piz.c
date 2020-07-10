@@ -546,7 +546,9 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
         if (flag_reference == REF_STORED || flag_reading_reference) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
             ref_uncompress_all_ranges();
-            if (!flag_quiet) progress_finalize_component ((flag_test && !flag_reading_reference) ? "Success" : "Done");
+            
+            if (flag_reading_reference) 
+                progress_finalize_component ((flag_test && !flag_reading_reference) ? "Success" : "Done");
         }
 
         // read dict_id aliases, if there are any
@@ -586,7 +588,7 @@ static bool piz_read_one_vb (VBlock *vb)
 }
 
 // returns true is successfully outputted a txt file
-bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_last_file)
+bool piz_dispatcher (bool is_first_component, bool is_last_file)
 {
     // static dispatcher - with flag_unbind, we use the same dispatcher when unzipping components
     static Dispatcher dispatcher = NULL;
@@ -602,7 +604,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     static DataType data_type = DT_NONE; 
     if (is_first_component) {
         data_type = piz_read_global_area (&original_file_digest);
-        if (data_type == DT_NONE) goto finish;
+        if (data_type == DT_NONE || flag_reading_reference) goto finish; // reference file has no VBs
 
         ASSERT (sections_get_next_header_type(&sl_ent, NULL, NULL) == SEC_TXT_HEADER, "Error: unable to find TXT Header data in %s", z_name);
 
@@ -611,11 +613,10 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     }
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_basename);
+        dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_file->basename, NULL);
 
     // case: we couldn't open the file because we didn't know what type it is - open it now
     if (!flag_unbind && !flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
-
 
     // read and write txt header. in unbind mode this also opens txt_file
     piz_successful = txtfile_genozip_to_txt_header (&original_file_digest);
@@ -706,8 +707,9 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     } while (!dispatcher_is_done (dispatcher));
 
     // verify file integrity, if the genounzip compress was run with --md5 or --test
+    Md5Hash decompressed_file_digest = MD5HASH_NONE;
     if (flag_md5) {
-        Md5Hash decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bounding file
+        decompressed_file_digest = md5_finalize (&txt_file->md5_ctx_bound); // z_file might be a bound file - this is the MD5 of the entire bounding file
         char s[200]; 
 
         if (md5_is_zero (original_file_digest)) { 
@@ -717,13 +719,13 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
 
         else if (md5_is_equal (decompressed_file_digest, original_file_digest)) {
 
-            if (flag_test) progress_finalize_component ("Success");
-
-            if (flag_md5) {
+            if (flag_md5) { 
                 sprintf (s, "MD5 = %s verified as identical to the original %s", 
                          md5_display (decompressed_file_digest), dt_name (z_file->data_type));
                 progress_finalize_component (s); 
             }
+
+            //else if (flag_test) progress_finalize_component ("Success");
         }
         else if (flag_test) {
             progress_finalize_component ("FAILED!!!");
@@ -740,7 +742,7 @@ bool piz_dispatcher (const char *z_basename, bool is_first_component, bool is_la
     if (flag_unbind) file_close (&txt_file, true); // close this component file
 
     if (!flag_test) 
-        progress_finalize_component_time ("Done");
+        progress_finalize_component_time ("Done", decompressed_file_digest);
 
 finish:
     // in unbind mode - we continue with the same dispatcher in the next component. otherwise, we finish with it here

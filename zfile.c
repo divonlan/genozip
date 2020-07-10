@@ -622,7 +622,7 @@ final:
     return data_type;
 }
 
-void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
+void zfile_compress_genozip_header (Md5Hash single_component_md5)
 {
     SectionHeaderGenozipHeader header;
 
@@ -664,12 +664,12 @@ void zfile_compress_genozip_header (const Md5Hash *single_component_md5)
 
     if (flag_md5) {
         if (flag_bind) {
-            header.md5_hash_bound = md5_finalize (&z_file->md5_ctx_bound);
-            if (flag_md5 && z_file->num_txt_components_so_far > 1 && !flag_quiet) 
-                fprintf (stderr, "Concatenated %s MD5 = %s\n", dt_name (z_file->data_type), md5_display (header.md5_hash_bound));
+            // get the hash from a copy of the md5 context, because we still need it for displaying the compression ratio later
+            Md5Context copy_md5_ctx_bound = z_file->md5_ctx_bound;
+            header.md5_hash_bound = md5_finalize (&copy_md5_ctx_bound);
         } 
         else 
-            header.md5_hash_bound = *single_component_md5; // if not in bound mode - just copy the md5 of the single file
+            header.md5_hash_bound = single_component_md5; // if not in bound mode - just copy the md5 of the single file
     }
 
     zfile_get_metadata (header.created);
@@ -817,11 +817,9 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
     curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
-    curr_header->md5_hash_single  = md5_finalize (&z_file->md5_ctx_single);
+    curr_header->md5_hash_single  = flag_md5 ? md5_finalize (&z_file->md5_ctx_single) : MD5HASH_none;
 
     *md5 = curr_header->md5_hash_single;
-    if (flag_md5 && !flag_quiet) 
-        fprintf (stderr, "MD5 = %s\n", md5_display (curr_header->md5_hash_single));
 
     if (pos_of_current_vcf_header == 0) 
         z_file->txt_header_first.md5_hash_single = curr_header->md5_hash_single; // first vcf - update the stored header 

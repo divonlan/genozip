@@ -42,6 +42,7 @@ extern DictId dict_id_dump_one_b250;                        // arguments of --du
 extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 
                 dict_id_FORMAT_PL, dict_id_FORMAT_GL, dict_id_FORMAT_GP, dict_id_FORMAT_DP, dict_id_FORMAT_MIN_DP, // some VCF FORMAT subfields
+                dict_id_FORMAT_PS,
                 dict_id_INFO_AC,  dict_id_INFO_AF, dict_id_INFO_AN, dict_id_INFO_DP, dict_id_INFO_VQSLOD, // some VCF INFO subfields
                 dict_id_INFO_END, dict_id_WindowsEOL,
 

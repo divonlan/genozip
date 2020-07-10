@@ -19,6 +19,7 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
+         dict_id_FORMAT_PS=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0;
 
@@ -90,6 +91,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_FORMAT_GP     = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
         dict_id_FORMAT_GL     = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
         dict_id_FORMAT_DP     = dict_id_vcf_format_sf (dict_id_make ("DP", 2)).num;
+        dict_id_FORMAT_PS     = dict_id_vcf_format_sf (dict_id_make ("PS", 2)).num;
         
         dict_id_INFO_AC       = dict_id_vcf_info_sf   (dict_id_make ("AC", 2)).num;
         dict_id_INFO_AF       = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;

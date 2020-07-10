@@ -97,7 +97,7 @@ void exit_on_error (bool show_stack)
     file_kill_external_compressors(); 
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
-    if (primary_command == ZIP && z_file && z_file->name) {
+    if (primary_command == ZIP && z_file && z_file->name && !flag_reading_reference) {
         char save_name[strlen (z_file->name)+1];
         strcpy (save_name, z_file->name);
 
@@ -301,13 +301,13 @@ static void main_genounzip (const char *z_filename,
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
     
-    const char *basename = file_basename (z_filename, false, "(stdin)", NULL, 0);
+    z_file->basename = file_basename (z_filename, false, "(stdin)", NULL, 0); // memory freed in file_close
     
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
     bool piz_successful;
     unsigned num_components=0;
     do {
-        piz_successful = piz_dispatcher (basename, num_components==0, is_last_file);
+        piz_successful = piz_dispatcher (num_components==0, is_last_file);
         if (piz_successful) num_components++;
     } while (flag_unbind && piz_successful); 
 
@@ -318,8 +318,6 @@ static void main_genounzip (const char *z_filename,
         file_close (&txt_file, false); 
 
     file_close (&z_file, false);
-
-    FREE ((void *)basename);
 
     if (flag_replace && txt_filename && z_filename) file_remove (z_filename, true); 
 }
@@ -348,8 +346,8 @@ static void main_test_after_genozip (char *exec_name, char *z_filename)
     int exit_code = stream_wait_for_exit (test);
 
     primary_command = TEST_AFTER_ZIP; // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
-
     ASSINP (!exit_code, "genozip test exited with status %d\n", exit_code);
+    primary_command = ZIP; // recover in case of more non-concatenated files
 }
 
 static void main_genozip (const char *txt_filename, 
@@ -789,10 +787,6 @@ int main (int argc, char **argv)
     if (command == HELP)    { main_print_help (true); return 0; }
 
     primary_command = command;
-
-    // import external reference if needed
-    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) 
-        ref_read_external_reference(); 
     
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
@@ -804,7 +798,12 @@ int main (int argc, char **argv)
                 "%s: filename(s) required (redirecting from stdin is not possible)", global_cmd);
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
-        
+
+        // import external reference if needed (in case of --REFERENCE for non-binding files, we need to read for each file)
+        if (((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && file_i==0) || 
+            (flag_reference == REF_EXT_STORE && !flag_bind)) 
+            ref_read_external_reference(); 
+
         switch (command) {
             case ZIP   : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); 
                          break;
