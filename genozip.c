@@ -806,14 +806,13 @@ int main (int argc, char **argv)
             ref_load_external_reference(); 
 
         switch (command) {
-            case ZIP   : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); 
-                         break;
+            case ZIP  : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); break;
             
-            case PIZ : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;
+            case PIZ  : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;
             
-            case LIST  : main_genols  (next_input_file, false, NULL, false); break;
+            case LIST : main_genols (next_input_file, false, NULL, false); break;
             
-            default         : ABORT ("%s: unrecognized command %c", global_cmd, command);
+            default   : ABORT ("%s: unrecognized command %c", global_cmd, command);
         }
     }
             

@@ -497,11 +497,14 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     }
 
     // check if the genozip file includes a reference
-    if (!flag_reading_reference && (sections_has_reference() || (z_file->data_type == DT_SAM && flag_reference != REF_EXTERNAL))) { // edge case for SAM zipped with REF_INTERNAL but no reference (eg unaligned) - it is still REF_STORED
-        ASSERTW (flag_reference == REF_NONE || flag_reference == REF_STORED, // it will be REF_STORED in the 2nd+ file
-        "Note: --reference option is ignored - %s does not require a reference to be uncompressed", z_name);
+    bool has_ref_sections = sections_has_reference();
+    bool possibly_unaligned_sam = z_file->data_type == DT_SAM && !has_ref_sections && flag_reference != REF_EXTERNAL; // edge case for SAM zipped with REF_INTERNAL but no reference (eg unaligned) - it is still REF_STORED
+
+    ASSERT (!has_ref_sections || flag_reference != REF_EXTERNAL || flag_reading_reference, 
+            "Error: cannot use --reference with %s because it was not compressed with --reference", z_name);
+
+    if (!flag_reading_reference && (has_ref_sections || possibly_unaligned_sam)) 
         flag_reference = REF_STORED;
-    }
 
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
@@ -517,29 +520,14 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             // if the regions are negative, transform them to the positive complement instead
             regions_transform_negative_to_positive_complement();
 
+            // if this is a stored reference we load the reference random access that will determined which reference sections
+            // should be read & uncompressed in case of --regions.
             if (flag_reference == REF_STORED || flag_reading_reference) 
                 random_access_load_ra_section (SEC_REF_RANDOM_ACC, &ref_stored_ra, "ref_stored_ra", 
-                                               flag_show_ref_index ? "Reference random-access index contents (result of --show-index)" : NULL);
+                                               flag_show_ref_index && !flag_reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
 
             random_access_load_ra_section (SEC_RANDOM_ACCESS, &z_file->ra_buf, "z_file->ra_buf", 
-                                           flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
-/*            
-            SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS);
-            zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, ra_sl);
-
-            zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
-
-            z_file->ra_buf.len /= sizeof (RAEntry);
-            BGEN_random_access (&z_file->ra_buf);
-
-            if (flag_show_index) {
-                random_access_show_index (&z_file->ra_buf, false, "Random-access index contents (result of --show-index)");
-                if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-index, we only show the index, not the data
-            }
-
-            buf_free (&evb->z_data);*/
-
-
+                                        flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
         }
 
         // get the last vb_i that included in the regions - returns -1 if no vb has the requested regions
@@ -611,6 +599,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
 
     // read genozip header, dictionaries etc and set the data type when reading the first component of in case of --unbind, 
     static DataType data_type = DT_NONE; 
+
     if (is_first_component) {
         data_type = piz_read_global_area (&original_file_digest);
         if (data_type == DT_NONE || flag_reading_reference) goto finish; // reference file has no VBs

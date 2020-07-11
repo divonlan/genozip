@@ -169,6 +169,13 @@ void zip_generate_b250_section (VBlock *vb, Context *ctx)
         fwrite (ctx->b250.data, 1, ctx->b250.len, stdout);
 }
 
+static void zip_update_txt_counters (VBlock *vb, bool update_txt_file)
+{
+    if (update_txt_file) txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
+    z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
+    z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
+    z_file->txt_data_so_far_bind             += (int64_t)vb->vb_data_size;
+}
 
 void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_txt_file, ProcessedDataType pd_type)
 {
@@ -183,12 +190,8 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
 
     z_file->disk_so_far += (int64_t)data_buf->len;
     
-    if (pd_type == PD_VBLOCK_DATA) {
-        if (update_txt_file) txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
-        z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
-        z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
-        z_file->txt_data_so_far_bind           += (int64_t)vb->vb_data_size;
-    }
+    if (pd_type == PD_VBLOCK_DATA) 
+        zip_update_txt_counters (vb, update_txt_file);
 
     // this function holds the mutex and hence has a non-trival performance penalty. we call
     // it only if the user specifically requested --show-sections
@@ -221,9 +224,6 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) {
-
-        // sort RA, update entries that don't yet have a chrom_index
-        //random_access_finalize_entries();
 
         if (flag_show_index) random_access_show_index (&z_file->ra_buf, true, "Random-access index contents (result of --show-index)");
         
@@ -378,8 +378,8 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
             if (!flag_make_reference)
                 zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
             else 
-                z_file->txt_data_so_far_bind += (int64_t)processed_vb->vb_data_size;
-                
+                zip_update_txt_counters (processed_vb, true); // normally called from zip_output_processed_vb
+
             z_file->num_vbs++;
             
             dispatcher_finalize_one_vb (dispatcher);

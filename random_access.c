@@ -129,9 +129,10 @@ void random_access_merge_in_vb (VBlock *vb)
 }
 
 // ZIP
+static Buffer *ra_buf_being_sorted;
 int random_access_sort_by_vb_i (const void *a_, const void *b_)
 {
-    ARRAY (RAEntry, ra, z_file->ra_buf);
+    ARRAY (RAEntry, ra, *ra_buf_being_sorted);
 
     int32_t a = *(int32_t *)a_;
     int32_t b = *(int32_t *)b_;
@@ -149,13 +150,14 @@ void random_access_finalize_entries (Buffer *ra_buf)
 {
     // build an index into ra_buf that we will sort. we need that, because for same-vb entries we need to 
     // maintain their current order - sorted by the index
-    int32_t *sorter = malloc (z_file->ra_buf.len * sizeof (int32_t));
+    int32_t *sorter = malloc (ra_buf->len * sizeof (int32_t));
     ASSERT (sorter, "Error in random_access_finalize_entries: failed to malloc %u bytes", (uint32_t)(ra_buf->len * sizeof (uint32_t)));
 
     for (int32_t i=0; i < ra_buf->len; i++) sorter[i] = i;
 
     // at this point, VBs in RA might be out of order, but all entries of a specific VB are grouped together in order
     // we sort so that the VBs are in order, and the order within a VB is unchanged
+    ra_buf_being_sorted = ra_buf;
     qsort (sorter, ra_buf->len, sizeof (uint32_t), random_access_sort_by_vb_i);
 
     // use sorter to consturct a sorted RA

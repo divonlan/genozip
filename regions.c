@@ -223,8 +223,6 @@ void regions_make_chregs(unsigned chrom_did_i)
         }
     }
 
-    buf_destroy (&regions_buf); // free the memory, we won't need it again
-
     //regions_display("After regions_make_chregs");
 }
 

@@ -590,7 +590,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     else {
         // case: we are attempting to decompress a reference file - this is not supported
         if ((header->h.flags & SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE) &&
-            !((flag_show_index || flag_show_reference) && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
+            !((flag_show_index || flag_show_reference || flag_show_ref_index) && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
             WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
             data_type = DT_NONE;
             goto final;

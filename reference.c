@@ -367,9 +367,14 @@ static void ref_read_one_range (VBlockP vb)
     bool range_is_included = true;
     RAEntry *ra = NULL;
     if (flag_regions) {
-        ASSERT (vb->vblock_i <= ref_stored_ra.len, "Error in ref_read_one_range: expecting vb->vblock_i(%u) <= ref_stored_ra.len(%u)", vb->vblock_i, (uint32_t)ref_stored_ra.len);
+        if (vb->vblock_i > ref_stored_ra.len) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
+        // get ra - if we're reading from a fasta reference (i.e. genounzip --reference) - get from z_file->ra_buf or
+        // if we're reading an internal reference - from ref_stored_ra
+        //ra = ENT (RAEntry, flag_reading_reference ? z_file->ra_buf : ref_stored_ra, vb->vblock_i-1);
         ra = ENT (RAEntry, ref_stored_ra, vb->vblock_i-1);
+        ASSERT (ra->vblock_i == vb->vblock_i, "Error in ref_read_one_range: expecting ra->vblock_i(%u) == vb->vblock_i(%u)", ra->vblock_i, vb->vblock_i);
+
         range_is_included = regions_is_ra_included (ra);
     }
 
@@ -392,10 +397,6 @@ static void ref_read_one_range (VBlockP vb)
         
         int32_t chrom = BGEN32 (header->chrom_word_index);
         if (chrom == NIL) return; // we're done - terminating empty section that sometimes appears (eg in unaligned SAM that don't have any reference and yet are REF_INTERNAL)
-
-        ASSERT (!flag_regions || (ra->chrom_index == chrom && ra->min_pos == BGEN64 (header->first_pos)), // note we don't compare max_pos because in the header it will be different if ref range is compacted
-                "Error in ref_read_one_range: inconsistency between RA and ref header: RA=(chrom=%d min=%"PRId64") header==(chrom=%d min=%"PRId64")",
-                ra->chrom_index, ra->min_pos, chrom, BGEN64 (header->first_pos));
 
         // if this is SEC_REF_IS_SET, read the SEC_REFERENCE section now
         if (header->h.section_type == SEC_REF_IS_SET) 
@@ -420,8 +421,9 @@ void ref_load_stored_reference (void)
     buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list", 0);
 
     // decompress reference using Dispatcher
-    dispatcher_fan_out_task (flag_reference == REF_EXTERNAL ? ref_filename : z_file->basename, 
-                             flag_reference == REF_EXTERNAL ? "Reading reference file..." : "Reading stored reference", flag_test, 
+    bool external = flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE;
+    dispatcher_fan_out_task (external ? ref_filename : z_file->basename, 
+                             external ? "Reading reference file..." : "Reading stored reference", flag_test, 
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
@@ -946,6 +948,8 @@ void ref_compress_ref (void)
             count_used_ranges++;
 
     buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * count_used_ranges, 1, "ref_stored_ra", 0);
+    ref_stored_ra.len = 0; // re-initialize, in case we read the external reference into here
+    
     mutex_initialize (&ref_stored_ra_mutex, &ref_stored_ra_mutex_initialized);
 
     // compression of reference doesn't output % progress
@@ -968,11 +972,11 @@ void ref_compress_ref (void)
         ref_compress_one_range (evb); // incidentally, will also be written in case of a small (one vb) reference - no harm
     }
 
+    // compress reference random access (note: in case of a reference file, SEC_REF_RANDOM_ACC will be identical to SEC_RANDOM_ACCESS. That's ok, its tiny)
+    random_access_finalize_entries (&ref_stored_ra); // sort in order of vb_i
+
     if (flag_show_ref_index) 
         random_access_show_index (&ref_stored_ra, true, "Reference random-access index contents (result of --show-ref-index)");
-
-    // compress reference random access
-    random_access_finalize_entries (&ref_stored_ra); // sort in order of vb_i
 
     BGEN_random_access (&ref_stored_ra); // make ra_buf into big endian
     ref_stored_ra.len *= sizeof (RAEntry); // change len to count bytes
