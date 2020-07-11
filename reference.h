@@ -36,10 +36,10 @@ typedef struct Range {
 
 extern void ref_initialize_ranges (bool one_range_per_contig);
 extern void ref_compress_ref (void);
-extern void ref_uncompress_all_ranges (void);
+extern void ref_load_stored_reference (void);
 extern void ref_set_reference (const char *filename);
 extern void ref_set_md5 (Md5Hash md5);
-extern void ref_read_external_reference (void);
+extern void ref_load_external_reference (void);
 extern void ref_cleanup_memory (void);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t num_nucleotides_needed);
@@ -81,5 +81,6 @@ extern Range *ref_make_ref_get_range (uint32_t vblock_i);
 // globals
 extern const char *ref_filename;
 extern Md5Hash ref_md5;
+extern Buffer ref_stored_ra;
 
 #endif

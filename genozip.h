@@ -60,6 +60,8 @@ typedef const struct SectionListEntry *ConstSectionListEntryP;
 typedef struct Range *RangeP;
 typedef struct BitArray *BitArrayP;
 typedef const struct BitArray *ConstBitArrayP;
+typedef struct RAEntry *RAEntryP;
+typedef const struct RAEntry *ConstRAEntryP;
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
@@ -84,7 +86,7 @@ extern CommandType command, primary_command;
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers, flag_show_aliases,
-           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions, 
+           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions, flag_show_ref_index, 
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_show_reference,
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only,
            flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_register,

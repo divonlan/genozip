@@ -24,6 +24,7 @@
 #include "profiler.h"
 #include "bit_array.h"
 #include "file.h"
+#include "regions.h"
 
 // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
 static Buffer ranges                    = EMPTY_BUFFER; 
@@ -33,13 +34,18 @@ static Buffer contig_dict               = EMPTY_BUFFER;
 static Buffer contig_words              = EMPTY_BUFFER;
 static Buffer contig_maxes              = EMPTY_BUFFER; // an array of int64 - the max_pos of each contig
 static Buffer contig_words_sorted_index = EMPTY_BUFFER; // an array of uint32 of indexes into contig_words - sorted by alphabetical order of the snip in contig_dict
-static Buffer ref_file_ra               = EMPTY_BUFFER; // Random Access data of the external reference file
+static Buffer ref_external_ra           = EMPTY_BUFFER; // Random Access data of the external reference file
 static Buffer ref_file_section_list     = EMPTY_BUFFER; // Section List of the external reference file
 
 // PIZ: an array of RegionToSet - list of non-compacted regions, for which we should set is_set bit to 1
 static Buffer region_to_set_list        = EMPTY_BUFFER; 
 static pthread_mutex_t region_to_set_list_mutex;
 static bool region_to_set_list_mutex_initialized=false;
+
+// ZIP/PIZ: random_access data for the reference sections stored in a target genozip file
+Buffer ref_stored_ra                    = EMPTY_BUFFER;
+static pthread_mutex_t ref_stored_ra_mutex; // ZIP only
+static bool ref_stored_ra_mutex_initialized = false;
 
 typedef struct {
     BitArray *is_set;
@@ -102,7 +108,8 @@ void ref_cleanup_memory(void)
         buf_free (&contig_words);
         buf_free (&contig_maxes);
         buf_free (&contig_words_sorted_index);
-        buf_free (&ref_file_ra);
+        buf_free (&ref_external_ra);
+        buf_free (&ref_stored_ra);
         buf_free (&ref_file_section_list);
     }
 }
@@ -194,6 +201,8 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET sections
 static void ref_uncompress_one_range (VBlockP vb)
 {
+    if (!buf_is_allocated (&vb->z_data)) goto finish; // we have no data in this VB because it was skipped due to --regions
+
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
 
     int32_t chrom             = (int32_t)BGEN32 (header->chrom_word_index);
@@ -241,7 +250,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     //    note: in case of ZIP with REF_INTERNAL, we CLEAR the bits in ref_zip_get_locked_range
     // case 2: PIZ, reading an uncompacted (i.e. complete) reference section - which is always the case when
     //    reading an external reference and sometimes when reading an stored one - we SET all the bits as they are valid for pizzing
-    //    we do this in ref_uncompress_all_ranges AFTER all the SEC_REFERENCE/SEC_REF_IS_SEC sections are uncompressed,
+    //    we do this in ref_load_stored_reference AFTER all the SEC_REFERENCE/SEC_REF_IS_SEC sections are uncompressed,
     //    so that in case this was an REF_EXT_STORE compression, we first copy the contig-wide IS_SET sections (case 3) 
     //    (which will have 0s in the place of copied FASTA sections), and only after do we set these regions to 1.
     //    note: in case of PIZ, entire contigs are initialized to clear in ref_initialize_ranges as there might be
@@ -312,7 +321,7 @@ static void ref_uncompress_one_range (VBlockP vb)
             final_flanking_len   = (ref_sec_last_pos > r->last_pos) ? ref_sec_last_pos - r->last_pos : 0; // nucleotides in the section that are after the end of our contig
 
             bit_array_set_region (&r->is_set, MAX (sec_start_within_contig, 0), ref_sec_len - initial_flanking_len - final_flanking_len);
-            // save the region we need to set, we will do the actual setting in ref_uncompress_all_ranges
+            // save the region we need to set, we will do the actual setting in ref_load_stored_reference
             mutex_lock (region_to_set_list_mutex);
             RegionToSet *rts = &NEXTENT (RegionToSet, region_to_set_list);
             mutex_unlock (region_to_set_list_mutex);
@@ -345,6 +354,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
     mutex_unlock (r->mutex);
 
+finish:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. 
 }
 
@@ -353,33 +363,53 @@ static void ref_read_one_range (VBlockP vb)
     if (!sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE, SEC_REF_IS_SET))
         return; // no more reference sections
 
-    buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers", 2); // room for 2 section headers  
+    // if the user specified --regions, check if this ref range is needed
+    bool range_is_included = true;
+    RAEntry *ra = NULL;
+    if (flag_regions) {
+        ASSERT (vb->vblock_i <= ref_stored_ra.len, "Error in ref_read_one_range: expecting vb->vblock_i(%u) <= ref_stored_ra.len(%u)", vb->vblock_i, (uint32_t)ref_stored_ra.len);
 
-    ASSERT0 (vb->z_section_headers.len < 2, "Error in ref_read_one_range: unexpected 3rd recursive entry");
+        ra = ENT (RAEntry, ref_stored_ra, vb->vblock_i-1);
+        range_is_included = regions_is_ra_included (ra);
+    }
 
-    int32_t section_offset = 
-        zfile_read_section (z_file, vb, sl_ent->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
-                            sizeof(SectionHeaderReference), sl_ent->section_type, sl_ent);    
+    if (range_is_included) { 
 
-    ASSERT (*LASTENT(int32_t, vb->z_section_headers) != EOF, "Error in ref_read_one_range: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
+        buf_alloc (vb, &vb->z_section_headers, 2 * sizeof(int32_t), 0, "z_section_headers", 2); // room for 2 section headers  
 
-    NEXTENT (int32_t, vb->z_section_headers) = section_offset;
+        ASSERT0 (vb->z_section_headers.len < 2, "Error in ref_read_one_range: unexpected 3rd recursive entry");
 
-    // allocate memory for entire chrom reference if this is the first range of this chrom
-    SectionHeaderReference *header = (SectionHeaderReference *)&vb->z_data.data[section_offset];
-    int32_t chrom = BGEN32 (header->chrom_word_index);
-    if (chrom == NIL) return; // we're done - terminating empty section that sometimes appears (eg in unaligned SAM that don't have any reference and yet are REF_INTERNAL)
+        int32_t section_offset = 
+            zfile_read_section (z_file, vb, sl_ent->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
+                                sizeof(SectionHeaderReference), sl_ent->section_type, sl_ent);    
 
-    // if this is SEC_REF_IS_SET, read the SEC_REFERENCE section now
-    if (header->h.section_type == SEC_REF_IS_SET) 
-        ref_read_one_range (vb);
+        ASSERT (*LASTENT(int32_t, vb->z_section_headers) != EOF, "Error in ref_read_one_range: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
 
-    vb->ready_to_dispatch = true;
+        NEXTENT (int32_t, vb->z_section_headers) = section_offset;
+
+        // allocate memory for entire chrom reference if this is the first range of this chrom
+        SectionHeaderReference *header = (SectionHeaderReference *)&vb->z_data.data[section_offset];
+        
+        int32_t chrom = BGEN32 (header->chrom_word_index);
+        if (chrom == NIL) return; // we're done - terminating empty section that sometimes appears (eg in unaligned SAM that don't have any reference and yet are REF_INTERNAL)
+
+        ASSERT (!flag_regions || (ra->chrom_index == chrom && ra->min_pos == BGEN64 (header->first_pos)), // note we don't compare max_pos because in the header it will be different if ref range is compacted
+                "Error in ref_read_one_range: inconsistency between RA and ref header: RA=(chrom=%d min=%"PRId64") header==(chrom=%d min=%"PRId64")",
+                ra->chrom_index, ra->min_pos, chrom, BGEN64 (header->first_pos));
+
+        // if this is SEC_REF_IS_SET, read the SEC_REFERENCE section now
+        if (header->h.section_type == SEC_REF_IS_SET) 
+            ref_read_one_range (vb);
+    }
+
+    vb->ready_to_dispatch = true; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
 }
 
-void ref_uncompress_all_ranges (void)
+// PIZ: loading a reference stored in the genozip file - this could have been originally stored as REF_INTERNAL or REF_EXT_STORE
+// or this could be a reference fasta file
+void ref_load_stored_reference (void)
 {
-    ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_uncompress_all_ranges: expecting ranges to be unallocated");
+    ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
     
     ref_initialize_ranges (true);
     
@@ -403,7 +433,7 @@ void ref_uncompress_all_ranges (void)
     for (uint32_t i=0; i < region_to_set_list.len; i++)
         bit_array_set_region (rts[i].is_set, rts[i].first_bit, rts[i].len);
 
-    buf_test_overflows_all_vbs ("ref_uncompress_all_ranges");
+    buf_test_overflows_all_vbs ("ref_load_stored_reference");
 
     // exit now if all we wanted was just to see the reference
     if ((flag_show_reference || flag_show_is_set) && exe_type == EXE_GENOCAT) exit(0);
@@ -686,9 +716,9 @@ static void ref_copy_compressed_sections_from_reference_file (void)
     // 1. If 95% of the ref file RA is set in the zfile contig range - we copy the compressed reference section directly from the ref FASTA
     // 2. If we copied from the FASTA, we mark those region covered by the RA as "is_set=0", so that we don't compress it later
     SectionListEntry *sl = FIRSTENT (SectionListEntry, ref_file_section_list);
-    ARRAY (RAEntry, fasta_sec, ref_file_ra);
+    ARRAY (RAEntry, fasta_sec, ref_external_ra);
 
-    for (uint32_t i=0; i < ref_file_ra.len; i++) {
+    for (uint32_t i=0; i < ref_external_ra.len; i++) {
 
         Range *contig_r = ENT (Range, ranges, fasta_sec[i].chrom_index);
         int64_t fasta_sec_start_in_contig_r = fasta_sec[i].min_pos - contig_r->first_pos; // the start of the FASTA section (a bit less than 1MB) within the full-contig range
@@ -838,12 +868,28 @@ static void ref_compress_one_range (VBlockP vb)
                  BGEN64 (header.first_pos), BGEN64 (header.last_pos), BGEN64 (header.last_pos) - BGEN64 (header.first_pos) + 1, 
                  BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
+    // store the ref_stored_ra data for this range
+    if (r) {
+        mutex_lock (ref_stored_ra_mutex);
+        NEXTENT (RAEntry, ref_stored_ra) = (RAEntry){ .vblock_i    = vb->vblock_i, 
+                                                      .chrom_index = r->chrom,
+                                                      .min_pos     = r->first_pos,
+                                                      .max_pos     = r->last_pos   };
+        mutex_unlock (ref_stored_ra_mutex);
+    }
+
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
 }
 
 static void ref_output_one_range (VBlockP vb) 
 { 
     zip_output_processed_vb (vb, &vb->section_list_buf, false, PD_REFERENCE_DATA); 
+}
+
+static inline bool ref_is_range_used (const Range *r)
+{
+    // note: in make_ref mode, is_set is always 0, and ref is 0 for unused ranges
+    return r->ref.num_of_bits && (r->is_set.num_of_bits || flag_make_reference);
 }
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
@@ -857,8 +903,9 @@ static void ref_prepare_range_for_compress (VBlockP vb)
 
         Range *r = ENT (Range, ranges, next_range_i);
 
-        if ((!flag_make_reference && !r->is_set.num_of_bits) || !r->ref.num_of_bits) 
-            continue; // unused range (note: in make_ref mode, is_set is always 0, and ref is 0 for unused ranges)
+        if (!ref_is_range_used (r)) continue;
+//        if ((!flag_make_reference && !r->is_set.num_of_bits) || !r->ref.num_of_bits) 
+//            continue; // unused range (note: in make_ref mode, is_set is always 0, and ref is 0 for unused ranges)
 
         uint64_t num_set = flag_make_reference ? (r->ref.num_of_bits / 2) : bit_array_num_bits_set (&r->is_set);
         if (!num_set) {
@@ -892,6 +939,16 @@ void ref_compress_ref (void)
     else if (flag_reference == REF_INTERNAL)
         ref_copy_chrom_data_from_z_file();
 
+    // initialize ref_stored_ra for the creation of SEC_REF_RANDOM_ACC section
+    uint32_t count_used_ranges=0;
+    for (int32_t i=0; i < ranges.len; i++)
+        if (ref_is_range_used (ENT (Range, ranges, i)))
+            count_used_ranges++;
+
+    buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * count_used_ranges, 1, "ref_stored_ra", 0);
+    mutex_initialize (&ref_stored_ra_mutex, &ref_stored_ra_mutex_initialized);
+
+    // compression of reference doesn't output % progress
     SAVE_FLAG (flag_quiet);
     if (flag_show_reference) flag_quiet = true; // show references instead of progress
 
@@ -910,6 +967,16 @@ void ref_compress_ref (void)
         evb->range = NULL;
         ref_compress_one_range (evb); // incidentally, will also be written in case of a small (one vb) reference - no harm
     }
+
+    if (flag_show_ref_index) 
+        random_access_show_index (&ref_stored_ra, true, "Reference random-access index contents (result of --show-ref-index)");
+
+    // compress reference random access
+    random_access_finalize_entries (&ref_stored_ra); // sort in order of vb_i
+
+    BGEN_random_access (&ref_stored_ra); // make ra_buf into big endian
+    ref_stored_ra.len *= sizeof (RAEntry); // change len to count bytes
+    zfile_compress_section_data_alg (evb, SEC_REF_RANDOM_ACC, &ref_stored_ra, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
 }
 
 // -------------------------------
@@ -927,7 +994,7 @@ void ref_set_md5 (Md5Hash md5)
 }
 
 // ZIP & PIZ: import external reference
-void ref_read_external_reference (void)
+void ref_load_external_reference (void)
 {
     ASSERT0 (ref_filename, "Error: ref_filename is NULL");
 
@@ -966,8 +1033,8 @@ void ref_read_external_reference (void)
     file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
 }
 
-// case 1: in case of ZIP with external reference, called by ref_uncompress_all_ranges during piz_read_global_area of the reference file
-// case 2: in case of PIZ: also called from ref_uncompress_all_ranges one_range_per_contig=true
+// case 1: in case of ZIP with external reference, called by ref_load_stored_reference during piz_read_global_area of the reference file
+// case 2: in case of PIZ: also called from ref_load_stored_reference one_range_per_contig=true
 // case 3: in case of ZIP of SAM using internal reference - called from sam_zip_initialize
 // note: ranges allocation must be called by the I/O thread as it adds a buffer to evb buf_list
 void ref_initialize_ranges (bool one_range_per_contig)
@@ -1071,7 +1138,7 @@ void ref_consume_ref_fasta_global_area (void)
 
     random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
     buf_copy (evb, &contig_maxes, &z_file->ra_min_max_by_chrom, sizeof (int64_t), 0, 0, "contig_maxes", 0);
-    buf_copy (evb, &ref_file_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_file_ra", 0);
+    buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra", 0);
     buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
 }
 

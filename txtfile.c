@@ -289,7 +289,7 @@ void txtfile_read_vblock (VBlock *vb)
             // from the previous VB, we will just not have a vb->md5_hash_so_far for this VB. no harm.
             if (partial_block >= 0) {
                 // use the Md5Context of the last fully-consumed block as the basis, and update it with the consumed part of the partial block
-                Md5Context md5_ctx = partial_block ? *ENT (Md5Context, block_md5_buf, partial_block-1) : MD5CONTEXT_none; // copy context
+                Md5Context md5_ctx = partial_block ? *ENT (Md5Context, block_md5_buf, partial_block-1) : MD5CONTEXT_NONE; // copy context
                 md5_update (&md5_ctx, *ENT (char *, block_start_buf, partial_block), block_len[partial_block] - unincluded_len);
 
                 vb->md5_hash_so_far = md5_snapshot (&md5_ctx);  

@@ -517,20 +517,29 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             // if the regions are negative, transform them to the positive complement instead
             regions_transform_negative_to_positive_complement();
 
+            if (flag_reference == REF_STORED || flag_reading_reference) 
+                random_access_load_ra_section (SEC_REF_RANDOM_ACC, &ref_stored_ra, "ref_stored_ra", 
+                                               flag_show_ref_index ? "Reference random-access index contents (result of --show-index)" : NULL);
+
+            random_access_load_ra_section (SEC_RANDOM_ACCESS, &z_file->ra_buf, "z_file->ra_buf", 
+                                           flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
+/*            
             SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (SEC_RANDOM_ACCESS);
             zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_RANDOM_ACCESS, ra_sl);
 
             zfile_uncompress_section (evb, evb->z_data.data, &z_file->ra_buf, "z_file->ra_buf", SEC_RANDOM_ACCESS);
 
-            z_file->ra_buf.len /= random_access_sizeof_entry();
-            BGEN_random_access();
+            z_file->ra_buf.len /= sizeof (RAEntry);
+            BGEN_random_access (&z_file->ra_buf);
 
             if (flag_show_index) {
-                random_access_show_index(false);
+                random_access_show_index (&z_file->ra_buf, false, "Random-access index contents (result of --show-index)");
                 if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-index, we only show the index, not the data
             }
 
-            buf_free (&evb->z_data);
+            buf_free (&evb->z_data);*/
+
+
         }
 
         // get the last vb_i that included in the regions - returns -1 if no vb has the requested regions
@@ -545,7 +554,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             ref_consume_ref_fasta_global_area();
 
         if (flag_reference == REF_STORED || flag_reading_reference) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
-            ref_uncompress_all_ranges();
+            ref_load_stored_reference();
             
             if (flag_reading_reference) 
                 progress_finalize_component ((flag_test && !flag_reading_reference) ? "Success" : "Done");

@@ -817,7 +817,7 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_size_single);
     curr_header->num_lines        = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
-    curr_header->md5_hash_single  = flag_md5 ? md5_finalize (&z_file->md5_ctx_single) : MD5HASH_none;
+    curr_header->md5_hash_single  = flag_md5 ? md5_finalize (&z_file->md5_ctx_single) : MD5HASH_NONE;
 
     *md5 = curr_header->md5_hash_single;
 

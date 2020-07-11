@@ -10,6 +10,7 @@
 #include "strings.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "regions.h"
 
 // PIZ: SEQ reconstruction rules : 
 // '-' - data should be taken from the reference
@@ -107,7 +108,6 @@ void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigne
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-
     sam_analyze_cigar (snip, snip_len, &vb->seq_len, &vb->ref_consumed, NULL);
 
     if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
@@ -120,6 +120,10 @@ void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigne
         RECONSTRUCT (snip, snip_len);    
 
     vb->last_cigar = snip;
+
+    if (flag_regions && vb->chrom_node_index != NIL && vb->contexts[SAM_POS].last_value && 
+        !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value, vb->contexts[SAM_POS].last_value + vb->ref_consumed - 1, true))
+        vb->dont_show_curr_line = true;
 }   
 
 void sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)

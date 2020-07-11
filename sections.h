@@ -17,18 +17,19 @@ typedef enum {
     SEC_DICT_ID_ALIASES = 1,
     SEC_REFERENCE       = 2,
     SEC_REF_IS_SET      = 3,
-    SEC_TXT_HEADER      = 4, 
-    SEC_VB_HEADER       = 5,
-    SEC_GENOZIP_HEADER  = 6, // SEC_GENOZIP_HEADER remains 6 as in v2-v5 to be able to read old versions' genozip header
-    SEC_DICT            = 7, 
-    SEC_B250            = 8, 
-    SEC_LOCAL           = 9, 
+    SEC_REF_RANDOM_ACC  = 4,
+    SEC_TXT_HEADER      = 5, 
+    SEC_VB_HEADER       = 6,
+    SEC_GENOZIP_HEADER  = 7, // SEC_GENOZIP_HEADER remains 6 as in v2-v5 to be able to read old versions' genozip header
+    SEC_DICT            = 8, 
+    SEC_B250            = 9, 
+    SEC_LOCAL           = 10, 
 
     // vcf specific    
-    SEC_VCF_GT_DATA     = 10,  
-    SEC_VCF_PHASE_DATA  = 11,
-    SEC_VCF_HT_DATA     = 12,                               
-    SEC_VCF_HT_GTSHARK  = 13,
+    SEC_VCF_GT_DATA     = 20,  
+    SEC_VCF_PHASE_DATA  = 21,
+    SEC_VCF_HT_DATA     = 22,                               
+    SEC_VCF_HT_GTSHARK  = 23,
 
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
@@ -39,12 +40,14 @@ typedef enum {
     {"SEC_DICT_ID_ALIASES"}, \
     {"SEC_REFERENCE"},       \
     {"SEC_REF_IS_SET"},      \
+    {"SEC_REF_RANDOM_ACC"},  \
     {"SEC_TXT_HEADER"},      \
     {"SEC_VB_HEADER"},       \
     {"SEC_GENOZIP_HEADER"},  \
     {"SEC_DICT"},            \
     {"SEC_B250"},            \
     {"SEC_LOCAL"},           \
+    {}, {}, {}, {}, {}, {}, {}, {}, {}, \
     {"SEC_VCF_GT_DATA"},     \
     {"SEC_VCF_PHASE_DATA"},  \
     {"SEC_VCF_HT_DATA"},     \
@@ -173,15 +176,6 @@ typedef struct {
     DictId dict_id;           
 } SectionHeaderCtx;         
 
-// the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
-typedef struct SectionListEntry {
-    uint64_t offset;           // offset of this section in the file
-    DictId dict_id;            // used if this section is a DICT, LOCAL or a B250 section
-    uint32_t vblock_i;
-    uint8_t section_type;
-    uint8_t unused[3];         
-} SectionListEntry;
-
 // two ways of storing a range:
 // uncompacted - we will have one section, SEC_REFERENCE, containing the data, and first/last_pos containing the coordinates of this range
 // compacting we will have 2 sections:
@@ -195,9 +189,18 @@ typedef struct {
     uint32_t chrom_word_index;    // index in context->word_list of the chrom of this reference range    
 } SectionHeaderReference;
 
+// the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
+typedef struct SectionListEntry {
+    uint64_t offset;           // offset of this section in the file
+    DictId dict_id;            // used if this section is a DICT, LOCAL or a B250 section
+    uint32_t vblock_i;
+    uint8_t section_type;
+    uint8_t unused[3];         
+} SectionListEntry;
+
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
-typedef struct {
+typedef struct RAEntry {
     uint32_t vblock_i;            // the vb_i in which this range appears
     uint32_t chrom_index;         // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
     uint64_t min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)

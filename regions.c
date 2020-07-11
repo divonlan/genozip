@@ -333,6 +333,40 @@ bool regions_is_site_included (uint32_t chrom_word_index, int64_t pos)
     return false;
 }
 
+// PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
+bool regions_is_range_included (int32_t chrom, int64_t start_pos, int64_t end_pos, bool completely_included)
+{
+    // it sufficient that the site is included in one (positive) region
+    Buffer *chregs_buf = &chregs[chrom];
+    for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
+        Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
+
+        // check for complete inclusion
+        if (start_pos >= chreg->start_pos && end_pos <= chreg->end_pos) 
+            return true;
+        
+        // check for region overlap
+        if (end_pos >= chreg->start_pos && start_pos <= chreg->end_pos) { // requested range overlaps chreg
+
+            // if we only need overlap, we're done
+            if (!completely_included) return true;
+
+            // part of the region is covered, decided based on the remaining part (which can be either before or after this chreg or both)
+            bool left_flanking_covered=true, right_flanking_covered=true;
+
+            if (start_pos < chreg->start_pos) 
+                left_flanking_covered = regions_is_range_included (chrom, start_pos, chreg->start_pos-1, true);
+
+            if (end_pos > chreg->end_pos) 
+                right_flanking_covered = regions_is_range_included (chrom, chreg->end_pos+1, end_pos, true);
+
+            return left_flanking_covered && right_flanking_covered;
+        }
+    }
+    return false;
+}
+
+
 unsigned regions_max_num_chregs (void) 
 { 
     static int result = 0; // initialize

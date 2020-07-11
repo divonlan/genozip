@@ -11,6 +11,7 @@
 #include "endianness.h"
 #include "regions.h"
 #include "arch.h"
+#include "zfile.h"
 
 static pthread_mutex_t ra_mutex;
 
@@ -144,37 +145,37 @@ int random_access_sort_by_vb_i (const void *a_, const void *b_)
 }
 
 // ZIP (I/O thread) sort RA, update overflowing chroms, create and merge in evb ra
-void random_access_finalize_entries (void)
+void random_access_finalize_entries (Buffer *ra_buf)
 {
     // build an index into ra_buf that we will sort. we need that, because for same-vb entries we need to 
     // maintain their current order - sorted by the index
     int32_t *sorter = malloc (z_file->ra_buf.len * sizeof (int32_t));
-    ASSERT (sorter, "Error in random_access_finalize_entries: failed to malloc %u bytes", (uint32_t)(z_file->ra_buf.len * sizeof (uint32_t)));
+    ASSERT (sorter, "Error in random_access_finalize_entries: failed to malloc %u bytes", (uint32_t)(ra_buf->len * sizeof (uint32_t)));
 
-    for (int32_t i=0; i < z_file->ra_buf.len; i++) sorter[i] = i;
+    for (int32_t i=0; i < ra_buf->len; i++) sorter[i] = i;
 
     // at this point, VBs in RA might be out of order, but all entries of a specific VB are grouped together in order
     // we sort so that the VBs are in order, and the order within a VB is unchanged
-    qsort (sorter, z_file->ra_buf.len, sizeof (uint32_t), random_access_sort_by_vb_i);
+    qsort (sorter, ra_buf->len, sizeof (uint32_t), random_access_sort_by_vb_i);
 
     // use sorter to consturct a sorted RA
     static Buffer sorted_ra_buf = EMPTY_BUFFER; // must be static because its added to buf_list
-    buf_alloc (evb, &sorted_ra_buf, sizeof (RAEntry) * z_file->ra_buf.len, 1, "z_file->ra_buf", 0);
-    sorted_ra_buf.len = z_file->ra_buf.len;
+    buf_alloc (evb, &sorted_ra_buf, sizeof (RAEntry) * ra_buf->len, 1, ra_buf->name, 0);
+    sorted_ra_buf.len = ra_buf->len;
 
-    for (uint32_t i=0; i < z_file->ra_buf.len; i++) 
-        *ENT (RAEntry, sorted_ra_buf, i) = *ENT (RAEntry, z_file->ra_buf, sorter[i]);
+    for (uint32_t i=0; i < ra_buf->len; i++) 
+        *ENT (RAEntry, sorted_ra_buf, i) = *ENT (RAEntry, *ra_buf, sorter[i]);
 
     // replace ra_buf with sorted one
-    buf_destroy (&z_file->ra_buf);
-    buf_move (evb, &z_file->ra_buf, evb, &sorted_ra_buf);
+    buf_destroy (ra_buf);
+    buf_move (evb, ra_buf, evb, &sorted_ra_buf);
 
     FREE (sorter);
 
     // now that the VBs are in order, we can updated the "CONTINUED FROM PREVIOUS VB" ra's to their final values
-    for (uint32_t i=0; i < z_file->ra_buf.len; i++) {
+    for (uint32_t i=0; i < ra_buf->len; i++) {
         
-        RAEntry *ra = ENT (RAEntry, z_file->ra_buf, i);
+        RAEntry *ra = ENT (RAEntry, *ra_buf, i);
 
         // case: chrom is unknown - if the sequence started in the previous VB (this happens in FASTA) - we update now
         if (ra->chrom_index == NIL) {
@@ -318,11 +319,11 @@ bool random_access_does_last_chrom_continue_in_next_vb (uint32_t vb_i)
 }
 
 // Called by PIZ I/O thread (piz_read_global_area) and ZIP I/O thread (zip_write_global_area)
-void BGEN_random_access()
+void BGEN_random_access (Buffer *ra_buf)
 {
-    ARRAY (RAEntry, ra, z_file->ra_buf);
+    ARRAY (RAEntry, ra, *ra_buf);
 
-    for (unsigned i=0; i < z_file->ra_buf.len; i++) {
+    for (unsigned i=0; i < ra_buf->len; i++) {
         ra[i].vblock_i    = BGEN32 (ra[i].vblock_i);
         ra[i].chrom_index = BGEN32 (ra[i].chrom_index);
         ra[i].min_pos     = BGEN64 (ra[i].min_pos);
@@ -330,20 +331,15 @@ void BGEN_random_access()
     }
 }
 
-unsigned random_access_sizeof_entry()
+void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *msg)
 {
-    return sizeof (RAEntry);
-}
-
-void random_access_show_index (bool from_zip)
-{
-    fprintf (stderr, "Random-access index contents (result of --show-index):\n");
+    fprintf (stderr, "\n%s:\n", msg);
     
-    ARRAY (RAEntry, ra, z_file->ra_buf);
+    ARRAY (const RAEntry, ra, *ra_buf);
 
     Context *ctx = &z_file->contexts[DTFZ(chrom)];
 
-    for (unsigned i=0; i < z_file->ra_buf.len; i++) {
+    for (unsigned i=0; i < ra_buf->len; i++) {
         
         const char *chrom_snip; unsigned chrom_snip_len;
         if (from_zip) {
@@ -374,4 +370,22 @@ void random_access_get_ra_info (uint32_t vblock_i, int32_t *chrom_index, int64_t
     *chrom_index = ra->chrom_index;
     *min_pos     = ra->min_pos;
     *max_pos     = ra->max_pos;
+}
+
+void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
+{
+    SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (sec_type);
+    zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), sec_type, ra_sl);
+
+    zfile_uncompress_section (evb, evb->z_data.data, ra_buf, buf_name, sec_type);
+
+    ra_buf->len /= sizeof (RAEntry);
+    BGEN_random_access (ra_buf);
+
+    if (show_index_msg) {
+        random_access_show_index (ra_buf, false, show_index_msg);
+        if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-index, we only show the index, not the data
+    }
+
+    buf_free (&evb->z_data);
 }

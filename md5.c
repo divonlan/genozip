@@ -11,9 +11,6 @@
 #include "profiler.h"
 #include "vblock.h"
 
-const Md5Hash MD5HASH_none = MD5HASH_NONE;
-const Md5Context MD5CONTEXT_none = MD5CONTEXT_NONE;
-
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
 #define G( x, y, z )            ( (y) ^ ((z) & ((x) ^ (y))) )
 #define H( x, y, z )            ( (x) ^ (y) ^ (z) )

@@ -25,7 +25,7 @@ void sam_zip_initialize (void)
     // (if an external reference IS provided, the user can decide whether to store it or not, with --store-reference)
     if (flag_reference == REF_NONE) flag_reference = REF_INTERNAL;
 
-    // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_read_external_reference()
+    // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
     if (!flag_reference || flag_reference == REF_INTERNAL) ref_initialize_ranges (false); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
     // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list

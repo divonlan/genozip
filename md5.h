@@ -20,8 +20,7 @@ typedef union {
     uint32_t words[4];
     uint64_t ulls[2];
 } Md5Hash;
-#define MD5HASH_NONE { .ulls = { 0, 0 } }
-extern const Md5Hash MD5HASH_none;
+#define MD5HASH_NONE (Md5Hash){ .ulls = { 0, 0 } }
 
 #pragma pack()
 
@@ -34,8 +33,7 @@ typedef struct {
     } buffer;
     bool initialized;
 } Md5Context;
-#define MD5CONTEXT_NONE { .lo=0, .hi=0, .buffer.words = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, .initialized=false }
-extern const Md5Context MD5CONTEXT_none;
+#define MD5CONTEXT_NONE (Md5Context){ .lo=0, .hi=0, .buffer.words = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, .initialized=false }
 
 extern Md5Hash md5_do (const void *data, unsigned len);
 extern void md5_update (Md5Context *ctx, const void *data, unsigned len);

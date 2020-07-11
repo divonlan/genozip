@@ -209,7 +209,7 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
 
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     if (DTPZ(has_random_access)) 
-        random_access_finalize_entries();
+        random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
     // output reference, if needed
     if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference) 
@@ -223,13 +223,13 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     if (DTPZ(has_random_access)) {
 
         // sort RA, update entries that don't yet have a chrom_index
-        random_access_finalize_entries();
+        //random_access_finalize_entries();
 
-        if (flag_show_index) random_access_show_index(true);
+        if (flag_show_index) random_access_show_index (&z_file->ra_buf, true, "Random-access index contents (result of --show-index)");
         
-        BGEN_random_access(); // make ra_buf into big endian
+        BGEN_random_access (&z_file->ra_buf); // make ra_buf into big endian
 
-        z_file->ra_buf.len *= random_access_sizeof_entry(); // change len to count bytes
+        z_file->ra_buf.len *= sizeof (RAEntry); // change len to count bytes
 
         zfile_compress_section_data_alg (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
     }
@@ -422,7 +422,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     if (is_last_file || !flag_bind) 
         zip_write_global_area (dispatcher, single_component_md5);
 
-    zip_display_compression_ratio (dispatcher, flag_bind ? MD5HASH_none : single_component_md5, is_last_file || !flag_bind); // Done for reference + final compression ratio calculation
+    zip_display_compression_ratio (dispatcher, flag_bind ? MD5HASH_NONE : single_component_md5, is_last_file || !flag_bind); // Done for reference + final compression ratio calculation
     
     if (flag_md5 && flag_bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
         progress_concatenated_md5 (dt_name (z_file->data_type), md5_finalize (&z_file->md5_ctx_bound));
