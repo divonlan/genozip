@@ -20,6 +20,10 @@ extern void cancel_io_thread (void);
 // -----------
 // mutex stuff
 // -----------
+#define MUTEX(storage_class, name) \
+    storage_class pthread_mutex_t name; \
+    storage_class bool name##_initialized = false;
+
 extern void mutex_initialize (pthread_mutex_t *mutex, bool *initialized);
 
 #define mutex_lock(m)   { int ret = pthread_mutex_lock (&m); \

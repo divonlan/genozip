@@ -71,8 +71,8 @@ char *flag_show_is_set = NULL;
 
 DictId dict_id_show_one_b250  = DICT_ID_NONE,  // argument of --show-b250-one
        dict_id_show_one_dict  = DICT_ID_NONE,  // argument of --show-dict-one
-       dict_id_dump_one_b250  = DICT_ID_NONE,  // argument of --dump-b250-one
-       dict_id_dump_one_local = DICT_ID_NONE;  // argument of --dump-local-one
+       dump_one_b250_dict_id  = DICT_ID_NONE,  // argument of --dump-b250-one
+       dump_one_local_dict_id = DICT_ID_NONE;  // argument of --dump-local-one
 static char *threads_str  = NULL;
 
 static void print_call_stack (void) 
@@ -477,9 +477,27 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
                  &basenames[i * BASENAME_LEN], out_filename);
 }
 
-//#include "base64.h"
+void TEST()
+{
+    FILE *in = fopen ("pos", "rb");
+    char *data = malloc (439074);
+    fread (data, 1, 439074, in);
+    fclose (in);
+
+    FILE *pos1 = fopen ("pos8", "wb");
+    FILE *pos2 = fopen ("pos9", "wb");
+    
+    for (uint32_t i=0; i < 439074; i++)
+        fputc (data[i], i % 4 == 3 ? pos1 : pos2);
+
+    fclose (pos1);
+    fclose (pos2);
+}
+
 int main (int argc, char **argv)
 {
+ //   TEST(); exit(0);
+
     arch_initialize();
 
 #ifdef _WIN32
@@ -644,8 +662,8 @@ int main (int argc, char **argv)
             case 'g' : flag_grep        = optarg   ; break;
             case '~' : flag_show_is_set = optarg   ; break;
             case '2' : dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
-            case '5' : dict_id_dump_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
-            case '6' : dict_id_dump_one_local = dict_id_make (optarg, strlen (optarg)); break;
+            case '5' : zip_initialize_binary_dump (optarg, &dump_one_b250_dict_id,  "b250");  break;
+            case '6' : zip_initialize_binary_dump (optarg, &dump_one_local_dict_id, "local"); break;
             case '3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
@@ -724,6 +742,7 @@ int main (int argc, char **argv)
     ASSINP (!flag_test        || !flag_make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
     ASSINP (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
     ASSINP (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
+    ASSINP (!dump_one_b250_dict_id.num || !dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
 
@@ -735,7 +754,7 @@ int main (int argc, char **argv)
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
-        dict_id_show_one_b250.num || dict_id_show_one_dict.num || dict_id_dump_one_b250.num || dict_id_dump_one_local.num || 
+        dict_id_show_one_b250.num || dict_id_show_one_dict.num || 
         flag_show_alleles || flag_show_vblocks || (flag_show_index && command==PIZ))
         flag_quiet=true; // don't show progress
 
