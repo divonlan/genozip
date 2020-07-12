@@ -13,12 +13,6 @@
 #include "random_access.h"
 #include "strings.h"
 
-void fasta_zip_initialize (void) 
-{
-    if (flag_make_reference)
-        ref_make_ref_init();
-}
-
 void fasta_seg_initialize (VBlockFAST *vb)
 {
     if (!flag_make_reference) {
@@ -45,7 +39,8 @@ void fasta_make_ref_range (VBlockP vb)
     Range *r = ref_make_ref_get_range (vb->vblock_i);
     uint64_t seq_len = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ)->local.len;
 
-    // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array
+    // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
+    // the missing details will be added during ref_prepare_range_for_compress
     bit_array_alloc (&r->ref, seq_len * 2); // 2 bits per base
 
     uint64_t bit_i=0;

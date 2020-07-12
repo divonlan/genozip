@@ -18,15 +18,11 @@
 #include <sys/sysinfo.h>
 #endif
 #endif
-#ifndef _MSC_VER // Microsoft compiler
-#include <pthread.h>
-#else
-#include "compatibility/visual_c_pthread.h"
-#endif
 
 #include "genozip.h"
 #include "endianness.h"
 #include "url.h"
+#include "arch.h"
 
 static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - despite common wisdom, it is NOT always 0 (on Windows it is 1)
 
@@ -143,12 +139,12 @@ bool arch_am_i_in_docker (void)
 }
 
 // initialize mutex, if its not initialized already
-void mutex_initialize (pthread_mutex_t *mutex, bool *initialized)
+void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool *initialized)
 {
     if (*initialized) return;
 
     unsigned ret = pthread_mutex_init (mutex, NULL);
-    ASSERT (!ret, "Error: pthread_mutex_init failed: %s", strerror (ret));
+    ASSERT (!ret, "Error: pthread_mutex_init failed for %s: %s", name, strerror (ret));
 
     *initialized = true;
 }

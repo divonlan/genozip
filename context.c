@@ -47,8 +47,8 @@ const int64_t ctx_lt_max[NUM_CTX_LT]     = { 0, 127, 255, 16383, 32767, 21474836
 
 #define INITIAL_NUM_NODES 10000
 
-static pthread_mutex_t wait_for_vb_1_mutex;
-static pthread_mutex_t compress_dictionary_data_mutex;
+MUTEX (wait_for_vb_1_mutex);
+MUTEX (compress_dictionary_data_mutex);
 
 static inline void mtf_lock_do (VBlock *vb, pthread_mutex_t *mutex, const char *func, uint32_t code_line, const char *name, uint32_t param)
 {
@@ -442,14 +442,9 @@ void mtf_initialize_for_zip (void)
 {
     if (z_file->dicts_mutex_initialized) return;
 
-    unsigned ret = pthread_mutex_init (&z_file->dicts_mutex, NULL);
-    ASSERT0 (!ret, "pthread_mutex_init failed for z_file->dicts_mutex");
-
-    ret = pthread_mutex_init (&wait_for_vb_1_mutex, NULL);
-    ASSERT0 (!ret, "pthread_mutex_init failed for wait_for_vb_1_mutex");
-
-    ret = pthread_mutex_init (&compress_dictionary_data_mutex, NULL);
-    ASSERT0 (!ret, "pthread_mutex_init failed for compress_dictionary_data_mutex");
+    mutex_initialize (z_file->dicts_mutex);
+    mutex_initialize (wait_for_vb_1_mutex);
+    mutex_initialize (compress_dictionary_data_mutex);
 
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)
         mtf_copy_reference_contig_to_chrom_ctx();
@@ -486,10 +481,8 @@ static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 
     zf_ctx = &z_file->contexts[z_file->num_dict_ids];
 
-    ASSERT (!pthread_mutex_init (&zf_ctx->mutex, NULL), 
-            "pthread_mutex_init failed for zf_ctx->mutex did_i=%u", zf_ctx->did_i);
+    mutex_initialize (zf_ctx->mutex);
 
-    zf_ctx->mutex_initialized = true;
     zf_ctx->did_i             = z_file->num_dict_ids; 
     zf_ctx->dict_id           = vb_ctx->dict_id;
     zf_ctx->flags             = vb_ctx->flags;

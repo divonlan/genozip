@@ -25,7 +25,7 @@
 #include "arch.h"
 
 static FILE *dump_file; // used by --dump-one-b250 and --dump-one-local
-MUTEX (static, dump_mutex);
+MUTEX (dump_mutex);
 
 void zip_initialize_binary_dump (const char *field, DictId *dict_id, const char *filename_ext)
 {
@@ -36,7 +36,7 @@ void zip_initialize_binary_dump (const char *field, DictId *dict_id, const char 
     
     dump_file = fopen (dump_fn, "wb"); // it will be closed implicitly when the process terminates
 
-    mutex_initialize (&dump_mutex, &dump_mutex_initialized);
+    mutex_initialize (dump_mutex);
 }
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)
@@ -67,7 +67,11 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
     else 
         ratio2 = (double)txt_file->disk_size / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
     
-    if (ratio2 >= 0) {
+    // when making a reference, we don't care abou the compression
+    if (flag_make_reference)
+        progress_finalize_component_time ("Done", md5);
+
+    else if (ratio2 >= 0) {
         if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
             progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio, md5);
         

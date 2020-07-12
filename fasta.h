@@ -10,7 +10,6 @@
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fast_zip_get_start_len_line_i_seq)
-extern void fasta_zip_initialize (void);
 extern void fasta_make_ref_range (VBlockP vb);
 
 // SEG Stuff

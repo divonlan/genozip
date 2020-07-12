@@ -13,12 +13,11 @@
 #include "arch.h"
 #include "zfile.h"
 
-static pthread_mutex_t ra_mutex;
+MUTEX (ra_mutex);
 
 void random_access_initialize(void)
 {
-    static bool ra_mutex_initialized = false;
-    mutex_initialize (&ra_mutex, &ra_mutex_initialized);
+    mutex_initialize (ra_mutex);
 }
 
 // --------------------

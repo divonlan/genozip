@@ -15,16 +15,17 @@
 #include "base250.h"
 #include "endianness.h"
 #include "strings.h"
+#include "arch.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
 uint32_t global_vcf_samples_per_block = 0; 
 
-static pthread_mutex_t best_gt_data_compressor_mutex;
+MUTEX (best_gt_data_compressor_mutex);
 
 void vcf_zip_initialize (void)
 {
-    pthread_mutex_init (&best_gt_data_compressor_mutex, NULL);
+    mutex_initialize (best_gt_data_compressor_mutex);
 }
 
 void vcf_zip_set_global_samples_per_block (const char *num_samples_str)

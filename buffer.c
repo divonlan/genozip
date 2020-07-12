@@ -14,11 +14,8 @@
 #include "strings.h"
 #include "reference.h"
 #include "bit_array.h"
-#ifndef _MSC_VER // Microsoft compiler
-#include <pthread.h>
-#else
-#include "compatibility/visual_c_pthread.h"
-#endif
+#include "arch.h"
+
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
@@ -29,15 +26,15 @@
 
 static const unsigned overhead_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
-static pthread_mutex_t overlay_mutex; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
-static pthread_mutex_t evb_buf_mutex; // used to thread-protect the buf_list of evb
+MUTEX (overlay_mutex); // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
+MUTEX (evb_buf_mutex); // used to thread-protect the buf_list of evb
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
 void buf_initialize()
 {
-    pthread_mutex_init (&overlay_mutex, NULL);
-    pthread_mutex_init (&evb_buf_mutex, NULL);
+    mutex_initialize (overlay_mutex);
+    mutex_initialize (evb_buf_mutex);
 
     vb_external_vb_initialize();
 }

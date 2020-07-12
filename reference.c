@@ -39,13 +39,11 @@ static Buffer ref_file_section_list     = EMPTY_BUFFER; // Section List of the e
 
 // PIZ: an array of RegionToSet - list of non-compacted regions, for which we should set is_set bit to 1
 static Buffer region_to_set_list        = EMPTY_BUFFER; 
-static pthread_mutex_t region_to_set_list_mutex;
-static bool region_to_set_list_mutex_initialized=false;
+MUTEX (region_to_set_list_mutex);
 
 // ZIP/PIZ: random_access data for the reference sections stored in a target genozip file
 Buffer ref_stored_ra                    = EMPTY_BUFFER;
-static pthread_mutex_t ref_stored_ra_mutex; // ZIP only
-static bool ref_stored_ra_mutex_initialized = false;
+MUTEX (ref_stored_ra_mutex); // ZIP only
 
 typedef struct {
     BitArray *is_set;
@@ -65,6 +63,7 @@ Md5Hash ref_md5 = MD5HASH_NONE;
 // forward declarations
 static int32_t ref_get_index_of_chrom_with_alt_name (VBlockP vb); 
 static void ref_copy_chrom_data_from_z_file (void);
+static void ref_prepare_range_for_compress_make_ref (VBlockP vb); // forward
 
 static inline int64_t ref_size (const Range *r) { return r ? (r->last_pos - r->first_pos + 1) : 0; }
 
@@ -417,7 +416,7 @@ void ref_load_stored_reference (void)
     sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
     ref_range_cursor = 0;
 
-    mutex_initialize (&region_to_set_list_mutex, &region_to_set_list_mutex_initialized);
+    mutex_initialize (region_to_set_list_mutex);
     buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list", 0);
 
     // decompress reference using Dispatcher
@@ -895,6 +894,7 @@ static inline bool ref_is_range_used (const Range *r)
 }
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
+// note: this is not called in make_reference - instead, ref_prepare_range_for_compress_make_ref is called
 static void ref_prepare_range_for_compress (VBlockP vb)
 {
     static uint32_t next_range_i=0;
@@ -905,24 +905,17 @@ static void ref_prepare_range_for_compress (VBlockP vb)
 
         Range *r = ENT (Range, ranges, next_range_i);
 
-        if (!ref_is_range_used (r)) continue;
-//        if ((!flag_make_reference && !r->is_set.num_of_bits) || !r->ref.num_of_bits) 
-//            continue; // unused range (note: in make_ref mode, is_set is always 0, and ref is 0 for unused ranges)
+        if (!ref_is_range_used (r)) continue; 
 
-        uint64_t num_set = flag_make_reference ? (r->ref.num_of_bits / 2) : bit_array_num_bits_set (&r->is_set);
+        uint64_t num_set = bit_array_num_bits_set (&r->is_set);
         if (!num_set) {
             r->is_set.num_of_bits = 0;
             continue; // nothing to with this range - perhaps copied and cleared in ref_copy_compressed_sections_from_reference_file
         }
 
-        // in make_reference, we have exactly one contig for each VB, one one RAEntry for that contig
-        // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
-        if (flag_make_reference) 
-            random_access_get_ra_info (vb->vblock_i, &r->chrom, &r->first_pos, &r->last_pos);
-
-        vb->range = r; // range to compress
+        vb->range              = r; // range to compress
         vb->range_num_set_bits = num_set;
-        vb->ready_to_dispatch = true;
+        vb->ready_to_dispatch  = true;
     }
 }
 
@@ -950,7 +943,7 @@ void ref_compress_ref (void)
     buf_alloc (evb, &ref_stored_ra, sizeof (RAEntry) * count_used_ranges, 1, "ref_stored_ra", 0);
     ref_stored_ra.len = 0; // re-initialize, in case we read the external reference into here
     
-    mutex_initialize (&ref_stored_ra_mutex, &ref_stored_ra_mutex_initialized);
+    mutex_initialize (ref_stored_ra_mutex);
 
     // compression of reference doesn't output % progress
     SAVE_FLAG (flag_quiet);
@@ -959,7 +952,7 @@ void ref_compress_ref (void)
     // proceed to compress all ranges that have still have data in them after copying
     uint32_t num_vbs_dispatched = 
         dispatcher_fan_out_task (NULL, "Writing reference...", false, 
-                                 ref_prepare_range_for_compress, 
+                                 flag_make_reference ? ref_prepare_range_for_compress_make_ref : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  ref_output_one_range);
 
@@ -1165,12 +1158,11 @@ int64_t ref_min_max_of_chrom (int32_t chrom, bool get_max)
 // Reference creation stuff
 //---------------------------------------
 
-static pthread_mutex_t make_ref_mutex;
-
+MUTEX (make_ref_mutex);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
 
 // in make_ref, each VB gets it own range indexed by vb->vblock_i - so they can work on them in parallel without
-// worrying about byte overlap.
+// worrying about byte overlap. called from zip_dispatcher as zip_initialize
 void ref_make_ref_init (void)
 {
     ASSERT0 (flag_make_reference, "Expecting flag_make_reference=true");
@@ -1178,18 +1170,35 @@ void ref_make_ref_init (void)
     buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges", 0); // must be allocated by I/O thread as its evb
     buf_zero (&ranges);
 
-    pthread_mutex_init (&make_ref_mutex, NULL);
+    mutex_initialize (make_ref_mutex);
 }
 
+// called from fasta_make_ref_range, returns the range for this fasta VB. note that we have exactly one range per VB
+// as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag_make_reference)
 Range *ref_make_ref_get_range (uint32_t vblock_i)
 {
+    // access ranges.len under the protection of the mutex
     mutex_lock (make_ref_mutex);
     ranges.len = MAX (ranges.len, (uint64_t)vblock_i + 1); // note that this function might be called out order (called from FASTA ZIP compute thread)
+    ASSERT (ranges.len <= MAKE_REF_NUM_RANGES, "Error in ref_make_ref_get_range: reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     mutex_unlock (make_ref_mutex);
 
-    ASSERT (ranges.len <= MAKE_REF_NUM_RANGES, "Error in ref_make_ref_get_range: reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
-
     return ENT (Range, ranges, vblock_i);
+}
+
+// compress the reference - one section at the time, using Dispatcher to do them in parallel (make_ref version)
+static void ref_prepare_range_for_compress_make_ref (VBlockP vb)
+{
+    if (vb->vblock_i < ranges.len) return; // we're done
+
+    Range *r = ENT (Range, ranges, vb->vblock_i);
+
+    // we have exactly one contig for each VB, one one RAEntry for that contig
+    // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
+    random_access_get_ra_info (vb->vblock_i, &r->chrom, &r->first_pos, &r->last_pos);
+    vb->range              = r; // range to compress
+    vb->range_num_set_bits = r->ref.num_of_bits / 2;
+    vb->ready_to_dispatch  = true;
 }
 
 //---------------------------------------
