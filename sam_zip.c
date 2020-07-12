@@ -181,7 +181,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     Context *nonref_ctx = &vb->contexts[SAM_SEQNOREF];
 
     if (!recursion_level)
-        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
+        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-stats - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
 
     ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
 

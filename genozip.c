@@ -69,10 +69,10 @@ uint64_t flag_stdin_size = 0;
 char *flag_grep = NULL;
 char *flag_show_is_set = NULL;
 
-DictId dict_id_show_one_b250 = { 0 },  // argument of --show-b250-one
-       dict_id_show_one_dict = { 0 },  // argument of --show-dict-one
-       dict_id_dump_one_b250 = { 0 };  // argument of --dump-b250-one
-
+DictId dict_id_show_one_b250  = DICT_ID_NONE,  // argument of --show-b250-one
+       dict_id_show_one_dict  = DICT_ID_NONE,  // argument of --show-dict-one
+       dict_id_dump_one_b250  = DICT_ID_NONE,  // argument of --dump-b250-one
+       dict_id_dump_one_local = DICT_ID_NONE;  // argument of --dump-local-one
 static char *threads_str  = NULL;
 
 static void print_call_stack (void) 
@@ -567,12 +567,14 @@ int main (int argc, char **argv)
         #define _s6 {"show-b250-one", required_argument, 0, '2'                    }
         #define _s7 {"dump-one-b250", required_argument, 0, '5'                    }
         #define _s8 {"dump-b250-one", required_argument, 0, '5'                    }
+        #define _S7 {"dump-one-local",required_argument, 0, '6'                    }
+        #define _S8 {"dump-local-one",required_argument, 0, '6'                    }
         #define _sa {"show-alleles",  no_argument,       &flag_show_alleles,     1 }
         #define _st {"show-time",     no_argument,       &flag_show_time   ,     1 } 
         #define _sm {"show-memory",   no_argument,       &flag_show_memory ,     1 } 
         #define _sh {"show-headers",  no_argument,       &flag_show_headers,     1 } 
         #define _si {"show-index",    no_argument,       &flag_show_index  ,     1 } 
-        #define _Si {"show-ref-index", no_argument,      &flag_show_ref_index,   1 } 
+        #define _Si {"show-ref-index",no_argument,       &flag_show_ref_index,   1 } 
         #define _sr {"show-gheader",  no_argument,       &flag_show_gheader,     1 }  
         #define _sT {"show-threads",  no_argument,       &flag_show_threads,     1 }  
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks,     1 }  
@@ -586,10 +588,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _sa, _st, _sm, _sh, _si, _Si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _Si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                _st, _sm, _sh, _si, _Si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                         _st, _sm,                                  _dm,                                                                                                            _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                   _st, _sm,                                  _dm,                                                                                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -641,9 +643,10 @@ int main (int argc, char **argv)
             case 'o' : out_filename     = optarg   ; break;
             case 'g' : flag_grep        = optarg   ; break;
             case '~' : flag_show_is_set = optarg   ; break;
-            case '2' : dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
-            case '5' : dict_id_dump_one_b250 = dict_id_make (optarg, strlen (optarg)); break;
-            case '3' : dict_id_show_one_dict = dict_id_make (optarg, strlen (optarg)); break;
+            case '2' : dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
+            case '5' : dict_id_dump_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
+            case '6' : dict_id_dump_one_local = dict_id_make (optarg, strlen (optarg)); break;
+            case '3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
                        break;
@@ -732,7 +735,7 @@ int main (int argc, char **argv)
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
-        dict_id_show_one_b250.num || dict_id_show_one_dict.num || dict_id_dump_one_b250.num || 
+        dict_id_show_one_b250.num || dict_id_show_one_dict.num || dict_id_dump_one_b250.num || dict_id_dump_one_local.num || 
         flag_show_alleles || flag_show_vblocks || (flag_show_index && command==PIZ))
         flag_quiet=true; // don't show progress
 
@@ -773,7 +776,7 @@ int main (int argc, char **argv)
      
     flag_bind = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
-    ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-sections can only work on one file at time", global_cmd);
+    ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-stats can only work on one file at time", global_cmd);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {

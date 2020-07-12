@@ -53,8 +53,8 @@ typedef struct DataTypeProperties {
     void (*cleanup_memory)(VBlockP);
 
     // misc properties and functions
-    const char *show_sections_line_name; // the header displayed in --show-sections
-    const char *stat_dict_types[3]; // the dictionary type displayed in --show-sections
+    const char *show_stats_line_name; // the header displayed in --show-stats
+    const char *stat_dict_types[3]; // the dictionary type displayed in --show-stats
 } DataTypeProperties;
 
 #define usz(type) ((unsigned)sizeof(type))

@@ -137,5 +137,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 6.0.0
 - Added compress against reference for SAM and VCF - new options --reference and --REFERENCE
+- Added new data type for reference files - and an option for creating a reference file from a FASTA - --make-reference
 - Added better compression for FORMAT/PS in VCF
+- Added dev opens --dump-one-local, --show-ref-index
 - Removed backward compatability with versions v1 and v5. Use genozip version 5 to decompress files of all previous versions.

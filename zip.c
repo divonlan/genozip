@@ -92,11 +92,20 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
             (vb->data_type != DT_VCF || !dict_id_is_vcf_format_sf (ctx->dict_id))) { // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
             
             zip_generate_b250_section (vb, ctx);
+
+            if (dict_id_printable (ctx->dict_id).num == dict_id_dump_one_b250.num) 
+                fwrite (ctx->b250.data, 1, ctx->b250.len, stdout);
+
             zfile_compress_b250_data (vb, ctx, COMP_BZ2);
         }
 
-        if (ctx->local.len || ctx->ltype == CTX_LT_SEQ_BITMAP) // bitmaps are always written, even if empty
+        if (ctx->local.len || ctx->ltype == CTX_LT_SEQ_BITMAP) { // bitmaps are always written, even if empty
+
+            if (dict_id_printable (ctx->dict_id).num == dict_id_dump_one_local.num) 
+                fwrite (ctx->local.data, 1, ctx->local.len * ctx_lt_sizeof_one[ctx->ltype], stdout);
+
             zfile_compress_local_data (vb, ctx);
+        }
     }
 }
 
@@ -164,9 +173,6 @@ void zip_generate_b250_section (VBlock *vb, Context *ctx)
         fprintf (stderr, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
-
-    if (dict_id_printable (ctx->dict_id).num == dict_id_dump_one_b250.num) 
-        fwrite (ctx->b250.data, 1, ctx->b250.len, stdout);
 }
 
 static void zip_update_txt_counters (VBlock *vb, bool update_txt_file)
@@ -194,7 +200,7 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
         zip_update_txt_counters (vb, update_txt_file);
 
     // this function holds the mutex and hence has a non-trival performance penalty. we call
-    // it only if the user specifically requested --show-sections
+    // it only if the user specifically requested --show-stats
     if (flag_show_sections) mtf_update_stats (vb);
 
     if (flag_show_headers && buf_is_allocated (&vb->show_headers_buf))

@@ -37,7 +37,7 @@ extern BufferP dict_id_create_aliases_buf (void);
 extern void dict_id_read_aliases (void) ;
 
 extern DictId dict_id_show_one_b250, dict_id_show_one_dict; // arguments of --show-b250-one and --show-dict-one (defined in genozip.c)
-extern DictId dict_id_dump_one_b250;                        // arguments of --dump-b250-one (defined in genozip.c)
+extern DictId dict_id_dump_one_b250, dict_id_dump_one_local;// arguments of --dump-b250-one and --dump-local-one (defined in genozip.c)
 
 extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 

@@ -146,7 +146,7 @@ static void stats_show_file_metadata (void)
         fprintf (stderr, "Individuals: %u   ", global_vcf_num_samples);
 
     fprintf (stderr, "%s: %s   Dictionaries: %u   Vblocks: %u   Sections: %u\n", 
-                DTPZ (show_sections_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, 
+                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, 
                 z_file->num_vbs, (uint32_t)z_file->section_list_buf.len);
 }
 
