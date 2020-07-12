@@ -457,7 +457,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         if (last_vb_i && sl_ent->vblock_i > last_vb_i) break;
 
         // cases where we can skip reading these dictionaries because we don't be using them
-        bool is_chrom = (sl_ent->dict_id.num == dict_id_fields[DTFZ(chrom)]);
+        bool is_chrom = (sl_ent->dict_id.num == dict_id_fields[CHROM]);
         if (read_chrom == DICTREAD_CHROM_ONLY  && !is_chrom) continue;
         if (read_chrom == DICTREAD_EXCEPT_CHROM && is_chrom) continue;
 
@@ -580,7 +580,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     // case: we are reading a file expected to be the reference file itself
     if (flag_reading_reference) {
-        ASSERT (header->h.flags & SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
+        ASSERT (header->data_type == DT_REF, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
                 ref_filename);
 
         ref_set_md5 (header->md5_hash_bound); 
@@ -589,7 +589,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // case: we are reading a file that is not expected to be a reference file
     else {
         // case: we are attempting to decompress a reference file - this is not supported
-        if ((header->h.flags & SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE) &&
+        if (header->data_type == DT_REF &&
             !((flag_show_index || flag_show_reference || flag_show_ref_index) && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
             WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
             data_type = DT_NONE;
@@ -651,9 +651,6 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.num_sections            = BGEN32 (num_sections); 
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
     
-    if (flag_make_reference && z_file->data_type == DT_FASTA) 
-        header.h.flags = SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE;
-
     if (flag_reference == REF_EXTERNAL) {   
         strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
         header.ref_file_md5 = ref_md5;

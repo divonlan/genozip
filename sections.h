@@ -77,7 +77,6 @@ typedef struct SectionHeader {
     uint8_t  flags               : 4; // section-type specific flags SEC_FLAG_*
 } SectionHeader; 
 
-#define SEC_FLAG_GENOZIP_HEADER_IS_REFERENCE 0x01
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;

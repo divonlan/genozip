@@ -40,7 +40,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
 }
 
 // called during FASTA ZIP compute thread, from zip_compress_one_vb (as "compress")- converts the vb sequence into a range
-static void fasta_make_ref_range (VBlockP vb)
+void fasta_make_ref_range (VBlockP vb)
 {
     Range *r = ref_make_ref_get_range (vb->vblock_i);
     uint64_t seq_len = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ)->local.len;
@@ -61,13 +61,6 @@ static void fasta_make_ref_range (VBlockP vb)
     }
 
     ASSERT (seq_len * 2 == bit_i, "Error in fasta_make_ref_range: Expecting SEQ.local.len (x2 = %"PRId64") == bit_i (%"PRId64")", seq_len * 2, bit_i);
-}
-
-void fasta_zip_callback (VBlockP vb_)
-{
-    // reference fasta - make the SEC_REFERENCE sections
-    if (flag_make_reference) 
-        fasta_make_ref_range (vb_);
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format

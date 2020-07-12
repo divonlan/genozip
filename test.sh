@@ -5,7 +5,8 @@ output=test-output
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
 
-ref=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.genozip
+ref37=data/Homo_sapiens.GRCh37.dna.toplevel.ref.genozip
+ref38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
 # -----------------
 # platform settings
@@ -105,7 +106,7 @@ for file in ${files[@]}; do
         cmp_2_files $file $output
     fi
 
-    test_header "$file - non-concatenated multiple files"
+    test_header "$file - non-bound multiple files"
     file1=copy1.$file
     file2=copy2.$file
     cp $file $file1
@@ -114,7 +115,7 @@ for file in ${files[@]}; do
     ./genounzip ${file1}.genozip ${file2}.genozip -t || exit 1
     rm $file1 $file2 ${file1}.genozip ${file2}.genozip
 
-    test_header "$file - concat & split"
+    test_header "$file - bind & unbind"
     file1=copy1.$file
     file2=copy2.$file
     cp $file $file1
@@ -194,21 +195,37 @@ test_header "Testing subsets (~3 VBs) or real world files"
 rm -f td/*.genozip
 ./genozip -ft td/* || exit 1
 
-test_header "Testing multiple SAM with --reference"
-echo "Note: '$ref' needs to be up to date with the latest genozip format"
-rm -f td/*.genozip
-./genozip -f --md5 --reference $ref td/test.transfly-unsorted.sam td/test.transfly-sorted.sam || exit 1
-./genounzip -t -e $ref td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
+test_header "Testing --make-reference"
+file=test-file.ref.fa 
+./genozip --make-reference $file -o copy.${file}.ref.genozip || exit 1
+rm -f copy.${file}.ref.genozip
 
-test_header "Testing multiple SAM with --REFERENCE" # we don't use transfly-unsorted because the stored reference is ~ the entire reference - takes a long time to compress
-file1=copy1.test-file.sam
-file2=copy2.test-file.sam
-cp td/test.transfly-sorted.sam $file1
-cp td/test.transfly-sorted.sam $file2
-./genozip -f --md5 --REFERENCE $ref $file1 $file2 || exit 1
-./genounzip ${file1}.genozip ${file2}.genozip -t || exit 1
-rm $file1 $file2 ${file1}.genozip ${file2}.genozip
+test_header "Testing multiple SAM with --reference"
+echo "Note: '$ref38' needs to be up to date with the latest genozip format"
+rm -f td/*.genozip
+./genozip -f --md5 --reference $ref38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam || exit 1
+./genounzip -t -e $ref38 td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
+
+test_header "Testing multiple bound SAM with --REFERENCE" 
+rm -f td/*.genozip
+./genozip -f --md5 --REFERENCE $ref38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam -o ${output}.genozip || exit 1
+./genounzip -t ${output}.genozip || exit 1
+
+test_header "Testing multiple bound VCF with --reference (GRCh37), and unbind"
+rm -f td/*.genozip
+file1=copy1.test-file.vcf
+file2=copy2.test-file.vcf
+cp td/test.GFX0241869.filtered.snp.vcf $file1
+cp td/test.GFX0241869.filtered.snp.vcf $file2
+./genozip -f --md5 --reference $ref37 $file1 $file2 --output ${output}.genozip || exit 1
+./genounzip -t -e $ref37 --unbind ${output}.genozip || exit 1
+rm -f $file1 $file2 ${output}.genozip
+
+test_header "Testing multiple VCF with --REFERENCE (GRCh37)" 
+rm -f td/*.genozip
+./genozip -f --md5 --REFERENCE $ref37 td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf td/test.GFX0241869.filtered.snp.vcf || exit 1
+./genounzip -t td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip td/test.GFX0241869.filtered.snp.vcf.genozip || exit 1
 
 printf "\nALL GOOD!\n"
 
-rm -f $output ${output}.genozip
+rm -f $output ${output}.genozip td/*.genozip

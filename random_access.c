@@ -104,7 +104,7 @@ void random_access_merge_in_vb (VBlock *vb)
 
     ARRAY (RAEntry, src_ra, vb->ra_buf);
 
-    Context *chrom_ctx = &vb->contexts[DTF(chrom)];
+    Context *chrom_ctx = &vb->contexts[CHROM];
     ASSERT0 (chrom_ctx, "Error in random_access_merge_in_vb: cannot find chrom_ctx");
 
     for (unsigned i=0; i < vb->ra_buf.len; i++) {
@@ -266,7 +266,7 @@ void random_access_pos_of_chrom (uint32_t chrom_word_index, int64_t *min_pos, in
 
     // first time here for this z_file - we initialize ra_min_max_by_chrom
     if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
-        uint64_t num_chroms = z_file->contexts[DTFZ(chrom)].word_list.len;
+        uint64_t num_chroms = z_file->contexts[CHROM].word_list.len;
 
         buf_alloc (evb, &z_file->ra_min_max_by_chrom, num_chroms * sizeof (MinMax), 1, "z_file->ra_min_max_by_chrom", 0);
         buf_zero (&z_file->ra_min_max_by_chrom); // safety
@@ -297,7 +297,7 @@ void random_access_pos_of_chrom (uint32_t chrom_word_index, int64_t *min_pos, in
 // sets vb->{chrom_name,chrom_name_len,chrom_node_index} and returns start_pos
 void random_access_get_first_chrom_of_vb (VBlockP vb, int64_t *first_pos, int64_t *last_pos)
 {
-    Context *ctx = &z_file->contexts[DTFZ(chrom)];
+    Context *ctx = &z_file->contexts[CHROM];
     ASSERT (ctx->word_list.len, "Error in random_access_get_first_chrom_of_vb: word_list of %s is empty", ctx->name);
 
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb->vblock_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
@@ -339,7 +339,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
     
     ARRAY (const RAEntry, ra, *ra_buf);
 
-    Context *ctx = &z_file->contexts[DTFZ(chrom)];
+    Context *ctx = &z_file->contexts[CHROM];
 
     for (unsigned i=0; i < ra_buf->len; i++) {
         

@@ -815,7 +815,7 @@ int main (int argc, char **argv)
             default   : ABORT ("%s: unrecognized command %c", global_cmd, command);
         }
     }
-            
+
     // if this is "list", finalize
     if (command == LIST) main_genols (NULL, true, NULL, false);
 

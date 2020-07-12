@@ -370,7 +370,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
             if (!processed_vb) continue; // no running compute threads 
 
             // update z_data in memory (its not written to disk yet)
-            DTPZ(update_header)(processed_vb, txt_line_i); 
+            (DTPZ(update_header) ? DTPZ(update_header) : zfile_update_compressed_vb_header)(processed_vb, txt_line_i); 
 
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;

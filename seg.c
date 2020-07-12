@@ -133,7 +133,7 @@ uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint8_t chrom_did_i = DTF(chrom);
+    uint8_t chrom_did_i = CHROM;
     uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, chrom_did_i, chrom_str_len+1);
 
     random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
@@ -729,9 +729,10 @@ void seg_all_data_lines (VBlock *vb)
         field_start = next_field;
 
         // if our estimate number of lines was too small, increase it
-        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) 
+        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) {
+buf_test_overflows(vb, "sssssss");            
             seg_more_lines (vb, sizeof_line);
-
+        }
         // collect stats at the approximate 1/3 or 2/3s marks of the file, to help hash_alloc_global create a hash
         // table. note: we do this for every vb, not just 1, because hash_alloc_global runs in the first
         // vb a new field/subfield is introduced
@@ -746,7 +747,7 @@ void seg_all_data_lines (VBlock *vb)
     }
 
     // if no line has special EOL, we can get rid of the EOL ctx
-    if (!does_any_line_have_13) {
+    if (!does_any_line_have_13 && DTF(eol) != -1) {
         Context *eol_ctx = &vb->contexts[DTF(eol)];
         buf_free (&eol_ctx->dict);
         buf_free (&eol_ctx->mtf);

@@ -178,6 +178,9 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
             vb_ctx->local_hash_prime = hash_next_size_up(500);
         break;
 
+    case DT_REF:
+        break;
+
     case DT_GFF3:
         if (vb_ctx->dict_id.num == dict_id_fields[GFF3_SEQID] ||
             vb_ctx->dict_id.num == dict_id_fields[GFF3_SOURCE] ||

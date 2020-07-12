@@ -366,7 +366,7 @@ void vcf_zip_generate_ht_gt_compress_vb_header (VBlockP vb_)
         vcf_zip_generate_phase_sections (vb);
 
     //unsigned variant_data_header_pos = vb->z_data.len;
-    vcf_zfile_compress_vb_header (vb_); // variant data header + ht index    
+    vcf_compress_vb_header (vb_); // variant data header + ht index    
 }
 
 // this function receives all lines of a vblock and processes them

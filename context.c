@@ -402,18 +402,18 @@ static void mtf_copy_reference_contig_to_chrom_ctx (void)
     ref_get_contigs (&ref_config_dict, &ref_contig_word_list);
 
     // Create chrom context, this is the first context so it will be did_i=0, hence the requirement that chrom is always the first field
-    ASSERT0 (DTFZ(chrom) == 0, "Error: DTFZ(chrom) must be 0");
+    ASSERT0 (CHROM == 0, "Error: CHROM must be 0");
     
     Context copy_from_ctx;
     memset (&copy_from_ctx, 0, sizeof (Context));
-    copy_from_ctx.dict_id = (DictId)dict_id_fields[DTFZ(chrom)];
+    copy_from_ctx.dict_id = (DictId)dict_id_fields[CHROM];
     copy_from_ctx.flags   = CTX_FL_NO_STONS; // needs b250 node_index for random access;
-    strcpy ((char*)copy_from_ctx.name, DTFZ(names)[DTFZ(chrom)]);
+    strcpy ((char*)copy_from_ctx.name, DTFZ(names)[CHROM]);
     
     mtf_add_new_zf_ctx (evb, &copy_from_ctx);
 
     // copy reference dict
-    Context *zf_ctx = &z_file->contexts[DTFZ(chrom)];
+    Context *zf_ctx = &z_file->contexts[CHROM];
     ARRAY (MtfWord, word_list, *ref_contig_word_list);
 
     buf_copy (evb, &zf_ctx->dict, ref_config_dict, 0,0,0, "z_file->contexts->dict", zf_ctx->did_i);

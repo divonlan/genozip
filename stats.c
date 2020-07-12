@@ -80,7 +80,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
         else if (section->section_type == SEC_TXT_HEADER && overhead_sec == OVERHEAD_SEC_TXT_HDR)
             *local_compressed_size += sec_size;
 
-        else if (section->section_type == SEC_RANDOM_ACCESS && overhead_sec == OVERHEAD_SEC_RA_INDEX)
+        else if ((section->section_type == SEC_RANDOM_ACCESS || section->section_type == SEC_REF_RANDOM_ACC) && overhead_sec == OVERHEAD_SEC_RA_INDEX)
             *local_compressed_size += sec_size;
         
         else if ((section->section_type == SEC_VCF_HT_DATA && dict_id.num == dict_id_fields[VCF_GT]) ||

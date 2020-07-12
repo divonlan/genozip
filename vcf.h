@@ -36,8 +36,8 @@ extern void vcf_piz_uncompress_vb(); // no parameter - implicit casting of VBloc
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 
 // ZFILE stuff
-extern void vcf_zfile_compress_vb_header (VBlockP vb);
-extern void vcf_zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
+extern void vcf_compress_vb_header (VBlockP vb);
+extern void vcf_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 
 // VCF Header stuff
 extern void vcf_header_initialize (void);

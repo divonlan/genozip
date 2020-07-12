@@ -240,7 +240,7 @@ void txtfile_read_vblock (VBlock *vb)
         ARRAY (char, txt, vb->txt_data);
         for (unsigned i=0; i < vb->txt_data.len; i++) {
             // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
-            ASSERT (txt[i] != ';', "Error: reference file %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
+            ASSERT (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
         
             // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
             // everything following to the next VB
@@ -351,7 +351,8 @@ void txtfile_write_one_vblock (VBlockP vb)
             (int32_t)vb->txt_data.len - (int32_t)vb->vb_data_size);
 
     // if testing, compare MD5 file up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-    if (flag_md5 && !md5_is_zero (vb->md5_hash_so_far)) {
+    // note: we cannot test this unbind mode, because the MD5s are commulative since the beginning of the bound file
+    if (flag_md5 && !flag_unbind && !md5_is_zero (vb->md5_hash_so_far)) {
         Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
         ASSERTW (md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far), 
                 "MD5 of reconstructed vblock=%u (%s) differs from original file (%s). To see bad vblock:\n"

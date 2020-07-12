@@ -212,7 +212,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     int64_t ref_sec_len       = ref_sec_last_pos - ref_sec_first_pos + 1;
     int64_t compacted_last_pos=0, compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
 
-    Context *ctx = &z_file->contexts[DTFZ(chrom)];
+    Context *ctx = &z_file->contexts[CHROM];
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_uncompress_one_range: chrom=%d out of range - ctx->word_list.len=%u",
             chrom, (uint32_t)ctx->word_list.len);
 
@@ -697,7 +697,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     z_file->disk_so_far += ref_seq_section.len;   // length of GENOZIP data writen to disk
 
     if (flag_show_reference) {
-        Context *ctx = &z_file->contexts[DTFZ(chrom)];
+        Context *ctx = &z_file->contexts[CHROM];
         MtfNode *node = ENT (MtfNode, ctx->mtf, ra->chrom_index);
         fprintf (stderr, "Copying reference    %.20s %"PRId64" - %"PRId64"\n", ENT (char, ctx->dict, node->char_index), ra->min_pos, ra->max_pos);
     }
@@ -1007,6 +1007,7 @@ void ref_load_external_reference (void)
         
     // save and reset some globals that after pizzing FASTA
     int save_flag_test         = flag_test        ; flag_test        = 0;
+    int save_flag_unbind       = flag_unbind      ; flag_unbind        = 0;
     int save_flag_md5          = flag_md5         ; flag_md5         = 0;
     int save_flag_show_time    = flag_show_time   ; flag_show_time   = 0;
     int save_flag_show_memory  = flag_show_memory ; flag_show_memory = 0;
@@ -1023,6 +1024,7 @@ void ref_load_external_reference (void)
     flag_reading_reference = false;
     command          = save_command;
     flag_test        = save_flag_test;
+    flag_unbind      = save_flag_unbind;
     flag_md5         = save_flag_md5;
     flag_show_time   = save_flag_show_time;
     flag_show_memory = save_flag_show_memory;
@@ -1043,7 +1045,7 @@ void ref_load_external_reference (void)
 // note: ranges allocation must be called by the I/O thread as it adds a buffer to evb buf_list
 void ref_initialize_ranges (bool one_range_per_contig)
 {
-    ranges.len = one_range_per_contig ? (flag_reference == REF_STORED ? z_file->contexts[DTFZ(chrom)].word_list.len : contig_words.len)
+    ranges.len = one_range_per_contig ? (flag_reference == REF_STORED ? z_file->contexts[CHROM].word_list.len : contig_words.len)
                                       : REF_NUM_RANGES;
     buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", 0); 
     buf_zero (&ranges);
@@ -1061,7 +1063,7 @@ void ref_initialize_ranges (bool one_range_per_contig)
             random_access_pos_of_chrom (i, &r->first_pos, &r->last_pos); // in reference fasta.genozip if REF_EXTERNAL, or in file itself is REF_STORED
             
             if (flag_reference == REF_STORED) {
-                Context *ctx = &z_file->contexts[DTFZ(chrom)];
+                Context *ctx = &z_file->contexts[CHROM];
                 mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
             }
             else
@@ -1096,7 +1098,7 @@ static int ref_sort_words_alphabetically (const void *a, const void *b)
 static void ref_copy_chrom_data_from_z_file (void)
 {
     // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
-    Context *chrom_ctx = &z_file->contexts[DTFZ(chrom)];
+    Context *chrom_ctx = &z_file->contexts[CHROM];
 
     ASSERT (flag_reference == REF_INTERNAL || (buf_is_allocated (&chrom_ctx->dict) && buf_is_allocated (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);

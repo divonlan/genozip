@@ -339,7 +339,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         piz_reconstruct_one_snip (vb, ctx, snip, snip_len);        
 
         // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
-        if (did_i == DTF(chrom)) { // test original did_i, not the alias target
+        if (did_i == CHROM) { // test original did_i, not the alias target
             vb->chrom_node_index = word_index;
             vb->chrom_name       = snip; // used for reconstruction from external reference
             vb->chrom_name_len   = snip_len;
@@ -515,7 +515,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
             // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-            regions_make_chregs (dt_fields[data_type].chrom);
+            regions_make_chregs();
 
             // if the regions are negative, transform them to the positive complement instead
             regions_transform_negative_to_positive_complement();

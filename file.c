@@ -44,7 +44,7 @@ static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 // get data type by file type
 static DataType file_get_data_type (FileType ft, bool is_input)
 {
-    for (DataType dt=0; dt < NUM_DATATYPES; dt++) 
+    for (DataType dt=!flag_make_reference; dt < NUM_DATATYPES; dt++) 
         for (unsigned i=0; (is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]); i++)
             if ((is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]) == ft) return dt;
 
@@ -209,7 +209,7 @@ bool file_open_txt (File *file)
             }
         }
 
-        ASSINP0 (!flag_make_reference || file->data_type == DT_FASTA, "Error: --make-reference can only be used with FASTA files");
+        ASSINP0 (!flag_make_reference || file->data_type == DT_REF, "Error: --make-reference can only be used with FASTA files");
     }
     else { // WRITE - data_type is already set by file_open
 

@@ -12,7 +12,7 @@
 #include "sections.h"
 
 // called by ZIP compute thread - called from vcf_zip_compress_one_vb()
-void vcf_zfile_compress_vb_header (VBlock *vb_)
+void vcf_compress_vb_header (VBlock *vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
@@ -63,9 +63,9 @@ void vcf_zfile_compress_vb_header (VBlock *vb_)
 }
 
 // ZIP only: called by the I/O thread in the sequential order of VBs: updating of the already compressed
-// variant data section (compressed by the compute thread in vcf_zfile_compress_vb_header) just before writing it to disk
+// variant data section (compressed by the compute thread in vcf_compress_vb_header) just before writing it to disk
 // note: this updates the z_data in memory (not on disk)
-void vcf_zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
+void vcf_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
 {
     SectionHeaderVbHeaderVCF *vb_header = (SectionHeaderVbHeaderVCF *)vb->z_data.data;
     vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);

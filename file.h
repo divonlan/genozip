@@ -19,6 +19,9 @@
 #include "aes.h"
 #include "compressor.h"
 
+// REFERENCE file - only appears in .genozip format
+#define REF_GENOZIP_   ".ref" GENOZIP_EXT
+
 // VCF file variations
 #define VCF_           ".vcf"
 #define VCF_GZ_        ".vcf.gz"
@@ -105,6 +108,7 @@
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
 
 typedef enum      { UNKNOWN_FILE_TYPE, 
+                    REF_GENOZIP,
                     VCF, VCF_GZ, VCF_BGZ, VCF_BZ2, VCF_XZ, BCF, BCF_GZ, BCF_BGZ, VCF_GENOZIP,  
                     SAM, SAM_GZ, SAM_BGZ, SAM_BZ2, SAM_XZ, BAM,                  SAM_GENOZIP,
                     FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
@@ -121,6 +125,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
+                   REF_GENOZIP_, \
                    VCF_, VCF_GZ_, VCF_BGZ_, VCF_BZ2_, VCF_XZ_, BCF_, BCF_GZ_, BCF_BGZ_, VCF_GENOZIP_, \
                    SAM_, SAM_GZ_, SAM_BGZ_, SAM_BZ2_, SAM_XZ_, BAM_,                    SAM_GENOZIP_, \
                    FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_, \
@@ -139,47 +144,51 @@ extern const char *file_exts[];
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file
-#define TXT_IN_FT_BY_DT  { { { VCF,       COMP_NONE, VCF_GENOZIP   }, { VCF_GZ,   COMP_GZ,  VCF_GENOZIP   }, { VCF_BGZ, COMP_GZ,  VCF_GENOZIP },\
-                             { VCF_BZ2,   COMP_BZ2, VCF_GENOZIP   }, { VCF_XZ,   COMP_XZ,  VCF_GENOZIP   },\
-                             { BCF,       COMP_BCF, VCF_GENOZIP   }, { BCF_GZ,   COMP_BCF, VCF_GENOZIP   }, { BCF_BGZ, COMP_BCF, VCF_GENOZIP }, {0, 0, 0} },\
+#define TXT_IN_FT_BY_DT  { { { FASTA,     COMP_NONE, REF_GENOZIP   }, { FASTA_GZ, COMP_GZ,  REF_GENOZIP   },\
+                             { FASTA_BZ2, COMP_BZ2,  REF_GENOZIP   }, { FASTA_XZ, COMP_XZ,  REF_GENOZIP   },\
+                             { FA,        COMP_NONE, REF_GENOZIP   }, { FA_GZ,    COMP_GZ,  REF_GENOZIP   },\
+                             { FA_BZ2,    COMP_BZ2,  REF_GENOZIP   }, { FA_XZ,    COMP_XZ,  REF_GENOZIP   }, { 0, 0, 0 }, }, \
+                           { { VCF,       COMP_NONE, VCF_GENOZIP   }, { VCF_GZ,   COMP_GZ,  VCF_GENOZIP   }, { VCF_BGZ, COMP_GZ,  VCF_GENOZIP },\
+                             { VCF_BZ2,   COMP_BZ2,  VCF_GENOZIP   }, { VCF_XZ,   COMP_XZ,  VCF_GENOZIP   },\
+                             { BCF,       COMP_BCF,  VCF_GENOZIP   }, { BCF_GZ,   COMP_BCF, VCF_GENOZIP   }, { BCF_BGZ, COMP_BCF, VCF_GENOZIP }, {0, 0, 0} },\
                            { { SAM,       COMP_NONE, SAM_GENOZIP   }, { SAM_GZ,   COMP_GZ,  SAM_GENOZIP   }, { SAM_BGZ, COMP_GZ,  SAM_GENOZIP },\
-                             { SAM_BZ2,   COMP_BZ2, SAM_GENOZIP   }, { SAM_XZ,   COMP_XZ,  SAM_GENOZIP   },\
-                             { BAM,       COMP_BAM, SAM_GENOZIP   },                                        { 0, 0, 0 }, },\
+                             { SAM_BZ2,   COMP_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   COMP_XZ,  SAM_GENOZIP   },\
+                             { BAM,       COMP_BAM,  SAM_GENOZIP   },                                        { 0, 0, 0 }, },\
                            { { FASTQ,     COMP_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, COMP_GZ,  FASTQ_GENOZIP },\
-                             { FASTQ_BZ2, COMP_BZ2, FASTQ_GENOZIP }, { FASTQ_XZ, COMP_XZ,  FASTQ_GENOZIP },\
+                             { FASTQ_BZ2, COMP_BZ2,  FASTQ_GENOZIP }, { FASTQ_XZ, COMP_XZ,  FASTQ_GENOZIP },\
                              { FQ,        COMP_NONE, FQ_GENOZIP    }, { FQ_GZ,    COMP_GZ,  FQ_GENOZIP    },\
-                             { FQ_BZ2,    COMP_BZ2, FQ_GENOZIP    }, { FQ_XZ,    COMP_XZ,  FQ_GENOZIP    }, { 0, 0, 0 } },\
+                             { FQ_BZ2,    COMP_BZ2,  FQ_GENOZIP    }, { FQ_XZ,    COMP_XZ,  FQ_GENOZIP    }, { 0, 0, 0 } },\
                            { { FASTA,     COMP_NONE, FASTA_GENOZIP }, { FASTA_GZ, COMP_GZ,  FASTA_GENOZIP },\
-                             { FASTA_BZ2, COMP_BZ2, FASTA_GENOZIP }, { FASTA_XZ, COMP_XZ,  FASTA_GENOZIP },\
+                             { FASTA_BZ2, COMP_BZ2,  FASTA_GENOZIP }, { FASTA_XZ, COMP_XZ,  FASTA_GENOZIP },\
                              { FAA,       COMP_NONE, FAA_GENOZIP   }, { FAA_GZ,   COMP_GZ,  FAA_GENOZIP   },\
-                             { FAA_BZ2,   COMP_BZ2, FAA_GENOZIP   }, { FAA_XZ,   COMP_XZ,  FAA_GENOZIP   },\
+                             { FAA_BZ2,   COMP_BZ2,  FAA_GENOZIP   }, { FAA_XZ,   COMP_XZ,  FAA_GENOZIP   },\
                              { FFN,       COMP_NONE, FFN_GENOZIP   }, { FFN_GZ,   COMP_GZ,  FFN_GENOZIP   },\
-                             { FFN_BZ2,   COMP_BZ2, FFN_GENOZIP   }, { FFN_XZ,   COMP_XZ,  FFN_GENOZIP   },\
+                             { FFN_BZ2,   COMP_BZ2,  FFN_GENOZIP   }, { FFN_XZ,   COMP_XZ,  FFN_GENOZIP   },\
                              { FNN,       COMP_NONE, FNN_GENOZIP   }, { FNN_GZ,   COMP_GZ,  FNN_GENOZIP   },\
-                             { FNN_BZ2,   COMP_BZ2, FNN_GENOZIP   }, { FNN_XZ,   COMP_XZ,  FNN_GENOZIP   },\
+                             { FNN_BZ2,   COMP_BZ2,  FNN_GENOZIP   }, { FNN_XZ,   COMP_XZ,  FNN_GENOZIP   },\
                              { FNA,       COMP_NONE, FNA_GENOZIP   }, { FNA_GZ,   COMP_GZ,  FNA_GENOZIP   },\
-                             { FNA_BZ2,   COMP_BZ2, FNA_GENOZIP   }, { FNA_XZ,   COMP_XZ,  FNA_GENOZIP   },\
+                             { FNA_BZ2,   COMP_BZ2,  FNA_GENOZIP   }, { FNA_XZ,   COMP_XZ,  FNA_GENOZIP   },\
                              { FA,        COMP_NONE, FA_GENOZIP    }, { FA_GZ,    COMP_GZ,  FA_GENOZIP    },\
-                             { FA_BZ2,    COMP_BZ2, FA_GENOZIP    }, { FA_XZ,    COMP_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
+                             { FA_BZ2,    COMP_BZ2,  FA_GENOZIP    }, { FA_XZ,    COMP_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
                            {/* { GFF3,      COMP_NONE, GFF3_GENOZIP  }, { GFF3_GZ,  COMP_GZ,  GFF3_GENOZIP  },\
-                             { GFF3_BZ2,  COMP_BZ2, GFF3_GENOZIP  }, { GFF3_XZ,  COMP_XZ,  GFF3_GENOZIP  },*/ \
+                             { GFF3_BZ2,  COMP_BZ2,  GFF3_GENOZIP  }, { GFF3_XZ,  COMP_XZ,  GFF3_GENOZIP  },*/ \
                              { GVF,       COMP_NONE, GVF_GENOZIP   }, { GVF_GZ,   COMP_GZ,  GVF_GENOZIP   },\
-                             { GVF_BZ2,   COMP_BZ2, GVF_GENOZIP   }, { GVF_XZ,   COMP_XZ,  GVF_GENOZIP   }, { 0, 0, 0 } },\
+                             { GVF_BZ2,   COMP_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   COMP_XZ,  GVF_GENOZIP   }, { 0, 0, 0 } },\
                            { { ME23,      COMP_NONE, ME23_GENOZIP  }, { ME23_ZIP, COMP_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
 
 // Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz
-#define TXT_OUT_FT_BY_DT { { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   \
+#define TXT_OUT_FT_BY_DT { { }, /* a reference file cannot be uncompressed */  \
+                           { VCF,  VCF_GZ,  VCF_BGZ,  BCF, 0 },   \
                            { SAM,  SAM_GZ,  BAM, 0 },   \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },     \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, 0 },\
                            { GVF, GVF_GZ, /*GFF3, GFF3_GZ,*/ 0 }, \
                            { ME23, ME23_ZIP, 0 } }                        
 
-// txt file types and their corresponding genozip file types for each data type
-// first entry of each data type MUST be the default genozip file
-#define Z_FT_BY_DT { { VCF_GENOZIP, 0  },               \
+#define Z_FT_BY_DT { { REF_GENOZIP, 0  },               \
+                     { VCF_GENOZIP, 0  },               \
                      { SAM_GENOZIP, 0  },               \
                      { FASTQ_GENOZIP, FQ_GENOZIP, 0 },  \
                      { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, 0 }, \

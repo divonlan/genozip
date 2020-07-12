@@ -188,12 +188,12 @@ void regions_add (const char *region_str)
 // convert the list of regions as parsed from --regions, to an array of chregs - one for each chromosome.
 // 1. convert the chrom string to a chrom word index
 // 2. for "all chrom" regions - include them in all chregs
-void regions_make_chregs(unsigned chrom_did_i)
+void regions_make_chregs (void)
 {
     if (!flag_regions) return; // nothing to do
 
     ARRAY (Region, regions, regions_buf);
-    Context *chrom_ctx = &z_file->contexts[chrom_did_i];
+    Context *chrom_ctx = &z_file->contexts[CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
     chregs = calloc (num_chroms, sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
