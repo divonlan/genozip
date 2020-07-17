@@ -168,8 +168,8 @@ int64_t seg_pos_field (VBlock *vb,
     Context *snip_ctx = &vb->contexts[snip_did_i];
     Context *base_ctx = &vb->contexts[base_did_i];
 
-    snip_ctx->flags |= CTX_FL_LOCAL_LZMA  | CTX_FL_NO_STONS; 
-    base_ctx->flags |= CTX_FL_STORE_VALUE | CTX_FL_NO_STONS;
+    snip_ctx->flags |= CTX_FL_LOCAL_LZMA | CTX_FL_NO_STONS; 
+    base_ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
 
     int64_t this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
@@ -187,15 +187,15 @@ int64_t seg_pos_field (VBlock *vb,
         return 0; // invalid pos
     }
 
-    int64_t pos_delta = this_pos - base_ctx->last_value;
+    int64_t pos_delta = this_pos - base_ctx->last_value.i;
     
     // if we're self-delta'ing - we store the value
-    if (snip_ctx == base_ctx) base_ctx->last_value = this_pos; 
+    if (snip_ctx == base_ctx) base_ctx->last_value.i = this_pos; 
 
     // if the delta is too big, add this_pos (not delta) to local and put SNIP_LOOKUP in the b250
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
     // section in every VB just for a single entry in case of a nicely sorted file
-    if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value) {
+    if ((pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
         
         // store the value in store it in local - uint32
         buf_alloc (vb, &snip_ctx->local, MAX (snip_ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, snip_ctx->name, snip_ctx->did_i);
@@ -365,6 +365,9 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
         }
     }
 
+    // finalize special handling
+    seg_special_subfields (vb, DICT_ID_NONE, NULL, NULL, NULL);
+
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
     if (flag_optimize_sort && st.num_items > 1) 
@@ -378,13 +381,10 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     uint32_t total_names_len=0;
     for (unsigned i=0; i < st.num_items; i++) {
         // Set the Structured item and find (or create) a context for this name
-        StructuredItem *si = &st.items[i];
-        InfoItem *ii  = &info_items[i];
-        si->dict_id   = ii->dict_id;
-        si->seperator[0] = ';'; 
-        si->seperator[1] = 0; 
-        si->did_i     = DID_I_NONE; // this must be NONE, it is used only by PIZ
-
+        InfoItem *ii = &info_items[i];
+        st.items[i] = (StructuredItem){ .dict_id   = ii->dict_id,
+                                        .seperator = { ';', 0 },
+                                        .did_i     = DID_I_NONE }; // this must be NONE, it is used only by PIZ
         // add to the prefixes
         ASSSEG (prefixes_len + ii->len + 1 <= STRUCTURED_MAX_PREFIXES_LEN, info_str, 
                 "%s contains tag names that, combined (including the '='), exceed the maximum of %u characters", field_name, STRUCTURED_MAX_PREFIXES_LEN);
@@ -729,10 +729,9 @@ void seg_all_data_lines (VBlock *vb)
         field_start = next_field;
 
         // if our estimate number of lines was too small, increase it
-        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len) {
-buf_test_overflows(vb, "sssssss");            
+        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len)         
             seg_more_lines (vb, sizeof_line);
-        }
+        
         // collect stats at the approximate 1/3 or 2/3s marks of the file, to help hash_alloc_global create a hash
         // table. note: we do this for every vb, not just 1, because hash_alloc_global runs in the first
         // vb a new field/subfield is introduced
@@ -756,6 +755,8 @@ buf_test_overflows(vb, "sssssss");
     }
 
     if (!flag_make_reference) seg_verify_file_size (vb);
+
+    if (DTP(seg_finalize)) DTP(seg_finalize) (vb); // data-type specific finalization
 
     COPY_TIMER(vb->profile.seg_all_data_lines);
 }

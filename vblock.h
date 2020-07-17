@@ -59,6 +59,9 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
     uint32_t range_num_set_bits;  /* ZIP: I/O thread telling compute thread to how many bits are set in range.is_set */ \
     \
+    uint32_t refhash_layer;     /* create_ref && reading external reference: compressing/decompressing refresh */ \
+    uint32_t refhash_start_in_layer;     /* create_ref && reading external reference: compressing/decompressing refresh */ \
+    \
     ProfilerRec profile; \
     \
     /* random access, chrom, pos */ \

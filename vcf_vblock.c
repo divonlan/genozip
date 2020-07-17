@@ -19,6 +19,9 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->has_genotype_data = vb->has_haplotype_data = false;
     vb->phase_type = PHASE_UNKNOWN;
     vb->max_gt_line_len = vb->max_genotype_section_len = 0;
+    vb->ac = vb->an = vb->af = NULL;
+    vb->ac_len = vb->an_len = vb->af_len = 0;
+    vb->is_af_before_ac = vb->is_an_before_ac = false;
 
     for (unsigned i=0; i < vb->num_sample_blocks; i++) {
         if (vb->haplotype_sections_data) buf_free(&vb->haplotype_sections_data[i]);

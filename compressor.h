@@ -49,7 +49,7 @@ typedef CompressorFunc (*Compressor);
 
 CompressorFunc comp_compress_bzlib, comp_compress_lzma, comp_compress_none;
 
-extern const char actg_decode[4];
 extern const uint8_t actg_encode[256];
-
+extern const char actg_decode[4];
+#define ACTG_DECODE(bitarr,idx) actg_decode[bit_array_get ((bitarr), (idx)*2) + (bit_array_get ((bitarr), (idx)*2 + 1) << 1)]
 #endif

@@ -328,10 +328,13 @@ static void comp_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t unco
 
     bit_array_clear_excess_bits_in_top_word (packed);
 
-    for (uint64_t i=0; i < uncompressed_len; i++) {
+    for (uint64_t i=0; i < uncompressed_len; i++) 
+        uncompressed_data[i] = ACTG_DECODE(packed, i);
+
+/*    for (uint64_t i=0; i < uncompressed_len; i++) {
         uint8_t encoding = bit_array_get (packed, i*2) + (bit_array_get (packed, i*2 + 1) << 1);
         uncompressed_data[i] = actg_decode[encoding];
-    }
+    }*/
 }
 
 static inline void comp_non_acgt_transform (char *data, uint32_t len)

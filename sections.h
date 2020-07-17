@@ -11,19 +11,20 @@
 
 // note: the numbering of the sections cannot be modified, for backward compatibility
 typedef enum {
-    SEC_NONE           = -1, // doesn't appear in the file 
+    SEC_NONE            = -1, // doesn't appear in the file 
 
     SEC_RANDOM_ACCESS   = 0,
     SEC_DICT_ID_ALIASES = 1,
     SEC_REFERENCE       = 2,
     SEC_REF_IS_SET      = 3,
-    SEC_REF_RANDOM_ACC  = 4,
-    SEC_TXT_HEADER      = 5, 
-    SEC_VB_HEADER       = 6,
-    SEC_GENOZIP_HEADER  = 7, // SEC_GENOZIP_HEADER remains 6 as in v2-v5 to be able to read old versions' genozip header
-    SEC_DICT            = 8, 
-    SEC_B250            = 9, 
-    SEC_LOCAL           = 10, 
+    SEC_REF_HASH        = 4,
+    SEC_REF_RANDOM_ACC  = 5,
+    SEC_GENOZIP_HEADER  = 6, // SEC_GENOZIP_HEADER remains 6 as in v2-v5, to be able to read old versions' genozip header
+    SEC_TXT_HEADER      = 7, 
+    SEC_VB_HEADER       = 8,
+    SEC_DICT            = 9, 
+    SEC_B250            = 10, 
+    SEC_LOCAL           = 11, 
 
     // vcf specific    
     SEC_VCF_GT_DATA     = 20,  
@@ -40,14 +41,15 @@ typedef enum {
     {"SEC_DICT_ID_ALIASES"}, \
     {"SEC_REFERENCE"},       \
     {"SEC_REF_IS_SET"},      \
+    {"SEC_REF_HASH"},        \
     {"SEC_REF_RANDOM_ACC"},  \
+    {"SEC_GENOZIP_HEADER"},  \
     {"SEC_TXT_HEADER"},      \
     {"SEC_VB_HEADER"},       \
-    {"SEC_GENOZIP_HEADER"},  \
     {"SEC_DICT"},            \
     {"SEC_B250"},            \
     {"SEC_LOCAL"},           \
-    {}, {}, {}, {}, {}, {}, {}, {}, {}, \
+    {}, {}, {}, {}, {}, {}, {}, {},  \
     {"SEC_VCF_GT_DATA"},     \
     {"SEC_VCF_PHASE_DATA"},  \
     {"SEC_VCF_HT_DATA"},     \
@@ -184,9 +186,20 @@ typedef struct {
 // SEC_REFERENCE (in both cases) contains 2 bits per base, and SEC_REF_IS_SET contains 1 bit per location.
 typedef struct {
     SectionHeader h;
-    uint64_t first_pos, last_pos; // first and last pos within chrom of this range         
-    uint32_t chrom_word_index;    // index in context->word_list of the chrom of this reference range    
+    uint64_t pos;              // first pos within chrom (1-based) of this range         
+    uint64_t gpos;             // first pos within genome (0-based) of this range
+    uint32_t num_bases;        // number of bases (nucleotides) in this range
+    uint32_t chrom_word_index; // index in context->word_list of the chrom of this reference range    
 } SectionHeaderReference;
+
+typedef struct {
+    SectionHeader h;
+    uint8_t num_layers;        // total number of layers
+    uint8_t layer_i;           // layer number of this section (0=base layer, with the most bits)
+    uint8_t layer_bits;        // number of bits in layer
+    uint8_t ffu;
+    uint32_t start_in_layer;   // start index within layer
+} SectionHeaderRefHash;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct SectionListEntry {
@@ -229,5 +242,7 @@ extern const char *st_name (SectionType sec_type);
 extern void sections_show_gheader (SectionHeaderGenozipHeader *header);
 
 extern bool sections_has_reference(void);
+extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
+extern int64_t sections_get_genome_size (void);
 
 #endif

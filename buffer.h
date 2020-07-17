@@ -57,7 +57,9 @@ typedef struct Buffer {
 #define LASTENT(type, buf)    ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
 #define AFTERENT(type, buf)   ((type *)(&(buf).data[((buf).len  ) * sizeof(type)]))
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[((buf).len++) * sizeof(type)]))
-            
+#define ENTNUM(buf, ent)      ((((char*)(ent)) - ((buf).data)) / sizeof (*ent))
+#define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
+
 extern void buf_initialize(void);
 
 #define buf_is_allocated(buf_p) ((buf_p)->data != NULL && ((buf_p)->type == BUF_REGULAR || (buf_p)->type == BUF_OVERLAY))

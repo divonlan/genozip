@@ -614,31 +614,31 @@ void bit_array_toggle_all(BitArray* bitarr)
 
 uint64_t bit_array_get_word64(const BitArray* bitarr, bit_index_t start)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   return (uint64_t)_get_word(bitarr, start);
 }
 
 uint32_t bit_array_get_word32(const BitArray* bitarr, bit_index_t start)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   return (uint32_t)_get_word(bitarr, start);
 }
 
 uint16_t bit_array_get_word16(const BitArray* bitarr, bit_index_t start)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   return (uint16_t)_get_word(bitarr, start);
 }
 
 uint8_t bit_array_get_word8(const BitArray* bitarr, bit_index_t start)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   return (uint8_t)_get_word(bitarr, start);
 }
 
 uint64_t bit_array_get_wordn(const BitArray* bitarr, bit_index_t start, int n)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   assert(n <= 64);
   return (uint64_t)(_get_word(bitarr, start) & bitmask64(n));
 }
@@ -652,33 +652,33 @@ uint64_t bit_array_get_wordn(const BitArray* bitarr, bit_index_t start, int n)
 
 void bit_array_set_word64(BitArray* bitarr, bit_index_t start, uint64_t word)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   _set_word(bitarr, start, (word_t)word);
 }
 
 void bit_array_set_word32(BitArray* bitarr, bit_index_t start, uint32_t word)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   word_t w = _get_word(bitarr, start);
   _set_word(bitarr, start, bitmask_merge(w, word, 0xffffffff00000000UL));
 }
 
 void bit_array_set_word16(BitArray* bitarr, bit_index_t start, uint16_t word)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   word_t w = _get_word(bitarr, start);
   _set_word(bitarr, start, bitmask_merge(w, word, 0xffffffffffff0000UL));
 }
 
 void bit_array_set_word8(BitArray* bitarr, bit_index_t start, uint8_t byte)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   _set_byte(bitarr, start, byte);
 }
 
 void bit_array_set_wordn(BitArray* bitarr, bit_index_t start, uint64_t word, int n)
 {
-  assert(start < bitarr->num_of_bits);
+  ASSERT (start < bitarr->num_of_bits, "Error in %s: expecting start(%"PRIu64") < bitarr->num_of_bits(%"PRIu64")", __FUNCTION__, start, bitarr->num_of_bits);
   assert(n <= 64);
   word_t w = _get_word(bitarr, start), m = bitmask64(n);
   _set_word(bitarr, start, bitmask_merge(word,w,m));

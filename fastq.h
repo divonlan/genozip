@@ -14,6 +14,7 @@ COMPRESSOR_CALLBACK(fastq_zip_get_start_len_line_i_qual)
 
 // SEG Stuff
 extern void fastq_seg_initialize();
+extern void fastq_seg_finalize();
 extern const char *fastq_seg_txt_line();
 
 // PIZ Stuff

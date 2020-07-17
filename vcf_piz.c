@@ -3,6 +3,7 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <math.h>
 #include "vcf_private.h"
 #include "zfile.h"
 #include "txtfile.h"
@@ -451,7 +452,7 @@ void vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigne
     char ref_alt[3] = { 0, '\t', 0 };
     char ref_value = 0;
     
-    int64_t pos = vb->contexts[VCF_POS].last_value;
+    int64_t pos = vb->contexts[VCF_POS].last_value.i;
 
     if (snip[0] == '-' || snip[1] == '-') { 
         const Range *range = ref_piz_get_range (vb, pos, 1);
@@ -481,6 +482,23 @@ void vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigne
 
     RECONSTRUCT (ref_alt, sizeof (ref_alt));
 }   
+
+void vcf_piz_special_AC (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
+{
+    bool is_an_before_ac = (bool)(snip[0] - '0');
+    bool is_af_before_ac = (bool)(snip[1] - '0');
+
+    Context *ctx_an = mtf_get_ctx (vb, dict_id_INFO_AN);
+    Context *ctx_af = mtf_get_ctx (vb, dict_id_INFO_AF);
+
+    uint32_t an = is_an_before_ac ? ctx_an->last_value.i : atoi (mtf_peek_next_snip (vb, ctx_an));
+    double   af = is_af_before_ac ? ctx_af->last_value.d : atof (mtf_peek_next_snip (vb, ctx_af));
+
+    char ac_str[30];
+    unsigned ac_str_len = str_int ((int64_t)round(an * af), ac_str);    
+
+    RECONSTRUCT (ac_str, ac_str_len);
+}
 
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block

@@ -20,6 +20,8 @@ void fast_vb_release_vb (VBlockFAST *vb)
     vb->last_line = 0;
     vb->contig_grepped_out = false;
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
+vb->almost_perfect = vb->coverage = 0;
+
 }
    
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
@@ -63,7 +65,7 @@ static bool fast_piz_test_grep (VBlockFAST *vb)
     // reconstruct each description line and check for string matching with flag_grep
     bool found = false, match = false;
 
-    Context *desc_ctx = (vb->data_type == DT_FASTQ) ? &vb->contexts[FASTQ_DESC] : mtf_get_ctx (vb, (DictId)dict_id_FASTA_DESC);
+    Context *desc_ctx = (vb->data_type == DT_FASTQ) ? &vb->contexts[FASTQ_DESC] : mtf_get_ctx (vb, dict_id_FASTA_DESC);
     desc_ctx->iterator.next_b250 = FIRSTENT (uint8_t, desc_ctx->b250); 
 
     vb->line_i = vb->data_type == DT_FASTQ ? 4 * vb->first_line : vb->first_line;

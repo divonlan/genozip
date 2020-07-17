@@ -445,6 +445,18 @@ int32_t zfile_read_section (File *file,
     return header_offset;
 }
 
+// Read one section header - NOT thread-safe, should only be called by the I/O thread
+void *zfile_read_section_header (uint64_t offset, uint32_t size)
+{
+    // get the uncompressed size from one of the headers - they are all the same size, and the reference file is never encrypted
+    file_seek (z_file, offset, SEEK_SET, false);
+
+    static Buffer one_header_buf = EMPTY_BUFFER;
+    buf_alloc (evb, &one_header_buf, size, 4, "one_header_buf", 0);
+
+    return zfile_read_from_disk (z_file, evb, &one_header_buf, size, false); 
+}
+
 // PIZ
 void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom)
 {
@@ -590,7 +602,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     else {
         // case: we are attempting to decompress a reference file - this is not supported
         if (header->data_type == DT_REF &&
-            !((flag_show_index || flag_show_reference || flag_show_ref_index) && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
+            !((flag_show_index || flag_show_reference || flag_show_ref_index || flag_show_ref_hash) && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
             WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
             data_type = DT_NONE;
             goto final;

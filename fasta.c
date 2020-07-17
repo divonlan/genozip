@@ -25,7 +25,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
 
         vb->contexts[FASTA_LINEMETA].flags = CTX_FL_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
-        Context *seq_ctx = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ);
+        Context *seq_ctx = mtf_get_ctx (vb, dict_id_FASTA_SEQ);
         seq_ctx->flags  = CTX_FL_LOCAL_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
         seq_ctx->ltype  = CTX_LT_SEQUENCE;
     }
@@ -37,7 +37,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
 void fasta_make_ref_range (VBlockP vb)
 {
     Range *r = ref_make_ref_get_range (vb->vblock_i);
-    uint64_t seq_len = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ)->local.len;
+    uint64_t seq_len = mtf_get_ctx (vb, dict_id_FASTA_SEQ)->local.len;
 
     // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_prepare_range_for_compress
@@ -88,7 +88,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
         if (!flag_make_reference) {
             // we segment using / | : and " " as separators. 
-            seg_compound_field ((VBlockP)vb, mtf_get_ctx (vb, (DictId)dict_id_FASTA_DESC), 
+            seg_compound_field ((VBlockP)vb, mtf_get_ctx (vb, dict_id_FASTA_DESC), 
                                 line_start, line_len, &vb->desc_mapper, structured_DESC, true, 0);
             
             seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);
@@ -114,7 +114,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
     else if (*line_start == ';' || !line_len) {
         
         if (!flag_make_reference) {
-            seg_add_to_local_text ((VBlockP)vb, mtf_get_ctx (vb, (DictId)dict_id_FASTA_COMMENT), 
+            seg_add_to_local_text ((VBlockP)vb, mtf_get_ctx (vb, dict_id_FASTA_COMMENT), 
                                 line_start, line_len, line_len); 
 
             seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_COMMENT, false, 0, &special_snip[2], &special_snip_len);
@@ -134,7 +134,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         DATA_LINE (vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
         DATA_LINE (vb->line_i)->seq_len        = line_len;
 
-        Context *seq_ctx = mtf_get_ctx (vb, (DictId)dict_id_FASTA_SEQ);
+        Context *seq_ctx = mtf_get_ctx (vb, dict_id_FASTA_SEQ);
         seq_ctx->local.len += line_len;
 
         if (!flag_make_reference) {

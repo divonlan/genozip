@@ -23,7 +23,8 @@ static int *count_per_section = NULL;
 #define OVERHEAD_SEC_TXT_HDR     -3
 #define OVERHEAD_SEC_RA_INDEX    -4
 #define OVERHEAD_SEC_REFERENCE   -5 // used only for REF_EXT_STORE
-#define LAST_OVERHEAD            -5
+#define OVERHEAD_SEC_REF_HASH    -6 // used only in a reference file
+#define LAST_OVERHEAD            -6
 
 static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
@@ -75,6 +76,9 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
             *local_compressed_size += z_file->disk_size - section->offset;
 
         else if (section->section_type == SEC_DICT_ID_ALIASES && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
+            *local_compressed_size += sec_size;
+
+        else if (section->section_type == SEC_REF_HASH && overhead_sec == OVERHEAD_SEC_REF_HASH)
             *local_compressed_size += sec_size;
 
         else if (section->section_type == SEC_TXT_HEADER && overhead_sec == OVERHEAD_SEC_TXT_HDR)
@@ -228,6 +232,7 @@ void stats_show_sections (void)
         else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
         else if (i==OVERHEAD_SEC_RA_INDEX)    strcpy (s->name, "--regions index");
         else if (i==OVERHEAD_SEC_REFERENCE)   strcpy (s->name, "Reference");
+        else if (i==OVERHEAD_SEC_REF_HASH)   strcpy (s->name, "Refhash");
 
         /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 

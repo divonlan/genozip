@@ -30,5 +30,6 @@ extern void random_access_alloc_ra_buf (VBlockP vb, int32_t chrom_node_index);
 extern void random_access_pos_of_chrom (uint32_t chrom_word_index, int64_t *min_pos, int64_t *max_pos);
 extern void random_access_get_ra_info (uint32_t vblock_i, int32_t *chrom_index, int64_t *min_pos, int64_t *max_pos);
 extern void random_access_load_ra_section (SectionType section_type, BufferP ra_buf, const char *buf_name, const char *show_index_msg);
+extern void random_access_compress (Buffer *ra_buf, SectionType sec_type, const char *msg);
 
 #endif

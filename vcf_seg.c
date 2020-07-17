@@ -42,7 +42,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
 
     // if we have a reference, we use it
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-        int64_t pos = vb->contexts[VCF_POS].last_value;
+        int64_t pos = vb->contexts[VCF_POS].last_value.i;
 
         Range *range = ref_zip_get_locked_range (vb, pos);
         uint32_t index_within_range = pos - range->first_pos;
@@ -226,7 +226,67 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
     // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_genotype_area)
     else if (dict_id.num == dict_id_INFO_DP) 
-        mtf_get_ctx (vb_, (DictId)dict_id_INFO_DP)->last_value = atoi (*this_value);
+        mtf_get_ctx (vb_, dict_id)->last_value.i = atoi (*this_value);
+
+    // in case of AC, AN and AF - we store the values, and we postpone handling AC to the finalization
+    else if (dict_id.num == dict_id_INFO_AC) { 
+        vb->ac = *this_value; 
+        vb->ac_len = *this_value_len; 
+        return false; 
+    } 
+    
+    else if (dict_id.num == dict_id_INFO_AN) { 
+        vb->an = *this_value; 
+        vb->an_len = *this_value_len;
+        vb->is_an_before_ac = (vb->ac == NULL);
+        mtf_get_ctx(vb, dict_id)->flags |= CTX_FL_NO_STONS | CTX_FL_STORE_INT;
+    }
+
+    else if (dict_id.num == dict_id_INFO_AF) { 
+        vb->af = *this_value; 
+        vb->af_len = *this_value_len;
+        vb->is_af_before_ac = (vb->ac == NULL);     
+        mtf_get_ctx(vb, dict_id)->flags |= CTX_FL_NO_STONS | CTX_FL_STORE_FLOAT;
+    }
+
+    // finalization of this INFO field
+    else if (!dict_id.num) { 
+
+        // if we have AC - we try to represent it as derived from AN and AF, and if not possible, we just
+        // store it normally. Note: we can normally do this accurately because AC is an integer. If we tried
+        // to instead represent AF as a function of AC and AN we would run into floating point issues
+        if (vb->ac) {
+            bool special = false;
+            if (vb->an && vb->af) {
+
+                char *after_af; double af = strtod (vb->af, &after_af); 
+                char *after_an; int    an = strtol (vb->an, &after_an, 10); 
+                char *after_ac; int    ac = strtol (vb->ac, &after_ac, 10); 
+
+                if (vb->an + vb->an_len == after_an && // conversion to a number consumed the entire snip
+                    vb->af + vb->af_len == after_af && 
+                    vb->ac + vb->ac_len == after_ac && 
+                    (int)round (af * an) == ac) { 
+
+                    special = true;
+
+                    char special_snip[4];
+                    special_snip[0] = SNIP_SPECIAL;
+                    special_snip[1] = VCF_SPECIAL_AC;
+                    special_snip[2] = '0' + (char)vb->is_an_before_ac;
+                    special_snip[3] = '0' + (char)vb->is_af_before_ac;
+
+                    Context *ctx = mtf_get_ctx (vb, dict_id_INFO_AC);
+                    ctx->flags |= CTX_FL_NO_STONS;
+                    seg_by_ctx ((VBlockP)vb, special_snip, 4, ctx, vb->ac_len, NULL);
+                }
+            }
+
+            if (!special) {
+                seg_by_dict_id (vb, vb->ac, vb->ac_len, dict_id_INFO_AC, vb->ac_len);
+            }
+        }
+    }
 
     return true; // procedue with adding to dictionary/b250
 }
@@ -411,7 +471,7 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
         if (cell_gt_data && ctx->dict_id.num == dict_id_FORMAT_DP) {
             dp_ctx = ctx;
             info_dp_ctx = mtf_get_existing_ctx ((VBlockP)vb, (DictId)dict_id_INFO_DP);
-            ctx->last_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
+            ctx->last_value.i = atoi (cell_gt_data); // an integer terminated by : \t or \n
         }
 
         uint32_t node_index;
@@ -440,24 +500,24 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
         // or might be the same as the previous line
         else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_PS) {
 
-            ctx->flags |= CTX_FL_STORE_VALUE | CTX_FL_NO_STONS;
+            ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
 
             char *ps_end;
             int64_t ps_value = strtoull (cell_gt_data, &ps_end, 10);
             if (ps_end - cell_gt_data != len) ps_value = 0; // PS is not an integer
 
-            if (ps_value && ps_value == ctx->last_value) { // same as previous line
+            if (ps_value && ps_value == ctx->last_value.i) { // same as previous line
                 const char copy_snip[] = { SNIP_SELF_DELTA, '0' };
                 node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, copy_snip, 2, NULL); 
             }
 
             else if (ps_value && 
-                     ps_value - vb->contexts[VCF_POS].last_value > -1000 && // if its a quite similar to POS 
-                     ps_value - vb->contexts[VCF_POS].last_value <  1000) { 
-                int32_t delta = ps_value - (int32_t)vb->contexts[VCF_POS].last_value; // expected to be a negative number
+                     ps_value - vb->contexts[VCF_POS].last_value.i > -1000 && // if its a quite similar to POS 
+                     ps_value - vb->contexts[VCF_POS].last_value.i <  1000) { 
+                int32_t delta = ps_value - (int32_t)vb->contexts[VCF_POS].last_value.i; // expected to be a negative number
                 seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_fields[VCF_POS], true, delta, snip, &snip_len);
                 node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, NULL); 
-                ctx->last_value = ps_value;
+                ctx->last_value.i = ps_value;
             }
 
             else
@@ -467,9 +527,9 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
         // case: DP - if there is an INFO/DP too, and it is the same - we store a delta of 0 
         // (this usually means there's one sample) - if they are not the same don't delta
         else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_DP && info_dp_ctx &&
-                 ctx->last_value == info_dp_ctx->last_value) {
+                 ctx->last_value.i == info_dp_ctx->last_value.i) {
 
-            info_dp_ctx->flags |= CTX_FL_STORE_VALUE | CTX_FL_NO_STONS;
+            info_dp_ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
             ctx        ->flags |= CTX_FL_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
             seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_INFO_DP, true, 0, snip, &snip_len);
 
@@ -480,12 +540,12 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_MIN_DP && dp_ctx) {
             int32_t min_dp_value = atoi (cell_gt_data); // an integer terminated by : \t or \n
-            int32_t delta = min_dp_value - (int32_t)dp_ctx->last_value; // expected to be a negative number
+            int32_t delta = min_dp_value - (int32_t)dp_ctx->last_value.i; // expected to be a negative number
             seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_FORMAT_DP, true, delta, snip, &snip_len);
             
             node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, NULL); 
             ctx   ->flags |= CTX_FL_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
-            dp_ctx->flags |= CTX_FL_STORE_VALUE | CTX_FL_NO_STONS;
+            dp_ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
         }
 
         else
@@ -592,6 +652,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
+    vb->ac = vb->an = vb->af = NULL;
 
     dl->phase_type = PHASE_UNKNOWN;
 

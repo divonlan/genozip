@@ -42,7 +42,7 @@ static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 
 // get data type by file type
-static DataType file_get_data_type (FileType ft, bool is_input)
+DataType file_get_data_type (FileType ft, bool is_input)
 {
     for (DataType dt=!flag_make_reference; dt < NUM_DATATYPES; dt++) 
         for (unsigned i=0; (is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]); i++)
@@ -94,7 +94,7 @@ static char *file_compressible_extensions(void)
     return s;
 }
 
-static FileType file_get_type (const char *filename, bool enforce_23andme_name_format)
+FileType file_get_type (const char *filename, bool enforce_23andme_name_format)
 {
     // 23andme files have the format "genome_Firstname_Lastname_optionalversion_timestamp.txt" or .zip
     if (enforce_23andme_name_format && file_has_ext (filename, ".txt")) 

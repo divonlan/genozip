@@ -226,6 +226,20 @@ uint32_t mtf_get_next_snip (VBlock *vb, Context *ctx,
     return word_index;
 }
 
+// get next snip without advancing the iterator
+const char *mtf_peek_next_snip (VBlock *vb, Context *ctx)
+{
+    SnipIterator save = ctx->iterator;
+
+    const char *snip;
+    uint32_t snip_len;
+    mtf_get_next_snip (vb, ctx, NULL, &snip, &snip_len);
+    
+    ctx->iterator = save; // restore
+
+    return snip;
+}
+
 // Process and snip - return its node index, and enter it into the directory if its not already there. Called
 // 1. During segregate - as snips are encountered in the data. No base250 encoding yet
 // 2. During mtf_merge_in_vb_ctx_one_dict_id() - to enter snips into z_file->contexts - also encoding in base250
@@ -295,6 +309,9 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
 
     uint32_t node_index_if_new = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
+    for (uint32_t i=0; i < snip_len; i++)
+        ASSERT (snip[i], "Error in mtf_evaluate_snip_seg: snip_len=%u but unexpectedly snip[%u]==0", snip_len, i);
+        
     ASSERT (node_index_if_new <= MAX_WORDS_IN_CTX, 
             "Error: ctx of %s is full (max allowed words=%u): ol_mtf.len=%u mtf.len=%u",
             vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)
@@ -957,7 +974,8 @@ void mtf_free_context (Context *ctx)
     ctx->merge_num = 0;
     ctx->mtf_len_at_1_3 = ctx->mtf_len_at_2_3 = 0;
     ctx->txt_len = ctx->next_local = ctx->num_singletons = ctx->num_failed_singletons = 0;
-    ctx->last_delta = ctx->last_value = 0;
+    ctx->last_delta = 0;
+    ctx->last_value.i = 0;
     ctx->last_line_i = 0;
     memset ((char*)ctx->name, 0, sizeof(ctx->name));
 

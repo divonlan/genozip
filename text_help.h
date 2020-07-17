@@ -163,6 +163,8 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-ref-index  Show the content of the random access index of the reference data (SEC_REF_RANDOM_ACC section). When used with genocat, only the index is shown, not the file contents",
     "",
+    "   ZUC  --show-ref-hash   Show the details of the reference hash table (SEC_REF_HASH) sections. When used with genocat, only this data is shown, not the file contents",
+    "",
     "   ZUC  --show-gheader    Show the content of the genozip header (which also includes the list of all sections in the file). When used with genocat, only the genozip header is shown, not the file contents",
     "",
     "   ZUC  --show-vblocks    Show vblock headers as they are read / written",

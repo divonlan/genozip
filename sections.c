@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "crypt.h"
 #include "dict_id.h"
+#include "zfile.h"
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
@@ -190,6 +191,51 @@ bool sections_has_reference(void)
     
     return false;
 }
+
+// get genome size - this is determined by gpos+num_bases of the last SEC_REFERENCE or SEC_REF_IS_SET section
+// NOT THREAD SAFE - can only be called by I/O thread
+int64_t sections_get_genome_size (void)
+{
+    for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the reference sections are near the end
+        const SectionListEntry *sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
+        
+        if (sl->section_type == SEC_REFERENCE) {
+            // check if we have a SEC_REF_IS_SET section - in that case, take num_bases from SEC_REF_IS_SET
+            // as the num_bases in SEC_REFERENCE indicates a compacted section
+            if (i > 0 && (sl-1)->section_type == SEC_REF_IS_SET) sl--;
+
+            SectionHeaderReference *header = zfile_read_section_header (sl->offset, sizeof (SectionHeaderReference));
+
+            return (int64_t)(BGEN64(header->gpos) + BGEN32 (header->num_bases));
+        }
+    }
+
+    ABORT0 ("Error in sections_get_genome_size: cannot find a SEC_REFERENCE section");
+    return 0;
+}
+
+// called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
+// NOT THREAD SAFE - can only be called by I/O thread
+void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
+{
+    ASSERT0 (flag_reading_reference, "Error in sections_get_refhash_details: can only be called while reading reference");
+
+    for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the refhash sections are near the end
+        SectionListEntry *sl = ENT (SectionListEntry, z_file->section_list_buf, i);
+        if (sl->section_type == SEC_REF_HASH) {
+
+            SectionHeaderRefHash *header = zfile_read_section_header (sl->offset, sizeof (SectionHeaderRefHash));
+            if (num_layers) *num_layers = header->num_layers;
+            if (base_layer_bits) *base_layer_bits = header->layer_bits + header->layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
+            return;
+        }
+        else if (sl->section_type == SEC_REFERENCE)
+            break; // we arrived at a SEC_REFERENCE - there won't be any more SEC_REF_HASH sections
+    }
+
+    ABORT ("Error in sections_get_refhash_details: can't find SEC_REF_HASH sections in %s", z_name);
+}
+
 
 // called by PIZ I/O when splitting a bound file - to know if there are any more VCF components remaining
 bool sections_has_more_components()

@@ -30,7 +30,7 @@
 #define SNIP_OTHER_DELTA         '\5'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
 #define SNIP_SPECIAL             '\6'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION         '\7'   // Get the data from another dict_id (can be in b250, local...)
-#define SNIP_DONT_STORE          '\11'  // Reconcstruct the following value, but don't store it in last_value (overriding CTX_FL_STORE_VALUE)
+#define SNIP_DONT_STORE          '\11'  // Reconcstruct the following value, but don't store it in last_value (overriding CTX_FL_STORE_INT)
 
 // structured snip: it starts with SNIP_STRUCTURED, following by a base64 of a big endian Structured
 #pragma pack(1)
@@ -109,8 +109,11 @@ extern const bool ctx_lt_is_signed[NUM_CTX_LT];
 extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 
 // flags written to the genozip file (4-bit header.h.flags)
-#define CTX_FL_STORE_VALUE 0x01 // the values of this ctx are uint32_t, and are a basis for a delta calculation (by this field or another one)
-#define CTX_FL_STRUCTURED  0x02 // snips usually contain Structured
+#define CTX_FL_STORE_INT   0x01 // the values of this ctx are uint32_t, and should be stored, eg because they are a basis for a delta calculation (by this field or another one)
+#define CTX_FL_STORE_FLOAT 0x02 // the values of this ctx are float
+#define CTX_FL_STRUCTURED  0x08 // snips usually contain Structured
+
+#define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
 
 // ZIP-only flags not written to the genozip file
 #define CTX_FL_NO_STONS    0x10 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
@@ -119,8 +122,13 @@ extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 
 // combination flags for convenience
 #define CTX_FL_POS         (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // A POS field that stores a delta vs. a different field
-#define CTX_FL_POS_BASE    (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA | CTX_FL_STORE_VALUE) // A POS field that is the base for delta calculations (with itself and/or other fields)
+#define CTX_FL_POS_BASE    (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA | CTX_FL_STORE_INT) // A POS field that is the base for delta calculations (with itself and/or other fields)
 #define CTX_FL_ID          (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // An ID field that is split between a numeric component in local and a textual component in b250
+
+typedef union {
+    int64_t i;
+    double d;
+} LastValueType;
 
 typedef struct Context {
     // ----------------------------
@@ -180,7 +188,7 @@ typedef struct Context {
     uint32_t next_local;       // PIZ only: iterator on Context.local
 
     uint32_t last_line_i;      // PIZ only: the last line_i this ctx was encountered
-    int64_t last_value;        // PIZ only: last value from which to conduct a delta. 
+    LastValueType last_value;  // PIZ only: last value from which to conduct a delta. 
     int64_t last_delta;        // PIZ only: last delta value calculated
 } Context;
 
@@ -191,6 +199,7 @@ static inline void mtf_init_iterator (Context *ctx) { ctx->iterator.next_b250 = 
 
 extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
 extern uint32_t mtf_get_next_snip (VBlockP vb, Context *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
+extern const char *mtf_peek_next_snip (VBlockP vb, Context *ctx);
 extern int32_t mtf_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VBlockP vb);
 extern MtfNode *mtf_node_vb_do (const Context *ctx, uint32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
@@ -202,7 +211,7 @@ extern void mtf_merge_in_vb_ctx (VBlockP vb);
 extern Context *mtf_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, DictId dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (dict_id))
+#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (DictId)(dict_id))
 
 static inline Context *mtf_get_ctx_do (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, DictId dict_id)
 {

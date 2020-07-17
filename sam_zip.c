@@ -26,7 +26,7 @@ void sam_zip_initialize (void)
     if (flag_reference == REF_NONE) flag_reference = REF_INTERNAL;
 
     // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
-    if (!flag_reference || flag_reference == REF_INTERNAL) ref_initialize_ranges (false); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
+    if (!flag_reference || flag_reference == REF_INTERNAL) ref_initialize_ranges (RT_SMALL_RANGES); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
     // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
     random_access_alloc_ra_buf (evb, 0);
@@ -110,7 +110,7 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_SEQNOREF].flags   = CTX_FL_LOCAL_ACGT;
     vb->contexts[SAM_SEQNOREF].ltype   = CTX_LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype       = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_VALUE;
+    vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
 }
 
@@ -128,7 +128,7 @@ static inline void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
     int64_t tlen_value = (int64_t)strtoull (tlen, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
     
     // case 1
-    if (tlen_value && tlen_value == -ctx->last_value) {
+    if (tlen_value && tlen_value == -ctx->last_value.i) {
         char snip_delta[2] = { SNIP_SELF_DELTA, '-'};
         seg_by_ctx ((VBlockP)vb, snip_delta, 2, ctx, tlen_len + 1, NULL);
     }
@@ -144,7 +144,7 @@ static inline void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
     else 
         seg_by_ctx ((VBlockP)vb, tlen, tlen_len, ctx, tlen_len+1, NULL);
 
-    ctx->last_value = tlen_value;
+    ctx->last_value.i = tlen_value;
 }
 
 // returns length of string ending with separator, or -1 if separator was not found
@@ -181,7 +181,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     Context *nonref_ctx = &vb->contexts[SAM_SEQNOREF];
 
     if (!recursion_level)
-        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-stats - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
+        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
 
     ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
 
@@ -472,7 +472,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
 
-    seg_structured_by_dict_id (vb, (DictId)dict_id_OPTION_XA, &xa, 1 /* \t */);
+    seg_structured_by_dict_id (vb, dict_id_OPTION_XA, &xa, 1 /* \t */);
     return;
 
 error:
@@ -481,7 +481,7 @@ error:
     // if it occurred on the 2nd+ subfield, after the 1st one was fine - we reject the file
     ASSSEG (!xa.repeats, field, "Invalid format in repeat #%u of field XA. snip: %.*s", xa.repeats+1, field_len, field);
 
-    seg_by_dict_id (vb, field, field_len, (DictId)dict_id_OPTION_XA, field_len + 1 /* \t */); 
+    seg_by_dict_id (vb, field, field_len, dict_id_OPTION_XA, field_len + 1 /* \t */); 
 }
 
 uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len)
@@ -682,7 +682,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
 
-        int64_t this_pos = vb->contexts[SAM_POS].last_value;
+        int64_t this_pos = vb->contexts[SAM_POS].last_value.i;
         sam_seg_seq_field (vb, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, vb->last_cigar); // remove const bc SEQ data is actually going to be modified
     }
 

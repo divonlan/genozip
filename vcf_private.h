@@ -68,6 +68,12 @@ typedef struct VBlockVCF {
     Buffer line_ht_data;       // length=ploidy*num_samples. exists if the GT subfield exists in any variant in the variant block
     Buffer line_phase_data;    // used only if phase is mixed. length=num_samples. exists if haplotype data exists and ploidy>=2
     uint32_t max_gt_line_len;  // length of longest gt line in this vb after segregation 
+    
+    // values stored during segging the INFO field and used when finalizing it - attempting to represent AC
+    // as a function of AN and AF if possible
+    const char *ac, *an, *af;  
+    uint32_t ac_len, af_len, an_len;
+    bool is_an_before_ac, is_af_before_ac;
 
     // section data - ready to compress
     Buffer haplotype_permutation_index;

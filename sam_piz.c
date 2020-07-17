@@ -32,7 +32,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
     const char *nonref_start = nonref;
     unsigned subcigar_len    = 0;
     char cigar_op            = 0;
-    const int64_t pos        = vb->contexts[SAM_POS].last_value;
+    const int64_t pos        = vb->contexts[SAM_POS].last_value.i;
     const Range *range       = NULL;
     unsigned seq_consumed=0, ref_consumed=0;
 
@@ -98,7 +98,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
     ASSERT (seq_consumed == vb->seq_len,      "Error in sam_piz_reconstruct_seq: expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
     ASSERT (ref_consumed == vb->ref_consumed, "Error in sam_piz_reconstruct_seq: expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
 
-    bitmap_ctx->last_value = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
+    bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
     
     nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (nonref - nonref_start);
 }
@@ -121,8 +121,8 @@ void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigne
 
     vb->last_cigar = snip;
 
-    if (flag_regions && vb->chrom_node_index != NIL && vb->contexts[SAM_POS].last_value && 
-        !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value, vb->contexts[SAM_POS].last_value + vb->ref_consumed - 1, true))
+    if (flag_regions && vb->chrom_node_index != NIL && vb->contexts[SAM_POS].last_value.i && 
+        !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value.i, vb->contexts[SAM_POS].last_value.i + vb->ref_consumed - 1, true))
         vb->dont_show_curr_line = true;
 }   
 
@@ -133,7 +133,7 @@ void sam_piz_special_TLEN (VBlock *vb, Context *ctx, const char *snip, unsigned 
     int32_t tlen_by_calc = atoi (snip);
     int32_t tlen_val = tlen_by_calc + vb->contexts[SAM_PNEXT].last_delta + vb->seq_len;
 
-    ctx->last_value = tlen_val;
+    ctx->last_value.i = tlen_val;
 
     RECONSTRUCT_INT (tlen_val);
 }
@@ -159,9 +159,9 @@ void sam_piz_special_BI (VBlock *vb, Context *ctx, const char *snip, unsigned sn
 {
     ASSERT (ctx->next_local + snip_len <= ctx->local.len, "Error reading txt_line=%u: unexpected end of BI data", vb->line_i);
 
-    Context *BD_ctx = mtf_get_ctx (vb, (DictId)dict_id_OPTION_BD);
+    Context *BD_ctx = mtf_get_ctx (vb, dict_id_OPTION_BD);
     char *bi_dst = AFTERENT (char, vb->txt_data);
-    const char *bd_txt = ENT (char, BD_ctx->local, (uint32_t)BD_ctx->last_value);
+    const char *bd_txt = ENT (char, BD_ctx->local, (uint32_t)BD_ctx->last_value.i);
     const char *bi_txt = ENT (char, ctx->local, ctx->next_local);
 
     for (uint32_t i=0; i < vb->seq_len; i++) 

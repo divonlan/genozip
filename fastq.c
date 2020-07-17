@@ -11,6 +11,7 @@
 #include "piz.h"
 #include "optimize.h"
 #include "dict_id.h"
+#include "refhash.h"
 
 void fastq_seg_initialize (VBlockFAST *vb)
 {
@@ -24,6 +25,12 @@ void fastq_seg_initialize (VBlockFAST *vb)
     vb->contexts[FASTQ_SEQ].flags  = CTX_FL_LOCAL_LZMA;
     vb->contexts[FASTQ_SEQ].ltype  = CTX_LT_SEQUENCE;
     vb->contexts[FASTQ_QUAL].ltype = CTX_LT_SEQUENCE;
+}
+
+void fastq_seg_finalize (VBlockFAST *vb)
+{
+    printf ("vb_i=%u almost_perfect=%u out of %u (%u%%) coverage=%u%%\n", vb->vblock_i, vb->almost_perfect, (uint32_t)vb->lines.len, (vb->almost_perfect*100) / (uint32_t)vb->lines.len,
+            (vb->coverage * 100) / (uint32_t)vb->contexts[FASTQ_SEQ].local.len);
 }
 
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
@@ -63,7 +70,15 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     dl->seq_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, has_13, "SEQ");
     vb->contexts[FASTQ_SEQ].local.len += dl->seq_len;
-    
+
+int64_t gpos = refhash_best_match (&vb->txt_data.data[dl->seq_data_start], dl->seq_len);
+int64_t room_fwd = MIN (dl->seq_len, genome_size-gpos);
+
+if (gpos != REFHASH_NOMATCH) {
+    int64_t match_len = refhash_get_final_match_len (&vb->txt_data.data[dl->seq_data_start], gpos, room_fwd); 
+    vb->coverage += match_len;
+    vb->almost_perfect += match_len >= (dl->seq_len * 95) / 100;
+}
     // Add LOOKUP snip with seq_len
     char snip[10];
     snip[0] = SNIP_LOOKUP;

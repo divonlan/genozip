@@ -59,7 +59,7 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0,
-    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0,
+    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_has_fastaq=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
     flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0;
 
@@ -477,27 +477,74 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
                  &basenames[i * BASENAME_LEN], out_filename);
 }
 
-void TEST()
+bool has_fasta_fastq (char **filenames, unsigned num_files)
 {
-    FILE *in = fopen ("pos", "rb");
-    char *data = malloc (439074);
-    fread (data, 1, 439074, in);
-    fclose (in);
+    FileType ft = file_get_stdin_type();
+    DataType dt = file_get_data_type (ft, true);
+    if (dt == DT_FASTA || dt == DT_FASTQ) return true;
 
-    FILE *pos1 = fopen ("pos8", "wb");
-    FILE *pos2 = fopen ("pos9", "wb");
-    
-    for (uint32_t i=0; i < 439074; i++)
-        fputc (data[i], i % 4 == 3 ? pos1 : pos2);
+    for (unsigned i=0; i < num_files ; i++) {
+        ft = file_get_type (filenames[i], false);
+        dt = file_get_data_type (ft, true);
+        if (dt == DT_FASTA || dt == DT_FASTQ) return true;
+    }
 
-    fclose (pos1);
-    fclose (pos2);
+    return false;
 }
 
+void TEST()
+{
+    uint32_t size = 14236798;
+    FILE *f=fopen ("qqual","rb");
+    char *data = malloc (size);
+    fread (data, 1, size, f);
+    fclose (f);
+
+    FILE *qualRuns = fopen ("qqualRuns4","wb");
+    FILE *qualChar = fopen ("qqualChar4","wb");
+
+    unsigned run=0;
+    for (uint32_t i=0; i < size; i++) {
+        if (data[i] == 'F') {
+            if (run == 256) {
+                fputc (0, qualRuns); // 0==256
+                fputc ('r', qualChar);
+                run=0;
+            }
+            
+            run++;
+        }
+
+        if (data[i] != 'F') {
+            if (run) {
+                if (run <= 1) 
+                    fwrite ("FFFF", 1, run, qualChar);
+                else {
+                    fputc ('r', qualChar);
+                    fputc (run-1, qualRuns);
+                }
+                run=0;
+            }
+            fputc (data[i], qualChar);
+        }
+    }
+
+    if (run) {
+        if (run <= 1) 
+            fwrite ("FFFF", 1, run, qualChar);
+        else {
+            fputc ('r', qualChar);
+            fputc (run-1, qualRuns);
+        }
+        run=0;
+    }
+
+    fclose (qualChar);
+    fclose (qualRuns);
+}
 int main (int argc, char **argv)
 {
- //   TEST(); exit(0);
-
+    //TEST();exit(0);
     arch_initialize();
 
 #ifdef _WIN32
@@ -593,6 +640,7 @@ int main (int argc, char **argv)
         #define _sh {"show-headers",  no_argument,       &flag_show_headers,     1 } 
         #define _si {"show-index",    no_argument,       &flag_show_index  ,     1 } 
         #define _Si {"show-ref-index",no_argument,       &flag_show_ref_index,   1 } 
+        #define _Sh {"show-ref-hash" ,no_argument,       &flag_show_ref_hash,    1 } 
         #define _sr {"show-gheader",  no_argument,       &flag_show_gheader,     1 }  
         #define _sT {"show-threads",  no_argument,       &flag_show_threads,     1 }  
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks,     1 }  
@@ -606,10 +654,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                   _st, _sm,                                  _dm,                                                                                                            _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                   _st, _sm,                                       _dm,                                                                                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -792,7 +840,9 @@ int main (int argc, char **argv)
 
     unsigned num_files = argc - optind;
     flag_multiple_files = (num_files > 1);
-     
+    
+    flag_has_fastaq = has_fasta_fastq (&argv[optind], num_files); 
+    
     flag_bind = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
     ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-stats can only work on one file at time", global_cmd);

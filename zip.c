@@ -21,6 +21,7 @@
 #include "random_access.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "refhash.h"
 #include "progress.h"
 #include "arch.h"
 
@@ -241,24 +242,37 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
     // output reference, if needed
-    if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference) 
+    bool store_ref = flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference;
+    if (store_ref) 
         ref_compress_ref();
         
+    if (flag_make_reference)
+        refhash_compress_refhash();
+
     // add dict_id aliases list, if we have one
     Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
-    if (DTPZ(has_random_access)) {
-
-        if (flag_show_index) random_access_show_index (&z_file->ra_buf, true, "Random-access index contents (result of --show-index)");
+    if (DTPZ(has_random_access)) 
+        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
+/*{        if (flag_show_index) random_access_show_index (&z_file->ra_buf, true, "Random-access index contents (result of --show-index)");
         
         BGEN_random_access (&z_file->ra_buf); // make ra_buf into big endian
 
         z_file->ra_buf.len *= sizeof (RAEntry); // change len to count bytes
 
         zfile_compress_section_data_alg (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
-    }
+    }*/
+    if (store_ref) 
+        random_access_compress (&ref_stored_ra, SEC_REF_RANDOM_ACC, flag_show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
+/*    if (flag_show_ref_index) 
+        random_access_show_index (&ref_stored_ra, true, "Reference random-access index contents (result of --show-ref-index)");
+
+    BGEN_random_access (&ref_stored_ra); // make ra_buf into big endian
+    ref_stored_ra.len *= sizeof (RAEntry); // change len to count bytes
+    zfile_compress_section_data_alg (evb, SEC_REF_RANDOM_ACC, &ref_stored_ra, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB*/
+
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header (single_component_md5);    

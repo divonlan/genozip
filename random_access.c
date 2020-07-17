@@ -63,7 +63,7 @@ void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index, const cha
 // ZIP only: update the pos in the existing chrom entry
 void random_access_update_pos (VBlock *vb, uint8_t did_i_pos)
 {
-    int64_t this_pos = vb->contexts[did_i_pos].last_value;
+    int64_t this_pos = vb->contexts[did_i_pos].last_value.i;
 
     if (!this_pos) return; // ignore pos=0 (in SAM, it means unmapped POS)
 
@@ -389,4 +389,14 @@ void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const 
     }
 
     buf_free (&evb->z_data);
+}
+
+void random_access_compress (Buffer *ra_buf, SectionType sec_type, const char *msg)
+{
+    if (msg) random_access_show_index (ra_buf, true, msg);
+    
+    BGEN_random_access (ra_buf); // make ra_buf into big endian
+
+    ra_buf->len *= sizeof (RAEntry); // change len to count bytes
+    zfile_compress_section_data_alg (evb, sec_type, ra_buf, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
 }

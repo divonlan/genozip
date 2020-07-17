@@ -192,7 +192,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
         dict_id.num == dict_id_ATTR_ancestral_allele) {
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
-        Context *ctx = mtf_get_ctx (vb, (DictId)dict_id_ATTR_Reference_seq); 
+        Context *ctx = mtf_get_ctx (vb, dict_id_ATTR_Reference_seq); 
         ctx->flags |= CTX_FL_LOCAL_LZMA;
 
         seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);

@@ -27,14 +27,18 @@ typedef struct Range {
     BitArray is_set;             // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
     const char *chrom_name;
     unsigned chrom_name_len;
-    int32_t chrom;     // index to the chrom of the external reference
+    int32_t chrom;               // index to the chrom of the external reference
     uint32_t range_i;
-    int64_t first_pos, last_pos;  // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
+    int64_t first_pos, last_pos; // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
+    int64_t gpos;                // position of this range in the "global position" 
     uint32_t copied_first_index, copied_len; // ZIP with REF_EXT_STORE: the subset of this range that was copied directly from the fasta file and doesn't need to be compressed
     pthread_mutex_t mutex;
 } Range;
 
-extern void ref_initialize_ranges (bool one_range_per_contig);
+#define ref_size(r) ((r) ? ((r)->last_pos - (r)->first_pos + 1) : 0)
+
+typedef enum { RT_SMALL_RANGES, RT_RANGE_PER_CONTIG, RT_SINGLE_RANGE } RangesType;
+extern void ref_initialize_ranges (RangesType ranges_type);
 extern void ref_compress_ref (void);
 extern void ref_load_stored_reference (void);
 extern void ref_set_reference (const char *filename);
@@ -45,7 +49,6 @@ extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
 extern void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_name_len, const char **snip, int32_t *word_index);
-//extern void ref_set_ref_from_external_data (VBlockP vb, int64_t first_pos, int64_t last_pos, BufferP data, uint64_t data_start, bool might_span_multiple_vbs);
 extern void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_words);
 extern int64_t ref_min_max_of_chrom (int32_t chrom, bool get_max);
 
@@ -57,6 +60,7 @@ extern void ref_print_is_set (const Range *r);
 // Make-reference stuff (ZIP of FASTA with --make-reference)
 extern void ref_make_ref_init (void);
 extern Range *ref_make_ref_get_range (uint32_t vblock_i);
+extern void ref_output_vb (VBlockP vb);
 
 // ZIP ONLY: access range_i and index within range, for ranges configured for ZIP
 #define ridx2pos(range_i,idx) (((int64_t)(range_i) * REF_NUM_SITES_PER_RANGE) | (idx))
@@ -74,7 +78,9 @@ extern Range *ref_make_ref_get_range (uint32_t vblock_i);
 // note that the following work on idx and not pos! (idx is the index within the range)
 #define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      actg_encode[(uint8_t)value] & 1)       ;  \
                                               bit_array_assign (&(range)->ref, (idx) * 2 + 1, (actg_encode[(uint8_t)value] & 2) >> 1) ; }
-#define ref_is_nucleotide_set(range,idx)    ((bool)bit_array_get (&(range)->is_set, (idx)))
+
+#define ref_is_nucleotide_set(range,idx) ((bool)bit_array_get (&(range)->is_set, (idx)))
+
 #define ref_get_nucleotide(range,idx)   actg_decode[(bit_array_get (&(range->ref), (idx) * 2 + 1) << 1) | \
                                                     bit_array_get (&(range)->ref, (idx) * 2)]
 
@@ -82,5 +88,8 @@ extern Range *ref_make_ref_get_range (uint32_t vblock_i);
 extern const char *ref_filename;
 extern Md5Hash ref_md5;
 extern Buffer ref_stored_ra;
+
+extern Range *genome;
+extern int64_t genome_size;
 
 #endif

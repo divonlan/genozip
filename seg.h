@@ -22,7 +22,7 @@ extern const char *seg_get_next_item (void *vb, const char *str, int *str_len,
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
 
 extern uint32_t seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
-#define seg_by_dict_id(vb,str,len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, str, len, mtf_get_ctx (vb, dict_id), add_bytes, NULL)
+#define seg_by_dict_id(vb,str,len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, str, len, mtf_get_ctx (vb, (DictId)dict_id), add_bytes, NULL)
 #define seg_by_did_i_ex(vb,str,len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, is_new);
 #define seg_by_did_i(vb,str,len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, NULL);
 

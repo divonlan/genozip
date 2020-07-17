@@ -23,7 +23,7 @@
 #include "seg.h"
 #include "dict_id.h"
 #include "reference.h"
-#include "fasta.h"
+#include "refhash.h"
 #include "progress.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
@@ -36,11 +36,11 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
                                            const char *delta_snip, unsigned delta_snip_len) 
 {
     ASSERT (delta_snip, "Error in piz_reconstruct_from_delta: delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERT (base_ctx->flags & CTX_FL_STORE_VALUE, "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have CTX_FL_STORE_VALUE",
+    ASSERT (ctx_is_store (base_ctx, CTX_FL_STORE_INT), "Error in piz_reconstruct_from_delta: attempting calculate delta from a base of \"%s\", but this context doesn't have CTX_FL_STORE_INT",
             base_ctx->name);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
-        my_ctx->last_delta = -2 * base_ctx->last_value; // negated previous value
+        my_ctx->last_delta = -2 * base_ctx->last_value.i; // negated previous value
 
     else if (!delta_snip_len)
         my_ctx->last_delta = -my_ctx->last_delta; // negated previous delta
@@ -48,7 +48,7 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
     else 
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
-    int64_t new_value = base_ctx->last_value + my_ctx->last_delta;  
+    int64_t new_value = base_ctx->last_value.i + my_ctx->last_delta;  
     RECONSTRUCT_INT (new_value);
 
     return new_value;
@@ -139,7 +139,7 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const
         if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
     }
 
-    ctx->last_value = ctx->next_local; // for seq_qual, we use last_value for storing the beginning of the sequence
+    ctx->last_value.i = ctx->next_local; // for seq_qual, we use last_value for storing the beginning of the sequence
     ctx->next_local += len;
 }
 
@@ -232,10 +232,11 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
 {
     if (!snip_len) return; // nothing to do
     
-    int64_t new_value=0;
+    LastValueType new_value = {0};
     bool have_new_value = false;
     Context *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
-    bool store = (snip_ctx->flags & CTX_FL_STORE_VALUE);
+    bool store_uint  = ctx_is_store (snip_ctx, CTX_FL_STORE_INT);
+    bool store_float = ctx_is_store (snip_ctx, CTX_FL_STORE_FLOAT);
 
     switch (snip[0]) {
 
@@ -253,7 +254,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         if (snip_len && !(base_ctx->ltype == CTX_LT_SEQUENCE)) RECONSTRUCT (snip, snip_len);
         
         if (base_ctx->ltype >= CTX_LT_INT8 && base_ctx->ltype <= CTX_LT_UINT64) {
-            new_value = piz_reconstruct_from_local_int (vb, base_ctx, 0);
+            new_value.i = piz_reconstruct_from_local_int (vb, base_ctx, 0);
             have_new_value = true;
         }
 
@@ -266,13 +267,13 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         break;
     }
     case SNIP_SELF_DELTA:
-        new_value = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip+1, snip_len-1);
+        new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip+1, snip_len-1);
         have_new_value = true;
         break;
 
     case SNIP_OTHER_DELTA: 
         base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
-        new_value = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip, snip_len); 
+        new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip, snip_len); 
         have_new_value = true;
         break;
 
@@ -293,19 +294,29 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         break;
     
     case SNIP_DONT_STORE:
-        store = false; // override CTX_FL_STORE_VALUE and fall through
+        store_uint = store_float = false; // override CTX_FL_STORE_* and fall through
         snip++; snip_len--;
         
     default: {
         RECONSTRUCT (snip, snip_len); // simple reconstruction
 
-        if (store) {
+        if (store_uint) {
             char *after;
-            new_value = (int64_t)strtoull (snip, &after, 10); // allows negative values
+            new_value.i = (int64_t)strtoull (snip, &after, 10); // allows negative values
 
             // if the snip in its entirety is not a valid integer, don't store the value.
             // this can happen for example when seg_pos_field stores a "nonsense" snip.
             have_new_value = (after == snip + snip_len);
+        }
+
+        else if (store_float) {
+            char *after;
+            new_value.d = strtod (snip, &after); // allows negative values
+
+            // if the snip in its entirety is not a valid integer, don't store the value.
+            // this can happen for example when seg_pos_field stores a "nonsense" snip.
+            have_new_value = (after == snip + snip_len);
+            
         }
 
         snip_ctx->last_delta = 0; // delta is 0 since we didn't calculate delta
@@ -313,7 +324,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
     }
 
     // update last_value if needed
-    if (have_new_value && store) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
+    if (have_new_value && (store_uint || store_float)) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
         snip_ctx->last_value = new_value;
 
     snip_ctx->last_line_i = vb->line_i;
@@ -345,7 +356,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
             vb->chrom_name_len   = snip_len;
         }
 
-        if (flag_regions && did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, ctx->last_value)) 
+        if (flag_regions && did_i == DTF(pos) && !regions_is_site_included (vb->chrom_node_index, ctx->last_value.i)) 
             vb->dont_show_curr_line = true;
     }
     
@@ -543,7 +554,14 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
         if (flag_reference == REF_STORED || flag_reading_reference) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
             ref_load_stored_reference();
-            
+
+            // load the refhash, if we are compressing FASTA or FASTQ
+            if (flag_reading_reference && primary_command == ZIP && flag_has_fastaq) 
+                refhash_load();
+
+            // exit now if all we wanted was just to see the reference (we've already shown it)
+            if ((flag_show_reference || flag_show_is_set || flag_show_ref_hash) && exe_type == EXE_GENOCAT) exit(0);
+
             if (flag_reading_reference) 
                 progress_finalize_component ((flag_test && !flag_reading_reference) ? "Success" : "Done");
         }
