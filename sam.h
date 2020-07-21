@@ -23,7 +23,7 @@ extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md
 
 // PIZ Stuff
 extern void sam_piz_reconstruct_vb ();
-extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx);
+extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
 
 // VB stuff
 extern void sam_vb_release_vb();

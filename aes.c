@@ -191,7 +191,7 @@ void aes_xcrypt_buffer (VBlock *vb, uint8_t *data, uint32_t length)
 
     for (unsigned i=0; i < length; i++, vb->bi++) {
  
-        if (vb->bi == AES_BLOCKLEN) { /* we need to regen xor compliment in buffer */
+        if (vb->bi == AES_BLOCKLEN) { /* we need to regen xor complement in buffer */
             memcpy (buffer.v, vb->aes_iv, AES_BLOCKLEN);
             aes_cipher (&buffer, vb->aes_round_key);
 

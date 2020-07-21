@@ -146,16 +146,16 @@ VBlock *vb_get_vb (unsigned vblock_i)
     unsigned vb_i; for (vb_i=0; vb_i < pool->num_vbs; vb_i++) {
     
         // free if this is a VB allocated by a previous file, with a different data type
-        if (pool->vb[vb_i] && pool->vb[vb_i]->data_type != z_file->data_type) {
+        if (pool->vb[vb_i] && z_file && pool->vb[vb_i]->data_type != z_file->data_type) {
             vb_destroy_vb (&pool->vb[vb_i]);
             pool->num_allocated_vbs--; // we will immediately allocate and increase this back
         }
         
         if (!pool->vb[vb_i]) { // VB is not allocated - allocate it
-            unsigned sizeof_vb = DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock);
+            unsigned sizeof_vb = z_file && DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock);
             pool->vb[vb_i] = calloc (sizeof_vb, 1); 
             pool->num_allocated_vbs++;
-            pool->vb[vb_i]->data_type = z_file->data_type;
+            pool->vb[vb_i]->data_type = z_file ? z_file->data_type : DT_NONE;
         }
 
         if (!pool->vb[vb_i]->in_use) break;
@@ -188,7 +188,7 @@ void vb_cleanup_memory (void)
     if (z_file->data_type != DT_NONE && DTPZ(cleanup_memory))
         DTPZ(cleanup_memory)(evb);
 
-    ref_cleanup_memory();
+    ref_cleanup_memory (false);
 }
 
 // NOT thread safe, use only in execution-terminating messages

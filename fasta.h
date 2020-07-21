@@ -9,7 +9,7 @@
 #include "genozip.h"
 
 // ZIP Stuff
-COMPRESSOR_CALLBACK(fast_zip_get_start_len_line_i_seq)
+COMPRESSOR_CALLBACK(fasta_zip_get_start_len_line_i_seq)
 extern void fasta_make_ref_range (VBlockP vb);
 
 // SEG Stuff
@@ -36,6 +36,6 @@ SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 #define FASTA_DICT_ID_ALIASES 
 
 #define FASTA_LOCAL_COMPRESSOR_CALLBACKS  \
-    { DT_FASTA, &dict_id_FASTA_SEQ,          fast_zip_get_start_len_line_i_seq  }, 
+    { DT_FASTA, &dict_id_FASTA_SEQ,          fasta_zip_get_start_len_line_i_seq  }, 
 
 #endif

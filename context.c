@@ -309,9 +309,10 @@ uint32_t mtf_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
 
     uint32_t node_index_if_new = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
-    for (uint32_t i=0; i < snip_len; i++)
-        ASSERT (snip[i], "Error in mtf_evaluate_snip_seg: snip_len=%u but unexpectedly snip[%u]==0", snip_len, i);
-        
+#ifdef DEBUG // time consuming and only needed during development
+    ASSERT (strnlen (snip, snip_len) == snip_len, "Error in mtf_evaluate_snip_seg: snip_len=%u but unexpectedly has an 0 in its midst", snip_len);
+#endif
+
     ASSERT (node_index_if_new <= MAX_WORDS_IN_CTX, 
             "Error: ctx of %s is full (max allowed words=%u): ol_mtf.len=%u mtf.len=%u",
             vb_ctx->name, MAX_WORDS_IN_CTX, (uint32_t)vb_ctx->ol_mtf.len, (uint32_t)vb_ctx->mtf.len)

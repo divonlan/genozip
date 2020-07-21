@@ -19,10 +19,9 @@ extern void refhash_calc_one_range (const Range *r, const Range *next_r);
 // stuff for loading and using refhash when ZIPping a fastq or fasta file
 extern void refhash_load(void);
 
-#define REFHASH_NOMATCH -10000000000000000LL
-extern int64_t refhash_best_match (const char *seq, int64_t seq_len);
+extern bool refhash_best_match (VBlockP vb, const char *seq, const uint32_t seq_len, int64_t *start_gpos, bool *is_forward, bool *is_all_ref);
 
-///// testing
-int64_t refhash_get_final_match_len (const char *seq, int64_t gpos, int64_t fwd_len);
+// globals
+extern const char complement[256];
 
 #endif

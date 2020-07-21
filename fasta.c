@@ -13,6 +13,18 @@
 #include "random_access.h"
 #include "strings.h"
 
+// callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
+void fasta_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
+                                         char **line_seq_data, uint32_t *line_seq_len,  // out 
+                                         char **unused_data,  uint32_t *unused_len)
+{
+    ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
+    *line_seq_len  = dl->seq_len;
+    *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
+    *unused_data   = NULL;
+    *unused_len    = 0;
+}   
+
 void fasta_seg_initialize (VBlockFAST *vb)
 {
     if (!flag_make_reference) {
@@ -48,7 +60,7 @@ void fasta_make_ref_range (VBlockP vb)
         
         const uint8_t *line_seq = ENT (uint8_t, vb->txt_data, DATA_LINE(line_i)->seq_data_start);
         for (uint64_t base_i=0; base_i < DATA_LINE(line_i)->seq_len; base_i++) {
-            uint8_t encoding = actg_encode[line_seq[base_i]];
+            uint8_t encoding = acgt_encode[line_seq[base_i]];
             bit_array_assign (&r->ref, bit_i, encoding & 1);
             bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
             bit_i += 2;

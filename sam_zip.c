@@ -107,8 +107,8 @@ void sam_seg_initialize (VBlock *vb)
 
     vb->contexts[SAM_RNAME].flags      = CTX_FL_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP;
-    vb->contexts[SAM_SEQNOREF].flags   = CTX_FL_LOCAL_ACGT;
-    vb->contexts[SAM_SEQNOREF].ltype   = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_SEQ_NOREF].flags  = CTX_FL_LOCAL_ACGT;
+    vb->contexts[SAM_SEQ_NOREF].ltype  = CTX_LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype       = CTX_LT_SEQUENCE;
     vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
@@ -169,16 +169,18 @@ static inline int sam_seg_get_next_subitem (const char *str, int str_len, char s
 // Creates a bitmap from seq data - exactly one bit per base that is mapped to the reference (e.g. not for INSERT bases)
 // - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SEQ_BITMAP whether this
 //   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
-//   bases that differ from the reference are stored in SAM_SEQNOREF
-// - Edge case: no POS (i.e. unaligned read) - we just store the sequence in SAM_SEQNOREF
+//   bases that differ from the reference are stored in SAM_SEQ_NOREF
+// - Edge case: no POS (i.e. unaligned read) - we just store the sequence in SAM_SEQ_NOREF
 // - Edge case: no CIGAR (it is "*") - we just treat it as an M and compare to the reference
-// - Edge case: no SEQ (it is "*") - we '*' in SAM_SEQNOREF and indicate "different from reference" in the bitmap. We store a
+// - Edge case: no SEQ (it is "*") - we '*' in SAM_SEQ_NOREF and indicate "different from reference" in the bitmap. We store a
 //   single entry, regardless of the number of entries indicated by CIGAR
+//
+// Best explanation of CIGAR operations: https://davetang.org/wiki/tiki-index.php?page=SAM
 static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len, int64_t pos, const char *cigar, 
                                unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar)
 {
     Context *bitmap_ctx = &vb->contexts[SAM_SEQ_BITMAP];
-    Context *nonref_ctx = &vb->contexts[SAM_SEQNOREF];
+    Context *nonref_ctx = &vb->contexts[SAM_SEQ_NOREF];
 
     if (!recursion_level)
         bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
@@ -186,12 +188,12 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
 
     // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
-    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + seq_len + 3 + sizeof(int64_t), vb->lines.len * seq_len / 5), CTX_GROWTH, 
+    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2words64 (seq_len) * sizeof(int64_t), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
                buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
     
-    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 40), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
 
-    // we can't compare to the reference if POS is 0: we store the seqeuence in SEQNOREF without an indication in the bitmap
+    // we can't compare to the reference if POS is 0: we store the seqeuence in SEQ_NOREF without an indication in the bitmap
     if (!pos) {
         buf_add (&nonref_ctx->local, seq, seq_len);
         goto align_nonref_local; 

@@ -357,7 +357,9 @@ void txtfile_write_one_vblock (VBlockP vb)
         ASSERTW (md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far), 
                 "MD5 of reconstructed vblock=%u (%s) differs from original file (%s). To see bad vblock:\n"
                 "head -n%u %s | tail -n%u", vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), 
-                vb->first_line + (uint32_t)vb->lines.len - 1, txt_name, (uint32_t)vb->lines.len);
+                DTP (line_height) * (vb->first_line + (uint32_t)vb->lines.len - 1), 
+                txt_name, 
+                DTP (line_height) * (uint32_t)vb->lines.len);
     }
 
     COPY_TIMER (vb->profile.write);

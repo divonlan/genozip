@@ -12,23 +12,18 @@
 #include "reference.h"
 #include "regions.h"
 
-// PIZ: SEQ reconstruction rules : 
-// '-' - data should be taken from the reference
-// '.' - data should be taken from SEQNOREF
-// if SEQ is '*' - stop after reconstructing the '*' regardless of CIGAR
-void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
+// PIZ: SEQ reconstruction 
+void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, unsigned unused2)
 {
 #define ROUNDUP_TO_NEAREST_4(x) ((uint32_t)(x) + 3) & ~((uint32_t)0x3)
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    ASSERT0 (bitmap_ctx, "Error in ref_reconstruct: bitmap_ctx is NULL");
-
-    BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
+    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == SAM_SEQ_BITMAP, "Error in sam_piz_reconstruct_seq: context is not SAM_SEQ_BITMAP");
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
-    Context *nonref_ctx      = bitmap_ctx + 1; // SEQNOREF is always one after SEQ
-    const char *nonref       = &nonref_ctx->local.data[nonref_ctx->next_local]; // possibly, this VB has no nonref (i.e. everything is ref), in which cse nonref would be an invalid pointer. That's ok, as it will not be accessed.
+    Context *nonref_ctx      = &vb->contexts[SAM_SEQ_NOREF];
+    const char *nonref       = ENT (const char, nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
     const char *nonref_start = nonref;
     unsigned subcigar_len    = 0;
     char cigar_op            = 0;
@@ -36,7 +31,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
     const Range *range       = NULL;
     unsigned seq_consumed=0, ref_consumed=0;
 
-    // case: missing pos - pos is 0 - in this case, the sequence is not encoded in the bitmap at all. we just copy it from SEQNOREF
+    // case: missing pos - pos is 0 - in this case, the sequence is not encoded in the bitmap at all. we just copy it from SEQ_NOREF
     if (!pos) {
         RECONSTRUCT (nonref, vb->seq_len);
         nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (vb->seq_len);
@@ -68,8 +63,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx)
 
         if (cigar_op & CIGAR_CONSUMES_QUERY) {
 
-            if (cigar_op & CIGAR_CONSUMES_REFERENCE && 
-                bit_array_get_bit (bitmap, bitmap_ctx->next_local++) /* copy from reference */) {
+            if ((cigar_op & CIGAR_CONSUMES_REFERENCE) && NEXTLOCALBIT (bitmap_ctx)) /* copy from reference */ {
 
                 uint32_t idx = pos + ref_consumed - range->first_pos;
 

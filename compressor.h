@@ -13,7 +13,7 @@ typedef enum {
     COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */,            
     COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8, 
     // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
-    // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complimentary 
+    // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
     // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt locations and verbatim for other characters
     COMP_ACGT=9, COMP_NON_ACGT=10 
 } CompressionAlg; 
@@ -49,7 +49,7 @@ typedef CompressorFunc (*Compressor);
 
 CompressorFunc comp_compress_bzlib, comp_compress_lzma, comp_compress_none;
 
-extern const uint8_t actg_encode[256];
-extern const char actg_decode[4];
-#define ACTG_DECODE(bitarr,idx) actg_decode[bit_array_get ((bitarr), (idx)*2) + (bit_array_get ((bitarr), (idx)*2 + 1) << 1)]
+extern const uint8_t acgt_encode[256];
+extern const char acgt_decode[4];
+#define ACGT_DECODE(bitarr,idx) acgt_decode[bit_array_get ((bitarr), ((int64_t)(idx))*2) + (bit_array_get ((bitarr), ((int64_t)(idx))*2 + 1) << 1)]
 #endif

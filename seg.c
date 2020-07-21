@@ -638,11 +638,12 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
 
 static uint32_t seg_estimate_num_lines (VBlock *vb)
 {
-    // get first line length
-    uint32_t len=0; for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
+    uint32_t len=0; 
+    int newlines=0; for (; newlines < (vb->data_type == DT_FASTQ ? 4 : 1); newlines++, len++)
+        for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
 
     char s[30];
-    ASSSEG (len < vb->txt_data.len, vb->txt_data.data, "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
+    ASSSEG (newlines==4 || len < vb->txt_data.len, vb->txt_data.data, "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (global_max_memory_per_vb, s));
 
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));

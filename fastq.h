@@ -9,7 +9,6 @@
 #include "genozip.h"
 
 // ZIP Stuff
-COMPRESSOR_CALLBACK(fast_zip_get_start_len_line_i_seq)
 COMPRESSOR_CALLBACK(fastq_zip_get_start_len_line_i_qual)
 
 // SEG Stuff
@@ -21,6 +20,7 @@ extern const char *fastq_seg_txt_line();
 extern bool fast_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern void fastq_piz_reconstruct_vb();
 extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
+extern void fastq_piz_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len);
 
 // VBlock stuff
 extern void fast_vb_release_vb();
@@ -34,7 +34,6 @@ extern unsigned fast_vb_zip_dl_size (void);
     { DT_FASTQ, &dict_id_fields[FASTQ_E4L], &dict_id_fields[FASTQ_E1L] }, 
 
 #define FASTQ_LOCAL_COMPRESSOR_CALLBACKS  \
-    { DT_FASTQ, &dict_id_fields[FASTQ_QUAL], fastq_zip_get_start_len_line_i_qual }, \
-    { DT_FASTQ, &dict_id_fields[FASTQ_SEQ],  fast_zip_get_start_len_line_i_seq  }, 
+    { DT_FASTQ, &dict_id_fields[FASTQ_QUAL], fastq_zip_get_start_len_line_i_qual },
 
 #endif

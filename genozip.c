@@ -324,9 +324,12 @@ static void main_genounzip (const char *z_filename,
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (char *exec_name, char *z_filename)
+static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_last_file)
 {
     const char *password = crypt_get_password();
+
+    // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
+    if (is_last_file) ref_cleanup_memory (true);
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 
                                   "To use the --test option",
@@ -434,7 +437,7 @@ static void main_genozip (const char *txt_filename,
     FREE ((void *)basename);
 
     // test the compression, if the user requested --test
-    if (flag_test && (!flag_bind || is_last_file)) main_test_after_genozip (exec_name, z_filename);
+    if (flag_test && (!flag_bind || is_last_file)) main_test_after_genozip (exec_name, z_filename, is_last_file);
 }
 
 static void main_list_dir(const char *dirname)
@@ -479,14 +482,24 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
 
 bool has_fasta_fastq (char **filenames, unsigned num_files)
 {
-    FileType ft = file_get_stdin_type();
-    DataType dt = file_get_data_type (ft, true);
-    if (dt == DT_FASTA || dt == DT_FASTQ) return true;
-
-    for (unsigned i=0; i < num_files ; i++) {
-        ft = file_get_type (filenames[i], false);
-        dt = file_get_data_type (ft, true);
+    if (command == ZIP) {
+        FileType ft = file_get_stdin_type();
+        DataType dt = file_get_data_type (ft, true);
         if (dt == DT_FASTA || dt == DT_FASTQ) return true;
+
+        for (unsigned i=0; i < num_files ; i++) {
+            ft = file_get_type (filenames[i], false);
+            dt = file_get_data_type (ft, true);
+            if (dt == DT_FASTA || dt == DT_FASTQ) return true;
+        }
+    }
+
+    else if (command == PIZ) {
+        for (unsigned i=0; i < num_files ; i++) {
+            FileType ft = file_get_type (filenames[i], false);
+            DataType dt = file_get_dt_by_z_ft (ft);
+            if (dt == DT_FASTA || dt == DT_FASTQ) return true;
+        }
     }
 
     return false;
@@ -494,54 +507,23 @@ bool has_fasta_fastq (char **filenames, unsigned num_files)
 
 void TEST()
 {
-    uint32_t size = 14236798;
-    FILE *f=fopen ("qqual","rb");
-    char *data = malloc (size);
-    fread (data, 1, size, f);
-    fclose (f);
+    FILE *f = fopen ("qual", "rb");
 
-    FILE *qualRuns = fopen ("qqualRuns4","wb");
-    FILE *qualChar = fopen ("qqualChar4","wb");
-
-    unsigned run=0;
-    for (uint32_t i=0; i < size; i++) {
-        if (data[i] == 'F') {
-            if (run == 256) {
-                fputc (0, qualRuns); // 0==256
-                fputc ('r', qualChar);
-                run=0;
-            }
-            
-            run++;
-        }
-
-        if (data[i] != 'F') {
-            if (run) {
-                if (run <= 1) 
-                    fwrite ("FFFF", 1, run, qualChar);
-                else {
-                    fputc ('r', qualChar);
-                    fputc (run-1, qualRuns);
-                }
-                run=0;
-            }
-            fputc (data[i], qualChar);
-        }
+    BitArray b = {};
+    bit_array_alloc (&b, 14336798);
+    for (unsigned i=0; i< 14336798; i++) {
+        char c = fgetc (f);
+        if (c=='F')
+            bit_array_set_bit (&b, i);
+        else if (c=='\n' || c=='\r')
+            {}
+        else 
+            bit_array_clear_bit (&b, i);
     }
 
-    if (run) {
-        if (run <= 1) 
-            fwrite ("FFFF", 1, run, qualChar);
-        else {
-            fputc ('r', qualChar);
-            fputc (run-1, qualRuns);
-        }
-        run=0;
-    }
-
-    fclose (qualChar);
-    fclose (qualRuns);
+    fwrite (b.words, b.num_of_words * sizeof (uint64_t), 1, stdout);
 }
+
 int main (int argc, char **argv)
 {
     //TEST();exit(0);
@@ -665,7 +647,7 @@ int main (int argc, char **argv)
             "i:I:cdfhlLqQt^Vzm@:o:p:B:S:9KWFe:E:",  // genozip
             "czfhLqQt^V@:uo:p:me:",                 // genounzip
             "hLVp:qf",                              // genols
-            "hLV@:p:qQ1r:t:s:H1Go:fg:e:"            // genocat
+            "hLV@:p:qQ1r:t:s:H1Go:fg:e:E:"          // genocat
         };
 
         int option_index = -1;
@@ -751,15 +733,23 @@ int main (int argc, char **argv)
 
         if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
         
-        // genozip with no input filename, no output filename, and no output or input redirection - show help (unless --register)
+        // genozip with no input filename, no output filename, and no output or input redirection 
         // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
         // coming from a pipe. the user must use "-" to redirect from stdin
         else if (command == -1 && optind == argc && !out_filename && 
                  (isatty(0) || arch_am_i_in_docker()) && isatty(1)) {
+            // case: --register
             if (flag_register) 
                 license_get();
+
+            // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
+            if (exe_type == EXE_GENOCAT && flag_reference) 
+                ref_load_external_reference (true);
+
+            // otherwise: show help
             else
                 main_print_help (false);
+
             return 0;
         }
 
@@ -778,8 +768,8 @@ int main (int argc, char **argv)
 
     // if flag_md5 we need to seek back and update the md5 in the txt header section - this is not possible with flag_stdout
     ASSINP (!flag_stdout      || !flag_md5,                         "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("md5", "m"));
-    ASSINP (!flag_test        || !out_filename || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
-    ASSINP (!flag_test        || !flag_replace || command != PIZ, "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
+    ASSINP (!flag_test        || !out_filename || command != PIZ,   "%s: option %s is incompatable with %s", global_cmd, OT("output", "o"),  OT("test", "t"));
+    ASSINP (!flag_test        || !flag_replace || command != PIZ,   "%s: option %s is incompatable with %s", global_cmd, OT("replace", "^"), OT("test", "t"));
     ASSINP (!flag_test        || !flag_stdout  || command != ZIP,   "%s: option %s is incompatable with %s", global_cmd, OT("stdout", "c"), OT("test", "t"));
     ASSINP (!flag_header_only || !flag_no_header,                   "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), "header-only");
     ASSINP (!flag_no_header   || !flag_header_one,                  "%s: option %s is incompatable with %s", global_cmd, OT("no-header", "H"), OT("header-one", "1"));
@@ -790,6 +780,7 @@ int main (int argc, char **argv)
     ASSINP (!flag_test        || !flag_make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
     ASSINP (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
     ASSINP (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
+    ASSINP (flag_reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
     ASSINP (!dump_one_b250_dict_id.num || !dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
@@ -875,7 +866,7 @@ int main (int argc, char **argv)
         // import external reference if needed (in case of --REFERENCE for non-binding files, we need to read for each file)
         if (((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && file_i==0) || 
             (flag_reference == REF_EXT_STORE && !flag_bind)) 
-            ref_load_external_reference(); 
+            ref_load_external_reference (false); 
 
         switch (command) {
             case ZIP  : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); break;

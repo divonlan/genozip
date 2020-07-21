@@ -4,7 +4,7 @@
 #   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
-# Mingw: http://mingw-w64.org/doku.php  (Windows 32 bit version also works)
+# Mingw: http://mingw-w64.org/doku.php 
 # Cygwin: https://www.cygwin.com/
 
 ifdef BUILD_PREFIX
@@ -24,7 +24,7 @@ ifdef IS_CONDA
 	endif
 else
 	CC=gcc
-	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1
+	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native
 endif 
 
 
@@ -303,6 +303,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
+distribution: CFLAGS := $(filter-out -march=native,$(CFLAGS))
 distribution: conda/.conda-timestamp windows/genozip-installer.exe mac/.remote_mac_timestamp
 	
 endif # Windows

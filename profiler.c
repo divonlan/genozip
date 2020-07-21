@@ -8,43 +8,51 @@
 
 void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
 {
-    dst->read                              += src->read;
-    dst->compute                           += src->compute;
-    dst->write                             += src->write;
-    dst->compressor                        += src->compressor;
-    dst->piz_reconstruct_vb   += src->piz_reconstruct_vb;
-    dst->vcf_piz_get_variant_data_line     += src->vcf_piz_get_variant_data_line;
-    dst->vcf_piz_get_haplotype_data_line   += src->vcf_piz_get_haplotype_data_line;
-    dst->vcf_piz_get_phase_data_line       += src->vcf_piz_get_phase_data_line;
-    dst->vcf_piz_reconstruct_genotype_data_line    += src->vcf_piz_reconstruct_genotype_data_line;
-    dst->zfile_uncompress_section          += src->zfile_uncompress_section;
-    dst->buf_alloc                         += src->buf_alloc;
-    dst->vcf_piz_initialize_sample_iterators    += src->vcf_piz_initialize_sample_iterators;
-    dst->piz_get_line_subfields            += src->piz_get_line_subfields;
-    dst->vcf_piz_reconstruct_samples                += src->vcf_piz_reconstruct_samples;
-    dst->piz_read_one_vb                 += src->piz_read_one_vb;
-    dst->zfile_compress_dictionary_data    += src->zfile_compress_dictionary_data,
-    dst->txtfile_read_vblock        += src->txtfile_read_vblock;
-    dst->txtfile_read_header               += src->txtfile_read_header;
-    dst->seg_all_data_lines                += src->seg_all_data_lines;
-    dst->vcf_zip_generate_haplotype_sections   += src->vcf_zip_generate_haplotype_sections;
-    dst->count_alt_alleles                 += src->count_alt_alleles;
-    dst->sample_haplotype_data             += src->sample_haplotype_data;
-    dst->zip_generate_genotype_sections    += src->zip_generate_genotype_sections;
-    dst->vcf_zip_generate_phase_sections   += src->vcf_zip_generate_phase_sections;
-    dst->zip_generate_variant_data_section += src->zip_generate_variant_data_section;
-    dst->md5                               += src->md5;
-    dst->lock_mutex_compress_dict          += src->lock_mutex_compress_dict;
-    dst->lock_mutex_zf_ctx                 += src->lock_mutex_zf_ctx;    
-    dst->mtf_merge_in_vb_ctx_one_dict_id   += src->mtf_merge_in_vb_ctx_one_dict_id;
-    dst->mtf_clone_ctx                     += src->mtf_clone_ctx;
-    dst->mtf_integrate_dictionary_fragment += src->mtf_integrate_dictionary_fragment;
+#   define ADD(x) dst->x += src->x
 
-    dst->tmp1                              += src->tmp1;
-    dst->tmp2                              += src->tmp2;
-    dst->tmp3                              += src->tmp3;
-    dst->tmp4                              += src->tmp4;
-    dst->tmp5                              += src->tmp5;
+    ADD(read);
+    ADD(compute);
+    ADD(write);
+    ADD(compressor_bz2);
+    ADD(compressor_lzma);
+    ADD(piz_reconstruct_vb);
+    ADD(vcf_piz_get_variant_data_line);
+    ADD(vcf_piz_get_haplotype_data_line);
+    ADD(vcf_piz_get_phase_data_line);
+    ADD(vcf_piz_reconstruct_genotype_data_line);
+    ADD(zfile_uncompress_section);
+    ADD(buf_alloc);
+    ADD(vcf_piz_initialize_sample_iterators);
+    ADD(piz_get_line_subfields);
+    ADD(vcf_piz_reconstruct_samples);
+    ADD(piz_read_one_vb);
+    ADD(zfile_compress_dictionary_data);
+    ADD(txtfile_read_vblock);
+    ADD(txtfile_read_header);
+    ADD(seg_all_data_lines);
+    ADD(vcf_zip_generate_haplotype_sections);
+    ADD(count_alt_alleles);
+    ADD(sample_haplotype_data);
+    ADD(zip_generate_genotype_sections);
+    ADD(vcf_zip_generate_phase_sections);
+    ADD(zip_generate_variant_data_section);
+    ADD(md5);
+    ADD(lock_mutex_compress_dict);
+    ADD(lock_mutex_zf_ctx);
+    ADD(mtf_merge_in_vb_ctx_one_dict_id);
+    ADD(mtf_clone_ctx);
+    ADD(mtf_integrate_dictionary_fragment);
+    ADD(refhash_best_match);
+    ADD(refhash_get_match_len);
+    ADD(refhash_get_word_from_seq);
+    ADD(generate_rev_complement_genome);
+    ADD(tmp1);
+    ADD(tmp2);
+    ADD(tmp3);
+    ADD(tmp4);
+    ADD(tmp5);
+
+#undef ADD
 }
 
 static inline unsigned ms(long long ns) { return (unsigned)(ns / 1000000);}
@@ -58,6 +66,9 @@ const char *profiler_print_short (const ProfilerRec *p)
 
 void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
 {
+    static const char *space = "                                                   ";
+#   define PRINT(x, level) if (p->x) fprintf (stderr, "%.*s" #x ": %u\n", level*3, space, ms(p->x));
+    
 #if defined _WIN32
     static const char *os ="Windows";
 #elif defined __APPLE__
@@ -83,44 +94,51 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     if (command != ZIP) { // this is a uncompress operation
 
         fprintf (stderr, "GENOUNZIP I/O thread (piz_dispatcher):\n");
-        fprintf (stderr, "   piz_read_one_vb: %u\n", ms(p->piz_read_one_vb));
-        fprintf (stderr, "      read: %u\n", ms(p->read));
-        fprintf (stderr, "      mtf_integrate_dictionary_fragment: %u\n", ms(p->mtf_integrate_dictionary_fragment));
-        fprintf (stderr, "   write: %u\n", ms(p->write));
+        PRINT (piz_read_one_vb, 1);
+        PRINT (read, 2);
+        PRINT (mtf_integrate_dictionary_fragment, 2);
+        PRINT (write, 1);
         fprintf (stderr, "GENOUNZIP compute threads (vcf_piz_uncompress_vb): %u\n", ms(p->compute));
-        fprintf (stderr, "   zfile_uncompress_section: %u\n", ms(p->zfile_uncompress_section));
-        fprintf (stderr, "   piz_reconstruct_vb: %u\n", ms(p->piz_reconstruct_vb));
-        fprintf (stderr, "      vcf_piz_get_variant_data_line: %u\n", ms(p->vcf_piz_get_variant_data_line));
-        fprintf (stderr, "      piz_get_line_subfields: %u\n", ms(p->piz_get_line_subfields));
-        fprintf (stderr, "      vcf_piz_get_haplotype_data_line: %u\n", ms(p->vcf_piz_get_haplotype_data_line));
-        fprintf (stderr, "      vcf_piz_initialize_sample_iterators: %u\n", ms(p->vcf_piz_initialize_sample_iterators));
-        fprintf (stderr, "      vcf_piz_reconstruct_genotype_data_line: %u\n", ms(p->vcf_piz_reconstruct_genotype_data_line));
-        fprintf (stderr, "      vcf_piz_get_phase_data_line: %u\n", ms(p->vcf_piz_get_phase_data_line));
-        fprintf (stderr, "      vcf_piz_reconstruct_samples: %u\n", ms(p->vcf_piz_reconstruct_samples));
+        PRINT (zfile_uncompress_section, 1);
+        PRINT (piz_reconstruct_vb, 1);
+        PRINT (vcf_piz_get_variant_data_line, 2);
+        PRINT (piz_get_line_subfields, 2);
+        PRINT (vcf_piz_get_haplotype_data_line, 2);
+        PRINT (vcf_piz_initialize_sample_iterators, 2);
+        PRINT (vcf_piz_reconstruct_genotype_data_line, 2);
+        PRINT (vcf_piz_get_phase_data_line, 2);
+        PRINT (vcf_piz_reconstruct_samples, 2);
     }
     else { // compress
         fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
-        fprintf (stderr, "   txtfile_read_header: %u\n", ms(p->txtfile_read_header));
-        fprintf (stderr, "   txtfile_read_vblock: %u\n", ms(p->txtfile_read_vblock));
-        fprintf (stderr, "      read: %u\n", ms(p->read));
-        fprintf (stderr, "      md5: %u\n", ms(p->md5));
-        fprintf (stderr, "   write: %u\n", ms(p->write));
+        PRINT (txtfile_read_header, 1);
+        PRINT (txtfile_read_vblock, 1);
+        PRINT (read, 2);
+        PRINT (md5, 2);
+        PRINT (write, 1);
         fprintf (stderr, "GENOZIP compute threads (vcf_zip_compress_one_vb): %u\n", ms(p->compute));
-        fprintf (stderr, "   compressor: %u\n", ms(p->compressor));
-        fprintf (stderr, "   seg_all_data_lines: %u\n", ms(p->seg_all_data_lines));
-        fprintf (stderr, "   vcf_zip_generate_haplotype_sections: %u\n", ms(p->vcf_zip_generate_haplotype_sections));
-        fprintf (stderr, "      count_alt_alleles: %u\n", ms(p->count_alt_alleles));
-        fprintf (stderr, "      sample_haplotype_data: %u\n", ms(p->sample_haplotype_data));
-        fprintf (stderr, "   zip_generate_genotype_sections: %u\n", ms(p->zip_generate_genotype_sections));
-        fprintf (stderr, "   vcf_zip_generate_phase_sections: %u\n", ms(p->vcf_zip_generate_phase_sections));
-        fprintf (stderr, "   zip_generate_variant_data_section: %u\n", ms(p->zip_generate_variant_data_section));
-        fprintf (stderr, "   mtf_clone_ctx: %u\n", ms(p->mtf_clone_ctx));
-        fprintf (stderr, "   lock_mutex_zf_ctx: %u\n", ms(p->lock_mutex_zf_ctx));
-        fprintf (stderr, "      mtf_merge_in_vb_ctx_one_dict_id: %u\n", ms(p->mtf_merge_in_vb_ctx_one_dict_id));
-        fprintf (stderr, "      lock_mutex_compress_dict: %u\n", ms(p->lock_mutex_compress_dict));
-        fprintf (stderr, "         zfile_compress_dictionary_data: %u\n", ms(p->zfile_compress_dictionary_data));
+        PRINT (compressor_bz2, 1);
+        PRINT (compressor_lzma, 1);
+        PRINT (seg_all_data_lines, 1);
+        PRINT (refhash_best_match, 2);
+        PRINT (refhash_get_match_len, 3);
+        PRINT (refhash_get_word_from_seq, 3);
+        PRINT (vcf_zip_generate_haplotype_sections, 1);
+        PRINT (count_alt_alleles, 2);
+        PRINT (sample_haplotype_data, 2);
+        PRINT (zip_generate_genotype_sections, 1);
+        PRINT (vcf_zip_generate_phase_sections, 1);
+        PRINT (zip_generate_variant_data_section, 1);
+        PRINT (mtf_clone_ctx, 1);
+        PRINT (lock_mutex_zf_ctx, 1);
+        PRINT (mtf_merge_in_vb_ctx_one_dict_id, 2);
+        PRINT (lock_mutex_compress_dict, 2);
+        PRINT (zfile_compress_dictionary_data, 3);
     }    
-    fprintf (stderr, "buf_alloc: %u\n", ms(p->buf_alloc));
+
+    PRINT (buf_alloc, 0);
+    PRINT (generate_rev_complement_genome, 0);
+    
     fprintf (stderr, "tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
 
     fprintf (stderr, "\nVblock stats:\n");

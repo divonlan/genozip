@@ -318,6 +318,32 @@ bool regions_get_ra_intersection (uint32_t chrom_word_index, int64_t min_pos, in
     return intersection_found;
 }
 
+// used by ref_display_ref. if an intersection was found - returns the min,max pos and true, otherwise returns false
+bool regions_get_range_intersection (uint32_t chrom_word_index, int64_t min_pos, int64_t max_pos,
+                                     int64_t *intersect_min_pos, int64_t *intersect_max_pos) // out
+{
+    if (!flag_regions) { // if no regions are specified, the entire range "intersects"
+        *intersect_min_pos = min_pos;
+        *intersect_max_pos = max_pos;
+        return true;
+    }
+
+    Buffer *chregs_buf = &chregs[chrom_word_index];
+    if (!chregs_buf->len) return false; // no intersection with this chromosome
+
+    ASSERT0 (chregs_buf->len==1, "Error: when using --regions to display a reference, you can specify at most on region per chromosome");
+
+    Chreg *chreg = FIRSTENT (Chreg, *chregs_buf);
+
+    if (chreg->start_pos > max_pos || chreg->end_pos < min_pos) 
+        return false; // no intersection with this chromosome
+
+    *intersect_min_pos = MAX (min_pos, chreg->start_pos);
+    *intersect_max_pos = MIN (max_pos, chreg->end_pos);
+
+    return true;
+}
+
 // PIZ: check if a (chrom,pos) that comes from a specific line, is included in any positive region of
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (uint32_t chrom_word_index, int64_t pos)

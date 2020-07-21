@@ -16,6 +16,7 @@
 #include "refhash.h"
 #include "compressor.h"
 #include "bit_array.h"
+#include "profiler.h"
 
 // ref_hash logic:
 // we use the 28 bits (14 nucleotides) following a "G" hook, as the hash value, to index into a hash table with multiple
@@ -32,6 +33,7 @@
 // reference gpos
 //
 #define HOOK 'G'
+#define HOOK_REV 'C' // complement of HOOK
 
 // values used in make-reference. when loading a reference file, we get it from the file
 // note: the code supports modifying MAKE_REF_BASE_LAYER_BITS and MAKE_REF_NUM_LAYERS without further code changes.
@@ -54,10 +56,45 @@ static uint32_t **refhashs = NULL; // array of pointers to the beginning of each
 static SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 static uint32_t ref_hash_cursor = 0;
 
-
 // used for parallelizing read / write of the refhash
 static uint32_t next_task_layer = 0;
 static uint32_t next_task_start_within_layer = 0;
+
+// strict encoding of A,C,G,T - everything else in non-encodable (a 4 here)
+static const uint32_t nuke_encode[256] = { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 4
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 16
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 32
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 48
+                                           4, 0, 4, 1, 4, 4, 4, 2, 4, 4, 4, 4, 4, 4, 4, 4,   // 64  A(65)->0 C(67)->1 G(71)->2
+                                           4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 84  T(84)->3
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 96  
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 112 
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 128
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+
+// lookup table for base complement
+const char complement[256] =  { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 4
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 16
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 32
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 48
+                                4,'T',4,'G',4, 4, 4,'C',4, 4, 4, 4, 4, 4, 4, 4,   // 64  A(65)->T C(67)->G G(71)->C
+                                4, 4, 4, 4,'A',4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 84  T(84)->A
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 96  
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 112 
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 128
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
 
 static inline uint32_t refhash_get_word (const Range *r, int64_t idx)
 {
@@ -160,12 +197,18 @@ static void refhash_prepare_for_compress (VBlockP vb)
 static void refhash_compress_one_vb (VBlockP vb)
 {
     uint32_t uncompressed_size = MIN (make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
+    
+    // calculate density to decide on compression alg
+    const uint32_t *hash_data = ENT (const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
+    uint32_t num_zeros=0;
+    for (uint32_t i=0 ; i < uncompressed_size / sizeof (uint32_t); i++)
+        if (!hash_data[i]) num_zeros++;
 
     // tradeoff between LZMA and BZ2 in this case:
-    // BZ2 pros : BZ2 is about 8x faster than LZMA in generating the reference (56 sec vs 7:42 min on my PC),
+    // BZ2 pros : BZ2 is about 8x faster than LZMA in generating the reference (56 sec vs 7:42 min on my PC for GRCh38), also, it compresses sparse arrays much better (eg in the case of a small reference)
     // LZMA pros: LZMA it saves 4-6 seconds (on my PC) in loading the generated reference for compressing fasta/fastq due to faster decompression. The reference file is ~1.5% smaller.
     SectionHeaderRefHash header = { .h.section_type          = SEC_REF_HASH, 
-                                    .h.sec_compression_alg   = COMP_LZMA, 
+                                    .h.sec_compression_alg   = num_zeros*sizeof(uint32_t) > uncompressed_size/2 ? COMP_BZ2 : COMP_LZMA, // if its sparse, go with BZ2
                                     .h.data_uncompressed_len = BGEN32 (uncompressed_size),
                                     .h.vblock_i              = BGEN32 (vb->vblock_i),
                                     .h.magic                 = BGEN32 (GENOZIP_MAGIC),
@@ -266,142 +309,218 @@ void refhash_load(void)
     buf_test_overflows_all_vbs ("refhash_load");
 }
 
-// strict encoding of A,C,G,T - everything else in non-encodable (a 4 here)
-static const uint32_t nuke_encode[256] = { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 4
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 16
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 32
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 48
-                                           4, 0, 4, 1, 4, 4, 4, 2, 4, 4, 4, 4, 4, 4, 4, 4,   // 64  A(65)->0 C(67)->1 G(71)->2
-                                           4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 84  T(84)->3
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 96  
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 112 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 128
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+#define COMPLIMENT(b) (3-(b))
 
+// Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
+// Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
 // calculates a refhash word from 14 nucleotides following a 'G' (only last G in a sequenece of GGGG...)
-static inline bool refhash_get_word_from_seq (const char *seq, uint32_t *refhash_word)
+static inline bool refhash_get_word_from_seq (VBlock *vb, const char *seq, uint32_t *refhash_word, int direction /* 1 forward, -1 reverse */)
+                                              
 {   
+    START_TIMER;
+
     *refhash_word = 0;
 
-    for (unsigned i=0; i < nukes_per_hash; i++) {   
+    for (int i=0; direction * i < nukes_per_hash; i += direction) {   
         uint32_t base = nuke_encode[(uint8_t)seq[i]];
-        if (base == 4) return false; // not a A,C,G,T
+        if (base == 4) {
+            COPY_TIMER (vb->profile.refhash_get_word_from_seq);
+            return false; // not a A,C,G,T
+        }
 
-        *refhash_word = *refhash_word + (base << (i*2));
+        if (direction == -1) base = COMPLIMENT (base);
+
+        *refhash_word |= (base << (direction * i * 2)); // 2-LSb of word is the first base
     }
 
-    *refhash_word &= layer_bitmask[0]; // remove MSb in case of an odd number of base bits
+    // remove MSb in case of an odd number of base layer bits
+    if (MAKE_REF_BASE_LAYER_BITS & 1) 
+        *refhash_word &= layer_bitmask[0]; 
 
+    COPY_TIMER (vb->profile.refhash_get_word_from_seq);
     return true;
 }
 
-int64_t refhash_get_final_match_len (const char *seq, int64_t gpos, int64_t fwd_len)
+static inline uint32_t refhash_get_match_len (VBlock *vb, BitArray *seq_bits, int64_t gpos, bool is_forward)
 {
-    int64_t count=0;
+    START_TIMER;
 
-    for (int64_t i=0; i < fwd_len; i++) 
-        if (seq[i] == ACTG_DECODE (&genome->ref, gpos + i)) count++;
+    // extract the portion of the genome for which alignment to seq_bits is to be tested
+    word_t bitmap_words[seq_bits->num_of_words];
+    BitArray bitmap = { .num_of_bits  = seq_bits->num_of_bits, 
+                        .num_of_words = seq_bits->num_of_words,
+                        .words        = bitmap_words };
 
-    return count;
-}
+    bit_array_copy (&bitmap, 0, 
+                    &(is_forward ? genome : genome_rev)->ref, 
+                    (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2, 
+                    bitmap.num_of_bits);
 
-static inline int64_t refhash_get_match_len (const char *seq, int64_t gpos, int64_t fwd_len, int64_t bwd_len,
-                                             int64_t *fwd_match, int64_t *bwd_match, int64_t *snps)
-{
-    *snps=0;
-    int64_t i;
+    bit_array_clear_excess_bits_in_top_word (&bitmap);
 
-    // search forwards
-    for (i=0; i < fwd_len; i++) 
-        if (seq[i] != ACTG_DECODE (&genome->ref, gpos + i)) {
-            if (i < fwd_len-1 && seq[i+1] == ACTG_DECODE (&genome->ref, gpos + i+1))
-                (*snps)++; // tolerate a SNP - this position is different, but next position in the same again
-            else
-                break;            
-        }
-    *fwd_match = i;
+    uint32_t nonmatches=0;
+    for (uint32_t i=0; i < (uint32_t)bitmap.num_of_words; i++) 
+        // xor - resulting in 1 if they're different and 0 if they're equal, then count the 1s
+        nonmatches += __builtin_popcountll (bitmap.words[i] ^ seq_bits->words[i]);
 
-    // search backwards
-    for (i=-1; i >= -bwd_len; i--)
-        if (seq[i] != ACTG_DECODE (&genome->ref, gpos + i)) {
-            if (i >= -bwd_len+1 && seq[i-1] == ACTG_DECODE (&genome->ref, gpos + i-1))
-                (*snps)++; // tolerate a SNP - this position is different, but next position in the same again
-            else
-                break;            
-        }
-    *bwd_match = -1 - i;
-
-    return *fwd_match + *bwd_match; 
-}
-
-// returns gpos aligned with seq, containing the longest match to the reference, or REFHASH_NOMATCH if no match was found
-int64_t refhash_best_match (const char *seq, int64_t seq_len)
-{
-    int64_t longest_len = 0, num_matches=0, total_len=0, hooks=0, fwd_match, bwd_match, snps, final_match_len,
-            best_fwd_match=0, best_bwd_match=0, best_snps=0, best_gpos=0, best_i=0;
-
-    bool almost_perfect = false;
-    for (int64_t i=0; i < seq_len - nukes_per_hash && !almost_perfect; i++) {
-        
-        if (seq[i] != HOOK || seq[i+1] == HOOK) continue; // take the G - if there is a polymer GGGG... take the last one
-        hooks++;
-
-        uint32_t refhash_word;
-        if (!refhash_get_word_from_seq (&seq[i+1], &refhash_word)) continue; 
-
-        for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-
-            int64_t gpos = (int64_t)BGEN32 (refhashs[layer_i][refhash_word & layer_bitmask[layer_i]]); // position of the start of the G... sequence in the genome
-            
-            // case: hash table is empty for this word - and the remaining layers do not have an entry that originated from refhash_word.
-            // note that they might have an entry from another word that shares LSb with refhash_word, but that by definition doesnt much our seq)
-            if (!gpos) break; 
-
-            int64_t match_len = refhash_get_match_len (&seq[i], gpos, MIN (seq_len-i, genome_size-gpos), MIN(i, gpos), &fwd_match, &bwd_match, &snps);
-            if (match_len < 20) continue;
-
-            if (match_len > longest_len) {
-                longest_len    = match_len;
-                best_gpos      = gpos;
-                best_i         = i;
-                best_fwd_match = fwd_match;
-                best_bwd_match = bwd_match;
-                best_snps      = snps;
-            }
-
-            total_len += match_len;
-            num_matches++;
-
-            // case: we have over 95% match, no need to continue searching
-            if (match_len >= (seq_len * 95) / 100) {
-                almost_perfect=true;
-                break; 
-            }
-        }
-    }
-
-    return longest_len ? (best_gpos - best_i) : REFHASH_NOMATCH; // can be negative if seq is aligned to before the start of the reference
+    //bit_array_print_bases (&bitmap, "bitmap", true);
 /*
-    if (longest_len > 0 && longest_len < seq_len) {
-        int64_t start_gpos = MAX (best_gpos - best_i, 0);
-        int64_t room_fwd = MIN (seq_len, genome_size-start_gpos);
-        final_match_len = refhash_get_final_match_len (seq, start_gpos, room_fwd); 
-    }
-    else 
-        final_match_len = longest_len;
+    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
+    word_t *ref = &(is_forward ? genome : genome_rev)->ref.words[bit_i >> 6];
+    uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
 
-    printf ("hooks=%u num_matches=%u longest_match_len=%u(%u%%) fwd=%u bwd=%u snps=%u final_match_len=%u(%u%%)\n", 
-            (uint32_t)hooks, (uint32_t)num_matches, (uint32_t)longest_len, (uint32_t)((longest_len*100)/seq_len), 
-            (uint32_t)best_fwd_match, (uint32_t)best_bwd_match, (uint32_t)best_snps,
-            (uint32_t)final_match_len, (uint32_t)((final_match_len*100)/seq_len));
+    uint32_t nonmatches=0;
+    word_t word=0;
+    if (!shift) 
+        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
+            word = seq_bits->words[i] ^ ref[i]; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
+            nonmatches += __builtin_popcountll (word);
+        }
+    else 
+        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words-1; i++) {
+            word = seq_bits->words[i] ^ ((ref[i] >> shift) | (ref[i+1] & bitmask64 (shift))); // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
+            nonmatches += __builtin_popcountll (word);
+        }
+    
+    // remove non-matches due to the unused part of the last word
+    if (seq_bits->num_of_bits % 64)
+        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
 */
-    return almost_perfect;
+    //bit_array_print_bases (&bitmap, "xor", true);
+
+    COPY_TIMER (vb->profile.refhash_get_match_len);
+    return (uint32_t)seq_bits->num_of_bits - nonmatches;
+}
+
+// returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. returns false if no match found.
+bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
+                         int64_t *start_gpos, bool *is_forward, bool *is_all_ref) // out
+{
+    START_TIMER;
+
+    uint32_t longest_len=0;
+    uint32_t refhash_word;
+    const int64_t seq_len_64 = (int64_t)seq_len; // 64 bit version of seq_len
+    
+    int64_t best_gpos = -1; // match not found yet
+    bool best_is_forward = false;
+    bool maybe_perfect_match = true;
+
+    // covert seq to 2-bit array
+    BitArray seq_bits = { .num_of_bits = seq_len * 2, .num_of_words = roundup_bits2words64(seq_len * 2)};
+    word_t seq_bits_words[seq_bits.num_of_words];
+    seq_bits.words = seq_bits_words; 
+
+{START_TIMER;
+    for (word_t base_i=0; base_i < seq_len_64; base_i++) {
+        uint8_t encoding = nuke_encode[(uint8_t)seq[base_i]];
+    
+        if (encoding == 4) { // not A, C, G or T - usually N
+            maybe_perfect_match = false; // this cannot be a perfect match
+            encoding = 0; // aritrary
+        }
+    
+        bit_array_assign2 (&seq_bits, (base_i << 1), encoding);
+    }
+
+COPY_TIMER(vb->profile.tmp1);}
+
+    bit_array_clear_excess_bits_in_top_word (&seq_bits);
+
+    //bit_array_print_bases (&seq_bits, "\nseq_bits fwd", true);
+    //bit_array_print_bases (&seq_bits, "seq_bits rev", false);
+
+    *is_all_ref = false;
+
+    uint32_t num_bits_matching_threadshold = (seq_len * 3) / 5; // 60% of seq_len (note that non-matching bases result in 50% matching bits)
+{START_TIMER;
+    
+    typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
+
+    struct Finds { uint32_t refhash_word; uint32_t i; Direction found; } finds[seq_len];
+    uint32_t num_finds = 0;
+    
+    // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
+    int64_t gpos, last_gpos=0;
+    for (uint32_t i=0; i < seq_len; i++) {
+        
+        Direction found = NOT_FOUND;
+
+        if (i < seq_len - nukes_per_hash && // room for the hash word
+            seq[i] == HOOK && seq[i+1] != HOOK &&  // take the G - if there is a polymer GGGG... take the last one
+            refhash_get_word_from_seq (vb, &seq[i+1], &refhash_word, 1)) { 
+
+            gpos = (int64_t)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the genome
+
+            if (gpos) {
+                gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
+                found = FORWARD;
+            }
+        }
+
+        else if (i >= nukes_per_hash && // room for the hash word
+            seq[i] == HOOK_REV && seq[i-1] != HOOK_REV &&  // take the G - if there is a polymer GGGG... take the last one
+            refhash_get_word_from_seq (vb, &seq[i-1], &refhash_word, -1)) { 
+
+            gpos = (int64_t)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the FORWARD genome
+            
+            if (gpos) { 
+                gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
+                found = REVERSE;
+            }
+        }
+
+#       define UPDATE_BEST(fwd)  { \
+            if (gpos != last_gpos) { \
+                uint32_t match_len = refhash_get_match_len (vb, &seq_bits, gpos, (fwd)); \
+                if (match_len > longest_len && match_len > num_bits_matching_threadshold) {  \
+                    longest_len     = match_len; \
+                    best_gpos       = gpos;      \
+                    best_is_forward = (fwd);     \
+                    /* note: we allow 2 snps and we still consider the match good enough and stop looking further */\
+                    /* compared to stopping only if match_len==seq_len, this adds about 1% to the file size, but is significantly faster */\
+                    if (match_len >= (seq_len-2) * 2) { /* we found (almost) the best possible match */ \
+                        *is_all_ref = maybe_perfect_match && (match_len == seq_len*2); /* perfect match */ \
+                        goto done; \
+                    } \
+                }\
+                last_gpos = gpos;      \
+            }\
+        }
+
+        if (found != NOT_FOUND && (gpos >= 0) && (gpos + seq_len_64 < genome_size)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
+            finds[num_finds++] = (struct Finds){ .refhash_word = refhash_word, .i = i, .found = found };
+            UPDATE_BEST (found);
+        }
+    }
+
+    // if still no near-perfect matches found, search the additional layers
+    for (unsigned layer_i=1; layer_i < num_layers; layer_i++) {
+        for (uint32_t find_i=0; find_i < num_finds; find_i++) {
+
+            if (finds[find_i].found == NOT_FOUND) continue;
+
+            gpos = (int64_t)BGEN32 (refhashs[layer_i][finds[find_i].refhash_word & layer_bitmask[layer_i]]); 
+            if (!gpos) {
+                finds[find_i].found = NOT_FOUND; // if we can't find it in this layer, we won't find it in the next layers either
+                continue;
+            }
+
+            gpos -= (finds[find_i].found == FORWARD ? finds[find_i].i : seq_len_64-1 - finds[find_i].i);
+
+            if ((gpos >= 0) && (gpos + seq_len_64 < genome_size))
+                UPDATE_BEST (finds[find_i].found);
+        }
+    }
+
+COPY_TIMER(vb->profile.tmp2);}
+
+done:
+    *start_gpos = best_gpos != -1 ? best_gpos : 0;
+    *is_forward = best_is_forward;
+
+    COPY_TIMER (vb->profile.refhash_best_match);
+    return best_gpos != -1;
 }
 
 // ----------------------------

@@ -20,22 +20,8 @@ void fast_vb_release_vb (VBlockFAST *vb)
     vb->last_line = 0;
     vb->contig_grepped_out = false;
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
-vb->almost_perfect = vb->coverage = 0;
-
 }
    
-// callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
-void fast_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
-                                        char **line_seq_data, uint32_t *line_seq_len,  // out 
-                                        char **unused_data,  uint32_t *unused_len)
-{
-    ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
-    *line_seq_len  = dl->seq_len;
-    *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
-    *unused_data   = NULL;
-    *unused_len    = 0;
-}   
-
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
 static bool fast_piz_test_grep (VBlockFAST *vb)

@@ -12,6 +12,7 @@
 #include "optimize.h"
 #include "dict_id.h"
 #include "refhash.h"
+#include "endianness.h"
 
 void fastq_seg_initialize (VBlockFAST *vb)
 {
@@ -22,15 +23,103 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[FASTQ_SEQ].flags  = CTX_FL_LOCAL_LZMA;
-    vb->contexts[FASTQ_SEQ].ltype  = CTX_LT_SEQUENCE;
-    vb->contexts[FASTQ_QUAL].ltype = CTX_LT_SEQUENCE;
+    vb->contexts[FASTQ_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP;
+    vb->contexts[FASTQ_SEQ_STRAND].ltype = CTX_LT_SEQ_BITMAP;
+    vb->contexts[FASTQ_SEQ_STRAND].flags = CTX_FL_LOCAL_NONE; // bz2 and lzma only make it biug
+    vb->contexts[FASTQ_SEQ_GPOS].ltype   = CTX_LT_UINT32;
+    vb->contexts[FASTQ_SEQ_GPOS].flags   = CTX_FL_LOCAL_LZMA;
+    vb->contexts[FASTQ_SEQ_NOREF].flags  = CTX_FL_LOCAL_ACGT;
+    vb->contexts[FASTQ_SEQ_NOREF].ltype  = CTX_LT_SEQUENCE;
+    vb->contexts[FASTQ_QUAL].ltype       = CTX_LT_SEQUENCE;
 }
 
 void fastq_seg_finalize (VBlockFAST *vb)
 {
-    printf ("vb_i=%u almost_perfect=%u out of %u (%u%%) coverage=%u%%\n", vb->vblock_i, vb->almost_perfect, (uint32_t)vb->lines.len, (vb->almost_perfect*100) / (uint32_t)vb->lines.len,
-            (vb->coverage * 100) / (uint32_t)vb->contexts[FASTQ_SEQ].local.len);
+/*    printf ("vb_i=%u bases=%u nonref=%u\n", vb->vblock_i, 
+            (unsigned)buf_get_bitarray (&vb->contexts[FASTQ_SEQ_BITMAP].local)->num_of_bits, 
+            (unsigned)vb->contexts[FASTQ_SEQ_NOREF].local.len);*/
+}
+
+static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
+{
+    Context *nonref_ctx = &vb->contexts[FASTQ_SEQ_NOREF];
+    Context *bitmap_ctx = &vb->contexts[FASTQ_SEQ_BITMAP];
+    Context *gpos_ctx =   &vb->contexts[FASTQ_SEQ_GPOS];
+    Context *strand_ctx = &vb->contexts[FASTQ_SEQ_STRAND];
+
+    BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
+
+    // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
+    if (!flag_reference) {
+        buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * (seq_len + 5)), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+        buf_add (&nonref_ctx->local, seq, seq_len);
+        return;
+    }
+
+    // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it + param must be 0
+    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2words64 (seq_len) * sizeof(int64_t), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+               buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
+
+    buf_alloc (vb, &strand_ctx->local, MAX (nonref_ctx->local.len + sizeof (int64_t), roundup_bits2words64 (vb->lines.len) * sizeof (int64_t)), CTX_GROWTH, 
+               buf_is_allocated (&strand_ctx->local) ? NULL : "context->local", 0); 
+
+    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+    buf_alloc (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "context->local", gpos_ctx->did_i); 
+
+    int64_t gpos;
+    bool is_forward, is_all_ref;
+    bool has_match = refhash_best_match ((VBlockP)vb, seq, seq_len, &gpos, &is_forward, &is_all_ref);
+
+    buf_add_bit (&strand_ctx->local, is_forward);
+    
+    bit_index_t next_bit = buf_extend_bits (&bitmap_ctx->local, seq_len);
+
+    ASSSEG (gpos >= 0 && gpos <= 0xffffffff, seq, "gpos=%"PRId64" is out of uint32_t range", gpos);
+    NEXTENT (uint32_t, gpos_ctx->local) = BGEN32 ((uint32_t)gpos);
+
+    // shortcut if there's no reference match
+    if (!has_match) {
+        bit_array_clear_region (bitmap, next_bit, seq_len); // no bases match the reference
+        buf_add (&nonref_ctx->local, seq, seq_len);
+        return;
+    }
+
+    // shortcut if we have a full reference match
+    if (is_all_ref) {
+        bit_array_set_region (bitmap, next_bit, seq_len); // all bases match the reference
+        
+        if (flag_reference == REF_EXT_STORE)
+            bit_array_set_region (&genome->is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
+        
+        return;
+    }
+
+    int64_t room_fwd = genome_size - gpos; // how much reference forward might contain a match
+
+    for (uint32_t i=0; i < seq_len; i++) {
+                
+        bool use_reference = false;
+
+        // case our seq is identical to the reference at this site
+        if (i < room_fwd) {
+            char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
+            char ref_base = ACGT_DECODE (&genome->ref, gpos + (is_forward ? i : seq_len-1-i));
+            if (seq_base == ref_base) {
+                
+                if (flag_reference == REF_EXT_STORE)
+                    bit_array_set (&genome->is_set, gpos + i); // we will need this ref to reconstruct
+
+                use_reference = true;
+            }
+        }
+
+        // case: we can't use the reference (different value than base or we have passed the end of the reference)
+        if (!use_reference) 
+            NEXTENT (char, nonref_ctx->local) = seq[i];
+
+        bit_array_assign (bitmap, next_bit, use_reference);
+        next_bit++;
+    }
 }
 
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
@@ -43,16 +132,12 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     const char *next_field, *field_start=field_start_line;
     unsigned field_len=0;
     char separator;
-/*
-    MiniStructured st = { .repeats=1, .num_items=1, .flags=0, .repsep={0,0},
-                          .items = { { .dict_id = dict_id_FASTQ_DESC, .did_i = DID_I_NONE, .seperator={0, '\n'} },
-                                     { .dict_id = dict_id_FASTQ_SEQ,  .did_i = DID_I_NONE, .seperator={0, '\n'} },
-                                     { .dict_id = dict_id_FASTQ_PLUS, .did_i = DID_I_NONE, .seperator={0, '\n'} },
-                                     { .dict_id = dict_id_FASTQ_QUAL, .did_i = DID_I_NONE, .seperator={0, 'n'} } } };
-*/
+
     int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - field_start_line);
 
     // the leading @ - just verify it (it will be included in D0ESC subfield)
+    ASSSEG (*field_start != '\n', field_start, "%s: Invalid FASTQ file format: unexpected newline", global_cmd);
+
     ASSSEG (*field_start == '@', field_start, "%s: Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
             global_cmd, *field_start);
 
@@ -69,21 +154,14 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     const char *seq_start = next_field;
     dl->seq_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, has_13, "SEQ");
-    vb->contexts[FASTQ_SEQ].local.len += dl->seq_len;
 
-int64_t gpos = refhash_best_match (&vb->txt_data.data[dl->seq_data_start], dl->seq_len);
-int64_t room_fwd = MIN (dl->seq_len, genome_size-gpos);
+    fastq_seg_seq (vb, seq_start, dl->seq_len);
 
-if (gpos != REFHASH_NOMATCH) {
-    int64_t match_len = refhash_get_final_match_len (&vb->txt_data.data[dl->seq_data_start], gpos, room_fwd); 
-    vb->coverage += match_len;
-    vb->almost_perfect += match_len >= (dl->seq_len * 95) / 100;
-}
     // Add LOOKUP snip with seq_len
     char snip[10];
     snip[0] = SNIP_LOOKUP;
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SEQ, dl->seq_len); 
+    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SEQ_BITMAP, dl->seq_len); 
 
     SEG_EOL (FASTQ_E1L, true);
 
@@ -134,7 +212,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     // note that piz_read_global_area rewrites --header-only as flag_header_one
     if (flag_header_one && 
-        (dict_id.num == dict_id_fields[FASTQ_SEQ] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTQ_PLUS]))
+        (dict_id.num == dict_id_fields[FASTQ_SEQ_NOREF] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTQ_PLUS]))
         return true;
         
     // when grepping by I/O thread - skipping all sections but DESC
@@ -148,6 +226,46 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     return false;
+}
+
+// PIZ: SEQ reconstruction 
+void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
+{
+    VBlockFAST *vb = (VBlockFAST *)vb_;
+    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == FASTQ_SEQ_BITMAP, "Error in fastq_piz_reconstruct_seq: context is not FASTQ_SEQ_BITMAP");
+
+    if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
+
+    Context *nonref_ctx = &vb->contexts[FASTQ_SEQ_NOREF];
+    Context *gpos_ctx =   &vb->contexts[FASTQ_SEQ_GPOS];
+    Context *strand_ctx = &vb->contexts[FASTQ_SEQ_STRAND];
+
+    // get seq_len, gpos and direction
+    vb->seq_len = atoi (seq_len_str); // terminated by SNIP_SEP=0
+    
+    if (buf_is_allocated (&bitmap_ctx->local)) { // not all non-ref
+        uint32_t gpos_be = NEXTLOCAL (uint32_t, gpos_ctx);
+        int64_t gpos = BGEN32 (gpos_be); 
+        bool forward_strand = NEXTLOCALBIT (strand_ctx);
+
+        if (forward_strand)  // normal (note: this condition test is outside of the tight loop)
+            for (uint32_t i=0; i < vb->seq_len; i++)
+                if (NEXTLOCALBIT (bitmap_ctx))  // get base from reference
+                    RECONSTRUCT1 (ACGT_DECODE (&genome->ref, gpos + i));
+                else  // get base from nonref
+                    RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
+
+        else // reverse compliment
+            for (uint32_t i=0; i < vb->seq_len; i++) 
+                if (NEXTLOCALBIT (bitmap_ctx))  // case: get base from reference
+                    RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (&genome->ref, gpos + vb->seq_len-1 - i)]);
+                else  // case: get base from nonref
+                    RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
+    }
+    else {
+        RECONSTRUCT (ENT (char, nonref_ctx->local, nonref_ctx->next_local), vb->seq_len);
+        nonref_ctx->next_local += vb->seq_len;
+    }
 }
 
 void fastq_piz_reconstruct_vb (VBlockFAST *vb)
@@ -168,7 +286,7 @@ void fastq_piz_reconstruct_vb (VBlockFAST *vb)
         // missing line EOLs and they will show wrong ones to the remaining lines. minor bc in virtually all files,
         // the EOL is identical in all lines
         if (!flag_header_one) { // note that piz_read_global_area rewrites --header-only as flag_header_one
-            piz_reconstruct_from_ctx (vb, FASTQ_SEQ,  0);
+            piz_reconstruct_from_ctx (vb, FASTQ_SEQ_BITMAP, 0);
             piz_reconstruct_from_ctx (vb, FASTQ_E2L,  0);
             piz_reconstruct_from_ctx (vb, FASTQ_PLUS, 0);
             piz_reconstruct_from_ctx (vb, FASTQ_E3L,  0);

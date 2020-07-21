@@ -43,8 +43,8 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
         
         // we put all the SEQ derived data in a single stats line for easy comparison (reference in dict, the +- section SEQ in b250, and the unique non-ref sequence stretchs in local)
-        if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ_BITMAP]) { // must be before SEC_LOCAL
-            if (section->dict_id.num == dict_id_fields[SAM_SEQNOREF])
+        if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ_BITMAP]) { // 'SEQ' line - must be before SEC_LOCAL
+            if (section->dict_id.num == dict_id_fields[SAM_SEQ_NOREF])
                 *local_compressed_size += sec_size;
             else if ((section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET) && flag_reference == REF_INTERNAL)
                 *dict_compressed_size += sec_size;
@@ -57,7 +57,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
                  (section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET))
             *dict_compressed_size += sec_size;
 
-        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQNOREF]) {} // ^ already handle above
+        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ_NOREF]) {} // ^ already handled above
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
             *dict_compressed_size += sec_size;
@@ -139,9 +139,13 @@ static void stats_show_file_metadata (void)
     if (txt_file->name) fprintf (stderr, "%s file name: %s\n", dt_name (z_file->data_type), txt_file->name);
     
     if (flag_reference == REF_INTERNAL && z_file->data_type == DT_SAM)
-        fprintf (stderr, "Reference: Internal (size appears in the 'SEQ' line, 'comp dict' column)\n");
-    else if (flag_reference == REF_EXTERNAL)
-        fprintf (stderr, "Reference: %s (not stored in genozip file)\n", ref_filename);
+        fprintf (stderr, "Reference: Internal ('SEQ' line: 'comp dict'=stored reference, 'comp 250'=bitmap, 'comp local'=non-refereance bases)\n");
+    else if (flag_reference == REF_EXTERNAL) {
+        if (z_file->data_type == DT_SAM)
+            fprintf (stderr, "Reference: %s ('SEQ' line: 'comp 250'=bitmap, 'comp local'=non-refereance bases)\n", ref_filename);
+        else
+            fprintf (stderr, "Reference: %s (not stored in genozip file)\n", ref_filename);
+    }
     else if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE)
         fprintf (stderr, "Reference: %s (size appears in 'Reference' line)\n", ref_filename);
 
@@ -216,7 +220,7 @@ void stats_show_sections (void)
         txt_len = ctx ? ctx->txt_len : (i==OVERHEAD_SEC_TXT_HDR ? txtfile_get_last_header_len() : 0);
 
         bool is_dict_a_reference = (i == OVERHEAD_SEC_REFERENCE) || // reference appreas in "comp_dict" of "Reference" line
-                                   (ctx && z_file->data_type == DT_SAM && (ctx->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP] || ctx->dict_id.num == dict_id_fields[SAM_SEQNOREF])); // reference appreas in "comp_dict" of "SEQ" line
+                                   (ctx && z_file->data_type == DT_SAM && (ctx->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP] || ctx->dict_id.num == dict_id_fields[SAM_SEQ_NOREF])); // reference appreas in "comp_dict" of "SEQ" line
         
         if (!is_dict_a_reference) all_comp_dict += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;

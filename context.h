@@ -101,7 +101,7 @@ typedef struct { // initialize with mtf_init_iterator()
 #define CTX_LT_FLOAT32      9    // ffu
 #define CTX_LT_FLOAT64      10   // ffu
 #define CTX_LT_SEQUENCE     11   // length of data extracted is determined by vb->seq_len
-#define CTX_LT_SEQ_BITMAP   12   // a bitmap indicating whether data should be taken from the reference 1 or SEQNOREF.local (0)
+#define CTX_LT_SEQ_BITMAP   12   // a bitmap indicating whether data should be taken from the reference 1 or SEQ_NOREF.local (0)
 #define NUM_CTX_LT          13
 extern const char ctx_lt_to_sam_map[NUM_CTX_LT];
 extern const int ctx_lt_sizeof_one[NUM_CTX_LT];
@@ -119,6 +119,7 @@ extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 #define CTX_FL_NO_STONS    0x10 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
 #define CTX_FL_LOCAL_LZMA  0x20 // compress local with COMP_LZMA
 #define CTX_FL_LOCAL_ACGT  0x40 // compress local with COMP_ACGT
+#define CTX_FL_LOCAL_NONE  0x80 // use COMP_NONE (no compression)
 
 // combination flags for convenience
 #define CTX_FL_POS         (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // A POS field that stores a delta vs. a different field
@@ -191,6 +192,9 @@ typedef struct Context {
     LastValueType last_value;  // PIZ only: last value from which to conduct a delta. 
     int64_t last_delta;        // PIZ only: last delta value calculated
 } Context;
+
+#define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
+static inline word_t NEXTLOCALBIT(Context *ctx) { BitArray *b = buf_get_bitarray (&ctx->local); word_t ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75

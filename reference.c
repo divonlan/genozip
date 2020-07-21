@@ -30,7 +30,7 @@
 // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
 static Buffer ranges                    = EMPTY_BUFFER; 
 
-Range *genome = NULL; // used in ZIP/PIZ of fasta and fastq with a reference - we have only one range that is the entire genome
+Range *genome = NULL, *genome_rev = NULL; // used in ZIP/PIZ of fasta and fastq with a reference - we have only one range that is the entire genome (this points to the first entry in ranges)
 int64_t genome_size = 0;
 
 // data derived from the external reference FASTA's CONTIG context
@@ -61,12 +61,13 @@ static uint32_t ref_range_cursor = 0;
 const char *ref_filename = NULL; // filename of external reference file
 Md5Hash ref_md5 = MD5HASH_NONE;
 
-#define CHROM_NAME_SINGLE "GENOME"
+#define CHROM_NAME_GENOME "GENOME"
+#define CHROM_NAME_GENOME_REV "GENOME_REV"
 
-#define SAVE_FLAG(flag) int save_##flag = flag ; flag=0
+#define SAVE_FLAG(flag) typeof(flag) save_##flag = flag ; flag=0
 #define RESTORE_FLAG(flag) flag = save_##flag
 
-// forward declarations
+// forward declarationsy
 static int32_t ref_get_index_of_chrom_with_alt_name (VBlockP vb); 
 static void ref_copy_chrom_data_from_z_file (void);
 static void ref_prepare_range_for_compress_make_ref (VBlockP vb); // forward
@@ -79,10 +80,10 @@ void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_wo
 }
 
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
-void ref_cleanup_memory(void)
+void ref_cleanup_memory (bool force_clean_all)
 {
     // in case of REF_EXTERNAL, we keep the reference for other files on the command line
-    if (flag_reference == REF_EXTERNAL) {
+    if (flag_reference == REF_EXTERNAL && !force_clean_all) {
         if (primary_command == ZIP) {
             for (unsigned i=0; i < ranges.len ; i++) 
                 bit_array_clear_all (&ENT (Range, ranges, i)->is_set); // zip sets 1 to nucleotides used. we clear it for the next file.
@@ -244,7 +245,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     int64_t ref_sec_len      = (int64_t)BGEN32 (header->num_bases);
     int64_t ref_sec_last_pos = ref_sec_pos + ref_sec_len - 1;
     int64_t compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
-    const char *chrom_name = CHROM_NAME_SINGLE;
+    const char *chrom_name = CHROM_NAME_GENOME;
 
     Range *r = flag_has_fastaq ? FIRSTENT (Range, ranges) : ref_get_range_by_chrom (chrom, &chrom_name);
 
@@ -425,7 +426,7 @@ void ref_load_stored_reference (void)
 {
     ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
     
-    ref_initialize_ranges (flag_has_fastaq ? RT_SINGLE_RANGE : RT_RANGE_PER_CONTIG);
+    ref_initialize_ranges (flag_has_fastaq ? RT_WHOLE_GENOME : RT_RANGE_PER_CONTIG);
     
     sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
     ref_range_cursor = 0;
@@ -851,7 +852,6 @@ static void ref_compress_one_range (VBlockP vb)
         header.h.sec_compression_alg   = COMP_BZ2;
         header.h.data_uncompressed_len = BGEN32 (r->is_set.num_of_words * sizeof (uint64_t));
         header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
-        //header.last_pos                = BGEN64 ((uint64_t)r->last_pos); // full length, after flanking regions removed
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
 
         if (flag_show_reference && r) 
@@ -868,7 +868,6 @@ static void ref_compress_one_range (VBlockP vb)
     header.h.sec_compression_alg   = COMP_LZMA;
     header.h.data_uncompressed_len = r ? BGEN32 (r->ref.num_of_words * sizeof (uint64_t)) : 0;
     header.num_bases               = r ? BGEN32 (r->ref.num_of_bits / 2) : 0; // less than ref_size(r) if compacted
-    //header.last_pos                = r ? BGEN64 ((uint64_t)(r->first_pos + compacted_ref_size - 1))  : 0;  // this is actually the same as r->last_pos if not compacted
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NULL);
 
     if (flag_show_reference && r) 
@@ -996,8 +995,63 @@ void ref_set_md5 (Md5Hash md5)
     ref_md5 = md5;
 }
 
+// display the reference:
+// if --reference is used, normal reference is shown, if --REFERENCE - reverse complement is shown
+// show a subset of the reference if --regions is specified - but only up to one region per chromosome
+static void ref_display_ref (void)
+{
+    for (const Range *r = FIRSTENT (Range, ranges); r < AFTERENT (Range, ranges); r++) {
+
+        int64_t display_first_pos, display_last_pos;
+        if (!regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, &display_first_pos, &display_last_pos))
+            continue;
+
+        printf ("%.*s\n", r->chrom_name_len, r->chrom_name);
+
+        // case: normal sequence
+        if (flag_reference == REF_EXTERNAL)
+            for (int64_t pos=display_first_pos; pos <= display_last_pos; pos++)
+                fputc (ref_get_nucleotide (r, pos - r->first_pos), stdout);
+
+        // case: reverse complement
+        else
+            for (int64_t pos=display_last_pos; pos >= display_first_pos; pos--) {
+                char base = ref_get_nucleotide (r, pos - r->first_pos);
+                switch (base) {
+                    case 'G': fputc ('C', stdout); break;
+                    case 'C': fputc ('G', stdout); break;
+                    case 'A': fputc ('T', stdout); break;
+                    case 'T': fputc ('A', stdout); break;
+                    case 'g': fputc ('c', stdout); break;
+                    case 'c': fputc ('g', stdout); break;
+                    case 'a': fputc ('t', stdout); break;
+                    case 't': fputc ('a', stdout); break;
+                    default : fputc (base, stdout); 
+                }
+            }        
+        
+        fputc ('\n', stdout);
+    }
+}
+
+#define REV_COMP_GENOME_BASES_PER_THREAD (1 << 27) // 128Mbp
+
+static void ref_reverse_compliment_genome_prepare (VBlock *vb)
+{
+    vb->ready_to_dispatch = (vb->vblock_i-1) * REV_COMP_GENOME_BASES_PER_THREAD < genome_size;
+}
+
+static void ref_reverse_compliment_genome_do (VBlock *vb)
+{
+    bit_array_reverse_complement_all (&genome_rev->ref, &genome->ref, 
+                                      (vb->vblock_i-1) * REV_COMP_GENOME_BASES_PER_THREAD, 
+                                      REV_COMP_GENOME_BASES_PER_THREAD);
+
+    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+}
+
 // ZIP & PIZ: import external reference
-void ref_load_external_reference (void)
+void ref_load_external_reference (bool display)
 {
     ASSERT0 (ref_filename, "Error: ref_filename is NULL");
 
@@ -1005,15 +1059,15 @@ void ref_load_external_reference (void)
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
         
     // save and reset some globals that after pizzing FASTA
-    int save_flag_test         = flag_test        ; flag_test        = 0;
-    int save_flag_unbind       = flag_unbind      ; flag_unbind      = 0;
-    int save_flag_md5          = flag_md5         ; flag_md5         = 0;
-    int save_flag_show_time    = flag_show_time   ; flag_show_time   = 0;
-    int save_flag_show_memory  = flag_show_memory ; flag_show_memory = 0;
-    int save_flag_no_header    = flag_no_header   ; flag_no_header   = 0;
-    int save_flag_header_one   = flag_header_one  ; flag_header_one  = 0;
-    int save_flag_header_only  = flag_header_only ; flag_header_only = 0;
-    char *save_flag_grep       = flag_grep        ; flag_grep        = 0;
+    SAVE_FLAG (flag_test);
+    SAVE_FLAG (flag_unbind);
+    SAVE_FLAG (flag_md5);
+    SAVE_FLAG (flag_show_time);
+    SAVE_FLAG (flag_show_memory);
+    SAVE_FLAG (flag_no_header);
+    SAVE_FLAG (flag_header_one);
+    SAVE_FLAG (flag_header_only);
+    SAVE_FLAG (flag_grep);
     CommandType save_command   = command;         ; command          = PIZ;
     flag_reading_reference = true; // tell fasta.c that this is a reference
     
@@ -1023,18 +1077,30 @@ void ref_load_external_reference (void)
     // recover globals
     flag_reading_reference = false;
     command          = save_command;
-    flag_test        = save_flag_test;
-    flag_unbind      = save_flag_unbind;
-    flag_md5         = save_flag_md5;
-    flag_show_time   = save_flag_show_time;
-    flag_show_memory = save_flag_show_memory;
-    flag_no_header   = save_flag_no_header;
-    flag_header_only = save_flag_header_only;
-    flag_header_one  = save_flag_header_one;
-    flag_grep        = save_flag_grep;
+    RESTORE_FLAG (flag_test);
+    RESTORE_FLAG (flag_unbind);
+    RESTORE_FLAG (flag_md5);
+    RESTORE_FLAG (flag_show_time);
+    RESTORE_FLAG (flag_show_memory);
+    RESTORE_FLAG (flag_no_header);
+    RESTORE_FLAG (flag_header_one);
+    RESTORE_FLAG (flag_header_only);
+    RESTORE_FLAG (flag_grep);
     
     file_close (&z_file, false);
     file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
+
+    // If we're zipping a FASTQ, create a reverse-compliment genome too
+    if (flag_has_fastaq && primary_command == ZIP) {
+        START_TIMER;
+        dispatcher_fan_out_task (NULL, "Generating reverse compliment reference...", false, 
+                                 ref_reverse_compliment_genome_prepare, 
+                                 ref_reverse_compliment_genome_do, 
+                                 NULL);
+        COPY_TIMER(evb->profile.generate_rev_complement_genome);
+    }
+
+    if (display) ref_display_ref();
 }
 
 // case 1: in case of ZIP with external reference, called by ref_load_stored_reference during piz_read_global_area of the reference file
@@ -1043,7 +1109,7 @@ void ref_load_external_reference (void)
 // note: ranges allocation must be called by the I/O thread as it adds a buffer to evb buf_list
 void ref_initialize_ranges (RangesType ranges_type)
 {
-    ranges.len = (ranges_type == RT_SINGLE_RANGE) ? 1 :
+    ranges.len = (ranges_type == RT_WHOLE_GENOME) ? 2 : // forward and reverse complement genomes
                  (ranges_type == RT_SMALL_RANGES) ? REF_NUM_RANGES :
                  /* RT_RANGE_PER_CONTIG */       
                  (flag_reference == REF_STORED)   ? z_file->contexts[CHROM].word_list.len :
@@ -1052,53 +1118,62 @@ void ref_initialize_ranges (RangesType ranges_type)
     buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", 0); 
     buf_zero (&ranges);
 
-    for (unsigned i=0; i < ranges.len; i++) {
-        Range *r = ENT (Range, ranges, i);
+    if (ranges_type != RT_WHOLE_GENOME) {
+        for (unsigned i=0; i < ranges.len; i++) {
+            Range *r = ENT (Range, ranges, i);
 
-        pthread_mutex_init (&r->mutex, NULL);
+            pthread_mutex_init (&r->mutex, NULL);
 
-        // For non Fasta/q, in PIZ or when reading an external range, we allocate and initialize one range per chromosome (in ZIP from REF_INTERNAL, we will allocate ranges as they are encoutered in the data)
-        if (ranges_type == RT_RANGE_PER_CONTIG) { // PIZ always and ZIP with external reference
+            // For non Fasta/q, in PIZ or when reading an external range, we allocate and initialize one range per chromosome (in ZIP from REF_INTERNAL, we will allocate ranges as they are encoutered in the data)
+            if (ranges_type == RT_RANGE_PER_CONTIG) { // PIZ always and ZIP with external reference
 
-            r->chrom = i;      
+                r->chrom = i;      
 
-            random_access_pos_of_chrom (i, &r->first_pos, &r->last_pos); // in reference fasta.genozip if REF_EXTERNAL, or in file itself is REF_STORED
-            
-            if (flag_reference == REF_STORED) {
-                Context *ctx = &z_file->contexts[CHROM];
-                mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
+                random_access_pos_of_chrom (i, &r->first_pos, &r->last_pos); // in reference fasta.genozip if REF_EXTERNAL, or in file itself is REF_STORED
+                
+                if (flag_reference == REF_STORED) {
+                    Context *ctx = &z_file->contexts[CHROM];
+                    mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
+                }
+                else
+                    mtf_get_snip_by_word_index (&contig_words, &contig_dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
+
+                // case: this chrom has no RA - for example, it is a "=" or "*". No need to allocate memory for it (we do get the chrom name ^ to ease debugging)
+                if (r->last_pos < 0) continue;
+
+                bit_array_alloc (&r->ref,    ref_size(r) * 2); 
+                bit_array_alloc (&r->is_set, ref_size(r));
+
+                // in PIZ, we start by clearing the entire contig, and then in ref_uncompress_one_range we set those regions
+                // that are read from SEC_REFERENCE sections in a stored or external reference
+                if (primary_command == PIZ) 
+                    bit_array_clear_all (&r->is_set); // entire contig is cleared
             }
-            else
-                mtf_get_snip_by_word_index (&contig_words, &contig_dict, r->chrom, &r->chrom_name, &r->chrom_name_len);
-
-            // case: this chrom has no RA - for example, it is a "=" or "*". No need to allocate memory for it (we do get the chrom name ^ to ease debugging)
-            if (r->last_pos < 0) continue;
-
-            bit_array_alloc (&r->ref,    ref_size(r) * 2); 
-            bit_array_alloc (&r->is_set, ref_size(r));
-
-            // in PIZ, we start by clearing the entire contig, and then in ref_uncompress_one_range we set those regions
-            // that are read from SEC_REFERENCE sections in a stored or external reference
-            if (primary_command == PIZ) 
-                bit_array_clear_all (&r->is_set); // entire contig is cleared
         }
+    }
 
-        // For ZIP/PIZ of fasta/q from external, we use a single range indexed by gpos
-        else if (ranges_type == RT_SINGLE_RANGE) {
-            genome_size = sections_get_genome_size(); 
-            genome = FIRSTENT (Range, ranges);
-            *genome = (Range){ .chrom_name = CHROM_NAME_SINGLE, 
-                               .chrom_name_len = strlen (CHROM_NAME_SINGLE),
+    // For ZIP/PIZ of fasta/q from external, we use a single range indexed by gpos
+    else {
+        // note: genome_size must be full words, so that bit_array_reverse_complement doesn't need to shift
+        genome_size = ((sections_get_genome_size() + 31) / 32) * 32 + 32; // round up to the nearest 32 (64 bit word = 32 bases), and add one word, needed by refhash_get_match_len for bit shifting overflow
+        genome = FIRSTENT (Range, ranges);
+        *genome = (Range){ .chrom_name = CHROM_NAME_GENOME, 
+                           .chrom_name_len = strlen (CHROM_NAME_GENOME),
+                           .chrom = NIL, 
+                           .last_pos = genome_size - 1 };
+
+        bit_array_alloc (&genome->ref, genome_size * 2); 
+        bit_array_alloc (&genome->is_set, genome_size);
+        if (primary_command == PIZ)  bit_array_clear_all (&genome->is_set); 
+        
+        genome_rev = genome + 1;
+        *genome_rev = (Range){ .chrom_name = CHROM_NAME_GENOME_REV, 
+                               .chrom_name_len = strlen (CHROM_NAME_GENOME_REV),
                                .chrom = NIL, 
                                .last_pos = genome_size - 1 };
+        bit_array_alloc (&genome_rev->ref, genome_size * 2); 
 
-            bit_array_alloc (&genome->ref, genome_size * 2); 
-            bit_array_alloc (&genome->is_set, genome_size);
-            pthread_mutex_init (&genome->mutex, NULL); // TO DO - replace with mutex per 100kbp
-
-            if (primary_command == PIZ) 
-                bit_array_clear_all (&genome->is_set); 
-        }
+        pthread_mutex_init (&genome->mutex, NULL); // TO DO - replace with mutex per 100kbp
     }
 }
 

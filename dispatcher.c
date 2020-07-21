@@ -180,8 +180,8 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     buf_test_overflows(evb, "dispatcher_finish"); 
 
     // free memory allocations that assume subsequent files will have the same number of samples.
-    // (we assume this if the files are being bound). don't bother freeing (=same time) if this is the last file
-    if (!flag_bind && !dd->is_last_file) {
+    // (we assume this if the files are being bound). don't bother freeing (=same time) if this is the last file, unless we're going to test and need the memory
+    if (!flag_bind && (!dd->is_last_file || flag_test)) {
         vb_cleanup_memory(); 
         vb_release_vb (evb);
     }

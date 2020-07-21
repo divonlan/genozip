@@ -37,14 +37,14 @@ typedef struct Range {
 
 #define ref_size(r) ((r) ? ((r)->last_pos - (r)->first_pos + 1) : 0)
 
-typedef enum { RT_SMALL_RANGES, RT_RANGE_PER_CONTIG, RT_SINGLE_RANGE } RangesType;
+typedef enum { RT_SMALL_RANGES, RT_RANGE_PER_CONTIG, RT_WHOLE_GENOME } RangesType;
 extern void ref_initialize_ranges (RangesType ranges_type);
 extern void ref_compress_ref (void);
 extern void ref_load_stored_reference (void);
 extern void ref_set_reference (const char *filename);
 extern void ref_set_md5 (Md5Hash md5);
-extern void ref_load_external_reference (void);
-extern void ref_cleanup_memory (void);
+extern void ref_load_external_reference (bool display);
+extern void ref_cleanup_memory (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
@@ -76,20 +76,20 @@ extern void ref_output_vb (VBlockP vb);
         "Error in %s:%u: reference is not set: chrom=%.*s pos=%"PRId64, __FUNCTION__, __LINE__, (range)->chrom_name_len, (range)->chrom_name, (pos))
 
 // note that the following work on idx and not pos! (idx is the index within the range)
-#define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      actg_encode[(uint8_t)value] & 1)       ;  \
-                                              bit_array_assign (&(range)->ref, (idx) * 2 + 1, (actg_encode[(uint8_t)value] & 2) >> 1) ; }
+#define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      acgt_encode[(uint8_t)value] & 1)       ;  \
+                                              bit_array_assign (&(range)->ref, (idx) * 2 + 1, (acgt_encode[(uint8_t)value] & 2) >> 1) ; }
 
 #define ref_is_nucleotide_set(range,idx) ((bool)bit_array_get (&(range)->is_set, (idx)))
 
-#define ref_get_nucleotide(range,idx)   actg_decode[(bit_array_get (&(range->ref), (idx) * 2 + 1) << 1) | \
-                                                    bit_array_get (&(range)->ref, (idx) * 2)]
+#define ref_get_nucleotide(range,idx)   acgt_decode[(bit_array_get (&(range)->ref, (idx) * 2 + 1) << 1) | \
+                                                     bit_array_get (&(range)->ref, (idx) * 2)]
 
 // globals
 extern const char *ref_filename;
 extern Md5Hash ref_md5;
 extern Buffer ref_stored_ra;
 
-extern Range *genome;
+extern Range *genome, *genome_rev;
 extern int64_t genome_size;
 
 #endif

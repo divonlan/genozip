@@ -12,21 +12,7 @@
 // Array length can be zero
 // Unused top bits must be zero
 
-#include <stdlib.h>
 #include <stdarg.h>
-#include <stdio.h>
-#include <limits.h> // ULONG_MAX
-#include <errno.h>
-#include <string.h> // memset()
-#include <unistd.h>  // need for getpid() for seeding rand number
-#include <ctype.h>  // need for tolower()
-#include <errno.h>  // perror()
-
-// Windows includes
-#if defined(_WIN32)
-//#include <intrin.h>
-#endif
-
 #include "genozip.h"
 #include "endianness.h"
 #include "bit_array.h"
@@ -369,14 +355,6 @@ static inline void _set_region(BitArray* bitarr, bit_index_t start,
 // Constructor
 //
 
-void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) // divon
-{
-  // zero the bits in the top word that are beyond nbits
-  bit_index_t top_bits = bits_in_top_word(bitarr->num_of_bits);
-  if (bitarr->num_of_words && top_bits < 64)
-    bitarr->words[bitarr->num_of_words-1] &= bitmask64 (top_bits);
-}
-
 // If cannot allocate memory, set errno to ENOMEM, return NULL
 BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits)
 {
@@ -591,6 +569,8 @@ void bit_array_set_all(BitArray* bitarr)
 // set all elements of data to zero
 void bit_array_clear_all(BitArray* bitarr)
 {
+  if (!bitarr->words) return; // nothing to do
+
   memset(bitarr->words, 0, bitarr->num_of_words * sizeof(word_t));
   DEBUG_VALIDATE(bitarr);
 }
@@ -996,6 +976,24 @@ void bit_array_print(const BitArray* bitarr, FILE* fout)
   {
     fprintf(fout, "%c", bit_array_get(bitarr, i) ? '1' : '0');
   }
+}
+
+// Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
+void bit_array_print_bases (const BitArray* bitarr, const char *msg, bool is_forward)
+{
+  static const char fwd[2][2] = { { 'A', 'C' }, {'G', 'T'} };
+  static const char rev[2][2] = { { 'T', 'G' }, {'C', 'A'} };
+
+  fprintf (stderr, "%s: ", msg);
+
+  if (is_forward)
+    for (bit_index_t i=0; i < bitarr->num_of_bits; i+=2)
+      fprintf(stderr, "%c", fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
+  else
+    for (int64_t i=bitarr->num_of_bits-2; i >= 0; i-=2) // signed type
+      fprintf(stderr, "%c", rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
+
+  fprintf (stderr, "\n");
 }
 
 // Print a string representations for a given region, using given on/off characters.
@@ -1434,6 +1432,54 @@ void bit_array_reverse(BitArray* bitarr)
 {
   if(bitarr->num_of_bits > 0) _reverse_region(bitarr, 0, bitarr->num_of_bits);
   DEBUG_VALIDATE(bitarr);
+}
+
+
+// for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
+// position, as well as transform them 00->11 11->00 01->10 10->01
+// works on arrays with full words
+void bit_array_reverse_complement_all (BitArray *dst, const BitArray *src,
+                                       bit_index_t src_start_base, bit_index_t max_num_bases) // one can call this function piecemiel - eg divide it to threads
+{
+  static const word_t rev_comp_table[256] = { // 00=A 01=C 10=G 11=T
+    0b11111111, 0b10111111, 0b01111111, 0b00111111, 0b11101111, 0b10101111, 0b01101111, 0b00101111, 0b11011111, 0b10011111, 0b01011111, 0b00011111, 0b11001111, 0b10001111, 0b01001111, 0b00001111,
+    0b11111011, 0b10111011, 0b01111011, 0b00111011, 0b11101011, 0b10101011, 0b01101011, 0b00101011, 0b11011011, 0b10011011, 0b01011011, 0b00011011, 0b11001011, 0b10001011, 0b01001011, 0b00001011,
+    0b11110111, 0b10110111, 0b01110111, 0b00110111, 0b11100111, 0b10100111, 0b01100111, 0b00100111, 0b11010111, 0b10010111, 0b01010111, 0b00010111, 0b11000111, 0b10000111, 0b01000111, 0b00000111,
+    0b11110011, 0b10110011, 0b01110011, 0b00110011, 0b11100011, 0b10100011, 0b01100011, 0b00100011, 0b11010011, 0b10010011, 0b01010011, 0b00010011, 0b11000011, 0b10000011, 0b01000011, 0b00000011,
+    0b11111110, 0b10111110, 0b01111110, 0b00111110, 0b11101110, 0b10101110, 0b01101110, 0b00101110, 0b11011110, 0b10011110, 0b01011110, 0b00011110, 0b11001110, 0b10001110, 0b01001110, 0b00001110,
+    0b11111010, 0b10111010, 0b01111010, 0b00111010, 0b11101010, 0b10101010, 0b01101010, 0b00101010, 0b11011010, 0b10011010, 0b01011010, 0b00011010, 0b11001010, 0b10001010, 0b01001010, 0b00001010,
+    0b11110110, 0b10110110, 0b01110110, 0b00110110, 0b11100110, 0b10100110, 0b01100110, 0b00100110, 0b11010110, 0b10010110, 0b01010110, 0b00010110, 0b11000110, 0b10000110, 0b01000110, 0b00000110,
+    0b11110010, 0b10110010, 0b01110010, 0b00110010, 0b11100010, 0b10100010, 0b01100010, 0b00100010, 0b11010010, 0b10010010, 0b01010010, 0b00010010, 0b11000010, 0b10000010, 0b01000010, 0b00000010,
+    0b11111101, 0b10111101, 0b01111101, 0b00111101, 0b11101101, 0b10101101, 0b01101101, 0b00101101, 0b11011101, 0b10011101, 0b01011101, 0b00011101, 0b11001101, 0b10001101, 0b01001101, 0b00001101,
+    0b11111001, 0b10111001, 0b01111001, 0b00111001, 0b11101001, 0b10101001, 0b01101001, 0b00101001, 0b11011001, 0b10011001, 0b01011001, 0b00011001, 0b11001001, 0b10001001, 0b01001001, 0b00001001,
+    0b11110101, 0b10110101, 0b01110101, 0b00110101, 0b11100101, 0b10100101, 0b01100101, 0b00100101, 0b11010101, 0b10010101, 0b01010101, 0b00010101, 0b11000101, 0b10000101, 0b01000101, 0b00000101,
+    0b11110001, 0b10110001, 0b01110001, 0b00110001, 0b11100001, 0b10100001, 0b01100001, 0b00100001, 0b11010001, 0b10010001, 0b01010001, 0b00010001, 0b11000001, 0b10000001, 0b01000001, 0b00000001,
+    0b11111100, 0b10111100, 0b01111100, 0b00111100, 0b11101100, 0b10101100, 0b01101100, 0b00101100, 0b11011100, 0b10011100, 0b01011100, 0b00011100, 0b11001100, 0b10001100, 0b01001100, 0b00001100, 
+    0b11111000, 0b10111000, 0b01111000, 0b00111000, 0b11101000, 0b10101000, 0b01101000, 0b00101000, 0b11011000, 0b10011000, 0b01011000, 0b00011000, 0b11001000, 0b10001000, 0b01001000, 0b00001000,
+    0b11110100, 0b10110100, 0b01110100, 0b00110100, 0b11100100, 0b10100100, 0b01100100, 0b00100100, 0b11010100, 0b10010100, 0b01010100, 0b00010100, 0b11000100, 0b10000100, 0b01000100, 0b00000100,
+    0b11110000, 0b10110000, 0b01110000, 0b00110000, 0b11100000, 0b10100000, 0b01100000, 0b00100000, 0b11010000, 0b10010000, 0b01010000, 0b00010000, 0b11000000, 0b10000000, 0b01000000, 0b00000000
+  };
+
+  ASSERT (src->num_of_bits == src->num_of_words * 64, "Error in bit_array_reverse_complement: expecting full words, bitarr->num_of_words=%"PRIu64" and bitarr->num_of_bit=%"PRIu64,
+          src->num_of_words, src->num_of_bits);
+
+  ASSERT0 (src->num_of_bits == dst->num_of_bits && src->num_of_words == dst->num_of_words, "Error in bit_array_reverse_complement: expecting src and dst to have the same number of bits and words");
+
+  ASSERT0 (src_start_base % 32 == 0 && max_num_bases % 32 == 0, "Error in bit_array_reverse_complement: invalid start_base or num_bases");
+
+# define REV_COMP(w) ((rev_comp_table[(w)       & 0xff] << 56) | \
+                      (rev_comp_table[(w >>  8) & 0xff] << 48) | \
+                      (rev_comp_table[(w >> 16) & 0xff] << 40) | \
+                      (rev_comp_table[(w >> 24) & 0xff] << 32) | \
+                      (rev_comp_table[(w >> 32) & 0xff] << 24) | \
+                      (rev_comp_table[(w >> 40) & 0xff] << 16) | \
+                      (rev_comp_table[(w >> 48) & 0xff] << 8)  | \
+                      (rev_comp_table[(w >> 56) & 0xff]))
+
+  bit_index_t after_word = MIN (src->num_of_words, (src_start_base + max_num_bases) / 32); // 32 nucleotides in a word
+
+  for (bit_index_t i=src_start_base / 32; i < after_word; i++)
+    dst->words[dst->num_of_words-1 - i] = REV_COMP (src->words[i]);
 }
 
 //

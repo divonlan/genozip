@@ -89,21 +89,21 @@ static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char se
 
     int64_t num=0;
     if (width == 4) { // check 4 first, as its the most popular
-        uint32_t num_big_en = *ENT (uint32_t, ctx->local, ctx->next_local++);
+        uint32_t num_big_en = NEXTLOCAL (uint32_t, ctx);
         uint32_t unum = BGEN32 (num_big_en); 
         num = (int64_t)(is_signed ? DEINTERLACE(int32_t,unum) : unum);
     }
     else if (width == 2) {
-        uint16_t num_big_en = *ENT (uint16_t, ctx->local, ctx->next_local++);
+        uint16_t num_big_en = NEXTLOCAL (uint16_t, ctx);
         uint16_t unum = BGEN16 (num_big_en); 
         num = (int64_t)(is_signed ? DEINTERLACE(int16_t,unum) : unum);
     }
     else if (width == 1) {
-        uint8_t unum = *ENT (uint8_t, ctx->local, ctx->next_local++);
+        uint8_t unum = NEXTLOCAL (uint8_t, ctx); 
         num = (int64_t)(is_signed ? DEINTERLACE(int8_t,unum) : unum);
     }
     else if (width == 8) { // note: for uint64_t the function returns the number correctly, it just needs to be casted to uint64_t
-        uint64_t num_big_en = *ENT (uint64_t, ctx->local, ctx->next_local++);
+        uint64_t num_big_en = NEXTLOCAL (uint64_t, ctx); 
         uint64_t unum = BGEN64 (num_big_en); 
         num = (int64_t)(is_signed ? DEINTERLACE(int64_t,unum) : unum);
     }
@@ -250,8 +250,9 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
             // we are request to reconstruct from another ctx
             base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
 
-        // case 1: LOCAL is not CTX_LT_SEQUENCE - we reconstruct this snip before adding the looked up data
-        if (snip_len && !(base_ctx->ltype == CTX_LT_SEQUENCE)) RECONSTRUCT (snip, snip_len);
+        // case 1: LOCAL is not CTX_LT_SEQ* - we reconstruct this snip before adding the looked up data
+        if (snip_len && base_ctx->ltype != CTX_LT_SEQUENCE && base_ctx->ltype != CTX_LT_SEQ_BITMAP) 
+            RECONSTRUCT (snip, snip_len);
         
         if (base_ctx->ltype >= CTX_LT_INT8 && base_ctx->ltype <= CTX_LT_UINT64) {
             new_value.i = piz_reconstruct_from_local_int (vb, base_ctx, 0);
@@ -261,6 +262,11 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         // case 2: CTX_LT_SEQUENCE  - the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
         else if (base_ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
+
+        else if (base_ctx->ltype == CTX_LT_SEQ_BITMAP) {
+            ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
+            DTP (reconstruct_seq) (vb, base_ctx, snip, snip_len);
+        }
 
         else piz_reconstruct_from_local_text (vb, base_ctx); // this will call us back recursively with the snip retrieved
                 
@@ -368,8 +374,10 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         else if (ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
         
-        else if (ctx->ltype == CTX_LT_SEQ_BITMAP) 
-            sam_piz_reconstruct_seq (vb, ctx);
+        else if (ctx->ltype == CTX_LT_SEQ_BITMAP) {
+            ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
+            DTP (reconstruct_seq) (vb, ctx, NULL, 0);
+        }
         
         else if (ctx->ltype == CTX_LT_TEXT)
             piz_reconstruct_from_local_text (vb, ctx);
@@ -377,9 +385,11 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
         else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }
 
-    // in case of CTX_LT_SEQ_BITMAP, it is it is ok if the bitmap is empty and all the data is in SEQNOREF (e.g. unaligned SAM)
-    else if (ctx->ltype == CTX_LT_SEQ_BITMAP && (ctx+1)->local.len)
-        sam_piz_reconstruct_seq (vb, ctx);
+    // in case of CTX_LT_SEQ_BITMAP, it is it is ok if the bitmap is empty and all the data is in SEQ_NOREF (e.g. unaligned SAM)
+    else if (ctx->ltype == CTX_LT_SEQ_BITMAP && (ctx+1)->local.len) {
+        ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
+        DTP (reconstruct_seq) (vb, ctx, NULL, 0);
+    }
 
     // case: the entire VB was just \n - so seg dropped the ctx
     else if (ctx->did_i == DTF(eol))
@@ -521,7 +531,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     if (!flag_header_only) {
         
         // read random access, but only if we are going to need it
-        bool need_random_access = flag_regions || flag_show_index || flag_fasta_sequential || flag_reference != REF_NONE;
+        bool need_random_access = flag_regions || flag_show_index || flag_fasta_sequential || (flag_reference != REF_NONE && z_file->data_type != DT_FASTQ);
         if (need_random_access) {
             zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 

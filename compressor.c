@@ -210,7 +210,7 @@ bool comp_compress_bzlib (VBlock *vb, CompressionAlg alg,
 
     *compressed_len -= strm.avail_out;
 
-    COPY_TIMER(vb->profile.compressor);
+    COPY_TIMER(vb->profile.compressor_bz2);
 
     return success;
 }
@@ -222,11 +222,11 @@ bool comp_compress_bzlib (VBlock *vb, CompressionAlg alg,
 // -------------------------------------------------------------------------------------
 
 // decoder of 2bit encoding of nucleotides
-const char actg_decode[4] = { 'A', 'C', 'G', 'T' };
+const char acgt_decode[4] = { 'A', 'C', 'G', 'T' };
 
 // table to convert ASCII to ACGT encoding. A,C,G,T (lower and upper case) are encoded as 0,1,2,3 respectively, 
 // and everything else (including N) is encoded as 0
-const uint8_t actg_encode[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0
+const uint8_t acgt_encode[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 16
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 32
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 48
@@ -245,7 +245,7 @@ const uint8_t actg_encode[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 
 
 // table to convert ASCII to NON-ACGT encoding. The character is XORed with the entry in the table
-static const uint8_t non_actg_encode[256] = 
+static const uint8_t non_acgt_encode[256] = 
                                  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0   -> XOR with 0 = stay unchanged
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 16
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 32
@@ -287,7 +287,7 @@ static void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, uns
         if (!IS_NUCLEOTIDE (data[i])) 
             vb->has_non_agct = true;
 
-        uint8_t encoding = actg_encode[(uint8_t)data[i]];
+        uint8_t encoding = acgt_encode[(uint8_t)data[i]];
         bit_array_assign (packed, next_bit, encoding & 1);
         bit_array_assign (packed, next_bit + 1, (encoding & 2) >> 1);
         next_bit += 2;
@@ -329,18 +329,18 @@ static void comp_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t unco
     bit_array_clear_excess_bits_in_top_word (packed);
 
     for (uint64_t i=0; i < uncompressed_len; i++) 
-        uncompressed_data[i] = ACTG_DECODE(packed, i);
+        uncompressed_data[i] = ACGT_DECODE(packed, i);
 
 /*    for (uint64_t i=0; i < uncompressed_len; i++) {
         uint8_t encoding = bit_array_get (packed, i*2) + (bit_array_get (packed, i*2 + 1) << 1);
-        uncompressed_data[i] = actg_decode[encoding];
+        uncompressed_data[i] = acgt_decode[encoding];
     }*/
 }
 
 static inline void comp_non_acgt_transform (char *data, uint32_t len)
 {
     for (uint32_t i=0; i < len; i++)
-        data[i] ^= non_actg_encode[(uint8_t)data[i]];
+        data[i] ^= non_acgt_encode[(uint8_t)data[i]];
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
@@ -580,7 +580,7 @@ bool comp_compress_lzma (VBlock *vb, CompressionAlg alg,
 
     LzmaEnc_Destroy (lzma_handle, &alloc_stuff, &alloc_stuff);
 
-    COPY_TIMER(vb->profile.compressor);
+    COPY_TIMER(vb->profile.compressor_lzma);
 
     return success;
 }

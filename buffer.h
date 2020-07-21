@@ -145,6 +145,7 @@ extern void *buf_low_level_realloc (void *p, size_t size, const char *func, uint
 extern const char *buf_desc (const Buffer *buf);
 
 // bitmap stuff
+extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);
 extern void buf_add_bit (Buffer *buf, int64_t new_bit);
 extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits);
 #define buf_get_bitarray(buf) ((BitArray*)(&(buf)->data))

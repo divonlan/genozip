@@ -750,3 +750,18 @@ void buf_add_bit (Buffer *buf, int64_t new_bit)
         bit_array_assign (bar, bar->num_of_bits-1, new_bit);  
 }
  
+bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits) 
+{
+    BitArray *bar = buf_get_bitarray (buf);
+
+    ASSERT (bar->num_of_bits + num_new_bits<= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap", __FUNCTION__, __LINE__, buf->name);
+    
+    bit_index_t next_bit = bar->num_of_bits;
+
+    bar->num_of_bits += num_new_bits;     
+    bar->num_of_words = roundup_bits2words64 (bar->num_of_bits);
+    bit_array_clear_excess_bits_in_top_word (bar);
+
+    return next_bit;
+}
+ 

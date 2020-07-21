@@ -78,6 +78,9 @@
 #define bitset2_and(arr,wrd,idx,bit) ((arr)[wrd] &= (_TYPESHIFT(arr,bit,idx) | ~_TYPESHIFT(arr,1,idx)))
 #define bitset2_cpy(arr,wrd,idx,bit) ((arr)[wrd]  = ((arr)[wrd] &~ _TYPESHIFT(arr,1,idx)) | _TYPESHIFT(arr,bit,idx))
 
+// divon - copy 2 bits - idx must be an even number
+#define bitset2_cpy2(arr,wrd,idx,bit2) ((arr)[wrd] = ((arr)[wrd] &~ _TYPESHIFT(arr,0x3,idx)) | _TYPESHIFT(arr,bit2,idx))
+
 //
 // Auto detect size of type from pointer
 //
@@ -95,6 +98,7 @@
 #define bitset_xor(arr,pos,bit) bitset_op2(bitset2_xor, arr, pos, bit)
 #define bitset_and(arr,pos,bit) bitset_op2(bitset2_and, arr, pos, bit)
 #define bitset_cpy(arr,pos,bit) bitset_op2(bitset2_cpy, arr, pos, bit)
+#define bitset_cpy2(arr,pos,bit2) bitset_op2(bitset2_cpy2, arr, pos, bit2)
 
 // Clearing a word does not return a meaningful value
 #define bitset_clear_word(arr,pos) ((arr)[bitset_wrd(arr,pos)] = 0)
@@ -170,7 +174,12 @@ typedef struct BitArray
 //
 
 // Allocate using existing struct
-extern void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr); // divon
+static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) // divon
+{
+  if (bitarr->num_of_bits % 64)
+    bitarr->words[bitarr->num_of_words-1] &= bitmask64 (bitarr->num_of_bits % 64); 
+}
+
 extern BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits);
 extern void bit_array_dealloc(BitArray* bitarr);
 
@@ -194,6 +203,9 @@ extern void LTEN_bit_array (BitArray* bitarr, bool also_partial_topword); // div
 #define bit_array_toggle(arr,i)   bitset_tgl((arr)->words, i)
 // c must be 0 or 1
 #define bit_array_assign(arr,i,c) bitset_cpy((arr)->words,i,c)
+
+// c must be 0,1,2 or 3 ; i must be even
+#define bit_array_assign2(arr,i,c) bitset_cpy2((arr)->words,i,c) // divon
 
 #define bit_array_len(arr) ((arr)->num_of_bits)
 
@@ -395,6 +407,7 @@ extern void bit_array_to_substr(const BitArray* bitarr,
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print
 // newline.
 extern void bit_array_print(const BitArray* bitarr, FILE* fout);
+extern void bit_array_print_bases (const BitArray* bitarr, const char *msg, bool is_forward); // divon
 
 // Print a string representations for a given region, using given on/off
 // characters. Reverse prints from highest to lowest -- this is useful for
@@ -425,6 +438,11 @@ extern void bit_array_copy(BitArray* dst, bit_index_t dstindx,
 
 // copy all of src to dst. dst is resized to match src.
 extern void bit_array_copy_all(BitArray* dst, const BitArray* src);
+
+// for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
+// position, as well as transform them 00->11 11->00 01->10 10->01
+// works on arrays with full words
+extern void bit_array_reverse_complement_all (BitArray *dst, const BitArray *src, bit_index_t src_start_base, bit_index_t max_num_bases);
 
 //
 // Logic operators
