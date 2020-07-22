@@ -114,16 +114,22 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
             
             zip_generate_b250_section (vb, ctx);
 
-            if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
+            if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) {
+                mutex_lock (dump_mutex);
                 fwrite (ctx->b250.data, 1, ctx->b250.len, dump_file);
+                mutex_unlock (dump_mutex);
+            }
 
             zfile_compress_b250_data (vb, ctx, COMP_BZ2);
         }
 
         if (ctx->local.len || ctx->ltype == CTX_LT_SEQ_BITMAP) { // bitmaps are always written, even if empty
 
-            if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
+            if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) {
+                mutex_lock (dump_mutex);
                 fwrite (ctx->local.data, 1, ctx->local.len * ctx_lt_sizeof_one[ctx->ltype], dump_file);
+                mutex_unlock (dump_mutex);
+            }
 
             zfile_compress_local_data (vb, ctx);
         }
@@ -369,7 +375,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
     // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, last_vblock_i, false, is_last_file, txt_basename, NULL);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, last_vblock_i, false, is_last_file, txt_basename, PROGRESS_PERCENT, 0);
 
     dict_id_initialize(z_file->data_type);
 

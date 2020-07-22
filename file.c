@@ -96,6 +96,8 @@ static char *file_compressible_extensions(void)
 
 FileType file_get_type (const char *filename, bool enforce_23andme_name_format)
 {
+    if (!filename) return UNKNOWN_FILE_TYPE;
+
     // 23andme files have the format "genome_Firstname_Lastname_optionalversion_timestamp.txt" or .zip
     if (enforce_23andme_name_format && file_has_ext (filename, ".txt")) 
         return (strstr (filename, "genome") && strstr (filename, "Full")) ? ME23 : UNKNOWN_FILE_TYPE;

@@ -43,7 +43,7 @@ typedef struct {
     unsigned next_vb_i;
     unsigned max_threads;
     bool is_last_file;
-    bool show_progress;
+    ProgressType prog;
     const char *filename;
 } DispatcherData;
 
@@ -110,17 +110,17 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
 Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
                             bool test_mode, bool is_last_file, 
                             const char *filename, // filename, or NULL if filename is unchanged
-                            const char *status)   // fixed status, or NULL if we should show progress
+                            ProgressType prog, const char *prog_msg /* used if prog=PROGRESS_MESSAGE */)   
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
     DispatcherData *dd = (DispatcherData *)calloc (1, sizeof(DispatcherData));
     ASSERT0 (dd, "failed to calloc DispatcherData");
 
-    dd->next_vb_i     = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
-    dd->max_threads   = max_threads;
-    dd->is_last_file  = is_last_file;
-    dd->show_progress = !status;
+    dd->next_vb_i    = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
+    dd->max_threads  = max_threads;
+    dd->is_last_file = is_last_file;
+    dd->prog         = prog;
 
     if (filename)
         dd->filename = filename;
@@ -135,8 +135,8 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
                                 command == ZIP && txt_file->redirected ? "Compressing..." : "0\%", // we can't show % when compressing from stdin as we don't know the file size
                                 test_mode); 
 
-    if (status)
-        progress_udpate_status (status);
+    if (prog == PROGRESS_MESSAGE)
+        progress_udpate_status (prog_msg);
 
     return dd;
 }
@@ -319,7 +319,7 @@ void dispatcher_finalize_one_vb (Dispatcher dispatcher)
         dd->processed_vb = NULL;
     }
 
-    if (dd->show_progress)
+    if (dd->prog == PROGRESS_PERCENT)
         dispatcher_show_progress (dispatcher);
 }                           
 
@@ -350,11 +350,12 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
 
 // returns the number of VBs successfully outputted
 uint32_t dispatcher_fan_out_task (const char *filename,  // NULL to continue with previous filename
-                                  const char *status,    // fixed status, or NULL if we should show progress
-                                  bool test_mode, 
+                                  ProgressType prog,
+                                  const char *prog_msg,  // used if prog=PROGRESS_MESSAGE 
+                                  bool test_mode,
                                   DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, test_mode, true, filename, status);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, 0, test_mode, true, filename, prog, prog_msg);
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;

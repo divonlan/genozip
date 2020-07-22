@@ -236,7 +236,7 @@ void refhash_compress_refhash (void)
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
-    dispatcher_fan_out_task (NULL, "Writing hash table used for compressing fastq and fasta files...", false, 
+    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table used for compressing fastq files...", false, 
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              ref_output_vb);
@@ -301,7 +301,7 @@ void refhash_load(void)
     ref_hash_cursor = 0;
 
     dispatcher_fan_out_task (ref_filename,
-                             "Reading reference hash table...", flag_test, 
+                             PROGRESS_MESSAGE, "Reading reference hash table...", flag_test, 
                              refhash_read_one_vb, 
                              refhash_uncompress_one_vb, 
                              NULL);
@@ -398,7 +398,7 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
 {
     START_TIMER;
 
-    uint32_t longest_len=0;
+    uint32_t longest_len=0; // longest number of bits (not bases!) that match
     uint32_t refhash_word;
     const int64_t seq_len_64 = (int64_t)seq_len; // 64 bit version of seq_len
     
@@ -432,7 +432,6 @@ COPY_TIMER(vb->profile.tmp1);}
 
     *is_all_ref = false;
 
-    uint32_t num_bits_matching_threadshold = (seq_len * 3) / 5; // 60% of seq_len (note that non-matching bases result in 50% matching bits)
 {START_TIMER;
     
     typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
@@ -470,10 +469,10 @@ COPY_TIMER(vb->profile.tmp1);}
             }
         }
 
-#       define UPDATE_BEST(fwd)  { \
-            if (gpos != last_gpos) { \
+#       define UPDATE_BEST(fwd)  {               \
+            if (gpos != last_gpos) {             \
                 uint32_t match_len = refhash_get_match_len (vb, &seq_bits, gpos, (fwd)); \
-                if (match_len > longest_len && match_len > num_bits_matching_threadshold) {  \
+                if (match_len > longest_len) {   \
                     longest_len     = match_len; \
                     best_gpos       = gpos;      \
                     best_is_forward = (fwd);     \
@@ -481,11 +480,11 @@ COPY_TIMER(vb->profile.tmp1);}
                     /* compared to stopping only if match_len==seq_len, this adds about 1% to the file size, but is significantly faster */\
                     if (match_len >= (seq_len-2) * 2) { /* we found (almost) the best possible match */ \
                         *is_all_ref = maybe_perfect_match && (match_len == seq_len*2); /* perfect match */ \
-                        goto done; \
-                    } \
-                }\
-                last_gpos = gpos;      \
-            }\
+                        goto done;               \
+                    }                            \
+                }                                \
+                last_gpos = gpos;                \
+            }                                    \
         }
 
         if (found != NOT_FOUND && (gpos >= 0) && (gpos + seq_len_64 < genome_size)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
@@ -533,8 +532,8 @@ void refhash_initialize (void)
 
     // case 1: called from ref_make_ref_init - initialize for making a reference file
     if (flag_make_reference) {
-        num_layers      = MAKE_REF_NUM_LAYERS;
-        base_layer_bits = MAKE_REF_BASE_LAYER_BITS;
+        num_layers       = MAKE_REF_NUM_LAYERS;
+        base_layer_bits  = MAKE_REF_BASE_LAYER_BITS;
         // we use the default vb size (16MB) not the reduced make-ref size (1MB), unless user overrides with --vblock
         make_ref_vb_size = flag_vblock ? global_max_memory_per_vb : (atoi (TXT_DATA_PER_VB_DEFAULT) << 20);
     }

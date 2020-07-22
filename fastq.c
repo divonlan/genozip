@@ -13,6 +13,7 @@
 #include "dict_id.h"
 #include "refhash.h"
 #include "endianness.h"
+#include "arch.h"
 
 void fastq_seg_initialize (VBlockFAST *vb)
 {
@@ -23,7 +24,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[FASTQ_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP;
+    vb->contexts[FASTQ_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP; 
     vb->contexts[FASTQ_SEQ_STRAND].ltype = CTX_LT_SEQ_BITMAP;
     vb->contexts[FASTQ_SEQ_STRAND].flags = CTX_FL_LOCAL_NONE; // bz2 and lzma only make it biug
     vb->contexts[FASTQ_SEQ_GPOS].ltype   = CTX_LT_UINT32;
@@ -66,7 +67,9 @@ static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
     buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
     buf_alloc (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "context->local", gpos_ctx->did_i); 
 
-    int64_t gpos;
+    int64_t 
+    
+    gpos;
     bool is_forward, is_all_ref;
     bool has_match = refhash_best_match ((VBlockP)vb, seq, seq_len, &gpos, &is_forward, &is_all_ref);
 
@@ -84,14 +87,22 @@ static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
         return;
     }
 
+    // we might have a nested spin lock for seq spans over a boundary. we always lock from the lower index to the higer
+    if (flag_reference == REF_EXT_STORE) {
+        mutex_lock (genome_muteces[GPOS2MUTEX(gpos)]);
+
+        if (GPOS2MUTEX(gpos) != GPOS2MUTEX(gpos + seq_len - 1)) // region might span two spinlock 64K-regions, but not more than that   
+            mutex_lock (genome_muteces[GPOS2MUTEX(gpos + seq_len - 1)]);
+    }
+
     // shortcut if we have a full reference match
     if (is_all_ref) {
         bit_array_set_region (bitmap, next_bit, seq_len); // all bases match the reference
         
-        if (flag_reference == REF_EXT_STORE)
+        if (flag_reference == REF_EXT_STORE) 
             bit_array_set_region (&genome->is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
-        
-        return;
+
+        goto done;
     }
 
     int64_t room_fwd = genome_size - gpos; // how much reference forward might contain a match
@@ -103,11 +114,14 @@ static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
         // case our seq is identical to the reference at this site
         if (i < room_fwd) {
             char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
-            char ref_base = ACGT_DECODE (&genome->ref, gpos + (is_forward ? i : seq_len-1-i));
+            
+            int64_t ref_i = gpos + (is_forward ? i : seq_len-1-i);
+            char ref_base = ACGT_DECODE (&genome->ref, ref_i);
+
             if (seq_base == ref_base) {
                 
-                if (flag_reference == REF_EXT_STORE)
-                    bit_array_set (&genome->is_set, gpos + i); // we will need this ref to reconstruct
+                if (flag_reference == REF_EXT_STORE) 
+                    bit_array_set (&genome->is_set, ref_i); // we will need this ref to reconstruct
 
                 use_reference = true;
             }
@@ -119,6 +133,15 @@ static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
 
         bit_array_assign (bitmap, next_bit, use_reference);
         next_bit++;
+    }
+
+done:
+    if (flag_reference == REF_EXT_STORE) {
+        // unlock in reverse order
+        if (GPOS2MUTEX(gpos) != GPOS2MUTEX(gpos + seq_len - 1)) // region might span to spinlock 64K-regions, but not more than that   
+            mutex_unlock (genome_muteces[GPOS2MUTEX(gpos + seq_len - 1)]);
+
+        mutex_unlock (genome_muteces[GPOS2MUTEX(gpos)]);
     }
 }
 
@@ -255,7 +278,7 @@ void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *se
                 else  // get base from nonref
                     RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
 
-        else // reverse compliment
+        else // reverse complement
             for (uint32_t i=0; i < vb->seq_len; i++) 
                 if (NEXTLOCALBIT (bitmap_ctx))  // case: get base from reference
                     RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (&genome->ref, gpos + vb->seq_len-1 - i)]);
@@ -270,6 +293,8 @@ void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *se
 
 void fastq_piz_reconstruct_vb (VBlockFAST *vb)
 {
+    ASSERT0 (!flag_reference || genome, "Error in fastq_piz_reconstruct_vb: reference is not loaded correctly");
+
     if (!flag_grep) piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); // it not already done during grep
 
     for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {

@@ -192,22 +192,32 @@ bool sections_has_reference(void)
     return false;
 }
 
-// get genome size - this is determined by gpos+num_bases of the last SEC_REFERENCE or SEC_REF_IS_SET section
+// get genome size - this is determined by gpos+num_bases of the SEC_REFERENCE with the highest gpos or SEC_REF_IS_SET section
+// note: SEC_REFERENCE sections might not be in the order of gpos, because some of them might be copied in ref_copy_one_compressed_section()
 // NOT THREAD SAFE - can only be called by I/O thread
 int64_t sections_get_genome_size (void)
 {
+    bool found_a_sec_reference = false;
+    int64_t size = 0;
+
     for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the reference sections are near the end
         const SectionListEntry *sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
         
         if (sl->section_type == SEC_REFERENCE) {
+            found_a_sec_reference = true;
+
             // check if we have a SEC_REF_IS_SET section - in that case, take num_bases from SEC_REF_IS_SET
             // as the num_bases in SEC_REFERENCE indicates a compacted section
             if (i > 0 && (sl-1)->section_type == SEC_REF_IS_SET) sl--;
 
             SectionHeaderReference *header = zfile_read_section_header (sl->offset, sizeof (SectionHeaderReference));
-
-            return (int64_t)(BGEN64(header->gpos) + BGEN32 (header->num_bases));
+            int64_t genome_size_at_least = (BGEN64(header->gpos) + BGEN32 (header->num_bases));
+            
+            size = MAX (size, genome_size_at_least);
         }
+        
+        else if (found_a_sec_reference)  // we found some reference sections, and we finished checking all of them
+            return size;
     }
 
     ABORT0 ("Error in sections_get_genome_size: cannot find a SEC_REFERENCE section");

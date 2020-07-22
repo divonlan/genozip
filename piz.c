@@ -543,6 +543,9 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
             // if this is a stored reference we load the reference random access that will determined which reference sections
             // should be read & uncompressed in case of --regions.
+            // note: in case of a data file with stored reference - SEC_REF_RANDOM_ACC will contain the random access of the reference
+            // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
+            // and are identical. It made the coding easier and their size is negligible.
             if (flag_reference == REF_STORED || flag_reading_reference) 
                 random_access_load_ra_section (SEC_REF_RANDOM_ACC, &ref_stored_ra, "ref_stored_ra", 
                                                flag_show_ref_index && !flag_reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
@@ -566,7 +569,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             ref_load_stored_reference();
 
             // load the refhash, if we are compressing FASTA or FASTQ
-            if (flag_reading_reference && primary_command == ZIP && flag_has_fastaq) 
+            if (flag_reading_reference && primary_command == ZIP && flag_ref_whole_genome) 
                 refhash_load();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
@@ -639,7 +642,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
     }
 
     if (!dispatcher) 
-        dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_file->basename, NULL);
+        dispatcher = dispatcher_init (global_max_threads, 0, flag_test, is_last_file, z_file->basename, PROGRESS_PERCENT, 0);
 
     // case: we couldn't open the file because we didn't know what type it is - open it now
     if (!flag_unbind && !flag_reading_reference && !txt_file->file) file_open_txt (txt_file);

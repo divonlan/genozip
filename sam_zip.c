@@ -182,6 +182,8 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     Context *bitmap_ctx = &vb->contexts[SAM_SEQ_BITMAP];
     Context *nonref_ctx = &vb->contexts[SAM_SEQ_NOREF];
 
+    BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
+
     if (!recursion_level)
         bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
 
@@ -209,14 +211,17 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
             "Error: file has contig \"%.*s\", POS=%"PRId64" CIGAR=\"%s\", implying a final reference pos for this read at %"PRId64". However, the reference's last pos for this contig is %"PRId64,
             range->chrom_name_len, range->chrom_name, pos, cigar, final_seq_pos, range->last_pos);
 
+    bit_index_t next_bit = buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
+
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. if reference range is NULL as the hash entry for this range is unfortunately already occupied by another range (can only happen with REF_INTERNAL)
         (cigar[0] == '*' && cigar[1] == 0)) { // 2. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
 
         buf_add (&nonref_ctx->local, seq, seq_len);
-                
-        for (uint32_t i=0; i < vb->ref_and_seq_consumed; i++) 
-            buf_add_clear_bit (&bitmap_ctx->local); // not very efficient, but quiet rare
+        
+        bit_array_clear_region (bitmap, next_bit, vb->ref_and_seq_consumed);
+        //for (uint32_t i=0; i < vb->ref_and_seq_consumed; i++) 
+            //buf_add_clear_bit (&bitmap_ctx->local); // not very efficient, but quiet rare
 
         random_access_update_last_pos ((VBlockP)vb, pos + vb->ref_consumed - 1);
 
@@ -264,19 +269,22 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
                 if (flag_reference == REF_INTERNAL && range && normal_base && !ref_is_nucleotide_set (range, next_ref)) { 
                     ref_set_nucleotide (range, next_ref, seq[i]);
                     bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
-                    buf_add_set_bit (&bitmap_ctx->local);
+                    bit_array_set (bitmap, next_bit); next_bit++; // cannot increment inside the macro
+                    //buf_add_set_bit (&bitmap_ctx->local);
                 }
 
                 // case our seq is identical to the reference at this site
                 else if (range && normal_base && seq[i] == ref_get_nucleotide (range, next_ref)) {
-                    buf_add_set_bit (&bitmap_ctx->local); // we will need this site in the reference for pizzing
+                    //buf_add_set_bit (&bitmap_ctx->local); // we will need this site in the reference for pizzing
+                    bit_array_set (bitmap, next_bit); next_bit++; // cannot increment inside the macro
                     bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
                 }
                 
                 // case: ref is set to a different value - we store our value in nonref_ctx
                 else {
                     NEXTENT (char, nonref_ctx->local) = seq[i];
-                    buf_add_clear_bit (&bitmap_ctx->local);
+                    bit_array_clear (bitmap, next_bit); next_bit++; // cannot increment inside the macro
+                    //buf_add_clear_bit (&bitmap_ctx->local);
                 } 
 
                 subcigar_len--;

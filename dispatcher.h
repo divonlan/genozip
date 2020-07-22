@@ -10,8 +10,10 @@
 #include "buffer.h"
 
 typedef void *Dispatcher;
+
+typedef enum { PROGRESS_PERCENT, PROGRESS_MESSAGE, PROGRESS_NONE } ProgressType;
 extern Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
-                                   bool test_mode, bool is_last_file, const char *filename, const char *status);
+                                   bool test_mode, bool is_last_file, const char *filename, ProgressType prog, const char *prog_msg);
 extern void dispatcher_pause (Dispatcher dispatcher);
 extern void dispatcher_resume (Dispatcher dispatcher);
 extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i);
@@ -29,6 +31,6 @@ extern void dispatcher_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern void dispatcher_show_time (const char *stage, int32_t thread_index, uint32_t vb_i);
-extern uint32_t dispatcher_fan_out_task (const char *filename, const char *status, bool test_mode, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
+extern uint32_t dispatcher_fan_out_task (const char *filename, ProgressType prog, const char *prog_msg, bool test_mode, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
 
 #endif

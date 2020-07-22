@@ -188,7 +188,7 @@ void vb_cleanup_memory (void)
     if (z_file->data_type != DT_NONE && DTPZ(cleanup_memory))
         DTPZ(cleanup_memory)(evb);
 
-    ref_cleanup_memory (false);
+    ref_unload_reference (false);
 }
 
 // NOT thread safe, use only in execution-terminating messages

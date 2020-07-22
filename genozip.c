@@ -55,11 +55,11 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file d
 int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_sections=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
-    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, 
+    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_list_chroms=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0,
-    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_has_fastaq=0,
+    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_ref_whole_genome=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
     flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0;
 
@@ -87,8 +87,11 @@ static void print_call_stack (void)
 #endif
 }
 
+static bool im_in_exit_on_error = false, exit_on_error_completed = false;
 void exit_on_error (bool show_stack) 
 {
+    im_in_exit_on_error = true;
+
     if (false /* show_stack */) print_call_stack(); //this is useless - doesn't print function names
 
     buf_test_overflows_all_vbs("exit_on_error");
@@ -108,8 +111,12 @@ void exit_on_error (bool show_stack)
 
         file_close (&z_file, false); // also frees file->name
 
+        // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
+        // because it can't access a z_file filed after z_file is freed, and main_sigsegv_handler aborts
         file_remove (save_name, true);
     }
+
+    exit_on_error_completed = true;
 
     abort();
 } 
@@ -117,7 +124,16 @@ void exit_on_error (bool show_stack)
 #ifndef _WIN32
 static void main_sigsegv_handler (int sig) 
 {
-    fprintf (stderr, "\nError: Segmentation fault\n");
+    // note: during exit_on_error, we close z_file which might cause compute threads access z_file fields to 
+    // throw a segmentation fault. we don't show it in this case, as we have already displayed the error itself
+    if (!im_in_exit_on_error) 
+        fprintf (stderr, "\nError: Segmentation fault\n");
+
+    // busy-wait for exit_on_error to complete before aborting
+    else 
+        while (!exit_on_error_completed) 
+            usleep (10000); // 10 millisec
+    
     //print_call_stack(); //this is useless - doesn't print function names
     abort();
 }
@@ -217,7 +233,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     Md5Hash md5_hash_bound, license_hash, ref_file_md5;
     char created[FILE_METADATA_LEN];
     char ref_file_name[REF_FILENAME_LEN];
-    bool success = zfile_get_genozip_header (&txt_data_size, &num_samples, &num_lines, 
+    bool success = zfile_get_genozip_header (z_file, NULL, &txt_data_size, &num_samples, &num_lines, 
                                              &md5_hash_bound, created, FILE_METADATA_LEN, &license_hash,
                                              ref_file_name, REF_FILENAME_LEN, &ref_file_md5);
     if (!success) goto finish;
@@ -329,7 +345,7 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     const char *password = crypt_get_password();
 
     // is we have a loaded reference and it is no longer needed, unload it now, to free the memory for the testing process
-    if (is_last_file) ref_cleanup_memory (true);
+    if (is_last_file) ref_unload_reference (true);
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 
                                   "To use the --test option",
@@ -480,29 +496,47 @@ void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
                  &basenames[i * BASENAME_LEN], out_filename);
 }
 
-bool has_fasta_fastq (char **filenames, unsigned num_files)
-{
-    if (command == ZIP) {
-        FileType ft = file_get_stdin_type();
-        DataType dt = file_get_data_type (ft, true);
-        if (dt == DT_FASTA || dt == DT_FASTQ) return true;
+static DataType main_get_file_dt (const char *filename)
+{   
+    DataType dt = DT_NONE;
 
-        for (unsigned i=0; i < num_files ; i++) {
-            ft = file_get_type (filenames[i], false);
-            dt = file_get_data_type (ft, true);
-            if (dt == DT_FASTA || dt == DT_FASTQ) return true;
-        }
+    if (command == ZIP) {
+        FileType ft = file_get_stdin_type(); // check for --input option
+
+        if (ft == UNKNOWN_FILE_TYPE) // no --input - get file type from filename
+            ft = file_get_type (filename, false);
+
+        dt = file_get_data_type (ft, true);
     }
 
     else if (command == PIZ) {
-        for (unsigned i=0; i < num_files ; i++) {
-            FileType ft = file_get_type (filenames[i], false);
-            DataType dt = file_get_dt_by_z_ft (ft);
-            if (dt == DT_FASTA || dt == DT_FASTQ) return true;
+        FileType ft = file_get_type (filename, false);
+        dt = file_get_dt_by_z_ft (ft);
+
+        // case: we don't know yet what file type this is - we need to read the genozip header to determine
+        if (dt == DT_NONE && filename) {
+            File *genozip_file = file_open (filename, READ, Z_FILE, DT_NONE);
+            zfile_get_genozip_header (genozip_file, &dt, 0,0,0,0,0,0,0,0,0,0);
+            file_close (&genozip_file, false);
         }
     }
 
-    return false;
+    return dt;
+}
+
+static int main_sort_input_filenames (const void *fn1, const void *fn2)
+{
+    DataType dt1 = main_get_file_dt (*(char **)fn1);
+    DataType dt2 = main_get_file_dt (*(char **)fn2);
+    
+    bool use_refhash1 = (dt1 == DT_FASTQ);
+    bool use_refhash2 = (dt2 == DT_FASTQ);
+
+    // refhash users - at the end of the list
+    if (use_refhash1 != use_refhash2) return (int)use_refhash1 - (int)use_refhash2;
+
+    // within refhash users, and within refhash non-users, sort by data type
+    return (int)dt1 - (int)dt2;
 }
 
 void TEST()
@@ -522,6 +556,26 @@ void TEST()
     }
 
     fwrite (b.words, b.num_of_words * sizeof (uint64_t), 1, stdout);
+}
+
+static void main_load_reference (const char *filename, bool is_first_file)
+{
+    int old_flag_ref_whole_genome = flag_ref_whole_genome;
+    flag_ref_whole_genome = (main_get_file_dt (filename) == DT_FASTQ); // this flag is also used when PIZ reads a stored reference
+
+    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+
+        if (is_first_file)
+            ref_load_external_reference (false); 
+
+        // Reload the reference in some cases. TODO: eliminate reloads (bug 157)
+        else if (!is_first_file && 
+            ((old_flag_ref_whole_genome == false && flag_ref_whole_genome == true) ||  // case 1: fastq follows a non-fastq
+            (flag_reference == REF_EXT_STORE && !flag_bind))) {             // case 2: --REFERENCE for non-binding files
+            ref_unload_reference (true); 
+            ref_load_external_reference (false); 
+        }
+    }
 }
 
 int main (int argc, char **argv)
@@ -608,6 +662,7 @@ int main (int argc, char **argv)
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,        1 } 
         #define _d1 {"show-one-dict", required_argument, 0, '3'                    }
         #define _d2 {"show-dict-one", required_argument, 0, '3'                    }
+        #define _lc {"list-chroms",   no_argument,       &flag_list_chroms,      1 } // identical to --show-one-dict for the CHROM dict of the data type
         #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes,    1 } 
         #define _s2 {"show-b250",     no_argument,       &flag_show_b250,        1 } 
         #define _s5 {"show-one-b250", required_argument, 0, '2'                    }
@@ -636,10 +691,10 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                   _st, _sm,                                       _dm,                                                                                                            _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -793,7 +848,7 @@ int main (int argc, char **argv)
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
     if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
-        dict_id_show_one_b250.num || dict_id_show_one_dict.num || 
+        dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_reference ||
         flag_show_alleles || flag_show_vblocks || (flag_show_index && command==PIZ))
         flag_quiet=true; // don't show progress
 
@@ -832,7 +887,8 @@ int main (int argc, char **argv)
     unsigned num_files = argc - optind;
     flag_multiple_files = (num_files > 1);
     
-    flag_has_fastaq = has_fasta_fastq (&argv[optind], num_files); 
+    // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
+    qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);
     
     flag_bind = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
 
@@ -863,11 +919,8 @@ int main (int argc, char **argv)
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
 
-        // import external reference if needed (in case of --REFERENCE for non-binding files, we need to read for each file)
-        if (((flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && file_i==0) || 
-            (flag_reference == REF_EXT_STORE && !flag_bind)) 
-            ref_load_external_reference (false); 
-
+        main_load_reference (next_input_file, !file_i);
+        
         switch (command) {
             case ZIP  : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); break;
             

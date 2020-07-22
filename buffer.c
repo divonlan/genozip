@@ -27,15 +27,12 @@
 static const unsigned overhead_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
 MUTEX (overlay_mutex); // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
-MUTEX (evb_buf_mutex); // used to thread-protect the buf_list of evb
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
 void buf_initialize()
 {
     mutex_initialize (overlay_mutex);
-    mutex_initialize (evb_buf_mutex);
-
     vb_external_vb_initialize();
 }
 

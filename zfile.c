@@ -207,11 +207,15 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
     if (flag_show_dict) {
         fprintf (stderr, "%s (vb_i=%u, did=%u, num_snips=%u):\t", 
                  ctx->name, vb->vblock_i, ctx->did_i, num_words);
-        str_print_null_seperated_data (data, num_chars, true);
+        str_print_null_seperated_data (data, num_chars, true, false);
     }
     
     if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num)
-        str_print_null_seperated_data (data, num_chars, false);
+        str_print_null_seperated_data (data, num_chars, false, false);
+
+    if (flag_list_chroms && ctx->did_i == CHROM)
+        str_print_null_seperated_data (data, num_chars, false, vb->data_type == DT_SAM);
+
 
     z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
     comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
@@ -454,6 +458,7 @@ void *zfile_read_section_header (uint64_t offset, uint32_t size)
 
     static Buffer one_header_buf = EMPTY_BUFFER;
     buf_alloc (evb, &one_header_buf, size, 4, "one_header_buf", 0);
+    one_header_buf.len = 0;
 
     return zfile_read_from_disk (z_file, evb, &one_header_buf, size, false); 
 }
@@ -485,18 +490,21 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
     }
 
     // output the dictionaries if we're asked to
-    if (flag_show_dict || dict_id_show_one_dict.num) {
+    if (flag_show_dict || dict_id_show_one_dict.num || flag_list_chroms) {
         for (uint32_t did_i=0; did_i < z_file->num_dict_ids; did_i++) {
             Context *ctx = &z_file->contexts[did_i];
 
 #define MAX_PRINTABLE_DICT_LEN 100000
 
             if (dict_id_printable (ctx->dict_id).num == dict_id_show_one_dict.num) 
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false);
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, false);
+            
+            if (flag_list_chroms && ctx->did_i == CHROM)
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), false, z_file->data_type == DT_SAM);
             
             if (flag_show_dict) {
                 fprintf (stderr, "%s (did_i=%u, num_snips=%u):\t", ctx->name, did_i, (uint32_t)ctx->word_list.len);
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), true);
+                str_print_null_seperated_data (ctx->dict.data, (uint32_t)MIN(ctx->dict.len,MAX_PRINTABLE_DICT_LEN), true, false);
             }
         }
         fprintf (stderr, "\n");
@@ -718,8 +726,10 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     z_data->len += sizeof(SectionFooterGenozipHeader);
 }
 
-// reads the the genozip header section's header from a GENOZIP file - used by main_list, returns true if successful
-bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
+// reads the the genozip header section's header from a GENOZIP file - used by main_list and main_is_fastq, returns true if successful
+bool zfile_get_genozip_header (File *file,
+                               DataType *dt,
+                               uint64_t *uncomp_data_size,
                                uint32_t *num_samples,
                                uint64_t *num_items_bound,
                                Md5Hash  *md5_hash_bound,
@@ -729,11 +739,11 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
                                Md5Hash *ref_file_md5)
 {
     // read the footer from the end of the file
-    if (!file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, true))
+    if (!file_seek (file, -sizeof(SectionFooterGenozipHeader), SEEK_END, true))
         return false;
 
     SectionFooterGenozipHeader footer;
-    int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);
+    int ret = fread (&footer, sizeof (footer), 1, (FILE *)file->file);
     ASSERTW (ret == 1, "Skipping empty file %s", z_name);    
     if (!ret) return false; // empty file / cannot read
     
@@ -742,22 +752,23 @@ bool zfile_get_genozip_header (uint64_t *uncompressed_data_size,
 
     // read genozip header
     uint64_t genozip_header_offset = BGEN64 (footer.genozip_header_offset);
-    if (!file_seek (z_file, genozip_header_offset, SEEK_SET, true))
+    if (!file_seek (file, genozip_header_offset, SEEK_SET, true))
         return false;
 
     SectionHeaderGenozipHeader header;
-    int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)z_file->file);
+    int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)file->file);
     if (bytes < sizeof(SectionHeaderGenozipHeader)) return false;
 
     ASSERTW (BGEN32 (header.h.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);
     if (BGEN32 (header.h.magic) != GENOZIP_MAGIC) return false;
 
-    *uncompressed_data_size = BGEN64 (header.uncompressed_data_size);
-    *num_samples            = BGEN32 (header.num_samples);
-    *num_items_bound       = BGEN64 (header.num_items_bound);
-    *md5_hash_bound        = header.md5_hash_bound;
-    *license_hash           = header.license_hash;
-    *ref_file_md5           = header.ref_file_md5;
+    if (dt)               *dt               = (DataType)BGEN16 (header.data_type);
+    if (uncomp_data_size) *uncomp_data_size = BGEN64 (header.uncompressed_data_size);
+    if (num_samples)      *num_samples      = BGEN32 (header.num_samples);
+    if (num_items_bound)  *num_items_bound  = BGEN64 (header.num_items_bound);
+    if (md5_hash_bound)   *md5_hash_bound   = header.md5_hash_bound;
+    if (license_hash)     *license_hash     = header.license_hash;
+    if (ref_file_md5)     *ref_file_md5     = header.ref_file_md5;
 
     memset (created, 0, created_len);
     memcpy (created, header.created, MIN (FILE_METADATA_LEN, created_len));

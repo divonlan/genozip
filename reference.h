@@ -44,7 +44,7 @@ extern void ref_load_stored_reference (void);
 extern void ref_set_reference (const char *filename);
 extern void ref_set_md5 (Md5Hash md5);
 extern void ref_load_external_reference (bool display);
-extern void ref_cleanup_memory (bool force_clean_all);
+extern void ref_unload_reference (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
@@ -91,5 +91,10 @@ extern Buffer ref_stored_ra;
 
 extern Range *genome, *genome_rev;
 extern int64_t genome_size;
+
+#define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K
+#define GPOS2MUTEX(gpos) ((gpos) / GENOME_BASES_PER_MUTEX)
+extern pthread_mutex_t *genome_muteces; // one spinlock per 16K bases - protects genome->is_set
+extern uint32_t genome_num_muteces;
 
 #endif

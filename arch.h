@@ -36,4 +36,21 @@ extern void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool 
 #define mutex_unlock(m) { int ret = pthread_mutex_unlock (&m); \
                           ASSERT (!ret, "Error in %s: pthread_mutex_lock failed: %s", __FUNCTION__, strerror (ret)); }
 
+// -----------
+// spinlock stuff
+// -----------
+#define SPINLOCK(name) \
+static pthread_spinlock_t name; \
+    static bool name##_initialized = false;
+
+extern void spin_initialize_do (const char *name, pthread_spinlock_t *spin, bool *initialized);
+#define spin_initialize(name) spin_initialize_do (#name, &name, &name##_initialized)
+
+#define spin_lock(m)   { int ret = pthread_spin_lock (&m); \
+                          ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
+
+#define spin_unlock(m) { int ret = pthread_spin_unlock (&m); \
+                          ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
+
+
 #endif

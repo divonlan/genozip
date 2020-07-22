@@ -118,10 +118,17 @@ const char *type_name (unsigned item,
     return *name;    
 }
 
-void str_print_null_seperated_data (const char *data, unsigned len, bool add_newline)
+void str_print_null_seperated_data (const char *data, unsigned len, bool add_newline, bool remove_equal_asterisk)
 {
-    for (unsigned i=0; i < len; i++)
+    for (unsigned i=0; i < len; i++) {
+        // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
+        if (remove_equal_asterisk && (data[i]=='*' || data[i]=='=') && !data[i+1]) {
+            i++;
+            continue; // skip character and following separator
+        }
+
         fputc (data[i] ? data[i] : ' ', stderr);
+    }
     
     if (add_newline) fputc ('\n', stderr);
 }
