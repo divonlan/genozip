@@ -264,7 +264,7 @@ void stats_show_sections (void)
         /* comp data      */ str_size (local_compressed_size, s->comp_data);
         /* comp total     */ str_size (s->total_comp_size, s->comp_total);
         /* comp ratio     */ s->comp_ratio = (double)txt_len / (double)s->total_comp_size;
-        /* % of txt       */ s->pc_txt     = 100.0 * (double)txt_len / (double)txt_file->txt_data_so_far_single;
+        /* % of txt       */ s->pc_txt     = 100.0 * (double)txt_len / (double)z_file->txt_data_so_far_bind;
         /* % of genozip   */ s->pc_genozip = 100.0 * (double)s->total_comp_size / (double)z_file->disk_size;
 
         s++;
@@ -309,5 +309,5 @@ void stats_show_sections (void)
     ASSERTW (all_txt == z_file->txt_data_so_far_bind || flag_optimize || flag_make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_uint_commas (all_txt, s1), str_uint_commas (z_file->txt_data_so_far_bind, s2), 
-             (int32_t)(txt_file->txt_data_so_far_single - all_txt)); 
+             (int32_t)(z_file->txt_data_so_far_bind - all_txt)); 
 }
