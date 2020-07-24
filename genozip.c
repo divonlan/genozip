@@ -58,13 +58,13 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_list_chroms=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
-    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0,
+    flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0, flag_genocat_info_only=0,
     flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_ref_whole_genome=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
-    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0;
+    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0,
+    flag_pair=NOT_PAIRED_END;
 
 ReferenceType flag_reference = REF_NONE;
-
 uint64_t flag_stdin_size = 0;
 char *flag_grep = NULL;
 char *flag_show_is_set = NULL;
@@ -74,6 +74,7 @@ DictId dict_id_show_one_b250  = DICT_ID_NONE,  // argument of --show-b250-one
        dump_one_b250_dict_id  = DICT_ID_NONE,  // argument of --dump-b250-one
        dump_one_local_dict_id = DICT_ID_NONE;  // argument of --dump-local-one
 static char *threads_str  = NULL;
+static char *out_filename = NULL; // the filename specified in --output
 
 static void print_call_stack (void) 
 {
@@ -422,7 +423,7 @@ static void main_genozip (const char *txt_filename,
                 if (basename) FREE ((char*)basename);
             }
 
-            z_file = file_open (z_filename, WRITE, Z_FILE, txt_file->data_type);
+            z_file = file_open (z_filename, flag_pair ? WRITEREAD : WRITE, Z_FILE, txt_file->data_type);
         }
     }
     else if (flag_stdout) { // stdout
@@ -477,16 +478,15 @@ static void main_list_dir(const char *dirname)
     ASSINP0 (!ret, "Error: failed to chdir(..)");
 }
 
-void main_warn_if_duplicates (int argc, char **argv, const char *out_filename)
+static void main_warn_if_duplicates (int num_files, char **filenames)
 {
-    int num_files = argc - optind;
     if (num_files <= 1) return; // nothing to do
 
     # define BASENAME_LEN 256
     char basenames[num_files * BASENAME_LEN];
 
     for (unsigned i=0; i < num_files; i++)
-        file_basename (argv[optind + i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
+        file_basename (filenames[i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
 
     qsort (basenames, num_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
 
@@ -536,7 +536,10 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     if (use_refhash1 != use_refhash2) return (int)use_refhash1 - (int)use_refhash2;
 
     // within refhash users, and within refhash non-users, sort by data type
-    return (int)dt1 - (int)dt2;
+    if (dt1 != dt2) return (int)dt1 - (int)dt2;
+
+    // within files of the same data type, keep original order
+    return fn1 - fn2;
 }
 
 void TEST()
@@ -561,7 +564,10 @@ void TEST()
 static void main_load_reference (const char *filename, bool is_first_file)
 {
     int old_flag_ref_whole_genome = flag_ref_whole_genome;
-    flag_ref_whole_genome = (main_get_file_dt (filename) == DT_FASTQ); // this flag is also used when PIZ reads a stored reference
+    flag_ref_whole_genome = flag_pair || (main_get_file_dt (filename) == DT_FASTQ); // this flag is also used when PIZ reads a stored reference
+
+    // no need to load the reference if genocat just wants to see some sections 
+    if (flag_genocat_info_only) return;
 
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
 
@@ -578,32 +584,8 @@ static void main_load_reference (const char *filename, bool is_first_file)
     }
 }
 
-int main (int argc, char **argv)
+static void main_set_flags_from_command_line (int argc, char **argv, bool *is_short)
 {
-    //TEST();exit(0);
-    arch_initialize();
-
-#ifdef _WIN32
-    // lowercase argv[0] to allow case-insensitive comparison in Windows
-    str_to_lowercase (argv[0]);
-#else
-    signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
-#endif
-
-    if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
-    else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
-    else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
-    else                                    exe_type = EXE_GENOZIP; // default
-    
-    buf_initialize();
-
-    char *out_filename = NULL;
-
-    global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
-
-    bool is_short[256]; // indexed by character of short option.
-    memset (is_short, 0, sizeof(is_short));
-
     // process command line options
     while (1) {
 
@@ -637,6 +619,7 @@ int main (int argc, char **argv)
         #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,      1 }
         #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,      1 }
         #define _gt {"gtshark",       no_argument,       &flag_gtshark,          1 } 
+        #define _pe {"pair",          no_argument,       &flag_pair,   PAIR_READ_1 } 
         #define _th {"threads",       required_argument, 0, '@'                    }
         #define _u  {"unbind",        no_argument,       &flag_unbind,           1 }
         #define _o  {"output",        required_argument, 0, 'o'                    }
@@ -660,17 +643,17 @@ int main (int argc, char **argv)
         #define _rg {"register",      no_argument,       &flag_register,         1 }
         #define _ss {"show-sections", no_argument,       &flag_show_sections,    1 } 
         #define _sd {"show-dict",     no_argument,       &flag_show_dict,        1 } 
-        #define _d1 {"show-one-dict", required_argument, 0, '3'                    }
-        #define _d2 {"show-dict-one", required_argument, 0, '3'                    }
+        #define _d1 {"show-one-dict", required_argument, 0, '\3'                   }
+        #define _d2 {"show-dict-one", required_argument, 0, '\3'                   }
         #define _lc {"list-chroms",   no_argument,       &flag_list_chroms,      1 } // identical to --show-one-dict for the CHROM dict of the data type
         #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes,    1 } 
         #define _s2 {"show-b250",     no_argument,       &flag_show_b250,        1 } 
-        #define _s5 {"show-one-b250", required_argument, 0, '2'                    }
-        #define _s6 {"show-b250-one", required_argument, 0, '2'                    }
-        #define _s7 {"dump-one-b250", required_argument, 0, '5'                    }
-        #define _s8 {"dump-b250-one", required_argument, 0, '5'                    }
-        #define _S7 {"dump-one-local",required_argument, 0, '6'                    }
-        #define _S8 {"dump-local-one",required_argument, 0, '6'                    }
+        #define _s5 {"show-one-b250", required_argument, 0, '\2'                   }
+        #define _s6 {"show-b250-one", required_argument, 0, '\2'                   }
+        #define _s7 {"dump-one-b250", required_argument, 0, '\5'                   }
+        #define _s8 {"dump-b250-one", required_argument, 0, '\5'                   }
+        #define _S7 {"dump-one-local",required_argument, 0, '\6'                   }
+        #define _S8 {"dump-local-one",required_argument, 0, '\6'                   }
         #define _sa {"show-alleles",  no_argument,       &flag_show_alleles,     1 }
         #define _st {"show-time",     no_argument,       &flag_show_time   ,     1 } 
         #define _sm {"show-memory",   no_argument,       &flag_show_memory ,     1 } 
@@ -691,18 +674,18 @@ int main (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _fa,          _rg, _sR, _me,           _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                   _sR,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                     _fs, _g,      _sR,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                            _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _pe, _fa,          _rg, _sR, _me,           _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                        _sR,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                          _fs, _g,      _sR,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                                 _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:o:p:B:S:9KWFe:E:",  // genozip
-            "czfhLqQt^V@:uo:p:me:",                 // genounzip
-            "hLVp:qf",                              // genols
-            "hLV@:p:qQ1r:t:s:H1Go:fg:e:E:"          // genocat
+            "i:I:cdfhlLqQt^Vzm@:o:p:B:S:9KWFe:E:2",  // genozip
+            "czfhLqQt^V@:uo:p:me:",                  // genounzip
+            "hLVp:qf",                               // genols
+            "hLV@:p:qQ1r:t:s:H1Go:fg:e:E:"           // genocat
         };
 
         int option_index = -1;
@@ -731,6 +714,7 @@ int main (int argc, char **argv)
             case '9' : flag_optimize      = 1      ; break;
             case 'W' : flag_show_sections = 1      ; break;
             case 'K' : flag_gtshark       = 1      ; break;
+            case '2' : flag_pair    = PAIR_READ_1; break;
             case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
                        // fall through for genocat -r
             case 'r' : flag_regions       = 1      ; regions_add     (optarg); break;
@@ -746,10 +730,10 @@ int main (int argc, char **argv)
             case 'o' : out_filename     = optarg   ; break;
             case 'g' : flag_grep        = optarg   ; break;
             case '~' : flag_show_is_set = optarg   ; break;
-            case '2' : dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
-            case '5' : zip_initialize_binary_dump (optarg, &dump_one_b250_dict_id,  "b250");  break;
-            case '6' : zip_initialize_binary_dump (optarg, &dump_one_local_dict_id, "local"); break;
-            case '3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
+            case '\2' : dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
+            case '\5' : zip_initialize_binary_dump (optarg, &dump_one_b250_dict_id,  "b250");  break;
+            case '\6' : zip_initialize_binary_dump (optarg, &dump_one_local_dict_id, "local"); break;
+            case '\3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
                        break;
@@ -782,37 +766,10 @@ int main (int argc, char **argv)
                 exit(0);  
         }
     }
+}
 
-    // if command not chosen explicitly, use the default determined by the executable name
-    if (command < 0) { 
-
-        if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
-        
-        // genozip with no input filename, no output filename, and no output or input redirection 
-        // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
-        // coming from a pipe. the user must use "-" to redirect from stdin
-        else if (command == -1 && optind == argc && !out_filename && 
-                 (isatty(0) || arch_am_i_in_docker()) && isatty(1)) {
-            // case: --register
-            if (flag_register) 
-                license_get();
-
-            // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
-            if (exe_type == EXE_GENOCAT && flag_reference) 
-                ref_load_external_reference (true);
-
-            // otherwise: show help
-            else
-                main_print_help (false);
-
-            return 0;
-        }
-
-        else if (exe_type == EXE_GENOUNZIP) command = PIZ;
-        else if (exe_type == EXE_GENOCAT) { command = PIZ; flag_stdout = !out_filename ; }
-        else command = ZIP; // default 
-    }
-
+static void main_process_flags (unsigned num_files, char **filenames, const bool *is_short)
+{
     // check for incompatabilities between flags
     #define OT(l,s) is_short[(int)s[0]] ? "-"s : "--"l
 
@@ -837,6 +794,16 @@ int main (int argc, char **argv)
     ASSINP (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
     ASSINP (flag_reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
     ASSINP (!dump_one_b250_dict_id.num || !dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
+
+    // --paired_end: verify an even number of fastq files, --output, and --reference/--REFERENCE
+    if (flag_pair) {
+        ASSINP (out_filename,       "%s: --output must be specified when using %s", global_cmd, OT("pair", "2"));
+        ASSINP (flag_reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
+        ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
+
+        for (unsigned i=0; i < num_files; i++)
+            ASSERT (main_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
+    }
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
 
@@ -882,18 +849,81 @@ int main (int argc, char **argv)
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --unbind
-    if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (argc, argv, out_filename);
+    if (command == ZIP && out_filename && !flag_quiet) main_warn_if_duplicates (num_files, filenames);
+
+    flag_multiple_files = (num_files > 1);
+
+    flag_bind = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
+
+    // cases where genocat is used to view some information, but not the file contents
+    flag_genocat_info_only = exe_type == EXE_GENOCAT &&
+                             (flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
+                              flag_show_index);
+
+    ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-stats can only work on one file at time", global_cmd);
+}
+
+int main (int argc, char **argv)
+{
+    //TEST();exit(0);
+    arch_initialize();
+
+#ifdef _WIN32
+    // lowercase argv[0] to allow case-insensitive comparison in Windows
+    str_to_lowercase (argv[0]);
+#else
+    signal (SIGSEGV, main_sigsegv_handler);   // segmentation fault handler
+#endif
+
+    if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
+    else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
+    else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
+    else                                    exe_type = EXE_GENOZIP; // default
+    
+    buf_initialize();
+
+    global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
+
+    bool is_short[256] = { 0 }; // indexed by character of short option.
+    main_set_flags_from_command_line (argc, argv, is_short);
+
+    // if command not chosen explicitly, use the default determined by the executable name
+    if (command < 0) { 
+
+        if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
+        
+        // genozip with no input filename, no output filename, and no output or input redirection 
+        // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
+        // coming from a pipe. the user must use "-" to redirect from stdin
+        else if (command == -1 && optind == argc && !out_filename && 
+                 (isatty(0) || arch_am_i_in_docker()) && isatty(1)) {
+            // case: --register
+            if (flag_register) 
+                license_get();
+
+            // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
+            if (exe_type == EXE_GENOCAT && flag_reference) 
+                ref_load_external_reference (true);
+
+            // otherwise: show help
+            else
+                main_print_help (false);
+
+            return 0;
+        }
+
+        else if (exe_type == EXE_GENOUNZIP) command = PIZ;
+        else if (exe_type == EXE_GENOCAT) { command = PIZ; flag_stdout = !out_filename ; }
+        else command = ZIP; // default 
+    }
 
     unsigned num_files = argc - optind;
-    flag_multiple_files = (num_files > 1);
-    
+
+    main_process_flags (num_files, &argv[optind], is_short);
+
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     qsort (&argv[optind], num_files, sizeof (argv[0]), main_sort_input_filenames);
     
-    flag_bind = (command == ZIP) && (out_filename != NULL) && (num_files > 1);
-
-    ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-stats can only work on one file at time", global_cmd);
-
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (threads_str) {
         int ret = sscanf (threads_str, "%u", &global_max_threads);
@@ -901,12 +931,12 @@ int main (int argc, char **argv)
     }
     else global_max_threads = arch_get_num_cores();
     
-    // take action, depending on the command selected
+    // handle call commands except for ZIP, PIZ or LIST
     if (command == VERSION) { main_print_version();   return 0; }
     if (command == LICENSE) { license_display();      return 0; }
     if (command == HELP)    { main_print_help (true); return 0; }
 
-    primary_command = command;
+    primary_command = command; 
     
     for (unsigned file_i=0; file_i < MAX (num_files, 1); file_i++) {
 
@@ -923,13 +953,12 @@ int main (int argc, char **argv)
         
         switch (command) {
             case ZIP  : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); break;
-            
-            case PIZ  : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;
-            
+            case PIZ  : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;           
             case LIST : main_genols (next_input_file, false, NULL, false); break;
-            
             default   : ABORT ("%s: unrecognized command %c", global_cmd, command);
         }
+
+        if (flag_pair) flag_pair = 3 - flag_pair; // alternate between PAIR_READ_1 and PAIR_READ_2
     }
 
     // if this is "list", finalize

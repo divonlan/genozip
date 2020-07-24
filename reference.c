@@ -69,7 +69,7 @@ Md5Hash ref_md5 = MD5HASH_NONE;
 #define CHROM_GENOME_REV 1
 #define CHROM_NAME_GENOME_REV "GENOME_REV"
 
-#define SAVE_FLAG(flag) typeof(flag) save_##flag = flag ; flag=0
+#define SAVE_FLAG(flag) typeof(flag) save_##flag = flag ; flag=(typeof(flag))(uint64_t)0
 #define RESTORE_FLAG(flag) flag = save_##flag
 
 // forward declarationsy
@@ -1095,7 +1095,7 @@ void ref_load_external_reference (bool display)
     z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
         
-    // save and reset some globals that after pizzing FASTA
+    // save and reset flags that are intended to operate on the compressed file rather than the reference file
     SAVE_FLAG (flag_test);
     SAVE_FLAG (flag_unbind);
     SAVE_FLAG (flag_md5);
@@ -1105,15 +1105,25 @@ void ref_load_external_reference (bool display)
     SAVE_FLAG (flag_header_one);
     SAVE_FLAG (flag_header_only);
     SAVE_FLAG (flag_grep);
-    CommandType save_command   = command;         ; command          = PIZ;
+    SAVE_FLAG (flag_show_index);
+    SAVE_FLAG (flag_show_dict);
+    SAVE_FLAG (flag_show_b250);
+    SAVE_FLAG (dict_id_show_one_b250);
+    SAVE_FLAG (dict_id_show_one_dict);
+    SAVE_FLAG (dump_one_b250_dict_id);
+    SAVE_FLAG (dump_one_local_dict_id);
+    SAVE_FLAG (flag_list_chroms);
+
+    CommandType save_command = command         ; 
+    command= PIZ;
     flag_reading_reference = true; // tell fasta.c that this is a reference
-    
+
     bool piz_successful = piz_dispatcher (true, false);
     ASSERT (piz_successful, "Error: failed to uncompress reference file %s", ref_filename);
 
     // recover globals
     flag_reading_reference = false;
-    command          = save_command;
+    command = save_command;
     RESTORE_FLAG (flag_test);
     RESTORE_FLAG (flag_unbind);
     RESTORE_FLAG (flag_md5);
@@ -1123,7 +1133,15 @@ void ref_load_external_reference (bool display)
     RESTORE_FLAG (flag_header_one);
     RESTORE_FLAG (flag_header_only);
     RESTORE_FLAG (flag_grep);
-    
+    RESTORE_FLAG (flag_show_index);
+    RESTORE_FLAG (flag_show_dict);
+    RESTORE_FLAG (flag_show_b250);
+    RESTORE_FLAG (dict_id_show_one_b250);
+    RESTORE_FLAG (dict_id_show_one_dict);
+    RESTORE_FLAG (dump_one_b250_dict_id);
+    RESTORE_FLAG (dump_one_local_dict_id);
+    RESTORE_FLAG (flag_list_chroms);
+
     file_close (&z_file, false);
     file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
 

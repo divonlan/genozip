@@ -73,6 +73,8 @@ typedef union DictId {
 } DictId;
 #pragma pack()
 
+typedef uint8_t DidIType;
+
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads, global_max_memory_per_vb;
 extern const char *global_cmd;            // set once in main()
@@ -89,7 +91,7 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_a
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms,
            flag_show_vblocks, flag_optimize, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only, flag_ref_whole_genome,
            flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_register,
-           flag_show_reference, flag_show_ref_hash, flag_show_ref_index,
+           flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_pair, flag_genocat_info_only,
            flag_debug_progress, flag_show_hash, flag_debug_memory, flag_debug_no_singletons, flag_make_reference, flag_reading_reference,
 
            flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
@@ -97,12 +99,17 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_a
 
 // values of flag_reference
 typedef enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
-       REF_INTERNAL,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
-       REF_EXTERNAL,  // ZIP & PIZ: user specified --reference
-       REF_EXT_STORE, // ZIP: user specified --REFERENCE
-       REF_STORED     // PIZ: file contains REFERENCE sections (user cannot specify --reference)
+               REF_INTERNAL,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
+               REF_EXTERNAL,  // ZIP & PIZ: user specified --reference
+               REF_EXT_STORE, // ZIP: user specified --REFERENCE
+               REF_STORED     // PIZ: file contains REFERENCE sections (user cannot specify --reference)
 } ReferenceType;
 extern ReferenceType flag_reference;           
+
+// values of flag_pair
+#define NOT_PAIRED_END 0
+#define PAIR_READ_1    1
+#define PAIR_READ_2    2
 
 extern char *flag_grep, *flag_show_is_set;
 extern uint64_t flag_stdin_size;

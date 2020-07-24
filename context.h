@@ -22,15 +22,18 @@
 #define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
-#define SNIP_SEP                 '\0'   // Seperator between snips - both for dict and local 
-#define SNIP_LOOKUP              '\1'   // Lookup from local 
-#define SNIP_OTHER_LOOKUP        '\2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
-#define SNIP_STRUCTURED          '\3'   // Appears as first character in the SNIP, followed by a specification of a structured field
-#define SNIP_SELF_DELTA          '\4'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
-#define SNIP_OTHER_DELTA         '\5'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
-#define SNIP_SPECIAL             '\6'   // Special algorithm followed by ID of the algorithm 
-#define SNIP_REDIRECTION         '\7'   // Get the data from another dict_id (can be in b250, local...)
-#define SNIP_DONT_STORE          '\11'  // Reconcstruct the following value, but don't store it in last_value (overriding CTX_FL_STORE_INT)
+// We use characters that cannot appear in a snip - i.e. other than ASCII 32-127, \t (\x9) \n (\xA) \r (\xD)
+#define SNIP_SEP                 '\x0'   // Seperator between snips - both for dict and local 
+#define SNIP_LOOKUP              '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see piz_reconstruct_one_snip)
+#define SNIP_OTHER_LOOKUP        '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
+#define SNIP_PAIR_LOOKUP         '\x3'   // Lookup from paired file (when using --pair)  
+#define SNIP_STRUCTURED          '\x4'   // Appears as first character in the SNIP, followed by a specification of a structured field
+#define SNIP_SELF_DELTA          '\x5'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
+#define SNIP_OTHER_DELTA         '\x6'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
+#define SNIP_PAIR_DELTA          '\x7'   // The value is a uint32_t which is a result of the equivalent value in the paired file + the delta value (when using --pair)
+#define SNIP_SPECIAL             '\x8'   // Special algorithm followed by ID of the algorithm 
+#define SNIP_REDIRECTION         '\xB'   // Get the data from another dict_id (can be in b250, local...)
+#define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding CTX_FL_STORE_INT)
 
 // structured snip: it starts with SNIP_STRUCTURED, following by a base64 of a big endian Structured
 #pragma pack(1)
@@ -40,7 +43,7 @@
 
 typedef struct StructuredItem {
         DictId dict_id;  
-        uint8_t did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
+        DidIType did_i;    // Used only in PIZ, must remain DID_I_NONE in ZIP
         char seperator[2];
         uint8_t ffu;
 } StructuredItem;
@@ -109,17 +112,20 @@ extern const bool ctx_lt_is_signed[NUM_CTX_LT];
 extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 
 // flags written to the genozip file (4-bit header.h.flags)
-#define CTX_FL_STORE_INT   0x01 // the values of this ctx are uint32_t, and should be stored, eg because they are a basis for a delta calculation (by this field or another one)
-#define CTX_FL_STORE_FLOAT 0x02 // the values of this ctx are float
-#define CTX_FL_STRUCTURED  0x08 // snips usually contain Structured
+#define CTX_FL_STORE_INT   0x0001 // the values of this ctx.local are uint32_t, and should be stored, eg because they are a basis for a delta calculation (by this field or another one)
+#define CTX_FL_STORE_FLOAT 0x0002 // the values of this ctx.local are float
+#define CTX_FL_PAIRED      0x0004 // appears in header.flags of b250 or local sections, indicating to PIZ that the the same section from the same vb of the previous (paired) file should be read from disk too
+#define CTX_FL_STRUCTURED  0x0008 // snips usually contain Structured
 
 #define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
 
 // ZIP-only flags not written to the genozip file
-#define CTX_FL_NO_STONS    0x10 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
-#define CTX_FL_LOCAL_LZMA  0x20 // compress local with COMP_LZMA
-#define CTX_FL_LOCAL_ACGT  0x40 // compress local with COMP_ACGT
-#define CTX_FL_LOCAL_NONE  0x80 // use COMP_NONE (no compression)
+#define CTX_FL_NO_STONS    0x0010 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
+#define CTX_FL_PAIR_LOCAL  0x0020 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
+#define CTX_FL_PAIR_B250   0x0040 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
+#define CTX_FL_LOCAL_LZMA  0x0080 // compress local with COMP_LZMA
+#define CTX_FL_LOCAL_ACGT  0x0100 // compress local with COMP_ACGT
+#define CTX_FL_LOCAL_NONE  0x0200 // "compress" local with COMP_NONE (no compression)
 
 // combination flags for convenience
 #define CTX_FL_POS         (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // A POS field that stores a delta vs. a different field
@@ -136,13 +142,15 @@ typedef struct Context {
     // common fields for ZIP & PIZ
     // ----------------------------
     const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
-    uint8_t did_i;             // the index of this ctx within the array vb->contexts
+    DidIType did_i;            // the index of this ctx within the array vb->contexts
     uint8_t ltype;             // CTX_LT_*
-    uint8_t flags;             // CTX_*
+    uint16_t flags;            // CTX_FL_* - flags to be included in section header (4 bits)
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. 
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
+    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if CTX_FL_PAIR_B250 or CTX_FL_PAIR_LOCAL is set)
+    SnipIterator pair_b250_iter; // Iterator on pair, if it contains b250 data
 
     // ----------------------------
     // ZIP only fields
@@ -194,7 +202,8 @@ typedef struct Context {
 } Context;
 
 #define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
-static inline word_t NEXTLOCALBIT(Context *ctx) { BitArray *b = buf_get_bitarray (&ctx->local); word_t ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
+static inline bool PAIRBIT(Context *ctx)      { BitArray *b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
+static inline bool NEXTLOCALBIT(Context *ctx) { BitArray *b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75
@@ -212,22 +221,22 @@ extern MtfNode *mtf_node_zf_do (const Context *ctx, int32_t node_index, const ch
 #define mtf_node_zf(ctx, node_index, snip_in_dict, snip_len) mtf_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
 
-extern Context *mtf_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, unsigned *num_dict_ids, DictId dict_id);
+extern Context *mtf_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, DidIType *num_dict_ids, DictId dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
 #define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (DictId)(dict_id))
 
-static inline Context *mtf_get_ctx_do (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids, DictId dict_id)
+static inline Context *mtf_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_dict_ids, DictId dict_id)
 {
-    uint8_t did_i = dict_id_to_did_i_map[dict_id.map_key];
+    DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];
     if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
         return &contexts[did_i];
     else    
         return mtf_get_ctx_if_not_found_by_inline (contexts, dt, dict_id_to_did_i_map, did_i, num_dict_ids, dict_id);
 }
 
-extern uint8_t mtf_get_existing_did_i (VBlockP vb, DictId dict_id);
-extern uint8_t mtf_get_existing_did_i_from_z_file (DictId dict_id);
+extern DidIType mtf_get_existing_did_i (VBlockP vb, DictId dict_id);
+extern DidIType mtf_get_existing_did_i_from_z_file (DictId dict_id);
 extern ContextP mtf_get_existing_ctx (VBlockP vb, DictId dict_id); // returns NULL if context doesn't exist
 
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
@@ -246,6 +255,6 @@ extern MtfNode *mtf_get_node_by_word_index (Context *ctx, uint32_t word_index);
 extern const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, int32_t word_index, 
                                                const char **snip, uint32_t *snip_len);
 
-extern void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, uint8_t *dict_id_to_did_i_map, unsigned *num_dict_ids);
+extern void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_dict_ids);
 
 #endif

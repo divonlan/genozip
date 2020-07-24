@@ -292,7 +292,7 @@ void stats_show_sections (void)
     }
 
     double all_comp_ratio = (double)all_txt / (double)all_comp_total;
-    double all_pc_txt     = 100.0 * (double)all_txt        / (double)txt_file->txt_data_so_far_single;
+    double all_pc_txt     = 100.0 * (double)all_txt        / (double)z_file->txt_data_so_far_bind;
     double all_pc_genozip = 100.0 * (double)all_comp_total / (double)z_file->disk_size;
     
     char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
@@ -306,8 +306,8 @@ void stats_show_sections (void)
 
     // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_size is 
     // missing, while txt_data_so_far_single is what was actually processed
-    ASSERTW (all_txt == txt_file->txt_data_so_far_single || flag_optimize || flag_make_reference, 
+    ASSERTW (all_txt == z_file->txt_data_so_far_bind || flag_optimize || flag_make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             dt_name (z_file->data_type), str_uint_commas (all_txt, s1), str_uint_commas (txt_file->txt_data_size_single, s2), 
+             dt_name (z_file->data_type), str_uint_commas (all_txt, s1), str_uint_commas (z_file->txt_data_so_far_bind, s2), 
              (int32_t)(txt_file->txt_data_so_far_single - all_txt)); 
 }

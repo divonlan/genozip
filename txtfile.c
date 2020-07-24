@@ -187,7 +187,7 @@ static inline bool txtfile_fastq_is_end_of_line (VBlock *vb,
 }
 
 // ZIP I/O threads
-void txtfile_read_vblock (VBlock *vb) 
+void txtfile_read_vblock (VBlock *vb)
 {
     START_TIMER;
 
@@ -206,14 +206,16 @@ void txtfile_read_vblock (VBlock *vb)
     }
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
-    int32_t block_i=0 ; for (; vb->txt_data.len < global_max_memory_per_vb; block_i++) {  
+    uint64_t max_memory_per_vb = global_max_memory_per_vb;
+    uint32_t unconsumed_len=0;
+    int32_t block_i=0 ; for (; vb->txt_data.len < max_memory_per_vb; block_i++) {  
 
         buf_alloc (evb, &block_md5_buf,   sizeof (Md5Context) * MAX (100, block_md5_buf.len+1), 2, "block_md5_buf",   0); // static buffer added to evb list - we are in I/O thread now
         buf_alloc (evb, &block_start_buf, sizeof (char *)     * MAX (100, block_md5_buf.len+1), 2, "block_start_buf", 0); 
         buf_alloc (evb, &block_len_buf,   sizeof (uint32_t)   * MAX (100, block_md5_buf.len+1), 2, "block_len_buf",   0); 
 
         char *start = &vb->txt_data.data[vb->txt_data.len];
-        uint32_t len = txtfile_read_block (start, MIN (READ_BUFFER_SIZE, global_max_memory_per_vb - vb->txt_data.len));
+        uint32_t len = txtfile_read_block (start, MIN (READ_BUFFER_SIZE, max_memory_per_vb - vb->txt_data.len));
 
         if (!len) { // EOF - we're expecting to have consumed all lines when reaching EOF (this will happen if the last line ends with newline as expected)
             ASSERT (!vb->txt_data.len || vb->txt_data.data[vb->txt_data.len-1] == '\n', "Error: invalid input file %s - expecting it to end with a newline", txt_name);
@@ -230,9 +232,17 @@ void txtfile_read_vblock (VBlock *vb)
         NEXTENT (Md5Context, block_md5_buf) = flag_bind ? z_file->md5_ctx_bound : z_file->md5_ctx_single; // MD5 of entire file up to and including this block
 
         vb->txt_data.len += len;
-    }
 
-    uint32_t unconsumed_len=0;
+        // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
+        if (flag_pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
+            vb->txt_data.len >= max_memory_per_vb && // we are about to exit the loop
+            !fastq_txtfile_have_enough_lines (vb, &unconsumed_len)) { // we don't yet have all the data we need
+
+            // if we need more lines - increase memory and keep on reading
+            max_memory_per_vb *= 1.1; 
+            buf_alloc (vb, &vb->txt_data, max_memory_per_vb, 1, "txt_data", vb->vblock_i);    
+        }
+    }
     
     // case: FASTA reference file - we allow only one contig (or part of it) per VB - move second contig onwards to next vb
     if (flag_make_reference) {

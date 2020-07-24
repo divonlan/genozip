@@ -20,6 +20,10 @@ typedef struct VBlockFAST {     // for FASTA and FASTQ
     VBLOCK_COMMON_FIELDS
     SubfieldMapper desc_mapper; // FASTA and FASTQ - ZIP & PIZ
 
+    // FASTQ - pairing stuff - used if we are the 2nd file in the pair 
+    uint32_t pair_vb_i;      // the equivalent vb_i in the first file, or 0 if this is the first file
+    uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
+
     // FASTA stuff
     bool contig_grepped_out;
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment
@@ -28,6 +32,7 @@ typedef struct VBlockFAST {     // for FASTA and FASTQ
 
 #define DATA_LINE(i) ENT (ZipDataLineFAST, vb->lines, i)
 
+extern bool fast_piz_test_grep (VBlockFAST *vb);
 extern bool fasta_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep);
 
 extern Structured structured_DESC;

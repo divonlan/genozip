@@ -119,8 +119,8 @@ static void vcf_piz_initialize_sample_iterators (VBlockVCF *vb)
         unsigned sample_i = sb_i * vb->num_samples_per_block; 
         for (;sample_i < sample_after && next < after; sample_i++) {
             
-            sample_iterator[sample_i].next_b250 = next; // line=0 of each sample_i (column)
-            sample_iterator[sample_i].prev_word_index = 1;
+            sample_iterator[sample_i] = (SnipIterator) { .next_b250 = next, // line=0 of each sample_i (column)
+                                                         .prev_word_index = -1 }; // not used for GT data, see comment in zip_generate_b250_section
 
             // now skip all remaining genotypes in this column, arriving at the beginning of the next column
             // (gt data is stored transposed - i.e. column by column)
@@ -641,10 +641,10 @@ static void vcf_piz_uncompress_all_sections (VBlockVCF *vb)
                    vb->num_haplotypes_per_line);
     }
 
-    unsigned section_i = piz_uncompress_all_ctxs ((VBlockP)vb);
+    uint32_t section_i = piz_uncompress_all_ctxs ((VBlockP)vb, 0);
 
     // de-optimize FORMAT/GL data in local (we have already de-optimized the data in dict elsewhere)
-    uint8_t gl_did_i =  mtf_get_existing_did_i ((VBlockP)vb, (DictId)dict_id_FORMAT_GL);
+    DidIType gl_did_i =  mtf_get_existing_did_i ((VBlockP)vb, (DictId)dict_id_FORMAT_GL);
     if (gl_did_i != DID_I_NONE) 
         gl_deoptimize (vb->contexts[gl_did_i].local.data, vb->contexts[gl_did_i].local.len);
 

@@ -34,6 +34,7 @@ static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --input command li
 // global pointers - so the can be compared eg "if (mode == READ)"
 const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
 const char *WRITE = "wb";
+const char *WRITEREAD = "wb+";
 
 const char *file_exts[] = FILE_EXTS;
 
@@ -186,6 +187,8 @@ static void file_redirect_output_to_stream (File *file, char *exec_name, char *s
 // returns true if successful
 bool file_open_txt (File *file)
 {
+    ASSERT0 (file->mode == READ || file->mode == WRITE, "Error in file_open_txt: only READ and WRITE modes are supported");
+
     // for READ, set data_type
     if (file->mode == READ) {
         
@@ -433,7 +436,7 @@ static bool file_open_z (File *file)
 
         file->data_type = file_get_dt_by_z_ft (file->type); // if we don't find it (DT_NONE), it will be determined after the genozip header is read
     }
-    else { // WRITE - data_type is already set by file_open
+    else { // WRITE or WRITEREAD - data_type is already set by file_open
         ASSINP (file_has_ext (file->name, GENOZIP_EXT), "%s: file %s must have a " GENOZIP_EXT " extension", 
                               global_cmd, file_printname (file));
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
@@ -441,11 +444,12 @@ static bool file_open_z (File *file)
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
     }
 
-    file->file = file->is_remote ? url_open (NULL, file->name) 
-                                 : fopen (file->name, file->mode);
+    ASSERT (!file->is_remote, "Error: it is not possible to access remote genozip files; when attempting to open %s", file->name);
+    
+    file->file = fopen (file->name, file->mode);
 
     // initialize read buffer indices
-    if (file->mode == READ) 
+    if (file->mode == READ || file->mode == WRITEREAD) 
         file->z_last_read = file->z_next_read = READ_BUFFER_SIZE;
 
     file_initialize_z_file_data (file);
@@ -453,18 +457,18 @@ static bool file_open_z (File *file)
     return file->file != 0;
 }
 
-File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */)
+File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
 {
     ASSINP0 (filename, "Error in file_open: filename is null");
 
-    File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
+    File *file = (File *)calloc (1, sizeof(File) + (((mode == READ || mode == WRITEREAD) && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
     file->supertype = supertype;
     file->is_remote = url_is_url (filename);
     bool file_exists;
 
     // is_remote is only possible in READ mode
-    ASSINP (mode != WRITE || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
+    ASSINP (mode == READ || !file->is_remote, "%s: expecting output file %s to be local, not a URL", global_cmd, filename);
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     const char *error = NULL;
@@ -484,9 +488,9 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         return NULL; 
     }
 
-    ASSINP (mode != READ  || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
+    ASSINP (mode != READ || file_exists, "%s: cannot open '%s' for reading: %s", global_cmd, filename, error);
 
-    if (mode == WRITE && file_exists && !flag_force && !(supertype==TXT_FILE && flag_test))
+    if ((mode == WRITE || mode == WRITEREAD) && file_exists && !flag_force && !(supertype==TXT_FILE && flag_test))
         file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
     // copy filename 
@@ -499,7 +503,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     if (mode==READ || data_type != DT_NONE) // if its NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
         file->type = file_get_type (file->name, true);
 
-    if (file->mode == WRITE) 
+    if (file->mode == WRITE || file->mode == WRITEREAD) 
         file->data_type = data_type; // for WRITE, data_type is set by file_open_*
 
     bool success=false;
@@ -700,7 +704,7 @@ bool file_seek (File *file, int64_t offset,
     }
 
     // reset the read buffers
-    if (!ret) file->z_next_read = file->z_last_read = READ_BUFFER_SIZE;
+    if (!ret || file->mode == WRITEREAD) file->z_next_read = file->z_last_read = READ_BUFFER_SIZE;
 
     return !ret;
 }

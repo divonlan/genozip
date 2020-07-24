@@ -351,13 +351,14 @@ static inline uint32_t refhash_get_match_len (VBlock *vb, BitArray *seq_bits, in
                         .num_of_words = seq_bits->num_of_words,
                         .words        = bitmap_words };
 
+{START_TIMER;
     bit_array_copy (&bitmap, 0, 
                     &(is_forward ? genome : genome_rev)->ref, 
                     (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2, 
                     bitmap.num_of_bits);
 
     bit_array_clear_excess_bits_in_top_word (&bitmap);
-
+COPY_TIMER (vb->profile.tmp5);}
     uint32_t nonmatches=0;
     for (uint32_t i=0; i < (uint32_t)bitmap.num_of_words; i++) 
         // xor - resulting in 1 if they're different and 0 if they're equal, then count the 1s
@@ -411,7 +412,6 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
     word_t seq_bits_words[seq_bits.num_of_words];
     seq_bits.words = seq_bits_words; 
 
-{START_TIMER;
     for (word_t base_i=0; base_i < seq_len_64; base_i++) {
         uint8_t encoding = nuke_encode[(uint8_t)seq[base_i]];
     
@@ -423,8 +423,6 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
         bit_array_assign2 (&seq_bits, (base_i << 1), encoding);
     }
 
-COPY_TIMER(vb->profile.tmp1);}
-
     bit_array_clear_excess_bits_in_top_word (&seq_bits);
 
     //bit_array_print_bases (&seq_bits, "\nseq_bits fwd", true);
@@ -432,8 +430,6 @@ COPY_TIMER(vb->profile.tmp1);}
 
     *is_all_ref = false;
 
-{START_TIMER;
-    
     typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
 
     struct Finds { uint32_t refhash_word; uint32_t i; Direction found; } finds[seq_len];
@@ -511,8 +507,6 @@ COPY_TIMER(vb->profile.tmp1);}
                 UPDATE_BEST (finds[find_i].found);
         }
     }
-
-COPY_TIMER(vb->profile.tmp2);}
 
 done:
     *start_gpos = best_gpos != -1 ? best_gpos : 0;

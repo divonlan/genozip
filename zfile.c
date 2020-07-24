@@ -52,7 +52,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%u vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%2.2u vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, 
              header->sec_compression_alg,
@@ -70,19 +70,18 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         printf ("%s", str);
 }
 
-static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
+static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_data)
 {
+    MUTEX (show_b250_mutex); // protect so compute thread's outputs don't get mix
+
     SectionHeaderCtx *header = (SectionHeaderCtx *)section_header_p;
 
     if (!flag_show_b250 && dict_id_printable (header->dict_id).num != dict_id_show_one_b250.num) return;
 
-    static bool first = true;
-    if (flag_show_b250 && first) { 
-        fprintf (stderr, "Base-250 data for VB %u (result of '--show-b250'):\n", BGEN32 (header->h.vblock_i));
-        first = false;
-    }
+    mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
+    mutex_lock (show_b250_mutex);
 
-    fprintf (stderr, "  %*.*s: ", -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
+    fprintf (stderr, "vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_printable (header->dict_id).id);
 
     const uint8_t *data  = FIRSTENT (const uint8_t, *b250_data);
     const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
@@ -97,6 +96,8 @@ static void zfile_show_b250_section (void *section_header_p, Buffer *b250_data)
         }
     }
     fprintf (stderr, "\n");
+
+    mutex_unlock (show_b250_mutex);
 }
 
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
@@ -142,10 +143,11 @@ void zfile_uncompress_section (VBlock *vb,
     if (data_encrypted_len) 
         crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_header->section_type, false);
 
+    BufferP uncompressed_buf = NULL;
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
         if (uncompressed_data_buf_name) { // we're decompressing into a buffer
-            BufferP uncompressed_buf = (BufferP)uncompressed_data;
+            uncompressed_buf = (BufferP)uncompressed_data;
             buf_alloc (vb, uncompressed_buf, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name, 0); // add a 64b word for safety in case this buffer will be converted to a bitarray later
             uncompressed_buf->len = data_uncompressed_len;
             uncompressed_data = uncompressed_buf->data;
@@ -155,8 +157,8 @@ void zfile_uncompress_section (VBlock *vb,
                          uncompressed_data, data_uncompressed_len);
     }
  
-    if (flag_show_b250 && expected_section_type == SEC_B250) 
-        zfile_show_b250_section (section_header_p, uncompressed_data);
+    if (uncompressed_buf && flag_show_b250 && expected_section_type == SEC_B250) 
+        zfile_show_b250_section (section_header_p, uncompressed_buf);
     
     if (vb) COPY_TIMER(vb->profile.zfile_uncompress_section);
 }
@@ -226,20 +228,18 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
 
 void zfile_compress_b250_data (VBlock *vb, Context *ctx, CompressionAlg comp_alg)
 {
-    SectionHeaderCtx header;
-    memset (&header, 0, sizeof(header)); // safety
-
-    header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    header.h.section_type          = SEC_B250;
-    header.h.data_uncompressed_len = BGEN32 (ctx->b250.len);
-    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx));
-    header.h.sec_compression_alg   = comp_alg;
-    header.h.vblock_i              = BGEN32 (vb->vblock_i);
-    header.h.section_i             = BGEN16 (vb->z_next_header_i++);
-    header.h.flags                 = ctx->flags & 0x0f; // 4 bits
-    header.dict_id                 = ctx->dict_id;
-    header.ltype                   = ctx->ltype;
-            
+    SectionHeaderCtx header = (SectionHeaderCtx) { 
+        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
+        .h.section_type          = SEC_B250,
+        .h.data_uncompressed_len = BGEN32 (ctx->b250.len),
+        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
+        .h.sec_compression_alg   = comp_alg,
+        .h.vblock_i              = BGEN32 (vb->vblock_i),
+        .h.section_i             = BGEN16 (vb->z_next_header_i++),
+        .h.flags                 = (uint8_t)(ctx->flags & 0x0f) | ((ctx->flags & CTX_FL_PAIR_B250) ? CTX_FL_PAIRED : 0), // 4 bit
+        .dict_id                 = ctx->dict_id,
+        .ltype                   = ctx->ltype
+    };
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
@@ -256,25 +256,25 @@ static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictId d
 
 void zfile_compress_local_data (VBlock *vb, Context *ctx)
 {   
-    SectionHeaderCtx header;
-    memset (&header, 0, sizeof(header)); // safety
     vb->has_non_agct = false;
     
     unsigned local_len_multiplier  = ctx_lt_sizeof_one[ctx->ltype];
 
-    header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    header.h.section_type          = SEC_LOCAL;
-    header.h.data_uncompressed_len = BGEN32 (ctx->local.len * local_len_multiplier); 
-    header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx));
-    header.h.sec_compression_alg   = (ctx->flags & CTX_FL_LOCAL_LZMA) ? COMP_LZMA : 
-                                     (ctx->flags & CTX_FL_LOCAL_ACGT) ? COMP_ACGT :
-                                     (ctx->flags & CTX_FL_LOCAL_NONE) ? COMP_NONE :
-                                     COMP_BZ2;
-    header.h.vblock_i              = BGEN32 (vb->vblock_i);
-    header.h.section_i             = BGEN16 (vb->z_next_header_i++);
-    header.h.flags                 = ctx->flags & 0x0f; // 4 bit
-    header.dict_id                 = ctx->dict_id;
-    header.ltype                   = ctx->ltype;
+    SectionHeaderCtx header = (SectionHeaderCtx) {
+        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
+        .h.section_type          = SEC_LOCAL,
+        .h.data_uncompressed_len = BGEN32 (ctx->local.len * local_len_multiplier),
+        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
+        .h.sec_compression_alg   = (ctx->flags & CTX_FL_LOCAL_LZMA) ? COMP_LZMA :
+                                   (ctx->flags & CTX_FL_LOCAL_ACGT) ? COMP_ACGT :
+                                   (ctx->flags & CTX_FL_LOCAL_NONE) ? COMP_NONE :
+                                                                      COMP_BZ2,
+        .h.vblock_i              = BGEN32 (vb->vblock_i),
+        .h.section_i             = BGEN16 (vb->z_next_header_i++),
+        .h.flags                 = (uint8_t)(ctx->flags & 0x0f) | ((ctx->flags & CTX_FL_PAIR_LOCAL) ? CTX_FL_PAIRED : 0), // 4 bit
+        .dict_id                 = ctx->dict_id,
+        .ltype                   = ctx->ltype
+    };
 
     CompGetLineCallback *callback = zfile_get_local_data_callback (vb->data_type, ctx->dict_id);
 
@@ -346,6 +346,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, unsigned
                     z_name, memcpyied, len_save);
 
             file->z_last_read = fread (file->read_buffer, 1, READ_BUFFER_SIZE, (FILE *)file->file);
+
             file->z_next_read = 0;
             file->disk_so_far += file->z_last_read;
 
@@ -623,7 +624,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
             if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-reference, we only show the reference, not the data
         }
 
-        ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL, 
+        ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL || flag_genocat_info_only, 
                 "Error: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
                 header->ref_filename);
 
@@ -789,7 +790,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
     header.h.section_type          = SEC_TXT_HEADER;
     header.h.data_uncompressed_len = BGEN32 (txt_header_text->len);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader));
-    header.h.sec_compression_alg  = COMP_BZ2;
+    header.h.sec_compression_alg   = COMP_BZ2;
     header.num_samples             = BGEN32 (global_vcf_num_samples);
     header.num_lines               = NUM_LINES_UNKNOWN; 
     header.compression_type        = (uint8_t)txt_file->comp_alg; 

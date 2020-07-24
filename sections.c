@@ -65,9 +65,9 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     ent->offset           = offset;  // this is a partial offset (within d) - we will correct it later
 }
 
-// Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file sectinon list - just before 
+// Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file section list - just before 
 // writing those sections to the disk. we use the current disk position to update the offset
-void sections_list_bind (VBlock *vb, BufferP section_list_buf)
+void sections_list_concat (VBlock *vb, BufferP section_list_buf)
 {
     buf_alloc (evb, &z_file->section_list_buf, 
               (z_file->section_list_buf.len + section_list_buf->len) * sizeof(SectionListEntry), 2, 
@@ -140,11 +140,12 @@ SectionType sections_peek (uint32_t cursor)
     return ENT (SectionListEntry, z_file->section_list_buf, cursor)->section_type;
 }
 
-bool sections_seek_to (SectionType st)
+// seek to the first or last section of its type, starting from sl (or globally if sl is NULL)
+bool sections_seek_to (SectionType st, bool first)
 {
-    SectionListEntry *sl=NULL;
-    unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
-        sl = ENT (SectionListEntry, z_file->section_list_buf, i);
+    int len = (int)z_file->section_list_buf.len;
+    for (int i=0; i < len; i++) {
+        SectionListEntry *sl = ENT (SectionListEntry, z_file->section_list_buf, first ? i : len-1-i);
         if (sl->section_type == st) {
             file_seek (z_file, sl->offset, SEEK_SET, false);
             return true; // section found
@@ -152,6 +153,28 @@ bool sections_seek_to (SectionType st)
     }
 
     return false; // section not found
+}
+
+// find the first and last vb_i of a the immediately previous bound file, start from an sl in this file
+void sections_get_prev_file_vb_i (const SectionListEntry *sl, // any sl of the current file
+                                  uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i) //out
+{
+#   define SAFTEY ASSERT0 ((char*)sl > z_file->section_list_buf.data, "Error in sections_get_prev_file_vb_i: cannot find previous file VBs")
+
+    // search back to current file's txt header
+    do { SAFTEY; sl--; } while (sl->section_type != SEC_TXT_HEADER);
+
+    // search back to previous file's last VB header
+    do { SAFTEY; sl--; } while (sl->section_type != SEC_VB_HEADER);
+    *prev_file_last_vb_i = sl->vblock_i;
+
+    // search back to the previous file's txt header
+    do { SAFTEY; sl--; } while (sl->section_type != SEC_TXT_HEADER);
+
+    sl++;
+    *prev_file_first_vb_i = sl->vblock_i;
+
+#   undef SAFETY
 }
 
 // count how many sections we have of a certain type
@@ -166,7 +189,7 @@ uint32_t sections_count_sections (SectionType st)
 }
 
 // called by PIZ I/O : vcf_zfile_read_one_vb. Sets *sl_ent to the first section of this vb_i, and returns its offset
-SectionListEntry *sections_vb_first (uint32_t vb_i)
+SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
 {
     SectionListEntry *sl=NULL;
     unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
@@ -174,7 +197,10 @@ SectionListEntry *sections_vb_first (uint32_t vb_i)
         if (sl->vblock_i == vb_i) break; // found!
     }
 
-    ASSERT (i < z_file->section_list_buf.len, "Error in sections_get_next_vb_section: cannot find any section for vb_i=%u", vb_i);
+    if (i >= z_file->section_list_buf.len) {
+        if (soft_fail) return NULL;
+        ABORT ("Error in sections_get_next_vb_section: cannot find any section for vb_i=%u", vb_i);
+    }
 
     return sl;
 }

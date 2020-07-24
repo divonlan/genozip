@@ -40,7 +40,7 @@ extern void zfile_compress_local_data (VBlockP vb, ContextP ctx);
 #define NO_SB_I ((uint32_t)-1)
 extern int32_t zfile_read_section (FileP file, VBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */
                                    BufferP data /* buffer to append */, const char *buf_name,
-                                   unsigned header_size, SectionType expected_sec_type,
+                                   unsigned header_size, SectionType expected_sec_type, 
                                    ConstSectionListEntryP sl); 
 
 extern void zfile_uncompress_section (VBlockP vb, void *section_header, 

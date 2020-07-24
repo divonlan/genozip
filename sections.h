@@ -222,20 +222,19 @@ typedef struct RAEntry {
 
 // zip stuff
 extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
-extern void sections_list_bind (VBlockP vb, BufferP section_list_buf);
+extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff
 extern SectionType sections_get_next_header_type (SectionListEntry **sl_ent, bool *skipped_vb, BufferP region_ra_intersection_matrix);
-
-typedef bool (*IsSectionTypeFunc)(SectionType);
 extern bool sections_get_next_section_of_type (SectionListEntry **sl_ent, uint32_t *cursor, SectionType st1, SectionType st2);
 extern SectionType sections_peek (uint32_t cursor);
 extern uint32_t sections_count_sections (SectionType st);
 
 extern bool sections_has_more_components(void);
 extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st);
-extern SectionListEntry *sections_vb_first (uint32_t vb_i);
-extern bool sections_seek_to (SectionType st);
+extern SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
+extern bool sections_seek_to (SectionType st, bool first);
+extern void sections_get_prev_file_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

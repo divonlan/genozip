@@ -24,6 +24,7 @@
 #include "refhash.h"
 #include "progress.h"
 #include "arch.h"
+#include "fastq.h"
 
 static FILE *dump_file; // used by --dump-one-b250 and --dump-one-local
 MUTEX (dump_mutex);
@@ -153,7 +154,7 @@ void zip_generate_b250_section (VBlock *vb, Context *ctx)
         bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
     int32_t prev = -1; 
-    for (unsigned i=0; i < ctx->mtf_i.len; i++) {
+    for (uint32_t i=0; i < ctx->mtf_i.len; i++) {
 
         uint32_t node_index = *ENT(uint32_t, ctx->mtf_i, i);
 
@@ -216,7 +217,7 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
 
     Buffer *data_buf = (pd_type == PD_DICT_DATA) ? &z_file->dict_data : &vb->z_data;
 
-    if (section_list_buf) sections_list_bind (vb, section_list_buf);
+    if (section_list_buf) sections_list_concat (vb, section_list_buf);
 
     file_write (z_file, data_buf->data, data_buf->len);
     COPY_TIMER (vb->profile.write);
@@ -301,7 +302,8 @@ static void zip_compress_one_vb (VBlock *vb)
     buf_alloc (vb, &vb->z_data, vb->vb_data_size / 5, 1.2, "z_data", 0);
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
-    mtf_clone_ctx (vb);
+    if (flag_pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_dispatcher
+        mtf_clone_ctx (vb);
 
     // split each line in this variant block to its components
     seg_all_data_lines (vb);
@@ -337,7 +339,7 @@ static void zip_compress_one_vb (VBlock *vb)
 
     // optimize FORMAT/GL data in local (we have already optimized the data in dict elsewhere)
     if (vb->data_type == DT_VCF) {
-        uint8_t gl_did_i =  mtf_get_existing_did_i (vb, (DictId)dict_id_FORMAT_GL);
+        DidIType gl_did_i =  mtf_get_existing_did_i (vb, (DictId)dict_id_FORMAT_GL);
         if (gl_did_i != DID_I_NONE) 
             gl_optimize_local (vb, &vb->contexts[gl_did_i].local);
     }
@@ -364,8 +366,9 @@ static void zip_compress_one_vb (VBlock *vb)
 void zip_dispatcher (const char *txt_basename, bool is_last_file)
 {
     static DataType last_data_type = DT_NONE;
-    static unsigned last_vblock_i = 0; // used if we're binding files - the vblock_i will continue from one file to the next
-    if (!flag_bind) last_vblock_i = 0; // reset if we're not binding
+    static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
+    
+    if (!flag_bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
 
     // we cannot bind files of different type
     ASSERT (!flag_bind || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
@@ -375,13 +378,15 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
     // normally global_max_threads would be the number of cores available - we allow up to this number of compute threads, 
     // because the I/O thread is normally idling waiting for the disk, so not consuming a lot of CPU
-    Dispatcher dispatcher = dispatcher_init (global_max_threads, last_vblock_i, false, is_last_file, txt_basename, PROGRESS_PERCENT, 0);
+    Dispatcher dispatcher = dispatcher_init (global_max_threads, prev_file_last_vb_i, false, is_last_file, txt_basename, PROGRESS_PERCENT, 0);
+
+    uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
     dict_id_initialize(z_file->data_type);
 
     if (DTPZ(zip_initialize)) DTPZ(zip_initialize)();
 
-    unsigned txt_line_i = 1; // the next line to be read (first line = 1)
+    uint32_t txt_line_i = 1; // the next line to be read (first line = 1)
     
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
@@ -435,14 +440,30 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
             next_vb = dispatcher_generate_next_vb (dispatcher, 0);
-            if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);
-            
-            txtfile_read_vblock (next_vb);
 
-            if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
+            // if we're compressing the 2nd file in a fastq pair (with --pair) - look back at the z_file data
+            // and copy the data we need for this vb. note: we need to do this before txtfile_read_vblock as
+            // we need the num_lines of the pair file
+            bool read_txt = true;
+            if (flag_pair == PAIR_READ_2) {
 
-            if (next_vb->txt_data.len)  // we found some data 
+                // normally we clone in the compute thread, because it might wait on mutex, but in this
+                // case we need to clone (i.e. create all contexts before we can read the pair file data)
+                mtf_clone_ctx (next_vb); 
+
+                // returns false if their is no vb with vb_i in the previous file
+                read_txt = fastq_read_pair_1_data (next_vb, prev_file_first_vb_i, prev_file_last_vb_i);
+            }
+
+            if (read_txt) {
+                if (flag_show_threads) dispatcher_show_time ("Read input data", -1, next_vb->vblock_i);            
+                txtfile_read_vblock (next_vb);
+                if (flag_show_threads) dispatcher_show_time ("Read input data done", -1, next_vb->vblock_i);
+            }
+
+            if (next_vb->txt_data.len)   // we found some data 
                 next_vb->ready_to_dispatch = true;
+            
             else {
                 // this vb has no data
                 dispatcher_input_exhausted (dispatcher);
@@ -480,5 +501,6 @@ finish:
     evb->z_next_header_i           = 0;
     memset (&z_file->md5_ctx_single, 0, sizeof (Md5Context));
 
-    dispatcher_finish (&dispatcher, &last_vblock_i);
+    prev_file_first_vb_i = first_vb_i;
+    dispatcher_finish (&dispatcher, &prev_file_last_vb_i);
 }

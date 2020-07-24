@@ -19,12 +19,13 @@ void fast_vb_release_vb (VBlockFAST *vb)
 {
     vb->last_line = 0;
     vb->contig_grepped_out = false;
+    vb->pair_num_lines = vb->pair_vb_i = 0;
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
 }
    
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
 // see if this vb is included. 
-static bool fast_piz_test_grep (VBlockFAST *vb)
+bool fast_piz_test_grep (VBlockFAST *vb)
 {
     ARRAY (const unsigned, section_index, vb->z_section_headers);
 
@@ -43,7 +44,7 @@ static bool fast_piz_test_grep (VBlockFAST *vb)
 
     // uncompress & map desc field (filtered by piz_is_skip_section)
     vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep
-    piz_uncompress_all_ctxs ((VBlockP)vb);
+    piz_uncompress_all_ctxs ((VBlockP)vb, 0);
     vb->grep_stages = GS_UNCOMPRESS; // during uncompress in the compute thread, uncompress only what was not already uncompressed here
 
     piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper);
@@ -87,12 +88,4 @@ static bool fast_piz_test_grep (VBlockFAST *vb)
         mtf_init_iterator (&vb->contexts[vb->desc_mapper.did_i[sf_i]]);
 
     return found; // no match found
-}
-
-bool fast_piz_read_one_vb (VBlock *vb, SectionListEntry *sl)
-{ 
-    // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
-    if (flag_grep && !fast_piz_test_grep ((VBlockFAST *)vb)) return false; 
-
-    return true;
 }

@@ -167,14 +167,14 @@ int32_t mtf_search_for_word_index (Context *ctx, const char *snip, unsigned snip
 
 // PIZ only (uses word_list): returns word index, and advances the iterator
 uint32_t mtf_get_next_snip (VBlock *vb, Context *ctx, 
-                            SnipIterator *override_iterator,   // if NULL, taken from ctx
+                            SnipIterator *override_iterator,   // if NULL, defaults to ctx->iterator
                             const char **snip, uint32_t *snip_len) // optional out 
 {
     ASSERT (ctx || override_iterator, "Error in mtf_get_next_snip: ctx is NULL. vb_i=%u", vb->vblock_i);
 
     SnipIterator *iterator = override_iterator ? override_iterator : &ctx->iterator;
     
-    if (!override_iterator && !iterator->next_b250) { // INFO and Field1-9 data (GT data uses override_next_b250)
+    if (!override_iterator && !iterator->next_b250) { 
         ASSERT (buf_is_allocated (&ctx->b250), "Error in mtf_get_next_snip: b250 is unallocated. dict_id=%s", ctx->name);
         
         iterator->next_b250 = FIRSTENT (uint8_t, ctx->b250); // initialize (GT data initializes to the beginning of each sample rather than the beginning of the data)
@@ -208,7 +208,7 @@ uint32_t mtf_get_next_snip (VBlock *vb, Context *ctx,
 
     else {
         if (word_index == WORD_INDEX_ONE_UP) 
-            word_index = ctx->iterator.prev_word_index + 1;
+            word_index = iterator->prev_word_index + 1;
 
         ASSERT (word_index < ctx->word_list.len, "Error while parsing line %u: word_index=%u is out of bounds - %s dictionary has only %u entries",
                 vb->line_i, word_index, ctx->name, (uint32_t)ctx->word_list.len);
@@ -357,7 +357,7 @@ void mtf_clone_ctx (VBlock *vb)
     // through merging and adding a bunch of dictionaries.
     // however z_num_dict_ids will always correctly state the number of dictionaries that are available.
 
-    for (unsigned did_i=0; did_i < z_num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < z_num_dict_ids; did_i++) {
         Context *vb_ctx = &vb->contexts[did_i];
         Context *zf_ctx = &z_file->contexts[did_i];
 
@@ -383,6 +383,7 @@ void mtf_clone_ctx (VBlock *vb)
         vb_ctx->dict_id  = zf_ctx->dict_id;
         vb_ctx->flags    = zf_ctx->flags;
         vb_ctx->ltype    = zf_ctx->ltype;
+        memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
         vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
         
@@ -396,7 +397,7 @@ void mtf_clone_ctx (VBlock *vb)
     COPY_TIMER (vb->profile.mtf_clone_ctx)
 }
 
-static void mtf_initialize_ctx (Context *ctx, DataType dt, uint8_t did_i, DictId dict_id, uint8_t *dict_id_to_did_i_map)
+static void mtf_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map)
 {
     ctx->did_i   = did_i;
     ctx->dict_id = dict_id;
@@ -473,9 +474,9 @@ void mtf_initialize_for_zip (void)
 // it to z_file
 static Context *mtf_get_zf_ctx (DictId dict_id)
 {
-    unsigned z_num_dict_ids = __atomic_load_n (&z_file->num_dict_ids, __ATOMIC_RELAXED);
+    DidIType z_num_dict_ids = __atomic_load_n (&z_file->num_dict_ids, __ATOMIC_RELAXED);
 
-    for (unsigned did_i=0; did_i < z_num_dict_ids; did_i++)
+    for (DidIType did_i=0; did_i < z_num_dict_ids; did_i++)
         if (dict_id.num == z_file->contexts[did_i].dict_id.num) 
             return &z_file->contexts[did_i];
 
@@ -619,7 +620,7 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
     mtf_verify_field_ctxs (merging_vb); // this was useful in the past to catch nasty thread issues
 
     // merge all contexts
-    for (unsigned did_i=0; did_i < merging_vb->num_dict_ids; did_i++) 
+    for (DidIType did_i=0; did_i < merging_vb->num_dict_ids; did_i++) 
         mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
 
     // note: z_file->num_dict_ids might be larger than merging_vb->num_dict_ids at this point, for example:
@@ -635,10 +636,10 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
 // PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
 // or returns NIL, if not. Called by subfield mapper functions only. NOTE: if ctx is local only (not dict)
 // then it will NOT be found, as it is not in z_file
-uint8_t mtf_get_existing_did_i_from_z_file (DictId dict_id)
+DidIType mtf_get_existing_did_i_from_z_file (DictId dict_id)
 {
     // attempt to get did_i from dict_id mapper
-    uint8_t did_i = z_file->dict_id_to_did_i_map[dict_id.map_key];
+    DidIType did_i = z_file->dict_id_to_did_i_map[dict_id.map_key];
     if (did_i != DID_I_NONE && z_file->contexts[did_i].dict_id.num == dict_id.num) return did_i;
 
     for (did_i=0; did_i < z_file->num_dict_ids; did_i++) 
@@ -648,9 +649,9 @@ uint8_t mtf_get_existing_did_i_from_z_file (DictId dict_id)
 }
 
 // returns an existing did_i in this vb, or DID_I_NONE if there isn't one
-uint8_t mtf_get_existing_did_i (VBlockP vb, DictId dict_id)
+DidIType mtf_get_existing_did_i (VBlockP vb, DictId dict_id)
 {
-    uint8_t did_i = vb->dict_id_to_did_i_map[dict_id.map_key];
+    DidIType did_i = vb->dict_id_to_did_i_map[dict_id.map_key];
     if (did_i == DID_I_NONE || vb->contexts[did_i].dict_id.num == dict_id.num) return did_i;
 
     // a different dict_id is in the map, perhaps a hash-clash...
@@ -662,7 +663,7 @@ uint8_t mtf_get_existing_did_i (VBlockP vb, DictId dict_id)
 
 ContextP mtf_get_existing_ctx (VBlockP vb, DictId dict_id) 
 {
-    uint8_t did_i = mtf_get_existing_did_i(vb, dict_id); 
+    DidIType did_i = mtf_get_existing_did_i(vb, dict_id); 
     return (did_i == DID_I_NONE) ? NULL : &vb->contexts[did_i]; 
 }
 
@@ -672,9 +673,9 @@ ContextP mtf_get_existing_ctx (VBlockP vb, DictId dict_id)
 Context *mtf_get_ctx_if_not_found_by_inline (
     Context *contexts /* an array */, 
     DataType dt, 
-    uint8_t *dict_id_to_did_i_map, 
-    uint8_t did_i,
-    unsigned *num_dict_ids, 
+    DidIType *dict_id_to_did_i_map, 
+    DidIType did_i,
+    DidIType *num_dict_ids, 
     DictId dict_id)
 {
     // case: its not in mapper - mapper is occupied by another - perhaps it exists
@@ -726,8 +727,8 @@ done:
 // but we maintain their fixed positions anyway as the code relies on it
 void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, 
                                         DataType dt,
-                                        uint8_t *dict_id_to_did_i_map,
-                                        unsigned *num_dict_ids)
+                                        DidIType *dict_id_to_did_i_map,
+                                        DidIType *num_dict_ids)
 {
     *num_dict_ids = MAX (dt_fields[dt].num_fields, *num_dict_ids);
 
@@ -828,7 +829,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
 // while starting a larger dict/word_list on a fresh memory allocation.
 void mtf_overlay_dictionaries_to_vb (VBlock *vb)
 {
-    for (unsigned did_i=0; did_i < MAX_DICTS; did_i++) {
+    for (DidIType did_i=0; did_i < MAX_DICTS; did_i++) {
         Context *zf_ctx = &z_file->contexts[did_i];
         Context *vb_ctx = &vb->contexts[did_i];
 
@@ -887,7 +888,7 @@ static int sorter_cmp(const void *a, const void *b)
 void mtf_sort_dictionaries_vb_1(VBlock *vb)
 {
     // thread safety note: no issues here, as this is run only by the compute thread of vblock_i=1
-    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++) {
 
         Context *ctx = &vb->contexts[did_i];
 
@@ -910,7 +911,7 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
         ctx->dict.len = old_dict.len;
 
         char *next = ctx->dict.data;
-        for (unsigned i=0; i < ctx->mtf.len; i++) {
+        for (uint32_t i=0; i < (uint32_t)ctx->mtf.len; i++) {
             uint32_t node_index = *ENT (uint32_t, sorter, i);
             MtfNode *node = ENT (MtfNode, ctx->mtf, node_index);
             memcpy (next, &old_dict.data[node->char_index], node->snip_len + 1 /* +1 for SNIP_SEP */);
@@ -943,7 +944,7 @@ void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 void mtf_update_stats (VBlock *vb)
 {
     // zf_ctx doesn't store mtf_i, but we just use mtf_i.len as a counter for displaying in genozip_show_sections
-    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++) {
         Context *vb_ctx = &vb->contexts[did_i];
     
         Context *zf_ctx = mtf_get_zf_ctx (vb_ctx->dict_id);

@@ -136,7 +136,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl,
 
             Context *ctx = mtf_get_ctx (vb, subfield);
             
-            format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : (uint8_t)NIL;
+            format_mapper.did_i[format_mapper.num_subfields++] = ctx ? ctx->did_i : DID_I_NONE;
         } 
         while (str[-1] != '\t' && str[-1] != '\n' && len > 0);
     }

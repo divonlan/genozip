@@ -17,7 +17,7 @@ extern void fasta_seg_initialize();
 extern const char *fasta_seg_txt_line();
 
 // PIZ Stuff
-extern bool fast_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
+extern bool fasta_piz_read_one_vb (VBlockP vb, SectionListEntryP sl);
 extern void fasta_piz_reconstruct_vb(); // no parameter - implicit casting of VBlockP
 extern bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 

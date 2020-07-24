@@ -17,11 +17,11 @@
 #define DID_I_NONE   255
 #endif
 typedef struct SubfieldMapper {
-    uint8_t num_subfields;        // (uint8_t)NIL if this mapper is not defined
-    uint8_t did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->contexts[]
+    DidIType num_subfields;        // DID_I_NONE if this mapper is not defined
+    DidIType did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->contexts[]
 } SubfieldMapper;
 
-#define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != (uint8_t)NIL) ? &vb->contexts[(mapper)->did_i[(sf)]] : NULL)
+#define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != DID_I_NONE) ? &vb->contexts[(mapper)->did_i[(sf)]] : NULL)
 
 #define NUM_COMPRESS_BUFS 7   // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
 
@@ -40,6 +40,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     bool is_processed;         /* thread completed processing this VB - it is ready for outputting */\
     bool in_use;               /* this vb is in use */\
     \
+    /* tracking lines */\
     Buffer lines;              /* An array of *DataLine* - the lines in this VB */\
     uint32_t first_line;       /* PIZ only: line number in VCF file (counting from 1), of this variant block */\
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
@@ -89,14 +90,14 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     int16_t z_next_header_i;          /* next header of this VB to be encrypted or decrypted */\
     \
-    Buffer z_section_headers;         /* PIZ only: an array of unsigned offsets of section headers within z_data */\
+    Buffer z_section_headers;         /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
     \
     Buffer compressed;                /* used by various zfile functions */\
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
-    uint32_t num_dict_ids;            /* total number of dictionaries of all types */\
+    DidIType num_dict_ids;            /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
-    uint8_t dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
+    DidIType dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* ZIP only: reference range lookup caching */ \
     RangeP prev_range; /* previous range returned by ref_zip_get_locked_range */ \

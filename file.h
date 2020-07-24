@@ -196,7 +196,7 @@ extern const char *file_exts[];
                      { ME23_GENOZIP, 0 } } 
 
 typedef const char *FileMode;
-extern FileMode READ, WRITE; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
+extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 // ---------------------------
 // tests for compression types
@@ -258,9 +258,9 @@ typedef struct File {
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     pthread_mutex_t dicts_mutex;
     bool dicts_mutex_initialized;      // this mutex protects contexts and num_dict_ids from concurrent adding of a new dictionary
-    unsigned num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
+    DidIType num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
     
-    uint8_t dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
+    DidIType dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
     Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
     Buffer ra_min_max_by_chrom;        // max_pos of each from according to RA. An array of uint32_t indexed by chrom_word_index.

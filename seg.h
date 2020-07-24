@@ -32,8 +32,8 @@ extern int64_t seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_le
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 extern int64_t seg_pos_field (VBlockP vb, 
-                              uint8_t snip_did_i,    // mandatory: the ctx the snip belongs to
-                              uint8_t base_did_i,    // mandatory: base for delta
+                              DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
+                              DidIType base_did_i,    // mandatory: base for delta
                               bool allow_non_number,      // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                               const char *pos_str, unsigned pos_len, 
                               bool account_for_separator);

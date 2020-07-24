@@ -272,6 +272,11 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
                 
         break;
     }
+    case SNIP_PAIR_LOOKUP:
+        mtf_get_next_snip (vb, snip_ctx, &snip_ctx->pair_b250_iter, &snip, &snip_len);
+        RECONSTRUCT (snip, snip_len);
+        break;
+
     case SNIP_SELF_DELTA:
         new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip+1, snip_len-1);
         have_new_value = true;
@@ -282,6 +287,16 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         new_value.i = piz_reconstruct_from_delta (vb, snip_ctx, base_ctx, snip, snip_len); 
         have_new_value = true;
         break;
+
+    case SNIP_PAIR_DELTA: { // used for FASTQ_GPOS 
+        uint32_t fastq_line_i = vb->line_i / 4 - vb->first_line; 
+        int64_t pair_value = BGEN32 ((int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i));  
+        int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
+        new_value.i = pair_value + delta;
+        RECONSTRUCT_INT (new_value.i);
+        have_new_value = true;
+        break;
+    }
 
     case SNIP_STRUCTURED:
         piz_reconstruct_structured (vb, snip+1, snip_len-1);
@@ -337,7 +352,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
 }
 
 // returns reconstructed length
-uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, uint8_t did_i, char sep)
+uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
 {
     Context *ctx = &vb->contexts[did_i];
 
@@ -407,7 +422,7 @@ void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictId), SubfieldMapp
 {
     mapper->num_subfields = 0;
 
-    for (uint8_t did_i=0; did_i < vb->num_dict_ids; did_i++)
+    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++)
         if (predicate (vb->contexts[did_i].dict_id)) {
          
             char index_char = vb->contexts[did_i].dict_id.id[1];
@@ -418,7 +433,8 @@ void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictId), SubfieldMapp
         }
 }
 
-uint32_t piz_uncompress_all_ctxs (VBlock *vb)
+uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
+                                  uint32_t pair_vb_i) // used in ZIP when uncompressing previous file's paired sections
 {
     ARRAY (const unsigned, section_index, vb->z_section_headers);
     
@@ -432,18 +448,31 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb)
         bool is_local = header->h.section_type == SEC_LOCAL;
         if (header->h.section_type == SEC_B250 || is_local) {
             Context *ctx = mtf_get_ctx (vb, header->dict_id);
-            ctx->flags = header->h.flags;
+            ctx->flags |= header->h.flags;
             ctx->ltype = header->ltype;
 
-            zfile_uncompress_section (vb, header, is_local ? &ctx->local : &ctx->b250, 
-                                      is_local ? "contexts.local" : "contexts.b250", header->h.section_type); 
+            // case: in PIZ: CTX_FL_PAIRED appears on the sections the "pair 2" VB (that come first in section_index)
+            if ((ctx->flags & CTX_FL_PAIRED) && !pair_vb_i) 
+                pair_vb_i = fastq_get_pair_vb_i (vb);
 
-            if (is_local) {
-                ctx->local.len /= ctx_lt_sizeof_one[ctx->ltype];
+            bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" (that come after all sections of pair2 on section_index)
+            if (is_pair_section) 
+                header->h.vblock_i = BGEN32 (vb->vblock_i); // set vb_i to pass the sanity check in zfile_uncompress_section
 
-                if (ctx->ltype == CTX_LT_SEQ_BITMAP)
-                    ctx->local.param = ctx->local.len * 64; // number of bits. note: this might be higher than the number of bits on the ZIP side, since we are rounding up the word boundary
-            }            
+            zfile_uncompress_section (vb, header, 
+                                      is_pair_section ? &ctx->pair      : is_local ? &ctx->local      : &ctx->b250, 
+                                      is_pair_section ? "contexts.pair" : is_local ? "contexts.local" : "contexts.b250", 
+                                      header->h.section_type); 
+
+#           define adjust_lens(buf) { \
+                buf.len /= ctx_lt_sizeof_one[ctx->ltype]; \
+                if (ctx->ltype == CTX_LT_SEQ_BITMAP) \
+                    buf.param = buf.len * 64; /* number of bits. note: this might be higher than the number of bits on the ZIP side, since we are rounding up the word boundary */ \
+            }
+
+            if      (is_pair_section) adjust_lens (ctx->pair)
+            else if (is_local)        adjust_lens (ctx->local);
+
             section_i++;
         }    
 
@@ -459,7 +488,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 
     // we read the header and ctxs for all data_types, except VCF that does its own special handling
     if (vb->data_type != DT_VCF) {
-        ARRAY (const unsigned, section_index, vb->z_section_headers); 
+        ARRAY (const uint32_t, section_index, vb->z_section_headers); 
 
         SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
         vb->first_line       = BGEN32 (header->first_line);      
@@ -475,11 +504,15 @@ static void piz_uncompress_one_vb (VBlock *vb)
 
         buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
 
-        piz_uncompress_all_ctxs (vb);
+        piz_uncompress_all_ctxs (vb, false);
+
+        // genocat --show-b250 only shows the b250 info and not the file data (shown when uncompressing via zfile_uncompress_section)
+        if (flag_show_b250 && exe_type == EXE_GENOCAT) goto done;
     }
 
     DTP(uncompress)(vb);
 
+done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
     COPY_TIMER (vb->profile.compute);
 }
@@ -490,13 +523,13 @@ static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
     mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids);
 
     while ((*next_sl)->section_type == SEC_B250 || (*next_sl)->section_type == SEC_LOCAL) {
-        *ENT (unsigned, vb->z_section_headers, vb->z_section_headers.len) = vb->z_data.len; 
+        uint32_t section_start = vb->z_data.len;
+        *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = section_start; 
 
         int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
                                           (*next_sl)->section_type, *next_sl); // returns 0 if section is skipped
 
         if (ret) vb->z_section_headers.len++;
-
         (*next_sl)++;                             
     }
 }
@@ -592,17 +625,17 @@ static bool piz_read_one_vb (VBlock *vb)
 {
     START_TIMER; 
 
-    SectionListEntry *sl = sections_vb_first (vb->vblock_i); 
+    SectionListEntry *sl = sections_vb_first (vb->vblock_i, false); 
 
-    int vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
-                                               z_file->data_type == DT_VCF ? sizeof (SectionHeaderVbHeaderVCF) : sizeof (SectionHeaderVbHeader), 
-                                               SEC_VB_HEADER, sl++); 
+    int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
+                                                   z_file->data_type == DT_VCF ? sizeof (SectionHeaderVbHeaderVCF) : sizeof (SectionHeaderVbHeader), 
+                                                   SEC_VB_HEADER, sl++); 
 
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
     mtf_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
-    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(int), 0, "z_section_headers", 1); // room for section headers  
-    NEXTENT (int, vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
+    buf_alloc (vb, &vb->z_section_headers, (MAX_DICTS * 2 + 50) * sizeof(uint32_t), 0, "z_section_headers", 1); // room for section headers  
+    NEXTENT (uint32_t, vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
 
     // read all b250 and local of all fields and subfields
     piz_read_all_ctxs (vb, &sl);

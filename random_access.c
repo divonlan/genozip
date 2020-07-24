@@ -61,7 +61,7 @@ void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index, const cha
 }
 
 // ZIP only: update the pos in the existing chrom entry
-void random_access_update_pos (VBlock *vb, uint8_t did_i_pos)
+void random_access_update_pos (VBlock *vb, DidIType did_i_pos)
 {
     int64_t this_pos = vb->contexts[did_i_pos].last_value.i;
 

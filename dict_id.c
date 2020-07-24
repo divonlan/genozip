@@ -235,7 +235,7 @@ Buffer *dict_id_create_aliases_buf (void)
 // PIZ I/O thread: read all dict_id aliaeses, if there are any
 void dict_id_read_aliases (void) 
 { 
-    if (!sections_seek_to (SEC_DICT_ID_ALIASES)) return; // no aliases section
+    if (!sections_seek_to (SEC_DICT_ID_ALIASES, true)) return; // no aliases section
 
     static Buffer compressed_aliases = EMPTY_BUFFER;
 

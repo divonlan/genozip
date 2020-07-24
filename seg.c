@@ -27,7 +27,7 @@ void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *n
     buf_alloc (vb, mapper_buf, mapper_buf->len * sizeof (SubfieldMapper), 2, name, 0);
     
     for (unsigned i=0; i < mapper_buf->len; i++) 
-        ((SubfieldMapper *)mapper_buf->data)[i].num_subfields = (uint8_t)NIL;
+        ((SubfieldMapper *)mapper_buf->data)[i].num_subfields = DID_I_NONE;
 }
 
 uint32_t seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
@@ -133,8 +133,7 @@ uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint8_t chrom_did_i = CHROM;
-    uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, chrom_did_i, chrom_str_len+1);
+    uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1);
 
     random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
 
@@ -159,8 +158,8 @@ int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool
 
 // returns POS value if a valid pos, or 0 if not
 int64_t seg_pos_field (VBlock *vb, 
-                       uint8_t snip_did_i,    // mandatory: the ctx the snip belongs to
-                       uint8_t base_did_i,    // mandatory: base for delta
+                       DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
+                       DidIType base_did_i,    // mandatory: base for delta
                        bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
                        const char *pos_str, unsigned pos_len, 
                        bool account_for_separator)
@@ -418,10 +417,11 @@ void seg_structured_by_ctx (VBlock *vb, Context *ctx, Structured *st,
     st->repeats = BGEN32 (st->repeats); // restore
 
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
+    uint32_t snip_len = 1 + b64_len + prefixes_len;
 
     ctx->flags |= CTX_FL_STRUCTURED;
 
-    seg_by_ctx (vb, snip, 1 + b64_len + prefixes_len, ctx, add_bytes, NULL); 
+    seg_by_ctx (vb, snip, snip_len, ctx, add_bytes, NULL); 
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
@@ -458,7 +458,6 @@ void seg_compound_field (VBlock *vb,
                          bool ws_is_sep, // whitespace is separator - separate by ' ' at '\t'
                          unsigned add_for_eol) // account for characters beyond the component seperators
 {
-    
     const char *snip = field;
     unsigned snip_len = 0;
     unsigned sf_i = 0;
@@ -488,7 +487,40 @@ void seg_compound_field (VBlock *vb,
             buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
                        CTX_GROWTH, "contexts->mtf_i", sf_ctx->did_i);
 
-            NEXTENT (uint32_t, sf_ctx->mtf_i) = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
+            // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
+            // i.e. its already in the dictionary and hash table - so no resources wasted
+            uint32_t word_index = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
+
+            // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
+            // and read 2 might have SNIP_PAIR_LOOKUP
+            if (flag_pair == PAIR_READ_1)
+                sf_ctx->flags |= CTX_FL_NO_STONS;
+            
+            else if (flag_pair == PAIR_READ_2) {
+                sf_ctx->flags |= CTX_FL_PAIR_B250;
+
+                // if the number of components in the compound is not exactly the same for every line of
+                // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
+                // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
+                // doesn't result in an error (TO DO: overcome this, bug 159)
+                if (sf_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, sf_ctx->pair)) {
+                    
+                    uint32_t pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250);  
+                    
+                    if (pair_word_index == WORD_INDEX_ONE_UP) 
+                        pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;
+                    
+                    sf_ctx->pair_b250_iter.prev_word_index = pair_word_index;
+                    
+                    if (word_index == pair_word_index) {
+                        static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
+                        word_index = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, lookup_pair_snip, 1, NULL);
+                    }   
+                }
+            }
+
+            NEXTENT (uint32_t, sf_ctx->mtf_i) = word_index;
+
             sf_ctx->txt_len += snip_len;
 
             // finalize this subfield and get ready for reading the next one
@@ -623,7 +655,7 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
     else 
         vb->num_lines_at_2_3 = vb->line_i + 1;
 
-    for (unsigned did_i=0; did_i < vb->num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++) {
 
         Context *ctx = &vb->contexts[did_i];
         if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
