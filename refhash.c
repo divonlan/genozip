@@ -341,54 +341,43 @@ static inline bool refhash_get_word_from_seq (VBlock *vb, const char *seq, uint3
     return true;
 }
 
-static inline uint32_t refhash_get_match_len (VBlock *vb, BitArray *seq_bits, int64_t gpos, bool is_forward)
+static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bits, int64_t gpos, bool is_forward)
 {
     START_TIMER;
 
-    // extract the portion of the genome for which alignment to seq_bits is to be tested
-    word_t bitmap_words[seq_bits->num_of_words];
+    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
+    const word_t *ref = &(is_forward ? genome : genome_rev)->ref.words[bit_i >> 6];
+    uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+
+    word_t word=0;
+    uint32_t nonmatches=0; 
+    for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
+        word_t left_word_msb  = (ref[i] >> shift);
+        word_t right_word_lsb = ((ref[i+1] & bitmask64 (shift)) << (64-shift));
+        word_t ref_word       = left_word_msb | right_word_lsb;
+        word = seq_bits->words[i] ^ ref_word; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
+        nonmatches += __builtin_popcountll (word);
+    }
+    
+    // remove non-matches due to the unused part of the last word
+    if (seq_bits->num_of_bits % 64)
+        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
+
+/*
     BitArray bitmap = { .num_of_bits  = seq_bits->num_of_bits, 
                         .num_of_words = seq_bits->num_of_words,
                         .words        = bitmap_words };
-
-{START_TIMER;
     bit_array_copy (&bitmap, 0, 
                     &(is_forward ? genome : genome_rev)->ref, 
                     (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2, 
                     bitmap.num_of_bits);
 
     bit_array_clear_excess_bits_in_top_word (&bitmap);
-COPY_TIMER (vb->profile.tmp5);}
-    uint32_t nonmatches=0;
+
     for (uint32_t i=0; i < (uint32_t)bitmap.num_of_words; i++) 
         // xor - resulting in 1 if they're different and 0 if they're equal, then count the 1s
         nonmatches += __builtin_popcountll (bitmap.words[i] ^ seq_bits->words[i]);
-
-    //bit_array_print_bases (&bitmap, "bitmap", true);
-/*
-    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
-    word_t *ref = &(is_forward ? genome : genome_rev)->ref.words[bit_i >> 6];
-    uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
-
-    uint32_t nonmatches=0;
-    word_t word=0;
-    if (!shift) 
-        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
-            word = seq_bits->words[i] ^ ref[i]; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
-            nonmatches += __builtin_popcountll (word);
-        }
-    else 
-        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words-1; i++) {
-            word = seq_bits->words[i] ^ ((ref[i] >> shift) | (ref[i+1] & bitmask64 (shift))); // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
-            nonmatches += __builtin_popcountll (word);
-        }
-    
-    // remove non-matches due to the unused part of the last word
-    if (seq_bits->num_of_bits % 64)
-        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
 */
-    //bit_array_print_bases (&bitmap, "xor", true);
-
     COPY_TIMER (vb->profile.refhash_get_match_len);
     return (uint32_t)seq_bits->num_of_bits - nonmatches;
 }

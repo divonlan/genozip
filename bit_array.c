@@ -967,33 +967,38 @@ void bit_array_to_substr(const BitArray* bitarr,
 //  str[length] = '\0';
 }
 
-// Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
-void bit_array_print(const BitArray* bitarr, FILE* fout)
+void bit_array_print_do (const BitArray *bitarr, const char *msg)
 {
-  bit_index_t i;
+    fprintf (stderr, "%s: ", msg);
 
-  for(i = 0; i < bitarr->num_of_bits; i++)
-  {
-    fprintf(fout, "%c", bit_array_get(bitarr, i) ? '1' : '0');
-  }
+    for (bit_index_t i=0; i < bitarr->num_of_bits; i++)
+        fprintf (stderr, "%c", bit_array_get(bitarr, i) ? '1' : '0');
+
+    fprintf (stderr, "\n");
+}
+
+void bit_array_print_binary_word_do (word_t word, const char *msg)
+{
+    BitArray bitarr = { .num_of_bits=64, .num_of_words=1, .words = &word };
+    bit_array_print_do (&bitarr, msg);
 }
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
-void bit_array_print_bases (const BitArray* bitarr, const char *msg, bool is_forward)
+void bit_array_print_bases (const BitArray *bitarr, const char *msg, bool is_forward)
 {
-  static const char fwd[2][2] = { { 'A', 'C' }, {'G', 'T'} };
-  static const char rev[2][2] = { { 'T', 'G' }, {'C', 'A'} };
+    static const char fwd[2][2] = { { 'A', 'C' }, {'G', 'T'} };
+    static const char rev[2][2] = { { 'T', 'G' }, {'C', 'A'} };
 
-  fprintf (stderr, "%s: ", msg);
+    fprintf (stderr, "%s: ", msg);
 
-  if (is_forward)
-    for (bit_index_t i=0; i < bitarr->num_of_bits; i+=2)
-      fprintf(stderr, "%c", fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
-  else
-    for (int64_t i=bitarr->num_of_bits-2; i >= 0; i-=2) // signed type
-      fprintf(stderr, "%c", rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
+    if (is_forward)
+        for (bit_index_t i=0; i < bitarr->num_of_bits; i+=2)
+            fprintf(stderr, "%c", fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
+    else
+        for (int64_t i=bitarr->num_of_bits-2; i >= 0; i-=2) // signed type
+          fprintf(stderr, "%c", rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
 
-  fprintf (stderr, "\n");
+    fprintf (stderr, "\n");
 }
 
 // Print a string representations for a given region, using given on/off characters.
