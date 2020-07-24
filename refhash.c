@@ -352,10 +352,18 @@ static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bi
     word_t word=0;
     uint32_t nonmatches=0; 
     for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
+        // create ref_word - the word of the reference to be compared to seq[i] - if the word is not aligned
+        // to the bitmap word boundaries, and hence spans 2 bitmap words, we take the MSb's from the left word and the 
+        // LSb's from the right word, to create ref_word
         word_t left_word_msb  = (ref[i] >> shift);
         word_t right_word_lsb = ((ref[i+1] & bitmask64 (shift)) << (64-shift));
         word_t ref_word       = left_word_msb | right_word_lsb;
-        word = seq_bits->words[i] ^ ref_word; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
+
+        // xor the seq_bits to the ref_bits - resulting in 1 in each position they differ and 0 where they're equal
+        word = seq_bits->words[i] ^ ref_word; 
+
+        // we count the number of different bits. note that identical nucleotides results in 2 equal bits while
+        // different nucleotides results in 0 or 1 equal bits (a 64 bit word contains 32 nucleotides x 2 bit each)
         nonmatches += __builtin_popcountll (word);
     }
     
@@ -363,23 +371,8 @@ static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bi
     if (seq_bits->num_of_bits % 64)
         nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
 
-/*
-    BitArray bitmap = { .num_of_bits  = seq_bits->num_of_bits, 
-                        .num_of_words = seq_bits->num_of_words,
-                        .words        = bitmap_words };
-    bit_array_copy (&bitmap, 0, 
-                    &(is_forward ? genome : genome_rev)->ref, 
-                    (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2, 
-                    bitmap.num_of_bits);
-
-    bit_array_clear_excess_bits_in_top_word (&bitmap);
-
-    for (uint32_t i=0; i < (uint32_t)bitmap.num_of_words; i++) 
-        // xor - resulting in 1 if they're different and 0 if they're equal, then count the 1s
-        nonmatches += __builtin_popcountll (bitmap.words[i] ^ seq_bits->words[i]);
-*/
     COPY_TIMER (vb->profile.refhash_get_match_len);
-    return (uint32_t)seq_bits->num_of_bits - nonmatches;
+    return (uint32_t)seq_bits->num_of_bits - nonmatches; // this is the number of matches
 }
 
 // returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. returns false if no match found.
