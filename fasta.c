@@ -12,6 +12,7 @@
 #include "reference.h"
 #include "random_access.h"
 #include "strings.h"
+#include "compressor.h"
 
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
 void fasta_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
@@ -35,14 +36,14 @@ void fasta_seg_initialize (VBlockFAST *vb)
             structured_initialized = true;
         }
 
-        vb->contexts[FASTA_LINEMETA].flags = CTX_FL_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
+        vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
         Context *seq_ctx = mtf_get_ctx (vb, dict_id_FASTA_SEQ);
-        seq_ctx->flags  = CTX_FL_LOCAL_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
-        seq_ctx->ltype  = CTX_LT_SEQUENCE;
+        seq_ctx->local_comp = COMP_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
+        seq_ctx->ltype = CTX_LT_SEQUENCE;
     }
 
-    vb->contexts[FASTA_CONTIG].flags = CTX_FL_NO_STONS; // needs b250 node_index for reference
+    vb->contexts[FASTA_CONTIG].inst = CTX_INST_NO_STONS; // needs b250 node_index for reference
 }
 
 // called during FASTA ZIP compute thread, from zip_compress_one_vb (as "compress")- converts the vb sequence into a range
