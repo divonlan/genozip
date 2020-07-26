@@ -16,26 +16,27 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(compressor_bz2);
     ADD(compressor_lzma);
     ADD(piz_reconstruct_vb);
+    ADD(piz_get_line_subfields);
+    ADD(piz_read_one_vb);
+    ADD(vcf_zip_generate_haplotype_sections);
+    ADD(vcf_zip_generate_phase_sections);
     ADD(vcf_piz_get_variant_data_line);
     ADD(vcf_piz_get_haplotype_data_line);
     ADD(vcf_piz_get_phase_data_line);
     ADD(vcf_piz_reconstruct_genotype_data_line);
+    ADD(vcf_piz_initialize_sample_iterators);
+    ADD(zip_generate_genotype_sections);
+    ADD(zip_generate_variant_data_section);
+    ADD(sam_seg_seq_field);
+    ADD(zfile_compress_dictionary_data);
     ADD(zfile_uncompress_section);
     ADD(buf_alloc);
-    ADD(vcf_piz_initialize_sample_iterators);
-    ADD(piz_get_line_subfields);
     ADD(vcf_piz_reconstruct_samples);
-    ADD(piz_read_one_vb);
-    ADD(zfile_compress_dictionary_data);
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
-    ADD(vcf_zip_generate_haplotype_sections);
     ADD(count_alt_alleles);
     ADD(sample_haplotype_data);
-    ADD(zip_generate_genotype_sections);
-    ADD(vcf_zip_generate_phase_sections);
-    ADD(zip_generate_variant_data_section);
     ADD(md5);
     ADD(lock_mutex_compress_dict);
     ADD(lock_mutex_zf_ctx);
@@ -55,7 +56,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
 #undef ADD
 }
 
-static inline unsigned ms(long long ns) { return (unsigned)(ns / 1000000);}
+static inline uint32_t ms(uint64_t ns) { return (uint32_t)(ns / 1000000);}
 
 const char *profiler_print_short (const ProfilerRec *p)
 {
@@ -123,6 +124,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (refhash_best_match, 2);
         PRINT (refhash_get_match_len, 3);
         PRINT (refhash_get_word_from_seq, 3);
+        PRINT (sam_seg_seq_field,2);
         PRINT (vcf_zip_generate_haplotype_sections, 1);
         PRINT (count_alt_alleles, 2);
         PRINT (sample_haplotype_data, 2);

@@ -11,6 +11,7 @@
 #include "dict_id.h"
 #include "reference.h"
 #include "regions.h"
+#include "compressor.h"
 
 // PIZ: SEQ reconstruction 
 void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, unsigned unused2)
@@ -22,7 +23,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
-    Context *nonref_ctx      = &vb->contexts[SAM_SEQ_NOREF];
+    Context *nonref_ctx      = &vb->contexts[SAM_NONREF];
     const char *nonref       = ENT (const char, nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
     const char *nonref_start = nonref;
     unsigned subcigar_len    = 0;
@@ -68,7 +69,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
                 uint32_t idx = pos + ref_consumed - range->first_pos;
 
                 if (!ref_is_nucleotide_set (range, idx)) {
-                    ref_print_is_set (range);
+                    ref_print_is_set (range, pos + seq_consumed);
                     ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u: reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
                            " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
                            vb->line_i, range->chrom, range->chrom_name_len, range->chrom_name, pos + seq_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);

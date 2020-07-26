@@ -251,7 +251,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
             base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
 
         // case 1: LOCAL is not CTX_LT_SEQ* - we reconstruct this snip before adding the looked up data
-        if (snip_len && base_ctx->ltype != CTX_LT_SEQUENCE && base_ctx->ltype != CTX_LT_SEQ_BITMAP) 
+        if (snip_len && base_ctx->ltype != CTX_LT_SEQUENCE && base_ctx->ltype != CTX_LT_BITMAP) 
             RECONSTRUCT (snip, snip_len);
         
         if (base_ctx->ltype >= CTX_LT_INT8 && base_ctx->ltype <= CTX_LT_UINT64) {
@@ -263,7 +263,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
         else if (base_ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
 
-        else if (base_ctx->ltype == CTX_LT_SEQ_BITMAP) {
+        else if (base_ctx->ltype == CTX_LT_BITMAP) {
             ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
             DTP (reconstruct_seq) (vb, base_ctx, snip, snip_len);
         }
@@ -389,7 +389,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
         else if (ctx->ltype == CTX_LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
         
-        else if (ctx->ltype == CTX_LT_SEQ_BITMAP) {
+        else if (ctx->ltype == CTX_LT_BITMAP) {
             ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
             DTP (reconstruct_seq) (vb, ctx, NULL, 0);
         }
@@ -400,8 +400,8 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
         else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }
 
-    // in case of CTX_LT_SEQ_BITMAP, it is it is ok if the bitmap is empty and all the data is in SEQ_NOREF (e.g. unaligned SAM)
-    else if (ctx->ltype == CTX_LT_SEQ_BITMAP && (ctx+1)->local.len) {
+    // in case of CTX_LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in SEQ_NOREF (e.g. unaligned SAM)
+    else if (ctx->ltype == CTX_LT_BITMAP && (ctx+1)->local.len) {
         ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
         DTP (reconstruct_seq) (vb, ctx, NULL, 0);
     }
@@ -466,8 +466,10 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 
 #           define adjust_lens(buf) { \
                 buf.len /= ctx_lt_sizeof_one[ctx->ltype]; \
-                if (ctx->ltype == CTX_LT_SEQ_BITMAP) \
+                if (ctx->ltype == CTX_LT_BITMAP) { \
                     buf.param = buf.len * 64; /* number of bits. note: this might be higher than the number of bits on the ZIP side, since we are rounding up the word boundary */ \
+                    LTEN_bit_array (buf_get_bitarray (&buf), true); \
+                } \
             }
 
             if      (is_pair_section) adjust_lens (ctx->pair)

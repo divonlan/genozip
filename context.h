@@ -92,45 +92,24 @@ typedef struct { // initialize with mtf_init_iterator()
 // these values and flags are part of the file format (in SectionHeaderCtx.flags) - so values cannot be changed easily
 // CTX_LT_* values are consistent with BAM optional 'B' types (and extend them)
 // IMPORTANT - if adding or chaging LTs, all ctx_lt_* arrays in context.c need to be updated
-#define CTX_LT_TEXT         0
-#define CTX_LT_INT8         1    
-#define CTX_LT_UINT8        2
-#define CTX_LT_INT16        3
-#define CTX_LT_UINT16       4
-#define CTX_LT_INT32        5
-#define CTX_LT_UINT32       6 
-#define CTX_LT_INT64        7    // ffu
-#define CTX_LT_UINT64       8    // ffu
-#define CTX_LT_FLOAT32      9    // ffu
-#define CTX_LT_FLOAT64      10   // ffu
-#define CTX_LT_SEQUENCE     11   // length of data extracted is determined by vb->seq_len
-#define CTX_LT_SEQ_BITMAP   12   // a bitmap indicating whether data should be taken from the reference 1 or SEQ_NOREF.local (0)
-#define NUM_CTX_LT          13
+
 extern const char ctx_lt_to_sam_map[NUM_CTX_LT];
 extern const int ctx_lt_sizeof_one[NUM_CTX_LT];
 extern const bool ctx_lt_is_signed[NUM_CTX_LT];
 extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
 
-// flags written to the genozip file (4-bit header.h.flags)
-#define CTX_FL_STORE_INT   0x0001 // the values of this ctx.local are uint32_t, and should be stored, eg because they are a basis for a delta calculation (by this field or another one)
-#define CTX_FL_STORE_FLOAT 0x0002 // the values of this ctx.local are float
-#define CTX_FL_PAIRED      0x0004 // appears in header.flags of b250 or local sections, indicating to PIZ that the the same section from the same vb of the previous (paired) file should be read from disk too
-#define CTX_FL_STRUCTURED  0x0008 // snips usually contain Structured
+// flags written to the genozip file (header.h.flags)
+#define CTX_FL_STORE_INT    0x01 // the values of this ctx.local are uint32_t, and should be stored, eg because they are a basis for a delta calculation (by this field or another one)
+#define CTX_FL_STORE_FLOAT  0x02 // the values of this ctx.local are float
+#define CTX_FL_PAIRED       0x04 // appears in header.flags of b250 or local sections, indicating to PIZ that the the same section from the same vb of the previous (paired) file should be read from disk too
+#define CTX_FL_STRUCTURED   0x08 // snips usually contain Structured
 
 #define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
 
-// ZIP-only flags not written to the genozip file
-#define CTX_FL_NO_STONS    0x0010 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
-#define CTX_FL_PAIR_LOCAL  0x0020 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
-#define CTX_FL_PAIR_B250   0x0040 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
-#define CTX_FL_LOCAL_LZMA  0x0080 // compress local with COMP_LZMA
-#define CTX_FL_LOCAL_ACGT  0x0100 // compress local with COMP_ACGT
-#define CTX_FL_LOCAL_NONE  0x0200 // "compress" local with COMP_NONE (no compression)
-
-// combination flags for convenience
-#define CTX_FL_POS         (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // A POS field that stores a delta vs. a different field
-#define CTX_FL_POS_BASE    (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA | CTX_FL_STORE_INT) // A POS field that is the base for delta calculations (with itself and/or other fields)
-#define CTX_FL_ID          (CTX_FL_NO_STONS | CTX_FL_LOCAL_LZMA) // An ID field that is split between a numeric component in local and a textual component in b250
+// ZIP-only instructions NOT written to the genozip file
+#define CTX_INST_NO_STONS   0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
+#define CTX_INST_PAIR_LOCAL 0x02 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
+#define CTX_INST_PAIR_B250  0x04 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
 
 typedef union {
     int64_t i;
@@ -143,13 +122,13 @@ typedef struct Context {
     // ----------------------------
     const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
     DidIType did_i;            // the index of this ctx within the array vb->contexts
-    uint8_t ltype;             // CTX_LT_*
-    uint16_t flags;            // CTX_FL_* - flags to be included in section header (4 bits)
+    LocalType ltype;           // CTX_LT_* - type of local data - included in the section header
+    int8_t flags;              // CTX_FL_* - flags to be included in section header (8 bits)
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. 
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
-    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if CTX_FL_PAIR_B250 or CTX_FL_PAIR_LOCAL is set)
+    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if CTX_INST_PAIR_B250 or CTX_INST_PAIR_LOCAL is set)
     SnipIterator pair_b250_iter; // Iterator on pair, if it contains b250 data
 
     // ----------------------------
@@ -162,6 +141,10 @@ typedef struct Context {
     Buffer mtf;                // array of MtfNode - in this VB that don't exist in ol_mtf. char/word indeces are into dict.
     Buffer mtf_i;              // contains 32bit indeces into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
     
+    // settings
+    CompressionAlg local_comp; // algorithm used to compress local
+    uint8_t inst;              // instructions for seg/zip - ORed CTX_INST_ values
+
     // hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list

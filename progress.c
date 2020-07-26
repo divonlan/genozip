@@ -189,5 +189,5 @@ void progress_concatenated_md5 (const char *me, Md5Hash md5)
 {
     ASSERT0 (!component_name, "Error in progress_concatenated_md5: expecting component_name=NULL");
 
-    FINALIZE ("Concatenated %s", me);
+    FINALIZE ("Bound %s", me);
 }

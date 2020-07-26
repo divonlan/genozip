@@ -969,7 +969,7 @@ void bit_array_to_substr(const BitArray* bitarr,
 
 void bit_array_print_do (const BitArray *bitarr, const char *msg)
 {
-    fprintf (stderr, "%s: ", msg);
+    fprintf (stderr, "%s (num_of_bits=%"PRIu64"): ", msg, bitarr->num_of_bits);
 
     for (bit_index_t i=0; i < bitarr->num_of_bits; i++)
         fprintf (stderr, "%c", bit_array_get(bitarr, i) ? '1' : '0');

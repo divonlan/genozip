@@ -19,8 +19,8 @@
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
 {
-    vb->contexts[GFF3_SEQID].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[GFF3_ATTRS].flags = CTX_FL_NO_STONS;
+    vb->contexts[GFF3_SEQID].inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[GFF3_ATTRS].inst = CTX_INST_NO_STONS;
 }
 
 // returns length of next expected item, and 0 if unsuccessful
@@ -117,7 +117,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_ID) {
         Context *ctx = mtf_get_ctx (vb, dict_id);
         seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, *this_value, *this_value_len, false);
-        ctx->flags &= ~CTX_FL_LOCAL_LZMA; // cancel flag set by  seg_pos_field - use BZ2 instead - it compresses better in this case
+        ctx->local_comp = COMP_BZ2; // cancel LZMA set by seg_pos_field - use BZ2 instead - it compresses better in this case
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -193,7 +193,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
         Context *ctx = mtf_get_ctx (vb, dict_id_ATTR_Reference_seq); 
-        ctx->flags |= CTX_FL_LOCAL_LZMA;
+        ctx->local_comp = COMP_LZMA;
 
         seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it

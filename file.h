@@ -13,11 +13,8 @@
 #endif
 
 #include "genozip.h"
-#include "buffer.h"
-#include "sections.h"
 #include "context.h"
 #include "aes.h"
-#include "compressor.h"
 
 // REFERENCE file - only appears in .genozip format
 #define REF_GENOZIP_   ".ref" GENOZIP_EXT

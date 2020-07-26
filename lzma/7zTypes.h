@@ -10,7 +10,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "../compressor.h"
+#include "../genozip.h"
 
 #ifndef EXTERN_C_BEGIN
 #ifdef __cplusplus

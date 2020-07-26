@@ -10,7 +10,7 @@
 #include "md5.h"
 
 // note: the numbering of the sections cannot be modified, for backward compatibility
-typedef enum {
+typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_NONE            = -1, // doesn't appear in the file 
 
     SEC_RANDOM_ACCESS   = 0,
@@ -73,10 +73,10 @@ typedef struct SectionHeader {
     uint32_t data_compressed_len;
     uint32_t data_uncompressed_len;
     uint32_t vblock_i;               // VB with in file starting from 1 ; 0 for Txt Header
-    uint16_t section_i;              // section within VB - 0 for Variant Data
-    uint8_t  section_type;          
-    uint8_t  sec_compression_alg : 4; // one of CompressionAlg
-    uint8_t  flags               : 4; // section-type specific flags SEC_FLAG_*
+    SectionType section_type;        // 1 byte
+    CompressionAlg sec_compression_alg; // 1 byte
+    uint8_t  flags;                  // CTX_FL_*
+    uint8_t  ffu;
 } SectionHeader; 
 
 typedef struct {
@@ -86,7 +86,7 @@ typedef struct {
     uint16_t data_type;               // one of DATA_TYPE_*
     uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
     uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
-    uint64_t num_items_bound;          // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
+    uint64_t num_items_bound;         // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
 
@@ -115,7 +115,7 @@ typedef struct {
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t num_samples;      // VCF only: number of samples in the original VCF file
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
-    uint8_t  compression_type; // compression type of original file, one of CompressionAlg 
+    CompressionAlg compression_type; // compression type of original file
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
 
 #define TXT_FILENAME_LEN 256
@@ -170,9 +170,26 @@ typedef struct {
     DictId dict_id;           
 } SectionHeaderDictionary; 
 
+typedef enum __attribute__ ((__packed__)) { // 1 byte
+    CTX_LT_TEXT     = 0,
+    CTX_LT_INT8     = 1,    
+    CTX_LT_UINT8    = 2,
+    CTX_LT_INT16    = 3,
+    CTX_LT_UINT16   = 4,
+    CTX_LT_INT32    = 5,
+    CTX_LT_UINT32   = 6,
+    CTX_LT_INT64    = 7,   // ffu
+    CTX_LT_UINT64   = 8,   // ffu
+    CTX_LT_FLOAT32  = 9,   // ffu
+    CTX_LT_FLOAT64  = 10,  // ffu
+    CTX_LT_SEQUENCE = 11,  // length of data extracted is determined by vb->seq_len
+    CTX_LT_BITMAP   = 12,  // a bitmap
+    NUM_CTX_LT
+} LocalType;
+
 typedef struct {
     SectionHeader h;
-    uint8_t ltype;             // CTX_*
+    LocalType ltype; // used by SEC_LOCAL
     uint8_t ffu[3];
     DictId dict_id;           
 } SectionHeaderCtx;         
@@ -206,7 +223,7 @@ typedef struct SectionListEntry {
     uint64_t offset;           // offset of this section in the file
     DictId dict_id;            // used if this section is a DICT, LOCAL or a B250 section
     uint32_t vblock_i;
-    uint8_t section_type;
+    SectionType section_type;  // 1 byte
     uint8_t unused[3];         
 } SectionListEntry;
 

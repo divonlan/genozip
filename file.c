@@ -18,9 +18,9 @@
 #include "file.h"
 #include "stream.h"
 #include "url.h"
-#include "compressor.h"
 #include "vblock.h"
 #include "strings.h"
+#include "compressor.h"
 
 // globals
 File *z_file   = NULL;
@@ -791,7 +791,10 @@ const char *ft_name (FileType ft)
 
 const char *file_viewer (File *file)
 {
-    static const char *viewer[NUM_COMPRESSION_ALGS] = COMPRESSED_FILE_VIEWER;
+    static const char *viewer[NUM_COMPRESSION_ALGS] = { 
+        "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
+        "bcftools -Ov --version", "samtools view -h -OSAM --threads 2", "N/A", "unzip -p",  \
+        "N/A", "N/A", "N/A", "N/A" };
 
     return viewer[file->comp_alg];
 }

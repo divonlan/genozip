@@ -18,7 +18,7 @@
 
 void me23_seg_initialize (VBlock *vb)
 {
-    vb->contexts[ME23_CHROM].flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[ME23_CHROM].inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
 }
 
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
@@ -50,7 +50,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
     
     // note: we don't use ACGT because the genotype contains frequent "--" causing a large NON_AGCT section and making
     // the compression gains negligible, but the execution time 50% higher
-    //vb->contexts[ME23_GENOTYPE].flags = CTX_FL_LOCAL_ACGT;
+    //vb->contexts[ME23_GENOTYPE].local_comp = COMP_ACGT;
     
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
     seg_by_did_i (vb, lookup, 2, ME23_GENOTYPE, field_len + 1);

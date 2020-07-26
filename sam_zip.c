@@ -15,6 +15,7 @@
 #include "optimize.h"
 #include "dict_id.h"
 #include "arch.h"
+#include "compressor.h"
 
 static Structured structured_QNAME;
 
@@ -105,13 +106,13 @@ void sam_seg_initialize (VBlock *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[SAM_RNAME].flags      = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[SAM_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP;
-    vb->contexts[SAM_SEQ_NOREF].flags  = CTX_FL_LOCAL_ACGT;
-    vb->contexts[SAM_SEQ_NOREF].ltype  = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].ltype       = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
-    vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
+    vb->contexts[SAM_RNAME].inst        = CTX_INST_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[SAM_SEQ_BITMAP].ltype  = CTX_LT_BITMAP;
+    vb->contexts[SAM_NONREF].local_comp = COMP_ACGT;
+    vb->contexts[SAM_NONREF].ltype      = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].ltype        = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_TLEN].flags        = CTX_FL_STORE_INT;
+    vb->contexts[SAM_OPTIONAL].flags    = CTX_FL_STRUCTURED;
 }
 
 // TLEN - 3 cases: 
@@ -129,14 +130,12 @@ static inline void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned
     
     // case 1
     if (tlen_value && tlen_value == -ctx->last_value.i) {
-        char snip_delta[2] = { SNIP_SELF_DELTA, '-'};
+        char snip_delta[2] = { SNIP_SELF_DELTA, '-' };
         seg_by_ctx ((VBlockP)vb, snip_delta, 2, ctx, tlen_len + 1, NULL);
     }
     // case 2:
     else if (tlen_value > 0 && pnext_pos_delta > 0 && cigar_seq_len > 0) {
-        char tlen_by_calc[50];
-        tlen_by_calc[0] = SNIP_SPECIAL;
-        tlen_by_calc[1] = SAM_SPECIAL_TLEN;
+        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN };
         unsigned tlen_by_calc_len = str_int (tlen_value - pnext_pos_delta - (int64_t)cigar_seq_len, &tlen_by_calc[2]);
         seg_by_ctx ((VBlockP)vb, tlen_by_calc, tlen_by_calc_len + 2, ctx, tlen_len+1, NULL);
     }
@@ -169,31 +168,36 @@ static inline int sam_seg_get_next_subitem (const char *str, int str_len, char s
 // Creates a bitmap from seq data - exactly one bit per base that is mapped to the reference (e.g. not for INSERT bases)
 // - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SEQ_BITMAP whether this
 //   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
-//   bases that differ from the reference are stored in SAM_SEQ_NOREF
-// - Edge case: no POS (i.e. unaligned read) - we just store the sequence in SAM_SEQ_NOREF
+//   bases that differ from the reference are stored in SAM_NONREF
+// - Edge case: no POS (i.e. unaligned read) - we just store the sequence in SAM_NONREF
 // - Edge case: no CIGAR (it is "*") - we just treat it as an M and compare to the reference
-// - Edge case: no SEQ (it is "*") - we '*' in SAM_SEQ_NOREF and indicate "different from reference" in the bitmap. We store a
+// - Edge case: no SEQ (it is "*") - we '*' in SAM_NONREF and indicate "different from reference" in the bitmap. We store a
 //   single entry, regardless of the number of entries indicated by CIGAR
 //
 // Best explanation of CIGAR operations: https://davetang.org/wiki/tiki-index.php?page=SAM
 static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len, int64_t pos, const char *cigar, 
                                unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar)
 {
-    Context *bitmap_ctx = &vb->contexts[SAM_SEQ_BITMAP];
-    Context *nonref_ctx = &vb->contexts[SAM_SEQ_NOREF];
-
-    BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
-
-    if (!recursion_level)
-        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
+    START_TIMER;
 
     ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
 
-    // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
-    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2words64 (seq_len) * sizeof(int64_t), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
-               buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
-    
-    buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+    Context *bitmap_ctx = &vb->contexts[SAM_SEQ_BITMAP];
+    Context *nonref_ctx = &vb->contexts[SAM_NONREF];
+
+    BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
+
+    if (!recursion_level) {
+        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
+
+        // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
+        buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2words64 (seq_len) * sizeof(int64_t), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+                buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
+        
+        buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
+
+        buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
+    }
 
     // we can't compare to the reference if POS is 0: we store the seqeuence in SEQ_NOREF without an indication in the bitmap
     if (!pos) {
@@ -201,7 +205,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
         goto align_nonref_local; 
     }
 
-    if (seq[0] == '*') return; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
+    if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
 
     Range *range = ref_zip_get_locked_range ((VBlockP)vb, pos);
 
@@ -211,17 +215,14 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
             "Error: file has contig \"%.*s\", POS=%"PRId64" CIGAR=\"%s\", implying a final reference pos for this read at %"PRId64". However, the reference's last pos for this contig is %"PRId64,
             range->chrom_name_len, range->chrom_name, pos, cigar, final_seq_pos, range->last_pos);
 
-    bit_index_t next_bit = buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
-
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. if reference range is NULL as the hash entry for this range is unfortunately already occupied by another range (can only happen with REF_INTERNAL)
         (cigar[0] == '*' && cigar[1] == 0)) { // 2. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
 
         buf_add (&nonref_ctx->local, seq, seq_len);
         
-        bit_array_clear_region (bitmap, next_bit, vb->ref_and_seq_consumed);
-        //for (uint32_t i=0; i < vb->ref_and_seq_consumed; i++) 
-            //buf_add_clear_bit (&bitmap_ctx->local); // not very efficient, but quiet rare
+        bit_array_clear_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed);
+        bitmap_ctx->next_local += vb->ref_and_seq_consumed;
 
         random_access_update_last_pos ((VBlockP)vb, pos + vb->ref_consumed - 1);
 
@@ -257,6 +258,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
                     "Error in sam_seg_seq_field: CIGAR %s implies seq_len longer than actual seq_len=%u (recursion_level=%u level0: cigar=%s seq_len=%u)", 
                     cigar, seq_len, recursion_level, level_0_cigar, level_0_seq_len);
 
+            uint32_t bit_i = bitmap_ctx->next_local; // copy to automatic variable for performance
             while (subcigar_len && next_ref < pos_index + ref_len_this_level) {
 
                 // when we have an X we don't enter it into our internal ref, and we wait for a read with a = or M for that site,
@@ -269,29 +271,26 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
                 if (flag_reference == REF_INTERNAL && range && normal_base && !ref_is_nucleotide_set (range, next_ref)) { 
                     ref_set_nucleotide (range, next_ref, seq[i]);
                     bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
-                    bit_array_set (bitmap, next_bit); next_bit++; // cannot increment inside the macro
-                    //buf_add_set_bit (&bitmap_ctx->local);
+                    bit_array_set (bitmap, bit_i); bit_i++; // cannot increment inside the macro
                 }
 
                 // case our seq is identical to the reference at this site
                 else if (range && normal_base && seq[i] == ref_get_nucleotide (range, next_ref)) {
-                    //buf_add_set_bit (&bitmap_ctx->local); // we will need this site in the reference for pizzing
-                    bit_array_set (bitmap, next_bit); next_bit++; // cannot increment inside the macro
+                    bit_array_set (bitmap, bit_i); bit_i++;
                     bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
                 }
                 
                 // case: ref is set to a different value - we store our value in nonref_ctx
                 else {
                     NEXTENT (char, nonref_ctx->local) = seq[i];
-                    bit_array_clear (bitmap, next_bit); next_bit++; // cannot increment inside the macro
-                    //buf_add_clear_bit (&bitmap_ctx->local);
+                    bit_array_clear (bitmap, bit_i); bit_i++;
                 } 
 
                 subcigar_len--;
                 next_ref++;
                 i++;
-                vb->ref_and_seq_consumed--;
             }
+            bitmap_ctx->next_local = bit_i;
         } // end if 'M', '=', 'X'
 
         // for Insertion or Soft clipping - this SEQ segment doesn't align with the reference - we leave it as is 
@@ -364,6 +363,8 @@ align_nonref_local: {
     uint64_t add_chars = (4 - (nonref_ctx->local.len & 3)) & 3;
     if (add_chars) buf_add (&nonref_ctx->local, "AAA", add_chars); // add 1 to 3 As
 }
+done:
+    COPY_TIMER (vb->profile.sam_seg_seq_field);
 }
 
 static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id, 
@@ -414,7 +415,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_by_dict_id (vb, nm,     nm_len,     structured_SA_OA.items[5].dict_id, 1 + nm_len);
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
-        pos_ctx->flags = CTX_FL_LOCAL_LZMA;
+        pos_ctx->local_comp = COMP_LZMA;
         pos_ctx->ltype = CTX_LT_UINT32;
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
@@ -477,7 +478,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_XA.items[2].dict_id);
         pos_ctx->ltype = CTX_LT_UINT32;
-        pos_ctx->flags = CTX_FL_LOCAL_LZMA;
+        pos_ctx->local_comp = COMP_LZMA;
 
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
@@ -561,9 +562,7 @@ static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictId d
 
     // if possible, store a special snip with the positive delta
     if (positive_delta) {
-        char new_snip[20];    
-        new_snip[0] = SNIP_SPECIAL;
-        new_snip[1] = SAM_SPECIAL_AS; 
+        char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_AS };
         unsigned delta_len = str_int (dl->seq_len-as, &new_snip[2]);
 
         seg_by_dict_id (vb, new_snip, delta_len+2, dict_id, snip_len + 1); 
@@ -645,7 +644,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
         ctx->ltype      = CTX_LT_SEQUENCE;
-        ctx->flags      = CTX_FL_LOCAL_LZMA;
+        ctx->local_comp = COMP_LZMA;
     }
 
     else if (dict_id.num == dict_id_OPTION_BI) { 
@@ -660,7 +659,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
         ctx->ltype      = CTX_LT_SEQUENCE;
-        ctx->flags      = CTX_FL_LOCAL_LZMA;
+        ctx->local_comp = COMP_LZMA;
 
         // BI requires a special algorithm to reconstruct from the delta from BD (if one exists)
         if (dl->bd_data_len) {
@@ -686,7 +685,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         seg_pos_field ((VBlockP)vb, mc_did_i, SAM_POS, true, value, value_len, true);
     }
 
-    // E2 - SEQ data (note: E2 doesn't have a dictionary)
+    // E2 - SEQ data (note: E2 doesn't have a context - it shares with SEQ)
     else if (dict_id.num == dict_id_OPTION_E2) { 
         ASSERT (value_len == dl->seq_len, 
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
@@ -696,7 +695,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         sam_seg_seq_field (vb, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, vb->last_cigar); // remove const bc SEQ data is actually going to be modified
     }
 
-    // U2 - QUAL data (note: U2 doesn't have a dictionary)
+    // U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
     else if (dict_id.num == dict_id_OPTION_U2) {
         ASSERT (value_len == dl->seq_len, 
                 "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
@@ -845,12 +844,12 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     while (separator != '\n') {
         GET_MAYBE_LAST_ITEM ("OPTIONAL-subfield");
 
-        StructuredItem *si = &st.items[st.num_items];
-        si->dict_id      = sam_seg_optional_field (vb, dl, field_start, field_len);
-        si->seperator[0] = '\t';
-        si->seperator[1] = 0;
-        si->did_i        = DID_I_NONE; // seg always puts NONE, PIZ changes it
-        st.num_items++;
+        st.items[st.num_items++] = (StructuredItem) {
+            .dict_id      = sam_seg_optional_field (vb, dl, field_start, field_len),
+            .seperator[0] = '\t',
+            .seperator[1] = 0,
+            .did_i        = DID_I_NONE, // seg always puts NONE, PIZ changes it
+        };
 
         ASSSEG (st.num_items <= MAX_SUBFIELDS, field_start, "Error: too many optional fields, limit is %u", MAX_SUBFIELDS);
 

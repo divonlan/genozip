@@ -11,7 +11,6 @@
 #include "buffer.h"
 #include "md5.h"
 #include "bit_array.h"
-#include "compressor.h"
 
 // reference sequences - one per range of 1MB. ranges (chrom, pos) are mapped here with a hash function. In the rare case two unrelated ranges
 // are mapped to the same entry - only the first range will have a reference, and the other ones will not. this will hurt the compression ratio,
@@ -55,7 +54,7 @@ extern int64_t ref_min_max_of_chrom (int32_t chrom, bool get_max);
 extern Range *ref_zip_get_locked_range (VBlockP vb, int64_t pos);
 
 extern void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int64_t end_pos);
-extern void ref_print_is_set (const Range *r);
+extern void ref_print_is_set (const Range *r, int64_t around_pos);
 
 // Make-reference stuff (ZIP of FASTA with --make-reference)
 extern void ref_make_ref_init (void);

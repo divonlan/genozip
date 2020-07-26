@@ -52,12 +52,11 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%2.2u vb_i=%-3u sec_i=%-2u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%2.2u vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, 
              header->sec_compression_alg,
-             BGEN32 (header->vblock_i), BGEN16 (header->section_i), 
-             BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
+             BGEN32 (header->vblock_i), BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
              BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic));
 
     if (vb) {
@@ -201,8 +200,7 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
     header.h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary));
     header.h.sec_compression_alg   = COMP_BZ2;
     header.h.vblock_i              = BGEN32 (vb->vblock_i);
-    header.h.section_i             = BGEN16 (vb->z_next_header_i++);
-    header.h.flags                 = ctx->flags & 0x0f; // 4 bits
+    header.h.flags                 = (uint8_t)(ctx->flags & 0xff); // 8 bits
     header.num_snips               = BGEN32 (num_words);
     header.dict_id                 = ctx->dict_id;
 
@@ -235,8 +233,7 @@ void zfile_compress_b250_data (VBlock *vb, Context *ctx, CompressionAlg comp_alg
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
         .h.sec_compression_alg   = comp_alg,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.section_i             = BGEN16 (vb->z_next_header_i++),
-        .h.flags                 = (uint8_t)(ctx->flags & 0x0f) | ((ctx->flags & CTX_FL_PAIR_B250) ? CTX_FL_PAIRED : 0), // 4 bit
+        .h.flags                 = (uint8_t)(ctx->flags & 0xff) | ((ctx->inst & CTX_INST_PAIR_B250) ? CTX_FL_PAIRED : 0), // 8 bit
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype
     };
@@ -265,13 +262,9 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
         .h.section_type          = SEC_LOCAL,
         .h.data_uncompressed_len = BGEN32 (ctx->local.len * local_len_multiplier),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.sec_compression_alg   = (ctx->flags & CTX_FL_LOCAL_LZMA) ? COMP_LZMA :
-                                   (ctx->flags & CTX_FL_LOCAL_ACGT) ? COMP_ACGT :
-                                   (ctx->flags & CTX_FL_LOCAL_NONE) ? COMP_NONE :
-                                                                      COMP_BZ2,
+        .h.sec_compression_alg   = ctx->local_comp,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.section_i             = BGEN16 (vb->z_next_header_i++),
-        .h.flags                 = (uint8_t)(ctx->flags & 0x0f) | ((ctx->flags & CTX_FL_PAIR_LOCAL) ? CTX_FL_PAIRED : 0), // 4 bit
+        .h.flags                 = (uint8_t)(ctx->flags & 0xff) | ((ctx->inst & CTX_INST_PAIR_LOCAL) ? CTX_FL_PAIRED : 0), // 8 bit
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype
     };
@@ -284,7 +277,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 
     // for COMP_ACGT, if we discovered any non-A,G,C,T, then we need an additional section with COMP_NON_ACGT 
     // that will have the correction needed
-    if ((ctx->flags & CTX_FL_LOCAL_ACGT) && vb->has_non_agct) {
+    if ((ctx->local_comp == COMP_ACGT) && vb->has_non_agct) {
         header.h.sec_compression_alg = COMP_NON_ACGT;
 
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
@@ -310,7 +303,6 @@ void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type,
     header.compressed_offset     = BGEN32 (sizeof(header));
     header.sec_compression_alg   = comp_alg;
     header.vblock_i              = BGEN32 (vb->vblock_i);
-    header.section_i             = BGEN16 (vb->z_next_header_i++);
     
     vb->z_data.name  = "z_data"; // comp_compress requires that these are pre-set
     vb->z_data.param = vb->vblock_i;
@@ -870,7 +862,6 @@ void zfile_compress_generic_vb_header (VBlock *vb)
     vb_header.h.section_type        = SEC_VB_HEADER;
     vb_header.h.compressed_offset   = BGEN32 (sizeof_header);
     vb_header.h.vblock_i            = BGEN32 (vb->vblock_i);
-    vb_header.h.section_i           = BGEN16 (vb->z_next_header_i++); // always 0
     vb_header.h.sec_compression_alg = COMP_NONE;
     vb_header.num_lines             = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.vb_data_size          = BGEN32 (vb->vb_data_size);

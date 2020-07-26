@@ -132,6 +132,19 @@ typedef _Bool bool;
     extern void func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len); \
     static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
 
+// IMPORTANT: This is part of the genozip file format. If making any changes, update arrays in 1. comp_compress 2. file_viewer
+typedef enum __attribute__ ((__packed__)) { // 1 byte
+    COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */,            
+    COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8, 
+    // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
+    // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
+    // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt locations and verbatim for other characters
+    COMP_ACGT=9, COMP_NON_ACGT=10, 
+    // compress a Illumina-binned QUAL sequenced dominated by 'F' characters
+    COMP_QUAL_BINNED_ILLUMINA=11, COMP_QUAL_F_RUNS=12,
+    NUM_COMPRESSION_ALGS
+} CompressionAlg; 
+
 #define COMPRESSOR_CALLBACK(func) \
 extern void func (VBlockP vb, uint32_t vb_line_i, \
                   char **line_data_1, uint32_t *line_data_len_1,\

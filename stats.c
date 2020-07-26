@@ -44,7 +44,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
         
         // we put all the SEQ derived data in a single stats line for easy comparison (reference in dict, the +- section SEQ in b250, and the unique non-ref sequence stretchs in local)
         if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ_BITMAP]) { // 'SEQ' line - must be before SEC_LOCAL
-            if (section->dict_id.num == dict_id_fields[SAM_SEQ_NOREF])
+            if (section->dict_id.num == dict_id_fields[SAM_NONREF])
                 *local_compressed_size += sec_size;
             else if ((section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET) && flag_reference == REF_INTERNAL)
                 *dict_compressed_size += sec_size;
@@ -57,7 +57,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
                  (section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET))
             *dict_compressed_size += sec_size;
 
-        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ_NOREF]) {} // ^ already handled above
+        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_NONREF]) {} // ^ already handled above
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
             *dict_compressed_size += sec_size;
@@ -220,7 +220,7 @@ void stats_show_sections (void)
         txt_len = ctx ? ctx->txt_len : (i==OVERHEAD_SEC_TXT_HDR ? txtfile_get_last_header_len() : 0);
 
         bool is_dict_a_reference = (i == OVERHEAD_SEC_REFERENCE) || // reference appreas in "comp_dict" of "Reference" line
-                                   (ctx && z_file->data_type == DT_SAM && (ctx->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP] || ctx->dict_id.num == dict_id_fields[SAM_SEQ_NOREF])); // reference appreas in "comp_dict" of "SEQ" line
+                                   (ctx && z_file->data_type == DT_SAM && (ctx->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP] || ctx->dict_id.num == dict_id_fields[SAM_NONREF])); // reference appreas in "comp_dict" of "SEQ" line
         
         if (!is_dict_a_reference) all_comp_dict += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;

@@ -253,7 +253,7 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, Co
     // 2. we insert it to ol_dict instead of dict - i.e. it doesn't get written the dict section
     // 3. we move it to the local section of this vb
     // 4. we set the word_index of its mtf to be the word_index of the SNIP_LOOKUP_TEXT snip
-    bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == CTX_LT_TEXT) && !(vb_ctx->flags & CTX_FL_NO_STONS)); // is singleton in this VB
+    bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == CTX_LT_TEXT) && !(vb_ctx->inst & CTX_INST_NO_STONS)); // is singleton in this VB
 
     // attempt to get the node from the hash table
     int32_t node_index = hash_global_get_entry (zf_ctx, snip, snip_len, is_singleton_in_vb ? HASH_NEW_OK_SINGLETON_IN_VB : HASH_NEW_OK_NOT_SINGLETON, node);
@@ -383,6 +383,9 @@ void mtf_clone_ctx (VBlock *vb)
         vb_ctx->dict_id  = zf_ctx->dict_id;
         vb_ctx->flags    = zf_ctx->flags;
         vb_ctx->ltype    = zf_ctx->ltype;
+        vb_ctx->inst     = zf_ctx->inst;
+        vb_ctx->local_comp = zf_ctx->local_comp;
+
         memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
         vb->dict_id_to_did_i_map[vb_ctx->dict_id.map_key] = did_i;
@@ -402,6 +405,8 @@ static void mtf_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictI
     ctx->did_i   = did_i;
     ctx->dict_id = dict_id;
     
+    if (command == ZIP) ctx->local_comp = COMP_BZ2; // default, may be changed in seg
+
     memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
     ((char*)ctx->name)[DICT_ID_LEN] = 0;
 
@@ -426,7 +431,7 @@ static void mtf_copy_reference_contig_to_chrom_ctx (void)
     Context copy_from_ctx;
     memset (&copy_from_ctx, 0, sizeof (Context));
     copy_from_ctx.dict_id = (DictId)dict_id_fields[CHROM];
-    copy_from_ctx.flags   = CTX_FL_NO_STONS; // needs b250 node_index for random access;
+    copy_from_ctx.inst    = CTX_INST_NO_STONS; // needs b250 node_index for random access;
     strcpy ((char*)copy_from_ctx.name, DTFZ(names)[CHROM]);
     
     mtf_add_new_zf_ctx (evb, &copy_from_ctx);
@@ -502,10 +507,12 @@ static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 
     mutex_initialize (zf_ctx->mutex);
 
-    zf_ctx->did_i             = z_file->num_dict_ids; 
-    zf_ctx->dict_id           = vb_ctx->dict_id;
-    zf_ctx->flags             = vb_ctx->flags;
-    zf_ctx->ltype             = vb_ctx->ltype;
+    zf_ctx->did_i      = z_file->num_dict_ids; 
+    zf_ctx->dict_id    = vb_ctx->dict_id;
+    zf_ctx->flags      = vb_ctx->flags;
+    zf_ctx->inst       = vb_ctx->inst;
+    zf_ctx->local_comp = vb_ctx->local_comp;
+    zf_ctx->ltype      = vb_ctx->ltype;
     memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
 
     // only when the new entry is finalized, do we increment num_dict_ids, atmoically , this is because

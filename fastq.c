@@ -38,17 +38,19 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[FASTQ_SEQ_BITMAP].ltype = CTX_LT_SEQ_BITMAP; 
-    vb->contexts[FASTQ_SEQ_STRAND].ltype = CTX_LT_SEQ_BITMAP;
-    vb->contexts[FASTQ_SEQ_GPOS]  .ltype = CTX_LT_UINT32;
-    vb->contexts[FASTQ_SEQ_GPOS]  .flags = CTX_FL_LOCAL_LZMA | CTX_FL_STORE_INT;
-    vb->contexts[FASTQ_SEQ_NOREF] .flags = CTX_FL_LOCAL_ACGT;
-    vb->contexts[FASTQ_SEQ_NOREF] .ltype = CTX_LT_SEQUENCE;
-    vb->contexts[FASTQ_QUAL]      .ltype = CTX_LT_SEQUENCE;
+    vb->contexts[FASTQ_SEQ_BITMAP] .ltype = CTX_LT_BITMAP; 
+    vb->contexts[FASTQ_STRAND]     .ltype = CTX_LT_BITMAP;
+    vb->contexts[FASTQ_GPOS]       .ltype = CTX_LT_UINT32;
+    vb->contexts[FASTQ_GPOS]       .flags = CTX_FL_STORE_INT;
+    vb->contexts[FASTQ_GPOS]  .local_comp = COMP_LZMA;
+    vb->contexts[FASTQ_NONREF].local_comp = COMP_ACGT;
+    vb->contexts[FASTQ_NONREF]     .ltype = CTX_LT_SEQUENCE;
+    vb->contexts[FASTQ_QUAL]       .ltype = CTX_LT_SEQUENCE;
 
      if (flag_pair == PAIR_READ_2) {
-        vb->contexts[FASTQ_SEQ_GPOS]  .flags |= CTX_FL_PAIR_LOCAL;
-        vb->contexts[FASTQ_SEQ_STRAND].flags = CTX_FL_PAIR_LOCAL; // bz2 and lzma only make it big ('=' to cancel the CTX_FL_LOCAL_NONE possibly inherited from the last vb of the previous bound file)
+        vb->contexts[FASTQ_GPOS]  .inst  = CTX_INST_PAIR_LOCAL;
+        vb->contexts[FASTQ_STRAND].inst  = CTX_INST_PAIR_LOCAL; 
+        vb->contexts[FASTQ_STRAND].local_comp = COMP_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. Cancel the COMP_NONE possibly inherited from the last vb of the previous bound file
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
@@ -56,14 +58,14 @@ void fastq_seg_initialize (VBlockFAST *vb)
         fastq_initialize_pair_iterators (vb);
     }
     else
-        vb->contexts[FASTQ_SEQ_STRAND].flags = CTX_FL_LOCAL_NONE; // bz2 and lzma only make it big
+        vb->contexts[FASTQ_STRAND].local_comp = COMP_NONE; // bz2 and lzma only make it bigger
 }
 
 void fastq_seg_finalize (VBlockFAST *vb)
 {
 /*    printf ("vb_i=%u bases=%u nonref=%u\n", vb->vblock_i, 
             (unsigned)buf_get_bitarray (&vb->contexts[FASTQ_SEQ_BITMAP].local)->num_of_bits, 
-            (unsigned)vb->contexts[FASTQ_SEQ_NOREF].local.len);*/
+            (unsigned)vb->contexts[FASTQ_NONREF].local.len);*/
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
@@ -113,7 +115,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
     while (sl->section_type == SEC_B250 || sl->section_type == SEC_LOCAL) {
         
         if (((dict_id_is_type_1 (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC]) && sl->section_type == SEC_B250) ||
-            ((sl->dict_id.num == dict_id_fields[FASTQ_SEQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_SEQ_STRAND]) && sl->section_type == SEC_LOCAL)) { // these are local sections
+            ((sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) && sl->section_type == SEC_LOCAL)) { // these are local sections
             
             *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = vb->z_data.len; 
             int32_t ret = zfile_read_section (z_file, (VBlockP)vb, vb->pair_vb_i, NO_SB_I, &vb->z_data, "data", sizeof(SectionHeaderCtx), 
@@ -161,15 +163,15 @@ uint32_t fastq_get_pair_vb_i (VBlockP vb)
 
 static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
 {
-    Context *nonref_ctx = &vb->contexts[FASTQ_SEQ_NOREF];
+    Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
     Context *bitmap_ctx = &vb->contexts[FASTQ_SEQ_BITMAP];
-    Context *gpos_ctx =   &vb->contexts[FASTQ_SEQ_GPOS];
-    Context *strand_ctx = &vb->contexts[FASTQ_SEQ_STRAND];
+    Context *gpos_ctx =   &vb->contexts[FASTQ_GPOS];
+    Context *strand_ctx = &vb->contexts[FASTQ_STRAND];
 
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
     // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
-    if (!flag_reference) {
+    if (flag_reference != REF_EXTERNAL && flag_reference != REF_EXT_STORE) {
         buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * (seq_len + 5)), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
         buf_add (&nonref_ctx->local, seq, seq_len);
         return;
@@ -191,7 +193,7 @@ static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting
     // it to be 1 in most cases - making the bitmap highly compressible)
-    if (gpos_ctx->flags & CTX_FL_PAIR_LOCAL) {
+    if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
         buf_add_bit (&strand_ctx->local, is_forward == pair_is_forward);
@@ -206,7 +208,7 @@ static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
     
     // case: we're the 2nd of the pair - store a delta if its small enough, or a lookup from local if not
     bool store_local = true;
-    if (gpos_ctx->flags & CTX_FL_PAIR_LOCAL) {
+    if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
         int64_t pair_gpos = (int64_t) BGEN32 (*ENT (uint32_t, gpos_ctx->pair, vb->line_i)); // same location, in the pair's local
         int64_t gpos_delta = gpos - pair_gpos;
 
@@ -382,7 +384,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     // note that piz_read_global_area rewrites --header-only as flag_header_one
     if (flag_header_one && 
-        (dict_id.num == dict_id_fields[FASTQ_SEQ_NOREF] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTQ_PLUS]))
+        (dict_id.num == dict_id_fields[FASTQ_NONREF] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTQ_PLUS]))
         return true;
         
     // when grepping by I/O thread - skipping all sections but DESC
@@ -406,9 +408,9 @@ void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *se
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
-    Context *nonref_ctx = &vb->contexts[FASTQ_SEQ_NOREF];
-    Context *gpos_ctx =   &vb->contexts[FASTQ_SEQ_GPOS];
-    Context *strand_ctx = &vb->contexts[FASTQ_SEQ_STRAND];
+    Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
+    Context *gpos_ctx =   &vb->contexts[FASTQ_GPOS];
+    Context *strand_ctx = &vb->contexts[FASTQ_STRAND];
 
     // get seq_len, gpos and direction
     vb->seq_len = atoi (seq_len_str); // terminated by SNIP_SEP=0
@@ -432,7 +434,7 @@ void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *se
             forward_strand = NEXTLOCALBIT (strand_ctx) ? pair_forward_strand : !pair_forward_strand;
 
             // gpos: reconstruct, then cancel the reconstruction and just use last_value
-            uint32_t reconstructed_len = piz_reconstruct_from_ctx (vb, FASTQ_SEQ_GPOS, 0);
+            uint32_t reconstructed_len = piz_reconstruct_from_ctx (vb, FASTQ_GPOS, 0);
             vb->txt_data.len -= reconstructed_len; // roll back reconstruction
             gpos = gpos_ctx->last_value.i;
         }

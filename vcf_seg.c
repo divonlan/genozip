@@ -15,6 +15,7 @@
 #include "dict_id.h"
 #include "reference.h"
 #include "arch.h"
+#include "compressor.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
@@ -30,9 +31,9 @@ void vcf_seg_initialize (VBlock *vb_)
 
     seg_init_mapper (vb_, VCF_FORMAT, &((VBlockVCF *)vb)->format_mapper_buf, "format_mapper_buf");    
 
-    vb->contexts[VCF_CHROM] .flags = CTX_FL_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[VCF_FORMAT].flags = CTX_FL_NO_STONS;
-    vb->contexts[VCF_INFO]  .flags = CTX_FL_NO_STONS;
+    vb->contexts[VCF_CHROM] .inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[VCF_FORMAT].inst = CTX_INST_NO_STONS;
+    vb->contexts[VCF_INFO]  .inst = CTX_INST_NO_STONS;
 }             
 
 // optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
@@ -239,14 +240,18 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
         vb->an = *this_value; 
         vb->an_len = *this_value_len;
         vb->is_an_before_ac = (vb->ac == NULL);
-        mtf_get_ctx(vb, dict_id)->flags |= CTX_FL_NO_STONS | CTX_FL_STORE_INT;
+        Context *ctx = mtf_get_ctx(vb, dict_id);
+        ctx->flags |= CTX_FL_STORE_INT;
+        ctx->inst  |= CTX_INST_NO_STONS;
     }
 
     else if (dict_id.num == dict_id_INFO_AF) { 
         vb->af = *this_value; 
         vb->af_len = *this_value_len;
         vb->is_af_before_ac = (vb->ac == NULL);     
-        mtf_get_ctx(vb, dict_id)->flags |= CTX_FL_NO_STONS | CTX_FL_STORE_FLOAT;
+        Context *ctx = mtf_get_ctx(vb, dict_id);
+        ctx->flags |= CTX_FL_STORE_FLOAT;
+        ctx->inst  |= CTX_INST_NO_STONS;
     }
 
     // finalization of this INFO field
@@ -270,14 +275,13 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
                     special = true;
 
-                    char special_snip[4];
-                    special_snip[0] = SNIP_SPECIAL;
-                    special_snip[1] = VCF_SPECIAL_AC;
-                    special_snip[2] = '0' + (char)vb->is_an_before_ac;
-                    special_snip[3] = '0' + (char)vb->is_af_before_ac;
+                    char special_snip[4] = { SNIP_SPECIAL,
+                                             VCF_SPECIAL_AC,
+                                             '0' + (char)vb->is_an_before_ac,
+                                             '0' + (char)vb->is_af_before_ac };
 
                     Context *ctx = mtf_get_ctx (vb, dict_id_INFO_AC);
-                    ctx->flags |= CTX_FL_NO_STONS;
+                    ctx->inst |= CTX_INST_NO_STONS;
                     seg_by_ctx ((VBlockP)vb, special_snip, 4, ctx, vb->ac_len, NULL);
                 }
             }
@@ -500,7 +504,8 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
         // or might be the same as the previous line
         else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_PS) {
 
-            ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
+            ctx->flags |= CTX_FL_STORE_INT;
+            ctx->inst  |= CTX_INST_NO_STONS;
 
             char *ps_end;
             int64_t ps_value = strtoull (cell_gt_data, &ps_end, 10);
@@ -529,8 +534,9 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
         else if (cell_gt_data && len && ctx->dict_id.num == dict_id_FORMAT_DP && info_dp_ctx &&
                  ctx->last_value.i == info_dp_ctx->last_value.i) {
 
-            info_dp_ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
-            ctx        ->flags |= CTX_FL_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
+            info_dp_ctx->flags |= CTX_FL_STORE_INT;
+            info_dp_ctx->inst  |= CTX_INST_NO_STONS;
+            ctx        ->inst  |= CTX_INST_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
             seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_INFO_DP, true, 0, snip, &snip_len);
 
             node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, NULL); 
@@ -544,8 +550,9 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
             seg_prepare_snip_other (SNIP_OTHER_DELTA, (DictId)dict_id_FORMAT_DP, true, delta, snip, &snip_len);
             
             node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, NULL); 
-            ctx   ->flags |= CTX_FL_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
-            dp_ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
+            ctx   ->inst  |= CTX_INST_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
+            dp_ctx->inst  |= CTX_INST_NO_STONS;
+            dp_ctx->flags |= CTX_FL_STORE_INT;
         }
 
         else
@@ -605,7 +612,7 @@ static void vcf_seg_update_vb_from_dl (VBlockVCF *vb, ZipDataLineVCF *dl)
     
     else if ((vb->phase_type == PHASE_PHASED     && dl->phase_type == PHASE_NOT_PHASED) ||
              (vb->phase_type == PHASE_NOT_PHASED && dl->phase_type == PHASE_PHASED) ||
-              dl->phase_type  == PHASE_MIXED_PHASED)
+              dl->phase_type == PHASE_MIXED_PHASED)
         vb->phase_type = PHASE_MIXED_PHASED;    
 }
 

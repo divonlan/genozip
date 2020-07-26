@@ -6,10 +6,8 @@
 #include "vcf_private.h"
 #include "sections.h"
 #include "endianness.h"
-#include "compressor.h"
 #include "crypt.h"
 #include "zfile.h"
-#include "sections.h"
 
 // called by ZIP compute thread - called from vcf_zip_compress_one_vb()
 void vcf_compress_vb_header (VBlock *vb_)
@@ -27,7 +25,6 @@ void vcf_compress_vb_header (VBlock *vb_)
     vb_header.h.data_uncompressed_len = BGEN32 (my_squeeze_len);
     vb_header.h.compressed_offset     = BGEN32 (sizeof_header);
     vb_header.h.vblock_i              = BGEN32 (vb->vblock_i);
-    vb_header.h.section_i             = BGEN16 (vb->z_next_header_i++); // always 0
     vb_header.h.sec_compression_alg   = COMP_NONE; // in versions 2-4 it was (needlessly) compressed with bzlib
     vb_header.num_lines               = BGEN32 ((uint32_t)vb->lines.len);
     vb_header.longest_line_len        = BGEN32 (vb->longest_line_len);

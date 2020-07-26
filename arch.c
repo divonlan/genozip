@@ -23,6 +23,7 @@
 #include "endianness.h"
 #include "url.h"
 #include "arch.h"
+#include "sections.h"
 
 static pthread_t io_thread_id = 0; // thread ID of I/O thread (=main thread) - despite common wisdom, it is NOT always 0 (on Windows it is 1)
 
@@ -48,6 +49,11 @@ void arch_initialize(void)
 #error Compilation error - on Windows, genozip must be compiled as a 64 bit application
 #endif
 #endif
+
+    // verify that type sizes are as required (types that appear in section headers written to the genozip format)
+    ASSERT0 (sizeof (SectionType)    ==1, "Error: expecting sizeof (SectionType)==1");
+    ASSERT0 (sizeof (CompressionAlg) ==1, "Error: expecting sizeof (CompressionAlg)==1");
+    ASSERT0 (sizeof (LocalType)      ==1, "Error: expecting sizeof (LocalType)==1");
 
     io_thread_id = pthread_self();
 }

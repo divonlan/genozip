@@ -155,10 +155,10 @@ test_count_genocat_lines test-file.fa "--grep cytochrome --sequential " 2
 test_count_genocat_lines test-file.fa "--grep cytochrome --sequential --no-header " 1
 
 # FASTQ genocat tests
-test_count_genocat_lines test-file.fq "--header-only" 2
-test_count_genocat_lines test-file.fq "--header-one" 2
-test_count_genocat_lines test-file.fq "--grep 8160" 4
-test_count_genocat_lines test-file.fq "--grep 8160 --header-only" 1
+test_count_genocat_lines test-file.fq "--header-only" `grep @ test-file.fq | wc -l` 
+test_count_genocat_lines test-file.fq "--header-one" `grep @ test-file.fq | wc -l`
+test_count_genocat_lines test-file.fq "--grep line5" 4
+test_count_genocat_lines test-file.fq "--grep line5 --header-only" 1
 
 #files=`ls backward-compatibility-test/*.genozip` 
 #for file in $files; do
@@ -196,20 +196,30 @@ rm -f td/*.genozip
 ./genozip -ft td/* || exit 1
 
 test_header "Testing --make-reference"
-file=test-file.ref.fa 
+file=test-file-ref.fa 
 ./genozip --make-reference $file -o copy.${file}.ref.genozip || exit 1
 rm -f copy.${file}.ref.genozip
 
-test_header "Testing multiple SAM with --reference"
+test_header "Testing command line with mixed SAM and FASTQ files with --reference"
 echo "Note: '$ref38' needs to be up to date with the latest genozip format"
 rm -f td/*.genozip
-./genozip -f --md5 --reference $ref38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam || exit 1
+./genozip -f --md5 --reference $ref38 td/test.transfly-unsorted.sam td/test.transfly.fq td/test.transfly-sorted.sam || exit 1
 ./genounzip -t -e $ref38 td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
 
 test_header "Testing multiple bound SAM with --REFERENCE" 
 rm -f td/*.genozip
 ./genozip -f --md5 --REFERENCE $ref38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam -o ${output}.genozip || exit 1
 ./genounzip -t ${output}.genozip || exit 1
+
+test_header "Testing paired FASTQ with --reference, FASTQs compressed with xz and bzip2"
+rm -f td/*.genozip
+./genozip -f --md5 -e $ref38 --pair td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.xz -o td/pair.genozip || exit 1
+./genounzip -t -e $ref38 td/pair.genozip || exit 1
+
+test_header "Testing paired FASTQ with --REFERENCE"
+rm -f td/*.genozip
+./genozip --force -m2E $ref38 --output td/pair.genozip td/test.divon-R1.100K.fq.bz2 td/test.divon-R2.100K.fq.xz || exit 1
+./genounzip -t td/pair.genozip || exit 1
 
 test_header "Testing multiple bound VCF with --reference (GRCh37), and unbind"
 rm -f td/*.genozip

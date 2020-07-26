@@ -312,7 +312,9 @@ static void ref_uncompress_one_range (VBlockP vb)
         bit_array_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len); // initialization of is_set - case 3
         mutex_unlock (r->mutex);
 
-        if (flag_show_is_set && !strcmp (chrom_name, flag_show_is_set)) ref_print_is_set (r);
+        // display contents of is_set if user so requested
+        if (flag_show_is_set && !strcmp (chrom_name, flag_show_is_set)) 
+            ref_print_is_set (r, -1);
 
         // prepare for uncompressing the next section - which is the SEC_REFERENCE
         header = (SectionHeaderReference *)&vb->z_data.data[*ENT (uint32_t, vb->z_section_headers, 1)];
@@ -710,7 +712,6 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 
     // some minor changes to the header...
     header->h.vblock_i  = 0; // we don't belong to any VB and there is no encryption of external ref
-    header->h.section_i = 0; // we don't belong to any VB
 
     // case: we're writing part of a single-contig (GENOME) reference
     if (flag_ref_whole_genome) {
@@ -1386,10 +1387,14 @@ void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int
     fputc ('\n', stderr);
 }
 
-void ref_print_is_set (const Range *r)
+void ref_print_is_set (const Range *r,
+                       int64_t around_pos) // display around this neighborhoud ; -1 means entire range
 {
+#   define neighborhood (int64_t)10000
+
     fprintf (stderr, "\n\nRegions set for chrom %u \"%.*s\" [%"PRId64"-%"PRId64"] according to range.is_set (format- \"first_pos-last_pos (len)\")\n", 
              r->chrom, r->chrom_name_len, r->chrom_name, r->first_pos, r->last_pos);
+    fprintf (stderr, "In the neighborhood of about %u bp around pos=%"PRId64"\n", (unsigned)neighborhood, around_pos);
 
     if (!r->is_set.num_of_bits)
         fprintf (stderr, "No data: r->is_set.num_of_bits=0\n");
@@ -1399,7 +1404,9 @@ void ref_print_is_set (const Range *r)
         
         bool found = bit_array_find_next_clear_bit (&r->is_set, i, &next);
         if (!found) next = r->is_set.num_of_bits;
-        if (next > i) {
+
+        bool in_neighborhood = (around_pos - (int64_t)(r->first_pos+i) > -neighborhood) && (around_pos - (int64_t)(r->first_pos+i) < neighborhood);
+        if (next > i && (around_pos == -1 || in_neighborhood)) {
             if (next - i > 1)
                 fprintf (stderr, "%"PRId64"-%"PRIu64"(%u)\t", r->first_pos + i, r->first_pos + next-1, (uint32_t)(next - i));
             else

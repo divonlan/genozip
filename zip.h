@@ -7,7 +7,6 @@
 #define ZIP_INCLUDED
 
 #include "genozip.h"
-#include "compressor.h"
 
 extern void zip_dispatcher (const char *vcf_basename, bool is_last_file);
 extern void zip_generate_b250_section (VBlockP vb, ContextP ctx);

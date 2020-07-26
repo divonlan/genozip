@@ -186,7 +186,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     static bool first_file = true;
     static unsigned files_listed=0, files_ignored=0;
-    static long long total_uncompressed_len=0, total_compressed_len=0;
+    static int64_t total_uncompressed_len=0, total_compressed_len=0;
     char z_size_str[20], txt_size_str[20], num_lines_str[20], indiv_str[20];
 
     const unsigned FILENAME_WIDTH = 40;
@@ -542,23 +542,25 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     return fn1 - fn2;
 }
 
-void TEST()
+// if two filenames differ by one character only, which is '1' and '2', creates a combined filename with "1+2"
+static char *main_get_pair_filename (const char *fn1, const char *fn2)
 {
-    FILE *f = fopen ("qual", "rb");
+    unsigned len = strlen (fn1);
+    if (len != strlen (fn2)) return NULL;
 
-    BitArray b = {};
-    bit_array_alloc (&b, 14336798);
-    for (unsigned i=0; i< 14336798; i++) {
-        char c = fgetc (f);
-        if (c=='F')
-            bit_array_set_bit (&b, i);
-        else if (c=='\n' || c=='\r')
-            {}
-        else 
-            bit_array_clear_bit (&b, i);
-    }
+    int df = -1;
+    for (unsigned i=0; i < len; i++)
+        if (fn1[i] != fn2[i]) {
+            if (df >= 0) return NULL; // 2nd differing character
+            df = i;
+        }
 
-    fwrite (b.words, b.num_of_words * sizeof (uint64_t), 1, stdout);
+    if (!((fn1[df] == '1' && fn2[df] == '2') || (fn1[df] == '2' && fn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
+
+    char *pair_fn = malloc (len+20);
+    sprintf (pair_fn, "%.*s1+2%s" GENOZIP_EXT, df, fn1, &fn1[df+1]);
+    
+    return pair_fn;
 }
 
 static void main_load_reference (const char *filename, bool is_first_file)
@@ -797,6 +799,11 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 
     // --paired_end: verify an even number of fastq files, --output, and --reference/--REFERENCE
     if (flag_pair) {
+
+        // in case of a flag_pair with 2 files, in which --output is missing, we attempt to figure it out if possible
+        if (!out_filename && num_files == 2) 
+            out_filename = main_get_pair_filename (filenames[0], filenames[1]);
+
         ASSINP (out_filename,       "%s: --output must be specified when using %s", global_cmd, OT("pair", "2"));
         ASSINP (flag_reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
         ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
@@ -861,6 +868,63 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
                               flag_show_index);
 
     ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-stats can only work on one file at time", global_cmd);
+}
+
+void TEST()
+{
+    char *genome_str = "0000111100001111000011110000111100001111";
+    char *seq_str =      "10010110";
+
+    BitArray genome = {}, seq = {};
+    bit_array_alloc (&genome, strlen (genome_str));
+
+    BitArray *seq_bits = &seq;
+    bit_array_alloc (seq_bits, strlen (seq_str));
+    
+    for (unsigned i=0; i < strlen(genome_str); i++) bit_array_assign (&genome, i, genome_str[i]-'0');
+    for (unsigned i=0; i < strlen(seq_str); i++) bit_array_assign (&seq, i, seq_str[i]-'0');
+
+bit_array_print (&genome);
+bit_array_print (seq_bits);
+
+    bool is_forward = true;
+    int64_t gpos = 1;
+    // ---------------------------------
+
+    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
+    //word_t *ref = &(is_forward ? genome : genome_rev)->ref.words[bit_i >> 6];
+    word_t *ref = &genome.words[bit_i >> 6];
+    uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+
+    uint32_t nonmatches=0;
+    word_t word=0;
+    if (!shift) 
+        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
+            word = seq_bits->words[i] ^ ref[i]; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
+            nonmatches += __builtin_popcountll (word);
+        }
+    else 
+        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
+            word_t left_word_msb = (ref[i] >> shift);
+            word_t right_word_lsb = ((ref[i+1] & bitmask64 (shift)) << (64-shift));
+            word_t ref_word = left_word_msb | right_word_lsb;
+            word = seq_bits->words[i] ^ ref_word; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
+            nonmatches += __builtin_popcountll (word);
+
+            bit_array_print_binary_word (ref[i]);
+            bit_array_print_binary_word (ref[i+1]);
+            bit_array_print_binary_word (left_word_msb);
+            bit_array_print_binary_word (right_word_lsb);
+            bit_array_print_binary_word (ref_word);
+            bit_array_print_binary_word (seq_bits->words[i]);
+            bit_array_print_binary_word (word);
+            fprintf (stderr, "nonmatches=%u\n", nonmatches);
+        }
+    
+    // remove non-matches due to the unused part of the last word
+    if (seq_bits->num_of_bits % 64)
+        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
+    fprintf (stderr, "nonmatches=%u\n", nonmatches);
 }
 
 int main (int argc, char **argv)

@@ -60,8 +60,8 @@ char *buf_display (const Buffer *buf)
 const char *buf_desc (const Buffer *buf)
 {
     static char desc[300];
-    sprintf (desc, "%s:%"PRId64" allocated in %s:%u by vb_i=%d", 
-             buf->name ? buf->name : "(no name)", buf->param, buf->func, buf->code_line, (buf->vb ? buf->vb->vblock_i : -999));
+    sprintf (desc, "%s:%"PRId64" len=%"PRIu64" allocated in %s:%u by vb_i=%d", 
+             buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->func, buf->code_line, (buf->vb ? buf->vb->vblock_i : -999));
     return desc;
 }
 

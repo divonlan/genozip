@@ -17,7 +17,6 @@
 #include "vcf.h"
 #include "zfile.h"
 #include "file.h"
-#include "compressor.h"
 #include "strings.h"
 #include "endianness.h"
 #include "crypt.h"

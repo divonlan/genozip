@@ -167,8 +167,11 @@ int64_t seg_pos_field (VBlock *vb,
     Context *snip_ctx = &vb->contexts[snip_did_i];
     Context *base_ctx = &vb->contexts[base_did_i];
 
-    snip_ctx->flags |= CTX_FL_LOCAL_LZMA | CTX_FL_NO_STONS; 
-    base_ctx->flags |= CTX_FL_STORE_INT | CTX_FL_NO_STONS;
+    snip_ctx->inst |= CTX_INST_NO_STONS;
+    snip_ctx->local_comp = COMP_LZMA;
+
+    base_ctx->flags |= CTX_FL_STORE_INT;
+    base_ctx->inst |= CTX_INST_NO_STONS;
 
     int64_t this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
@@ -275,8 +278,9 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     }
 
     Context *ctx = mtf_get_ctx (vb, dict_id);
-    ctx->flags |= CTX_FL_ID;
-    ctx->ltype  = CTX_LT_UINT32;
+    ctx->inst      |= CTX_INST_NO_STONS;
+    ctx->local_comp = COMP_LZMA;
+    ctx->ltype      = CTX_LT_UINT32;
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
@@ -494,10 +498,10 @@ void seg_compound_field (VBlock *vb,
             // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
             // and read 2 might have SNIP_PAIR_LOOKUP
             if (flag_pair == PAIR_READ_1)
-                sf_ctx->flags |= CTX_FL_NO_STONS;
+                sf_ctx->inst |= CTX_INST_NO_STONS;
             
             else if (flag_pair == PAIR_READ_2) {
-                sf_ctx->flags |= CTX_FL_PAIR_B250;
+                sf_ctx->inst |= CTX_INST_PAIR_B250;
 
                 // if the number of components in the compound is not exactly the same for every line of
                 // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
@@ -671,11 +675,12 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
 static uint32_t seg_estimate_num_lines (VBlock *vb)
 {
     uint32_t len=0; 
-    int newlines=0; for (; newlines < (vb->data_type == DT_FASTQ ? 4 : 1); newlines++, len++)
+    unsigned newlines_per_dt_line = vb->data_type == DT_FASTQ ? 4 : 1;
+    int newlines=0; for (; newlines < newlines_per_dt_line; newlines++, len++)
         for (; len < vb->txt_data.len && vb->txt_data.data[len] != '\n'; len++) {};
 
     char s[30];
-    ASSSEG (newlines==4 || len < vb->txt_data.len, vb->txt_data.data, "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
+    ASSSEG (newlines==newlines_per_dt_line || len < vb->txt_data.len, vb->txt_data.data, "Error: a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
             str_uint_commas (global_max_memory_per_vb, s));
 
     return MAX (100, (uint32_t)(((double)vb->txt_data.len / (double)len) * 1.2));
