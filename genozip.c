@@ -39,6 +39,7 @@
 #include "vcf.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "context.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -88,10 +89,10 @@ static void print_call_stack (void)
 #endif
 }
 
-static bool im_in_exit_on_error = false, exit_on_error_completed = false;
-void exit_on_error (bool show_stack) 
+static bool im_in_main_exit = false, exit_completed = false;
+void main_exit (bool show_stack, bool is_error) 
 {
-    im_in_exit_on_error = true;
+    im_in_main_exit = true;
 
     if (false /* show_stack */) print_call_stack(); //this is useless - doesn't print function names
 
@@ -117,9 +118,12 @@ void exit_on_error (bool show_stack)
         file_remove (save_name, true);
     }
 
-    exit_on_error_completed = true;
+    exit_completed = true;
 
-    abort();
+    if (is_error)
+        abort();
+    else
+        exit (0);
 } 
 
 #ifndef _WIN32
@@ -127,12 +131,13 @@ static void main_sigsegv_handler (int sig)
 {
     // note: during exit_on_error, we close z_file which might cause compute threads access z_file fields to 
     // throw a segmentation fault. we don't show it in this case, as we have already displayed the error itself
-    if (!im_in_exit_on_error) 
+    if (!im_in_main_exit) 
         fprintf (stderr, "\nError: Segmentation fault\n");
 
     // busy-wait for exit_on_error to complete before exiting cleanly
     else {
-        while (!exit_on_error_completed) 
+        //fprintf (stderr, "Segmentation fault might appear now - it is not an error - you can safely ignore it\n");
+        while (!exit_completed) 
             usleep (10000); // 10 millisec
         exit (1);
     }
@@ -679,8 +684,8 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V,               _m, _th,     _o, _p, _e, _E,                                         _ss, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _gt, _pe, _fa,          _rg, _sR, _me,           _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                        _sR,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6,                          _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                          _fs, _g,      _sR,      _sA, _sI, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                        _sR,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,     _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                          _fs, _g,      _sR,      _sA, _sI, _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                                 _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
@@ -735,8 +740,8 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             case 'g' : flag_grep        = optarg   ; break;
             case '~' : flag_show_is_set = optarg   ; break;
             case '\2' : dict_id_show_one_b250  = dict_id_make (optarg, strlen (optarg)); break;
-            case '\5' : zip_initialize_binary_dump (optarg, &dump_one_b250_dict_id,  "b250");  break;
-            case '\6' : zip_initialize_binary_dump (optarg, &dump_one_local_dict_id, "local"); break;
+            case '\5' : mtf_initialize_binary_dump (optarg, &dump_one_b250_dict_id,  "b250");  break;
+            case '\6' : mtf_initialize_binary_dump (optarg, &dump_one_local_dict_id, "local"); break;
             case '\3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
@@ -867,7 +872,7 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     // cases where genocat is used to view some information, but not the file contents
     flag_genocat_info_only = exe_type == EXE_GENOCAT &&
                              (flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
-                              flag_show_index);
+                              flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num);
 
     ASSINP (num_files <= 1 || flag_bind || !flag_show_sections, "%s: --show-stats can only work on one file at time", global_cmd);
 }

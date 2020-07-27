@@ -1006,3 +1006,32 @@ void mtf_destroy_context (Context *ctx)
         ctx->mutex_initialized = false;
     }
 }
+
+static FILE *dump_file; // used by --dump-one-b250 and --dump-one-local
+MUTEX (dump_mutex);
+
+void mtf_initialize_binary_dump (const char *field, DictId *dict_id, const char *filename_ext)
+{
+    *dict_id = dict_id_make (field, strlen (field)); 
+    
+    char dump_fn[strlen(field) + strlen (filename_ext) + 2];
+    sprintf (dump_fn, "%s.%s", field, filename_ext);
+    
+    dump_file = fopen (dump_fn, "wb"); // it will be closed implicitly when the process terminates
+
+    fprintf (stderr, "Writing %s data to %s\n", field, dump_fn);
+
+    mutex_initialize (dump_mutex);
+}
+
+void mtf_dump_local (ContextP ctx, bool local /* true = local, false = b250 */)
+{
+    mutex_lock (dump_mutex);
+
+    if (local)
+        fwrite (ctx->local.data, 1, ctx->local.len * lt_sizeof_one[ctx->ltype], dump_file);
+    else
+        fwrite (ctx->b250.data, 1, ctx->b250.len, dump_file);
+
+    mutex_unlock (dump_mutex);
+}

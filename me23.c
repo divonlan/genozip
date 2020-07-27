@@ -21,6 +21,20 @@ void me23_seg_initialize (VBlock *vb)
     vb->contexts[ME23_CHROM].inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
 }
 
+// returns true if section is to be skipped reading / uncompressing
+bool me23_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+{
+    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+
+    //if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
+    //    return true;
+    
+    //if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
+    //    return true;
+
+    return false;
+}
+
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;

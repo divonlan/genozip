@@ -7,6 +7,7 @@
 #define GFF3_INCLUDED
 
 #include "genozip.h"
+#include "sections.h"
 
 // SEG Stuff
 extern const char *gff3_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
@@ -14,6 +15,7 @@ extern void gff3_seg_initialize (VBlockP vb_);
 
 // PIZ Stuff
 extern void gff3_piz_reconstruct_vb(); 
+extern bool gff3_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 
 // VBlock stuff
 extern void gff3_vb_release_vb();

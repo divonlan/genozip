@@ -836,3 +836,4 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
 
     comp_free_all (vb); // just in case
 }
+

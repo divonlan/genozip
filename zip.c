@@ -26,23 +26,6 @@
 #include "arch.h"
 #include "fastq.h"
 
-static FILE *dump_file; // used by --dump-one-b250 and --dump-one-local
-MUTEX (dump_mutex);
-
-void zip_initialize_binary_dump (const char *field, DictId *dict_id, const char *filename_ext)
-{
-    *dict_id = dict_id_make (field, strlen (field)); 
-    
-    char dump_fn[strlen(field) + strlen (filename_ext) + 2];
-    sprintf (dump_fn, "%s.%s", field, filename_ext);
-    
-    dump_file = fopen (dump_fn, "wb"); // it will be closed implicitly when the process terminates
-
-    fprintf (stderr, "Writing %s data to %s\n", field, dump_fn);
-
-    mutex_initialize (dump_mutex);
-}
-
 static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)
 {
     double z_bytes   = (double)z_file->disk_so_far;
@@ -117,22 +100,16 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
             
             zip_generate_b250_section (vb, ctx);
 
-            if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) {
-                mutex_lock (dump_mutex);
-                fwrite (ctx->b250.data, 1, ctx->b250.len, dump_file);
-                mutex_unlock (dump_mutex);
-            }
+            if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
+                mtf_dump_local (ctx, false);
 
             zfile_compress_b250_data (vb, ctx, COMP_BZ2);
         }
 
         if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty
 
-            if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) {
-                mutex_lock (dump_mutex);
-                fwrite (ctx->local.data, 1, ctx->local.len * lt_sizeof_one[ctx->ltype], dump_file);
-                mutex_unlock (dump_mutex);
-            }
+            if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
+                mtf_dump_local (ctx, true);
 
             if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local), true);

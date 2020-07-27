@@ -470,6 +470,12 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
                                       is_pair_section ? "contexts.pair" : is_local ? "contexts.local" : "contexts.b250", 
                                       header->h.section_type); 
 
+            if (!is_pair_section && is_local && dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
+                mtf_dump_local (ctx, true);
+
+            if (!is_pair_section && !is_local && dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
+                mtf_dump_local (ctx, false);
+
 #           define adjust_lens(buf) { \
                 buf.len /= lt_sizeof_one[ctx->ltype]; \
                 if (ctx->ltype == LT_BITMAP) { \
@@ -489,6 +495,9 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 
         else break;
     }
+
+    // if all we wanted is to dump some data, we're done
+    if (exe_type == EXE_GENOCAT && (dump_one_b250_dict_id.num || dump_one_local_dict_id.num)) exit_ok;
 
     return section_i;
 }
@@ -617,7 +626,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
                 refhash_load();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
-            if ((flag_show_reference || flag_show_is_set || flag_show_ref_hash) && exe_type == EXE_GENOCAT) exit(0);
+            if ((flag_show_reference || flag_show_is_set || flag_show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok;
 
             if (flag_reading_reference) 
                 progress_finalize_component ((flag_test && !flag_reading_reference) ? "Success" : "Done");

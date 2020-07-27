@@ -7,6 +7,7 @@
 #define FASTA_INCLUDED
 
 #include "genozip.h"
+#include "sections.h"
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fasta_zip_get_start_len_line_i_seq)

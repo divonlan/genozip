@@ -23,6 +23,20 @@ void gff3_seg_initialize (VBlock *vb)
     vb->contexts[GFF3_ATTRS].inst = CTX_INST_NO_STONS;
 }
 
+// returns true if section is to be skipped reading / uncompressing
+bool gff3_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+{
+    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+
+    //if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
+    //    return true;
+    
+    //if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
+    //    return true;
+
+    return false;
+}
+
 // returns length of next expected item, and 0 if unsuccessful
 static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool is_last_item)
 {

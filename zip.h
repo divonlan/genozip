@@ -14,8 +14,6 @@ extern void zip_generate_b250_section (VBlockP vb, ContextP ctx);
 typedef enum { PD_VBLOCK_DATA, PD_DICT_DATA, PD_REFERENCE_DATA } ProcessedDataType;
 extern void zip_output_processed_vb (VBlockP vb, BufferP section_list_buf, bool update_txt_file, ProcessedDataType pd_type);
 
-extern void zip_initialize_binary_dump (const char *field, DictId *dict_id, const char *filename_ext);
-
 // --------------------------------------------------
 // utilities for use by zip_*_compress_one_vb
 // --------------------------------------------------

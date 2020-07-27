@@ -509,7 +509,7 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         }
         fprintf (stderr, "\n");
 
-        if (exe_type == EXE_GENOCAT) exit(0); // if this is genocat - we're done
+        if (exe_type == EXE_GENOCAT) exit_ok; // if this is genocat - we're done
     }
 }
 
@@ -596,7 +596,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     if (flag_show_gheader) {
         sections_show_gheader (header);
-        if (exe_type == EXE_GENOCAT) exit(0); // in genocat, exit after showing the requested data
+        if (exe_type == EXE_GENOCAT) exit_ok; // in genocat, exit after showing the requested data
     }
 
     // case: we are reading a file expected to be the reference file itself
@@ -620,7 +620,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
         if (flag_show_reference && !md5_is_zero (header->ref_file_md5)) {
             fprintf (stderr, "%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                      z_name, header->ref_filename, md5_display (header->ref_file_md5));
-            if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-reference, we only show the reference, not the data
+            if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
         }
 
         ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL || flag_genocat_info_only, 

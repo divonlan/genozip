@@ -7,6 +7,7 @@
 #define SAM_INCLUDED
 
 #include "genozip.h"
+#include "sections.h"
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_seq)
@@ -23,6 +24,7 @@ extern uint32_t sam_seg_seq_len_from_cigar (const char *cigar, unsigned cigar_le
 extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len);
 
 // PIZ Stuff
+extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern void sam_piz_reconstruct_vb ();
 extern void sam_piz_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
 

@@ -169,7 +169,7 @@ static void fastq_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len)
 {
     Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
     Context *bitmap_ctx = &vb->contexts[FASTQ_SEQ_BITMAP];
-    Context *gpos_ctx =   &vb->contexts[FASTQ_GPOS];
+    Context *gpos_ctx   = &vb->contexts[FASTQ_GPOS];
     Context *strand_ctx = &vb->contexts[FASTQ_STRAND];
 
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
@@ -392,14 +392,20 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
         
     // when grepping by I/O thread - skipping all sections but DESC
-    if (vb && flag_grep && (vb->grep_stages == GS_TEST) && 
+    if (flag_grep && (vb->grep_stages == GS_TEST) && 
         dict_id.num != dict_id_fields[FASTQ_DESC] && !dict_id_is_fast_desc_sf (dict_id))
         return true;
 
     // if grepping, compute thread doesn't need to decompressed DESC again
-    if (vb && flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
+    if (flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
         (dict_id.num == dict_id_fields[FASTQ_DESC] || dict_id_is_fast_desc_sf (dict_id)))
         return true;
+
+//    if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
+//        return true;
+    
+//    if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
+//        return true;
 
     return false;
 }

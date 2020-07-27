@@ -30,6 +30,13 @@ bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[VCF_FORMAT] || dict_id_is_vcf_format_sf (dict_id) || st == SEC_VCF_GT_DATA))
         return true;
 
+    //if (vb && dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
+    //    return true;
+    
+    //if (vb && dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
+    //    return true;
+
+
     return false;
 }
 

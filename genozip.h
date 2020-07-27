@@ -151,7 +151,9 @@ extern void func (VBlockP vb, uint32_t vb_line_i, \
                   char **line_data_2, uint32_t *line_data_len_2);
                   
 // sanity checks
-extern void exit_on_error(bool show_stack);
+extern void main_exit (bool show_stack, bool is_error);
+#define exit_on_error(show_stack) main_exit (show_stack, true)
+#define exit_ok main_exit (false, false)
 
 // check for a user error
 #define ASSINP(condition, format, ...)       { if (!(condition)) { fprintf (stderr, "\n"); fprintf (stderr, format, __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false); }}

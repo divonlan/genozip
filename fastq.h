@@ -7,6 +7,7 @@
 #define FASTQ_INCLUDED
 
 #include "genozip.h"
+#include "sections.h"
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(fastq_zip_get_start_len_line_i_qual)

@@ -13,6 +13,20 @@
 #include "regions.h"
 #include "compressor.h"
 
+// returns true if section is to be skipped reading / uncompressing
+bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+{
+    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+
+    //if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
+    //    return true;
+    
+    //if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
+    //    return true;
+
+    return false;
+}
+
 // PIZ: SEQ reconstruction 
 void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, unsigned unused2)
 {

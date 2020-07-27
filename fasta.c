@@ -189,14 +189,20 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     // when grepping by I/O thread - skipping all sections but DESC
-    if (vb && flag_grep && (vb->grep_stages == GS_TEST) && 
+    if (flag_grep && (vb->grep_stages == GS_TEST) && 
         dict_id.num != dict_id_FASTA_DESC && !dict_id_is_fast_desc_sf (dict_id))
         return true;
 
     // if grepping, compute thread doesn't need to decompressed DESC again
-    if (vb && flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
+    if (flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
         (dict_id.num == dict_id_FASTA_DESC || dict_id_is_fast_desc_sf (dict_id)))
         return true;
+
+    //if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
+    //    return true;
+    
+    //if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
+    //    return true;
 
     return false;
 }
