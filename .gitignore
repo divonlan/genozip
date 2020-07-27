@@ -44,9 +44,11 @@ mac/scripts/*
 *.gff3*
 !test-file.vcf
 !test-file.sam
+!test-file-domqual.sam
 !test-file.fa
 !test-file-ref.fa
 !test-file.fq
+!test-file-domqual.fq
 !test-file.gvf
 !minimal.vcf
 !minimal.sam

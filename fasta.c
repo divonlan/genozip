@@ -40,7 +40,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
         
         Context *seq_ctx = mtf_get_ctx (vb, dict_id_FASTA_SEQ);
         seq_ctx->local_comp = COMP_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
-        seq_ctx->ltype = CTX_LT_SEQUENCE;
+        seq_ctx->ltype = LT_SEQUENCE;
     }
 
     vb->contexts[FASTA_CONTIG].inst = CTX_INST_NO_STONS; // needs b250 node_index for reference

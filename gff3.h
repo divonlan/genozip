@@ -25,7 +25,7 @@ extern unsigned gff3_vb_size (void);
     { DT_GFF3, &dict_id_ATTR_Variant_seq  ,    &dict_id_ATTR_Reference_seq }, \
     { DT_GFF3, &dict_id_ATTR_ancestral_allele, &dict_id_ATTR_Reference_seq }, 
 
-#define GFF3_LOCAL_COMPRESSOR_CALLBACKS
+#define GFF3_LOCAL_GET_LINE_CALLBACKS
 
 #define dict_id_is_gff3_attr_sf dict_id_is_type_1
 #define dict_id_gff3_attr_sf dict_id_type_1

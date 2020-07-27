@@ -170,27 +170,39 @@ typedef struct {
     DictId dict_id;           
 } SectionHeaderDictionary; 
 
+// LT_* values are consistent with BAM optional 'B' types (and extend them)
+// IMPORTANT - if adding or chaging LTs, all lt_* arrays in sections.c need to be updated
 typedef enum __attribute__ ((__packed__)) { // 1 byte
-    CTX_LT_TEXT     = 0,
-    CTX_LT_INT8     = 1,    
-    CTX_LT_UINT8    = 2,
-    CTX_LT_INT16    = 3,
-    CTX_LT_UINT16   = 4,
-    CTX_LT_INT32    = 5,
-    CTX_LT_UINT32   = 6,
-    CTX_LT_INT64    = 7,   // ffu
-    CTX_LT_UINT64   = 8,   // ffu
-    CTX_LT_FLOAT32  = 9,   // ffu
-    CTX_LT_FLOAT64  = 10,  // ffu
-    CTX_LT_SEQUENCE = 11,  // length of data extracted is determined by vb->seq_len
-    CTX_LT_BITMAP   = 12,  // a bitmap
-    NUM_CTX_LT
+    LT_TEXT     = 0,
+    LT_INT8     = 1,    
+    LT_UINT8    = 2,
+    LT_INT16    = 3,
+    LT_UINT16   = 4,
+    LT_INT32    = 5,
+    LT_UINT32   = 6,
+    LT_INT64    = 7,   // ffu
+    LT_UINT64   = 8,   // ffu
+    LT_FLOAT32  = 9,   // ffu
+    LT_FLOAT64  = 10,  // ffu
+    LT_SEQUENCE = 11,  // length of data extracted is determined by vb->seq_len
+    LT_BITMAP   = 12,  // a bitmap
+    LT_DOMQUAL  = 13,  // quality scores in domqual format
+    NUM_LOCAL_TYPES
 } LocalType;
+
+// 3 letter names for --show-headers
+#define LOCALTYPE_NAMES { "TXT", "I8 ", "U8 ", "I16", "U16", "I32", "U32", "I64", "U64", "F32", "F64", "SEQ", "BMP", "DOM" }
+extern const char *lt_names[NUM_LOCAL_TYPES];
+extern const char lt_to_sam_map[NUM_LOCAL_TYPES];
+extern const int lt_sizeof_one[NUM_LOCAL_TYPES];
+extern const bool lt_is_signed[NUM_LOCAL_TYPES];
+extern const int64_t lt_min[NUM_LOCAL_TYPES], lt_max[NUM_LOCAL_TYPES];
 
 typedef struct {
     SectionHeader h;
     LocalType ltype; // used by SEC_LOCAL
-    uint8_t ffu[3];
+    uint8_t param;   // goes into ctx.b250/local.param if flags contains CTX_FL_COPY_PARAM
+    uint8_t ffu[2];
     DictId dict_id;           
 } SectionHeaderCtx;         
 

@@ -39,12 +39,6 @@ unzip:
 #include "reference.h"
 #include "arch.h"
 
-const char ctx_lt_to_sam_map[NUM_CTX_LT] = "\0cCsSiI\0\0f\0\0\0" ;
-const int ctx_lt_sizeof_one[NUM_CTX_LT]  = { 1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 1, 8 };
-const bool ctx_lt_is_signed[NUM_CTX_LT]  = { 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0 };
-const int64_t ctx_lt_min[NUM_CTX_LT]     = { 0, -128, 0, -16384, 0,    -2147483648, 0,         -0x8000000000000000LL, 0,                     0, 0, 0, 0 };
-const int64_t ctx_lt_max[NUM_CTX_LT]     = { 0, 127, 255, 16383, 32767, 2147483647, 4294967295, 0x7fffffffffffffffLL, 0xffffffffffffffffULL, 0, 0, 0, 0 };
-
 #define INITIAL_NUM_NODES 10000
 
 MUTEX (wait_for_vb_1_mutex);
@@ -253,7 +247,7 @@ static uint32_t mtf_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, Co
     // 2. we insert it to ol_dict instead of dict - i.e. it doesn't get written the dict section
     // 3. we move it to the local section of this vb
     // 4. we set the word_index of its mtf to be the word_index of the SNIP_LOOKUP_TEXT snip
-    bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == CTX_LT_TEXT) && !(vb_ctx->inst & CTX_INST_NO_STONS)); // is singleton in this VB
+    bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == LT_TEXT) && !(vb_ctx->inst & CTX_INST_NO_STONS)); // is singleton in this VB
 
     // attempt to get the node from the hash table
     int32_t node_index = hash_global_get_entry (zf_ctx, snip, snip_len, is_singleton_in_vb ? HASH_NEW_OK_SINGLETON_IN_VB : HASH_NEW_OK_NOT_SINGLETON, node);

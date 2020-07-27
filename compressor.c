@@ -126,7 +126,7 @@ uint64_t BZ2_consumed (void *bz_file)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool comp_compress_bzlib (VBlock *vb, CompressionAlg alg,
                           const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                          CompGetLineCallback callback,                        // option 2 - compress data one line at a tim
+                          LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
                           char *compressed, uint32_t *compressed_len /* in/out */, 
                           bool soft_fail)
 {
@@ -346,7 +346,7 @@ static inline void comp_non_acgt_transform (char *data, uint32_t len)
 // We modify the source data (and hence NON-AGCT compression is destructive!) and then recursively compress it with bz2.
 static bool comp_compress_non_acgt (VBlock *vb, CompressionAlg alg,
                                     const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                                    CompGetLineCallback callback,                        // option 2 - compress data one line at a time
+                                    LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
                                     char *compressed, uint32_t *compressed_len /* in/out */, 
                                     bool soft_fail)
 {
@@ -499,7 +499,7 @@ static size_t comp_lzma_data_out_callback (const ISeqOutStream *p, const void *b
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool comp_compress_lzma (VBlock *vb, CompressionAlg alg,
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                         CompGetLineCallback callback,                        // option 2 - compress data one line at a time
+                         LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
@@ -587,7 +587,7 @@ bool comp_compress_lzma (VBlock *vb, CompressionAlg alg,
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool comp_compress_none (VBlock *vb, CompressionAlg alg,
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                         CompGetLineCallback callback,                        // option 2 - compress data one line at a tim
+                         LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
@@ -614,7 +614,7 @@ bool comp_compress_none (VBlock *vb, CompressionAlg alg,
     return true;
 }
 
-bool comp_error (VBlock *vb, CompressionAlg alg, const char *uncompressed, uint32_t uncompressed_len, CompGetLineCallback callback,
+bool comp_error (VBlock *vb, CompressionAlg alg, const char *uncompressed, uint32_t uncompressed_len, LocalGetLineCallback callback,
                  char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
     ABORT0 ("Error in comp_compress: Unsupported section compression algorithm");
@@ -627,7 +627,7 @@ bool comp_error (VBlock *vb, CompressionAlg alg, const char *uncompressed, uint3
 void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
                     SectionHeader *header, 
                     const char *uncompressed_data, // option 1 - compress contiguous data
-                    CompGetLineCallback callback)  // option 2 - compress data one line at a time
+                    LocalGetLineCallback callback)  // option 2 - compress data one line at a time
 { 
     ASSERT0 (!uncompressed_data || !callback, "Error in comp_compress: expecting either uncompressed_data or callback but not both");
 

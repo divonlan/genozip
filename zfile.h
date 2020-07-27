@@ -22,7 +22,7 @@ extern bool zfile_get_genozip_header (FileP file, DataType *dt,
                                       Md5Hash *ref_file_md5);
 
 extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
-                                             BufferP section_data, CompGetLineCallback callback, uint32_t total_len, 
+                                             BufferP section_data, LocalGetLineCallback callback, uint32_t total_len, 
                                              CompressionAlg comp_alg);
 #define zfile_compress_section_data(vb, section_type, section_data) \
     zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, COMP_BZ2)

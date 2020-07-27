@@ -17,6 +17,7 @@
 #include "zfile.h"
 #include "piz.h"
 #include "buffer.h"
+#include "domqual.h"
 
 static void fastq_initialize_pair_iterators (VBlockFAST *vb)
 {
@@ -38,14 +39,17 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[FASTQ_SEQ_BITMAP] .ltype = CTX_LT_BITMAP; 
-    vb->contexts[FASTQ_STRAND]     .ltype = CTX_LT_BITMAP;
-    vb->contexts[FASTQ_GPOS]       .ltype = CTX_LT_UINT32;
+    vb->contexts[FASTQ_SEQ_BITMAP] .ltype = LT_BITMAP; 
+    vb->contexts[FASTQ_STRAND]     .ltype = LT_BITMAP;
+
+    vb->contexts[FASTQ_GPOS]       .ltype = LT_UINT32;
     vb->contexts[FASTQ_GPOS]       .flags = CTX_FL_STORE_INT;
     vb->contexts[FASTQ_GPOS]  .local_comp = COMP_LZMA;
+
+    vb->contexts[FASTQ_NONREF]     .ltype = LT_SEQUENCE;
     vb->contexts[FASTQ_NONREF].local_comp = COMP_ACGT;
-    vb->contexts[FASTQ_NONREF]     .ltype = CTX_LT_SEQUENCE;
-    vb->contexts[FASTQ_QUAL]       .ltype = CTX_LT_SEQUENCE;
+
+    vb->contexts[FASTQ_QUAL]       .ltype = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
 
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst  = CTX_INST_PAIR_LOCAL;
@@ -61,11 +65,10 @@ void fastq_seg_initialize (VBlockFAST *vb)
         vb->contexts[FASTQ_STRAND].local_comp = COMP_NONE; // bz2 and lzma only make it bigger
 }
 
-void fastq_seg_finalize (VBlockFAST *vb)
+void fastq_seg_finalize (VBlockP vb)
 {
-/*    printf ("vb_i=%u bases=%u nonref=%u\n", vb->vblock_i, 
-            (unsigned)buf_get_bitarray (&vb->contexts[FASTQ_SEQ_BITMAP].local)->num_of_bits, 
-            (unsigned)vb->contexts[FASTQ_NONREF].local.len);*/
+    // check if domqual compression is applicable to this quality data, and prepare QUAL/QDOMRUNS local data if it is
+    domqual_convert_qual_to_domqual (vb, fastq_zip_get_start_len_line_i_qual, FASTQ_QUAL);
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),

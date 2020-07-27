@@ -204,7 +204,7 @@ int64_t seg_pos_field (VBlock *vb,
         NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
         snip_ctx->txt_len += pos_len + account_for_separator;
 
-        snip_ctx->ltype  = CTX_LT_UINT32;
+        snip_ctx->ltype  = LT_UINT32;
 
         // add a LOOKUP to b250
         static const char lookup[1] = { SNIP_LOOKUP };
@@ -280,7 +280,7 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     Context *ctx = mtf_get_ctx (vb, dict_id);
     ctx->inst      |= CTX_INST_NO_STONS;
     ctx->local_comp = COMP_LZMA;
-    ctx->ltype      = CTX_LT_UINT32;
+    ctx->ltype      = LT_UINT32;
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
@@ -616,7 +616,7 @@ void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned a
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint8_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int8_t, value);
+    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int8_t, value);
     NEXTENT (uint8_t, ctx->local) = value;
 
     if (add_bytes) ctx->txt_len += add_bytes;
@@ -626,7 +626,7 @@ void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint16_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int16_t, value);
+    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int16_t, value);
     NEXTENT (uint16_t, ctx->local) = BGEN16 (value);
 
     if (add_bytes) ctx->txt_len += add_bytes;
@@ -636,7 +636,7 @@ void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int32_t, value);
+    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int32_t, value);
     NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
 
     if (add_bytes) ctx->txt_len += add_bytes;
@@ -646,7 +646,7 @@ void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint64_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (ctx_lt_is_signed[ctx->ltype]) value = INTERLACE (int64_t, value);
+    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int64_t, value);
     NEXTENT (uint64_t, ctx->local) = BGEN64 (value);
 
     if (add_bytes) ctx->txt_len += add_bytes;

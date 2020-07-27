@@ -17,6 +17,7 @@ extern void sam_zip_initialize (void);
 
 // SEG Stuff
 extern void sam_seg_initialize (VBlockP vb);
+extern void sam_seg_finalize (VBlockP vb);
 extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (const char *cigar, unsigned cigar_len);
 extern uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len);
@@ -54,7 +55,7 @@ SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
     { DT_SAM,  &dict_id_OPTION_E2,             &dict_id_fields[SAM_SEQ_BITMAP] }, \
     { DT_SAM,  &dict_id_OPTION_U2,             &dict_id_fields[SAM_QUAL]   },
 
-#define SAM_LOCAL_COMPRESSOR_CALLBACKS  \
+#define SAM_LOCAL_GET_LINE_CALLBACKS  \
     { DT_SAM,   &dict_id_OPTION_BD,          sam_zip_get_start_len_line_i_bd    }, \
     { DT_SAM,   &dict_id_OPTION_BI,          sam_zip_get_start_len_line_i_bi    }, \
     { DT_SAM,   &dict_id_fields[SAM_QUAL],   sam_zip_get_start_len_line_i_qual  }, 

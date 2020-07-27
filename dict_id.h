@@ -84,26 +84,6 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
 
                 dict_id_FASTA_DESC, dict_id_FASTA_SEQ, dict_id_FASTA_COMMENT;
 
-// list of ctx who's local data is compressed via a callback function
-#define LOCAL_COMPRESSOR_CALLBACKS {  \
-    VCF_LOCAL_COMPRESSOR_CALLBACKS    \
-    GFF3_LOCAL_COMPRESSOR_CALLBACKS   \
-    SAM_LOCAL_COMPRESSOR_CALLBACKS    \
-    FASTQ_LOCAL_COMPRESSOR_CALLBACKS  \
-    FASTA_LOCAL_COMPRESSOR_CALLBACKS  \
-}
-
-// aliases - these are used only in PIZ, as a way for multiple dict_id's to get access to the same data storage
-// on the ZIP side, the data is just placed directly in the primary ctx
-#define DICT_ID_ALIASES { \
-    VCF_DICT_ID_ALIASES   \
-    SAM_DICT_ID_ALIASES   \
-    FASTQ_DICT_ID_ALIASES \
-    FASTA_DICT_ID_ALIASES \
-    GFF3_DICT_ID_ALIASES  \
-    ME23_DICT_ID_ALIASES  \
-}
-
 extern void dict_id_initialize (DataType data_type);
 
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id

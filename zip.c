@@ -97,7 +97,7 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
         // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
-        if ((ctx->inst & CTX_INST_NO_STONS) || ctx->ltype != CTX_LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
+        if ((ctx->inst & CTX_INST_NO_STONS) || ctx->ltype != LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
 
         buf_move (vb, &ctx->local, vb, &ctx->dict);
         buf_free (&ctx->mtf);
@@ -126,15 +126,15 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
             zfile_compress_b250_data (vb, ctx, COMP_BZ2);
         }
 
-        if (ctx->local.len || ctx->ltype == CTX_LT_BITMAP) { // bitmaps are always written, even if empty
+        if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty
 
             if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) {
                 mutex_lock (dump_mutex);
-                fwrite (ctx->local.data, 1, ctx->local.len * ctx_lt_sizeof_one[ctx->ltype], dump_file);
+                fwrite (ctx->local.data, 1, ctx->local.len * lt_sizeof_one[ctx->ltype], dump_file);
                 mutex_unlock (dump_mutex);
             }
 
-            if (ctx->ltype == CTX_LT_BITMAP) 
+            if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local), true);
 
             zfile_compress_local_data (vb, ctx);

@@ -130,11 +130,13 @@ static void main_sigsegv_handler (int sig)
     if (!im_in_exit_on_error) 
         fprintf (stderr, "\nError: Segmentation fault\n");
 
-    // busy-wait for exit_on_error to complete before aborting
-    else 
+    // busy-wait for exit_on_error to complete before exiting cleanly
+    else {
         while (!exit_on_error_completed) 
             usleep (10000); // 10 millisec
-    
+        exit (0);
+    }
+
     //print_call_stack(); //this is useless - doesn't print function names
     abort();
 }
@@ -872,63 +874,11 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 
 void TEST()
 {
-    char *genome_str = "0000111100001111000011110000111100001111";
-    char *seq_str =      "10010110";
-
-    BitArray genome = {}, seq = {};
-    bit_array_alloc (&genome, strlen (genome_str));
-
-    BitArray *seq_bits = &seq;
-    bit_array_alloc (seq_bits, strlen (seq_str));
-    
-    for (unsigned i=0; i < strlen(genome_str); i++) bit_array_assign (&genome, i, genome_str[i]-'0');
-    for (unsigned i=0; i < strlen(seq_str); i++) bit_array_assign (&seq, i, seq_str[i]-'0');
-
-bit_array_print (&genome);
-bit_array_print (seq_bits);
-
-    bool is_forward = true;
-    int64_t gpos = 1;
-    // ---------------------------------
-
-    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
-    //word_t *ref = &(is_forward ? genome : genome_rev)->ref.words[bit_i >> 6];
-    word_t *ref = &genome.words[bit_i >> 6];
-    uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
-
-    uint32_t nonmatches=0;
-    word_t word=0;
-    if (!shift) 
-        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
-            word = seq_bits->words[i] ^ ref[i]; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
-            nonmatches += __builtin_popcountll (word);
-        }
-    else 
-        for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
-            word_t left_word_msb = (ref[i] >> shift);
-            word_t right_word_lsb = ((ref[i+1] & bitmask64 (shift)) << (64-shift));
-            word_t ref_word = left_word_msb | right_word_lsb;
-            word = seq_bits->words[i] ^ ref_word; // xor the seq_bits to the ref_bits - resulting in 1 if they're different and 0 if they're equal
-            nonmatches += __builtin_popcountll (word);
-
-            bit_array_print_binary_word (ref[i]);
-            bit_array_print_binary_word (ref[i+1]);
-            bit_array_print_binary_word (left_word_msb);
-            bit_array_print_binary_word (right_word_lsb);
-            bit_array_print_binary_word (ref_word);
-            bit_array_print_binary_word (seq_bits->words[i]);
-            bit_array_print_binary_word (word);
-            fprintf (stderr, "nonmatches=%u\n", nonmatches);
-        }
-    
-    // remove non-matches due to the unused part of the last word
-    if (seq_bits->num_of_bits % 64)
-        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
-    fprintf (stderr, "nonmatches=%u\n", nonmatches);
 }
 
 int main (int argc, char **argv)
 {
+    
     //TEST();exit(0);
     arch_initialize();
 

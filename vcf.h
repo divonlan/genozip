@@ -74,7 +74,7 @@ SPECIAL (VCF, 1, AC,     vcf_piz_special_AC);
     /*         alias                           maps to this ctx          */  \
     { DT_VCF,  &dict_id_INFO_END,              &dict_id_fields[VCF_POS]    }, \
 
-#define VCF_LOCAL_COMPRESSOR_CALLBACKS
+#define VCF_LOCAL_GET_LINE_CALLBACKS
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2

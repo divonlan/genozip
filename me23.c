@@ -46,7 +46,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
             global_cmd, txt_name, field_len, field_len, field_start);
 
     seg_add_to_local_fixed (vb, &vb->contexts[ME23_GENOTYPE], field_start, field_len); 
-    vb->contexts[ME23_GENOTYPE].ltype = CTX_LT_SEQUENCE;
+    vb->contexts[ME23_GENOTYPE].ltype = LT_SEQUENCE;
     
     // note: we don't use ACGT because the genotype contains frequent "--" causing a large NON_AGCT section and making
     // the compression gains negligible, but the execution time 50% higher

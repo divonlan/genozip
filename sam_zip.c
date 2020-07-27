@@ -16,6 +16,7 @@
 #include "dict_id.h"
 #include "arch.h"
 #include "compressor.h"
+#include "domqual.h"
 
 static Structured structured_QNAME;
 
@@ -107,12 +108,18 @@ void sam_seg_initialize (VBlock *vb)
     }
 
     vb->contexts[SAM_RNAME].inst        = CTX_INST_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[SAM_SEQ_BITMAP].ltype  = CTX_LT_BITMAP;
+    vb->contexts[SAM_SEQ_BITMAP].ltype  = LT_BITMAP;
     vb->contexts[SAM_NONREF].local_comp = COMP_ACGT;
-    vb->contexts[SAM_NONREF].ltype      = CTX_LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].ltype        = CTX_LT_SEQUENCE;
+    vb->contexts[SAM_NONREF].ltype      = LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].ltype        = LT_SEQUENCE;
     vb->contexts[SAM_TLEN].flags        = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags    = CTX_FL_STRUCTURED;
+}
+
+void sam_seg_finalize (VBlockP vb)
+{
+    // check if domqual compression is applicable to this quality data, and prepare QUAL/QDOMRUNS local data if it is
+    domqual_convert_qual_to_domqual (vb, sam_zip_get_start_len_line_i_qual, SAM_QUAL);
 }
 
 // TLEN - 3 cases: 
@@ -416,7 +423,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
         pos_ctx->local_comp = COMP_LZMA;
-        pos_ctx->ltype = CTX_LT_UINT32;
+        pos_ctx->ltype = LT_UINT32;
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
 
@@ -477,7 +484,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_by_dict_id (vb, nm,     nm_len,    structured_XA.items[4].dict_id, 1 + nm_len);
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_XA.items[2].dict_id);
-        pos_ctx->ltype = CTX_LT_UINT32;
+        pos_ctx->ltype = LT_UINT32;
         pos_ctx->local_comp = COMP_LZMA;
 
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
@@ -643,7 +650,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         Context *ctx = mtf_get_ctx (vb, dict_id);
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
-        ctx->ltype      = CTX_LT_SEQUENCE;
+        ctx->ltype      = LT_SEQUENCE;
         ctx->local_comp = COMP_LZMA;
     }
 
@@ -658,7 +665,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         Context *ctx = mtf_get_ctx (vb, dict_id);
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
-        ctx->ltype      = CTX_LT_SEQUENCE;
+        ctx->ltype      = LT_SEQUENCE;
         ctx->local_comp = COMP_LZMA;
 
         // BI requires a special algorithm to reconstruct from the delta from BD (if one exists)

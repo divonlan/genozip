@@ -34,7 +34,8 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     if (flag_reading_reference) return; // don't show headers of reference file
     
     DictId dict_id = {0};
-    char flags[10] = "", ltype[10] = "";
+    char flags[10] = "", param[10] = "";
+    const char *ltype="";
     bool has_ltype = false;
 
     if (header->section_type == SEC_DICT) 
@@ -43,7 +44,8 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     else if (header->section_type == SEC_LOCAL || header->section_type == SEC_B250) {
         SectionHeaderCtx *header_ctx = (SectionHeaderCtx *)header;
         dict_id = header_ctx->dict_id;
-        str_int (header_ctx->ltype, ltype);
+        str_int (header_ctx->param, param);
+        ltype = lt_names[header_ctx->ltype];
         has_ltype = true;
     }
 
@@ -52,9 +54,9 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%-19s %*.*s %6s%-3s %11s%-3s alg=%2.2u vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-19s %*.*s %6s%-3s %6s%-3s %7s%-3s alg=%2.2u vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
-             header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, 
+             header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
              header->sec_compression_alg,
              BGEN32 (header->vblock_i), BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
              BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic));
@@ -240,12 +242,12 @@ void zfile_compress_b250_data (VBlock *vb, Context *ctx, CompressionAlg comp_alg
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
-static CompGetLineCallback *zfile_get_local_data_callback (DataType dt, DictId dict_id)
+static LocalGetLineCallback *zfile_get_local_data_callback (DataType dt, Context *ctx)
 {
-    static struct { DataType dt; const uint64_t *dict_id_num; CompGetLineCallback *func; } callbacks[] = LOCAL_COMPRESSOR_CALLBACKS;
+    static struct { DataType dt; const uint64_t *dict_id_num; LocalGetLineCallback *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
 
     for (unsigned i=0; i < sizeof(callbacks)/sizeof(callbacks[0]); i++)
-        if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == dict_id.num) 
+        if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == ctx->dict_id.num && !(ctx->inst & CTX_INST_NO_CALLBACK)) 
             return callbacks[i].func;
 
     return NULL;
@@ -255,8 +257,12 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 {   
     vb->has_non_agct = false;
     
-    unsigned local_len_multiplier  = ctx_lt_sizeof_one[ctx->ltype];
+    unsigned local_len_multiplier  = lt_sizeof_one[ctx->ltype];
 
+    uint8_t flags = ctx->flags | 
+                    ((ctx->inst & CTX_INST_PAIR_LOCAL)  ? CTX_FL_PAIRED     : 0) |
+                    ((ctx->inst & CTX_INST_LOCAL_PARAM) ? CTX_FL_COPY_PARAM : 0);
+                    
     SectionHeaderCtx header = (SectionHeaderCtx) {
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_LOCAL,
@@ -264,12 +270,13 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
         .h.sec_compression_alg   = ctx->local_comp,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.flags                 = (uint8_t)(ctx->flags & 0xff) | ((ctx->inst & CTX_INST_PAIR_LOCAL) ? CTX_FL_PAIRED : 0), // 8 bit
+        .h.flags                 = flags,
         .dict_id                 = ctx->dict_id,
-        .ltype                   = ctx->ltype
+        .ltype                   = ctx->ltype,
+        .param                   = (flags & CTX_FL_COPY_PARAM) ? (uint8_t)ctx->local.param : 0
     };
 
-    CompGetLineCallback *callback = zfile_get_local_data_callback (vb->data_type, ctx->dict_id);
+    LocalGetLineCallback *callback = zfile_get_local_data_callback (vb->data_type, ctx);
 
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
                    callback ? NULL : ctx->local.data, 
@@ -291,7 +298,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 // 2. line by line data - by providing a callback + total_len
 void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type, 
                                       Buffer *section_data,          // option 1 - compress contiguous data
-                                      CompGetLineCallback callback, uint32_t total_len, // option 2 - compress data one line at a time
+                                      LocalGetLineCallback callback, uint32_t total_len, // option 2 - compress data one line at a time
                                       CompressionAlg comp_alg)
 {
     SectionHeader header;

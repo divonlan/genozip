@@ -38,7 +38,7 @@ extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
     { DT_FASTQ, &dict_id_fields[FASTQ_E3L], &dict_id_fields[FASTQ_E1L] }, \
     { DT_FASTQ, &dict_id_fields[FASTQ_E4L], &dict_id_fields[FASTQ_E1L] }, 
 
-#define FASTQ_LOCAL_COMPRESSOR_CALLBACKS  \
+#define FASTQ_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTQ, &dict_id_fields[FASTQ_QUAL], fastq_zip_get_start_len_line_i_qual },
 
 #endif

@@ -89,27 +89,21 @@ typedef struct { // initialize with mtf_init_iterator()
     int32_t prev_word_index;   // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
 
-// these values and flags are part of the file format (in SectionHeaderCtx.flags) - so values cannot be changed easily
-// CTX_LT_* values are consistent with BAM optional 'B' types (and extend them)
-// IMPORTANT - if adding or chaging LTs, all ctx_lt_* arrays in context.c need to be updated
-
-extern const char ctx_lt_to_sam_map[NUM_CTX_LT];
-extern const int ctx_lt_sizeof_one[NUM_CTX_LT];
-extern const bool ctx_lt_is_signed[NUM_CTX_LT];
-extern const int64_t ctx_lt_min[NUM_CTX_LT], ctx_lt_max[NUM_CTX_LT];
-
 // flags written to the genozip file (header.h.flags)
 #define CTX_FL_STORE_INT    0x01 // the values of this ctx.local are uint32_t, and should be stored, eg because they are a basis for a delta calculation (by this field or another one)
 #define CTX_FL_STORE_FLOAT  0x02 // the values of this ctx.local are float
 #define CTX_FL_PAIRED       0x04 // appears in header.flags of b250 or local sections, indicating to PIZ that the the same section from the same vb of the previous (paired) file should be read from disk too
 #define CTX_FL_STRUCTURED   0x08 // snips usually contain Structured
+#define CTX_FL_COPY_PARAM   0x10 // appears in header.flags of b250 or local sections, that ctx.b250/local.param should be copied from SectionHeaderCtx.param
 
 #define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
 
 // ZIP-only instructions NOT written to the genozip file
-#define CTX_INST_NO_STONS   0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=CTX_LT_TEXT)
-#define CTX_INST_PAIR_LOCAL 0x02 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
-#define CTX_INST_PAIR_B250  0x04 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
+#define CTX_INST_NO_STONS    0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
+#define CTX_INST_PAIR_LOCAL  0x02 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
+#define CTX_INST_PAIR_B250   0x04 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
+#define CTX_INST_NO_CALLBACK 0x08 // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
+#define CTX_INST_LOCAL_PARAM 0x10 // copy local.param to SectionHeaderCtx
 
 typedef union {
     int64_t i;
@@ -122,7 +116,7 @@ typedef struct Context {
     // ----------------------------
     const char name[DICT_ID_LEN+1]; // null-terminated printable dict_id
     DidIType did_i;            // the index of this ctx within the array vb->contexts
-    LocalType ltype;           // CTX_LT_* - type of local data - included in the section header
+    LocalType ltype;           // LT_* - type of local data - included in the section header
     int8_t flags;              // CTX_FL_* - flags to be included in section header (8 bits)
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
