@@ -134,7 +134,7 @@ static void main_sigsegv_handler (int sig)
     else {
         while (!exit_on_error_completed) 
             usleep (10000); // 10 millisec
-        exit (0);
+        exit (1);
     }
 
     //print_call_stack(); //this is useless - doesn't print function names

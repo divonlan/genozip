@@ -50,6 +50,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
     vb->contexts[FASTQ_NONREF].local_comp = COMP_ACGT;
 
     vb->contexts[FASTQ_QUAL]       .ltype = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
+    vb->contexts[FASTQ_QUAL]        .inst = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
 
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst  = CTX_INST_PAIR_LOCAL;

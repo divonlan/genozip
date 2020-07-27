@@ -112,6 +112,7 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_NONREF].local_comp = COMP_ACGT;
     vb->contexts[SAM_NONREF].ltype      = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype        = LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].inst         = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
     vb->contexts[SAM_TLEN].flags        = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags    = CTX_FL_STRUCTURED;
 }

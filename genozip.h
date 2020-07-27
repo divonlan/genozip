@@ -138,7 +138,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8, 
     // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
     // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
-    // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt locations and verbatim for other characters
+    // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters
     COMP_ACGT=9, COMP_NON_ACGT=10, 
     // compress a Illumina-binned QUAL sequenced dominated by 'F' characters
     COMP_QUAL_BINNED_ILLUMINA=11, COMP_QUAL_F_RUNS=12,

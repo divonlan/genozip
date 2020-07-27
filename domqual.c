@@ -59,8 +59,9 @@ static char domqual_has_dominant_value (VBlock *vb, LocalGetLineCallback get_lin
     if (char_counter['F'] > total_len / 2) return 'F'; 
 
     // get most frequent value
+#   define DOMQUAL_MINIMUM_THREADSHOLD 5 // not worth it if less than this (and will fail in SAM with 1)
     for (unsigned c=32; c <= 126; c++)  // printable ASCII only
-        if (char_counter[c] > total_len / 2 && char_counter[c]) 
+        if (char_counter[c] > total_len / 2 && char_counter[c] > DOMQUAL_MINIMUM_THREADSHOLD) 
             return c; // this will be 'F' in case of binned illumina
 
     return -1; // no value has more than 50% in the tested 4-line sample
@@ -233,7 +234,7 @@ void domqual_reconstruct (VBlockP vb, ContextP qual_ctx)
         else
             c = NEXTLOCAL (char, qual_ctx);
 
-        RECONSTRUCT1 (c);
+        RECONSTRUCT1 (c==' ' ? '*' : c); // in SAM, we re-wrote a '*' marking 'unavailable' as ' ' to avoid confusing with '*' as a valid quality store during optimizaition
         qual_len++;
     }
 
