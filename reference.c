@@ -223,7 +223,7 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
 static Range *ref_get_range_by_chrom (int32_t chrom, const char **chrom_name)
 {
     Context *ctx = &z_file->contexts[CHROM];
-    ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_uncompress_one_range: chrom=%d out of range - ctx->word_list.len=%u",
+    ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "Error in ref_get_range_by_chrom: chrom=%d out of range - ctx->word_list.len=%u",
             chrom, (uint32_t)ctx->word_list.len);
 
     *chrom_name = mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, 0, 0);
@@ -241,7 +241,7 @@ static Range *ref_get_range_by_chrom (int32_t chrom, const char **chrom_name)
         }
     }
 
-    ASSERT (r->last_pos != RA_MISSING_RA_MAX, "Error in ref_uncompress_one_range #2: chrom=%d \"%s\" appears as a reference section, but it doesn't appear in the file data",
+    ASSERT (r->last_pos != RA_MISSING_RA_MAX, "Error in ref_get_range_by_chrom #2: chrom=%d \"%s\" appears as a reference section, but it doesn't appear in the file data",
             chrom, *chrom_name);
 
     return r;
@@ -575,17 +575,28 @@ void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_nam
 */
 static int32_t ref_get_index_of_chrom_with_alt_name (VBlockP vb)
 {
-    if (vb->chrom_name_len > 2 || !str_is_int (vb->chrom_name, vb->chrom_name_len))  // we only handle 1 or 2 digit chrom names
-        goto fail;
+    // 22 -> chr22 (for all numeric chromosomes)
+    if (vb->chrom_name_len <= 2 && 
+        IS_DIGIT (vb->chrom_name[0]) && 
+        (vb->chrom_name_len == 1 || IS_DIGIT (vb->chrom_name[1]))) {
 
-    char chr_chrom[5] = "chr";
-    chr_chrom[3] = vb->chrom_name[0];
-    chr_chrom[4] = (vb->chrom_name_len == 2 ? vb->chrom_name[0] : 0);
+        char chr_chrom[5] = "chr";
+        chr_chrom[3] = vb->chrom_name[0];
+        chr_chrom[4] = (vb->chrom_name_len == 2 ? vb->chrom_name[0] : 0);
 
-    int32_t alternative_chrom_word_index = ref_get_contig_word_index (chr_chrom, vb->chrom_name_len+3); 
-    if (alternative_chrom_word_index == NIL) goto fail;
+        int32_t alternative_chrom_word_index = ref_get_contig_word_index (chr_chrom, vb->chrom_name_len+3); 
+        if (alternative_chrom_word_index == NIL) goto fail;
 
-    return (uint32_t)alternative_chrom_word_index;
+        return (uint32_t)alternative_chrom_word_index;
+    }
+
+    // chrM -> chrMT
+    if (vb->chrom_name_len==4 && !memcmp (vb->chrom_name, "chrM", 4)) {
+        int32_t alternative_chrom_word_index = ref_get_contig_word_index ("chrMT", 5); 
+        if (alternative_chrom_word_index == NIL) goto fail;
+
+        return (uint32_t)alternative_chrom_word_index;
+    }
 
 fail:
     return vb->chrom_node_index;
