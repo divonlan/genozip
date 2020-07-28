@@ -1,0 +1,4 @@
+@CO	Test cases: 
+@unaligned reads (no POS, RNAME, CIGAR, PNEXT, RNEXT, TLEN)
+SOL:7:266:787:209	0	*	0	25	*	*	0	0	TGTGT	[FF;F
+SOL:7:266:787:209	0	*	0	25	*	*	0	0	TGTGT	[FF;F

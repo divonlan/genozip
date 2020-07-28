@@ -45,6 +45,7 @@ mac/scripts/*
 !test-file.vcf
 !test-file.sam
 !test-file-domqual.sam
+!test-file-unaligned.sam
 !test-file.fa
 !test-file-ref.fa
 !test-file.fq

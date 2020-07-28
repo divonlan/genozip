@@ -129,6 +129,14 @@ for file in ${files[@]}; do
 
 done
 
+# files represent cases that cannot be fit into test-file.* because they would conflict
+files=(test-file-domqual.fq test-file-domqual.sam test-file-unaligned.sam)
+for file in ${files[@]}; do
+    test_header "$file - special case test"
+    cat $file | tr -d "\r" > unix-nl.$file
+    ./genozip unix-nl.$file -ft -o ${output}.genozip || exit 1
+done
+
 file=test-file.vcf
 test_header "$file - testing VCF with --sblock=1"
 ./genozip $file --sblock 1 -ft -o ${output}.genozip || exit 1
