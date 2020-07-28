@@ -27,6 +27,9 @@ void fast_vb_release_vb (VBlockFAST *vb)
     vb->contig_grepped_out = false;
     vb->pair_num_lines = vb->pair_vb_i = 0;
     memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
+    
+    if (z_file->data_type == DT_FASTA || z_file->data_type == DT_REF) 
+        vb->contexts[FASTA_SEQ].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
 }
    
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 
