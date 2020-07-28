@@ -327,6 +327,9 @@ static void main_genounzip (const char *z_filename,
     
     z_file->basename = file_basename (z_filename, false, "(stdin)", NULL, 0); // memory freed in file_close
     
+    // save flag as it might be modified by PIZ (for example, REF_STORED overriding REF_EXTERNAL)
+    SAVE_FLAG (flag_reference);
+
     // a loop for decompressing all components in unbind mode. in non-unbind mode, it collapses to one a single iteration.
     bool piz_successful;
     unsigned num_components=0;
@@ -342,6 +345,8 @@ static void main_genounzip (const char *z_filename,
         file_close (&txt_file, false); 
 
     file_close (&z_file, false);
+
+    RESTORE_FLAG (flag_reference);
 
     if (flag_replace && txt_filename && z_filename) file_remove (z_filename, true); 
 }

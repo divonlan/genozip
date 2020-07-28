@@ -577,10 +577,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             "Error: cannot use --reference with %s because it was not compressed with --reference", z_name);
 
     if (!flag_reading_reference && has_ref_sections) 
-        flag_reference = REF_STORED;
-
-    if (!flag_reading_reference && !has_ref_sections) 
-        flag_reference = REF_NONE; // reset in case flag was set to REF_STORE by previous file
+        flag_reference = REF_STORED; // possibly override REF_EXTERNAL
 
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
@@ -679,7 +676,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
     bool piz_successful = true;
 
     if (flag_unbind && !sections_has_more_components()) return false; // no more components
-    
+
     // read genozip header
     Md5Hash original_file_digest;
 
@@ -687,6 +684,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
     static DataType data_type = DT_NONE; 
 
     if (is_first_component) {
+
         data_type = piz_read_global_area (&original_file_digest);
         if (data_type == DT_NONE || flag_reading_reference) goto finish; // reference file has no VBs
 

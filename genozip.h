@@ -84,6 +84,9 @@ extern ExeType exe_type;
 typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP='h', TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
 
+#define SAVE_FLAG(flag) typeof(flag) save_##flag = flag ; flag=(typeof(flag))(uint64_t)0
+#define RESTORE_FLAG(flag) flag = save_##flag
+
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers, flag_show_aliases,

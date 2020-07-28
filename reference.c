@@ -69,9 +69,6 @@ Md5Hash ref_md5 = MD5HASH_NONE;
 #define CHROM_GENOME_REV 1
 #define CHROM_NAME_GENOME_REV "GENOME_REV"
 
-#define SAVE_FLAG(flag) typeof(flag) save_##flag = flag ; flag=(typeof(flag))(uint64_t)0
-#define RESTORE_FLAG(flag) flag = save_##flag
-
 // forward declarationsy
 static int32_t ref_get_index_of_chrom_with_alt_name (VBlockP vb); 
 static void ref_copy_chrom_data_from_z_file (void);
