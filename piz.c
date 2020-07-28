@@ -572,13 +572,15 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
 
     // check if the genozip file includes a reference
     bool has_ref_sections = sections_has_reference();
-    bool possibly_unaligned_sam = z_file->data_type == DT_SAM && !has_ref_sections && flag_reference != REF_EXTERNAL; // edge case for SAM zipped with REF_INTERNAL but no reference (eg unaligned) - it is still REF_STORED
 
     ASSERT (!has_ref_sections || flag_reference != REF_EXTERNAL || flag_reading_reference, 
             "Error: cannot use --reference with %s because it was not compressed with --reference", z_name);
 
-    if (!flag_reading_reference && (has_ref_sections || possibly_unaligned_sam)) 
+    if (!flag_reading_reference && has_ref_sections) 
         flag_reference = REF_STORED;
+
+    if (!flag_reading_reference && !has_ref_sections) 
+        flag_reference = REF_NONE; // reset in case flag was set to REF_STORE by previous file
 
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
