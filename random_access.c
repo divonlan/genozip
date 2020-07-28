@@ -93,6 +93,13 @@ void random_access_update_last_pos (VBlock *vb, int64_t last_pos)
     if (last_pos > ra_ent->max_pos) ra_ent->max_pos = last_pos;
 }
 
+void random_access_update_to_entire_chrom (VBlockP vb, int64_t first_pos_of_chrom, int64_t last_pos_of_chrom)
+{
+    RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    ra_ent->min_pos = first_pos_of_chrom;
+    ra_ent->max_pos = last_pos_of_chrom;
+}
+
 // called by ZIP compute thread, while holding the z_file mutex: merge in the VB's ra_buf in the global z_file one
 // note: the order of the merge is not necessarily the sequential order of VBs
 void random_access_merge_in_vb (VBlock *vb)

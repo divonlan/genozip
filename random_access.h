@@ -18,6 +18,7 @@ extern void random_access_update_chrom (VBlockP vb, int32_t chrom_node_index, co
 extern void random_access_update_pos (VBlockP vb, DidIType did_i_pos);
 extern void random_access_increment_last_pos (VBlockP vb, int64_t increment);
 extern void random_access_update_last_pos (VBlockP vb, int64_t last_pos);
+extern void random_access_update_to_entire_chrom (VBlockP vb, int64_t first_pos_of_chrom, int64_t last_pos_of_chrom);
 extern void random_access_merge_in_vb (VBlockP vb);
 extern void random_access_finalize_entries (BufferP ra_buf);
 extern void BGEN_random_access (Buffer *ra_buf);

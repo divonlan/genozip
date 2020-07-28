@@ -217,12 +217,12 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
     Range *range = ref_zip_get_locked_range ((VBlockP)vb, pos);
 
-    // when using an external refernce, pos has to be within the reference range (we already checked pos ref_zip_get_locked_range, now we check the end pos)
+/*    // when using an external refernce, pos has to be within the reference range (we already checked pos ref_zip_get_locked_range, now we check the end pos)
     int64_t final_seq_pos = pos + vb->ref_consumed - 1;
     ASSSEG (flag_reference == REF_INTERNAL || final_seq_pos <= range->last_pos, cigar,
             "Error: file has contig \"%.*s\", POS=%"PRId64" CIGAR=\"%s\", implying a final reference pos for this read at %"PRId64". However, the reference's last pos for this contig is %"PRId64,
             range->chrom_name_len, range->chrom_name, pos, cigar, final_seq_pos, range->last_pos);
-
+*/
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. if reference range is NULL as the hash entry for this range is unfortunately already occupied by another range (can only happen with REF_INTERNAL)
         (cigar[0] == '*' && cigar[1] == 0)) { // 2. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
@@ -247,8 +247,8 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     int subcigar_len=0;
     char cigar_op;
 
-    // get exact ref lengths to be consumed in this recursion level
-    uint32_t ref_len_this_level = MIN (vb->ref_consumed, range->last_pos - pos + 1);
+    uint32_t ref_len_this_level = (flag_reference == REF_INTERNAL ? MIN (vb->ref_consumed, range->last_pos - pos + 1)
+                                                                  : vb->ref_consumed); // possibly going around the end of the chromosome in case of a circular chromosome                                   
 
     uint32_t range_len = (range->last_pos - range->first_pos + 1);
     
@@ -274,18 +274,23 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
             
                 bool normal_base = IS_NUCLEOTIDE (seq[i]);
 
+                // circle around to beginning of chrom if out of range (can only happen with external reference, expected only with circular chromosomes) 
+                uint32_t actual_next_ref = next_ref % range_len; 
+
                 // case: we have not yet set a value for this site - we set it now. note: in ZIP, is_set means that the site
                 // will be needed for pizzing. With REF_INTERNAL, this is equivalent to saying we have set the ref value for the site
-                if (flag_reference == REF_INTERNAL && range && normal_base && !ref_is_nucleotide_set (range, next_ref)) { 
-                    ref_set_nucleotide (range, next_ref, seq[i]);
-                    bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
+                if (flag_reference == REF_INTERNAL && range && normal_base 
+                    && !ref_is_nucleotide_set (range, actual_next_ref)) { 
+                    
+                    ref_set_nucleotide (range, actual_next_ref, seq[i]);
+                    bit_array_set (&range->is_set, actual_next_ref); // we will need this ref to reconstruct
                     bit_array_set (bitmap, bit_i); bit_i++; // cannot increment inside the macro
                 }
 
                 // case our seq is identical to the reference at this site
-                else if (range && normal_base && seq[i] == ref_get_nucleotide (range, next_ref)) {
+                else if (range && normal_base && seq[i] == ref_get_nucleotide (range, actual_next_ref)) {
                     bit_array_set (bitmap, bit_i); bit_i++;
-                    bit_array_set (&range->is_set, next_ref); // we will need this ref to reconstruct
+                    bit_array_set (&range->is_set, actual_next_ref); // we will need this ref to reconstruct
                 }
                 
                 // case: ref is set to a different value - we store our value in nonref_ctx
@@ -314,7 +319,8 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
         // for Deletion or Skipping - we move the next_ref ahead
         else if (cigar_op == 'D' || cigar_op == 'N') {
-            unsigned ref_consumed = MIN (subcigar_len, range_len - next_ref);
+            unsigned ref_consumed = (flag_reference == REF_INTERNAL ? MIN (subcigar_len, range_len - next_ref)
+                                                                    : subcigar_len);
 
             next_ref         += ref_consumed;
             subcigar_len     -= ref_consumed;
@@ -361,9 +367,13 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
         sam_seg_seq_field (vb, seq + i, seq_len - i, range->last_pos + 1, subcigar_len ? updated_cigar : next_cigar, recursion_level + 1, level_0_seq_len, level_0_cigar);
     }
-    else // update RA of the VB with last pos of this line as implied by the CIGAR string
-        random_access_update_last_pos ((VBlockP)vb, this_seq_last_pos);
+    else { // update RA of the VB with last pos of this line as implied by the CIGAR string
+        if (this_seq_last_pos <= range->last_pos) // always the case in INTERNAL and non-circular EXTERNAL 
+            random_access_update_last_pos ((VBlockP)vb, this_seq_last_pos);
 
+        else  // we circled back to the beginning for the chromosome - i.e. this VB RA is the entire chromosome
+            random_access_update_to_entire_chrom ((VBlockP)vb, range->first_pos, range->last_pos);
+    }
 align_nonref_local: {
     // we align nonref_ctx->local to a 4-character boundary. this is because COMP_ACGT squeezes every 4 characters into a byte,
     // before compressing it with LZMA. In sorted SAM, we want subsequent identical sequences to have the same byte alignment
@@ -741,7 +751,9 @@ static void sam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned las
 
     ASSSEG (!(seq_is_available && *seq=='*'), seq, "seq=%.*s (seq_len=%u), but expecting a missing seq to be \"*\" only (1 character)", seq_data_len, seq, seq_data_len);
 
-    char cigar_snip[100] = { SNIP_SPECIAL, SAM_SPECIAL_CIGAR };
+    char cigar_snip[last_cigar_len + 50];
+    cigar_snip[0] = SNIP_SPECIAL;
+    cigar_snip[1] = SAM_SPECIAL_CIGAR;
     unsigned cigar_snip_len=2;
 
     // case: SEQ is "*" - we add a '-' to the CIGAR
