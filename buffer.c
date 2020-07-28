@@ -361,13 +361,15 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
     ASSERT (buf->name, "Error: buffer has no name. func=%s:%u", buf->func, buf->code_line);
 
     if (!memory) {
-#ifdef DEBUG
-        buf_display_memory_usage (true, 0, 0);
-#endif 
+        if (flag_show_memory)
+            buf_display_memory_usage (true, 0, 0);
+
         char s[30];
-        ABORT ("%s: Out of memroy. %sDetails: failed to allocate %s bytes. Buffer: %s", 
-               global_cmd, (command==ZIP ? "Try running with a lower vblock size using --vblock. " : ""), 
-               str_uint_commas (size + overhead_size, s), buf_desc(buf));
+        ABORT ("%s: Out of memroy. %s%sDetails: %s:%u failed to allocate %s bytes. Buffer: %s", 
+               global_cmd, 
+               (command==ZIP ? "Try running with a lower vblock size using --vblock. " : ""), 
+               (!flag_show_memory ? "To see memory details - run again with --show-memory. " : ""), 
+               func, code_line, str_uint_commas (size + overhead_size, s), buf_desc(buf));
     }
 
     buf->data        = memory + sizeof (uint64_t);
