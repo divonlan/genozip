@@ -82,7 +82,7 @@ typedef enum { REF_CONTIG, NUM_REF_FIELDS } RefFields;
 typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_GT, VCF_EOL, NUM_VCF_FIELDS } VcfFields;
 typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SEQ_BITMAP, SAM_NONREF, SAM_QUAL, SAM_QDOMRUNS, SAM_EOL, NUM_SAM_FIELDS } SamFields;
 typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, FASTQ_SEQ_BITMAP, FASTQ_NONREF, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_PLUS, FASTQ_E3L, FASTQ_QUAL, FASTQ_QDOMRUNS, FASTQ_E4L, NUM_FASTQ_FIELDS } FastqFields;
-typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, NUM_FASTA_FIELDS } FastaFields;
+typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_SEQ, FASTA_DESC, FASTA_COMMENT, FASTA_SEQ_BITMAP, FASTA_NONREF, FASTA_GPOS, FASTA_STRAND, NUM_FASTA_FIELDS } FastaFields;
 typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, NUM_GFF3_FIELDS } Gff3Fields;
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, NUM_ME23_FIELDS } Me23Fields;  
 
@@ -106,8 +106,8 @@ typedef struct DataTypeFields {
   {NUM_REF_FIELDS,   -1,         -1,         -1,        { "CONTIG", }, }, \
   {NUM_VCF_FIELDS,   VCF_POS,    VCF_INFO,   VCF_EOL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "GT", "EOL" },                    }, \
   {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_EOL,   { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SEQ" /* for stats display */, "NONREF", "QUAL", "QDOMRUNS", "EOL" }, }, \
-  {NUM_FASTQ_FIELDS, -1,         -1,         FASTQ_E1L, { "CONTIG", "DESC", "E1L", "SEQBITMP", "NONREF", "GPOS", "STRAND", "E2L", "PLUS", "E3L", "QUAL", "QDOMRUNS", "E4L" },                                                            }, \
-  {NUM_FASTA_FIELDS, -1,         -1,         FASTA_EOL, { "CONTIG", "LINEMETA", "EOL" },                                                         }, \
+  {NUM_FASTQ_FIELDS, -1,         -1,         FASTQ_E1L, { "CONTIG", "DESC", "E1L", "SQBITMAP", "NONREF", "GPOS", "STRAND", "E2L", "PLUS", "E3L", "QUAL", "QDOMRUNS", "E4L" },                                                            }, \
+  {NUM_FASTA_FIELDS, -1,         -1,         FASTA_EOL, { "CONTIG", "LINEMETA", "EOL", "SEQ", "DESC", "COMMENT", "SQBITMAP", "NONREF", "GPOS", "STRAND" },                                                         }, \
   {NUM_GFF3_FIELDS,  GFF3_START, GFF3_ATTRS, GFF3_EOL,  { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "EOL" },               }, \
   {NUM_ME23_FIELDS,  ME23_POS,   -1,         ME23_EOL,  { "CHROM", "POS", "ID", "GENOTYPE", "EOL" },                                                    }, \
 }

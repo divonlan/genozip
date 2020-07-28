@@ -38,9 +38,12 @@ void fasta_seg_initialize (VBlockFAST *vb)
 
         vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
-        Context *seq_ctx = mtf_get_ctx (vb, dict_id_FASTA_SEQ);
+        Context *seq_ctx = &vb->contexts[FASTA_SEQ];
         seq_ctx->local_comp = COMP_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
         seq_ctx->ltype = LT_SEQUENCE;
+
+        if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)
+            vb->contexts[FASTA_SEQ].inst |= CTX_INST_NO_CALLBACK; // override callback if we are segmenting to a reference
     }
 
     vb->contexts[FASTA_CONTIG].inst = CTX_INST_NO_STONS; // needs b250 node_index for reference
@@ -50,7 +53,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
 void fasta_make_ref_range (VBlockP vb)
 {
     Range *r = ref_make_ref_get_range (vb->vblock_i);
-    uint64_t seq_len = mtf_get_ctx (vb, dict_id_FASTA_SEQ)->local.len;
+    uint64_t seq_len = vb->contexts[FASTA_SEQ].local.len;
 
     // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_prepare_range_for_compress
@@ -101,10 +104,10 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
         if (!flag_make_reference) {
             // we segment using / | : and " " as separators. 
-            seg_compound_field ((VBlockP)vb, mtf_get_ctx (vb, dict_id_FASTA_DESC), 
+            seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], 
                                 line_start, line_len, &vb->desc_mapper, structured_DESC, true, 0);
             
-            seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);
+            seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_fields[FASTA_DESC], false, 0, &special_snip[2], &special_snip_len);
 
             special_snip[0] = SNIP_SPECIAL;
             special_snip[1] = FASTA_SPECIAL_DESC;
@@ -127,10 +130,9 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
     else if (*line_start == ';' || !line_len) {
         
         if (!flag_make_reference) {
-            seg_add_to_local_text ((VBlockP)vb, mtf_get_ctx (vb, dict_id_FASTA_COMMENT), 
-                                line_start, line_len, line_len); 
+            seg_add_to_local_text ((VBlockP)vb, &vb->contexts[FASTA_COMMENT], line_start, line_len, line_len); 
 
-            seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_COMMENT, false, 0, &special_snip[2], &special_snip_len);
+            seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_COMMENT], false, 0, &special_snip[2], &special_snip_len);
 
             special_snip[0] = SNIP_SPECIAL;
             special_snip[1] = FASTA_SPECIAL_COMMENT;
@@ -147,14 +149,14 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         DATA_LINE (vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
         DATA_LINE (vb->line_i)->seq_len        = line_len;
 
-        Context *seq_ctx = mtf_get_ctx (vb, dict_id_FASTA_SEQ);
+        Context *seq_ctx = &vb->contexts[FASTA_SEQ];
         seq_ctx->local.len += line_len;
 
         if (!flag_make_reference) {
 
             seq_ctx->txt_len += line_len;
 
-            seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_FASTA_SEQ, true, (int32_t)line_len, &special_snip[3], &special_snip_len);
+            seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_SEQ], true, (int32_t)line_len, &special_snip[3], &special_snip_len);
 
             special_snip[0] = SNIP_SPECIAL;
             special_snip[1] = FASTA_SPECIAL_SEQ;
@@ -162,6 +164,11 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
             seg_by_did_i (vb, special_snip, 3 + special_snip_len, FASTA_LINEMETA, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
 
             SEG_EOL (FASTA_EOL, true); 
+
+            if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+                fast_seg_seq (vb, line_start, line_len, FASTA_SEQ_BITMAP);
+                seq_ctx->local.len = 0; // we don't use FASTA_SEQ if segging to a reference
+            }
         }
 
         vb->last_line = FASTA_LINE_SEQ;
@@ -185,17 +192,17 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (flag_reading_reference) return false;  // doesn't apply when using FASTA as a reference
 
     // note that piz_read_global_area rewrites --header-only as flag_header_one
-    if (flag_header_one && (dict_id.num == dict_id_FASTA_SEQ || dict_id.num == dict_id_FASTA_COMMENT))
+    if (flag_header_one && (dict_id.num == dict_id_fields[FASTA_SEQ] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
         return true;
 
     // when grepping by I/O thread - skipping all sections but DESC
     if (flag_grep && (vb->grep_stages == GS_TEST) && 
-        dict_id.num != dict_id_FASTA_DESC && !dict_id_is_fast_desc_sf (dict_id))
+        dict_id.num != dict_id_fields[FASTA_DESC] && !dict_id_is_fast_desc_sf (dict_id))
         return true;
 
     // if grepping, compute thread doesn't need to decompressed DESC again
     if (flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
-        (dict_id.num == dict_id_FASTA_DESC || dict_id_is_fast_desc_sf (dict_id)))
+        (dict_id.num == dict_id_fields[FASTA_DESC] || dict_id_is_fast_desc_sf (dict_id)))
         return true;
 
     //if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)

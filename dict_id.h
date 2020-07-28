@@ -67,7 +67,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_OPTION_BD, dict_id_OPTION_BI,
                 
                 // our own
-                dict_id_OPTION_STRAND, dict_id_OPTION_RNAME, dict_id_OPTION_POS, dict_id_OPTION_CIGAR,  dict_id_OPTION_MAPQ,
+                dict_id_OPTION_STRAND, dict_id_OPTION_RNAME, dict_id_OPTION_POS, dict_id_OPTION_CIGAR, dict_id_OPTION_MAPQ,
 
                 // GVF attributes - standard
                 dict_id_ATTR_ID, dict_id_ATTR_Variant_seq, dict_id_ATTR_Reference_seq, dict_id_ATTR_Variant_freq,
@@ -80,9 +80,7 @@ extern uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE],
                 dict_id_ATTR_polyphen_prediction,
                 dict_id_ATTR_variant_peptide,
 
-                dict_id_ENSTid,  // private genozip dict
-
-                dict_id_FASTA_DESC, dict_id_FASTA_SEQ, dict_id_FASTA_COMMENT;
+                dict_id_ENSTid;  // private genozip dict
 
 extern void dict_id_initialize (DataType data_type);
 

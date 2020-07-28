@@ -573,7 +573,8 @@ static char *main_get_pair_filename (const char *fn1, const char *fn2)
 static void main_load_reference (const char *filename, bool is_first_file)
 {
     int old_flag_ref_whole_genome = flag_ref_whole_genome;
-    flag_ref_whole_genome = flag_pair || (main_get_file_dt (filename) == DT_FASTQ); // this flag is also used when PIZ reads a stored reference
+    flag_ref_whole_genome = flag_pair ||  // this flag is also used when PIZ reads a stored reference
+                            (main_get_file_dt (filename) == DT_FASTQ || main_get_file_dt (filename) == DT_FASTA); 
 
     // no need to load the reference if genocat just wants to see some sections 
     if (flag_genocat_info_only) return;
@@ -849,6 +850,10 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 
         flag_md5 = true;
         if (!flag_vblock) vb_set_global_max_memory_per_vb("1");
+
+        ASSINP (num_files <= 1, "%s: you can specify only one FASTA file when using --make-reference.\n"
+                "To create a reference from multiple FASTAs use something like this:\n"
+                "cat *.fa | %s --make-reference --input fasta --output myref.ref.genozip -", global_cmd, global_cmd);
     }
 
     // if --optimize was selected, all optimizations are turned on

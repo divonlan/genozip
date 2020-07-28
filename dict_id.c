@@ -38,9 +38,6 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          // private genozip dict
          dict_id_OPTION_STRAND=0, dict_id_OPTION_RNAME=0, dict_id_OPTION_POS=0, dict_id_OPTION_CIGAR=0, dict_id_OPTION_MAPQ=0; 
 
-// FASTA stuff
-uint64_t dict_id_FASTA_DESC=0, dict_id_FASTA_SEQ=0, dict_id_FASTA_COMMENT=0;
-
 // GVF stuff
 uint64_t dict_id_ATTR_ID=0, dict_id_ATTR_Variant_seq=0, dict_id_ATTR_Reference_seq=0, dict_id_ATTR_Variant_freq=0,
          dict_id_ATTR_Dbxref=0, // from from GRCh37/38 - example: "dbSNP_151:rs1282280967"
@@ -83,7 +80,6 @@ void dict_id_initialize (DataType data_type)
     }
 
     dict_id_WindowsEOL = dict_id_type_1 (dict_id_make ("#", 1)).num; 
-    dict_id_FASTA_SEQ  = dict_id_field (dict_id_make ("SEQ", 3)).num; // we always need this, as it is used by reference.c
 
     switch (data_type) { 
     case DT_VCF:
@@ -168,8 +164,6 @@ void dict_id_initialize (DataType data_type)
         break;
 
     case DT_FASTA:
-        dict_id_FASTA_DESC    = dict_id_field (dict_id_make ("DESC",    4)).num;
-        dict_id_FASTA_COMMENT = dict_id_field (dict_id_make ("COMMENT", 7)).num;
         break;
 
     case DT_GFF3:

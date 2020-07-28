@@ -168,17 +168,44 @@ finish:
 static inline bool txtfile_fastq_is_end_of_line (VBlock *vb, 
                                                  int32_t txt_i) // index of a \n in txt_data
 {
+#   define IS_NL_BEFORE_QUAL_LINE(i) \
+        ((i > 3) && ((txt[i-2] == '\n' && txt[i-1] == '+') || /* \n line ending case */ \
+                     (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r'))) /* \r\n line ending case */
+    
     ARRAY (char, txt, vb->txt_data);
 
     // if we're not at the end of the data - we can just look at the next character
+    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
+    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
     if (txt_i < vb->txt_data.len-1)
-        return txt[txt_i+1] == '@';
+        return txt[txt_i+1] == '@' && !IS_NL_BEFORE_QUAL_LINE(txt_i);
 
     // if we're at the end of the line, we scan back to the previous \n and check if it is at the +
     for (int32_t i=txt_i-1; i >= 0; i--) 
         if (txt[i] == '\n') 
-            return (i > 3) && ((txt[i-2] == '\n' && txt[i-1] == '+') || // \n line ending case
-                               (txt[i-3] == '\n' && txt[i-2] == '+' && txt[i-1] == '\r')); // \r\n line ending case;
+            return IS_NL_BEFORE_QUAL_LINE(i);
+
+    // we can't find a complete FASTQ block in the entire vb data
+    ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
+    return 0; // squash compiler warning ; never reaches here
+}
+
+// returns true if txt_data[txt_i] is the end of a FASTA read (= next char is > or end-of-file)
+static inline bool txtfile_fasta_is_end_of_line (VBlock *vb, 
+                                                 int32_t txt_i) // index of a \n in txt_data
+{
+    ARRAY (char, txt, vb->txt_data);
+
+    // if we're not at the end of the data - we can just look at the next character
+    // if it is a @ then that @ is a new record EXCEPT if the previous character is + and then
+    // @ is actually a quality value... (we check two previous characters, as the previous one might be \r)
+    if (txt_i < vb->txt_data.len-1)
+        return txt[txt_i+1] == '>';
+
+    // if we're at the end of the line, we scan back to the previous \n and check if it NOT the >
+    for (int32_t i=txt_i-1; i >= 0; i--) 
+        if (txt[i] == '\n') 
+            return txt[txt_i+1] != '>'; // this row is a sequence row, not a description row
 
     // we can't find a complete FASTQ block in the entire vb data
     ABORT ("Error when reading %s: last FASTQ record appears truncated, or the record is bigger than vblock", txt_name);
@@ -270,6 +297,11 @@ void txtfile_read_vblock (VBlock *vb)
 
                 // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
                 if (txt_file->data_type == DT_FASTQ && !txtfile_fastq_is_end_of_line (vb, i)) continue;
+
+                // when compressing FASTA with a reference - an "end of line" is one that the next character is >, or it is the end of the file
+                // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), line cannot be too long - they 
+                // must fit in a VB
+                if (txt_file->data_type == DT_FASTA && (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) && !txtfile_fasta_is_end_of_line (vb, i)) continue;
 
                 unconsumed_len = vb->txt_data.len-1 - i;
                 break;

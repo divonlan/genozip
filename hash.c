@@ -171,7 +171,7 @@ void hash_alloc_local (VBlock *segging_vb, Context *vb_ctx)
         break;
 
     case DT_FASTA:
-        if (vb_ctx->dict_id.num == dict_id_FASTA_DESC ||
+        if (vb_ctx->dict_id.num == dict_id_fields[FASTA_DESC] ||
             vb_ctx->dict_id.num == dict_id_fields[FASTA_LINEMETA] ||
             vb_ctx->dict_id.num == dict_id_fields[FASTA_EOL])
             
