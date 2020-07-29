@@ -5,8 +5,8 @@ output=test-output
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
 
-ref37=data/Homo_sapiens.GRCh37.dna.toplevel.ref.genozip
-ref38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
+GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 
 # -----------------
 # platform settings
@@ -209,39 +209,39 @@ file=test-file-ref.fa
 rm -f copy.${file}.ref.genozip
 
 test_header "Testing command line with mixed SAM and FASTQ files with --reference"
-echo "Note: '$ref38' needs to be up to date with the latest genozip format"
+echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
 rm -f td/*.genozip
-./genozip -f --md5 --reference $ref38 td/test.transfly-unsorted.sam td/test.transfly.fq td/test.transfly-sorted.sam || exit 1
-./genounzip -t -e $ref38 td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
+./genozip -f --md5 --reference $GRCh38 td/test.transfly-unsorted.sam td/test.transfly.fq td/test.transfly-sorted.sam || exit 1
+./genounzip -t -e $GRCh38 td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
 
 test_header "Testing multiple bound SAM with --REFERENCE" 
 rm -f td/*.genozip
-./genozip -f --md5 --REFERENCE $ref38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam -o ${output}.genozip || exit 1
+./genozip -f --md5 --REFERENCE $GRCh38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam -o ${output}.genozip || exit 1
 ./genounzip -t ${output}.genozip || exit 1
 
 test_header "Testing paired FASTQ with --reference, FASTQs compressed with xz and bzip2"
 rm -f td/*.genozip
-./genozip -f --md5 -e $ref38 --pair td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.xz -o td/pair.genozip || exit 1
-./genounzip -t -e $ref38 td/pair.genozip || exit 1
+./genozip -f --md5 -e $GRCh38 --pair td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.xz -o td/pair.genozip || exit 1
+./genounzip -t -e $GRCh38 td/pair.genozip || exit 1
 
 test_header "Testing paired FASTQ with --REFERENCE"
 rm -f td/*.genozip
-./genozip --force -m2E $ref38 --output td/pair.genozip td/test.divon-R1.100K.fq.bz2 td/test.divon-R2.100K.fq.xz || exit 1
+./genozip --force -m2E $GRCh38 --output td/pair.genozip td/test.divon-R1.100K.fq.bz2 td/test.divon-R2.100K.fq.xz || exit 1
 ./genounzip -t td/pair.genozip || exit 1
 
-test_header "Testing multiple bound VCF with --reference (GRCh37), and unbind"
+test_header "Testing multiple bound VCF with --reference (hg19), and unbind"
 rm -f td/*.genozip
 file1=copy1.test-file.vcf
 file2=copy2.test-file.vcf
 cp td/test.GFX0241869.filtered.snp.vcf $file1
 cp td/test.GFX0241869.filtered.snp.vcf $file2
-./genozip -f --md5 --reference $ref37 $file1 $file2 --output ${output}.genozip || exit 1
-./genounzip -t -e $ref37 --unbind ${output}.genozip || exit 1
+./genozip -f --md5 --reference $hg19 $file1 $file2 --output ${output}.genozip || exit 1
+./genounzip -t -e $hg19 --unbind ${output}.genozip || exit 1
 rm -f $file1 $file2 ${output}.genozip
 
-test_header "Testing multiple VCF with --REFERENCE (GRCh37)" 
+test_header "Testing multiple VCF with --REFERENCE (hg19)" 
 rm -f td/*.genozip
-./genozip -f --md5 --REFERENCE $ref37 td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf td/test.GFX0241869.filtered.snp.vcf || exit 1
+./genozip -f --md5 --REFERENCE $hg19 td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf td/test.GFX0241869.filtered.snp.vcf || exit 1
 ./genounzip -t td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip td/test.GFX0241869.filtered.snp.vcf.genozip || exit 1
 
 printf "\nALL GOOD!\n"
