@@ -577,7 +577,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
             "Error: cannot use --reference with %s because it was not compressed with --reference", z_name);
 
     if (!flag_reading_reference && has_ref_sections) 
-        flag_reference = REF_STORED; // possibly override REF_EXTERNAL
+        flag_reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in main_genounzip)
 
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
