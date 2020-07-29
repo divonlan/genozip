@@ -624,8 +624,8 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
         }
 
         ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL || flag_genocat_info_only, 
-                "Error: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
-                header->ref_filename);
+                "Error reading %s: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
+                z_name, header->ref_filename);
 
         // just warn, don't fail - there are use cases where the user might do this on purpose
         ASSERTW (flag_reference == REF_NONE || flag_reference == REF_INTERNAL || md5_is_equal (header->ref_file_md5, ref_md5), 

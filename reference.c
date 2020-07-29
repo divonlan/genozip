@@ -708,7 +708,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 
-    SAVE_FLAG (flag_show_headers);
+    RESET_FLAG (flag_show_headers);
     zfile_read_section (ref_file, evb, ra->vblock_i, NO_SB_I, &ref_seq_section, "ref_seq_section", 
                         sizeof (SectionHeaderReference), SEC_REFERENCE, *sl);
     RESTORE_FLAG (flag_show_headers);
@@ -1003,7 +1003,7 @@ void ref_compress_ref (void)
     spin_initialize (ref_stored_ra_spin);
 
     // compression of reference doesn't output % progress
-    SAVE_FLAG (flag_quiet);
+    RESET_FLAG (flag_quiet);
     if (flag_show_reference) flag_quiet = true; // show references instead of progress
 
     // proceed to compress all ranges that have still have data in them after copying
@@ -1105,23 +1105,23 @@ void ref_load_external_reference (bool display)
     z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
         
     // save and reset flags that are intended to operate on the compressed file rather than the reference file
-    SAVE_FLAG (flag_test);
-    SAVE_FLAG (flag_unbind);
-    SAVE_FLAG (flag_md5);
-    SAVE_FLAG (flag_show_time);
-    SAVE_FLAG (flag_show_memory);
-    SAVE_FLAG (flag_no_header);
-    SAVE_FLAG (flag_header_one);
-    SAVE_FLAG (flag_header_only);
-    SAVE_FLAG (flag_grep);
-    SAVE_FLAG (flag_show_index);
-    SAVE_FLAG (flag_show_dict);
-    SAVE_FLAG (flag_show_b250);
-    SAVE_FLAG (dict_id_show_one_b250);
-    SAVE_FLAG (dict_id_show_one_dict);
-    SAVE_FLAG (dump_one_b250_dict_id);
-    SAVE_FLAG (dump_one_local_dict_id);
-    SAVE_FLAG (flag_list_chroms);
+    RESET_FLAG (flag_test);
+    RESET_FLAG (flag_unbind);
+    RESET_FLAG (flag_md5);
+    RESET_FLAG (flag_show_time);
+    RESET_FLAG (flag_show_memory);
+    RESET_FLAG (flag_no_header);
+    RESET_FLAG (flag_header_one);
+    RESET_FLAG (flag_header_only);
+    RESET_FLAG (flag_grep);
+    RESET_FLAG (flag_show_index);
+    RESET_FLAG (flag_show_dict);
+    RESET_FLAG (flag_show_b250);
+    RESET_FLAG (dict_id_show_one_b250);
+    RESET_FLAG (dict_id_show_one_dict);
+    RESET_FLAG (dump_one_b250_dict_id);
+    RESET_FLAG (dump_one_local_dict_id);
+    RESET_FLAG (flag_list_chroms);
 
     CommandType save_command = command         ; 
     command= PIZ;
