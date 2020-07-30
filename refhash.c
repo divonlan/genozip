@@ -419,7 +419,14 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
     
     // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
     int64_t gpos, last_gpos=0;
-    for (uint32_t i=0; i < seq_len; i++) {
+
+    // in case of --fast, we check only 1/5 of the bases, and we are content with a match (not searching any further) if it 
+    // has at most 10 SNPs. On our test file, this reduced the number of calls to refhash_get_match_len by about 4X, 
+    // at the cost of the compressed file being about 11% larger
+    uint32_t density = (flag_fast ? 5 : 1);
+    uint32_t max_snps_for_perfection = (flag_fast ? 10 : 2);
+
+    for (uint32_t i=0; i < seq_len; i += density) {    
         
         Direction found = NOT_FOUND;
 
@@ -456,7 +463,7 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
                     best_is_forward = (fwd);     \
                     /* note: we allow 2 snps and we still consider the match good enough and stop looking further */\
                     /* compared to stopping only if match_len==seq_len, this adds about 1% to the file size, but is significantly faster */\
-                    if (match_len >= (seq_len-2) * 2) { /* we found (almost) the best possible match */ \
+                    if (match_len >= (seq_len - max_snps_for_perfection) * 2) { /* we found (almost) the best possible match */ \
                         *is_all_ref = maybe_perfect_match && (match_len == seq_len*2); /* perfect match */ \
                         goto done;               \
                     }                            \
@@ -485,8 +492,10 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
 
             gpos -= (finds[find_i].found == FORWARD ? finds[find_i].i : seq_len_64-1 - finds[find_i].i);
 
-            if ((gpos >= 0) && (gpos + seq_len_64 < genome_size))
+            if ((gpos >= 0) && (gpos + seq_len_64 < genome_size)) {
+
                 UPDATE_BEST (finds[find_i].found);
+            }
         }
     }
 
@@ -495,6 +504,7 @@ done:
     *is_forward = best_is_forward;
 
     COPY_TIMER (vb->profile.refhash_best_match);
+
     return best_gpos != -1;
 }
 
@@ -549,7 +559,7 @@ void refhash_free (void)
         for (unsigned layer_i=0; layer_i < num_layers; layer_i++) 
             buf_destroy (&refhash_bufs[layer_i]);
 
-        FREE (refhash_bufs); refhash_bufs = NULL;
-        FREE (refhashs);     refhashs     = NULL;
+        FREE (refhash_bufs);
+        FREE (refhashs);
     }
 }

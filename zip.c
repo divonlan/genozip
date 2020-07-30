@@ -119,8 +119,8 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
     }
 }
 
-// here we translate the mtf_i indeces creating during seg_* to their finally dictionary indeces in base-250.
-// Note that the dictionary indeces have changed since segregate (which is why we needed this intermediate step)
+// here we translate the mtf_i indices creating during seg_* to their finally dictionary indices in base-250.
+// Note that the dictionary indices have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
 void zip_generate_b250_section (VBlock *vb, Context *ctx)
@@ -187,7 +187,10 @@ void zip_generate_b250_section (VBlock *vb, Context *ctx)
 
 static void zip_update_txt_counters (VBlock *vb, bool update_txt_file)
 {
-    if (update_txt_file) txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
+    // note: in case of an FASTQ with flag_optimize_DESC, we already updated this in fastq_txtfile_count_lines
+    if (update_txt_file && !(flag_optimize_DESC && vb->data_type == DT_FASTQ)) 
+        txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
+        
     z_file->num_lines                        += (int64_t)vb->lines.len; // lines in all bound files in this z_file
     z_file->txt_data_so_far_single           += (int64_t)vb->vb_data_size;
     z_file->txt_data_so_far_bind             += (int64_t)vb->vb_data_size;

@@ -349,6 +349,10 @@ void txtfile_read_vblock (VBlock *vb)
     if (file_is_read_via_int_decompressor (txt_file))
         vb->vb_data_read_size = file_tell (txt_file) - pos_before; // gz/bz2 compressed bytes read
 
+    // in case we're optimizing DESC in FASTQ, we need to know the number of lines
+    if (vb->data_type == DT_FASTQ && flag_optimize_DESC)
+        fastq_txtfile_count_lines (vb);
+        
     buf_free (&block_md5_buf);
     buf_free (&block_start_buf);
     buf_free (&block_len_buf);

@@ -594,9 +594,8 @@ void file_close (File **file_p,
         buf_destroy (&file->section_list_dict_buf);
         buf_destroy (&file->unconsumed_txt);
 
-        if (file->name)     FREE (file->name);
-        if (file->basename) FREE ((char*)file->basename);
-        
+        FREE (file->name);
+        FREE (file->basename);
         FREE (file);
     }
 }

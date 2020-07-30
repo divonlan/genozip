@@ -809,7 +809,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM ("QNAME");
-    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, &vb->qname_mapper, structured_QNAME, false, 1 /* \n */);
+    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, &vb->qname_mapper, structured_QNAME, false, 0, 1 /* \n */);
 
     SEG_NEXT_ITEM (SAM_FLAG);
 

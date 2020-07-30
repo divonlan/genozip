@@ -23,7 +23,7 @@ typedef enum { PHASE_UNKNOWN      = '-',
                                                               : &(vb)->txt_data.data[(dl)->phase_data_start])
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-    // the following 3 are indeces, lens into txt_data or txt_data_spillover. 
+    // the following 3 are indices, lens into txt_data or txt_data_spillover. 
     bool genotype_data_spillover, haplotype_data_spillover, phase_data_spillover;
     uint32_t genotype_data_start, haplotype_data_start, phase_data_start;
     uint32_t genotype_data_len, haplotype_data_len, phase_data_len;

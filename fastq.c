@@ -38,7 +38,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[FASTQ_SEQ_BITMAP] .ltype = LT_BITMAP; 
+    vb->contexts[FASTQ_SQBITMAP] .ltype = LT_BITMAP; 
     vb->contexts[FASTQ_STRAND]     .ltype = LT_BITMAP;
 
     vb->contexts[FASTQ_GPOS]       .ltype = LT_UINT32;
@@ -63,6 +63,12 @@ void fastq_seg_initialize (VBlockFAST *vb)
     }
     else
         vb->contexts[FASTQ_STRAND].local_comp = COMP_NONE; // bz2 and lzma only make it bigger
+
+    if (flag_optimize_DESC) {
+        vb->optimized_desc_len = strlen (txt_file->basename) + 2; // +2 for @ :
+        vb->optimized_desc = malloc (vb->optimized_desc_len + 30); // leave room for the line number to follow
+        sprintf (vb->optimized_desc, "@%s:", txt_file->basename);
+    }
 }
 
 void fastq_seg_finalize (VBlockP vb)
@@ -91,6 +97,21 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
 
     *unconsumed_len = after - next;
     return true;
+}
+
+// used in case of flag_optimize_DESC to count the number of lines, as we need it for the description
+void fastq_txtfile_count_lines (VBlockP vb)
+{
+    uint32_t num_lines = 0;
+    ARRAY (const char, txt, vb->txt_data);
+
+    for (uint32_t i=0; i < vb->txt_data.len; i++)
+        if (txt[i] == '\n') num_lines++;
+
+    ASSERT (num_lines % 4 == 0, "Error in fastq_txtfile_count_lines: expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
+
+    vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
+    txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
 }
 
 // called from I/O thread ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
@@ -188,8 +209,16 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     // See here for details of Illumina subfields: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     next_field = seg_get_next_line (vb, field_start, &len, &field_len, has_13, "DESC");
  
+    // if flag_optimize_DESC is on, we replace the description with filename:line_i 
+    unsigned unoptimized_len = 0; // 0 unless optimized
+    if (flag_optimize_DESC) {
+        unoptimized_len = field_len;
+        field_start = vb->optimized_desc;
+        field_len = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);        
+    }
+
     // we segment it using / | : and " " as separators. 
-    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, &vb->desc_mapper, structured_DESC, true, 0);
+    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, &vb->desc_mapper, structured_DESC, true, unoptimized_len, 0);
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
@@ -197,13 +226,13 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     dl->seq_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, has_13, "SEQ");
 
-    fast_seg_seq (vb, seq_start, dl->seq_len, FASTQ_SEQ_BITMAP);
+    fast_seg_seq (vb, seq_start, dl->seq_len, FASTQ_SQBITMAP);
 
     // Add LOOKUP snip with seq_len
     char snip[10];
     snip[0] = SNIP_LOOKUP;
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SEQ_BITMAP, dl->seq_len); 
+    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SQBITMAP, dl->seq_len); 
 
     SEG_EOL (FASTQ_E1L, true);
 
@@ -280,7 +309,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
-    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == FASTQ_SEQ_BITMAP, "Error in fastq_piz_reconstruct_seq: context is not FASTQ_SEQ_BITMAP");
+    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == FASTQ_SQBITMAP, "Error in fastq_piz_reconstruct_seq: context is not FASTQ_SQBITMAP");
 
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
@@ -357,7 +386,7 @@ void fastq_piz_reconstruct_vb (VBlockFAST *vb)
         // missing line EOLs and they will show wrong ones to the remaining lines. minor bc in virtually all files,
         // the EOL is identical in all lines
         if (!flag_header_one) { // note that piz_read_global_area rewrites --header-only as flag_header_one
-            piz_reconstruct_from_ctx (vb, FASTQ_SEQ_BITMAP, 0);
+            piz_reconstruct_from_ctx (vb, FASTQ_SQBITMAP, 0);
             piz_reconstruct_from_ctx (vb, FASTQ_E2L,  0);
             piz_reconstruct_from_ctx (vb, FASTQ_PLUS, 0);
             piz_reconstruct_from_ctx (vb, FASTQ_E3L,  0);

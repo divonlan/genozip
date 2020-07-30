@@ -460,6 +460,7 @@ void seg_compound_field (VBlock *vb,
                          Context *field_ctx, const char *field, unsigned field_len, 
                          SubfieldMapper *mapper, Structured st,
                          bool ws_is_sep, // whitespace is separator - separate by ' ' at '\t'
+                         unsigned nonoptimized_len, // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
                          unsigned add_for_eol) // account for characters beyond the component seperators
 {
     const char *snip = field;
@@ -491,6 +492,23 @@ void seg_compound_field (VBlock *vb,
             buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
                        CTX_GROWTH, "contexts->mtf_i", sf_ctx->did_i);
 
+            // if snip is an integer, we store a delta
+            char delta_snip[30];
+            unsigned original_snip_len = snip_len;
+
+            if (str_is_int (snip, snip_len)) {
+                delta_snip[0] = SNIP_SELF_DELTA;
+
+                int64_t this_value = (int64_t)strtoull (snip, NULL, 10);
+                int64_t delta = this_value - sf_ctx->last_value.i;
+                snip_len = 1 + str_int (delta, &delta_snip[1]);
+                snip = delta_snip;
+
+                sf_ctx->last_value.i = this_value;
+                sf_ctx->inst  |= CTX_INST_NO_STONS;
+                sf_ctx->flags |= CTX_FL_STORE_INT;
+            }
+            
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted
             uint32_t word_index = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, snip, snip_len, NULL);
@@ -525,7 +543,7 @@ void seg_compound_field (VBlock *vb,
 
             NEXTENT (uint32_t, sf_ctx->mtf_i) = word_index;
 
-            sf_ctx->txt_len += snip_len;
+            sf_ctx->txt_len += nonoptimized_len ? 0 : original_snip_len;
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
@@ -541,7 +559,7 @@ void seg_compound_field (VBlock *vb,
 
     st.num_items = sf_i;
 
-    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, sf_i-1 + add_for_eol);
+    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, (nonoptimized_len ? nonoptimized_len : sf_i-1) + add_for_eol);
 }
 
 void seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 

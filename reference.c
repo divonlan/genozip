@@ -103,10 +103,10 @@ void ref_unload_reference (bool force_clean_all)
         if (buf_is_allocated (&ranges)) {
             ARRAY (Range, rng, ranges);
             for (unsigned i=0; i < ranges.len ; i++) {
-                if (rng[i].ref.words)    FREE (rng[i].ref.words);
-                if (rng[i].is_set.words) FREE (rng[i].is_set.words);
+                FREE (rng[i].ref.words);
+                FREE (rng[i].is_set.words);
                 if (primary_command == ZIP && flag_reference == REF_INTERNAL) 
-                    FREE ((char *)rng[i].chrom_name); // allocated only in ZIP/REF_INTERNAL - otherwise a pointer into another Buffer
+                    FREE (rng[i].chrom_name); // allocated only in ZIP/REF_INTERNAL - otherwise a pointer into another Buffer
             }
             buf_free (&ranges);
 
@@ -126,7 +126,7 @@ void ref_unload_reference (bool force_clean_all)
             for (unsigned i=0; i < genome_num_muteces; i++)
                 pthread_mutex_destroy (&genome_muteces[i]);
 
-            FREE (genome_muteces) genome_muteces = NULL;
+            FREE (genome_muteces);
             genome_num_muteces = 0;
         }
 
@@ -629,7 +629,7 @@ Range *ref_zip_get_locked_range (VBlockP vb, int64_t pos)  // out - index of pos
                 MIN (vb->chrom_name_len, 100), vb->chrom_name, ref_filename);
     }
 
-    // one_chrom_ranges_buf is an array of indeces into ranges - one index per range of size REF_NUM_SITES_PER_RANGE
+    // one_chrom_ranges_buf is an array of indices into ranges - one index per range of size REF_NUM_SITES_PER_RANGE
     // note: in case of REF_INTERNAL, we can get hash conflicts, but in case of REF_EXTERNAL, it is guaranteed that there are no conflicts
     uint32_t range_id = (flag_reference == REF_INTERNAL) ? ref_range_id_by_hash (vb, range_i) : vb->chrom_node_index;
 

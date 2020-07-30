@@ -105,7 +105,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         if (!flag_make_reference) {
             // we segment using / | : and " " as separators. 
             seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], 
-                                line_start, line_len, &vb->desc_mapper, structured_DESC, true, 0);
+                                line_start, line_len, &vb->desc_mapper, structured_DESC, true, 0, 0);
             
             seg_prepare_snip_other (SNIP_REDIRECTION, (DictId)dict_id_fields[FASTA_DESC], false, 0, &special_snip[2], &special_snip_len);
 
@@ -166,7 +166,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
             SEG_EOL (FASTA_EOL, true); 
 
             if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-                fast_seg_seq (vb, line_start, line_len, FASTA_SEQ_BITMAP);
+                fast_seg_seq (vb, line_start, line_len, FASTA_SQBITMAP);
                 seq_ctx->local.len = 0; // we don't use FASTA_SEQ if segging to a reference
             }
         }

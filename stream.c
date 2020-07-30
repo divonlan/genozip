@@ -317,7 +317,6 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
         exit_code = stream_wait_for_exit (*stream);
 
     FREE (*stream);
-    *stream = NULL;
 
     return exit_code;
 }

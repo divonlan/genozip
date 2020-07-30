@@ -136,11 +136,12 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - bug fixes
 
 6.0.0
-- Added compress against reference for FASTQ, SAM and VCF - new options --reference and --REFERENCE
+- Added compression against reference for FASTQ, SAM and VCF - new options --reference and --REFERENCE
 - Added --pair to compresses pairs of pair-ended fastq files together, resulting in significantly better compression
 - Added Domqual compression method for Illumina binned quality scores in FASTQ and SAM
 - Added ACGT compression method for nucleotide sequences
 - Added new data type for reference files - and an option for creating a reference file from a FASTA - --make-reference
 - Added better compression for FORMAT/PS in VCF
+- Added --optimize-DESC for FASTQ optimization
 - Added many options including --list-chroms, --dump-one-local, --show-reference, --show-ref-index
 - Removed backward compatability with versions v1 and v5. Use genozip version 5 to decompress files of all previous versions.

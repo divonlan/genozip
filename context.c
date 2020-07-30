@@ -893,8 +893,8 @@ void mtf_sort_dictionaries_vb_1(VBlock *vb)
 
         Context *ctx = &vb->contexts[did_i];
 
-        // prepare sorter array containing indeces into ctx->mtf. We are going to sort it rather than sort mtf directly
-        // as the b250 data contains node indeces into ctx->mtf.
+        // prepare sorter array containing indices into ctx->mtf. We are going to sort it rather than sort mtf directly
+        // as the b250 data contains node indices into ctx->mtf.
         static Buffer sorter = EMPTY_BUFFER;
         buf_alloc (vb, &sorter, ctx->mtf.len * sizeof (int32_t), CTX_GROWTH, "sorter", ctx->did_i);
         for (uint32_t i=0; i < ctx->mtf.len; i++)

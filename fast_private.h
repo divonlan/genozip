@@ -23,7 +23,9 @@ typedef struct VBlockFAST {     // for FASTA and FASTQ
     // FASTQ - pairing stuff - used if we are the 2nd file in the pair 
     uint32_t pair_vb_i;      // the equivalent vb_i in the first file, or 0 if this is the first file
     uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
-
+    char *optimized_desc;    // base of desc in flag_optimize_DESC 
+    uint32_t optimized_desc_len;
+    
     // FASTA stuff
     bool contig_grepped_out;
     // note: last_line is initialized to FASTA_LINE_SEQ (=0) so that a ; line as the first line of the VB is interpreted as a description, not a comment

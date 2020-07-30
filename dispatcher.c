@@ -188,9 +188,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     
     if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent bound files
 
-    FREE (dd);
-
-    *dispatcher = NULL;
+    FREE (*dispatcher);
 }
 
 static void *dispatcher_thread_entry (void *thread_)

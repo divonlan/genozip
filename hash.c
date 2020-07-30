@@ -17,7 +17,7 @@
 typedef struct {        
     int32_t node_index;       // index into Context.ol_mtf (if < ol_mtf.len) or Context.mtf or NIL
     uint32_t next;            // linked list - index into Context.global/local_hash or NIL
-                              //               local_hash indeces started at LOCAL_HASH_OFFSET
+                              //               local_hash indices started at LOCAL_HASH_OFFSET
 } LocalHashEnt;
 
 #pragma pack(4)

@@ -95,7 +95,6 @@ static void vcf_vb_free_buffer_array (Buffer **buf_array, unsigned buf_array_len
         buf_destroy (&(*buf_array)[i]);
 
     FREE (*buf_array);
-    *buf_array = NULL;
 }
 
 // free memory allocations that assume subsequent files will have the same number of samples.

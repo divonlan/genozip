@@ -587,7 +587,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
         if (need_random_access) {
             zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
-            // update chrom node indeces using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
+            // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
             regions_make_chregs();
 
             // if the regions are negative, transform them to the positive complement instead

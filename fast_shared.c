@@ -30,6 +30,9 @@ void fast_vb_release_vb (VBlockFAST *vb)
     
     if (z_file && (z_file->data_type == DT_FASTA || z_file->data_type == DT_REF))
         vb->contexts[FASTA_SEQ].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
+
+    FREE (vb->optimized_desc);
+    vb->optimized_desc_len = 0;
 }
    
 // called by I/O thread in fast_piz_read_one_vb, in case of --grep, to decompress and reconstruct the desc line, to 

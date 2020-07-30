@@ -33,6 +33,9 @@ extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t first_vb_i_of_pair_1, u
 extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_len);
 extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 
+// optimization stuff
+extern void fastq_txtfile_count_lines (VBlockP vb);
+
 #define FASTQ_DICT_ID_ALIASES \
     /*          alias                       maps to this ctx          */  \
     { DT_FASTQ, &dict_id_fields[FASTQ_E2L], &dict_id_fields[FASTQ_E1L] }, /* note: the lowest did_i must be the non-alias */ \

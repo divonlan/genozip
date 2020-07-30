@@ -106,8 +106,7 @@ void vb_destroy_vb (VBlockP *vb_p)
     if (vb->data_type != DT_NONE && DTP(destroy_vb))
         DTP(destroy_vb)(vb);
 
-    FREE (vb);
-    *vb_p = NULL;
+    FREE (*vb_p);
 }
 
 void vb_create_pool (unsigned num_vbs)

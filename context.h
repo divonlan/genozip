@@ -120,7 +120,7 @@ typedef struct Context {
     int8_t flags;              // CTX_FL_* - flags to be included in section header (8 bits)
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
-    Buffer b250;               // The buffer of b250 data containing indeces (in b250) to word_list. 
+    Buffer b250;               // The buffer of b250 data containing indices (in b250) to word_list. 
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
     Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if CTX_INST_PAIR_B250 or CTX_INST_PAIR_LOCAL is set)
     SnipIterator pair_b250_iter; // Iterator on pair, if it contains b250 data
@@ -130,10 +130,10 @@ typedef struct Context {
     // ----------------------------
     Buffer ol_dict;            // VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
                                // zfile: singletons are stored here
-    Buffer ol_mtf;             // MTF nodes - overlayed all previous VB dictionaries. char/word indeces are into ol_dict.
+    Buffer ol_mtf;             // MTF nodes - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
                                // zfile: nodes of singletons
-    Buffer mtf;                // array of MtfNode - in this VB that don't exist in ol_mtf. char/word indeces are into dict.
-    Buffer mtf_i;              // contains 32bit indeces into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
+    Buffer mtf;                // array of MtfNode - in this VB that don't exist in ol_mtf. char/word indices are into dict.
+    Buffer mtf_i;              // contains 32bit indices into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
     
     // settings
     CompressionAlg local_comp; // algorithm used to compress local

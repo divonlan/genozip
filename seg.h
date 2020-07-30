@@ -56,7 +56,7 @@ extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, u
 
 extern void seg_initialize_compound_structured (VBlockP vb, char *name_template, Structured *st);
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
-                                SubfieldMapperP mapper, Structured st, bool ws_is_sep, unsigned add_for_eol);
+                                SubfieldMapperP mapper, Structured st, bool ws_is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 extern void seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, SegOptimize optimize);
