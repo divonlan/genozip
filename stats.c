@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
+#include "buffer.h"
 #include "dict_id.h"
 #include "strings.h"
 #include "stats.h"
@@ -17,6 +18,9 @@
 // of words each ctx contributed
 static struct { uint64_t words_total, words_so_far, comp_bytes_so_far; } vcf_gt_data_tracker;
 static int *count_per_section = NULL;
+
+// a concatenation of all bound txt_names that contributed to this genozip file
+static Buffer bound_txt_names = EMPTY_BUFFER;
 
 #define OVERHEAD_SEC_VB_HDR      -1
 #define OVERHEAD_SEC_GENOZIP_HDR -2
@@ -136,7 +140,7 @@ static void stats_check_count (uint64_t all_comp_total)
 static void stats_show_file_metadata (void)
 {
     fprintf (stderr, "\n\n");
-    if (txt_file->name) fprintf (stderr, "%s file name: %s\n", dt_name (z_file->data_type), txt_file->name);
+    if (txt_file->name) fprintf (stderr, "%s file(s): %.*s\n", dt_name (z_file->data_type), (int)bound_txt_names.len, bound_txt_names.data);
     
     if (flag_reference == REF_INTERNAL && z_file->data_type == DT_SAM)
         fprintf (stderr, "Reference: Internal ('SEQ' line: 'comp dict'=stored reference, 'comp 250'=bitmap, 'comp local'=non-refereance bases)\n");
@@ -329,3 +333,16 @@ void stats_show_stats (void)
              dt_name (z_file->data_type), str_uint_commas (all_txt, s1), str_uint_commas (z_file->txt_data_so_far_bind, s2), 
              (int32_t)(z_file->txt_data_so_far_bind - all_txt)); 
 }
+
+// concatenate txt names of bound files so we can show them all
+void stats_add_txt_name (const char *fn)
+{
+    unsigned fn_len = strlen (fn);
+
+    buf_alloc (evb, &bound_txt_names, bound_txt_names.len + fn_len + 1, 2, "bound_txt_names", 0);
+    
+    if (bound_txt_names.len) buf_add (&bound_txt_names, " ", 1);
+    buf_add (&bound_txt_names, fn, fn_len);
+}
+
+

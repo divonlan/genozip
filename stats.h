@@ -7,5 +7,6 @@
 #define STATS_INCLUDED
 
 extern void stats_show_stats (void);
+extern void stats_add_txt_name (const char *fn);
 
 #endif

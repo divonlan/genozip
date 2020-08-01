@@ -41,7 +41,7 @@ extern void ref_initialize_ranges (RangesType ranges_type);
 extern void ref_compress_ref (void);
 extern void ref_load_stored_reference (void);
 extern void ref_set_reference (const char *filename);
-extern void ref_set_md5 (Md5Hash md5);
+extern void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name);
 extern void ref_load_external_reference (bool display);
 extern void ref_unload_reference (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
@@ -60,6 +60,7 @@ extern void ref_print_is_set (const Range *r, int64_t around_pos);
 extern void ref_make_ref_init (void);
 extern Range *ref_make_ref_get_range (uint32_t vblock_i);
 extern void ref_output_vb (VBlockP vb);
+extern const char *ref_get_cram_ref (void);
 
 // ZIP ONLY: access range_i and index within range, for ranges configured for ZIP
 #define ridx2pos(range_i,idx) (((int64_t)(range_i) * REF_NUM_SITES_PER_RANGE) | (idx))

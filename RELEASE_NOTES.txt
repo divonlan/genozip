@@ -141,6 +141,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Added Domqual compression method for Illumina binned quality scores in FASTQ and SAM
 - Added ACGT compression method for nucleotide sequences
 - Added new data type for reference files - and an option for creating a reference file from a FASTA - --make-reference
+- Added support for compressing CRAM files
 - Added better compression for FORMAT/PS in VCF
 - Added --optimize-DESC for FASTQ optimization
 - Added many options including --list-chroms, --dump-one-local, --show-reference, --show-ref-index

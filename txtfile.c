@@ -472,9 +472,8 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 
     // for vcf, we need to check if the samples are the same before approving binding.
     // other data types can bind without restriction
-    bool can_bindenate = (txt_file->data_type == DT_VCF) ? vcf_header_set_globals(txt_file->name, &evb->txt_data)
-                                                           : true;
-    if (!can_bindenate) { 
+    bool can_bind = (txt_file->data_type == DT_VCF) ? vcf_header_set_globals(txt_file->name, &evb->txt_data) : true;
+    if (!can_bind) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;
@@ -535,8 +534,8 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
 
     bool is_vcf = (z_file->data_type == DT_VCF);
 
-    bool can_bindenate = is_vcf ? vcf_header_set_globals(z_file->name, &header_buf) : true;
-    if (!can_bindenate) {
+    bool can_bind = is_vcf ? vcf_header_set_globals(z_file->name, &header_buf) : true;
+    if (!can_bind) {
         buf_free (&header_section);
         buf_free (&header_buf);
         return false;

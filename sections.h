@@ -96,7 +96,7 @@ typedef struct {
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
     Md5Hash  license_hash;            // MD5(license_num)
-#define REF_FILENAME_LEN 255
+#define REF_FILENAME_LEN 256
     char ref_filename[REF_FILENAME_LEN]; // external reference filename, null-terimated. ref_filename[0]=0 if there is no external reference.
     Md5Hash ref_file_md5;             // SectionHeaderGenozipHeader.md5_hash_bound of the reference FASTA genozip file
 } SectionHeaderGenozipHeader;

@@ -38,12 +38,17 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
-    vb->contexts[FASTQ_STRAND].ltype   = LT_BITMAP;
+    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+        vb->contexts[FASTQ_STRAND].ltype   = LT_BITMAP;
+        vb->contexts[FASTQ_STRAND].lcomp   = COMP_NONE; // bz2 and lzma only make it bigger
 
-    vb->contexts[FASTQ_GPOS].ltype     = LT_UINT32;
-    vb->contexts[FASTQ_GPOS].flags     = CTX_FL_STORE_INT;
-    vb->contexts[FASTQ_GPOS].lcomp     = COMP_LZMA;
+        vb->contexts[FASTQ_GPOS].ltype     = LT_UINT32;
+        vb->contexts[FASTQ_GPOS].flags     = CTX_FL_STORE_INT;
+        vb->contexts[FASTQ_GPOS].lcomp     = COMP_LZMA;
+
+    }
+
+    vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; // used in non-reference too
 
     vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
     vb->contexts[FASTQ_NONREF].lcomp   = COMP_ACGT;
@@ -61,8 +66,6 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
         fastq_initialize_pair_iterators (vb);
     }
-    else
-        vb->contexts[FASTQ_STRAND].lcomp = COMP_NONE; // bz2 and lzma only make it bigger
 
     if (flag_optimize_DESC) {
         vb->optimized_desc_len = strlen (txt_file->basename) + 2; // +2 for @ :
@@ -234,7 +237,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
     seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SQBITMAP, 0); 
     vb->contexts[FASTQ_NONREF].txt_len += dl->seq_len; // account for the txt data in NONREF
-    
+
     SEG_EOL (FASTQ_E1L, true);
 
     // PLUS - next line is expected to be a "+"

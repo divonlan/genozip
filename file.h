@@ -301,6 +301,7 @@ extern FileType file_get_stdin_type (void);
 extern DataType file_get_data_type (FileType ft, bool is_input);
 extern bool file_is_dir (const char *filename);
 extern void file_remove (const char *filename, bool fail_quietly);
+extern void file_get_raw_name_and_type (const char *filename, char **raw_name, FileType *ft);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
@@ -314,7 +315,10 @@ extern const char *file_plain_ext_by_dt (DataType dt);
 extern const char *ft_name (FileType ft);
 extern const char *file_viewer (File *file);
 
-#define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? "(stdin)" : "(stdout)"))
+#define FILENAME_STDIN  "(stdin)"
+#define FILENAME_STDOUT "(stdout)"
+
+#define file_printname(file) ((file)->name ? (file)->name : ((file)->mode==READ ? FILENAME_STDIN : FILENAME_STDOUT))
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 

@@ -113,6 +113,20 @@ FileType file_get_type (const char *filename, bool enforce_23andme_name_format)
     return UNKNOWN_FILE_TYPE;
 }
 
+// returns the filename without the extension eg myfile.1.sam.gz -> myfile.1. memory is allocated sufficiently
+// to concatenate a extension
+void file_get_raw_name_and_type (const char *filename, char **raw_name, FileType *ft)
+{
+    unsigned len = strlen (filename);
+    *raw_name = malloc (len + 30);
+    memcpy (*raw_name, filename, len);
+    (*raw_name)[len] = 0;
+
+    *ft = file_get_type (filename, true);
+    if (ft != UNKNOWN_FILE_TYPE) 
+        (*raw_name)[len - strlen (file_exts[*ft])] = 0;
+}
+
 void file_set_input_size (const char *size_str)
 {   
     unsigned len = strlen (size_str);
@@ -334,8 +348,10 @@ bool file_open_txt (File *file)
             break;
 
         case COMP_BCF:
-        case COMP_BAM: {
-            bool bam = (file->comp_alg == COMP_BAM);
+        case COMP_BAM: 
+        case COMP_CRAM: {
+            bool bam =  (file->comp_alg == COMP_BAM);
+            bool cram = (file->comp_alg == COMP_CRAM);
 
             if (file->mode == READ) {
                 char reason[100];
@@ -343,13 +359,14 @@ bool file_open_txt (File *file)
                 input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                     file->is_remote ? file->name : NULL,         // url                                        
                                                     reason, 
-                                                    bam ? "samtools" : "bcftools", // exec_name
+                                                    (bam || cram) ? "samtools" : "bcftools", // exec_name
                                                     "view", 
                                                     "--threads", "8", // in practice, samtools is able to consume 1.3 cores
-                                                    bam ? "-OSAM" : "-Ov",
+                                                    (bam || cram) ? "-OSAM" : "-Ov",
                                                     file->is_remote ? SKIP_ARG : file->name,    // local file name 
-                                                    bam ? "-h" : "--no-version", // BAM: include header
-                                                                                 // BCF: do not append version and command line to the header
+                                                    (bam || cram) ? "-h" : "--no-version", // BAM: include header
+                                                                                           // BCF: do not append version and command line to the header
+                                                    cram ? ref_get_cram_ref() : NULL,
                                                     NULL);
                 file->file = stream_from_stream_stdout (input_decompressor);
             }
@@ -618,7 +635,7 @@ size_t file_write (File *file, const void *data, unsigned len)
     if (!file->name && command != ZIP && errno == EINVAL) exit(0);
 
     ASSERT (bytes_written, "Error: failed to write %u bytes to %s: %s", 
-            len, file->name ? file->name : "(stdout)", strerror(errno));
+            len, file->name ? file->name : FILENAME_STDOUT, strerror(errno));
     return bytes_written;
 }
 

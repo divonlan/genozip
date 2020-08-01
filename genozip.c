@@ -325,7 +325,7 @@ static void main_genounzip (const char *z_filename,
         ABORT0 ("Error: unrecognized configuration for the txt_file");
     }
     
-    z_file->basename = file_basename (z_filename, false, "(stdin)", NULL, 0); // memory freed in file_close
+    z_file->basename = file_basename (z_filename, false, FILENAME_STDIN, NULL, 0); // memory freed in file_close
     
     // save flag as it might be modified by PIZ (for example, REF_STORED overriding REF_EXTERNAL)
     SAVE_FLAG (flag_reference);
@@ -406,7 +406,9 @@ static void main_genozip (const char *txt_filename,
         txt_file = file_open_redirect (READ, TXT_FILE, DT_NONE);
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
- 
+
+    stats_add_txt_name (txt_name);
+
     ASSERT0 (flag_bind || !z_file, "Error: expecting z_file to be NULL in non-bound mode");
 
     // get output FILE
@@ -449,7 +451,7 @@ static void main_genozip (const char *txt_filename,
     } 
     else ABORT0 ("Error: No output channel");
     
-    txt_file->basename = file_basename (txt_filename, false, "(stdin)", NULL, 0);
+    txt_file->basename = file_basename (txt_filename, false, FILENAME_STDIN, NULL, 0);
     zip_dispatcher (txt_file->basename, is_last_file);
 
     if (flag_show_stats && is_last_file) stats_show_stats();
@@ -553,22 +555,28 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
 }
 
 // if two filenames differ by one character only, which is '1' and '2', creates a combined filename with "1+2"
-static char *main_get_pair_filename (const char *fn1, const char *fn2)
+static char *main_get_fastq_pair_filename (const char *fn1, const char *fn2)
 {
-    unsigned len = strlen (fn1);
-    if (len != strlen (fn2)) return NULL;
+    FileType ft1, ft2;
+    char *rn1, *rn2;
+
+    file_get_raw_name_and_type (fn1, &rn1, &ft1);
+    file_get_raw_name_and_type (fn2, &rn2, &ft2);
+    
+    unsigned len = strlen (rn1);
+    if (len != strlen (rn2)) return NULL;
 
     int df = -1;
     for (unsigned i=0; i < len; i++)
-        if (fn1[i] != fn2[i]) {
+        if (rn1[i] != rn2[i]) {
             if (df >= 0) return NULL; // 2nd differing character
             df = i;
         }
 
-    if (!((fn1[df] == '1' && fn2[df] == '2') || (fn1[df] == '2' && fn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
+    if (!((rn1[df] == '1' && rn2[df] == '2') || (rn1[df] == '2' && rn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
 
     char *pair_fn = malloc (len+20);
-    sprintf (pair_fn, "%.*s1+2%s" GENOZIP_EXT, df, fn1, &fn1[df+1]);
+    sprintf (pair_fn, "%.*s1+2%s" FASTQ_GENOZIP_, df, rn1, &rn1[df+1]);
     
     return pair_fn;
 }
@@ -824,16 +832,16 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     // --paired_end: verify an even number of fastq files, --output, and --reference/--REFERENCE
     if (flag_pair) {
 
+        for (unsigned i=0; i < num_files; i++)
+            ASSERT (main_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
+
         // in case of a flag_pair with 2 files, in which --output is missing, we attempt to figure it out if possible
         if (!out_filename && num_files == 2) 
-            out_filename = main_get_pair_filename (filenames[0], filenames[1]);
+            out_filename = main_get_fastq_pair_filename (filenames[0], filenames[1]);
 
         ASSINP (out_filename,       "%s: --output must be specified when using %s", global_cmd, OT("pair", "2"));
         ASSINP (flag_reference,     "%s: either --reference or --REFERENCE must be specified when using %s", global_cmd, OT("pair", "2"));
         ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
-
-        for (unsigned i=0; i < num_files; i++)
-            ASSERT (main_get_file_dt (filenames[i]) == DT_FASTQ, "%s: when using %s, all input files are expected to be FASTQ files, but %s is not", global_cmd, OT("pair", "2"), filenames[i]);
     }
 
     if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 

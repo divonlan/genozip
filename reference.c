@@ -59,6 +59,8 @@ typedef struct {
 static SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 static uint32_t ref_range_cursor = 0;
 
+static char *ref_fasta_name = NULL;
+
 // globals
 const char *ref_filename = NULL; // filename of external reference file
 Md5Hash ref_md5 = MD5HASH_NONE;
@@ -1038,9 +1040,15 @@ void ref_set_reference (const char *filename)
     ref_filename = filename;
 }
 
-void ref_set_md5 (Md5Hash md5)
+// called when loading an external reference
+void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name)
 {
     ref_md5 = md5;
+
+    if (fasta_name[0]) {
+        ref_fasta_name = malloc (strlen (fasta_name) + 1); 
+        strcpy (ref_fasta_name, fasta_name);
+    }
 }
 
 // display the reference:
@@ -1436,4 +1444,26 @@ void ref_print_is_set (const Range *r,
         i = next;
     }
     fprintf (stderr, "\n");
+}
+
+// returns the reference file name for CRAM, derived from the genozip reference name
+const char *ref_get_cram_ref (void)
+{
+    static char *samtools_T_option = NULL;
+    if (samtools_T_option) goto done; // already calculated
+
+    ASSINP (ref_filename, "%s: when compressing a CRAM file, --reference or --REFERENCE must be specified", global_cmd);
+
+    ASSINP (ref_fasta_name, "%s: cannot compress a CRAM file because %s is lacking the name of the source fasta file - likely because it was created by piping a fasta from from stdin, or because the name of the fasta provided exceed %u characters",
+            global_cmd, ref_filename, REF_FILENAME_LEN-1);
+
+    bool file_exists = (access (ref_fasta_name, F_OK) == 0);
+    ASSINP (file_exists, "%s: cannot find the fasta file %s. Note: this is the file that was used to create %s, and it needs to exist in this name, in order to be passed to samtools as a reference file (-T option) for reading the CRAM file", 
+            global_cmd, ref_fasta_name, ref_filename);
+
+    samtools_T_option = malloc (strlen (ref_fasta_name) + 10);
+    sprintf (samtools_T_option, "-T%s", ref_fasta_name);
+
+done:
+    return samtools_T_option;
 }

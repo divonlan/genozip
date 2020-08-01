@@ -376,7 +376,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
     bool success = txtfile_header_to_genozip (&txt_line_i);
-    if (!success) goto finish;
+    if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
 
     mtf_initialize_for_zip();
 
@@ -471,6 +471,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
+finish:
     if (is_last_file || !flag_bind) 
         zip_write_global_area (dispatcher, single_component_md5);
 
@@ -479,7 +480,6 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     if (flag_md5 && flag_bind && z_file->num_txt_components_so_far > 1 && is_last_file) 
         progress_concatenated_md5 (dt_name (z_file->data_type), md5_finalize (&z_file->md5_ctx_bound));
 
-finish:
     z_file->disk_size              = z_file->disk_so_far;
     z_file->txt_data_so_far_single = 0;
     evb->z_data.len                = 0;

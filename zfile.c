@@ -604,7 +604,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
         ASSERT (header->data_type == DT_REF, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
                 ref_filename);
 
-        ref_set_md5 (header->md5_hash_bound); 
+        ref_set_ref_file_info (header->md5_hash_bound, header->ref_filename); // in the reference file itself, header->ref_filename is the original fasta used to create this reference
     }
 
     // case: we are reading a file that is not expected to be a reference file
@@ -672,10 +672,16 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.num_sections            = BGEN32 (num_sections); 
     header.num_components          = BGEN32 (z_file->num_txt_components_so_far);
     
+    // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (flag_reference == REF_EXTERNAL) {   
         strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
         header.ref_file_md5 = ref_md5;
     }
+
+    // in --make-ref, we set header.ref_filename to the original fasta file, to be used later in ref_get_cram_ref
+    // (unless the fasta is piped from stdin, or its name is too long)
+    else if (flag_make_reference && strcmp (txt_name, FILENAME_STDIN) && strlen (txt_name) < REF_FILENAME_LEN) 
+        strncpy (header.ref_filename, txt_name, REF_FILENAME_LEN-1);
 
     uint32_t license_num_bgen = BGEN32 (license_get());
     header.license_hash = md5_do (&license_num_bgen, sizeof (int32_t));
@@ -794,7 +800,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
     header.num_lines               = NUM_LINES_UNKNOWN; 
     header.compression_type        = (uint8_t)txt_file->comp_alg; 
 
-    file_basename (txt_file->name, false, "(stdin)", header.txt_filename, TXT_FILENAME_LEN);
+    file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);
     header.txt_filename[strlen(header.txt_filename)- (strlen(file_exts[txt_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
     
     static Buffer txt_header_buf = EMPTY_BUFFER;

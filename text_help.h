@@ -8,7 +8,7 @@
 
 static const char *help_genozip[] = {
     "",
-    "Compress genomics files. Currently supported file types: VCF/BCF, SAM/BAM, FASTQ, FASTA, GVF and 23andMe",
+    "Compress genomics files. Currently supported file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF and 23andMe",
     "",
     "Usage: genozip [options]... [files or urls]...",
     "",
@@ -16,7 +16,7 @@ static const char *help_genozip[] = {
     "",
     "Supported input file types: ",
     "   VCF: vcf (possibly .gz .bgz .bz2 .xz), bcf (possibly .gz .bgz)",
-    "   SAM: sam, bam",
+    "   SAM: sam (possibly .gz .bgz .bz2 .xz), bam, cram",
     "   FASTQ: fastq, fq (possibly .gz .bgz .bz2 .xz)",
     "   FASTA: fasta, fa, faa, ffn, fnn, fna (possibly .gz .bgz .bz2 .xz)",
     "   GVF: gvf (possibly .gz .bgz .bz2 .xz)",
