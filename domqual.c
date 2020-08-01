@@ -97,10 +97,10 @@ bool domqual_convert_qual_to_domqual (VBlockP vb, LocalGetLineCallback get_line,
     qual_ctx->local.len = 0; 
     qual_ctx->inst |= CTX_INST_NO_CALLBACK | CTX_INST_LOCAL_PARAM;
     qual_ctx->ltype = LT_DOMQUAL;
-    qual_ctx->local_comp = COMP_LZMA;
+    qual_ctx->lcomp = COMP_LZMA;
 
     qdomruns_ctx->ltype = LT_UINT8;
-    qdomruns_ctx->local_comp = COMP_LZMA;
+    qdomruns_ctx->lcomp = COMP_LZMA;
 
     uint32_t runlen = 0;
     

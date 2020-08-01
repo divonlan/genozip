@@ -15,18 +15,18 @@
 
 #define NO_NEXT 0xffffffff
 typedef struct {        
-    int32_t node_index;       // index into Context.ol_mtf (if < ol_mtf.len) or Context.mtf or NIL
-    uint32_t next;            // linked list - index into Context.global/local_hash or NIL
+    WordIndex node_index;     // index into Context.ol_mtf (if < ol_mtf.len) or Context.mtf or NODE_INDEX_NONE
+    uint32_t next;            // linked list - index into Context.global/local_hash or NO_NEXT
                               //               local_hash indices started at LOCAL_HASH_OFFSET
 } LocalHashEnt;
 
 #pragma pack(4)
 typedef struct {        
-    int32_t node_index;       // index into Context.mtf or NIL
-    uint32_t next;            // linked list - index into Context.global/local_hash or NIL
+    WordIndex node_index;     // index into Context.mtf or NODE_INDEX_NONE
+    uint32_t next;            // linked list - index into Context.global/local_hash or NO_NEXT
     int32_t merge_num;        // the merge_num in which the "node_index" field was set. when this global hash is overlayed 
                               // to a vb_ctx, that vb_ctx is permitted use the node_index value if this merge_num is <= vb_ctx->merge_num,
-                              // otherwise, it should treat it as NIL.
+                              // otherwise, it should treat it as NODE_INDEX_NONE.
 } GlobalHashEnt;
 #pragma pack()
 
@@ -50,10 +50,10 @@ static uint32_t hash_next_size_up (uint64_t size)
 // reference contig dictionary  
 static void hash_populate_from_mtf (Context *zf_ctx)
 {
-    uint32_t len = zf_ctx->mtf.len;
+    uint64_t len = zf_ctx->mtf.len;
     zf_ctx->mtf.len = 0; // hash_global_get_entry will increment it back to its original value
 
-    for (uint32_t i=0; i < len; i++) {
+    for (uint64_t i=0; i < len; i++) {
         MtfNode *node = ENT (MtfNode, zf_ctx->mtf, i);
         const char *snip = ENT (const char, zf_ctx->dict, node->char_index);
         hash_global_get_entry (zf_ctx, snip, node->snip_len, HASH_NEW_OK_NOT_SINGLETON, NULL /* the snip is not in the hash for sure */); 
@@ -349,7 +349,7 @@ void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries)
 
     zf_ctx->global_hash.len = zf_ctx->global_hash_prime; // global_hash.len can get longer over time as extension links are added
 
-    // we set all entries to {NO_NEXT, NIL, NIL} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
+    // we set all entries to {NO_NEXT, NODE_INDEX_NONE, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
     memset (zf_ctx->global_hash.data, 0xff, sizeof(GlobalHashEnt) * zf_ctx->global_hash.len);
 
     hash_populate_from_mtf (zf_ctx);
@@ -374,8 +374,8 @@ static inline uint32_t hash_do (uint32_t hash_len, const char *snip, unsigned sn
 // creates a node in the hash table, unless the snip is already there. 
 // the old node is in node, and NULL if its a new node.
 // returns the node_index (positive if in mtf and negative-2 if in ol_mtf - the singleton buffer)
-int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
-                               MtfNode **old_node)        // out - node if node is found, NULL if not
+WordIndex hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
+                                 MtfNode **old_node)        // out - node if node is found, NULL if not
 {
     GlobalHashEnt g_head, *g_hashent = &g_head;
     g_hashent->next = hash_do (zf_ctx->global_hash_prime, snip, snip_len); // entry in hash table determined by hash function on snip
@@ -391,15 +391,15 @@ int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_
 
         g_hashent = ENT(GlobalHashEnt, zf_ctx->global_hash, hashent_i);
 
-        // case: snip is not in core hash table and also no other snip occupies the slot (node_index==NIL happens only in the core table)
-        if (g_hashent->node_index == NIL) { // unoccupied space in core hash table
+        // case: snip is not in core hash table and also no other snip occupies the slot (node_index==NODE_INDEX_NONE happens only in the core table)
+        if (g_hashent->node_index == NODE_INDEX_NONE) { // unoccupied space in core hash table
             // thread safety: VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
             // and accessing it. we make sure that the setting of g_hashent->merge_num is atomic and the other threads will at all times either
-            // see NIL or merge_num - both of which indicate the this entry is effectively NIL as they have an older merge_num
+            // see NIL or merge_num - both of which indicate the this entry is effectively NODE_INDEX_NONE as they have an older merge_num
 
             if (mode != HASH_READ_ONLY) {
                 g_hashent->next = NO_NEXT;
-                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NIL)
+                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
                 __atomic_store_n (&g_hashent->merge_num, zf_ctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
             }
 
@@ -432,7 +432,7 @@ int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
     if (mode == HASH_READ_ONLY) {
         if (old_node) *old_node = NULL; // we don't have an old node
-        return NIL;
+        return NODE_INDEX_NONE;
     }
 
     buf_alloc (evb, &zf_ctx->global_hash, sizeof (GlobalHashEnt) * (1 + zf_ctx->global_hash.len), 2, 
@@ -443,15 +443,20 @@ int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_
     // thread safetey:  VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
     // and accessing it. We make sure to first prepare the new entry including the merge_num which will prohibit old
     // VBs from using it, before we atomically set the "next"
+    ASSERT (zf_ctx->global_hash.len <= 0xffffffff, "Error in hash_global_get_entry: no more room in global_hash of context %s", zf_ctx->name);
     uint32_t next = zf_ctx->global_hash.len++;
+
     GlobalHashEnt *new_hashent = ENT (GlobalHashEnt, zf_ctx->global_hash, next);
     new_hashent->merge_num     = zf_ctx->merge_num; // stamp our merge_num as the ones that set the node_index
     
     // we enter the node as a singleton (=in ol_mtf) if this was a singleton in this VB but not in any previous VB 
     // (the second occurange in the file isn't a singleton anymore)
     bool is_singleton_global   = ((mode == HASH_NEW_OK_SINGLETON_IN_VB) && !singleton_encountered);
-    new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NIL)
+    new_hashent->node_index    = is_singleton_global ? (-zf_ctx->ol_mtf.len++ - 2) : zf_ctx->mtf.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
+
+    ASSERT (zf_ctx->mtf.len <= MAX_NODE_INDEX, "Error in hash_global_get_entry: number of nodes in context %s exceeded the maximum of %u", 
+            zf_ctx->name, MAX_NODE_INDEX);
     
     // now, with the new g_hashent set, we can atomically update the "next"
     __atomic_store_n (&g_hashent->next, next, __ATOMIC_RELAXED);
@@ -470,10 +475,10 @@ int32_t hash_global_get_entry (Context *zf_ctx, const char *snip, unsigned snip_
 // 1. if its in the global hash table, with merge_num lower or equal to ours - i.e. added by an earler thread - we take it 
 // 2. if its in the local hash table - i.e. added by us (this vb) earlier - we take it
 // 3. if not found - we add it to the local hash table
-int32_t hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
-                                const char *snip, unsigned snip_len, 
-                                int32_t node_index_if_new,
-                                MtfNode **node)        // out - node if node is found, NULL if not
+WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
+                                  const char *snip, unsigned snip_len, 
+                                  WordIndex node_index_if_new,
+                                  MtfNode **node)        // out - node if node is found, NULL if not
 {
     // first, search for the snip in the global table
     GlobalHashEnt g_head, *g_hashent = &g_head;
@@ -498,7 +503,7 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
                 
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
         uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_RELAXED);
-        if (g_hashent->node_index == NIL || merge_num > vb_ctx->merge_num) break; // case 3
+        if (g_hashent->node_index == NODE_INDEX_NONE || merge_num > vb_ctx->merge_num) break; // case 3
 
         // we skip singletons and continue searching
         if (g_hashent->node_index < 0) continue;
@@ -530,12 +535,12 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
         l_hashent_i = l_hashent->next;
         l_hashent = ENT (LocalHashEnt, vb_ctx->local_hash, l_hashent_i);
 
-        // case: snip is not in hash table and also no other snip occupies the slot (node_index==NIL happens only in the core table)
-        if (l_hashent->node_index == NIL) { // unoccupied space in core hash table
+        // case: snip is not in hash table and also no other snip occupies the slot (node_index==NODE_INDEX_NONE happens only in the core table)
+        if (l_hashent->node_index == NODE_INDEX_NONE) { // unoccupied space in core hash table
             l_hashent->next = NO_NEXT;
             l_hashent->node_index = node_index_if_new;
             if (node) *node = NULL;
-            return NIL;
+            return NODE_INDEX_NONE;
         }
 
         if (node) { // if the caller doesn't provide "node", he is telling us that with certainly the snip is not in the hash table
@@ -561,5 +566,5 @@ int32_t hash_get_entry_for_seg (VBlock *segging_vb, Context *vb_ctx,
     new_l_hashent->node_index = node_index_if_new;
 
     if (node) *node = NULL;
-    return NIL;
+    return NODE_INDEX_NONE;
 }

@@ -88,7 +88,7 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
     const uint8_t *after = AFTERENT (const uint8_t, *b250_data);
 
     while (data < after) {
-        uint32_t word_index = base250_decode (&data);
+        WordIndex word_index = base250_decode (&data);
         switch (word_index) {
             case WORD_INDEX_ONE_UP     : fprintf (stderr, "ONE_UP "); break;
             case WORD_INDEX_EMPTY_SF   : fprintf (stderr, "EMPTY "); break;
@@ -268,7 +268,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
         .h.section_type          = SEC_LOCAL,
         .h.data_uncompressed_len = BGEN32 (ctx->local.len * local_len_multiplier),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.sec_compression_alg   = ctx->local_comp,
+        .h.sec_compression_alg   = ctx->lcomp,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags                 = flags,
         .dict_id                 = ctx->dict_id,
@@ -284,7 +284,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 
     // for COMP_ACGT, if we discovered any non-A,G,C,T, then we need an additional section with COMP_NON_ACGT 
     // that will have the correction needed
-    if ((ctx->local_comp == COMP_ACGT) && vb->has_non_agct) {
+    if ((ctx->lcomp == COMP_ACGT) && vb->has_non_agct) {
         header.h.sec_compression_alg = COMP_NON_ACGT;
 
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 

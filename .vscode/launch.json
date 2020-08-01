@@ -16,17 +16,14 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
-
-            //"args": ["-fm", "td/test.transfly-sorted.sam", "-Edata/GRCh38_full_analysis_set_plus_decoy_hla.fa.genozip"]
-            "args": ["data/GRCh38_full_analysis_set_plus_decoy_hla.fa", "-fo junk.genozip", "-t@1"],
-            //"args": ["-mf@1", "td/test.transfly-sorted.sam"]
-            //"args": ["bug.fa.genozip", "-t@1"],
-            //"args": ["bug.fa", "-ft"],
-            //"args":["-t","td/test.transfly-sorted.sam.genozip"],
-            //"args":["--seq", "--grep", "chr22", "data/GRCh38_full_analysis_set_plus_decoy_hla.fa.genozip"],
-            //"args":["-ft", "-edata/GRCh38_full_analysis_set_plus_decoy_hla.fa.genozip", "data/transfly.100K.sam", "--show-gh"],
-            //"args":["-t", "td/test.transfly-sorted.sam.genozip", "-edata/GRCh38_full_analysis_set_plus_decoy_hla.fa.genozip"],
-            //"args":["backward-compatibility-test/test-file.4.0.12.vcf.genozip", "-t"],
+            
+            //"args": ["td/test.transfly-unsorted.sam.genozip", "-edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "-t"],
+            //"args": ["bug.sam", "-f", "-edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip"],
+            "args": ["bug.sam", "-f"],
+            //"args": ["pair.genozip",  "-etest-file-ref.ref.genozip"],
+            //"args": ["-2fedata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "-fopair.genozip", "junk1.fq", "junk2.fq", "--show-head"],
+            //"args": ["-2fedata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "-fopair.genozip", "junk1.fq", "junk2.fq", "--show-head"],
+            //"args": ["--dump-one-local","QUAL","test-file.fq.genozip"],
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

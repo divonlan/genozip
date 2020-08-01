@@ -38,7 +38,7 @@ void random_access_alloc_ra_buf (VBlock *vb, int32_t chrom_node_index)
 
 // ZIP only: called from vcf_seg_chrom_field when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom (for example, in an unsorted SAM or VCF). we maitain one ra field per chrom per vb
-void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index, const char *chrom_name, unsigned chrom_name_len)
+void random_access_update_chrom (VBlock *vb, WordIndex chrom_node_index, const char *chrom_name, unsigned chrom_name_len)
 {
     // note: when FASTA calls this for a sequence that started in the previous vb, and hence chrom is unknown, chrom_node_index==-1.
     ASSERT (chrom_node_index >= -1, "Error in random_access_update_chrom: chrom_node_index=%d in vb_i=%u", 
@@ -54,7 +54,7 @@ void random_access_update_chrom (VBlock *vb, int32_t chrom_node_index, const cha
 
     vb->chrom_node_index = chrom_node_index;
 
-    if (chrom_node_index != NIL) {
+    if (chrom_node_index != WORD_INDEX_NONE) {
         vb->chrom_name       = chrom_name;
         vb->chrom_name_len   = chrom_name_len;
     }
@@ -123,12 +123,12 @@ void random_access_merge_in_vb (VBlock *vb)
         dst_ra->min_pos  = src_ra[i].min_pos;
         dst_ra->max_pos  = src_ra[i].max_pos;
 
-        if (src_ra[i].chrom_index != NIL) {
-            MtfNode *chrom_node = mtf_node_vb (chrom_ctx, src_ra[i].chrom_index, NULL, NULL);
+        if (src_ra[i].chrom_index != WORD_INDEX_NONE) {
+            MtfNode *chrom_node = mtf_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
             dst_ra->chrom_index = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
         }
         else 
-            dst_ra->chrom_index = NIL; // to be updated in random_access_finalize_entries()
+            dst_ra->chrom_index = WORD_INDEX_NONE; // to be updated in random_access_finalize_entries()
     }
 
     mutex_unlock (ra_mutex);
@@ -186,9 +186,9 @@ void random_access_finalize_entries (Buffer *ra_buf)
         RAEntry *ra = ENT (RAEntry, *ra_buf, i);
 
         // case: chrom is unknown - if the sequence started in the previous VB (this happens in FASTA) - we update now
-        if (ra->chrom_index == NIL) {
+        if (ra->chrom_index == WORD_INDEX_NONE) {
             // we expect this ra to be the first in its VB, and the previous ra to be of the previous VB
-            ASSERT (i && (ra->vblock_i == (ra-1)->vblock_i+1), "Error in random_access_finalize_entries: currupt ra[%u]: chrom_index=NIL but vb_i=%u and (ra-1)->vb_i=%u (expecting it to be %u)",
+            ASSERT (i && (ra->vblock_i == (ra-1)->vblock_i+1), "Error in random_access_finalize_entries: currupt ra[%u]: chrom_index=WORD_INDEX_NONE but vb_i=%u and (ra-1)->vb_i=%u (expecting it to be %u)",
                     i, ra->vblock_i, (ra-1)->vblock_i, ra->vblock_i-1);
 
             ra->chrom_index = (ra-1)->chrom_index;
@@ -266,7 +266,7 @@ int32_t random_access_get_last_included_vb_i (void)
 }
 
 // PIZ I/O thread: gets min/max pos value for a particular chrom, across the entire file, by looking at the RA entries
-void random_access_pos_of_chrom (uint32_t chrom_word_index, int64_t *min_pos, int64_t *max_pos)
+void random_access_pos_of_chrom (WordIndex chrom_word_index, int64_t *min_pos, int64_t *max_pos)
 {
     typedef struct { int64_t min_pos, max_pos; } MinMax;
 
@@ -351,7 +351,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
         
         const char *chrom_snip; unsigned chrom_snip_len;
         if (from_zip) {
-            if (ra[i].chrom_index != NIL) {
+            if (ra[i].chrom_index != WORD_INDEX_NONE) {
                 MtfNode *chrom_node = mtf_get_node_by_word_index (ctx, ra[i].chrom_index);
                 chrom_snip     = ENT (char, ctx->dict, chrom_node->char_index);
                 chrom_snip_len = chrom_node->snip_len;
@@ -371,7 +371,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
     }
 }
 
-void random_access_get_ra_info (uint32_t vblock_i, int32_t *chrom_index, int64_t *min_pos, int64_t *max_pos)
+void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, int64_t *min_pos, int64_t *max_pos)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
 

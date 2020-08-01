@@ -45,7 +45,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
         int64_t pos = vb->contexts[VCF_POS].last_value.i;
 
-        Range *range = ref_zip_get_locked_range (vb, pos);
+        Range *range = ref_seg_get_locked_range (vb, pos, start_line);
         uint32_t index_within_range = pos - range->first_pos;
 
         ref_assert_nucleotide_available (range, pos);
@@ -478,7 +478,7 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
             ctx->last_value.i = atoi (cell_gt_data); // an integer terminated by : \t or \n
         }
 
-        uint32_t node_index;
+        WordIndex node_index;
         unsigned optimized_snip_len;
         char optimized_snip[OPTIMIZE_MAX_SNIP_LEN];
 
@@ -559,7 +559,7 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
             node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, cell_gt_data, len, NULL);
 
         NEXTENT (uint32_t, vb->line_gt_data) = node_index;
-        ctx->mtf_i.len++; // mtf_i is not used in FORMAT, we just update len for the use of stats_show_sections()
+        ctx->mtf_i.len++; // mtf_i is not used in FORMAT, we just update len for the use of stats_show_stats()
         
         if (is_vcf_string && len)
             ctx->txt_len += len + 1; // account for : \t or \n, but NOT \r (EOL accounts for it)

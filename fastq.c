@@ -38,23 +38,23 @@ void fastq_seg_initialize (VBlockFAST *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[FASTQ_SQBITMAP] .ltype = LT_BITMAP; 
-    vb->contexts[FASTQ_STRAND]     .ltype = LT_BITMAP;
+    vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
+    vb->contexts[FASTQ_STRAND].ltype   = LT_BITMAP;
 
-    vb->contexts[FASTQ_GPOS]       .ltype = LT_UINT32;
-    vb->contexts[FASTQ_GPOS]       .flags = CTX_FL_STORE_INT;
-    vb->contexts[FASTQ_GPOS]  .local_comp = COMP_LZMA;
+    vb->contexts[FASTQ_GPOS].ltype     = LT_UINT32;
+    vb->contexts[FASTQ_GPOS].flags     = CTX_FL_STORE_INT;
+    vb->contexts[FASTQ_GPOS].lcomp     = COMP_LZMA;
 
-    vb->contexts[FASTQ_NONREF]     .ltype = LT_SEQUENCE;
-    vb->contexts[FASTQ_NONREF].local_comp = COMP_ACGT;
+    vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
+    vb->contexts[FASTQ_NONREF].lcomp   = COMP_ACGT;
 
-    vb->contexts[FASTQ_QUAL]       .ltype = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
-    vb->contexts[FASTQ_QUAL]        .inst = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
+    vb->contexts[FASTQ_QUAL].ltype     = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
+    vb->contexts[FASTQ_QUAL].inst      = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
 
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst  = CTX_INST_PAIR_LOCAL;
         vb->contexts[FASTQ_STRAND].inst  = CTX_INST_PAIR_LOCAL; 
-        vb->contexts[FASTQ_STRAND].local_comp = COMP_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. Cancel the COMP_NONE possibly inherited from the last vb of the previous bound file
+        vb->contexts[FASTQ_STRAND].lcomp = COMP_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. Cancel the COMP_NONE possibly inherited from the last vb of the previous bound file
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
@@ -62,7 +62,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
         fastq_initialize_pair_iterators (vb);
     }
     else
-        vb->contexts[FASTQ_STRAND].local_comp = COMP_NONE; // bz2 and lzma only make it bigger
+        vb->contexts[FASTQ_STRAND].lcomp = COMP_NONE; // bz2 and lzma only make it bigger
 
     if (flag_optimize_DESC) {
         vb->optimized_desc_len = strlen (txt_file->basename) + 2; // +2 for @ :
@@ -232,8 +232,9 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     char snip[10];
     snip[0] = SNIP_LOOKUP;
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SQBITMAP, dl->seq_len); 
-
+    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SQBITMAP, 0); 
+    vb->contexts[FASTQ_NONREF].txt_len += dl->seq_len; // account for the txt data in NONREF
+    
     SEG_EOL (FASTQ_E1L, true);
 
     // PLUS - next line is expected to be a "+"

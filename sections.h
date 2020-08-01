@@ -243,7 +243,7 @@ typedef struct SectionListEntry {
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct RAEntry {
     uint32_t vblock_i;            // the vb_i in which this range appears
-    uint32_t chrom_index;         // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
+    WordIndex chrom_index;        // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
     uint64_t min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 

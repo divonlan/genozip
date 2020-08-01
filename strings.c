@@ -64,6 +64,12 @@ unsigned str_int (int64_t n, char *str /* out */)
 
 bool str_is_int (const char *str, unsigned str_len)
 {
+     // edge cases - "" ; "-" ; "030" ; "-0" ; "-030" - false, because if we store these as an integer, we can't reconstruct them
+    if (!str_len || 
+        (str_len == 1 && str[0] == '-') || 
+        (str_len >= 2 && str[0] == '0') || 
+        (str_len >= 2 && str[0] == '-' && str[1] == '0')) return false;
+
     for (unsigned i=0; i < str_len; i++) 
         if (!IS_DIGIT(str[i]) && !(i==0 && str[0]=='-')) return false;
 

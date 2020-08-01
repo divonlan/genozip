@@ -175,14 +175,14 @@ cleanup:
 }
 
 // optimizes a dictionary fragment into a new buffer, as we still need the unoptimized dict for future evals.
-const char *gl_optimize_dictionary (VBlockP vb_, const Buffer *dict, const MtfNode *nodes, uint64_t dict_start_char, unsigned num_words)
+const char *gl_optimize_dictionary (VBlockP vb_, const Buffer *dict, const MtfNode *nodes, CharIndex dict_start_char, unsigned num_words)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
 
     buf_copy (vb, &vb->optimized_gl_dict, dict, 1, dict_start_char, 0, "optimized_gl_dict", vb->vblock_i);
 
     for (unsigned i=0; i < num_words; i++) {
-        unsigned char_index = nodes[i].char_index - dict_start_char;
+        CharIndex char_index = nodes[i].char_index - dict_start_char;
         gl_optimize_do (&vb->optimized_gl_dict.data[char_index], nodes[i].snip_len);
     }
 

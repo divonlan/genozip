@@ -131,7 +131,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_ID) {
         Context *ctx = mtf_get_ctx (vb, dict_id);
         seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, *this_value, *this_value_len, false);
-        ctx->local_comp = COMP_BZ2; // cancel LZMA set by seg_pos_field - use BZ2 instead - it compresses better in this case
+        ctx->lcomp = COMP_BZ2; // cancel LZMA set by seg_pos_field - use BZ2 instead - it compresses better in this case
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -207,7 +207,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
         Context *ctx = mtf_get_ctx (vb, dict_id_ATTR_Reference_seq); 
-        ctx->local_comp = COMP_LZMA;
+        ctx->lcomp = COMP_LZMA;
 
         seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it

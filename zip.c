@@ -135,16 +135,16 @@ void zip_generate_b250_section (VBlock *vb, Context *ctx)
     if (show) 
         bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
-    int32_t prev = -1; 
-    for (uint32_t i=0; i < ctx->mtf_i.len; i++) {
+    WordIndex prev = WORD_INDEX_NONE; 
+    for (uint32_t i=0; i < (uint32_t)ctx->mtf_i.len; i++) {
 
-        uint32_t node_index = *ENT(uint32_t, ctx->mtf_i, i);
+        WordIndex node_index = *ENT(WordIndex, ctx->mtf_i, i);
 
-        if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
+        if (node_index >= 0) { // normal index
 
             MtfNode *node = mtf_node_vb (ctx, node_index, NULL, NULL);
 
-            uint32_t n            = node->word_index.n;
+            WordIndex n           = node->word_index.n;
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
             uint8_t *numerals     = node->word_index.encoded.numerals;
             
@@ -214,7 +214,7 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
 
     // this function holds the mutex and hence has a non-trival performance penalty. we call
     // it only if the user specifically requested --show-stats
-    if (flag_show_sections) mtf_update_stats (vb);
+    if (flag_show_stats) mtf_update_stats (vb);
 
     if (flag_show_headers && buf_is_allocated (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);

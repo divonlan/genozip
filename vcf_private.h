@@ -35,7 +35,7 @@ typedef struct {
     bool has_haplotype_data; // FORMAT field contains GT
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
-    uint32_t format_mtf_i;   // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    WordIndex format_mtf_i;  // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
 } ZipDataLineVCF;
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
@@ -43,7 +43,7 @@ typedef struct {
     bool has_haplotype_data; // FORMAT field contains GT
     bool has_genotype_data;  // FORMAT field contains subfields other than GT
 
-    uint32_t format_mtf_i;   // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
+    WordIndex format_mtf_i;  // the mtf_i into contexts[VCF_FORMAT].mtf and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_mtf_i]
 } PizDataLineVCF;
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb

@@ -80,3 +80,6 @@ genome_*Full*
 unix-nl.*
 windows-nl.*
 test.*
+docs/*
+utils/*
+

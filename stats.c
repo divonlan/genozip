@@ -183,7 +183,7 @@ static int stats_sort_by_total_comp_size(const void *a, const void *b)
     return (((StatsByLine*)b)->total_comp_size > ((StatsByLine*)a)->total_comp_size) ? 1 : -1; // use comparison (>) and not minus (-) as the retun value is only 32 bit
 }
 
-void stats_show_sections (void)
+void stats_show_stats (void)
 {
     stats_show_file_metadata();
 
@@ -274,9 +274,15 @@ void stats_show_sections (void)
     // sort by total compressed size
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_total_comp_size);
 
+    
     fprintf (stderr, "\nSections (sorted by %% of genozip file):\n");
-    fprintf (stderr, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  \n");
-    fprintf (stderr, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
+    if (flag_show_stats == 1) {
+        fprintf (stderr, "NAME                  TXT      %%       ZIP      %%   RATIO\n");
+    }
+    else {
+        fprintf (stderr, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  \n");
+        fprintf (stderr, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
+    }
 
     for (uint32_t i=0; i < num_stats; i++) { // don't show CHROM-FORMAT as they are already showed above
 
@@ -284,11 +290,17 @@ void stats_show_sections (void)
         if (!s->total_comp_size) continue;
 
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
-        fprintf (stderr, "%-2.2s    %-15.15s %-6.6s %15s  %4.*f%%  %4.*f%%  %4.*f%% %12s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-                 s->did_i, s->name, s->type, s->words, 
-                 PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
-                 s->hash, s->pc_hash_occupancy, // Up to here - these don't appear in the total
-                 s->uncomp_dict, s->comp_dict, s->comp_b250, s->comp_data, s->comp_total, s->txt, s->comp_ratio, s->pc_txt, s->pc_genozip);
+        if (flag_show_stats == 1) {
+            fprintf (stderr, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                     s->name, s->txt, s->pc_txt, s->comp_total, s->pc_genozip, s->comp_ratio);
+        }
+        else {
+            fprintf (stderr, "%-2.2s    %-15.15s %-6.6s %15s  %4.*f%%  %4.*f%%  %4.*f%% %12s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+                     s->did_i, s->name, s->type, s->words, 
+                     PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
+                     s->hash, s->pc_hash_occupancy, // Up to here - these don't appear in the total
+                     s->uncomp_dict, s->comp_dict, s->comp_b250, s->comp_data, s->comp_total, s->txt, s->comp_ratio, s->pc_txt, s->pc_genozip);
+        }
     }
 
     double all_comp_ratio = (double)all_txt / (double)all_comp_total;
@@ -296,12 +308,18 @@ void stats_show_sections (void)
     double all_pc_genozip = 100.0 * (double)all_comp_total / (double)z_file->disk_size;
     
     char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
-    fprintf (stderr, "TOTAL                                                                               "
-             "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-             str_size (all_uncomp_dict, s1), str_size (all_comp_dict, s2),  str_size (all_comp_b250, s3), 
-             str_size (all_comp_data, s4),   str_size (all_comp_total, s5), str_size (all_txt, s6), 
-             all_comp_ratio, all_pc_txt, all_pc_genozip);
-
+    if (flag_show_stats == 1) {
+        fprintf (stderr, "TOTAL           "
+                    "%9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                    str_size (all_txt, s6), all_pc_txt, str_size (all_comp_total, s5), all_pc_genozip, all_comp_ratio);
+    }
+    else {
+        fprintf (stderr, "TOTAL                                                                               "
+                    "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+                    str_size (all_uncomp_dict, s1), str_size (all_comp_dict, s2),  str_size (all_comp_b250, s3), 
+                    str_size (all_comp_data, s4),   str_size (all_comp_total, s5), str_size (all_txt, s6), 
+                    all_comp_ratio, all_pc_txt, all_pc_genozip);
+    }
     stats_check_count(all_comp_total);
 
     // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_size is 

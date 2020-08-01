@@ -26,7 +26,7 @@ typedef struct Range {
     BitArray is_set;             // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
     const char *chrom_name;
     unsigned chrom_name_len;
-    int32_t chrom;               // index to the chrom of the external reference
+    WordIndex chrom;               // index to the chrom of the external reference
     uint32_t range_i;
     int64_t first_pos, last_pos; // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
     int64_t gpos;                // position of this range in the "global position" 
@@ -47,11 +47,11 @@ extern void ref_unload_reference (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
-extern void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_name_len, const char **snip, int32_t *word_index);
+extern void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_name_len, const char **snip, WordIndex *word_index);
 extern void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_words);
 extern int64_t ref_min_max_of_chrom (int32_t chrom, bool get_max);
 
-extern Range *ref_zip_get_locked_range (VBlockP vb, int64_t pos);
+extern Range *ref_seg_get_locked_range (VBlockP vb, int64_t pos, const char *field /* used for ASSSEG */);
 
 extern void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int64_t end_pos);
 extern void ref_print_is_set (const Range *r, int64_t around_pos);

@@ -19,15 +19,15 @@
 
 #define MAX_BASE250_NUMERALS 4
 typedef struct {
-    uint32_t n;                                  // the number being encoded
+    WordIndex n;                                 // the number being encoded
     union {
         uint8_t numerals[MAX_BASE250_NUMERALS];  // 4-byte big endian except if a 1 byte value 250-255
         uint32_t bgen;                           // big endian
     } encoded;
 } Base250;
 
-extern Base250 base250_encode (uint32_t n);
-extern uint32_t base250_decode (const uint8_t **str_p); // decodes and advances str_p
+extern Base250 base250_encode (WordIndex n);
+extern WordIndex base250_decode (const uint8_t **str_p); // decodes and advances str_p
 #define base250_len(data) ((*(data) < 250) ? 4 : 1)
 #define base250_copy(dst, b250) memcpy (dst, (b250).encoded.numerals, base250_len((b250).encoded.numerals))
 

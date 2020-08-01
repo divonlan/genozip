@@ -275,7 +275,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
     }
     case SNIP_PAIR_LOOKUP:
         mtf_get_next_snip (vb, snip_ctx, &snip_ctx->pair_b250_iter, &snip, &snip_len);
-        RECONSTRUCT (snip, snip_len);
+        piz_reconstruct_one_snip (vb, snip_ctx, snip, snip_len); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
 
     case SNIP_SELF_DELTA:

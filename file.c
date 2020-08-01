@@ -430,8 +430,14 @@ static bool file_open_z (File *file)
         if (!file_has_ext (file->name, GENOZIP_EXT)) {
             if (flag_multiple_files) 
                 RETURNW (false, true, "Skipping %s - it doesn't have a .genozip extension", file_printname (file))
-            else
-                ABORT ("%s: file %s must have a " GENOZIP_EXT " extension", global_cmd, file_printname (file));
+            else {
+                if (flag_reading_reference)
+                    ABORT ("%s: with --reference or --REFERENCE, you must specify a genozip reference file (.ref.genozip extension)\n"
+                           "Tip: You can create a genozip reference file from a FASTA file with 'genozip --make-reference myfasta.fa'",
+                           global_cmd)
+                else
+                    ABORT ("%s: file %s must have a " GENOZIP_EXT " extension", global_cmd, file_printname (file));
+            }
         }
 
         file->data_type = file_get_dt_by_z_ft (file->type); // if we don't find it (DT_NONE), it will be determined after the genozip header is read

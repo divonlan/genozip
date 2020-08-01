@@ -67,7 +67,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* random access, chrom, pos */ \
     Buffer ra_buf;             /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
-    int32_t chrom_node_index;  /* ZIP and PIZ: index and name of chrom of the current line */ \
+    WordIndex chrom_node_index;  /* ZIP and PIZ: index and name of chrom of the current line */ \
     const char *chrom_name;    \
     unsigned chrom_name_len; \
     uint32_t seq_len;          /* PIZ - last calculated seq_len (as defined by each data_type) */\
@@ -100,9 +100,9 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     DidIType dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
     /* ZIP only: reference range lookup caching */ \
-    RangeP prev_range; /* previous range returned by ref_zip_get_locked_range */ \
+    RangeP prev_range; /* previous range returned by ref_seg_get_locked_range */ \
     uint32_t prev_range_range_i; /* range_i used to calculate previous range */ \
-    uint32_t prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
+    WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;                   /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\

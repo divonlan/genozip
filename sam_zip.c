@@ -109,7 +109,7 @@ void sam_seg_initialize (VBlock *vb)
 
     vb->contexts[SAM_RNAME].inst        = CTX_INST_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SEQ_BITMAP].ltype  = LT_BITMAP;
-    vb->contexts[SAM_NONREF].local_comp = COMP_ACGT;
+    vb->contexts[SAM_NONREF].lcomp = COMP_ACGT;
     vb->contexts[SAM_NONREF].ltype      = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype        = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].inst         = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
@@ -215,21 +215,15 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
     if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
 
-    Range *range = ref_zip_get_locked_range ((VBlockP)vb, pos);
+    Range *range = ref_seg_get_locked_range ((VBlockP)vb, pos, seq);
 
-/*    // when using an external refernce, pos has to be within the reference range (we already checked pos ref_zip_get_locked_range, now we check the end pos)
-    int64_t final_seq_pos = pos + vb->ref_consumed - 1;
-    ASSSEG (flag_reference == REF_INTERNAL || final_seq_pos <= range->last_pos, cigar,
-            "Error: file has contig \"%.*s\", POS=%"PRId64" CIGAR=\"%s\", implying a final reference pos for this read at %"PRId64". However, the reference's last pos for this contig is %"PRId64,
-            range->chrom_name_len, range->chrom_name, pos, cigar, final_seq_pos, range->last_pos);
-*/
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. if reference range is NULL as the hash entry for this range is unfortunately already occupied by another range (can only happen with REF_INTERNAL)
         (cigar[0] == '*' && cigar[1] == 0)) { // 2. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
 
         buf_add (&nonref_ctx->local, seq, seq_len);
         
-        bit_array_clear_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed);
+        bit_array_clear_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
         bitmap_ctx->next_local += vb->ref_and_seq_consumed;
 
         random_access_update_last_pos ((VBlockP)vb, pos + vb->ref_consumed - 1);
@@ -433,7 +427,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_by_dict_id (vb, nm,     nm_len,     structured_SA_OA.items[5].dict_id, 1 + nm_len);
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
-        pos_ctx->local_comp = COMP_LZMA;
+        pos_ctx->lcomp = COMP_LZMA;
         pos_ctx->ltype = LT_UINT32;
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
@@ -496,7 +490,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_XA.items[2].dict_id);
         pos_ctx->ltype = LT_UINT32;
-        pos_ctx->local_comp = COMP_LZMA;
+        pos_ctx->lcomp = COMP_LZMA;
 
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
@@ -662,7 +656,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
         ctx->ltype      = LT_SEQUENCE;
-        ctx->local_comp = COMP_LZMA;
+        ctx->lcomp = COMP_LZMA;
     }
 
     else if (dict_id.num == dict_id_OPTION_BI) { 
@@ -677,7 +671,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         ctx->local.len += value_len;
         ctx->txt_len   += value_len + 1; // +1 for \t
         ctx->ltype      = LT_SEQUENCE;
-        ctx->local_comp = COMP_LZMA;
+        ctx->lcomp = COMP_LZMA;
 
         // BI requires a special algorithm to reconstruct from the delta from BD (if one exists)
         if (dl->bd_data_len) {

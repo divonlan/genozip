@@ -13,12 +13,12 @@ extern uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zf_ctx,
 extern void hash_alloc_global (ContextP zf_ctx, uint32_t estimated_entries);
 
 typedef enum { HASH_NEW_OK_SINGLETON_IN_VB, HASH_NEW_OK_NOT_SINGLETON, HASH_READ_ONLY } HashGlobalGetEntryMode; 
-extern int32_t hash_global_get_entry (ContextP zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
-                                      MtfNodeP *old_node);
+extern WordIndex hash_global_get_entry (ContextP zf_ctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
+                                        MtfNodeP *old_node);
 
-extern int32_t hash_get_entry_for_seg (VBlockP segging_vb, ContextP vb_ctx,
-                                       const char *snip, unsigned snip_len, 
-                                       int32_t new_mtf_i_if_no_old_one,
-                                       MtfNodeP *node);
+extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vb_ctx,
+                                         const char *snip, unsigned snip_len, 
+                                         WordIndex new_mtf_i_if_no_old_one,
+                                         MtfNodeP *node);
 
 #endif

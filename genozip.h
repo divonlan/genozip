@@ -74,6 +74,8 @@ typedef union DictId {
 #pragma pack()
 
 typedef uint8_t DidIType;
+typedef uint64_t CharIndex;
+typedef int32_t WordIndex; // used for word and node indices
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads, global_max_memory_per_vb;
@@ -90,7 +92,7 @@ extern CommandType command, primary_command;
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
-           flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_sections, flag_show_headers, flag_show_aliases,
+           flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_stats, flag_show_headers, flag_show_aliases,
            flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions,  
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms,
            flag_show_vblocks, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only, flag_ref_whole_genome,
@@ -139,7 +141,7 @@ typedef _Bool bool;
 // IMPORTANT: This is part of the genozip file format. If making any changes, update arrays in 1. comp_compress 2. file_viewer
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */,            
-    COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_LZMA=7, COMP_ZIP=8, 
+    COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_CRAM=13, COMP_LZMA=7, COMP_ZIP=8, 
     // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
     // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
     // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters

@@ -202,17 +202,17 @@ void regions_make_chregs (void)
 
         Region *reg = &regions[i];
         
-        int32_t chrom_word_index = NIL; // All chromosomes, unless reg->chrom is defined
+        int32_t chrom_word_index = WORD_INDEX_NONE; // All chromosomes, unless reg->chrom is defined
         if (reg->chrom) {
             chrom_word_index = mtf_search_for_word_index (chrom_ctx, regions[i].chrom, strlen (regions[i].chrom));
 
             // if the requested chrom does not exist in the file, we remove this region
-            if (chrom_word_index == NIL) continue;
+            if (chrom_word_index == WORD_INDEX_NONE) continue;
         }
 
         // loop through either a single chromosome or all chromosomes 
-        for (unsigned chr_i = (chrom_word_index == NIL ? 0 : chrom_word_index);
-             chr_i         <= (chrom_word_index == NIL ? num_chroms-1 : chrom_word_index);
+        for (unsigned chr_i = (chrom_word_index == WORD_INDEX_NONE ? 0 : chrom_word_index);
+             chr_i         <= (chrom_word_index == WORD_INDEX_NONE ? num_chroms-1 : chrom_word_index);
              chr_i++) {
             
             buf_alloc (evb, &chregs[chr_i], (++chregs[chr_i].len) * sizeof (Chreg), 2, "chregs", chr_i);

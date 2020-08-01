@@ -39,7 +39,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
         vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
         Context *seq_ctx = &vb->contexts[FASTA_SEQ];
-        seq_ctx->local_comp = COMP_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
+        seq_ctx->lcomp = COMP_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
         seq_ctx->ltype = LT_SEQUENCE;
 
         if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)
@@ -117,7 +117,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         }
 
         bool is_new;
-        uint32_t chrom_node_index = mtf_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_name, chrom_name_len, &is_new);
+        WordIndex chrom_node_index = mtf_evaluate_snip_seg ((VBlockP)vb, &vb->contexts[FASTA_CONTIG], chrom_name, chrom_name_len, &is_new);
         random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_name, chrom_name_len);
 
         ASSERT (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
@@ -176,7 +176,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         // case: this sequence is continuation from the previous VB - we don't yet know the chrom - we will update it,
         // and increment the min/max_pos relative to the beginning of the seq in the vb later, in random_access_finalize_entries
         if (!vb->chrom_name && vb->line_i == 0)
-            random_access_update_chrom ((VBlockP)vb, NIL, 0, 0);
+            random_access_update_chrom ((VBlockP)vb, WORD_INDEX_NONE, 0, 0);
 
         random_access_increment_last_pos ((VBlockP)vb, line_len); 
     }

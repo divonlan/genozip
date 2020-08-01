@@ -80,13 +80,13 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 
             if ((cigar_op & CIGAR_CONSUMES_REFERENCE) && NEXTLOCALBIT (bitmap_ctx)) /* copy from reference */ {
 
-                uint32_t idx = pos + ref_consumed - range->first_pos;
+                uint32_t idx = (pos - range->first_pos) + ref_consumed ;
 
                 if (!ref_is_nucleotide_set (range, idx)) {
-                    ref_print_is_set (range, pos + seq_consumed);
-                    ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u: reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
+                    ref_print_is_set (range, pos + ref_consumed);
+                    ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u (vb_i=%u): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
                            " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
-                           vb->line_i, range->chrom, range->chrom_name_len, range->chrom_name, pos + seq_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
+                           vb->line_i, vb->vblock_i, range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
                 }
 
                 char ref = ref_get_nucleotide (range, idx);
@@ -130,7 +130,7 @@ void sam_piz_special_CIGAR (VBlock *vb_, Context *ctx, const char *snip, unsigne
 
     vb->last_cigar = snip;
 
-    if (flag_regions && vb->chrom_node_index != NIL && vb->contexts[SAM_POS].last_value.i && 
+    if (flag_regions && vb->chrom_node_index != WORD_INDEX_NONE && vb->contexts[SAM_POS].last_value.i && 
         !regions_is_range_included (vb->chrom_node_index, vb->contexts[SAM_POS].last_value.i, vb->contexts[SAM_POS].last_value.i + vb->ref_consumed - 1, true))
         vb->dont_show_curr_line = true;
 }   

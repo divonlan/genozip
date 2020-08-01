@@ -168,7 +168,7 @@ int64_t seg_pos_field (VBlock *vb,
     Context *base_ctx = &vb->contexts[base_did_i];
 
     snip_ctx->inst |= CTX_INST_NO_STONS;
-    snip_ctx->local_comp = COMP_LZMA;
+    snip_ctx->lcomp = COMP_LZMA;
 
     base_ctx->flags |= CTX_FL_STORE_INT;
     base_ctx->inst |= CTX_INST_NO_STONS;
@@ -279,7 +279,7 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
 
     Context *ctx = mtf_get_ctx (vb, dict_id);
     ctx->inst      |= CTX_INST_NO_STONS;
-    ctx->local_comp = COMP_LZMA;
+    ctx->lcomp = COMP_LZMA;
     ctx->ltype      = LT_UINT32;
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
@@ -473,7 +473,7 @@ void seg_compound_field (VBlock *vb,
         char sep = (i==field_len) ? 0 : field[i];
 
         if (!sep || 
-            ((sf_i < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || (ws_is_sep && (sep==' ' || sep==1))))) {
+            ((sf_i < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep==1))))) {
         
             // process the subfield that just ended
             Context *sf_ctx;
@@ -496,18 +496,21 @@ void seg_compound_field (VBlock *vb,
             char delta_snip[30];
             unsigned original_snip_len = snip_len;
 
+            int64_t this_value = (int64_t)strtoull (snip, NULL, 10);
             if (str_is_int (snip, snip_len)) {
                 delta_snip[0] = SNIP_SELF_DELTA;
 
-                int64_t this_value = (int64_t)strtoull (snip, NULL, 10);
                 int64_t delta = this_value - sf_ctx->last_value.i;
                 snip_len = 1 + str_int (delta, &delta_snip[1]);
                 snip = delta_snip;
 
-                sf_ctx->last_value.i = this_value;
-                sf_ctx->inst  |= CTX_INST_NO_STONS;
+                //sf_ctx->inst  |= CTX_INST_NO_STONS;
                 sf_ctx->flags |= CTX_FL_STORE_INT;
             }
+            // note: we store it regardless of whether str_is_int considers it an int (for example 003 will fail str_is_int)
+            // because a future value that IS successful with str_is_int will delta against this. This is because
+            // piz_reconstruct_one_snip always sets last_value without checking str_is_int
+            sf_ctx->last_value.i = this_value;
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted
@@ -515,19 +518,19 @@ void seg_compound_field (VBlock *vb,
 
             // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
             // and read 2 might have SNIP_PAIR_LOOKUP
-            if (flag_pair == PAIR_READ_1)
-                sf_ctx->inst |= CTX_INST_NO_STONS;
-            
-            else if (flag_pair == PAIR_READ_2) {
-                sf_ctx->inst |= CTX_INST_PAIR_B250;
-
+            if (flag_pair == PAIR_READ_2) {
+ 
                 // if the number of components in the compound is not exactly the same for every line of
                 // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
                 // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
                 // doesn't result in an error (TO DO: overcome this, bug 159)
-                if (sf_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, sf_ctx->pair)) {
+                if (sf_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, sf_ctx->pair) &&
+                    // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
+                    // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
+                    // inequality - we stop the pairing going forward till the end of this VB
+                    !(sf_ctx->inst && CTX_INST_STOP_PAIRING)) {
                     
-                    uint32_t pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250);  
+                    WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250);  
                     
                     if (pair_word_index == WORD_INDEX_ONE_UP) 
                         pair_word_index = sf_ctx->pair_b250_iter.prev_word_index + 1;
@@ -535,10 +538,15 @@ void seg_compound_field (VBlock *vb,
                     sf_ctx->pair_b250_iter.prev_word_index = pair_word_index;
                     
                     if (word_index == pair_word_index) {
+                        sf_ctx->inst |= CTX_INST_PAIR_B250;
                         static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
                         word_index = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, lookup_pair_snip, 1, NULL);
                     }   
+                    else 
+                        sf_ctx->inst |= CTX_INST_STOP_PAIRING;
                 }
+                else
+                    sf_ctx->inst |= CTX_INST_STOP_PAIRING;
             }
 
             NEXTENT (uint32_t, sf_ctx->mtf_i) = word_index;

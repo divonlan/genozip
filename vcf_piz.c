@@ -8,7 +8,6 @@
 #include "zfile.h"
 #include "txtfile.h"
 #include "seg.h"
-#include "base250.h"
 #include "context.h"
 #include "file.h"
 #include "endianness.h"
@@ -85,7 +84,7 @@ static void vcf_piz_map_format_subfields (VBlock *vb)
 
             DictId dict_id = dict_id_vcf_format_sf (dict_id_make (start, len)); 
 
-            // get the did_i of this subfield. note: the context will be new (exist in the VB but not z_file) did_i can be NIL if the subfield appeared in a FORMAT field
+            // get the did_i of this subfield. note: the context will be new (exist in the VB but not z_file) did_i can be DID_I_NONE if the subfield appeared in a FORMAT field
             // in this VB, but never had any value in any sample on any line in this VB
             formats[format_i].did_i[sf_i] = mtf_get_existing_did_i_from_z_file (dict_id); 
         }

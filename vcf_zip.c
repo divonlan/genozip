@@ -62,7 +62,7 @@ static unsigned vcf_zip_get_genotype_vb_start_len (VBlockVCF *vb)
     for (uint32_t line_i=0; line_i < (uint32_t)vb->lines.len; line_i++) {
 
         uint32_t *gt_data  = (uint32_t*)GENOTYPE_DATA(vb, DATA_LINE (line_i));        
-        unsigned format_mtf_i = DATA_LINE (line_i)->format_mtf_i;
+        WordIndex format_mtf_i = DATA_LINE (line_i)->format_mtf_i;
         SubfieldMapper *format_mapper = ENT (SubfieldMapper, vb->format_mapper_buf, format_mtf_i);
         
         for (unsigned sb_i=0; sb_i < vb->num_sample_blocks; sb_i++) {
@@ -119,11 +119,11 @@ static void vcf_zip_generate_genotype_one_section (VBlockVCF *vb, unsigned sb_i)
             // therefore we have 1 fake subfield
             if (vb->has_genotype_data > 0 && num_subfields==0) num_subfields = 1;
 
-            for (unsigned sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
+            for (DidIType sf=0; sf < format_mapper->num_subfields; sf++) { // iterate on the order as in the line
             
-                uint32_t node_index = this_line[format_mapper->num_subfields * sample_i + sf];
+                WordIndex node_index = this_line[format_mapper->num_subfields * sample_i + sf];
 
-                if (node_index <= WORD_INDEX_MAX_INDEX) { // normal index
+                if (node_index >= 0) { // normal index
 
                     Context *ctx = MAPPER_CTX (format_mapper, sf);
                     MtfNode *node = mtf_node_vb (ctx, node_index, NULL, NULL);

@@ -15,11 +15,14 @@
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on mtf.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
-// fake mtf index values that go into genotype_data after segregation if subfields are missing
-#define WORD_INDEX_MAX_INDEX  0xfffffffcUL // the number just smaller than all the special values below
-#define WORD_INDEX_ONE_UP     0xfffffffdUL // the value is the one more than the previous value
-#define WORD_INDEX_EMPTY_SF   0xfffffffeUL // subfield is missing, terminating : present
-#define WORD_INDEX_MISSING_SF 0xffffffffUL // subfield is missing at end of cell, no :
+#define NODE_INDEX_NONE       -1
+#define MAX_NODE_INDEX (MAX_WORDS_IN_CTX-1)
+
+#define MAX_WORD_INDEX (MAX_WORDS_IN_CTX-1)
+#define WORD_INDEX_NONE       -1
+#define WORD_INDEX_ONE_UP     -2 // the value is the one more than the previous value
+#define WORD_INDEX_EMPTY_SF   -3 // subfield is missing, terminating : present
+#define WORD_INDEX_MISSING_SF -4 // subfield is missing at end of cell, no :
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
 // We use characters that cannot appear in a snip - i.e. other than ASCII 32-127, \t (\x9) \n (\xA) \r (\xD)
@@ -71,22 +74,22 @@ typedef struct MiniStructured {
 #ifndef DID_I_NONE // also defined in vblock.h
 #define DID_I_NONE   255
 #endif
-#define NIL ((int32_t)-1)
+
 typedef struct MtfNode {
-    uint32_t char_index;      // character index into dictionary array
-    uint32_t snip_len;        // not including SNIP_SEP terminator present in dictionary array
-    Base250  word_index;      // word index into dictionary 
-    int32_t  count;           // number of times this snip has been evaluated in this VB
+    CharIndex char_index; // character index into dictionary array
+    uint32_t snip_len;    // not including SNIP_SEP terminator present in dictionary array
+    int32_t  count;       // number of times this snip has been evaluated in this VB
+    Base250  word_index;  // word index into dictionary 
 } MtfNode;
 
 typedef struct {
-    uint32_t char_index;
+    CharIndex char_index;
     uint32_t snip_len;
 } MtfWord;
 
 typedef struct { // initialize with mtf_init_iterator()
     const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
-    int32_t prev_word_index;   // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
+    WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
 
 // flags written to the genozip file (header.h.flags)
@@ -99,11 +102,12 @@ typedef struct { // initialize with mtf_init_iterator()
 #define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
 
 // ZIP-only instructions NOT written to the genozip file
-#define CTX_INST_NO_STONS    0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
-#define CTX_INST_PAIR_LOCAL  0x02 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
-#define CTX_INST_PAIR_B250   0x04 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
-#define CTX_INST_NO_CALLBACK 0x08 // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
-#define CTX_INST_LOCAL_PARAM 0x10 // copy local.param to SectionHeaderCtx
+#define CTX_INST_NO_STONS     0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
+#define CTX_INST_PAIR_LOCAL   0x02 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL
+#define CTX_INST_PAIR_B250    0x04 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_B250
+#define CTX_INST_STOP_PAIRING 0x08 // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
+#define CTX_INST_NO_CALLBACK  0x10 // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
+#define CTX_INST_LOCAL_PARAM  0x20 // copy local.param to SectionHeaderCtx
 
 typedef union {
     int64_t i;
@@ -136,7 +140,7 @@ typedef struct Context {
     Buffer mtf_i;              // contains 32bit indices into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
     
     // settings
-    CompressionAlg local_comp; // algorithm used to compress local
+    CompressionAlg lcomp; // algorithm used to compress local
     uint8_t inst;              // instructions for seg/zip - ORed CTX_INST_ values
 
     // hash stuff 
@@ -187,12 +191,12 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArray *b = buf_get_bitarray (
 
 static inline void mtf_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
-extern uint32_t mtf_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
-extern uint32_t mtf_get_next_snip (VBlockP vb, Context *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
+extern WordIndex mtf_evaluate_snip_seg (VBlockP segging_vb, ContextP vb_ctx, const char *snip, uint32_t snip_len, bool *is_new);
+extern WordIndex mtf_get_next_snip (VBlockP vb, Context *ctx, SnipIterator *override_iterator, const char **snip, uint32_t *snip_len);
 extern const char *mtf_peek_next_snip (VBlockP vb, Context *ctx);
-extern int32_t mtf_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
+extern WordIndex mtf_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
 extern void mtf_clone_ctx (VBlockP vb);
-extern MtfNode *mtf_node_vb_do (const Context *ctx, uint32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+extern MtfNode *mtf_node_vb_do (const Context *ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node_vb(ctx, node_index, snip_in_dict, snip_len) mtf_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern MtfNode *mtf_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node_zf(ctx, node_index, snip_in_dict, snip_len) mtf_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
@@ -228,8 +232,8 @@ extern void mtf_free_context (Context *ctx);
 extern void mtf_destroy_context (Context *ctx);
 
 extern void mtf_vb_1_lock (VBlockP vb);
-extern MtfNode *mtf_get_node_by_word_index (Context *ctx, uint32_t word_index);
-extern const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, int32_t word_index, 
+extern MtfNode *mtf_get_node_by_word_index (Context *ctx, WordIndex word_index);
+extern const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
 
 extern void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_dict_ids);

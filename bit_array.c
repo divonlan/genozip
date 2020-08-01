@@ -521,7 +521,8 @@ void bit_array_toggle_bits(BitArray* bitarr, size_t n, ...)
 // Set all the bits in a region
 void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 {
-  //assert(start + len <= bitarr->num_of_bits);
+  if (!len) return; // nothing to do 
+
   ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_set_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
           start, len, bitarr->num_of_bits); // divon fixed bug
 
@@ -533,7 +534,8 @@ void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 // Clear all the bits in a region
 void bit_array_clear_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 {
-  //assert(start + len <= bitarr->num_of_bits);
+  if (!len) return; // nothing to do 
+
   ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_clear_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
           start, len, bitarr->num_of_bits); // divon fixed bug
 
@@ -544,6 +546,8 @@ void bit_array_clear_region(BitArray* bitarr, bit_index_t start, bit_index_t len
 // Toggle all the bits in a region
 void bit_array_toggle_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 {
+  if (!len) return; // nothing to do 
+
   ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_toggle_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
           start, len, bitarr->num_of_bits); // divon fixed bug
           

@@ -9,11 +9,10 @@
 #include "context.h"
 
 // Used by ZIP only
-Base250 base250_encode (uint32_t n) // number to encode
+Base250 base250_encode (WordIndex n) // number to encode
 {
-    static const uint32_t MAX_B250 = 250UL*256UL*256UL*256UL-1;
-
-    ASSERT (n <= MAX_B250, "Error: number too large for base250. n=%u, MAX_B250=%u", n, MAX_B250);
+    // note: the actual maximum that the format can carry is 250*256*256*256-1 but we restrict it to MAX_WORD_INDEX
+    ASSERT (n >= 0 && n <= MAX_WORD_INDEX, "Error in base250_encode: n=%d is out of range 0-%u", n, MAX_WORD_INDEX);
 
     // get numberals in base 250 (i.e. each numeral is 0 to 249) - least-signifcant-first order (little endian)
     Base250 result;
@@ -27,7 +26,7 @@ Base250 base250_encode (uint32_t n) // number to encode
     return result;
 }
 
-uint32_t base250_decode (const uint8_t **str)
+WordIndex base250_decode (const uint8_t **str)
 {
     ASSERT0 (*str, "Error in base250_decode: *str is NULL");
 

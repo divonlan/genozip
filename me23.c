@@ -64,7 +64,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
     
     // note: we don't use ACGT because the genotype contains frequent "--" causing a large NON_AGCT section and making
     // the compression gains negligible, but the execution time 50% higher
-    //vb->contexts[ME23_GENOTYPE].local_comp = COMP_ACGT;
+    //vb->contexts[ME23_GENOTYPE].lcomp = COMP_ACGT;
     
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
     seg_by_did_i (vb, lookup, 2, ME23_GENOTYPE, field_len + 1);
