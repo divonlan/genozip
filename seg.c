@@ -466,7 +466,8 @@ void seg_compound_field (VBlock *vb,
     const char *snip = field;
     unsigned snip_len = 0;
     unsigned sf_i = 0;
-        
+    unsigned num_double_sep = 0;
+
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
     
@@ -553,10 +554,17 @@ void seg_compound_field (VBlock *vb,
 
             sf_ctx->txt_len += nonoptimized_len ? 0 : original_snip_len;
 
+            // case double space (common in fasta reference file description)
+            bool double_sep = (sep==' ') && (i < field_len-1) && (field[i+1] == sep);
+            if (double_sep) {
+                i++;
+                num_double_sep++;
+            }
+
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
-                st.items[sf_i].seperator[0] = field[i];
-                st.items[sf_i].seperator[1] = 0;
+                st.items[sf_i].seperator[0] = sep;
+                st.items[sf_i].seperator[1] = double_sep ? sep : 0;
                 snip = &field[i+1];
                 snip_len = 0;
             }
@@ -567,7 +575,7 @@ void seg_compound_field (VBlock *vb,
 
     st.num_items = sf_i;
 
-    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, (nonoptimized_len ? nonoptimized_len : sf_i-1) + add_for_eol);
+    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, (nonoptimized_len ? nonoptimized_len : sf_i + num_double_sep - 1) + add_for_eol);
 }
 
 void seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
