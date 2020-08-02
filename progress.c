@@ -170,7 +170,7 @@ void progress_finalize_component_time (const char *status, Md5Hash md5)
 void progress_finalize_component_time_ratio (const char *me, double ratio, Md5Hash md5)
 {
     if (component_name)
-        FINALIZE ("Done (%s, compression ratio: %1.1f)", progress_ellapsed_time (false), ratio)
+        FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time (false), me, ratio)
     else
         FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
 }

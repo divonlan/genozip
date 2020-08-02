@@ -27,6 +27,11 @@ void vcf_header_initialize (void)
     buf_free (&global_vcf_header_line);
 }
 
+bool vcf_inspect_txt_header (Buffer *txt_header)
+{
+    return vcf_header_set_globals (txt_file->name, txt_header);
+}
+
 bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
 {
     static const char *vcf_header_line_filename = NULL; // file from which the header line was taken

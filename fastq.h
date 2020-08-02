@@ -10,6 +10,7 @@
 #include "sections.h"
 
 // ZIP Stuff
+extern void fastq_zip_read_one_vb (VBlockP vb);
 COMPRESSOR_CALLBACK(fastq_zip_get_start_len_line_i_qual)
 
 // SEG Stuff
@@ -32,9 +33,6 @@ extern unsigned fast_vb_zip_dl_size (void);
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t first_vb_i_of_pair_1, uint32_t last_vb_i_of_pair_1);
 extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_len);
 extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
-
-// optimization stuff
-extern void fastq_txtfile_count_lines (VBlockP vb);
 
 #define FASTQ_DICT_ID_ALIASES \
     /*          alias                       maps to this ctx          */  \

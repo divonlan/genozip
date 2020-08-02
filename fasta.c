@@ -13,6 +13,7 @@
 #include "random_access.h"
 #include "strings.h"
 #include "compressor.h"
+#include "regions.h"
 
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
 void fasta_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i, 
@@ -39,7 +40,7 @@ void fasta_seg_initialize (VBlockFAST *vb)
         vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
         Context *seq_ctx = &vb->contexts[FASTA_SEQ];
-        seq_ctx->lcomp = COMP_ACGT; // we will compress with ACGT unless we find evidence of a non-nucleotide and downgrade to LZMA
+        seq_ctx->lcomp = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good 
         seq_ctx->ltype = LT_SEQUENCE;
 
         if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)
@@ -103,7 +104,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         unsigned chrom_name_len = strcspn (line_start + 1, " \t\r\n");
 
         if (!flag_make_reference) {
-            // we segment using / | : and " " as separators. 
+            // we segment using / | : . and " " as separators. 
             seg_compound_field ((VBlockP)vb, &vb->contexts[FASTA_DESC], 
                                 line_start, line_len, &vb->desc_mapper, structured_DESC, true, 0, 0);
             
@@ -121,7 +122,8 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_name, chrom_name_len);
 
         ASSERT (is_new, "Error: bad FASTA file - contig \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
-                flag_bind ? " (possibly in another FASTA being bound)" : "");
+                flag_bind ? " (possibly in another FASTA being bound)" : 
+                (flag_reference==REF_EXTERNAL || flag_reference==REF_EXT_STORE) ? " (possibly the contig size exceeds vblock size, try enlarging with --vblock)" : "");
             
         vb->last_line = FASTA_LINE_DESC;
     }
@@ -165,10 +167,10 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
             SEG_EOL (FASTA_EOL, true); 
 
-            if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-                fast_seg_seq (vb, line_start, line_len, FASTA_SQBITMAP);
-                seq_ctx->local.len = 0; // we don't use FASTA_SEQ if segging to a reference
-            }
+//            if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+//                fast_seg_seq (vb, line_start, line_len, FASTA_SQBITMAP);
+//                seq_ctx->local.len = 0; // we don't use FASTA_SEQ if segging to a reference
+//            }
         }
 
         vb->last_line = FASTA_LINE_SEQ;
@@ -184,6 +186,12 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
     return next_field;
 }
 
+// Called by thread I/O to initialize for a new genozip file
+void fasta_piz_initialize (void)
+{
+    fasta_initialize_contig_grepped_out (0,0,0); // initialize 
+}
+
 // returns true if section is to be skipped reading / uncompressing
 bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
@@ -196,12 +204,12 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     // when grepping by I/O thread - skipping all sections but DESC
-    if (flag_grep && (vb->grep_stages == GS_TEST) && 
+    if ((flag_grep || flag_regions) && (vb->grep_stages == GS_TEST) && 
         dict_id.num != dict_id_fields[FASTA_DESC] && !dict_id_is_fast_desc_sf (dict_id))
         return true;
 
     // if grepping, compute thread doesn't need to decompressed DESC again
-    if (flag_grep && (vb->grep_stages == GS_UNCOMPRESS) && 
+    if ((flag_grep || flag_regions) && (vb->grep_stages == GS_UNCOMPRESS) && 
         (dict_id.num == dict_id_fields[FASTA_DESC] || dict_id_is_fast_desc_sf (dict_id)))
         return true;
 
@@ -265,21 +273,41 @@ bool fasta_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_any_
 {
     // we pass the info from one VB to the next using this static variable
     static bool prev_vb_last_contig_grepped_out = false; 
-    bool ret = !prev_vb_last_contig_grepped_out;
+    static uint32_t prev_vb_i = 0;
+
+    if (!vb) { // vb=0 means initialize
+        prev_vb_last_contig_grepped_out = false;
+        prev_vb_i = 0;
+        return 0;
+    }
+
+    //bool ret = !prev_vb_last_contig_grepped_out;
 
     // we're continuing the contig in the previous VB - until DESC is encountered
-    vb->contig_grepped_out = prev_vb_last_contig_grepped_out; 
+    vb->contig_grepped_out = prev_vb_last_contig_grepped_out || // last contig of previous VB had last_desc_in_this_vb_matches_grep
+                             (prev_vb_i + 1 < vb->vblock_i);    // previous VB was skipped in sections_get_next_header_type due to --regions
     
     // update for use of next VB, IF this VB contains any DESC line, otherwise just carry forward the current value
     if (does_vb_have_any_desc) 
         prev_vb_last_contig_grepped_out = !last_desc_in_this_vb_matches_grep; 
 
-    return ret;
+    prev_vb_i = vb->vblock_i;
+    
+    return !vb->contig_grepped_out;
+}
+
+bool fasta_is_grepped_out_due_to_regions (VBlockFAST *vb, const char *line_start)
+{
+    const char *chrom_name = line_start + 1;
+    unsigned chrom_name_len = strcspn (chrom_name, " \t\r\n");
+    WordIndex chrom_index = mtf_search_for_word_index (&vb->contexts[CHROM], chrom_name, chrom_name_len);
+    return !regions_is_site_included (chrom_index, 1); // we check for POS 1 to include (or not) the whole contig
 }
 
 void fasta_piz_special_DESC (VBlock *vb_, Context *ctx, const char *snip, unsigned snip_len)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
+    vb->contig_grepped_out = false;
 
     const char *desc_start = AFTERENT (const char, vb->txt_data);
     piz_reconstruct_one_snip (vb_, ctx, snip, snip_len);    
@@ -290,6 +318,9 @@ void fasta_piz_special_DESC (VBlock *vb_, Context *ctx, const char *snip, unsign
         vb->contig_grepped_out = !strstr (desc_start, flag_grep);
     }
 
+    if (flag_regions && !vb->contig_grepped_out) 
+        vb->contig_grepped_out = fasta_is_grepped_out_due_to_regions (vb, desc_start);
+
     // note: this logic allows the to grep contigs even if --no-header 
     if (vb->contig_grepped_out || flag_no_header)
         vb->dont_show_curr_line = true;     
@@ -298,7 +329,7 @@ void fasta_piz_special_DESC (VBlock *vb_, Context *ctx, const char *snip, unsign
 // PIZ
 void fasta_piz_reconstruct_vb (VBlockFAST *vb)
 {
-    if (!flag_grep) // if --grep this is already done in fast_piz_test_grep (except if reading as a reference)
+    if (!flag_grep && !flag_regions) // if --grep this is already done in fast_piz_test_grep (except if reading as a reference)
         piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); 
 
     const Context *lm_ctx = &vb->contexts[FASTA_LINEMETA];
@@ -325,7 +356,7 @@ void fasta_piz_reconstruct_vb (VBlockFAST *vb)
 bool fasta_piz_read_one_vb (VBlock *vb, SectionListEntry *sl)
 { 
     // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped
-    if (flag_grep && !fast_piz_test_grep ((VBlockFAST *)vb)) return false; 
+    if ((flag_grep || flag_regions) && !fast_piz_test_grep ((VBlockFAST *)vb)) return false; 
 
     return true;
 }

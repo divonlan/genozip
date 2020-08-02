@@ -62,7 +62,7 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
     flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0, flag_genocat_info_only=0,
     flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_ref_whole_genome=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
-    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0,
+    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0, flag_optimize_SEQ=0,
     flag_pair=NOT_PAIRED_END;
 
 ReferenceType flag_reference = REF_NONE;
@@ -560,8 +560,8 @@ static char *main_get_fastq_pair_filename (const char *fn1, const char *fn2)
     FileType ft1, ft2;
     char *rn1, *rn2;
 
-    file_get_raw_name_and_type (fn1, &rn1, &ft1);
-    file_get_raw_name_and_type (fn2, &rn2, &ft2);
+    file_get_raw_name_and_type ((char *)fn1, &rn1, &ft1);
+    file_get_raw_name_and_type ((char *)fn2, &rn2, &ft2);
     
     unsigned len = strlen (rn1);
     if (len != strlen (rn2)) return NULL;
@@ -640,6 +640,7 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,      1 }
         #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,      1 }
         #define _9D {"optimize-DESC", no_argument,       &flag_optimize_DESC,    1 }
+        #define _9S {"optimize-SEQ",  no_argument,       &flag_optimize_SEQ,     1 }
         #define _gt {"gtshark",       no_argument,       &flag_gtshark,          1 } 
         #define _pe {"pair",          no_argument,       &flag_pair,   PAIR_READ_1 } 
         #define _th {"threads",       required_argument, 0, '@'                    }
@@ -649,7 +650,6 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
         #define _S  {"sblock",        required_argument, 0, 'S'                    }
         #define _r  {"regions",       required_argument, 0, 'r'                    }
-        #define _tg {"targets",       required_argument, 0, 't'                    }
         #define _s  {"samples",       required_argument, 0, 's'                    }
         #define _e  {"reference",     required_argument, 0, 'e'                    }
         #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
@@ -697,10 +697,10 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _gt, _pe, _fa,          _rg, _sR, _me, _sA, _sI, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                       _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                             _sR,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _tg, _s, _G, _1, _H0, _H1, _Gt, _GT,          _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                               _fs, _g,      _sR,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                             _st, _sm,                                       _dm,                                                                                                                      _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                    _ss, _SS, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _gt, _pe, _fa,          _rg, _sR, _me, _sA, _sI, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                                  _sR,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT,          _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                    _fs, _g,      _sR,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                                           _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -708,7 +708,7 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             "i:I:cdfhlLqQt^Vzm@:o:p:B:S:9KwWFe:E:2uz",  // genozip
             "czfhLqQt^V@:uo:p:me:",                     // genounzip
             "hLVp:qf",                                  // genols
-            "hLV@:p:qQ1r:t:s:H1Go:fg:e:E:"              // genocat
+            "hLV@:p:qQ1r:s:H1Go:fg:e:E:"              // genocat
         };
 
         int option_index = -1;
@@ -738,8 +738,8 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             case 'w' : flag_show_stats    = 1      ; break;
             case 'W' : flag_show_stats    = 2      ; break;
             case 'K' : flag_gtshark       = 1      ; break;
-            case '2' : flag_pair    = PAIR_READ_1; break;
-            case 't' : if (exe_type != EXE_GENOCAT) { flag_test = 1 ; break; }
+            case '2' : flag_pair    = PAIR_READ_1  ; break;
+            case 't' : flag_test          = 1      ; break; 
                        // fall through for genocat -r
             case 'r' : flag_regions       = 1      ; regions_add     (optarg); break;
             case 's' : flag_samples       = 1      ; vcf_samples_add (optarg); break;
@@ -882,13 +882,15 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 
     // if --optimize was selected, all optimizations are turned on
     if (flag_optimize)
-        flag_optimize_sort = flag_optimize_PL = flag_optimize_GL = flag_optimize_GP = flag_optimize_VQSLOD = 
-        flag_optimize_QUAL = flag_optimize_Vf = flag_optimize_ZM = flag_optimize_DESC = true;
+        flag_optimize_sort = flag_optimize_PL = flag_optimize_GL = flag_optimize_GP   = flag_optimize_VQSLOD = 
+        flag_optimize_QUAL = flag_optimize_Vf = flag_optimize_ZM = flag_optimize_DESC = flag_optimize_SEQ = true;
     
     // if any optimization flag is on, we turn on flag_optimize
-    if (flag_optimize_sort || flag_optimize_PL || flag_optimize_GL || flag_optimize_GP || flag_optimize_VQSLOD ||
-        flag_optimize_QUAL || flag_optimize_Vf || flag_optimize_ZM || flag_optimize_DESC)
+    if (flag_optimize_sort || flag_optimize_PL || flag_optimize_GL || flag_optimize_GP   || flag_optimize_VQSLOD ||
+        flag_optimize_QUAL || flag_optimize_Vf || flag_optimize_ZM || flag_optimize_DESC || flag_optimize_SEQ)
         flag_optimize = true;
+
+    if (flag_fast) flag_optimize_SEQ = false; // if --fast, SEQ is compressed with ACGT (if we left flag_optimize_SEQ==true, it would be set to LZMA and fast will change it to BZ2 - very lousy compression for SEQ data)
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --unbind

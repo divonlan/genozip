@@ -635,9 +635,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     if (flag_fast && header->sec_compression_alg == COMP_LZMA)
         header->sec_compression_alg = COMP_BZ2;
 
+#   define NA comp_error
     static Compressor compressors[NUM_COMPRESSION_ALGS] = { 
-        comp_compress_none, comp_error, comp_compress_bzlib, comp_error, comp_error, comp_error, comp_error, comp_compress_lzma, 
-        comp_error, comp_compress_lzma /* acgt */, comp_compress_non_acgt };
+        comp_compress_none, NA, comp_compress_bzlib,  comp_compress_lzma, NA, NA, NA, NA, NA, NA, 
+        comp_compress_lzma /* acgt */, comp_compress_non_acgt, NA, NA, NA, NA, NA, NA, NA, NA,
+        NA, NA, NA, NA, NA, NA  };
 
     ASSERT (header->sec_compression_alg < NUM_COMPRESSION_ALGS, "Error in comp_compress: unsupported section compressor=%u", header->sec_compression_alg);
 

@@ -59,7 +59,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
         progress_finalize_component_time ("Done", md5);
 
     else if (ratio2 >= 0) {
-        if (txt_file->comp_alg == COMP_NONE || ratio2 < 1)  // source file was plain txt or ratio2 is low (nothing to brag about)
+        if (txt_file->comp_alg == COMP_NONE || ratio2 < 1.05)  // source file was plain txt or ratio2 is low (nothing to brag about)
             progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio, md5);
         
         else // source was compressed
@@ -248,23 +248,9 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
     if (DTPZ(has_random_access)) 
         random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
-/*{        if (flag_show_index) random_access_show_index (&z_file->ra_buf, true, "Random-access index contents (result of --show-index)");
-        
-        BGEN_random_access (&z_file->ra_buf); // make ra_buf into big endian
 
-        z_file->ra_buf.len *= sizeof (RAEntry); // change len to count bytes
-
-        zfile_compress_section_data_alg (evb, SEC_RANDOM_ACCESS, &z_file->ra_buf, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
-    }*/
     if (store_ref) 
         random_access_compress (&ref_stored_ra, SEC_REF_RANDOM_ACC, flag_show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
-/*    if (flag_show_ref_index) 
-        random_access_show_index (&ref_stored_ra, true, "Reference random-access index contents (result of --show-ref-index)");
-
-    BGEN_random_access (&ref_stored_ra); // make ra_buf into big endian
-    ref_stored_ra.len *= sizeof (RAEntry); // change len to count bytes
-    zfile_compress_section_data_alg (evb, SEC_REF_RANDOM_ACC, &ref_stored_ra, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB*/
-
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header (single_component_md5);    
@@ -369,8 +355,6 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
     dict_id_initialize(z_file->data_type);
 
-    if (DTPZ(zip_initialize)) DTPZ(zip_initialize)();
-
     uint32_t txt_line_i = 1; // the next line to be read (first line = 1)
     
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
@@ -378,9 +362,9 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     bool success = txtfile_header_to_genozip (&txt_line_i);
     if (!success) goto finish; // 2nd+ VCF file cannot bind, because of different sample names
 
-    mtf_initialize_for_zip();
+    if (DTPZ(zip_initialize)) DTPZ(zip_initialize)();
 
-    if (z_file->data_type == DT_VCF) vcf_zip_initialize();
+    mtf_initialize_for_zip();
 
     uint32_t max_lines_per_vb=0;
 

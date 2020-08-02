@@ -22,6 +22,7 @@ typedef struct {
     WordIndex n;                                 // the number being encoded
     union {
         uint8_t numerals[MAX_BASE250_NUMERALS];  // 4-byte big endian except if a 1 byte value 250-255
+        int8_t shortcode;
         uint32_t bgen;                           // big endian
     } encoded;
 } Base250;

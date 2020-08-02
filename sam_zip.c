@@ -34,6 +34,39 @@ void sam_zip_initialize (void)
     random_access_alloc_ra_buf (evb, 0);
 }
 
+bool sam_inspect_txt_header (BufferP txt_header)
+{
+    if (!(flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)) return true; // we're not using a reference - all is good
+
+    char *line = txt_header->data;
+
+    while (1) {
+        line = strchr (line, '@');
+        if (!line) break;
+
+        if (line[1] == 'S' && line[2] == 'Q') { // this test will always be in the buffer - possible in the overflow area
+            char *newline = strchr (line, '\n');
+            *newline = 0;
+
+            // line looks something like: @SQ\tSN:chr10\tLN:135534747 (no strict order between SN and LN and there could be more parameters)
+            char *chrom_name   = strstr (line, "SN:"); 
+            char *last_pos_str = strstr (line, "LN:"); 
+
+            if (chrom_name && last_pos_str) {
+                unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
+                int64_t last_pos = (int64_t)strtoull (&last_pos_str[3], NULL, 10);
+                ref_verify_identical_chrom (&chrom_name[3], chrom_name_len, last_pos);
+            }
+
+            line = newline+1;
+        }
+        else 
+            line++;
+    }
+
+    return true;
+}
+
 // callback function for compress to get data of one line (called by comp_compress_bzlib)
 void sam_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i, 
                                         char **line_qual_data, uint32_t *line_qual_len, // out
@@ -109,7 +142,7 @@ void sam_seg_initialize (VBlock *vb)
 
     vb->contexts[SAM_RNAME].inst        = CTX_INST_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SEQ_BITMAP].ltype  = LT_BITMAP;
-    vb->contexts[SAM_NONREF].lcomp = COMP_ACGT;
+    vb->contexts[SAM_NONREF].lcomp      = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good ;
     vb->contexts[SAM_NONREF].ltype      = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype        = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].inst         = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)

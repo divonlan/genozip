@@ -113,18 +113,25 @@ FileType file_get_type (const char *filename, bool enforce_23andme_name_format)
     return UNKNOWN_FILE_TYPE;
 }
 
-// returns the filename without the extension eg myfile.1.sam.gz -> myfile.1. memory is allocated sufficiently
-// to concatenate a extension
-void file_get_raw_name_and_type (const char *filename, char **raw_name, FileType *ft)
+// returns the filename without the extension eg myfile.1.sam.gz -> myfile.1. 
+// if raw_name is given, memory is allocated sufficiently to concatenate a extension. Otherwise, filename is overwritten
+void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *out_ft)
 {
     unsigned len = strlen (filename);
-    *raw_name = malloc (len + 30);
-    memcpy (*raw_name, filename, len);
-    (*raw_name)[len] = 0;
 
-    *ft = file_get_type (filename, true);
+    if (raw_name) {
+        *raw_name = malloc (len + 30);
+        memcpy (*raw_name, filename, len);
+        (*raw_name)[len] = 0;
+    }
+    else 
+        raw_name = &filename; // overwrite filename
+
+    FileType ft = file_get_type (filename, true);
     if (ft != UNKNOWN_FILE_TYPE) 
-        (*raw_name)[len - strlen (file_exts[*ft])] = 0;
+        (*raw_name)[len - strlen (file_exts[ft])] = 0;
+
+    if (out_ft) *out_ft = ft;
 }
 
 void file_set_input_size (const char *size_str)
@@ -814,9 +821,14 @@ const char *ft_name (FileType ft)
 const char *file_viewer (File *file)
 {
     static const char *viewer[NUM_COMPRESSION_ALGS] = { 
-        "cat", "gunzip -d -c", "bzip2 -d -c", "gunzip -d -c", "xz -d -c", \
-        "bcftools -Ov --version", "samtools view -h -OSAM --threads 2", "N/A", "unzip -p",  \
-        "N/A", "N/A", "N/A", "N/A" };
+        "cat", "gunzip -d -c", "bzip2 -d -c", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 
+        "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 
+        "gunzip -d -c",   // bgz
+        "xz -d -c",       // xz
+        "bcftools -Ov --version",  // bcf
+        "samtools view -h -OSAM --threads 2", // bam
+        "N/A", // cram
+        "unzip -p" };  // zip
 
     return viewer[file->comp_alg];
 }

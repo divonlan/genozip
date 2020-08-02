@@ -660,7 +660,7 @@ static bool piz_read_one_vb (VBlock *vb)
     piz_read_all_ctxs (vb, &sl);
 
     // read additional sections and other logic specific to this data type
-    bool ok_to_compute = DTPZ(read_one_vb) ? DTPZ(read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
+    bool ok_to_compute = DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
 
     COPY_TIMER (vb->profile.piz_read_one_vb); 
 
@@ -708,6 +708,8 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
     if (!piz_successful || flag_header_only) goto finish;
 
     if (flag_unbind) dispatcher_resume (dispatcher); // accept more input 
+
+    if (DTPZ(piz_initialize)) DTPZ(piz_initialize)();
 
     // this is the dispatcher loop. In each iteration, it can do one of 3 things, in this order of priority:
     // 1. In input is not exhausted, and a compute thread is available - read a variant block and compute it

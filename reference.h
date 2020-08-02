@@ -45,16 +45,17 @@ extern void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name);
 extern void ref_load_external_reference (bool display);
 extern void ref_unload_reference (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
-extern const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t num_nucleotides_needed);
+extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);
 extern void ref_consume_ref_fasta_global_area (void);
 extern void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_name_len, const char **snip, WordIndex *word_index);
 extern void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_words);
-extern int64_t ref_min_max_of_chrom (int32_t chrom, bool get_max);
+extern PosType ref_min_max_of_chrom (int32_t chrom, bool get_max);
 
-extern Range *ref_seg_get_locked_range (VBlockP vb, int64_t pos, const char *field /* used for ASSSEG */);
+extern Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, const char *field /* used for ASSSEG */);
 
-extern void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int64_t end_pos);
-extern void ref_print_is_set (const Range *r, int64_t around_pos);
+extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos);
+extern void ref_print_is_set (const Range *r, PosType around_pos);
+extern void ref_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos);
 
 // Make-reference stuff (ZIP of FASTA with --make-reference)
 extern void ref_make_ref_init (void);
@@ -63,8 +64,8 @@ extern void ref_output_vb (VBlockP vb);
 extern const char *ref_get_cram_ref (void);
 
 // ZIP ONLY: access range_i and index within range, for ranges configured for ZIP
-#define ridx2pos(range_i,idx) (((int64_t)(range_i) * REF_NUM_SITES_PER_RANGE) | (idx))
-#define range_i2pos(range_i) ((int64_t)(range_i) * REF_NUM_SITES_PER_RANGE)
+#define ridx2pos(range_i,idx) (((PosType)(range_i) * REF_NUM_SITES_PER_RANGE) | (idx))
+#define range_i2pos(range_i) ((PosType)(range_i) * REF_NUM_SITES_PER_RANGE)
 #define pos2range_i(pos)   ((uint32_t)((pos) / REF_NUM_SITES_PER_RANGE))
 #define pos2range_idx(pos) ((uint32_t)((pos) % REF_NUM_SITES_PER_RANGE))
 #define pos2startrange(pos) ((pos) & ~(uint64_t)(REF_NUM_SITES_PER_RANGE-1)) // zeros the LSbs

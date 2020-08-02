@@ -15,6 +15,7 @@
 #include "context.h"
 #include "seg.h"
 #include "compressor.h"
+#include "regions.h"
 
 Structured structured_DESC;
 
@@ -75,7 +76,10 @@ bool fast_piz_test_grep (VBlockFAST *vb)
 
         *AFTERENT (char, vb->txt_data) = 0; // terminate the desc string
 
-        match = !!strstr (vb->txt_data.data, flag_grep);
+        match = flag_grep && !!strstr (vb->txt_data.data, flag_grep); // note: this function is also called due to --regions in FASTA
+
+        if (!match && flag_regions && vb->data_type == DT_FASTA) 
+            match = fasta_is_grepped_out_due_to_regions (vb, vb->txt_data.data);
 
         vb->txt_data.len = 0; // reset
 
@@ -99,7 +103,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
     for (unsigned sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++) 
         mtf_init_iterator (&vb->contexts[vb->desc_mapper.did_i[sf_i]]);
 
-    return found; // no match found
+    return found; 
 }
 
 void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bitmap_field)

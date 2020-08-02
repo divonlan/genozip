@@ -72,7 +72,7 @@ Md5Hash ref_md5 = MD5HASH_NONE;
 #define CHROM_NAME_GENOME_REV "GENOME_REV"
 
 // forward declarationsy
-static int32_t ref_get_index_of_chrom_with_alt_name (VBlockP vb); 
+static WordIndex ref_get_index_of_chrom_with_alt_name (const char *chrom_name, unsigned chrom_name_len, WordIndex fallback_index); 
 static void ref_copy_chrom_data_from_z_file (void);
 static void ref_prepare_range_for_compress_make_ref (VBlockP vb); // forward
 
@@ -165,7 +165,7 @@ const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t n
         return vb->prev_range;
 
     // if the chrom is not in the reference and it is numeric only, attempt to change it eg "22"->"chr22"
-    uint32_t index = vb->chrom_node_index < ranges.len ? vb->chrom_node_index : ref_get_index_of_chrom_with_alt_name (vb);
+    uint32_t index = vb->chrom_node_index < ranges.len ? vb->chrom_node_index : ref_get_index_of_chrom_with_alt_name (vb->chrom_name, vb->chrom_name_len, vb->chrom_node_index);
 
     ASSERT (index < ranges.len, "Error in ref_piz_get_range: vb->chrom_node_index=%u is out of range: ranges.len=%u",
             index, (uint32_t)ranges.len);
@@ -519,11 +519,11 @@ static WordIndex ref_get_contig_word_index_do (const char *chrom_name, unsigned 
 }             
 
 // binary search for this chrom in contig_sorted_words. we count on gcc tail recursion optimization to keep this fast.
-static WordIndex ref_get_contig_word_index (const char *chrom_name, unsigned chrom_name_len)
+static WordIndex ref_get_contig_word_index (const char *chrom_name, unsigned chrom_name_len, bool soft_fail)
 {
     WordIndex word_index = ref_get_contig_word_index_do (chrom_name, chrom_name_len, 0, contig_words_sorted_index.len-1);
 
-    ASSERT (word_index != WORD_INDEX_NONE, "Error: contig \"%.*s\" is observed in %s but is not found in the reference %s",
+    ASSERT (soft_fail || word_index != WORD_INDEX_NONE, "Error: contig \"%.*s\" is observed in %s but is not found in the reference %s",
             chrom_name_len, chrom_name, txt_name, ref_filename);
 
     return word_index;
@@ -533,72 +533,37 @@ static WordIndex ref_get_contig_word_index (const char *chrom_name, unsigned chr
 void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_name_len, 
                                       const char **snip, int32_t *word_index) // out
 {
-    *word_index = ref_get_contig_word_index (chrom_name, chrom_name_len);
+    *word_index = ref_get_contig_word_index (chrom_name, chrom_name_len, false);
     MtfWord *word = ENT (MtfWord, contig_words, *word_index);
     *snip = ENT (const char, contig_dict, word->char_index);
 }
 
-
-// in case of REF_EXTERNAL - we use the FASTA_CONTIG word_index from the reference FASTA file to build the range_id
-// we allow the first 64 contigs (assumingly the chromosomes) to have up to MAX_POS bp and the rest to have
-// up to 16Mbp (assumingly alt contigs, decoys etc)
-// Our 2^20 ranges are divided: 
-//  - 128 primary contigs * MAX_POS (2^32) / REF_NUM_SITES_PER_RANGE (2^20) = 512K ranges
-//  - 32K secondary contigs * 16Mbp (2^24) / REF_NUM_SITES_PER_RANGE (2^20) = 512K ranges
-#define REF_NUM_PRIMARY_CONTIGS       (1<<7 ) // 128
-#define REF_NUM_SECONDARY_CONTIGS     (1<<15) // 32K
-#define REF_MAX_POS_SECONDARY_CONTIG  (1<<24) // 16 Mbp
-/*static inline uint32_t ref_range_id_by_word_index (VBlock *vb, uint32_t range_i)
+static WordIndex ref_get_index_of_chrom_with_alt_name (const char *chrom, unsigned chrom_len, WordIndex fallback_index)
 {
-    // note: before starting ZIP, we copied the pre-loaded external reference FASTA CONTIG dictionary into our chrom
-    // dictionary, ensuring the that chrom_node_index of the chroms in the file, if they exist in reference, are the same
-    ASSERT (vb->chrom_node_index < contig_words.len, "Error in ref_range_id_by_word_index: chrom \"%.*s\" in %s does not appear in the reference %s",
-            vb->chrom_name_len, vb->chrom_name, txt_name, ref_filename);
-
-    if (vb->chrom_node_index < REF_NUM_PRIMARY_CONTIGS) {
-        ASSERT (range_i < pos2range_i (MAX_POS+1), "Error in ref_range_id_by_word_index: range_i=%u is out of range", range_i);
-
-        // 20 bits id: MSb=1 ; 7 bits are the contig, 12 MSb are the range_i 
-        return (1 << 19) | (vb->chrom_node_index << 12) | range_i;
-    }
-
-    else {
-        ASSERT (range_i < REF_MAX_POS_SECONDARY_CONTIG / REF_NUM_SITES_PER_RANGE, "Error: this FASTA cannot be used as a reference: contig %.*s, which is the #%u contig in the FASTA file, has %u bp or more, but contigs beyond the first %u contigs are only allowed up to %u bps.", 
-                vb->chrom_name_len, vb->chrom_name,
-                vb->chrom_node_index+1, (uint32_t)range_i2pos (range_i), REF_NUM_PRIMARY_CONTIGS, (uint32_t)range_i2pos (range_i)-1);
-    
-        // 20 bits: MSb=0 ; 15 bit contig ; 4 bit range_i
-        return (0 << 19) | ((vb->chrom_node_index - REF_NUM_PRIMARY_CONTIGS) << 4) | range_i;
-    }
-}
-*/
-static WordIndex ref_get_index_of_chrom_with_alt_name (VBlockP vb)
-{
-    // 22 -> chr22 (for all numeric chromosomes)
-    if (vb->chrom_name_len <= 2 && 
-        IS_DIGIT (vb->chrom_name[0]) && 
-        (vb->chrom_name_len == 1 || IS_DIGIT (vb->chrom_name[1]))) {
+    // 22 -> chr22 (1->22, X, Y, M, MT chromosomes)
+    if ((chrom_len == 1 && (IS_DIGIT (chrom[0]) || chrom[0]=='X' || chrom[0]=='Y' || chrom[0]=='M')) ||
+        (chrom_len == 2 && ((IS_DIGIT (chrom[0]) && IS_DIGIT (chrom[1])) || (chrom[0]=='M' && chrom[1]=='T')))) {
 
         char chr_chrom[5] = "chr";
-        chr_chrom[3] = vb->chrom_name[0];
-        chr_chrom[4] = (vb->chrom_name_len == 2 ? vb->chrom_name[0] : 0);
+        chr_chrom[3] = chrom[0];
+        chr_chrom[4] = (chrom_len == 2 ? chrom[1] : 0);
 
-        WordIndex alternative_chrom_word_index = ref_get_contig_word_index (chr_chrom, vb->chrom_name_len+3); 
+        WordIndex alternative_chrom_word_index = ref_get_contig_word_index (chr_chrom, chrom_len+3, true); 
         if (alternative_chrom_word_index == WORD_INDEX_NONE) goto fail;
 
         return alternative_chrom_word_index;
     }
 
-    // chrM -> chrMT
-    if (vb->chrom_name_len==4 && !memcmp (vb->chrom_name, "chrM", 4)) {
-        int32_t alternative_chrom_word_index = ref_get_contig_word_index ("chrMT", 5); 
+    // M, chrM -> chrMT
+    if ((chrom_len==4 && !memcmp (chrom, "chrM", 4)) || (chrom_len==1 && chrom[0]=='M')) {
+        int32_t alternative_chrom_word_index = ref_get_contig_word_index ("chrMT", 5, true); 
         if (alternative_chrom_word_index == WORD_INDEX_NONE) goto fail;
 
         return alternative_chrom_word_index;
     }
 
 fail:
-    return vb->chrom_node_index;
+    return fallback_index;
 }
 
 // ZIP: Allocated and initializes the ref and mutex buffers for the given chrom/range
@@ -625,7 +590,7 @@ Range *ref_seg_get_locked_range (VBlockP vb, int64_t pos, const char *field /* u
 
         // if the chrom is not in the reference and it is numeric only, attempt to change it eg "22"->"chr22"
         if (vb->chrom_node_index >= contig_words.len) 
-            vb->chrom_node_index = ref_get_index_of_chrom_with_alt_name (vb); // change temporarily just for ref_range_id_by_word_index()
+            vb->chrom_node_index = ref_get_index_of_chrom_with_alt_name (vb->chrom_name, vb->chrom_name_len, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
         
         ASSSEG (vb->chrom_node_index < contig_words.len, field, "Error in ref_seg_get_locked_range: chrom \"%.*s\" is not found in the reference file %s",
                 MIN (vb->chrom_name_len, 100), vb->chrom_name, ref_filename);
@@ -881,7 +846,7 @@ static void ref_compress_one_range (VBlockP vb)
 
     // in case of REF_INTERNAL, chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
     if (r && r->chrom == WORD_INDEX_NONE)
-        r->chrom = ref_get_contig_word_index (r->chrom_name, r->chrom_name_len); // this changes first/last_pos, removing flanking regions
+        r->chrom = ref_get_contig_word_index (r->chrom_name, r->chrom_name_len, false); // this changes first/last_pos, removing flanking regions
 
     SectionHeaderReference header = { .h.vblock_i          = BGEN32 (vb->vblock_i),
                                       .h.magic             = BGEN32 (GENOZIP_MAGIC),
@@ -1032,7 +997,7 @@ void ref_compress_ref (void)
 }
 
 // -------------------------------
-// Importing an external reference
+// Loading an external reference
 // -------------------------------
 
 void ref_set_reference (const char *filename)
@@ -1126,6 +1091,7 @@ void ref_load_external_reference (bool display)
     RESET_FLAG (flag_header_one);
     RESET_FLAG (flag_header_only);
     RESET_FLAG (flag_grep);
+    RESET_FLAG (flag_regions);
     RESET_FLAG (flag_show_index);
     RESET_FLAG (flag_show_dict);
     RESET_FLAG (flag_show_b250);
@@ -1135,7 +1101,7 @@ void ref_load_external_reference (bool display)
     RESET_FLAG (dump_one_local_dict_id);
     RESET_FLAG (flag_list_chroms);
 
-    CommandType save_command = command         ; 
+    CommandType save_command = command; 
     command= PIZ;
 
     bool piz_successful = piz_dispatcher (true, false);
@@ -1153,6 +1119,7 @@ void ref_load_external_reference (bool display)
     RESTORE_FLAG (flag_header_one);
     RESTORE_FLAG (flag_header_only);
     RESTORE_FLAG (flag_grep);
+    RESTORE_FLAG (flag_regions);
     RESTORE_FLAG (flag_show_index);
     RESTORE_FLAG (flag_show_dict);
     RESTORE_FLAG (flag_show_b250);
@@ -1466,4 +1433,25 @@ const char *ref_get_cram_ref (void)
 
 done:
     return samtools_T_option;
+}
+
+// verify that we have the specified chrom (name & last_pos) loaded from the referenence. called by sam_inspect_txt_header
+void ref_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos)
+{
+    WordIndex chrom_index = ref_get_contig_word_index (chrom_name, chrom_name_len, true);
+
+    // if not found, try common alternative names
+    if (chrom_index == WORD_INDEX_NONE)
+        chrom_index = ref_get_index_of_chrom_with_alt_name (chrom_name, chrom_name_len, WORD_INDEX_NONE);
+
+    ASSERT (chrom_index != WORD_INDEX_NONE, "Error: wrong reference file: file %s has a @SQ header field specifying the contig '%.*s', however this contig is missing in reference %s",
+            txt_name, chrom_name_len, chrom_name, ref_filename);
+
+    // get info as it appears in reference
+    PosType ref_last_pos = ref_min_max_of_chrom (chrom_index, true);
+    MtfWord *ref_chrom_word = ENT (MtfWord, contig_words, chrom_index);
+    const char *ref_chrom_name = ENT (const char, contig_dict, ref_chrom_word->char_index); // might be different that chrom_name if we used an alt_name
+
+    ASSERT (last_pos == ref_last_pos, "Error: wrong reference file: file %s has a @SQ header field specifying contig '%.*s' with LN=%"PRId64", however in reference %s the last position of '%s' is %"PRId64,
+            txt_name, chrom_name_len, chrom_name, last_pos, ref_filename, ref_chrom_name, ref_last_pos);
 }

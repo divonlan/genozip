@@ -37,6 +37,7 @@ typedef struct VBlockFAST {     // for FASTA and FASTQ
 extern void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bitmap_field);
 extern bool fast_piz_test_grep (VBlockFAST *vb);
 extern bool fasta_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep);
+extern bool fasta_is_grepped_out_due_to_regions (VBlockFAST *vb, const char *line_start);
 
 extern Structured structured_DESC;
 

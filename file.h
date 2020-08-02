@@ -301,7 +301,7 @@ extern FileType file_get_stdin_type (void);
 extern DataType file_get_data_type (FileType ft, bool is_input);
 extern bool file_is_dir (const char *filename);
 extern void file_remove (const char *filename, bool fail_quietly);
-extern void file_get_raw_name_and_type (const char *filename, char **raw_name, FileType *ft);
+extern void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *ft);
 extern bool file_has_ext (const char *filename, const char *extension);
 extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
                                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);

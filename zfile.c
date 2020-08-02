@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <time.h>
 #include <math.h>
+#include <limits.h>
 #include "genozip.h"
 #include "profiler.h"
 #include "zfile.h"
@@ -31,6 +32,8 @@ static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHi
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
 {
+    static const char *comp_names[NUM_COMPRESSION_ALGS] = COMP_ALG_NAMES;
+
     if (flag_reading_reference) return; // don't show headers of reference file
     
     DictId dict_id = {0};
@@ -54,10 +57,10 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%-19s %*.*s %6s%-3s %6s%-3s %7s%-3s alg=%2.2u vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-19s %*.*s %6s%-3s %6s%-3s %7s%-3s alg=%-4.4s vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
-             header->sec_compression_alg,
+             comp_names[header->sec_compression_alg],
              BGEN32 (header->vblock_i), BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
              BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic));
 
@@ -680,8 +683,13 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
 
     // in --make-ref, we set header.ref_filename to the original fasta file, to be used later in ref_get_cram_ref
     // (unless the fasta is piped from stdin, or its name is too long)
-    else if (flag_make_reference && strcmp (txt_name, FILENAME_STDIN) && strlen (txt_name) < REF_FILENAME_LEN) 
-        strncpy (header.ref_filename, txt_name, REF_FILENAME_LEN-1);
+    else if (flag_make_reference && strcmp (txt_name, FILENAME_STDIN) && strlen (txt_name) <= REF_FILENAME_LEN-1) {
+#ifndef WIN32
+        realpath (txt_name, header.ref_filename);
+#else
+        _fullpath (header.ref_filename, txt_name, REF_FILENAME_LEN);
+#endif
+    }
 
     uint32_t license_num_bgen = BGEN32 (license_get());
     header.license_hash = md5_do (&license_num_bgen, sizeof (int32_t));

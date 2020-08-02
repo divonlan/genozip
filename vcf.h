@@ -41,6 +41,7 @@ extern void vcf_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line
 
 // VCF Header stuff
 extern void vcf_header_initialize (void);
+extern bool vcf_inspect_txt_header (BufferP txt_header);
 extern bool vcf_header_set_globals (const char *filename, BufferP vcf_header);
 extern void vcf_header_trim_header_line (BufferP vcf_header_buf);
 extern void vcf_header_keep_only_last_line (BufferP vcf_header_buf);

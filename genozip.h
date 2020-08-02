@@ -73,9 +73,10 @@ typedef union DictId {
 } DictId;
 #pragma pack()
 
-typedef uint8_t DidIType;
-typedef uint64_t CharIndex;
-typedef int32_t WordIndex; // used for word and node indices
+typedef uint8_t DidIType;   // index of a context in vb->contexts or z_file->contexts / a counter of contexts
+typedef uint64_t CharIndex; // index within dictionary
+typedef int32_t WordIndex;  // used for word and node indices
+typedef int64_t PosType;    // used for position coordinate within a genome
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads, global_max_memory_per_vb;
@@ -101,7 +102,7 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_a
            flag_debug_progress, flag_show_hash, flag_debug_memory, flag_debug_no_singletons, flag_make_reference, flag_reading_reference,
 
            flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
-           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC;
+           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC, flag_optimize_SEQ;
 
 // values of flag_reference
 typedef enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -138,18 +139,27 @@ typedef _Bool bool;
     extern void func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len); \
     static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
 
-// IMPORTANT: This is part of the genozip file format. If making any changes, update arrays in 1. comp_compress 2. file_viewer
+// IMPORTANT: This is part of the genozip file format. 
+// If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
-    COMP_UNKNOWN=-1, COMP_NONE=0 /* plain - no compression */,            
-    COMP_GZ=1, COMP_BZ2=2, COMP_BGZ=3, COMP_XZ=4, COMP_BCF=5, COMP_BAM=6, COMP_CRAM=13, COMP_LZMA=7, COMP_ZIP=8, 
+    COMP_UNKNOWN=-1, 
+    COMP_NONE=0, COMP_GZ=1, COMP_BZ2=2, COMP_LZMA=3, FFU4,FFU5,FFU6,FFU7,FFU8,FFU9,// internal compressors
+    
+    // novel codecs
     // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
     // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
     // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters
-    COMP_ACGT=9, COMP_NON_ACGT=10, 
-    // compress a Illumina-binned QUAL sequenced dominated by 'F' characters
-    COMP_QUAL_BINNED_ILLUMINA=11, COMP_QUAL_F_RUNS=12,
+    COMP_ACGT=10, COMP_NON_ACGT=11, FF12,FF13,FF14,FF15,FF16,FF17,FF18,FF19,
+
+    COMP_BGZ=20, COMP_XZ=21, COMP_BCF=22, COMP_BAM=23, COMP_CRAM=24, COMP_ZIP=25,  // external compressors
+
     NUM_COMPRESSION_ALGS
 } CompressionAlg; 
+
+// aligned with CompressionAlg ; used in --show-header
+#define COMP_ALG_NAMES {"NONE", "GZ",   "BZ2",  "LZMA", "FFU4", "FFU5", "FFU6", "FFU7", "FFU8", "FFU9", \
+                        "ACGT", "~CGT", "FF12", "FF13", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
+                        "BGZ",  "XZ",   "BCF",  "BAM" , "CRAM", "ZIP" }
 
 #define COMPRESSOR_CALLBACK(func) \
 extern void func (VBlockP vb, uint32_t vb_line_i, \

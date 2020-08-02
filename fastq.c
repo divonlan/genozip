@@ -18,6 +18,28 @@
 #include "buffer.h"
 #include "domqual.h"
 
+// used in case of flag_optimize_DESC to count the number of lines, as we need it for the description
+static void fastq_txtfile_count_lines (VBlockP vb)
+{
+    uint32_t num_lines = 0;
+    ARRAY (const char, txt, vb->txt_data);
+
+    for (uint32_t i=0; i < vb->txt_data.len; i++)
+        if (txt[i] == '\n') num_lines++;
+
+    ASSERT (num_lines % 4 == 0, "Error in fastq_txtfile_count_lines: expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
+
+    vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
+    txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
+}
+
+void fastq_zip_read_one_vb (VBlockP vb)
+{
+    // in case we're optimizing DESC in FASTQ, we need to know the number of lines
+    if (flag_optimize_DESC)
+        fastq_txtfile_count_lines (vb);
+}
+
 static void fastq_initialize_pair_iterators (VBlockFAST *vb)
 {
     // initialize pair iterators
@@ -27,6 +49,22 @@ static void fastq_initialize_pair_iterators (VBlockFAST *vb)
             ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair),
                                                   .prev_word_index = -1 };
     }
+}
+
+// case of --optimize-DESC: generate the prefix of the read name from the txt file name
+// eg. "../../fqs/sample.1.fq.gz" -> "@sample-1:"
+static void fastq_get_optimized_desc_read_name (VBlockFAST *vb)
+{
+    vb->optimized_desc = malloc (strlen (txt_file->basename) + 30); // leave room for the line number to follow
+    vb->optimized_desc[0] = '@';
+    strcpy (&vb->optimized_desc[1], txt_file->basename);
+    file_get_raw_name_and_type (&vb->optimized_desc[1], NULL, NULL); // remove file type extension
+    vb->optimized_desc_len = strlen (vb->optimized_desc) + 1; // +1 :
+    vb->optimized_desc[vb->optimized_desc_len-1] = ':';
+
+    // replace '.' in the filename with '-' as '.' is a separator in seg_compound_field and would needless inflate the number of contexts
+    for (unsigned i=0; i < vb->optimized_desc_len; i++)
+        if (vb->optimized_desc[i] == '.') vb->optimized_desc[i] = '-';
 }
 
 void fastq_seg_initialize (VBlockFAST *vb)
@@ -51,7 +89,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
     vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; // used in non-reference too
 
     vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
-    vb->contexts[FASTQ_NONREF].lcomp   = COMP_ACGT;
+    vb->contexts[FASTQ_NONREF].lcomp   = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good
 
     vb->contexts[FASTQ_QUAL].ltype     = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
     vb->contexts[FASTQ_QUAL].inst      = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
@@ -67,11 +105,8 @@ void fastq_seg_initialize (VBlockFAST *vb)
         fastq_initialize_pair_iterators (vb);
     }
 
-    if (flag_optimize_DESC) {
-        vb->optimized_desc_len = strlen (txt_file->basename) + 2; // +2 for @ :
-        vb->optimized_desc = malloc (vb->optimized_desc_len + 30); // leave room for the line number to follow
-        sprintf (vb->optimized_desc, "@%s:", txt_file->basename);
-    }
+    if (flag_optimize_DESC) 
+        fastq_get_optimized_desc_read_name (vb);
 }
 
 void fastq_seg_finalize (VBlockP vb)
@@ -100,21 +135,6 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len)
 
     *unconsumed_len = after - next;
     return true;
-}
-
-// used in case of flag_optimize_DESC to count the number of lines, as we need it for the description
-void fastq_txtfile_count_lines (VBlockP vb)
-{
-    uint32_t num_lines = 0;
-    ARRAY (const char, txt, vb->txt_data);
-
-    for (uint32_t i=0; i < vb->txt_data.len; i++)
-        if (txt[i] == '\n') num_lines++;
-
-    ASSERT (num_lines % 4 == 0, "Error in fastq_txtfile_count_lines: expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
-
-    vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
-    txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
 }
 
 // called from I/O thread ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
@@ -160,7 +180,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
     return true;
 }
 
-// I/O thread: called from piz_read_one_vb as DTPZ(read_one_vb)
+// I/O thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
 bool fastq_piz_read_one_vb (VBlockP vb, SectionListEntryP sl)
 {
     // if we're grepping we we uncompress and reconstruct the DESC from the I/O thread, and terminate here if this VB is to be skipped

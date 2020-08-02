@@ -117,6 +117,7 @@ typedef struct {
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     CompressionAlg compression_type; // compression type of original file
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
+    Md5Hash  md5_hash_compressed;  // ffu: md5 of the original compressed file (e.g. .bam or .fastq.gz)
 
 #define TXT_FILENAME_LEN 256
     char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
@@ -125,8 +126,8 @@ typedef struct {
 
 #define VB_HEADER_COMMON_FIELDS \
     SectionHeader h;            \
-    uint32_t first_line;       /* line (starting from 1) of this vblock in the single VCF file */ \
-                               /* if this value is 0, then this is the terminating section of the file. after it is either EOF or a VCF Header section of the next bound file */ \
+    uint32_t first_line;       /* line (starting from 1) of this vblock in the single txt file */ \
+                               /* if this value is 0, then this is the terminating section of the file. after it is either EOF or a TXT Header section of the next bound file */ \
     uint32_t num_lines;        /* number of records in this vblock */ \
                                 \
     /* features of the data */  \

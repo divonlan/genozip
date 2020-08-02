@@ -112,9 +112,9 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
 
         // enlarge if needed        
         if (!evb->txt_data.data || evb->txt_data.size - evb->txt_data.len < READ_BUFFER_SIZE) 
-            buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE, 1.2, "txt_data", 0);    
+            buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE + 1 /* for \0 */, 1.2, "txt_data", 0);    
 
-        bytes_read = txtfile_read_block (&evb->txt_data.data[evb->txt_data.len], READ_BUFFER_SIZE);
+        bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
 
         if (!bytes_read) { // EOF
             ASSERT (!evb->txt_data.len || evb->txt_data.data[evb->txt_data.len-1] == '\n', 
@@ -160,6 +160,8 @@ finish:
 
     // md5 unconsumed_txt - always
     txtfile_update_md5 (txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len, false);
+
+    *AFTERENT (char, evb->txt_data) = 0; // null-terminate
 
     COPY_TIMER (evb->profile.txtfile_read_header);
 }
@@ -349,9 +351,7 @@ void txtfile_read_vblock (VBlock *vb)
     if (file_is_read_via_int_decompressor (txt_file))
         vb->vb_data_read_size = file_tell (txt_file) - pos_before; // gz/bz2 compressed bytes read
 
-    // in case we're optimizing DESC in FASTQ, we need to know the number of lines
-    if (vb->data_type == DT_FASTQ && flag_optimize_DESC)
-        fastq_txtfile_count_lines (vb);
+    if (DTPZ(zip_read_one_vb)) DTPZ(zip_read_one_vb)(vb);
         
     buf_free (&block_md5_buf);
     buf_free (&block_start_buf);
@@ -442,11 +442,13 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
         case COMP_BAM: ratio = 7; break;
 
+        case COMP_CRAM: ratio = 9; break;
+
         case COMP_ZIP: ratio = 3; break;
 
         case COMP_NONE: ratio = 1; break;
 
-        default: ABORT ("Error in file_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
+        default: ABORT ("Error in txtfile_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
     }
 
     txt_file->txt_data_size_single = disk_size * ratio;
@@ -470,10 +472,10 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     
     *txt_line_i += (uint32_t)evb->lines.len;
 
-    // for vcf, we need to check if the samples are the same before approving binding.
-    // other data types can bind without restriction
-    bool can_bind = (txt_file->data_type == DT_VCF) ? vcf_header_set_globals(txt_file->name, &evb->txt_data) : true;
-    if (!can_bind) { 
+    // for vcf, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
+    // for sam, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
+    bool txt_file_ok = (DTPT (zip_inspect_txt_header) ? DTPT (zip_inspect_txt_header) (&evb->txt_data) : true);
+    if (!txt_file_ok) { 
         // this is the second+ file in a bind list, but its samples are incompatible
         buf_free (&evb->txt_data);
         return false;
