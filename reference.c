@@ -229,7 +229,7 @@ static Range *ref_get_range_by_chrom (int32_t chrom, const char **chrom_name)
     Range *r = ENT (Range, ranges, chrom); // in PIZ, we have one range per chrom
 
     // if we can't find the chrom in the file data, try a reduced name "chr22" -> "22"
-    int32_t alt_chrom = ctx->word_list.len;
+    WordIndex alt_chrom = ctx->word_list.len;
     if (r->last_pos == RA_MISSING_RA_MAX && !strncmp (*chrom_name, "chr", 3)) {
 
         // ineffecient search. consider adding a sorter to the chrom word_list and binary searching
@@ -538,8 +538,36 @@ void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_nam
     *snip = ENT (const char, contig_dict, word->char_index);
 }
 
+static WordIndex ref_search_for_chrom_by_accession_number (const char *ac, unsigned ac_len)
+{
+    // "GL000207.1" -> "000207"
+    char numeric[ac_len+1];
+    unsigned numeric_len=0, letter_len=0;
+    for (unsigned i=0; i < ac_len; i++) {
+        if (ac[i] == '.') break;
+        if (!IS_DIGIT (ac[i])) {
+            letter_len++;
+            continue;
+        }
+        numeric[numeric_len++] = ac[i];
+    }
+    numeric[numeric_len] = 0;
+
+    // search by numeric only - easier as we don't have to worry about case. when candidate is found, compare letters
+    for (WordIndex alt_chrom=0 ; alt_chrom < contig_words.len; alt_chrom++) {
+        const char *alt_chrom_name = ENT (const char, contig_dict, ENT (MtfWord, contig_words, alt_chrom)->char_index);
+        const char *substr = strstr (alt_chrom_name, numeric);
+        if (substr && (substr - alt_chrom_name >= letter_len) && !strnicmp (substr-letter_len, ac, numeric_len + letter_len)) 
+            return alt_chrom;
+    }
+
+    return NODE_INDEX_NONE; // not found
+}
+
 static WordIndex ref_get_index_of_chrom_with_alt_name (const char *chrom, unsigned chrom_len, WordIndex fallback_index)
 {
+    WordIndex alternative_chrom_word_index = WORD_INDEX_NONE;
+
     // 22 -> chr22 (1->22, X, Y, M, MT chromosomes)
     if ((chrom_len == 1 && (IS_DIGIT (chrom[0]) || chrom[0]=='X' || chrom[0]=='Y' || chrom[0]=='M')) ||
         (chrom_len == 2 && ((IS_DIGIT (chrom[0]) && IS_DIGIT (chrom[1])) || (chrom[0]=='M' && chrom[1]=='T')))) {
@@ -548,22 +576,19 @@ static WordIndex ref_get_index_of_chrom_with_alt_name (const char *chrom, unsign
         chr_chrom[3] = chrom[0];
         chr_chrom[4] = (chrom_len == 2 ? chrom[1] : 0);
 
-        WordIndex alternative_chrom_word_index = ref_get_contig_word_index (chr_chrom, chrom_len+3, true); 
-        if (alternative_chrom_word_index == WORD_INDEX_NONE) goto fail;
-
-        return alternative_chrom_word_index;
+        alternative_chrom_word_index = ref_get_contig_word_index (chr_chrom, chrom_len+3, true); 
     }
 
     // M, chrM -> chrMT
-    if ((chrom_len==4 && !memcmp (chrom, "chrM", 4)) || (chrom_len==1 && chrom[0]=='M')) {
-        int32_t alternative_chrom_word_index = ref_get_contig_word_index ("chrMT", 5, true); 
-        if (alternative_chrom_word_index == WORD_INDEX_NONE) goto fail;
+    else if ((chrom_len==4 && !memcmp (chrom, "chrM", 4)) || (chrom_len==1 && chrom[0]=='M')) 
+        alternative_chrom_word_index = ref_get_contig_word_index ("chrMT", 5, true); 
 
-        return alternative_chrom_word_index;
-    }
+    // AC subfield in DESC in reference FASTAs, eg GRCh37/38, eg "GL000207.1" -> "chr18_gl000207_random"
+    // https://www.ncbi.nlm.nih.gov/Sequin/acc.html
+    else if (chrom_len >= 6 && IS_CLETTER (chrom[0]) && chrom[chrom_len-2]=='.' && IS_DIGIT(chrom[chrom_len-1])) 
+        alternative_chrom_word_index = ref_search_for_chrom_by_accession_number (chrom, chrom_len);
 
-fail:
-    return fallback_index;
+    return (alternative_chrom_word_index != WORD_INDEX_NONE) ? alternative_chrom_word_index : fallback_index;
 }
 
 // ZIP: Allocated and initializes the ref and mutex buffers for the given chrom/range
@@ -1444,8 +1469,8 @@ void ref_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len
     if (chrom_index == WORD_INDEX_NONE)
         chrom_index = ref_get_index_of_chrom_with_alt_name (chrom_name, chrom_name_len, WORD_INDEX_NONE);
 
-    ASSERT (chrom_index != WORD_INDEX_NONE, "Error: wrong reference file: file %s has a @SQ header field specifying the contig '%.*s', however this contig is missing in reference %s",
-            txt_name, chrom_name_len, chrom_name, ref_filename);
+    // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
+    if (chrom_index == WORD_INDEX_NONE) return;
 
     // get info as it appears in reference
     PosType ref_last_pos = ref_min_max_of_chrom (chrom_index, true);
