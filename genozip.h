@@ -143,13 +143,13 @@ typedef _Bool bool;
 // If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     COMP_UNKNOWN=-1, 
-    COMP_NONE=0, COMP_GZ=1, COMP_BZ2=2, COMP_LZMA=3, FFU4,FFU5,FFU6,FFU7,FFU8,FFU9,// internal compressors
+    COMP_NONE=0, COMP_GZ=1, COMP_BZ2=2, COMP_LZMA=3, // internal compressors
     
     // novel codecs
     // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
     // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
     // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters
-    COMP_ACGT=10, COMP_NON_ACGT=11, FF12,FF13,FF14,FF15,FF16,FF17,FF18,FF19,
+    COMP_ACGT=10, COMP_NON_ACGT=11, 
 
     COMP_BGZ=20, COMP_XZ=21, COMP_BCF=22, COMP_BAM=23, COMP_CRAM=24, COMP_ZIP=25,  // external compressors
 

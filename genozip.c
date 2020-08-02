@@ -914,7 +914,6 @@ void TEST()
 
 int main (int argc, char **argv)
 {
-    
     //TEST();exit(0);
     arch_initialize();
 
