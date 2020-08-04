@@ -62,17 +62,32 @@ unsigned str_int (int64_t n, char *str /* out */)
     return len;
 }
 
-bool str_is_int (const char *str, unsigned str_len)
+// similar to strtoull, except it rejects numbers that are shorter than str_len, or that their reconstruction would be different
+// the the original string
+bool str_get_int (const char *str, unsigned str_len, int64_t *value)
 {
+    int64_t out = 0;
+
      // edge cases - "" ; "-" ; "030" ; "-0" ; "-030" - false, because if we store these as an integer, we can't reconstruct them
     if (!str_len || 
         (str_len == 1 && str[0] == '-') || 
         (str_len >= 2 && str[0] == '0') || 
         (str_len >= 2 && str[0] == '-' && str[1] == '0')) return false;
 
-    for (unsigned i=0; i < str_len; i++) 
-        if (!IS_DIGIT(str[i]) && !(i==0 && str[0]=='-')) return false;
+    unsigned negative = (str[0] == '-');
 
+    for (unsigned i=negative; i < str_len; i++) {
+        if (!IS_DIGIT(str[i])) return false;
+
+        int64_t prev_out = out;
+        out = (out * 10) + (str[i] - '0');
+
+        if (out < prev_out) return false; // number overflowed beyond maximum int64_t
+    }
+
+    if (negative) out *= -1;
+
+    if (value) *value = out; // update only if successful
     return true;
 }
 

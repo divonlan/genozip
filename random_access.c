@@ -63,7 +63,7 @@ void random_access_update_chrom (VBlock *vb, WordIndex chrom_node_index, const c
 // ZIP only: update the pos in the existing chrom entry
 void random_access_update_pos (VBlock *vb, DidIType did_i_pos)
 {
-    int64_t this_pos = vb->contexts[did_i_pos].last_value.i;
+    PosType this_pos = vb->contexts[did_i_pos].last_value.i;
 
     if (!this_pos) return; // ignore pos=0 (in SAM, it means unmapped POS)
 
@@ -78,7 +78,7 @@ void random_access_update_pos (VBlock *vb, DidIType did_i_pos)
 }
 
 // ZIP: update increment reference pos
-void random_access_increment_last_pos (VBlockP vb, int64_t increment)
+void random_access_increment_last_pos (VBlockP vb, PosType increment)
 {
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
 
@@ -87,13 +87,13 @@ void random_access_increment_last_pos (VBlockP vb, int64_t increment)
 }
 
 // ZIP: update last reference pos
-void random_access_update_last_pos (VBlock *vb, int64_t last_pos)
+void random_access_update_last_pos (VBlock *vb, PosType last_pos)
 {
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     if (last_pos > ra_ent->max_pos) ra_ent->max_pos = last_pos;
 }
 
-void random_access_update_to_entire_chrom (VBlockP vb, int64_t first_pos_of_chrom, int64_t last_pos_of_chrom)
+void random_access_update_to_entire_chrom (VBlockP vb, PosType first_pos_of_chrom, PosType last_pos_of_chrom)
 {
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     ra_ent->min_pos = first_pos_of_chrom;
@@ -266,9 +266,9 @@ int32_t random_access_get_last_included_vb_i (void)
 }
 
 // PIZ I/O thread: gets min/max pos value for a particular chrom, across the entire file, by looking at the RA entries
-void random_access_pos_of_chrom (WordIndex chrom_word_index, int64_t *min_pos, int64_t *max_pos)
+void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, PosType *max_pos)
 {
-    typedef struct { int64_t min_pos, max_pos; } MinMax;
+    typedef struct { PosType min_pos, max_pos; } MinMax;
 
     // first time here for this z_file - we initialize ra_min_max_by_chrom
     if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
@@ -289,8 +289,8 @@ void random_access_pos_of_chrom (WordIndex chrom_word_index, int64_t *min_pos, i
         for (unsigned i=0; i < z_file->ra_buf.len; i++) {
             RAEntry *ra = ENT (RAEntry, z_file->ra_buf, i);
             MinMax *mm = ENT (MinMax, z_file->ra_min_max_by_chrom, ra->chrom_index);
-            mm->max_pos = MAX (mm->max_pos, (int64_t)ra->max_pos);
-            mm->min_pos = MIN (mm->min_pos, (int64_t)ra->min_pos);
+            mm->max_pos = MAX (mm->max_pos, ra->max_pos);
+            mm->min_pos = MIN (mm->min_pos, ra->min_pos);
         }
     }
 
@@ -301,7 +301,7 @@ void random_access_pos_of_chrom (WordIndex chrom_word_index, int64_t *min_pos, i
 
 // FASTA PIZ compute thread when consuming a reference FASTA
 // sets vb->{chrom_name,chrom_name_len,chrom_node_index} and returns start_pos
-void random_access_get_first_chrom_of_vb (VBlockP vb, int64_t *first_pos, int64_t *last_pos)
+void random_access_get_first_chrom_of_vb (VBlockP vb, PosType *first_pos, PosType *last_pos)
 {
     Context *ctx = &z_file->contexts[CHROM];
     ASSERT (ctx->word_list.len, "Error in random_access_get_first_chrom_of_vb: word_list of %s is empty", ctx->name);
@@ -371,7 +371,7 @@ void random_access_show_index (const Buffer *ra_buf, bool from_zip, const char *
     }
 }
 
-void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, int64_t *min_pos, int64_t *max_pos)
+void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i, FIRSTENT (RAEntry, z_file->ra_buf), LASTENT (RAEntry, z_file->ra_buf));
 

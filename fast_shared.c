@@ -124,16 +124,16 @@ void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bi
     }
 
     // allocate bitmaps - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it + param must be 0
-    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2words64 (seq_len) * sizeof(int64_t), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+    buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
                buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
 
-    buf_alloc (vb, &strand_ctx->local, MAX (nonref_ctx->local.len + sizeof (int64_t), roundup_bits2words64 (vb->lines.len) * sizeof (int64_t)), CTX_GROWTH, 
+    buf_alloc (vb, &strand_ctx->local, MAX (nonref_ctx->local.len + sizeof (int64_t), roundup_bits2bytes64 (vb->lines.len)), CTX_GROWTH, 
                buf_is_allocated (&strand_ctx->local) ? NULL : "context->local", 0); 
 
     buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
     buf_alloc (vb, &gpos_ctx->local,   MAX (nonref_ctx->local.len + sizeof (uint32_t), vb->lines.len * sizeof (uint32_t)), CTX_GROWTH, "context->local", gpos_ctx->did_i); 
 
-    int64_t gpos;
+    PosType gpos;
     bool is_forward, is_all_ref;
     bool has_match = refhash_best_match ((VBlockP)vb, seq, seq_len, &gpos, &is_forward, &is_all_ref);
 
@@ -155,8 +155,8 @@ void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bi
     // case: we're the 2nd of the pair - store a delta if its small enough, or a lookup from local if not
     bool store_local = true;
     if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
-        int64_t pair_gpos = (int64_t) BGEN32 (*ENT (uint32_t, gpos_ctx->pair, vb->line_i)); // same location, in the pair's local
-        int64_t gpos_delta = gpos - pair_gpos;
+        PosType pair_gpos = (PosType) BGEN32 (*ENT (uint32_t, gpos_ctx->pair, vb->line_i)); // same location, in the pair's local
+        PosType gpos_delta = gpos - pair_gpos;
 
         if (gpos_delta <= MAX_POS_DELTA && gpos_delta >= -MAX_POS_DELTA) {
             store_local = false;      
@@ -200,7 +200,7 @@ void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bi
         goto done;
     }
 
-    int64_t room_fwd = genome_size - gpos; // how much reference forward might contain a match
+    PosType room_fwd = genome_size - gpos; // how much reference forward might contain a match
 
     for (uint32_t i=0; i < seq_len; i++) {
                 
@@ -210,7 +210,7 @@ void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bi
         if (i < room_fwd) {
             char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
             
-            int64_t ref_i = gpos + (is_forward ? i : seq_len-1-i);
+            PosType ref_i = gpos + (is_forward ? i : seq_len-1-i);
             char ref_base = ACGT_DECODE (&genome->ref, ref_i);
 
             if (seq_base == ref_base) {

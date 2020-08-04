@@ -92,15 +92,6 @@ typedef struct { // initialize with mtf_init_iterator()
     WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
 } SnipIterator;
 
-// flags written to the genozip file (header.h.flags)
-#define CTX_FL_STORE_INT    0x01 // the values of this ctx.local are uint32_t, and should be stored, eg because they are a basis for a delta calculation (by this field or another one)
-#define CTX_FL_STORE_FLOAT  0x02 // the values of this ctx.local are float
-#define CTX_FL_PAIRED       0x04 // appears in header.flags of b250 or local sections, indicating to PIZ that the the same section from the same vb of the previous (paired) file should be read from disk too
-#define CTX_FL_STRUCTURED   0x08 // snips usually contain Structured
-#define CTX_FL_COPY_PARAM   0x10 // appears in header.flags of b250 or local sections, that ctx.b250/local.param should be copied from SectionHeaderCtx.param
-
-#define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
-
 // ZIP-only instructions NOT written to the genozip file
 #define CTX_INST_NO_STONS     0x01 // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
 #define CTX_INST_PAIR_LOCAL   0x02 // this is the 2nd file of a pair - compare vs the first file, and set CTX_FL_PAIRED in the header of SEC_LOCAL

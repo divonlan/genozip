@@ -9,10 +9,8 @@
 #include "file.h"
 #include "piz.h"
 #include "dict_id.h"
-#include "reference.h"
 #include "random_access.h"
 #include "strings.h"
-#include "compressor.h"
 #include "regions.h"
 
 // callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
@@ -29,6 +27,9 @@ void fasta_zip_get_start_len_line_i_seq (VBlock *vb, uint32_t vb_line_i,
 
 void fasta_seg_initialize (VBlockFAST *vb)
 {
+    ASSERT (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
+            "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
+
     if (!flag_make_reference) {
         // thread safety: this will be initialized by vb_i=1, while it holds a mutex in zip_compress_one_vb
         static bool structured_initialized = false;
@@ -48,31 +49,6 @@ void fasta_seg_initialize (VBlockFAST *vb)
     }
 
     vb->contexts[FASTA_CONTIG].inst = CTX_INST_NO_STONS; // needs b250 node_index for reference
-}
-
-// called during FASTA ZIP compute thread, from zip_compress_one_vb (as "compress")- converts the vb sequence into a range
-void fasta_make_ref_range (VBlockP vb)
-{
-    Range *r = ref_make_ref_get_range (vb->vblock_i);
-    uint64_t seq_len = vb->contexts[FASTA_SEQ].local.len;
-
-    // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
-    // the missing details will be added during ref_prepare_range_for_compress
-    bit_array_alloc (&r->ref, seq_len * 2); // 2 bits per base
-
-    uint64_t bit_i=0;
-    for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
-        
-        const uint8_t *line_seq = ENT (uint8_t, vb->txt_data, DATA_LINE(line_i)->seq_data_start);
-        for (uint64_t base_i=0; base_i < DATA_LINE(line_i)->seq_len; base_i++) {
-            uint8_t encoding = acgt_encode[line_seq[base_i]];
-            bit_array_assign (&r->ref, bit_i, encoding & 1);
-            bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
-            bit_i += 2;
-        }
-    }
-
-    ASSERT (seq_len * 2 == bit_i, "Error in fasta_make_ref_range: Expecting SEQ.local.len (x2 = %"PRId64") == bit_i (%"PRId64")", seq_len * 2, bit_i);
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format

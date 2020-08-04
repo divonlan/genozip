@@ -32,6 +32,7 @@
 #define roundup_bits2bytes(bits)   (((bits)+7)/8)
 #define roundup_bits2words32(bits) (((bits)+31)/32)
 #define roundup_bits2words64(bits) (((bits)+63)/64)
+#define roundup_bits2bytes64(bits) (roundup_bits2words64(bits)*8)
 
 // Round a number up to the nearest number that is a power of two
 #define roundup2pow(x) (1UL << (64 - leading_zeros(x)))

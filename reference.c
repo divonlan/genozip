@@ -26,12 +26,13 @@
 #include "file.h"
 #include "regions.h"
 #include "refhash.h"
+#include "ref_private.h"
 
 // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
-static Buffer ranges                    = EMPTY_BUFFER; 
+Buffer ranges                           = EMPTY_BUFFER; 
 
 Range *genome = NULL, *genome_rev = NULL; // used in ZIP/PIZ of fasta and fastq with a reference - we have only one range that is the entire genome (this points to the first entry in ranges)
-int64_t genome_size = 0;
+PosType genome_size = 0;
 pthread_mutex_t *genome_muteces = NULL; // one spinlock per 16K bases - protects genome->is_set
 uint32_t genome_num_muteces=0;
 
@@ -53,7 +54,7 @@ SPINLOCK (ref_stored_ra_spin); // ZIP only
 
 typedef struct {
     BitArray *is_set;
-    int64_t first_bit, len;
+    PosType first_bit, len;
 } RegionToSet;
 
 static SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
@@ -74,7 +75,6 @@ Md5Hash ref_md5 = MD5HASH_NONE;
 // forward declarationsy
 static WordIndex ref_get_index_of_chrom_with_alt_name (const char *chrom_name, unsigned chrom_name_len, WordIndex fallback_index); 
 static void ref_copy_chrom_data_from_z_file (void);
-static void ref_prepare_range_for_compress_make_ref (VBlockP vb); // forward
 
 // called by mtf_copy_reference_contig_to_chrom_ctx when initializing ZIP for a new file using a pre-loaded external reference
 void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_words)
@@ -158,7 +158,7 @@ MemStats ref_memory_consumption (void)
 }
 
 // PIZ: returns a range which is the entire contig
-const Range *ref_piz_get_range (VBlockP vb, int64_t first_pos_needed, uint32_t num_nucleotides_needed)
+const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed)
 {
     // caching
     if (vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index)
@@ -256,17 +256,17 @@ static void ref_uncompress_one_range (VBlockP vb)
 
     int32_t chrom            = (int32_t)BGEN32 (header->chrom_word_index);
     uint32_t uncomp_len      = BGEN32 (header->h.data_uncompressed_len);
-    int64_t ref_sec_pos      = (int64_t)BGEN64 (header->pos);
-    int64_t ref_sec_gpos     = (int64_t)BGEN64 (header->gpos);
-    int64_t ref_sec_len      = (int64_t)BGEN32 (header->num_bases);
-    int64_t ref_sec_last_pos = ref_sec_pos + ref_sec_len - 1;
-    int64_t compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
+    PosType ref_sec_pos      = (PosType)BGEN64 (header->pos);
+    PosType ref_sec_gpos     = (PosType)BGEN64 (header->gpos);
+    PosType ref_sec_len      = (PosType)BGEN32 (header->num_bases);
+    PosType ref_sec_last_pos = ref_sec_pos + ref_sec_len - 1;
+    PosType compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
 
     const char *chrom_name;
     Range *r = ref_get_range_by_chrom (flag_ref_whole_genome ? CHROM_GENOME : chrom, &chrom_name);
 
-    int64_t sec_start_within_contig = flag_ref_whole_genome ? ref_sec_gpos : ref_sec_pos - r->first_pos;
-    int64_t sec_end_within_contig   = sec_start_within_contig + ref_sec_len - 1;
+    PosType sec_start_within_contig = flag_ref_whole_genome ? ref_sec_gpos : ref_sec_pos - r->first_pos;
+    PosType sec_end_within_contig   = sec_start_within_contig + ref_sec_len - 1;
 
     bool is_compacted = (header->h.section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if  SEC_REFERENCE was compacted
 
@@ -300,7 +300,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                 "Error in ref_uncompress_one_range: section range out of bounds for chrom=%d \"%s\": in SEC_REFERENCE being uncompressed: first_pos=%"PRId64" last_pos=%"PRId64" but in reference contig as initialized: first_pos=%"PRId64" last_pos=%"PRId64,
                 chrom, r->chrom_name, ref_sec_pos, ref_sec_last_pos, r->first_pos, r->last_pos);
 
-        ASSERT (uncomp_len == roundup_bits2words64 (ref_sec_len) * sizeof (uint64_t), "Error in ref_uncompress_one_range: when uncompressing SEC_REF_IS_SET: uncomp_len=%u inconsistent with len=%"PRId64, uncomp_len, ref_sec_len); 
+        ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len), "Error in ref_uncompress_one_range: when uncompressing SEC_REF_IS_SET: uncomp_len=%u inconsistent with len=%"PRId64, uncomp_len, ref_sec_len); 
 
         // uncompress into r->is_set, via vb->compress
         zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", SEC_REF_IS_SET);
@@ -323,10 +323,10 @@ static void ref_uncompress_one_range (VBlockP vb)
                     st_name (header->h.section_type), BGEN32 (header->chrom_word_index), r->chrom_name_len, r->chrom_name, BGEN64 (header->gpos), 
                     BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
-        compacted_ref_len  = (int64_t)BGEN32(header->num_bases);
+        compacted_ref_len  = (PosType)BGEN32(header->num_bases);
         uncomp_len         = BGEN32 (header->h.data_uncompressed_len);
 
-        ASSERT (uncomp_len == roundup_bits2words64 (compacted_ref_len*2) * sizeof (uint64_t), 
+        ASSERT (uncomp_len == roundup_bits2bytes64 (compacted_ref_len*2), 
                 "Error: uncomp_len=%u inconsistent with compacted_ref_len=%"PRId64, uncomp_len, compacted_ref_len); 
 
         ASSERT0 (BGEN32 (header->chrom_word_index) == chrom && BGEN64 (header->pos) == ref_sec_pos && BGEN64 (header->gpos) == ref_sec_gpos, // chrom should be the same between the two sections
@@ -335,7 +335,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     
     // case: not compacted means that entire range is set
     else {
-        ASSERT (uncomp_len == roundup_bits2words64 (ref_sec_len*2) * sizeof (uint64_t), "Error: uncomp_len=%u inconsistent with ref_len=%"PRId64, uncomp_len, ref_sec_len); 
+        ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len*2), "Error: uncomp_len=%u inconsistent with ref_len=%"PRId64, uncomp_len, ref_sec_len); 
 
         if (primary_command == ZIP) { // initialization of is_set - case 1
             mutex_lock (r->mutex); // while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
@@ -596,7 +596,7 @@ static WordIndex ref_get_index_of_chrom_with_alt_name (const char *chrom, unsign
 // case 2: ZIP: in SAM with REF_INTERNAL, when segging a SEQ field ahead of committing it to the reference
 // case 3: ZIP: SAM and VCF with REF_EXTERNAL: when segging a SAM_SEQ or VCF_REFALT field, called with RGR_MUST_EXIST
 // if range is found, returns a locked range, and its the responsibility of the caller to unlock it. otherwise, returns NULL
-Range *ref_seg_get_locked_range (VBlockP vb, int64_t pos, const char *field /* used for ASSSEG */)  // out - index of pos within range
+Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, const char *field /* used for ASSSEG */)  // out - index of pos within range
 {
     uint32_t range_i = flag_reference == REF_INTERNAL ? pos2range_i (pos) : 0; // range within chromosome (only non-0 for REF_INTERNAL)
 
@@ -763,7 +763,7 @@ static void ref_copy_compressed_sections_from_reference_file (void)
     ARRAY (RAEntry, fasta_sec, ref_external_ra);
 
     Range *contig_r = genome; // initialize in case of fastaq
-    int64_t fasta_sec_start_in_contig_r=0; // in case of flag_ref_whole_genome, this is gpos
+    PosType fasta_sec_start_in_contig_r=0; // in case of flag_ref_whole_genome, this is gpos
     for (uint32_t i=0; i < ref_external_ra.len; i++) {
 
         if (!flag_ref_whole_genome) {
@@ -771,8 +771,8 @@ static void ref_copy_compressed_sections_from_reference_file (void)
             fasta_sec_start_in_contig_r = fasta_sec[i].min_pos - contig_r->first_pos; // the start of the FASTA section (a bit less than 1MB) within the full-contig range
         }
 
-        int64_t fasta_sec_len = fasta_sec[i].max_pos - fasta_sec[i].min_pos + 1;
-        int64_t bits_is_set   = bit_array_num_bits_set_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
+        PosType fasta_sec_len = fasta_sec[i].max_pos - fasta_sec[i].min_pos + 1;
+        PosType bits_is_set   = bit_array_num_bits_set_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
@@ -945,7 +945,7 @@ static inline bool ref_is_range_used (const Range *r)
 }
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel 
-// note: this is not called in make_reference - instead, ref_prepare_range_for_compress_make_ref is called
+// note: this is not called in make_reference - instead, ref_make_prepare_range_for_compress is called
 static void ref_prepare_range_for_compress (VBlockP vb)
 {
     static uint32_t next_range_i=0;
@@ -1003,7 +1003,7 @@ void ref_compress_ref (void)
     // proceed to compress all ranges that have still have data in them after copying
     uint32_t num_vbs_dispatched = 
         dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing reference...", false, 
-                                 flag_make_reference ? ref_prepare_range_for_compress_make_ref : ref_prepare_range_for_compress, 
+                                 flag_make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  ref_output_vb);
 
@@ -1048,7 +1048,7 @@ static void ref_display_ref (void)
 {
     for (const Range *r = FIRSTENT (Range, ranges); r < AFTERENT (Range, ranges); r++) {
 
-        int64_t display_first_pos, display_last_pos;
+        PosType display_first_pos, display_last_pos;
         if (!regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, &display_first_pos, &display_last_pos))
             continue;
 
@@ -1056,12 +1056,12 @@ static void ref_display_ref (void)
 
         // case: normal sequence
         if (flag_reference == REF_EXTERNAL)
-            for (int64_t pos=display_first_pos; pos <= display_last_pos; pos++)
+            for (PosType pos=display_first_pos; pos <= display_last_pos; pos++)
                 fputc (ref_get_nucleotide (r, pos - r->first_pos), stdout);
 
         // case: reverse complement
         else
-            for (int64_t pos=display_last_pos; pos >= display_first_pos; pos--) {
+            for (PosType pos=display_last_pos; pos >= display_first_pos; pos--) {
                 char base = ref_get_nucleotide (r, pos - r->first_pos);
                 switch (base) {
                     case 'G': fputc ('C', stdout); break;
@@ -1304,89 +1304,36 @@ static void ref_copy_chrom_data_from_z_file (void)
     qsort (contig_words_sorted_index.data, contig_words_sorted_index.len, sizeof(uint32_t), ref_sort_words_alphabetically);
 }
 
+typedef struct { PosType min_pos, max_pos; } MinMax;
+
 // ZIP & PIZ: called by piz_read_global_area during PIZ of the external reference fa.genozip file
 void ref_consume_ref_fasta_global_area (void)
 {
     ref_copy_chrom_data_from_z_file();
 
     random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
-    buf_copy (evb, &contig_maxes, &z_file->ra_min_max_by_chrom, sizeof (int64_t), 0, 0, "contig_maxes", 0);
+    buf_copy (evb, &contig_maxes, &z_file->ra_min_max_by_chrom, sizeof (MinMax), 0, 0, "contig_maxes", 0);
     buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra", 0);
     buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
 }
 
 // ZIP & PIZ: used when zipping or pizzing the target file, after the external reference is read
-int64_t ref_min_max_of_chrom (int32_t chrom, bool get_max)
+PosType ref_min_max_of_chrom (int32_t chrom, bool get_max)
 {
     ASSERT (chrom >= 0 && chrom < contig_maxes.len, "Error in ref_min_max_of_chrom: chrom=%d out of range, contig_maxes.len=%u",
             chrom, (uint32_t)contig_maxes.len);
 
     ASSERT0 (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE, "Error in ref_min_max_of_chrom: function can only be called with external reference");
 
-    typedef struct { int64_t min_pos, max_pos; } MinMax;
     MinMax *mm = ENT (MinMax, contig_maxes, chrom);
     return get_max ? mm->max_pos : mm->min_pos;
 }
 
 //---------------------------------------
-// Reference creation stuff
-//---------------------------------------
-
-SPINLOCK (make_ref_spin);
-#define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
-
-// in make_ref, each VB gets it own range indexed by vb->vblock_i - so they can work on them in parallel without
-// worrying about byte overlap. called from zip_dispatcher as zip_initialize
-void ref_make_ref_init (void)
-{
-    ASSERT0 (flag_make_reference, "Expecting flag_make_reference=true");
-
-    buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges", 0); // must be allocated by I/O thread as its evb
-    buf_zero (&ranges);
-
-    refhash_initialize();
-
-    spin_initialize (make_ref_spin);
-}
-
-// called from fasta_make_ref_range, returns the range for this fasta VB. note that we have exactly one range per VB
-// as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag_make_reference)
-Range *ref_make_ref_get_range (uint32_t vblock_i)
-{
-    // access ranges.len under the protection of the mutex
-    spin_lock (make_ref_spin);
-    ranges.len = MAX (ranges.len, (uint64_t)vblock_i + 1); // note that this function might be called out order (called from FASTA ZIP compute thread)
-    ASSERT (ranges.len <= MAKE_REF_NUM_RANGES, "Error in ref_make_ref_get_range: reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
-    spin_unlock (make_ref_spin);
-
-    return ENT (Range, ranges, vblock_i);
-}
-
-// compress the reference - one section at the time, using Dispatcher to do them in parallel (make_ref version)
-static void ref_prepare_range_for_compress_make_ref (VBlockP vb)
-{
-    if (vb->vblock_i == ranges.len) return; // we're done
-
-    Range *r = ENT (Range, ranges, vb->vblock_i);
-
-    // we have exactly one contig for each VB, one one RAEntry for that contig
-    // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
-    random_access_get_ra_info (vb->vblock_i, &r->chrom, &r->first_pos, &r->last_pos);
-    
-    // set gpos "global pos" - a single 0-based coordinate spanning all ranges in order
-    r->gpos = vb->vblock_i > 1 ? (r-1)->gpos + ref_size (r-1) : 0;
-
-    vb->range              = r; // range to compress
-    vb->range_num_set_bits = r->ref.num_of_bits / 2;
-    vb->ready_to_dispatch  = true;
-}
-
-
-//---------------------------------------
 // Printing
 //---------------------------------------
 
-void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int64_t end_pos) /* start_pos=end_pos=0 if entire ref */
+void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos) /* start_pos=end_pos=0 if entire ref */
 {
     uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
     uint64_t end_idx   = (end_pos ? MIN (end_pos, r->last_pos) : r->last_pos) - r->first_pos;
@@ -1399,9 +1346,9 @@ void ref_print_subrange (const char *msg, const Range *r, int64_t start_pos, int
 }
 
 void ref_print_is_set (const Range *r,
-                       int64_t around_pos) // display around this neighborhoud ; -1 means entire range
+                       PosType around_pos) // display around this neighborhoud ; -1 means entire range
 {
-#   define neighborhood (int64_t)10000
+#   define neighborhood (PosType)10000
 
     fprintf (stderr, "\n\nRegions set for chrom %u \"%.*s\" [%"PRId64"-%"PRId64"] according to range.is_set (format- \"first_pos-last_pos (len)\")\n", 
              r->chrom, r->chrom_name_len, r->chrom_name, r->first_pos, r->last_pos);
@@ -1419,7 +1366,7 @@ void ref_print_is_set (const Range *r,
         bool found = bit_array_find_next_clear_bit (&r->is_set, i, &next);
         if (!found) next = r->is_set.num_of_bits;
 
-        bool in_neighborhood = (around_pos - (int64_t)(r->first_pos+i) > -neighborhood) && (around_pos - (int64_t)(r->first_pos+i) < neighborhood);
+        bool in_neighborhood = (around_pos - (PosType)(r->first_pos+i) > -neighborhood) && (around_pos - (PosType)(r->first_pos+i) < neighborhood);
         if (next > i && (around_pos == -1 || in_neighborhood)) {
             if (next - i > 1)
                 fprintf (stderr, "%"PRId64"-%"PRIu64"(%u)\t", r->first_pos + i, r->first_pos + next-1, (uint32_t)(next - i));

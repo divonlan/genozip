@@ -14,14 +14,14 @@
 // region as parsed from the --regions option
 typedef struct {
     const char *chrom;        // NULL means all chromosomes (i.e. not a specific chromosome)
-    int64_t start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
-    int64_t end_pos;         // the region searched will include both the start and the end
+    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
+    PosType end_pos;         // the region searched will include both the start and the end
 } Region;
 
 // region of a specific chromosome
 typedef struct {
-    int64_t start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
-    int64_t end_pos;         // the region searched will include both the start and the end
+    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
+    PosType end_pos;         // the region searched will include both the start and the end
 } Chreg; // = Chromosome Region
 
 static Buffer regions_buf = EMPTY_BUFFER; // all regions together
@@ -34,7 +34,7 @@ static bool is_negative_regions = false; // true if the user used ^ to negate th
 typedef enum {RPT_SINGLTON, RPT_START_ONLY, RPT_END_ONLY, RPT_BOTH_START_END} RegionPosType;
 
 static bool regions_parse_pos (const char *str, 
-                               RegionPosType *type, int64_t *start_pos, int64_t *end_pos) // optional outs - only if case of true
+                               RegionPosType *type, PosType *start_pos, PosType *end_pos) // optional outs - only if case of true
 {
     unsigned len = strlen (str);
 
@@ -297,7 +297,7 @@ void regions_transform_negative_to_positive_complement()
 // PIZ: we calculate which regions (specified in the command line -r/-R) intersect with 
 // the ra (=a range of a single chrome within a vb) (represented by the parameters of this funciton) - 
 // filling in a bytemap of the intersection, and returning true if there is any intersection at all
-bool regions_get_ra_intersection (uint32_t chrom_word_index, int64_t min_pos, int64_t max_pos,
+bool regions_get_ra_intersection (uint32_t chrom_word_index, PosType min_pos, PosType max_pos,
                                   char *intersection_array) // optional out
 {
     if (!flag_regions) return true; // nothing to do
@@ -319,8 +319,8 @@ bool regions_get_ra_intersection (uint32_t chrom_word_index, int64_t min_pos, in
 }
 
 // used by ref_display_ref. if an intersection was found - returns the min,max pos and true, otherwise returns false
-bool regions_get_range_intersection (uint32_t chrom_word_index, int64_t min_pos, int64_t max_pos,
-                                     int64_t *intersect_min_pos, int64_t *intersect_max_pos) // out
+bool regions_get_range_intersection (uint32_t chrom_word_index, PosType min_pos, PosType max_pos,
+                                     PosType *intersect_min_pos, PosType *intersect_max_pos) // out
 {
     if (!flag_regions) { // if no regions are specified, the entire range "intersects"
         *intersect_min_pos = min_pos;
@@ -346,7 +346,7 @@ bool regions_get_range_intersection (uint32_t chrom_word_index, int64_t min_pos,
 
 // PIZ: check if a (chrom,pos) that comes from a specific line, is included in any positive region of
 // a specific ra (i.e. chromosome)
-bool regions_is_site_included (uint32_t chrom_word_index, int64_t pos)
+bool regions_is_site_included (uint32_t chrom_word_index, PosType pos)
 {
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];
@@ -358,7 +358,7 @@ bool regions_is_site_included (uint32_t chrom_word_index, int64_t pos)
 }
 
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
-bool regions_is_range_included (int32_t chrom, int64_t start_pos, int64_t end_pos, bool completely_included)
+bool regions_is_range_included (int32_t chrom, PosType start_pos, PosType end_pos, bool completely_included)
 {
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom];

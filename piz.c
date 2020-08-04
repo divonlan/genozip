@@ -322,14 +322,9 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
     default: {
         RECONSTRUCT (snip, snip_len); // simple reconstruction
 
-        if (store_uint) {
-            char *after;
-            new_value.i = (int64_t)strtoull (snip, &after, 10); // allows negative values
-
-            // if the snip in its entirety is not a valid integer, don't store the value.
-            // this can happen for example when seg_pos_field stores a "nonsense" snip.
-            have_new_value = (after == snip + snip_len);
-        }
+        if (store_uint) 
+            // store the value only if the snip in its entirety is a reconstructable integer (eg NOT "21A", "-0", "012" etc)
+            have_new_value = str_get_int (snip, snip_len, &new_value.i);
 
         else if (store_float) {
             char *after;

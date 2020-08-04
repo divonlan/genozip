@@ -96,6 +96,10 @@ const char complement[256] =  { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
                                 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
                                 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
 
+// ------------------------------------------------------
+// stuff related to creating the refhash
+// ------------------------------------------------------
+
 static inline uint32_t refhash_get_word (const Range *r, int64_t idx)
 {
     // num_bits_this_range will be:
@@ -103,7 +107,7 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t idx)
     // * larger than 0, smaller than BITS_PER_HASH if HOOK is in this range, 
     //   and some bits in this range and some in next
     // * BITS_PER_HASH if HOOK and all bits are in this range
-    int64_t num_bits_this_range = MIN (bits_per_hash, (int64_t)r->ref.num_of_bits - idx*2);
+    PosType num_bits_this_range = MIN (bits_per_hash, (PosType)r->ref.num_of_bits - idx*2);
 
     uint32_t refhash_word = 0;
 
@@ -128,14 +132,14 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t idx)
 // towards the end of the range, we might have hash values that start in this range and end in the next range.
 void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is the last range */)
 {
-    int64_t this_range_size = ref_size (r);
-    int64_t next_range_size = ref_size (next_r);
+    PosType this_range_size = ref_size (r);
+    PosType next_range_size = ref_size (next_r);
     
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
-    int64_t num_bases = this_range_size - (nukes_per_hash - MIN (next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
+    PosType num_bases = this_range_size - (nukes_per_hash - MIN (next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
 
-    for (int64_t i=0; i < num_bases; i++)
+    for (PosType i=0; i < num_bases; i++)
 
         // take only the final hook in a polymer string of hooks (i.e. the last G in a e.g. GGGGG)
         if (GET_BASE(i) == HOOK && GET_BASE(i+1) != HOOK) {
@@ -236,7 +240,7 @@ void refhash_compress_refhash (void)
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table used for compressing fastq files...", false, 
+    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table used for compressing FASTQ and unaligned SAM files...", false, 
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              ref_output_vb);
@@ -341,7 +345,7 @@ static inline bool refhash_get_word_from_seq (VBlock *vb, const char *seq, uint3
     return true;
 }
 
-static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bits, int64_t gpos, bool is_forward)
+static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bits, PosType gpos, bool is_forward)
 {
     START_TIMER;
 
@@ -377,15 +381,15 @@ static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bi
 
 // returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. returns false if no match found.
 bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
-                         int64_t *start_gpos, bool *is_forward, bool *is_all_ref) // out
+                         PosType *start_gpos, bool *is_forward, bool *is_all_ref) // out
 {
     START_TIMER;
 
     uint32_t longest_len=0; // longest number of bits (not bases!) that match
     uint32_t refhash_word;
-    const int64_t seq_len_64 = (int64_t)seq_len; // 64 bit version of seq_len
+    const PosType seq_len_64 = (PosType)seq_len; // 64 bit version of seq_len
     
-    int64_t best_gpos = -1; // match not found yet
+    PosType best_gpos = -1; // match not found yet
     bool best_is_forward = false;
     bool maybe_perfect_match = true;
 
@@ -418,7 +422,7 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
     uint32_t num_finds = 0;
     
     // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
-    int64_t gpos, last_gpos=0;
+    PosType gpos, last_gpos=0;
 
     // in case of --fast, we check only 1/5 of the bases, and we are content with a match (not searching any further) if it 
     // has at most 10 SNPs. On our test file, this reduced the number of calls to refhash_get_match_len by about 4X, 
@@ -434,7 +438,7 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
             seq[i] == HOOK && seq[i+1] != HOOK &&  // take the G - if there is a polymer GGGG... take the last one
             refhash_get_word_from_seq (vb, &seq[i+1], &refhash_word, 1)) { 
 
-            gpos = (int64_t)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the genome
+            gpos = (PosType)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the genome
 
             if (gpos) {
                 gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
@@ -446,7 +450,7 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
             seq[i] == HOOK_REV && seq[i-1] != HOOK_REV &&  // take the G - if there is a polymer GGGG... take the last one
             refhash_get_word_from_seq (vb, &seq[i-1], &refhash_word, -1)) { 
 
-            gpos = (int64_t)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the FORWARD genome
+            gpos = (PosType)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the FORWARD genome
             
             if (gpos) { 
                 gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
@@ -484,7 +488,7 @@ bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
 
             if (finds[find_i].found == NOT_FOUND) continue;
 
-            gpos = (int64_t)BGEN32 (refhashs[layer_i][finds[find_i].refhash_word & layer_bitmask[layer_i]]); 
+            gpos = (PosType)BGEN32 (refhashs[layer_i][finds[find_i].refhash_word & layer_bitmask[layer_i]]); 
             if (!gpos) {
                 finds[find_i].found = NOT_FOUND; // if we can't find it in this layer, we won't find it in the next layers either
                 continue;

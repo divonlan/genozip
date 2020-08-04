@@ -142,12 +142,12 @@ uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_
 
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
 // (if allow_nonsense) or errors
-int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool allow_nonsense)
+PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool allow_nonsense)
 {
-    char *after;
-    int64_t value = (int64_t)strtoull (snip, &after, 10);
+    PosType value;
+    bool is_int = str_get_int (snip, snip_len, &value);
 
-    if (value >= 0 && value <= MAX_POS && ((unsigned)(after - snip) == snip_len))
+    if (is_int && value >= 0 && value <= MAX_POS)
         return value; // all good
 
     ASSSEG (allow_nonsense, snip, "Error: position field must be an integer number between 0 and %"PRId64", seeing: %.*s", 
@@ -157,7 +157,7 @@ int64_t seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool
 }
 
 // returns POS value if a valid pos, or 0 if not
-int64_t seg_pos_field (VBlock *vb, 
+PosType seg_pos_field (VBlock *vb, 
                        DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                        DidIType base_did_i,    // mandatory: base for delta
                        bool allow_non_number, // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
@@ -173,7 +173,7 @@ int64_t seg_pos_field (VBlock *vb,
     base_ctx->flags |= CTX_FL_STORE_INT;
     base_ctx->inst |= CTX_INST_NO_STONS;
 
-    int64_t this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
+    PosType this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, allow_non_number);
 
     // < 0  -  caller allows a non-valid-number and this is indeed a non-valid-number, just store the string
     // == 0 - 
@@ -189,7 +189,7 @@ int64_t seg_pos_field (VBlock *vb,
         return 0; // invalid pos
     }
 
-    int64_t pos_delta = this_pos - base_ctx->last_value.i;
+    PosType pos_delta = this_pos - base_ctx->last_value.i;
     
     // if we're self-delta'ing - we store the value
     if (snip_ctx == base_ctx) base_ctx->last_value.i = this_pos; 
@@ -474,7 +474,7 @@ void seg_compound_field (VBlock *vb,
         char sep = (i==field_len) ? 0 : field[i];
 
         if (!sep || 
-            ((sf_i < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep==1))))) {
+            ((sf_i < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep=='\t' || sep==1))))) {
         
             // process the subfield that just ended
             Context *sf_ctx;
@@ -497,21 +497,17 @@ void seg_compound_field (VBlock *vb,
             char delta_snip[30];
             unsigned original_snip_len = snip_len;
 
-            int64_t this_value = (int64_t)strtoull (snip, NULL, 10);
-            if (str_is_int (snip, snip_len)) {
+            PosType this_value;
+            if (str_get_int (snip, snip_len, &this_value)) {
                 delta_snip[0] = SNIP_SELF_DELTA;
 
-                int64_t delta = this_value - sf_ctx->last_value.i;
+                PosType delta = this_value - sf_ctx->last_value.i;
                 snip_len = 1 + str_int (delta, &delta_snip[1]);
                 snip = delta_snip;
 
-                //sf_ctx->inst  |= CTX_INST_NO_STONS;
                 sf_ctx->flags |= CTX_FL_STORE_INT;
+                sf_ctx->last_value.i = this_value;
             }
-            // note: we store it regardless of whether str_is_int considers it an int (for example 003 will fail str_is_int)
-            // because a future value that IS successful with str_is_int will delta against this. This is because
-            // piz_reconstruct_one_snip always sets last_value without checking str_is_int
-            sf_ctx->last_value.i = this_value;
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted

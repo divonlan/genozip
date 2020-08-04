@@ -28,10 +28,10 @@ extern uint32_t seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, Con
 
 extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
-extern int64_t seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, bool allow_nonsense);
+extern PosType seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, bool allow_nonsense);
 
 #define MAX_POS_DELTA 32000 // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
-extern int64_t seg_pos_field (VBlockP vb, 
+extern PosType seg_pos_field (VBlockP vb, 
                               DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
                               DidIType base_did_i,    // mandatory: base for delta
                               bool allow_non_number,      // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
@@ -107,8 +107,8 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                               "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %"PRIu64 " > vb%s", \
             __VA_ARGS__, txt_name, vb->line_i, vb->vblock_i, \
-            /* pos_in_vb:         */ (int64_t)(p_into_txt ? (p_into_txt - vb->txt_data.data) : -1), \
-            /* pos_in_file:       */ (int64_t)(p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1),\
+            /* pos_in_vb:         */ (PosType)(p_into_txt ? (p_into_txt - vb->txt_data.data) : -1), \
+            /* pos_in_file:       */ (PosType)(p_into_txt ? (vb->vb_position_txt_file + (p_into_txt - vb->txt_data.data)) : -1),\
             /* vb start pos file: */ vb->vb_position_txt_file, \
             /* vb end pos file:   */ vb->vb_position_txt_file + vb->txt_data.len-1, \
             /* vb length:         */ vb->txt_data.len,\

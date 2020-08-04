@@ -54,7 +54,7 @@ bool sam_inspect_txt_header (BufferP txt_header)
 
             if (chrom_name && last_pos_str) {
                 unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
-                int64_t last_pos = (int64_t)strtoull (&last_pos_str[3], NULL, 10);
+                PosType last_pos = (PosType)strtoull (&last_pos_str[3], NULL, 10);
                 ref_verify_identical_chrom (&chrom_name[3], chrom_name_len, last_pos);
             }
 
@@ -160,14 +160,15 @@ void sam_seg_finalize (VBlockP vb)
 // 1. if a non-zero value that is the negative of the previous line - a SNIP_DELTA & "-" (= value negation)
 // 2. else, tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as SNIP_SPECIAL & tlen-pnext_pos_delta-seq_len
 // 3. else, stored as is
-static inline void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, int64_t pnext_pos_delta, int32_t cigar_seq_len)
+static inline void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, PosType pnext_pos_delta, int32_t cigar_seq_len)
 {
     ASSSEG (tlen_len, tlen, "%s: empty TLEN", global_cmd);
-    ASSSEG (str_is_int (tlen, tlen_len), tlen, "%s: expecting TLEN to be an integer", global_cmd);
 
     Context *ctx = &vb->contexts[SAM_TLEN];
 
-    int64_t tlen_value = (int64_t)strtoull (tlen, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
+    int64_t tlen_value=0;
+    bool is_int = str_get_int (tlen, tlen_len, &tlen_value); // note: tlen_value remains 0 if not a valid integer
+    ASSSEG (is_int, tlen, "%s: expecting TLEN to be an integer, but found \"%.*s\"", global_cmd, tlen_len, tlen);
     
     // case 1
     if (tlen_value && tlen_value == -ctx->last_value.i) {
@@ -216,7 +217,7 @@ static inline int sam_seg_get_next_subitem (const char *str, int str_len, char s
 //   single entry, regardless of the number of entries indicated by CIGAR
 //
 // Best explanation of CIGAR operations: https://davetang.org/wiki/tiki-index.php?page=SAM
-static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len, int64_t pos, const char *cigar, 
+static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len, PosType pos, const char *cigar, 
                                unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar)
 {
     START_TIMER;
@@ -232,7 +233,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
         bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
 
         // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
-        buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2words64 (seq_len) * sizeof(int64_t), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
+        buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
                 buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
         
         buf_alloc (vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + seq_len + 3, vb->lines.len * seq_len / 4), CTX_GROWTH, "context->local", nonref_ctx->did_i); 
@@ -450,7 +451,7 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         // sanity checks before adding to any dictionary
         if (strand_len != 1 || (strand[0] != '+' && strand[0] != '-')) goto error; // invalid format
         
-        int64_t pos_value = seg_scan_pos_snip ((VBlockP)vb, pos, pos_len, true);
+        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, pos, pos_len, true);
         if (pos_value < 0) goto error;
 
         seg_by_dict_id (vb, rname,  rname_len,  structured_SA_OA.items[0].dict_id, 1 + rname_len);
@@ -513,7 +514,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         // sanity checks before adding to any dictionary
         if (pos_len < 2 || (pos[0] != '+' && pos[0] != '-')) goto error; // invalid format - expecting pos to begin with the strand
 
-        int64_t pos_value = seg_scan_pos_snip ((VBlockP)vb, &pos[1], pos_len-1, true);
+        PosType pos_value = seg_scan_pos_snip ((VBlockP)vb, &pos[1], pos_len-1, true);
         if (pos_value < 0) goto error;
 
         seg_by_dict_id (vb, rname,  rname_len, structured_XA.items[0].dict_id, 1 + rname_len);
@@ -736,7 +737,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
                 "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
                 txt_name, dl->seq_len, value_len, value_len, value);
 
-        int64_t this_pos = vb->contexts[SAM_POS].last_value.i;
+        PosType this_pos = vb->contexts[SAM_POS].last_value.i;
         sam_seg_seq_field (vb, (char *)value, value_len, this_pos, vb->last_cigar, 0, value_len, vb->last_cigar); // remove const bc SEQ data is actually going to be modified
     }
 
@@ -845,7 +846,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     bool rname_is_missing = (*field_start == '*' && field_len == 1);
 
     GET_NEXT_ITEM ("POS");
-    int64_t this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, true);
+    PosType this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, false, field_start, field_len, true);
     ASSSEG (!(rname_is_missing && this_pos), field_start, "Error: RNAME=\"*\" - expecting POS to be 0 but it is %"PRId64, this_pos);
 
     random_access_update_pos (vb_, SAM_POS);

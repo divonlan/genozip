@@ -52,6 +52,11 @@ DataType file_get_data_type (FileType ft, bool is_input)
     return DT_NONE;
 }
 
+const char *file_plain_text_ext_of_dt (DataType dt) 
+{
+    return file_exts [txt_out_ft_by_dt[dt][0]];
+}
+
 // get genozip file type by txt file type
 FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 {

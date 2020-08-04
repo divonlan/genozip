@@ -724,10 +724,10 @@ BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits)
             num_of_bits, roundup_bits2bytes (num_of_bits), buf->len);
 
     BitArray *bitarr = buf_get_bitarray (buf);
-    bitarr->num_of_bits = num_of_bits;
+    bitarr->num_of_bits  = num_of_bits;
     bitarr->num_of_words = roundup_bits2words64 (bitarr->num_of_bits);
 
-    ASSERT (roundup_bits2words64 (num_of_bits) * sizeof (int64_t) <= buf->size, "Error in buf_zfile_buf_to_bitarray: buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
+    ASSERT (roundup_bits2bytes64 (num_of_bits) <= buf->size, "Error in buf_zfile_buf_to_bitarray: buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
             buf->size, bitarr->num_of_words, bitarr->num_of_words * sizeof(uint64_t));
 
     LTEN_bit_array (bitarr, true);

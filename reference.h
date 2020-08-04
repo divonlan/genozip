@@ -28,8 +28,8 @@ typedef struct Range {
     unsigned chrom_name_len;
     WordIndex chrom;               // index to the chrom of the external reference
     uint32_t range_i;
-    int64_t first_pos, last_pos; // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
-    int64_t gpos;                // position of this range in the "global position" 
+    PosType first_pos, last_pos; // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
+    PosType gpos;                // position of this range in the "global position" 
     uint32_t copied_first_index, copied_len; // ZIP with REF_EXT_STORE: the subset of this range that was copied directly from the fasta file and doesn't need to be compressed
     pthread_mutex_t mutex;
 } Range;
@@ -50,18 +50,13 @@ extern void ref_consume_ref_fasta_global_area (void);
 extern void ref_contig_word_index_from_name (const char *chrom_name, unsigned chrom_name_len, const char **snip, WordIndex *word_index);
 extern void ref_get_contigs (ConstBufferP *out_contig_dict, ConstBufferP *out_contig_words);
 extern PosType ref_min_max_of_chrom (int32_t chrom, bool get_max);
-
 extern Range *ref_seg_get_locked_range (VBlockP vb, PosType pos, const char *field /* used for ASSSEG */);
-
 extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos);
 extern void ref_print_is_set (const Range *r, PosType around_pos);
 extern void ref_verify_identical_chrom (const char *chrom_name, unsigned chrom_name_len, PosType last_pos);
-
-// Make-reference stuff (ZIP of FASTA with --make-reference)
-extern void ref_make_ref_init (void);
-extern Range *ref_make_ref_get_range (uint32_t vblock_i);
-extern void ref_output_vb (VBlockP vb);
 extern const char *ref_get_cram_ref (void);
+extern void ref_output_vb (VBlockP vb);
+extern void ref_make_ref_init (void);
 
 // ZIP ONLY: access range_i and index within range, for ranges configured for ZIP
 #define ridx2pos(range_i,idx) (((PosType)(range_i) * REF_NUM_SITES_PER_RANGE) | (idx))
@@ -91,7 +86,7 @@ extern Md5Hash ref_md5;
 extern Buffer ref_stored_ra;
 
 extern Range *genome, *genome_rev;
-extern int64_t genome_size;
+extern PosType genome_size;
 
 #define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K
 #define GPOS2MUTEX(gpos) ((gpos) / GENOME_BASES_PER_MUTEX)

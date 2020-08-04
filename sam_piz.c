@@ -42,7 +42,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
     const char *nonref_start = nonref;
     unsigned subcigar_len    = 0;
     char cigar_op            = 0;
-    const int64_t pos        = vb->contexts[SAM_POS].last_value.i;
+    const PosType pos        = vb->contexts[SAM_POS].last_value.i;
     const Range *range       = NULL;
     unsigned seq_consumed=0, ref_consumed=0;
 

@@ -458,7 +458,7 @@ void vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigne
     char ref_alt[3] = { 0, '\t', 0 };
     char ref_value = 0;
     
-    int64_t pos = vb->contexts[VCF_POS].last_value.i;
+    PosType pos = vb->contexts[VCF_POS].last_value.i;
 
     if (snip[0] == '-' || snip[1] == '-') { 
         const Range *range = ref_piz_get_range (vb, pos, 1);

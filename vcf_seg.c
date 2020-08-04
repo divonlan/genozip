@@ -43,7 +43,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
 
     // if we have a reference, we use it
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-        int64_t pos = vb->contexts[VCF_POS].last_value.i;
+        PosType pos = vb->contexts[VCF_POS].last_value.i;
 
         Range *range = ref_seg_get_locked_range (vb, pos, start_line);
         uint32_t index_within_range = pos - range->first_pos;
@@ -507,9 +507,8 @@ static int vcf_seg_genotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, uint32_t sa
             ctx->flags |= CTX_FL_STORE_INT;
             ctx->inst  |= CTX_INST_NO_STONS;
 
-            char *ps_end;
-            int64_t ps_value = strtoull (cell_gt_data, &ps_end, 10);
-            if (ps_end - cell_gt_data != len) ps_value = 0; // PS is not an integer
+            int64_t ps_value=0;
+            str_get_int (cell_gt_data, len, &ps_value); // note: ps_value remains 0 if PS is not an integer
 
             if (ps_value && ps_value == ctx->last_value.i) { // same as previous line
                 const char copy_snip[] = { SNIP_SELF_DELTA, '0' };

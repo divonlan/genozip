@@ -79,6 +79,8 @@ typedef struct SectionHeader {
     uint8_t  ffu;
 } SectionHeader; 
 
+// flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
+#define GENOZIP_FL_
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
@@ -117,11 +119,10 @@ typedef struct {
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     CompressionAlg compression_type; // compression type of original file
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
-    Md5Hash  md5_hash_compressed;  // ffu: md5 of the original compressed file (e.g. .bam or .fastq.gz)
+    Md5Hash  md5_hash_compressed;  // ffu: md5 of the original compressed file (e.g. .bam or .fastq.gz) (bug 158)
 
 #define TXT_FILENAME_LEN 256
     char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
-
 } SectionHeaderTxtHeader; 
 
 #define VB_HEADER_COMMON_FIELDS \
@@ -199,6 +200,14 @@ extern const int lt_sizeof_one[NUM_LOCAL_TYPES];
 extern const bool lt_is_signed[NUM_LOCAL_TYPES];
 extern const int64_t lt_min[NUM_LOCAL_TYPES], lt_max[NUM_LOCAL_TYPES];
 
+// flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz
+#define CTX_FL_STORE_INT    0x01 // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)
+#define CTX_FL_STORE_FLOAT  0x02 // after reconstruction of a snip, store it in ctx.last_value as double
+#define CTX_FL_PAIRED       0x04 // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
+#define CTX_FL_STRUCTURED   0x08 // snips may contain Structured
+#define CTX_FL_COPY_PARAM   0x10 // copy ctx.b250/local.param from SectionHeaderCtx.param
+#define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
+
 typedef struct {
     SectionHeader h;
     LocalType ltype; // used by SEC_LOCAL
@@ -243,9 +252,9 @@ typedef struct SectionListEntry {
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct RAEntry {
-    uint32_t vblock_i;            // the vb_i in which this range appears
-    WordIndex chrom_index;        // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
-    uint64_t min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
+    uint32_t vblock_i;           // the vb_i in which this range appears
+    WordIndex chrom_index;       // before merge: node index into chrom context mtf, after merge - word index in CHROM dictionary
+    PosType min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
 #pragma pack()

@@ -299,6 +299,7 @@ extern void file_set_input_size (const char *size_str);
 extern FileType file_get_type (const char *filename, bool enforce_23andme_name_format);
 extern FileType file_get_stdin_type (void);
 extern DataType file_get_data_type (FileType ft, bool is_input);
+extern const char *file_plain_text_ext_of_dt (DataType dt);
 extern bool file_is_dir (const char *filename);
 extern void file_remove (const char *filename, bool fail_quietly);
 extern void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *ft);

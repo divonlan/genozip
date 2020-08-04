@@ -797,10 +797,10 @@ void comp_uncompress (VBlock *vb, CompressionAlg alg,
 
         SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
 
-        uint64_t bitarray_size = roundup_bits2words64 (uncompressed_len * 2) * sizeof (uint64_t); // 4 nucleotides per byte, rounded up to whole 64b words
+        uint64_t bitarray_size = roundup_bits2bytes64 (uncompressed_len * 2); // 4 nucleotides per byte, rounded up to whole 64b words
         buf_alloc (vb, &vb->compressed, bitarray_size, 2, "compressed", 0);
         
-        uint64_t expected_num_uncompressed_bytes = roundup_bits2words64 (uncompressed_len * 2) * sizeof (uint64_t); // 4 nucleotides per byte, rounded up to whole bytes
+        uint64_t expected_num_uncompressed_bytes = roundup_bits2bytes64 (uncompressed_len * 2); // 4 nucleotides per byte, rounded up to whole bytes
         uint64_t actual_num_uncompressed_bytes = expected_num_uncompressed_bytes;
         
         SRes ret = LzmaDecode ((uint8_t *)vb->compressed.data, &actual_num_uncompressed_bytes, 
