@@ -17,11 +17,11 @@
 #include "endianness.h"
 #include "bit_array.h"
 
-#define assert(x) ASSERT ((x), "Error in %s:%u: %s", __FUNCTION__, __LINE__, #x)
-
 //
 // Tables of constants
 //
+
+#define assert(x) ASSERT ((x), "Error in %s:%u: %s", __FUNCTION__, __LINE__, #x)
 
 // byte reverse look up table
 static const word_t reverse_table[256] =
@@ -673,21 +673,22 @@ void bit_array_set_wordn(BitArray* bitarr, bit_index_t start, uint64_t word, int
 //
 
 // Get the number of bits set (hamming weight)
-bit_index_t bit_array_num_bits_set(const BitArray* bitarr)
+bit_index_t bit_array_num_bits_set (const BitArray *bitarr)
 {
-  word_addr_t i;
+    if (!bitarr->num_of_bits) return 0;
 
-  bit_index_t num_of_bits_set = 0;
+    bit_index_t num_of_bits_set = 0;
 
-  for(i = 0; i < bitarr->num_of_words; i++)
-  {
-    if(bitarr->words[i] > 0)
-    {
-      num_of_bits_set += POPCOUNT(bitarr->words[i]);
-    }
-  }
+    // all words but last one
+    for (word_addr_t i=0; i < bitarr->num_of_words-1; i++)
+        if (bitarr->words[i])
+            num_of_bits_set += POPCOUNT (bitarr->words[i]);
 
-  return num_of_bits_set;
+    // last word might be partial
+    word_offset_t bits_active = bits_in_top_word (bitarr->num_of_bits);    
+    num_of_bits_set += POPCOUNT (bitarr->words[bitarr->num_of_words-1] & bitmask64 (bits_active));
+    
+    return num_of_bits_set;
 }
 
 // added by divon
@@ -1103,6 +1104,17 @@ void bit_array_copy(BitArray* dst, bit_index_t dstindx,
   DEBUG_VALIDATE(dst);
 }
 
+void bit_array_overlay (BitArray *overlaid_bitarr, BitArray *regular_bitarr, bit_index_t start, bit_index_t num_of_bits)
+{
+    ASSERT (start % 64 == 0, "Error in bit_array_overlay: start=%"PRIu64" must be a multiple of 64", start);
+    ASSERT (start + num_of_bits <= regular_bitarr->num_of_bits, "Error in bit_array_overlay: start(%"PRIu64") + num_of_bits(%"PRIu64") <= regular_bitarr->num_of_bits(%"PRIu64")",
+            start, num_of_bits, regular_bitarr->num_of_bits);
+
+    bit_index_t word_i = start / 64;
+    *overlaid_bitarr = (BitArray){ .words        = &regular_bitarr->words[word_i],
+                                   .num_of_words = roundup_bits2words64 (num_of_bits),
+                                   .num_of_bits  = num_of_bits };
+} 
 
 //
 // Logic operators

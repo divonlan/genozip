@@ -39,19 +39,19 @@
 // note: the code supports modifying MAKE_REF_BASE_LAYER_BITS and MAKE_REF_NUM_LAYERS without further code changes.
 // this only affects make-reference. These values were chosen to balance RAM and almost optimimum "near-perfect short read matches"
 // (47-49% of reads in our fastq benchmarks are 95%+ matched to the reference), with memory use of refhash - 1.875 GB
-#define MAKE_REF_BASE_LAYER_BITS 28 // number of bits of layer_i=0. each subsequent layer has 1 bit less 
+#define MAKE_REF_BASE_LAYER_BITS 28   // number of bits of layer_i=0. each subsequent layer has 1 bit less 
 #define MAKE_REF_NUM_LAYERS 4
 static uint32_t make_ref_vb_size = 0; // max bytes in a refhash vb
 
 // each rehash_buf entry is a Buffer containing a hash layer containing 256M gpos values (4B each) = 1GB
 static unsigned num_layers=0;
-static uint32_t bits_per_hash=0;  // = layer_bits[0]
-static uint32_t nukes_per_hash=0; // = layer_bits[0] / 2
-static uint32_t layer_bits[64]; // number of bits in each layer - layer_bits[0] is the base (widest) layer
-static uint32_t layer_size[64]; // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
-static uint32_t layer_bitmask[64]; // 1s in the layer_bits[] LSbs
+static uint32_t bits_per_hash=0;    // = layer_bits[0]
+static uint32_t nukes_per_hash=0;   // = layer_bits[0] / 2
+static uint32_t layer_bits[64];     // number of bits in each layer - layer_bits[0] is the base (widest) layer
+static uint32_t layer_size[64];     // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
+static uint32_t layer_bitmask[64];  // 1s in the layer_bits[] LSbs
 static Buffer *refhash_bufs = NULL; // array of buffers, one for each layer
-static uint32_t **refhashs = NULL; // array of pointers to the beginning of each layer
+static uint32_t **refhashs = NULL;  // array of pointers to the beginning of each layer
 
 static SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 static uint32_t ref_hash_cursor = 0;
@@ -100,20 +100,19 @@ const char complement[256] =  { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
 // stuff related to creating the refhash
 // ------------------------------------------------------
 
-static inline uint32_t refhash_get_word (const Range *r, int64_t idx)
+static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
 {
     // num_bits_this_range will be:
     // * 0 if HOOK is in this range, but all bits in next range
     // * larger than 0, smaller than BITS_PER_HASH if HOOK is in this range, 
     //   and some bits in this range and some in next
     // * BITS_PER_HASH if HOOK and all bits are in this range
-    PosType num_bits_this_range = MIN (bits_per_hash, (PosType)r->ref.num_of_bits - idx*2);
-
+    PosType num_bits_this_range = MIN (bits_per_hash, (PosType)r->ref.num_of_bits - base_i*2);
     uint32_t refhash_word = 0;
 
     // if the are any of the 29 bits in this range, use them
     if (num_bits_this_range > 0)
-        refhash_word = bit_array_get_wordn (&r->ref, idx * 2, num_bits_this_range);
+        refhash_word = bit_array_get_wordn (&r->ref, base_i * 2, num_bits_this_range);
 
     // if there are any bits in the next range, they are the more significant bits in the word we are forming
     if (num_bits_this_range < bits_per_hash)
@@ -135,20 +134,25 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     PosType this_range_size = ref_size (r);
     PosType next_range_size = ref_size (next_r);
     
+    ASSERT (this_range_size * 2 == r->ref.num_of_bits, 
+            "Error in refhash_calc_one_range: mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.num_of_bits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64, 
+            this_range_size, this_range_size*2, r->ref.num_of_bits, ENT (char, z_file->contexts[0].dict, ENT (MtfNode, z_file->contexts[0].mtf, r->chrom)->char_index), 
+            r->first_pos, r->last_pos);
+            
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
     PosType num_bases = this_range_size - (nukes_per_hash - MIN (next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
 
-    for (PosType i=0; i < num_bases; i++)
+    for (PosType base_i=0; base_i < num_bases; base_i++)
 
         // take only the final hook in a polymer string of hooks (i.e. the last G in a e.g. GGGGG)
-        if (GET_BASE(i) == HOOK && GET_BASE(i+1) != HOOK) {
+        if (GET_BASE(base_i) == HOOK && GET_BASE(base_i+1) != HOOK) {
             
-            uint32_t refhash_word = refhash_get_word (r, i+1); // +1 so not to include the hook
+            uint32_t refhash_word = refhash_get_word (r, base_i+1); // +1 so not to include the hook
 
             // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
             // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
-            if (r->gpos + i > ((uint64_t)1 << 32)) {
+            if (r->gpos + base_i > ((uint64_t)1 << 32)) {
                 static bool warning_given = false;
 
                 ASSERTW (warning_given, "Warning: %s contains more than 2^32 (~4 billion) nucleaotides. When compressing a FASTQ or FASTA file using the reference being generated, only the first 2^32 nucleotides of the reference will be used (no such limitation when compressing other file types)", txt_name);
@@ -165,7 +169,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
 
                 if (refhashs[layer_i][idx] == 0) {
-                    refhashs[layer_i][idx] = BGEN32 (r->gpos + i);
+                    refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i);
                     set=true;
                     break;
                 }
@@ -174,7 +178,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
             if (!set && ((rand() & 3) == 0)) { // if all layers are already set, and we are on the lucky side of a 25% chance
                 uint32_t layer_i = rand() % num_layers;
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
-                refhashs[layer_i][idx] = BGEN32 (r->gpos + i); // replace one layer in random
+                refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i); // replace one layer in random
             }
         }
 }
@@ -313,6 +317,29 @@ void refhash_load(void)
     buf_test_overflows_all_vbs ("refhash_load");
 }
 
+void refhash_load_standalone (void)
+{
+    flag_reading_reference = true; // tell file.c and fasta.c that this is a reference
+
+    TEMP_FLAG (command, PIZ);
+    RESET_FLAG (flag_test);
+
+    z_file = file_open (ref_filename, READ, Z_FILE, DT_FASTA);    
+    z_file->basename = file_basename (ref_filename, false, "(reference)", NULL, 0);
+
+    zfile_read_genozip_header (NULL);
+
+    refhash_load();
+
+    file_close (&z_file, false);
+    file_close (&txt_file, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtfile_genozip_to_txt_header.
+    
+    RESTORE_FLAG (flag_test);
+    RESTORE_FLAG (command);
+
+    flag_reading_reference = false;
+}
+
 #define COMPLIMENT(b) (3-(b))
 
 // Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
@@ -350,7 +377,7 @@ static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bi
     START_TIMER;
 
     bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
-    const word_t *ref = &(is_forward ? genome : genome_rev)->ref.words[bit_i >> 6];
+    const word_t *ref = &(is_forward ? genome : genome_rev).ref.words[bit_i >> 6];
     uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
 
     word_t word=0;

@@ -462,6 +462,8 @@ void vcf_piz_special_REFALT (VBlock *vb, Context *ctx, const char *snip, unsigne
 
     if (snip[0] == '-' || snip[1] == '-') { 
         const Range *range = ref_piz_get_range (vb, pos, 1);
+        ASSERT (range, "Error in vcf_piz_special_REFALT: failed to find range for chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
+        
         uint32_t idx = pos - range->first_pos;
         ASSERT (ref_is_nucleotide_set (range, idx), "Error in vcf_piz_special_REFALT: reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
         ref_value = ref_get_nucleotide (range, idx);

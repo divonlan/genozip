@@ -10,9 +10,6 @@
 
 extern bool piz_dispatcher (bool is_first_component, bool is_last_file);
 
-extern int32_t piz_decode_pos (VBlockP vb, int32_t last_pos, const char *delta_snip, unsigned delta_snip_len, 
-                               int32_t *last_delta, char *pos_str, unsigned *pos_len);
-
 #define piz_is_skip_section(vb,st,dict_id) (vb->data_type != DT_NONE     && DTP(is_skip_secetion)  && DTP (is_skip_secetion)((VBlockP)(vb), (st), (dict_id)))
 #define piz_is_skip_sectionz(st,dict_id)   (z_file->data_type != DT_NONE && DTPZ(is_skip_secetion) && DTPZ(is_skip_secetion)(NULL, (st), (dict_id)))
 
@@ -59,14 +56,6 @@ typedef struct PizSubfieldMapper {
     LOAD_SNIP (did_i);\
     RECONSTRUCT (snip, snip_len);\
     if (add_tab) RECONSTRUCT1 ('\t');
-
-#define RECONSTRUCT_FROM_DICT_POS(did_i,last_pos,update_last_pos,last_delta,add_tab) { \
-    if ((did_i) != DID_I_NONE) LOAD_SNIP(did_i);\
-    char pos_str[30];\
-    uint32_t new_pos = piz_decode_pos ((VBlockP)vb, last_pos, snip, snip_len, last_delta, pos_str, &snip_len); \
-    if (update_last_pos) last_pos = new_pos;\
-    RECONSTRUCT (pos_str, snip_len);\
-    if (add_tab) RECONSTRUCT1 ('\t'); }
 
 #endif
 

@@ -17,11 +17,11 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
 {
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    ranges.len = MAX (ranges.len, (uint64_t)vblock_i + 1); // note that this function might be called out order (called from FASTA ZIP compute thread)
+    ranges.len = MAX (ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from FASTA ZIP compute thread)
     ASSERT (ranges.len <= MAKE_REF_NUM_RANGES, "Error in ref_make_ref_get_range: reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 
-    return ENT (Range, ranges, vblock_i);
+    return ENT (Range, ranges, vblock_i-1);
 }
 
 // called during REF ZIP compute thread, from zip_compress_one_vb (as "compress" defined in data_types.h)
@@ -57,7 +57,7 @@ void ref_make_ref_init (void)
 {
     ASSERT0 (flag_make_reference, "Expecting flag_make_reference=true");
 
-    buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges", 0); // must be allocated by I/O thread as its evb
+    buf_alloc (evb, &ranges, MAKE_REF_NUM_RANGES * sizeof (Range), 1, "ranges", RT_MAKE_REF); // must be allocated by I/O thread as its evb
     buf_zero (&ranges);
 
     refhash_initialize();
@@ -65,12 +65,13 @@ void ref_make_ref_init (void)
     spin_initialize (make_ref_spin);
 }
 
-// "read" part of dispatcher, called from ref_compress_ref
+
+// the "read" part of reference-compressing dispatcher, called from ref_compress_ref
 void ref_make_prepare_range_for_compress (VBlockP vb)
 {
-    if (vb->vblock_i == ranges.len) return; // we're done
+    if (vb->vblock_i-1 == ranges.len) return; // we're done
 
-    Range *r = ENT (Range, ranges, vb->vblock_i);
+    Range *r = ENT (Range, ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
     // we have exactly one contig for each VB, one one RAEntry for that contig
     // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
@@ -80,11 +81,9 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
     r->gpos = vb->vblock_i > 1 ? (r-1)->gpos + ref_size (r-1) : 0;
 
     // each chrom's gpos must start on a 64bit aligned word
-    static WordIndex last_chrom = WORD_INDEX_NONE;
-    if (r->chrom != last_chrom && r->gpos % 32) // reference bits in a chrom must start a new 64bit word, so gpos must be rounded to 32 (32 bases per word) 
-        r->gpos = (r->gpos + 31) & ~(uint64_t)0x1f;
-    last_chrom = r->chrom;
-
+    if (r->gpos % 64 && r->chrom != (r-1)->chrom) // each new chrom needs to have a GPOS aligned to 64, so that we can overload is_set bits between the whole genome and individual chroms
+        r->gpos = ROUNDUP64 (r->gpos);
+    
     vb->range              = r; // range to compress
     vb->range_num_set_bits = r->ref.num_of_bits / 2;
     vb->ready_to_dispatch  = true;

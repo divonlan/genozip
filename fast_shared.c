@@ -182,20 +182,15 @@ void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bi
         return;
     }
 
-    // we might have a nested spin lock for seq spans over a boundary. we always lock from the lower index to the higer
-    if (flag_reference == REF_EXT_STORE) {
-        mutex_lock (genome_muteces[GPOS2MUTEX(gpos)]);
-
-        if (GPOS2MUTEX(gpos) != GPOS2MUTEX(gpos + seq_len - 1)) // region might span two spinlock 64K-regions, but not more than that   
-            mutex_lock (genome_muteces[GPOS2MUTEX(gpos + seq_len - 1)]);
-    }
+    // lock region of reference to protect is_set
+    RefLock lock = (flag_reference == REF_EXT_STORE) ? ref_lock (gpos, seq_len) : REFLOCK_NONE;
 
     // shortcut if we have a full reference match
     if (is_all_ref) {
         bit_array_set_region (bitmap, next_bit, seq_len); // all bases match the reference
         
         if (flag_reference == REF_EXT_STORE) 
-            bit_array_set_region (&genome->is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
+            bit_array_set_region (&genome.is_set, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
 
         goto done;
     }
@@ -211,12 +206,12 @@ void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bi
             char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
             
             PosType ref_i = gpos + (is_forward ? i : seq_len-1-i);
-            char ref_base = ACGT_DECODE (&genome->ref, ref_i);
+            char ref_base = ACGT_DECODE (&genome.ref, ref_i);
 
             if (seq_base == ref_base) {
                 
                 if (flag_reference == REF_EXT_STORE) 
-                    bit_array_set (&genome->is_set, ref_i); // we will need this ref to reconstruct
+                    bit_array_set (&genome.is_set, ref_i); // we will need this ref to reconstruct
 
                 use_reference = true;
             }
@@ -231,11 +226,5 @@ void fast_seg_seq (VBlockFAST *vb, const char *seq, uint32_t seq_len, int seq_bi
     }
 
 done:
-    if (flag_reference == REF_EXT_STORE) {
-        // unlock in reverse order
-        if (GPOS2MUTEX(gpos) != GPOS2MUTEX(gpos + seq_len - 1)) // region might span to spinlock 64K-regions, but not more than that   
-            mutex_unlock (genome_muteces[GPOS2MUTEX(gpos + seq_len - 1)]);
-
-        mutex_unlock (genome_muteces[GPOS2MUTEX(gpos)]);
-    }
+    ref_unlock (lock);
 }

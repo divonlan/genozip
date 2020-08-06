@@ -416,8 +416,11 @@ static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx); 
 // dictionary as the chrom dictionary of the new file
 static void mtf_copy_reference_contig_to_chrom_ctx (void)
 {
-    ConstBufferP ref_contig_word_list, ref_config_dict;
-    ref_get_contigs (&ref_config_dict, &ref_contig_word_list);
+    ConstBufferP ref_contigs, ref_config_dict;
+    ref_contigs_get (&ref_config_dict, &ref_contigs);
+
+    ASSERT0 (buf_is_allocated (ref_contigs) && buf_is_allocated (ref_config_dict), 
+             "Error in mtf_copy_reference_contig_to_chrom_ctx: expecting ref_contigs and ref_config_dict to be allocated");
 
     // Create chrom context, this is the first context so it will be did_i=0, hence the requirement that chrom is always the first field
     ASSERT0 (CHROM == 0, "Error: CHROM must be 0");
@@ -432,20 +435,20 @@ static void mtf_copy_reference_contig_to_chrom_ctx (void)
 
     // copy reference dict
     Context *zf_ctx = &z_file->contexts[CHROM];
-    ARRAY (MtfWord, word_list, *ref_contig_word_list);
+    ARRAY (RefContig, contigs, *ref_contigs);
 
     buf_copy (evb, &zf_ctx->dict, ref_config_dict, 0,0,0, "z_file->contexts->dict", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->dict);
 
     // build mtf from reference word_list
-    buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * ref_contig_word_list->len, 1, "z_file->contexts->mtf", zf_ctx->did_i);
+    buf_alloc (evb, &zf_ctx->mtf, sizeof (MtfNode) * ref_contigs->len, 1, "z_file->contexts->mtf", zf_ctx->did_i);
     buf_set_overlayable (&zf_ctx->mtf);
-    zf_ctx->mtf.len = ref_contig_word_list->len;
+    zf_ctx->mtf.len = ref_contigs->len;
 
     for (unsigned i=0 ; i < zf_ctx->mtf.len; i++) {
         MtfNode *node = ENT (MtfNode, zf_ctx->mtf, i);
-        node->char_index = word_list[i].char_index;
-        node->snip_len   = word_list[i].snip_len;
+        node->char_index = contigs[i].char_index;
+        node->snip_len   = contigs[i].snip_len;
         node->word_index = base250_encode (i);
         node->count      = 0;
     }
@@ -981,11 +984,7 @@ void mtf_free_context (Context *ctx)
     ctx->last_value.i = 0;
     ctx->last_line_i = 0;
     memset ((char*)ctx->name, 0, sizeof(ctx->name));
-
-    if (ctx->mutex_initialized) {
-        pthread_mutex_destroy (&ctx->mutex);
-        ctx->mutex_initialized = false;
-    }
+    mutex_destroy (ctx->mutex);
 }
 
 // Called by file_close ahead of freeing File memory containing contexts
@@ -1000,11 +999,7 @@ void mtf_destroy_context (Context *ctx)
     buf_destroy (&ctx->global_hash);
     buf_destroy (&ctx->mtf_i);
     buf_destroy (&ctx->b250);
-
-    if (ctx->mutex_initialized) {
-        pthread_mutex_destroy (&ctx->mutex);
-        ctx->mutex_initialized = false;
-    }
+    mutex_destroy (ctx->mutex);
 }
 
 static FILE *dump_file; // used by --dump-one-b250 and --dump-one-local

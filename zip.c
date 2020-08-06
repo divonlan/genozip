@@ -233,6 +233,10 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
     if (DTPZ(has_random_access)) 
         random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
 
+    // store a mapping of the file's chroms to the reference's contigs, if they are any different
+    if (flag_reference == REF_EXT_STORE || flag_reference == REF_EXTERNAL)
+        ref_alt_chroms_compress();
+    
     // output reference, if needed
     bool store_ref = flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE || flag_make_reference;
     if (store_ref) 
@@ -250,8 +254,8 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
         random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
 
     if (store_ref) 
-        random_access_compress (&ref_stored_ra, SEC_REF_RANDOM_ACC, flag_show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
-
+        random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, flag_show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
+    
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header (single_component_md5);    
 

@@ -14,17 +14,19 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_NONE            = -1, // doesn't appear in the file 
 
     SEC_RANDOM_ACCESS   = 0,
-    SEC_DICT_ID_ALIASES = 1,
-    SEC_REFERENCE       = 2,
-    SEC_REF_IS_SET      = 3,
-    SEC_REF_HASH        = 4,
-    SEC_REF_RANDOM_ACC  = 5,
+    SEC_REFERENCE       = 1,
+    SEC_REF_IS_SET      = 2,
+    SEC_REF_HASH        = 3,
+    SEC_REF_RAND_ACC    = 4,
+    SEC_REF_CONTIGS     = 5,
     SEC_GENOZIP_HEADER  = 6, // SEC_GENOZIP_HEADER remains 6 as in v2-v5, to be able to read old versions' genozip header
-    SEC_TXT_HEADER      = 7, 
-    SEC_VB_HEADER       = 8,
-    SEC_DICT            = 9, 
-    SEC_B250            = 10, 
-    SEC_LOCAL           = 11, 
+    SEC_DICT_ID_ALIASES = 7,
+    SEC_TXT_HEADER      = 8, 
+    SEC_VB_HEADER       = 9,
+    SEC_DICT            = 10, 
+    SEC_B250            = 11, 
+    SEC_LOCAL           = 12, 
+    SEC_ALT_CHROMS      = 13,
 
     // vcf specific    
     SEC_VCF_GT_DATA     = 20,  
@@ -38,18 +40,20 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // this data must be perfectly aligned with SectionType.
 #define SECTIONTYPE_ABOUT {  \
     {"SEC_RANDOM_ACCESS"},   \
-    {"SEC_DICT_ID_ALIASES"}, \
     {"SEC_REFERENCE"},       \
     {"SEC_REF_IS_SET"},      \
     {"SEC_REF_HASH"},        \
-    {"SEC_REF_RANDOM_ACC"},  \
+    {"SEC_REF_RAND_ACC"},    \
+    {"SEC_REF_CONTIGS"},     \
     {"SEC_GENOZIP_HEADER"},  \
+    {"SEC_DICT_ID_ALIASES"}, \
     {"SEC_TXT_HEADER"},      \
     {"SEC_VB_HEADER"},       \
     {"SEC_DICT"},            \
     {"SEC_B250"},            \
     {"SEC_LOCAL"},           \
-    {}, {}, {}, {}, {}, {}, {}, {},  \
+    {"SEC_ALT_CHROMS"},      \
+    {}, {}, {}, {}, {}, {},  \
     {"SEC_VCF_GT_DATA"},     \
     {"SEC_VCF_PHASE_DATA"},  \
     {"SEC_VCF_HT_DATA"},     \
@@ -80,7 +84,7 @@ typedef struct SectionHeader {
 } SectionHeader; 
 
 // flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
-#define GENOZIP_FL_
+#define GENOZIP_FL_REF_INTERNAL 0x01  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
@@ -225,8 +229,8 @@ typedef struct {
 // SEC_REFERENCE (in both cases) contains 2 bits per base, and SEC_REF_IS_SET contains 1 bit per location.
 typedef struct {
     SectionHeader h;
-    uint64_t pos;              // first pos within chrom (1-based) of this range         
-    uint64_t gpos;             // first pos within genome (0-based) of this range
+    PosType pos;               // first pos within chrom (1-based) of this range         
+    PosType gpos;              // first pos within genome (0-based) of this range
     uint32_t num_bases;        // number of bases (nucleotides) in this range
     uint32_t chrom_word_index; // index in context->word_list of the chrom of this reference range    
 } SectionHeaderReference;
@@ -257,6 +261,23 @@ typedef struct RAEntry {
     PosType min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
+// the data of SEC_REF_RAND_ACC is an array of the following type
+typedef struct RefContig {
+    CharIndex char_index;        // char index in CHROM dictionary of this contig
+    uint32_t snip_len;
+    WordIndex chrom_index;
+    PosType min_pos, max_pos;    // POS field value of smallest and largest POS value of this contig
+    PosType gpos;                // The GPOS in genome matching min_pos in contig.
+
+    // Properties, as they appear in the DESC line of the reference FASTA (character arrays are 0-padded)
+    char AC[16];
+    char AS[16];
+    char rl[32];
+    uint64_t gi;
+    uint64_t LN;
+    Md5Hash M5;
+} RefContig; 
+
 #pragma pack()
 
 // zip stuff
@@ -270,7 +291,7 @@ extern SectionType sections_peek (uint32_t cursor);
 extern uint32_t sections_count_sections (SectionType st);
 
 extern bool sections_has_more_components(void);
-extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st);
+extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st, bool soft_fail);
 extern SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
 extern bool sections_seek_to (SectionType st, bool first);
 extern void sections_get_prev_file_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);
@@ -279,8 +300,8 @@ extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);
 extern void sections_show_gheader (SectionHeaderGenozipHeader *header);
 
+extern bool sections_has_random_access(void);
 extern bool sections_has_reference(void);
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
-extern int64_t sections_get_genome_size (void);
 
 #endif

@@ -376,7 +376,7 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
     buf->size        = size;
     buf->overlayable = false;
 
-    *(uint64_t *)memory        = UNDERFLOW_TRAP;        // underflow protection
+    *(uint64_t *)memory = UNDERFLOW_TRAP;                    // underflow protection
     *(uint64_t *)(buf->data + size) = OVERFLOW_TRAP;         // overflow prortection (underflow protection was copied with realloc)
     *(uint16_t *)(buf->data + size + sizeof (uint64_t)) = 1; // counter of buffers that use of this memory (0 or 1 main buffer + any number of overlays)
 

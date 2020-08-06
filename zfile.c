@@ -588,8 +588,9 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     global_vcf_num_samples    = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
     z_file->genozip_version   = header->genozip_version;
     z_file->num_components    = BGEN32 (header->num_components);
-    *digest                   = header->md5_hash_bound; 
-
+    if (digest) *digest       = header->md5_hash_bound; 
+    if (header->h.flags & GENOZIP_FL_REF_INTERNAL) flag_ref_originates_from_internal = true;
+    
     // global bools to help testing
     is_v6_or_above = (z_file->genozip_version >= 6);
          
@@ -613,8 +614,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // case: we are reading a file that is not expected to be a reference file
     else {
         // case: we are attempting to decompress a reference file - this is not supported
-        if (header->data_type == DT_REF &&
-            !((flag_show_index || flag_show_reference || flag_show_ref_index || flag_show_ref_hash || flag_list_chroms) && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
+        if (header->data_type == DT_REF && !(flag_genocat_info_only && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
             WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
             data_type = DT_NONE;
             goto final;
@@ -666,6 +666,7 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.sec_compression_alg   = COMP_BZ2;
+    header.h.flags                 = (flag_reference == REF_INTERNAL) ? GENOZIP_FL_REF_INTERNAL : 0;
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_file->data_type);
     header.encryption_type         = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;

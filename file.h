@@ -263,6 +263,9 @@ typedef struct File {
     Buffer ra_buf;                     // RAEntry records - in a format ready to write to disk (Big Endian etc)
     Buffer ra_min_max_by_chrom;        // max_pos of each from according to RA. An array of uint32_t indexed by chrom_word_index.
     Buffer dict_data;                  // Dictionary data accumulated from all VBs and written near the end of the file
+    Buffer chroms_sorted_index;        // PIZ: index into contexts[CHROM]->word_list, sorted alphabetically by snip
+    
+    Buffer alt_chrom_map;              // ZIP/PIZ: mapping from user file chrom to alternate chrom in reference file
 
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section

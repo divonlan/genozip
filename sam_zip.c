@@ -14,7 +14,6 @@
 #include "zip.h"
 #include "optimize.h"
 #include "dict_id.h"
-#include "arch.h"
 #include "compressor.h"
 #include "domqual.h"
 
@@ -28,7 +27,7 @@ void sam_zip_initialize (void)
     if (flag_reference == REF_NONE) flag_reference = REF_INTERNAL;
 
     // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
-    if (!flag_reference || flag_reference == REF_INTERNAL) ref_initialize_ranges (RT_SMALL_RANGES); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
+    if (!flag_reference || flag_reference == REF_INTERNAL) ref_initialize_ranges (RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
     // evb buffers must be alloced by I/O threads, since other threads cannot modify evb's buf_list
     random_access_alloc_ra_buf (evb, 0);
@@ -55,7 +54,7 @@ bool sam_inspect_txt_header (BufferP txt_header)
             if (chrom_name && last_pos_str) {
                 unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
                 PosType last_pos = (PosType)strtoull (&last_pos_str[3], NULL, 10);
-                ref_verify_identical_chrom (&chrom_name[3], chrom_name_len, last_pos);
+                ref_contigs_verify_identical_chrom (&chrom_name[3], chrom_name_len, last_pos);
             }
 
             line = newline+1;
@@ -249,7 +248,8 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
     if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
 
-    Range *range = ref_seg_get_locked_range ((VBlockP)vb, pos, seq);
+    RefLock lock;
+    Range *range = ref_seg_get_locked_range ((VBlockP)vb, pos, vb->ref_consumed, seq, &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. if reference range is NULL as the hash entry for this range is unfortunately already occupied by another range (can only happen with REF_INTERNAL)
@@ -262,7 +262,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
         random_access_update_last_pos ((VBlockP)vb, pos + vb->ref_consumed - 1);
 
-        if (range) mutex_unlock (range->mutex);
+        if (range) ref_unlock (lock);
         
         goto align_nonref_local; 
     }    
@@ -318,7 +318,9 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
                 // case our seq is identical to the reference at this site
                 else if (range && normal_base && seq[i] == ref_get_nucleotide (range, actual_next_ref)) {
                     bit_array_set (bitmap, bit_i); bit_i++;
-                    bit_array_set (&range->is_set, actual_next_ref); // we will need this ref to reconstruct
+
+                    if (flag_reference == REF_EXT_STORE)
+                        bit_array_set (&range->is_set, actual_next_ref); // we will need this ref to reconstruct
                 }
                 
                 // case: ref is set to a different value - we store our value in nonref_ctx
@@ -370,7 +372,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
         if (next_ref == pos_index + ref_len_this_level && subcigar_len) break;
     }
 
-    if (range) mutex_unlock (range->mutex);       
+    if (range) ref_unlock (lock);       
 
     uint32_t this_seq_last_pos = pos + (next_ref - pos_index) - 1;
 

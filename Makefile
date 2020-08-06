@@ -29,7 +29,8 @@ endif
 
 
 MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
-          zip.c piz.c seg.c zfile.c reference.c refhash.c ref_make.c domqual.c \
+          zip.c piz.c seg.c zfile.c domqual.c \
+		  reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
 		  vcf_zip.c vcf_piz.c vcf_seg.c vcf_zfile.c vcf_gloptimize.c vcf_vblock.c vcf_gtshark.c vcf_squeeze.c vcf_samples.c vcf_header.c \
           sam_zip.c sam_piz.c sam_shared.c  \
 		  fasta.c fastq.c fast_shared.c \
@@ -53,7 +54,8 @@ CONDA_DOCS = LICENSE.non-commercial.txt LICENSE.commercial.txt AUTHORS README.md
 CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h \
              buffer.h file.h context.h seg.h text_license.h version.h compressor.h stats.h domqual.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reference.h ref_private.h refhash.h \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
+			 reference.h ref_private.h ref_lock.h refhash.h \
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_unistd.h \

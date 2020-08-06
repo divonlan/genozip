@@ -101,7 +101,7 @@ extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, boo
 #define SEG_EOL(f,account_for_ascii10) seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); 
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSERT (condition, format "\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
+    ASSERT (condition, format "\n\nFile: %s vb_line_i:%u vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
                               "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\
                               "\n%d characters before to %d characters after (in quotes): \"%.*s\""\

@@ -212,50 +212,20 @@ SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail)
     return sl;
 }
 
-bool sections_has_reference(void)
+static inline bool sections_has_global_area_section (SectionType st)
 {
     for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the reference sections are near the end
-        SectionType st = ENT (SectionListEntry, z_file->section_list_buf, i)->section_type;
-        if (st == SEC_REFERENCE)
+        SectionType this_st = ENT (SectionListEntry, z_file->section_list_buf, i)->section_type;
+        if (st == this_st)
             return true; // found
-        else if (st == SEC_DICT)
-            return false; // we arrived at a SEC_DICT without seeing any reference, so there isn't any
+        else if (this_st == SEC_DICT)
+            return false; // we arrived at a SEC_DICT without seeing it, so there isn't any
     }
     
     return false;
 }
-
-// get genome size - this is determined by gpos+num_bases of the SEC_REFERENCE with the highest gpos or SEC_REF_IS_SET section
-// note: SEC_REFERENCE sections might not be in the order of gpos, because some of them might be copied in ref_copy_one_compressed_section()
-// NOT THREAD SAFE - can only be called by I/O thread
-PosType sections_get_genome_size (void)
-{
-    bool found_a_sec_reference = false;
-    PosType size = 0;
-
-    for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the reference sections are near the end
-        const SectionListEntry *sl = ENT (const SectionListEntry, z_file->section_list_buf, i);
-        
-        if (sl->section_type == SEC_REFERENCE) {
-            found_a_sec_reference = true;
-
-            // check if we have a SEC_REF_IS_SET section - in that case, take num_bases from SEC_REF_IS_SET
-            // as the num_bases in SEC_REFERENCE indicates a compacted section
-            if (i > 0 && (sl-1)->section_type == SEC_REF_IS_SET) sl--;
-
-            SectionHeaderReference *header = zfile_read_section_header (sl->offset, sizeof (SectionHeaderReference));
-            PosType genome_size_at_least = (BGEN64(header->gpos) + BGEN32 (header->num_bases));
-            
-            size = MAX (size, genome_size_at_least);
-        }
-        
-        else if (found_a_sec_reference)  // we found some reference sections, and we finished checking all of them
-            return size;
-    }
-
-    ABORT0 ("Error in sections_get_genome_size: cannot find a SEC_REFERENCE section");
-    return 0;
-}
+bool sections_has_reference(void)     { return sections_has_global_area_section (SEC_REFERENCE); }
+bool sections_has_random_access(void) { return sections_has_global_area_section (SEC_RANDOM_ACCESS); }
 
 // called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 // NOT THREAD SAFE - can only be called by I/O thread
@@ -351,13 +321,14 @@ const char *st_name(SectionType sec_type)
 }
 
 // called by PIZ I/O
-SectionListEntry *sections_get_offset_first_section_of_type (SectionType st)
+SectionListEntry *sections_get_offset_first_section_of_type (SectionType st, bool soft_fail)
 {
     ARRAY (SectionListEntry, sl, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++)
         if (sl[i].section_type == st) return &sl[i];
 
-    ABORT ("Error in sections_get_offset_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
-    return 0; // never reaches here - squash compiler warning
+    ASSERT (soft_fail, "Error in sections_get_offset_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
+
+    return NULL;
 }

@@ -448,6 +448,8 @@ extern void bit_array_copy_all(BitArray* dst, const BitArray* src);
 // works on arrays with full words
 extern void bit_array_reverse_complement_all (BitArray *dst, const BitArray *src, bit_index_t src_start_base, bit_index_t max_num_bases);
 
+extern void bit_array_overlay (BitArray *overlaid_bitarr, BitArray *regular_bitarr, bit_index_t start, bit_index_t num_of_bits);
+
 //
 // Logic operators
 //

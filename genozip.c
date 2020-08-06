@@ -39,6 +39,7 @@
 #include "vcf.h"
 #include "dict_id.h"
 #include "reference.h"
+#include "refhash.h"
 #include "context.h"
 
 // globals - set it main() and never change
@@ -60,9 +61,10 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
     flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_fasta_sequential=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0, flag_genocat_info_only=0,
-    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_ref_whole_genome=0,
+    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_ref_use_aligner=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
     flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0, flag_optimize_SEQ=0,
+    flag_show_ref_contigs=0, flag_ref_originates_from_internal=0, flag_show_ref_alts=0,
     flag_pair=NOT_PAIRED_END;
 
 ReferenceType flag_reference = REF_NONE;
@@ -377,9 +379,9 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
     int exit_code = stream_wait_for_exit (test);
 
-    primary_command = TEST_AFTER_ZIP; // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
+    TEMP_FLAG (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
     ASSINP (!exit_code, "genozip test exited with status %d\n", exit_code);
-    primary_command = ZIP; // recover in case of more non-concatenated files
+    RESTORE_FLAG (primary_command); // recover in case of more non-concatenated files
 }
 
 static void main_genozip (const char *txt_filename, 
@@ -581,10 +583,10 @@ static char *main_get_fastq_pair_filename (const char *fn1, const char *fn2)
     return pair_fn;
 }
 
-static void main_load_reference (const char *filename, bool is_first_file)
+static void main_load_reference (const char *filename, bool is_first_file, bool is_last_file)
 {
-    int old_flag_ref_whole_genome = flag_ref_whole_genome;
-    flag_ref_whole_genome = flag_pair ||  // this flag is also used when PIZ reads a stored reference
+    int old_flag_ref_use_aligner = flag_ref_use_aligner;
+    flag_ref_use_aligner = flag_pair ||  // this flag is also used when PIZ reads a stored reference
                             (main_get_file_dt (filename) == DT_FASTQ || main_get_file_dt (filename) == DT_FASTA); 
 
     // no need to load the reference if genocat just wants to see some sections 
@@ -593,14 +595,12 @@ static void main_load_reference (const char *filename, bool is_first_file)
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
 
         if (is_first_file)
-            ref_load_external_reference (false); 
+            ref_load_external_reference (false, is_last_file); 
 
         // Reload the reference in some cases. TODO: eliminate reloads (bug 157)
-        else if (!is_first_file && 
-            ((old_flag_ref_whole_genome == false && flag_ref_whole_genome == true) ||  // case 1: fastq follows a non-fastq
-            (flag_reference == REF_EXT_STORE && !flag_bind))) {             // case 2: --REFERENCE for non-binding files
-            ref_unload_reference (true); 
-            ref_load_external_reference (false); 
+        else if (!is_first_file && !old_flag_ref_use_aligner && flag_ref_use_aligner) { // before we didn't use an aligner, now we will
+            ref_generate_reverse_complement_genome();
+            refhash_load_standalone();
         }
     }
 }
@@ -688,6 +688,8 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _sT {"show-threads",  no_argument,       &flag_show_threads,     1 }  
         #define _sv {"show-vblocks",  no_argument,       &flag_show_vblocks,     1 }  
         #define _sR {"show-reference",no_argument,       &flag_show_reference,   1 }  
+        #define _sC {"show-ref-contigs", no_argument,    &flag_show_ref_contigs, 1 }  
+        #define _rA {"show-ref-alts", no_argument,       &flag_show_ref_alts,    1 }  
         #define _sI {"show-is-set",   required_argument, 0, '~',                   }  
         #define _sA {"show-aliases",  no_argument,       &flag_show_aliases,     1 }  
         #define _dm {"debug-memory",  no_argument,       &flag_debug_memory,     1 }  
@@ -697,10 +699,10 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                    _ss, _SS, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _gt, _pe, _fa,          _rg, _sR, _me, _sA, _sI, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                                  _sR,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT,          _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                    _fs, _g,      _sR,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                                           _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                    _ss, _SS, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _gt, _pe, _fa,          _rg, _sR, _sC, _rA, _me, _sA, _sI, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                                  _sR, _sC, _rA,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT,          _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                    _fs, _g,      _sR, _sC, _rA,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                                                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -903,7 +905,8 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     // cases where genocat is used to view some information, but not the file contents
     flag_genocat_info_only = exe_type == EXE_GENOCAT &&
                              (flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
-                              flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num);
+                              flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num ||
+                              flag_show_ref_contigs || flag_show_ref_index || flag_show_ref_hash || flag_show_ref_alts);
 
     ASSINP (num_files <= 1 || flag_bind || !flag_show_stats, "%s: --show-stats can only work on one file at time", global_cmd);
 }
@@ -952,7 +955,7 @@ int main (int argc, char **argv)
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
             if (exe_type == EXE_GENOCAT && flag_reference) 
-                ref_load_external_reference (true);
+                ref_load_external_reference (true, true);
 
             // otherwise: show help
             else
@@ -998,11 +1001,13 @@ int main (int argc, char **argv)
 
         ASSERTW (next_input_file || !flag_replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
 
-        main_load_reference (next_input_file, !file_i);
+        bool is_last_file = (file_i==num_files-1);
+
+        main_load_reference (next_input_file, !file_i, is_last_file);
         
         switch (command) {
-            case ZIP  : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || file_i==num_files-1, argv[0]); break;
-            case PIZ  : main_genounzip (next_input_file, out_filename, file_i==num_files-1); break;           
+            case ZIP  : main_genozip (next_input_file, out_filename, file_i==0, !next_input_file || is_last_file, argv[0]); break;
+            case PIZ  : main_genounzip (next_input_file, out_filename, is_last_file); break;           
             case LIST : main_genols (next_input_file, false, NULL, false); break;
             default   : ABORT ("%s: unrecognized command %c", global_cmd, command);
         }

@@ -371,14 +371,14 @@ void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *se
         if (forward_strand)  // normal (note: this condition test is outside of the tight loop)
             for (uint32_t i=0; i < vb->seq_len; i++)
                 if (NEXTLOCALBIT (bitmap_ctx))  // get base from reference
-                    RECONSTRUCT1 (ACGT_DECODE (&genome->ref, gpos + i));
+                    RECONSTRUCT1 (ACGT_DECODE (&genome.ref, gpos + i));
                 else  // get base from nonref
                     RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
 
         else // reverse complement
             for (uint32_t i=0; i < vb->seq_len; i++) 
                 if (NEXTLOCALBIT (bitmap_ctx))  // case: get base from reference
-                    RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (&genome->ref, gpos + vb->seq_len-1 - i)]);
+                    RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (&genome.ref, gpos + vb->seq_len-1 - i)]);
                 else  // case: get base from nonref
                     RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
     }
@@ -390,7 +390,7 @@ void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *se
 
 void fastq_piz_reconstruct_vb (VBlockFAST *vb)
 {
-    ASSERT0 (!flag_reference || genome, "Error in fastq_piz_reconstruct_vb: reference is not loaded correctly");
+    ASSERT0 (!flag_reference || genome.ref.num_of_bits, "Error in fastq_piz_reconstruct_vb: reference is not loaded correctly");
 
     fastq_initialize_pair_iterators (vb);
 

@@ -28,7 +28,9 @@ static Buffer bound_txt_names = EMPTY_BUFFER;
 #define OVERHEAD_SEC_RA_INDEX    -4
 #define OVERHEAD_SEC_REFERENCE   -5 // used only for REF_EXT_STORE
 #define OVERHEAD_SEC_REF_HASH    -6 // used only in a reference file
-#define LAST_OVERHEAD            -6
+#define OVERHEAD_SEC_REF_CONTIGS -7 
+#define OVERHEAD_SEC_ALT_CHROMS  -8 
+#define LAST_OVERHEAD            -8
 
 static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
@@ -82,13 +84,19 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
         else if (section->section_type == SEC_DICT_ID_ALIASES && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
             *local_compressed_size += sec_size;
 
+        else if (section->section_type == SEC_REF_CONTIGS && overhead_sec == OVERHEAD_SEC_REF_CONTIGS)
+            *local_compressed_size += sec_size;
+
+        else if (section->section_type == SEC_ALT_CHROMS && overhead_sec == OVERHEAD_SEC_ALT_CHROMS)
+            *local_compressed_size += sec_size;
+
         else if (section->section_type == SEC_REF_HASH && overhead_sec == OVERHEAD_SEC_REF_HASH)
             *local_compressed_size += sec_size;
 
         else if (section->section_type == SEC_TXT_HEADER && overhead_sec == OVERHEAD_SEC_TXT_HDR)
             *local_compressed_size += sec_size;
 
-        else if ((section->section_type == SEC_RANDOM_ACCESS || section->section_type == SEC_REF_RANDOM_ACC) && overhead_sec == OVERHEAD_SEC_RA_INDEX)
+        else if ((section->section_type == SEC_RANDOM_ACCESS || section->section_type == SEC_REF_RAND_ACC) && overhead_sec == OVERHEAD_SEC_RA_INDEX)
             *local_compressed_size += sec_size;
         
         else if ((section->section_type == SEC_VCF_HT_DATA && dict_id.num == dict_id_fields[VCF_GT]) ||

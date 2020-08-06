@@ -559,7 +559,7 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     dict_id_initialize (data_type); // must run after zfile_read_genozip_header that sets z_file->data_type
     
     // for FASTA and FASTQ we convert a "header_only" flag to "header_one" as flag_header_only has some additional logic
-    // that doesn't work for FAST
+    // that doesn't work for FASTA / FASTQ
     if (flag_header_only && (data_type == DT_FASTA || data_type == DT_FASTQ)) {
         flag_header_only = false;
         flag_header_one  = true;
@@ -577,46 +577,41 @@ static DataType piz_read_global_area (Md5Hash *original_file_digest) // out
     // if the user wants to see only the header, we can skip the dictionaries, regions and random access
     if (!flag_header_only) {
         
-        // read random access, but only if we are going to need it
-        bool need_random_access = flag_regions || flag_show_index || flag_fasta_sequential || (flag_reference != REF_NONE && z_file->data_type != DT_FASTQ);
-        if (need_random_access) {
-            zfile_read_all_dictionaries (0, DICTREAD_CHROM_ONLY); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
+        zfile_read_all_dictionaries (0, DICTREAD_ALL); // read all CHROM/RNAME dictionaries - needed for regions_make_chregs()
 
-            // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-            regions_make_chregs();
+        // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
+        regions_make_chregs();
 
-            // if the regions are negative, transform them to the positive complement instead
-            regions_transform_negative_to_positive_complement();
+        // if the regions are negative, transform them to the positive complement instead
+        regions_transform_negative_to_positive_complement();
 
-            // if this is a stored reference we load the reference random access that will determined which reference sections
-            // should be read & uncompressed in case of --regions.
-            // note: in case of a data file with stored reference - SEC_REF_RANDOM_ACC will contain the random access of the reference
-            // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
-            // and are identical. It made the coding easier and their size is negligible.
-            if (flag_reference == REF_STORED || flag_reading_reference) 
-                random_access_load_ra_section (SEC_REF_RANDOM_ACC, &ref_stored_ra, "ref_stored_ra", 
-                                               flag_show_ref_index && !flag_reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
-
+        // if this is a stored reference we load the reference random access that will determined which reference sections
+        // should be read & uncompressed in case of --regions.
+        // note: in case of a data file with stored reference - SEC_REF_RAND_ACC will contain the random access of the reference
+        // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
+        // and are identical. It made the coding easier and their size is negligible.
+        if (sections_has_random_access())
             random_access_load_ra_section (SEC_RANDOM_ACCESS, &z_file->ra_buf, "z_file->ra_buf", 
-                                        flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
-        }
+                                            flag_show_index ? "Random-access index contents (result of --show-index)" : NULL);
 
-        // get the last vb_i that included in the regions - returns -1 if no vb has the requested regions
-        int32_t last_vb_i = flag_regions ? random_access_get_last_included_vb_i() : 0;
+        if (has_ref_sections) 
+            random_access_load_ra_section (SEC_REF_RAND_ACC, &ref_stored_ra, "ref_stored_ra", 
+                                            flag_show_ref_index && !flag_reading_reference ? "Reference random-access index contents (result of --show-index)" : NULL);
 
-        // read dictionaries
-        if (last_vb_i >= 0)
-            zfile_read_all_dictionaries (last_vb_i, need_random_access ? DICTREAD_EXCEPT_CHROM : DICTREAD_ALL);
+        if ((flag_reference == REF_STORED || flag_reference == REF_EXTERNAL) && !flag_reading_reference)
+            ref_contigs_sort_chroms(); // create alphabetically sorted index for user file chrom word list
 
-        // give the reference FASTA CONTIG dictionary to the reference module
-        if (flag_reading_reference)
-            ref_consume_ref_fasta_global_area();
+        if (has_ref_sections) // note: in case of REF_EXTERNAL, reference is already pre-loaded
+            ref_contigs_load_contigs();
 
-        if (flag_reference == REF_STORED || flag_reading_reference) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
+        // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
+        ref_alt_chroms_load();
+
+        if (has_ref_sections) { // note: in case of REF_EXTERNAL, reference is already pre-loaded
             ref_load_stored_reference();
 
             // load the refhash, if we are compressing FASTA or FASTQ
-            if (flag_reading_reference && primary_command == ZIP && flag_ref_whole_genome) 
+            if (flag_reading_reference && primary_command == ZIP && flag_ref_use_aligner) 
                 refhash_load();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)

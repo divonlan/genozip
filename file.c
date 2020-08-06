@@ -21,6 +21,7 @@
 #include "vblock.h"
 #include "strings.h"
 #include "compressor.h"
+#include "arch.h"
 
 // globals
 File *z_file   = NULL;
@@ -444,6 +445,8 @@ static void file_initialize_z_file_data (File *file)
     INIT (dict_data);
     INIT (ra_buf);
     INIT (ra_min_max_by_chrom);
+    INIT (chroms_sorted_index);
+    INIT (alt_chrom_map);
     INIT (section_list_buf);
     INIT (section_list_dict_buf);
     INIT (unconsumed_txt);
@@ -615,9 +618,8 @@ void file_close (File **file_p,
     // it is faster to just let the process die
     if (cleanup_memory) {
 
-        if (file->dicts_mutex_initialized) 
-            pthread_mutex_destroy (&file->dicts_mutex);
-
+        mutex_destroy (file->dicts_mutex);
+            
         // always destroy all buffers even if unused - for saftey
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
             mtf_destroy_context (&file->contexts[i]);
@@ -625,6 +627,8 @@ void file_close (File **file_p,
         buf_destroy (&file->dict_data);
         buf_destroy (&file->ra_buf);
         buf_destroy (&file->ra_min_max_by_chrom);
+        buf_destroy (&file->chroms_sorted_index);
+        buf_destroy (&file->alt_chrom_map);
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->section_list_dict_buf);
         buf_destroy (&file->unconsumed_txt);

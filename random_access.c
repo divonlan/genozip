@@ -268,7 +268,7 @@ int32_t random_access_get_last_included_vb_i (void)
 // PIZ I/O thread: gets min/max pos value for a particular chrom, across the entire file, by looking at the RA entries
 void random_access_pos_of_chrom (WordIndex chrom_word_index, PosType *min_pos, PosType *max_pos)
 {
-    typedef struct { PosType min_pos, max_pos; } MinMax;
+    typedef struct { PosType min_pos, max_pos, gpos; } MinMax;
 
     // first time here for this z_file - we initialize ra_min_max_by_chrom
     if (!buf_is_allocated (&z_file->ra_min_max_by_chrom)) {
@@ -382,7 +382,7 @@ void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosTy
 
 void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
 {
-    SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (sec_type);
+    SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (sec_type, false);
     zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), sec_type, ra_sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, ra_buf, buf_name, sec_type);

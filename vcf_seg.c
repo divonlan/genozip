@@ -14,7 +14,6 @@
 #include "zip.h"
 #include "dict_id.h"
 #include "reference.h"
-#include "arch.h"
 #include "compressor.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
@@ -45,7 +44,8 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
         PosType pos = vb->contexts[VCF_POS].last_value.i;
 
-        Range *range = ref_seg_get_locked_range (vb, pos, start_line);
+        RefLock lock;
+        Range *range = ref_seg_get_locked_range (vb, pos, 1, start_line, &lock);
         uint32_t index_within_range = pos - range->first_pos;
 
         ref_assert_nucleotide_available (range, pos);
@@ -57,7 +57,7 @@ static void vcf_seg_optimize_ref_alt (VBlockP vb, const char *start_line, char v
         if (flag_reference == REF_EXT_STORE)
             bit_array_set (&range->is_set, index_within_range);
 
-        mutex_unlock (range->mutex);
+        ref_unlock (lock);
     }
 
     // replace the most common SNP with +

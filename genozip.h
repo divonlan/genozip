@@ -88,21 +88,27 @@ typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LI
 extern CommandType command, primary_command;
 
 #define SAVE_FLAG(flag) typeof(flag) save_##flag = flag 
+#define TEMP_FLAG(flag,temp) typeof(flag) save_##flag = flag ; flag = (temp)
 #define RESET_FLAG(flag) SAVE_FLAG(flag) ; flag=(typeof(flag))(uint64_t)0
 #define RESTORE_FLAG(flag) flag = save_##flag
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_stats, flag_show_headers, flag_show_aliases,
-           flag_show_index, flag_show_gheader, flag_stdout, flag_replace, flag_test, flag_regions,  
-           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms,
-           flag_show_vblocks, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only, flag_ref_whole_genome,
+           flag_show_index, flag_show_gheader, flag_show_ref_contigs, flag_stdout, flag_replace, flag_test, flag_regions,  
+           flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms, 
+           flag_show_vblocks, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only, 
            flag_header_one, flag_fast, flag_multiple_files, flag_fasta_sequential, flag_register,
-           flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_pair, flag_genocat_info_only,
+           flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_show_ref_alts, flag_pair, flag_genocat_info_only, 
            flag_debug_progress, flag_show_hash, flag_debug_memory, flag_debug_no_singletons, flag_make_reference, flag_reading_reference,
 
            flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
-           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC, flag_optimize_SEQ;
+           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC, flag_optimize_SEQ,
+
+// flags set in code, that impact reference
+            flag_ref_use_aligner, flag_ref_originates_from_internal;
+           
+           ;
 
 // values of flag_reference
 typedef enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
