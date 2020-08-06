@@ -130,8 +130,8 @@ void progress_udpate_status (const char *status)
 {
     if (flag_quiet) return;
 
-    static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-    static const char *spaces = "                                                                      ";
+    static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+    static const char *spaces = "                                                                                ";
 
     fprintf (stderr, "%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
 

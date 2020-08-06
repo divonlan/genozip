@@ -208,7 +208,8 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
     COPY_TIMER (vb->profile.write);
 
     z_file->disk_so_far += (int64_t)data_buf->len;
-    
+    data_buf->len = 0;
+
     if (pd_type == PD_VBLOCK_DATA) 
         zip_update_txt_counters (vb, update_txt_file);
 
