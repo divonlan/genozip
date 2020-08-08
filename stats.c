@@ -202,7 +202,7 @@ void stats_show_stats (void)
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_comp_total=0, all_txt=0;
 
     //prepare data
-    StatsByLine sbl[MAX_DICTS+10], *s = sbl;
+    StatsByLine sbl[MAX_DICTS+50], *s = sbl;
     memset (sbl, 0, sizeof(sbl));
 
     if (z_file->data_type == DT_VCF) initialize_vcf_gt_data_tracker();
@@ -248,7 +248,9 @@ void stats_show_stats (void)
         else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
         else if (i==OVERHEAD_SEC_RA_INDEX)    strcpy (s->name, "--regions index");
         else if (i==OVERHEAD_SEC_REFERENCE)   strcpy (s->name, "Reference");
-        else if (i==OVERHEAD_SEC_REF_HASH)   strcpy (s->name, "Refhash");
+        else if (i==OVERHEAD_SEC_REF_HASH)    strcpy (s->name, "Refhash");
+        else if (i==OVERHEAD_SEC_REF_CONTIGS) strcpy (s->name, "Ref Contigs");
+        else if (i==OVERHEAD_SEC_ALT_CHROMS)  strcpy (s->name, "Alt Chroms");
 
         /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 
@@ -286,7 +288,6 @@ void stats_show_stats (void)
     // sort by total compressed size
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_total_comp_size);
 
-    
     fprintf (stderr, "\nSections (sorted by %% of genozip file):\n");
     if (flag_show_stats == 1) {
         fprintf (stderr, "NAME                  TXT      %%       ZIP      %%   RATIO\n");
@@ -296,7 +297,7 @@ void stats_show_stats (void)
         fprintf (stderr, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
     }
 
-    for (uint32_t i=0; i < num_stats; i++) { // don't show CHROM-FORMAT as they are already showed above
+    for (uint32_t i=0; i < num_stats; i++) { // don't show primary fields as they are already showed above
 
         StatsByLine *s = &sbl[i];
         if (!s->total_comp_size) continue;

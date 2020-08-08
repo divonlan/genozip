@@ -108,13 +108,19 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
     char prev_char='\n';
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
-    while (1) { 
+    for (bool first_block=true;; first_block=false) { 
 
         // enlarge if needed        
         if (!evb->txt_data.data || evb->txt_data.size - evb->txt_data.len < READ_BUFFER_SIZE) 
             buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE + 1 /* for \0 */, 1.2, "txt_data", 0);    
 
-        bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
+        // case: first batch of data was already read in txtfile_read_header_and_100_lines(), use it
+        if (first_block && evb->txt_data.len) {
+            bytes_read = (int32_t)evb->txt_data.len;
+            evb->txt_data.len = 0;
+        }
+        else
+            bytes_read = txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
 
         if (!bytes_read) { // EOF
             ASSERT (!evb->txt_data.len || evb->txt_data.data[evb->txt_data.len-1] == '\n', 
@@ -358,6 +364,44 @@ void txtfile_read_vblock (VBlock *vb)
     buf_free (&block_len_buf);
 
     COPY_TIMER (vb->profile.txtfile_read_vblock);
+}
+
+// read num_lines of the txtfile (after the header), and call test_func for each line. true iff the proportion of lines
+// that past the test is at least success_threashold
+bool txtfile_test_data (char first_char,    // first character in every header line
+                        unsigned num_lines_to_test, // number of lines to test
+                        double success_threashold, // proportion of lines that need to pass the test, for this function to return true
+                        TxtFileTestFunc test_func)
+{
+    uint32_t line_start_i = 0;
+    unsigned num_lines_so_far = 0; // number of data (non-header) lines
+    unsigned successes = 0;
+
+    while (1) {      // read data from the file until either 1. EOF is reached 2. we pass the header + 100 lines
+        // enlarge if needed        
+        if (!evb->txt_data.data || evb->txt_data.size - evb->txt_data.len < READ_BUFFER_SIZE) 
+            buf_alloc (evb, &evb->txt_data, evb->txt_data.size + READ_BUFFER_SIZE + 1 /* for \0 */, 1.2, "txt_data", 0);    
+
+        uint64_t start_read = evb->txt_data.len;
+        evb->txt_data.len += txtfile_read_block (AFTERENT (char, evb->txt_data), READ_BUFFER_SIZE);
+        if (start_read == evb->txt_data.len) break; // EOF
+
+        ARRAY (char, str, evb->txt_data); // declare here, in case of a realloc ^ 
+        for (uint64_t i=start_read; i < evb->txt_data.len; i++) {
+
+            if (str[i] == '\n') { 
+                if (str[line_start_i] != first_char) {  // data line
+                    successes += test_func (&str[line_start_i], i - line_start_i);
+                    num_lines_so_far++;
+
+                    if (num_lines_so_far == num_lines_to_test) break;
+                }
+                line_start_i = i+1; 
+            }
+        }
+    }
+
+    return (double)successes / (double)num_lines_so_far >= success_threashold;
 }
 
 // PIZ

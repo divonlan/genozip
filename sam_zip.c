@@ -837,6 +837,23 @@ static void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *q
     qual_ctx->txt_len   += dl->qual_data_len + 1;
 }
 
+// test function called from main_load_reference -> txtfile_test_data: returns true if this line as pos=0 (i.e. unaligned)
+bool sam_zip_is_unaligned_line (const char *line, int len)
+{
+    VBlock *vb = evb;
+    const char *field_start, *next_field=line;
+    char separator;
+    unsigned field_len;
+
+    GET_NEXT_ITEM ("QNAME");
+    GET_NEXT_ITEM ("FLAG");
+    GET_NEXT_ITEM ("RNAME");
+    GET_NEXT_ITEM ("POS");
+
+    return (field_len == 1 && *field_start == '0');
+}
+
+
 const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;

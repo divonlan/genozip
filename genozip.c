@@ -396,8 +396,9 @@ static void main_genozip (const char *txt_filename,
 
     // get input file
     if (txt_filename) {
-        // open the file
-        txt_file = file_open (txt_filename, READ, TXT_FILE, 0);
+        
+        if (!txt_file) // open the file - possibly already open from main_load_reference
+            txt_file = file_open (txt_filename, READ, TXT_FILE, 0); 
 
         // skip this file if its size is 0
         RETURNW (txt_file,, "Cannot compresss file %s because its size is 0 - skipping it", txt_filename);
@@ -405,7 +406,8 @@ static void main_genozip (const char *txt_filename,
         if (!txt_file->file) return; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
     }
     else {  // stdin
-        txt_file = file_open_redirect (READ, TXT_FILE, DT_NONE);
+        if (!txt_file) // possibly already open from main_load_reference
+            txt_file = file_open_redirect (READ, TXT_FILE, DT_NONE); 
         flag_stdout = (z_filename == NULL); // implicit setting of stdout by using stdin, unless -o was used
     }
 
@@ -585,27 +587,37 @@ static char *main_get_fastq_pair_filename (const char *fn1, const char *fn2)
 
 static void main_load_reference (const char *filename, bool is_first_file, bool is_last_file)
 {
+    if (flag_reference != REF_EXTERNAL && flag_reference != REF_EXT_STORE) return;
+
     int old_flag_ref_use_aligner = flag_ref_use_aligner;
     DataType dt = main_get_file_dt (filename);
-    flag_ref_use_aligner = old_flag_ref_use_aligner || flag_pair ||  // this flag is also used when PIZ reads a stored reference
-                            (  (dt == DT_FASTQ || dt == DT_FASTA || dt == DT_SAM) && 
-                               primary_command == ZIP &&
-                               (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE));
+    flag_ref_use_aligner = (old_flag_ref_use_aligner || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
 
-    // no need to load the reference if genocat just wants to see some sections 
-    if (flag_genocat_info_only) return;
+    // no need to load the reference if genocat just wants to see some sections (unless its genocat of the refernece file itself)
+    if (flag_genocat_info_only && dt != DT_REF) return;
 
-    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
+    // we also need the aligner if this is an unaligned SAM 
+    if (!flag_ref_use_aligner && dt==DT_SAM && primary_command==ZIP) {
 
-        if (is_first_file)
-            ref_load_external_reference (false, is_last_file); 
+        // open here instead of in main_genozip
+        txt_file = filename ? file_open (filename, READ, TXT_FILE, 0) : file_open_redirect (READ, TXT_FILE, DT_NONE);
 
-        // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
-        else if (!is_first_file && !old_flag_ref_use_aligner && flag_ref_use_aligner) { 
-            ref_generate_reverse_complement_genome();
-            refhash_load_standalone();
-        }
+        // use the aligner if over 5 of the 100 first lines of the file are unaligned
+        flag_ref_use_aligner = txt_file && txt_file->file && txtfile_test_data ('@', 100, 0.05, sam_zip_is_unaligned_line); 
     }
+
+    RESET_FLAG (txt_file); // save and reset - for use by reference loader
+
+    if (is_first_file)
+        ref_load_external_reference (false, is_last_file); // also loads refhash if needed
+
+    // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
+    else if (!old_flag_ref_use_aligner && flag_ref_use_aligner) { 
+        ref_generate_reverse_complement_genome();
+        refhash_load_standalone();
+    }
+
+    RESTORE_FLAG (txt_file);
 }
 
 static void main_set_flags_from_command_line (int argc, char **argv, bool *is_short)

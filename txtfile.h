@@ -11,6 +11,10 @@
 
 extern void txtfile_read_header (bool is_first_txt, bool header_required, char first_char);
 extern void txtfile_read_vblock (VBlockP vb);
+
+typedef bool (*TxtFileTestFunc)(const char *, int);
+extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, double success_threashold, TxtFileTestFunc test_func);
+
 extern void txtfile_estimate_txt_data_size (VBlockP vb);
 extern void txtfile_write_one_vblock (VBlockP vb);
 

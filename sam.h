@@ -15,6 +15,7 @@ COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_qual)
 COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_bd)
 COMPRESSOR_CALLBACK(sam_zip_get_start_len_line_i_bi)
 extern void sam_zip_initialize (void);
+extern bool sam_zip_is_unaligned_line (const char *line, int len);
 extern bool sam_inspect_txt_header (BufferP txt_header);
 
 // SEG Stuff
