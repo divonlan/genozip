@@ -586,10 +586,10 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     }
 
     global_vcf_num_samples    = BGEN32 (header->num_samples); // possibly 0, if genozip header was not rewritten. in this case, piz will get it from the first VCF header, but genols will show 0
-    z_file->genozip_version   = header->genozip_version;
     z_file->num_components    = BGEN32 (header->num_components);
+    z_file->genozip_version   = header->genozip_version;
+    z_file->flags             = header->h.flags;
     if (digest) *digest       = header->md5_hash_bound; 
-    if (header->h.flags & GENOZIP_FL_REF_INTERNAL) flag_ref_originates_from_internal = true;
     
     // global bools to help testing
     is_v6_or_above = (z_file->genozip_version >= 6);
@@ -630,17 +630,23 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
                 "Error reading %s: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
                 z_name, header->ref_filename);
 
-        // just warn, don't fail - there are use cases where the user might do this on purpose
-        ASSERTW (flag_reference == REF_NONE || flag_reference == REF_INTERNAL || md5_is_equal (header->ref_file_md5, ref_md5), 
-                 "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
-                 "If these two files contain a different sequence in the genomic regions contained in the compressed file, then \n"
-                 "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
-                 "Reference you are using now: %s MD5=%s\n"
-                 "Reference used to compress the file: %s MD5=%s\n", 
-                 z_name, ref_filename, md5_display (ref_md5), 
-                 header->ref_filename, md5_display (header->ref_file_md5));
-    }
+        if (!(flag_reference == REF_NONE || flag_reference == REF_INTERNAL || md5_is_equal (header->ref_file_md5, ref_md5))) {
     
+            // fail if user loaded an external reference, but file does not require one
+            ASSINP (!md5_is_zero (header->ref_file_md5), "Error: %s does not need --reference to decompress", txt_name);
+
+            // just warn, don't fail - there are use cases where the user might do this on purpose
+            ASSERTW (false, 
+                    "WARNING: The reference file has a different MD5 than the reference file used to compress %s\n"
+                    "If these two files contain a different sequence in the genomic regions contained in the compressed file, then \n"
+                    "THE UNCOMPRESSED FILE WILL BE DIFFERENT THAN ORIGINAL FILE\n"
+                    "Reference you are using now: %s MD5=%s\n"
+                    "Reference used to compress the file: %s MD5=%s\n", 
+                    z_name, ref_filename, md5_display (ref_md5), 
+                    header->ref_filename, md5_display (header->ref_file_md5));
+        }
+    }
+     
 final:
     buf_free (&evb->z_data);
     return data_type;
@@ -666,7 +672,8 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
     header.h.sec_compression_alg   = COMP_BZ2;
-    header.h.flags                 = (flag_reference == REF_INTERNAL) ? GENOZIP_FL_REF_INTERNAL : 0;
+    header.h.flags                 = ((flag_reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
+                                      (flag_ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0) );
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_file->data_type);
     header.encryption_type         = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;

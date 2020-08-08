@@ -540,7 +540,7 @@ void bit_array_clear_region(BitArray* bitarr, bit_index_t start, bit_index_t len
           start, len, bitarr->num_of_bits); // divon fixed bug
 
   CLEAR_REGION(bitarr, start, len);
-  DEBUG_VALIDATE(bitarr);
+//  DEBUG_VALIDATE(bitarr);
 }
 
 // Toggle all the bits in a region
@@ -989,21 +989,25 @@ void bit_array_print_binary_word_do (word_t word, const char *msg)
 }
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
-void bit_array_print_bases (const BitArray *bitarr, const char *msg, bool is_forward)
+void bit_array_print_bases_region (FILE *file, const BitArray *bitarr, 
+                                   bit_index_t start_base, bit_index_t num_of_bases, const char *msg, bool is_forward)
 {
     static const char fwd[2][2] = { { 'A', 'C' }, {'G', 'T'} };
     static const char rev[2][2] = { { 'T', 'G' }, {'C', 'A'} };
 
-    fprintf (stderr, "%s: ", msg);
+    fprintf (file, "%s: ", msg);
 
     if (is_forward)
-        for (bit_index_t i=0; i < bitarr->num_of_bits; i+=2)
-            fprintf(stderr, "%c", fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
-    else
-        for (int64_t i=bitarr->num_of_bits-2; i >= 0; i-=2) // signed type
-          fprintf(stderr, "%c", rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
-
-    fprintf (stderr, "\n");
+        for (bit_index_t i=start_base*2; i < (start_base + num_of_bases)*2; i+=2) {
+            fprintf (file, "%c", fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
+            if (!flag_sequential && ((i-start_base*2) % 320 == 318)) fputc ('\n', file);
+        }
+    else 
+        for (int64_t i=(start_base+num_of_bases-1)*2; i >= start_base*2; i-=2) { // signed type
+          fprintf(file, "%c", rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
+          if (!flag_sequential && (((start_base+num_of_bases-1)*2-i) % 320 == 318)) fputc ('\n', file);
+        }
+    fprintf (file, "\n");
 }
 
 // Print a string representations for a given region, using given on/off characters.

@@ -408,10 +408,13 @@ extern void bit_array_to_substr(const BitArray* bitarr,
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print
 // newline.
 extern void bit_array_print_do (const BitArray* bitarr, const char *msg);
-extern void bit_array_print_binary_word_do (word_t word, const char *msg);
-extern void bit_array_print_bases (const BitArray* bitarr, const char *msg, bool is_forward); // divon
 #define bit_array_print(bitarr) bit_array_print_do (bitarr, #bitarr)
+
+extern void bit_array_print_binary_word_do (word_t word, const char *msg);
 #define bit_array_print_binary_word(word) bit_array_print_binary_word_do (word, #word)
+
+extern void bit_array_print_bases_region (FILE *file, const BitArray *bitarr, bit_index_t start_base, bit_index_t num_of_bases, const char *msg, bool is_forward);
+#define bit_array_print_bases(file, bitarr, msg, is_forward) bit_array_print_bases_region ((file), (bitarr), 0, (bitarr)->num_of_bits/2, (msg), (is_forward))
 
 // Print a string representations for a given region, using given on/off
 // characters. Reverse prints from highest to lowest -- this is useful for

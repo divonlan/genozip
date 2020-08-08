@@ -16,6 +16,7 @@
 #include "dict_id.h"
 #include "compressor.h"
 #include "domqual.h"
+#include "aligner.h"
 
 static Structured structured_QNAME;
 
@@ -139,14 +140,19 @@ void sam_seg_initialize (VBlock *vb)
         structured_initialized = true;
     }
 
-    vb->contexts[SAM_RNAME].inst        = CTX_INST_NO_STONS; // needs b250 node_index for random access
-    vb->contexts[SAM_SEQ_BITMAP].ltype  = LT_BITMAP;
-    vb->contexts[SAM_NONREF].lcomp      = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good ;
-    vb->contexts[SAM_NONREF].ltype      = LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].ltype        = LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].inst         = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
-    vb->contexts[SAM_TLEN].flags        = CTX_FL_STORE_INT;
-    vb->contexts[SAM_OPTIONAL].flags    = CTX_FL_STRUCTURED;
+    vb->contexts[SAM_RNAME].inst       = CTX_INST_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[SAM_SEQ_BITMAP].ltype = LT_BITMAP;
+    vb->contexts[SAM_NONREF].lcomp     = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good ;
+    vb->contexts[SAM_NONREF].ltype     = LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].ltype       = LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].inst        = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
+    vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
+    vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
+    vb->contexts[SAM_STRAND].ltype     = LT_BITMAP;
+    vb->contexts[SAM_STRAND].lcomp     = COMP_NONE; // bz2 and lzma only make it bigger
+    vb->contexts[SAM_GPOS].ltype       = LT_UINT32;
+    vb->contexts[SAM_GPOS].flags       = CTX_FL_STORE_INT;
+    vb->contexts[SAM_GPOS].lcomp       = COMP_LZMA;
 }
 
 void sam_seg_finalize (VBlockP vb)
@@ -221,16 +227,23 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 {
     START_TIMER;
 
-    ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
-
     Context *bitmap_ctx = &vb->contexts[SAM_SEQ_BITMAP];
     Context *nonref_ctx = &vb->contexts[SAM_NONREF];
+
+    ASSERT0 (recursion_level < 4, "Error in sam_seg_seq_field: excess recursion"); // this would mean a read of about 4M bases... in 2020, this looks unlikely
+
+    if (!recursion_level) 
+        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
+
+    // for unaligned lines, if we have refhash loaded, use the aligner instead of CIGAR-based segmenting
+    if (!pos && flag_ref_use_aligner) {
+        aligner_seg_seq ((VBlockP)vb, bitmap_ctx, seq, seq_len);
+        goto align_nonref_local;
+    }
 
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
     if (!recursion_level) {
-        bitmap_ctx->txt_len += seq_len + 1; // byte counts for --show-sections - +1 for terminating \t (note: E2 will be accounted in SEQ as its an alias)
-
         // allocate bitmap - provide name only if buffer is not allocated, to avoid re-writing param which would overwrite num_of_bits that overlays it
         buf_alloc (vb, &bitmap_ctx->local, MAX (bitmap_ctx->local.len + roundup_bits2bytes64 (seq_len), vb->lines.len * (seq_len+5) / 8), CTX_GROWTH, 
                 buf_is_allocated (&bitmap_ctx->local) ? NULL : "context->local", 0); 
@@ -874,7 +887,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     // SEQ 
     GET_NEXT_ITEM ("SEQ");
 
-    // calculate diff vs. reference (self or imported) - only if aligned (pos!=0) and CIGAR and SEQ values are available
+    // calculate diff vs. reference (self or imported)
     sam_seg_seq_field (vb, field_start, field_len, this_pos, vb->last_cigar, 0, field_len, vb->last_cigar);
     const char *seq = field_start;
     uint32_t seq_data_len = field_len;

@@ -144,7 +144,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
             SEG_EOL (FASTA_EOL, true); 
 
 //            if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-//                fast_seg_seq (vb, line_start, line_len, FASTA_SQBITMAP);
+//                aligner_seg_seq (vb, line_start, line_len, FASTA_SQBITMAP);
 //                seq_ctx->local.len = 0; // we don't use FASTA_SEQ if segging to a reference
 //            }
         }
@@ -216,7 +216,7 @@ void fasta_piz_special_SEQ (VBlock *vb_, Context *ctx, const char *snip, unsigne
 
     // --sequential - if this is NOT the first seq line in the contig, we delete the previous end-of-line
     // TO DO: this doesn't yet work across vblock boundaries
-    if (flag_fasta_sequential && !is_first_seq_line_in_this_contig) 
+    if (flag_sequential && !is_first_seq_line_in_this_contig) 
         fasta_remove_trailing_newlines (vb);
 
     // skip showing line if this contig is grepped - but consume it anyway
@@ -325,7 +325,7 @@ void fasta_piz_reconstruct_vb (VBlockFAST *vb)
     }
 
     // if we are asked for a sequential SEQ, delete final newline if this VB ends with a sequence that is continued in the next VB 
-    if (flag_fasta_sequential && !vb->dont_show_curr_line && random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i))
+    if (flag_sequential && !vb->dont_show_curr_line && random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i))
         fasta_remove_trailing_newlines (vb);
 }
 

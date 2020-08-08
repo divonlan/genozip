@@ -43,9 +43,9 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(mtf_merge_in_vb_ctx_one_dict_id);
     ADD(mtf_clone_ctx);
     ADD(mtf_integrate_dictionary_fragment);
-    ADD(refhash_best_match);
-    ADD(refhash_get_match_len);
-    ADD(refhash_get_word_from_seq);
+    ADD(aligner_best_match);
+    ADD(aligner_get_match_len);
+    ADD(aligner_get_word_from_seq);
     ADD(generate_rev_complement_genome);
     ADD(tmp1);
     ADD(tmp2);
@@ -121,9 +121,9 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_bz2, 1);
         PRINT (compressor_lzma, 1);
         PRINT (seg_all_data_lines, 1);
-        PRINT (refhash_best_match, 2);
-        PRINT (refhash_get_match_len, 3);
-        PRINT (refhash_get_word_from_seq, 3);
+        PRINT (aligner_best_match, 2);
+        PRINT (aligner_get_match_len, 3);
+        PRINT (aligner_get_word_from_seq, 3);
         PRINT (sam_seg_seq_field,2);
         PRINT (vcf_zip_generate_haplotype_sections, 1);
         PRINT (count_alt_alleles, 2);

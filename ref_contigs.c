@@ -185,7 +185,7 @@ void ref_contigs_load_contigs (void)
 
     if (flag_show_ref_contigs) {
         ref_contigs_show (&loaded_contigs, false);
-        if (exe_type == EXE_GENOCAT) exit(0);  // in genocat this, not the data
+        if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
     }
 
     buf_free (&evb->z_data);

@@ -17,6 +17,7 @@
 #include "piz.h"
 #include "buffer.h"
 #include "domqual.h"
+#include "aligner.h"
 
 // used in case of flag_optimize_DESC to count the number of lines, as we need it for the description
 static void fastq_txtfile_count_lines (VBlockP vb)
@@ -83,10 +84,9 @@ void fastq_seg_initialize (VBlockFAST *vb)
         vb->contexts[FASTQ_GPOS].ltype     = LT_UINT32;
         vb->contexts[FASTQ_GPOS].flags     = CTX_FL_STORE_INT;
         vb->contexts[FASTQ_GPOS].lcomp     = COMP_LZMA;
-
     }
 
-    vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; // used in non-reference too
+    vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
 
     vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
     vb->contexts[FASTQ_NONREF].lcomp   = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good
@@ -97,7 +97,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst  = CTX_INST_PAIR_LOCAL;
         vb->contexts[FASTQ_STRAND].inst  = CTX_INST_PAIR_LOCAL; 
-        vb->contexts[FASTQ_STRAND].lcomp = COMP_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. Cancel the COMP_NONE possibly inherited from the last vb of the previous bound file
+        vb->contexts[FASTQ_STRAND].lcomp = COMP_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. We set it explicitly to override the COMP_NONE possibly inherited from the last vb of the previous bound file
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
@@ -249,13 +249,21 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     dl->seq_data_start = next_field - vb->txt_data.data;
     next_field = seg_get_next_item (vb, next_field, &len, true, false, false, &dl->seq_len, &separator, has_13, "SEQ");
 
-    fast_seg_seq (vb, seq_start, dl->seq_len, FASTQ_SQBITMAP);
+    // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
+    if (flag_ref_use_aligner) 
+        aligner_seg_seq ((VBlockP)vb, &vb->contexts[FASTQ_SQBITMAP], seq_start, dl->seq_len);
+
+    else {
+        Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
+        buf_alloc ((VBlockP)vb, &nonref_ctx->local, MAX (nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), CTX_GROWTH, "context->local", FASTQ_NONREF); 
+        buf_add (&nonref_ctx->local, seq_start, dl->seq_len);
+    }
 
     // Add LOOKUP snip with seq_len
     char snip[10];
     snip[0] = SNIP_LOOKUP;
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_did_i (vb, snip, 1 + seq_len_str_len, FASTQ_SQBITMAP, 0); 
+    seg_by_ctx ((VBlockP)vb, snip, 1 + seq_len_str_len, &vb->contexts[FASTQ_SQBITMAP], 0, 0); 
     vb->contexts[FASTQ_NONREF].txt_len += dl->seq_len; // account for the txt data in NONREF
 
     SEG_EOL (FASTQ_E1L, true);
@@ -333,59 +341,12 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
 {
     VBlockFAST *vb = (VBlockFAST *)vb_;
-    ASSERT0 (bitmap_ctx && bitmap_ctx->did_i == FASTQ_SQBITMAP, "Error in fastq_piz_reconstruct_seq: context is not FASTQ_SQBITMAP");
+ 
+    int64_t seq_len_64;
+    ASSERT (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "Error in fastq_piz_reconstruct_seq: could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
+    vb->seq_len = (uint32_t)seq_len_64;
 
-    if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
-
-    Context *nonref_ctx = &vb->contexts[FASTQ_NONREF];
-    Context *gpos_ctx =   &vb->contexts[FASTQ_GPOS];
-    Context *strand_ctx = &vb->contexts[FASTQ_STRAND];
-
-    // get seq_len, gpos and direction
-    vb->seq_len = atoi (seq_len_str); // terminated by SNIP_SEP=0
-    
-    if (buf_is_allocated (&bitmap_ctx->local)) { // not all non-ref
-
-        bool forward_strand;
-        int64_t gpos;
-
-        // first file of a pair ("pair 1") or a non-pair fastq
-        if (!vb->pair_vb_i) {
-            uint32_t gpos_bgen = NEXTLOCAL (uint32_t, gpos_ctx);
-            gpos = BGEN32 (gpos_bgen); 
-            forward_strand = NEXTLOCALBIT (strand_ctx);        
-        }
-
-        // 2nd file of a pair ("pair 2")
-        else {
-            // forward_strand: the strand bit is a 1 iff the strand is the same as the pair
-            bool pair_forward_strand = PAIRBIT (strand_ctx);
-            forward_strand = NEXTLOCALBIT (strand_ctx) ? pair_forward_strand : !pair_forward_strand;
-
-            // gpos: reconstruct, then cancel the reconstruction and just use last_value
-            uint32_t reconstructed_len = piz_reconstruct_from_ctx (vb, FASTQ_GPOS, 0);
-            vb->txt_data.len -= reconstructed_len; // roll back reconstruction
-            gpos = gpos_ctx->last_value.i;
-        }
-        
-        if (forward_strand)  // normal (note: this condition test is outside of the tight loop)
-            for (uint32_t i=0; i < vb->seq_len; i++)
-                if (NEXTLOCALBIT (bitmap_ctx))  // get base from reference
-                    RECONSTRUCT1 (ACGT_DECODE (&genome.ref, gpos + i));
-                else  // get base from nonref
-                    RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
-
-        else // reverse complement
-            for (uint32_t i=0; i < vb->seq_len; i++) 
-                if (NEXTLOCALBIT (bitmap_ctx))  // case: get base from reference
-                    RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (&genome.ref, gpos + vb->seq_len-1 - i)]);
-                else  // case: get base from nonref
-                    RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
-    }
-    else {
-        RECONSTRUCT (ENT (char, nonref_ctx->local, nonref_ctx->next_local), vb->seq_len);
-        nonref_ctx->next_local += vb->seq_len;
-    }
+    aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
 }
 
 void fastq_piz_reconstruct_vb (VBlockFAST *vb)

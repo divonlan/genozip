@@ -32,8 +32,6 @@
 // On a typical 150 bases short read, we expected 150/4 =~ 37.5 'G' hooks - hopefully one of them will point to the correct
 // reference gpos
 //
-#define HOOK 'G'
-#define HOOK_REV 'C' // complement of HOOK
 
 // values used in make-reference. when loading a reference file, we get it from the file
 // note: the code supports modifying MAKE_REF_BASE_LAYER_BITS and MAKE_REF_NUM_LAYERS without further code changes.
@@ -44,14 +42,15 @@
 static uint32_t make_ref_vb_size = 0; // max bytes in a refhash vb
 
 // each rehash_buf entry is a Buffer containing a hash layer containing 256M gpos values (4B each) = 1GB
-static unsigned num_layers=0;
-static uint32_t bits_per_hash=0;    // = layer_bits[0]
-static uint32_t nukes_per_hash=0;   // = layer_bits[0] / 2
-static uint32_t layer_bits[64];     // number of bits in each layer - layer_bits[0] is the base (widest) layer
-static uint32_t layer_size[64];     // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
-static uint32_t layer_bitmask[64];  // 1s in the layer_bits[] LSbs
+unsigned num_layers=0;
+bool bits_per_hash_is_odd=0; // true bits_per_hash is odd
+uint32_t bits_per_hash=0;    // = layer_bits[0]
+uint32_t nukes_per_hash=0;   // = layer_bits[0] / 2
+uint32_t layer_bits[64];     // number of bits in each layer - layer_bits[0] is the base (widest) layer
+uint32_t layer_size[64];     // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
+uint32_t layer_bitmask[64];  // 1s in the layer_bits[] LSbs
 static Buffer *refhash_bufs = NULL; // array of buffers, one for each layer
-static uint32_t **refhashs = NULL;  // array of pointers to the beginning of each layer
+uint32_t **refhashs = NULL;  // array of pointers to the beginning of each layer
 
 static SectionListEntry *sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 static uint32_t ref_hash_cursor = 0;
@@ -59,24 +58,6 @@ static uint32_t ref_hash_cursor = 0;
 // used for parallelizing read / write of the refhash
 static uint32_t next_task_layer = 0;
 static uint32_t next_task_start_within_layer = 0;
-
-// strict encoding of A,C,G,T - everything else in non-encodable (a 4 here)
-static const uint32_t nuke_encode[256] = { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 4
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 16
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 32
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 48
-                                           4, 0, 4, 1, 4, 4, 4, 2, 4, 4, 4, 4, 4, 4, 4, 4,   // 64  A(65)->0 C(67)->1 G(71)->2
-                                           4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 84  T(84)->3
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 96  
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 112 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 128
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
 
 // lookup table for base complement
 const char complement[256] =  { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 4
@@ -152,10 +133,10 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
 
             // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
             // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
-            if (r->gpos + base_i > ((uint64_t)1 << 32)) {
+            if (r->gpos + base_i > MAX_GPOS) {
                 static bool warning_given = false;
 
-                ASSERTW (warning_given, "Warning: %s contains more than 2^32 (~4 billion) nucleaotides. When compressing a FASTQ or FASTA file using the reference being generated, only the first 2^32 nucleotides of the reference will be used (no such limitation when compressing other file types)", txt_name);
+                ASSERTW (warning_given, "Warning: %s contains more than %"PRId64" nucleaotides. When compressing a FASTQ, FASTA or unaligned SAM file using the reference being generated, only the first %"PRId64" nucleotides of the reference will be used (no such limitation when compressing other file types)", txt_name, MAX_GPOS, MAX_GPOS);
                 warning_given = true; // display this warning only once
                 return;
             }
@@ -168,14 +149,16 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
                 
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
 
-                if (refhashs[layer_i][idx] == 0) {
+                if (refhashs[layer_i][idx] == NO_GPOS) {
                     refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i);
                     set=true;
                     break;
                 }
             }
 
-            if (!set && ((rand() & 3) == 0)) { // if all layers are already set, and we are on the lucky side of a 25% chance
+            // if all layers are already set, and we are on the lucky side of a 25% chance we 
+            // overwrite one of the layers
+            if (!set && ((rand() & 3) == 0)) { 
                 uint32_t layer_i = rand() % num_layers;
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
                 refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i); // replace one layer in random
@@ -244,7 +227,7 @@ void refhash_compress_refhash (void)
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
-    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table used for compressing FASTQ and unaligned SAM files...", false, 
+    dispatcher_fan_out_task (NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", false, 
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              ref_output_vb);
@@ -340,205 +323,6 @@ void refhash_load_standalone (void)
     flag_reading_reference = false;
 }
 
-#define COMPLIMENT(b) (3-(b))
-
-// Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
-// Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
-// calculates a refhash word from 14 nucleotides following a 'G' (only last G in a sequenece of GGGG...)
-static inline bool refhash_get_word_from_seq (VBlock *vb, const char *seq, uint32_t *refhash_word, int direction /* 1 forward, -1 reverse */)
-                                              
-{   
-    START_TIMER;
-
-    *refhash_word = 0;
-
-    for (int i=0; direction * i < nukes_per_hash; i += direction) {   
-        uint32_t base = nuke_encode[(uint8_t)seq[i]];
-        if (base == 4) {
-            COPY_TIMER (vb->profile.refhash_get_word_from_seq);
-            return false; // not a A,C,G,T
-        }
-
-        if (direction == -1) base = COMPLIMENT (base);
-
-        *refhash_word |= (base << (direction * i * 2)); // 2-LSb of word is the first base
-    }
-
-    // remove MSb in case of an odd number of base layer bits
-    if (MAKE_REF_BASE_LAYER_BITS & 1) 
-        *refhash_word &= layer_bitmask[0]; 
-
-    COPY_TIMER (vb->profile.refhash_get_word_from_seq);
-    return true;
-}
-
-static inline uint32_t refhash_get_match_len (VBlock *vb, const BitArray *seq_bits, PosType gpos, bool is_forward)
-{
-    START_TIMER;
-
-    bit_index_t bit_i = (is_forward ? gpos : genome_size-1 - (gpos + seq_bits->num_of_bits/2 -1)) * 2;
-    const word_t *ref = &(is_forward ? genome : genome_rev).ref.words[bit_i >> 6];
-    uint8_t shift = bit_i & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
-
-    word_t word=0;
-    uint32_t nonmatches=0; 
-    for (uint32_t i=0; i < (uint32_t)seq_bits->num_of_words; i++) {
-        // create ref_word - the word of the reference to be compared to seq[i] - if the word is not aligned
-        // to the bitmap word boundaries, and hence spans 2 bitmap words, we take the MSb's from the left word and the 
-        // LSb's from the right word, to create ref_word
-        word_t left_word_msb  = (ref[i] >> shift);
-        word_t right_word_lsb = ((ref[i+1] & bitmask64 (shift)) << (64-shift));
-        word_t ref_word       = left_word_msb | right_word_lsb;
-
-        // xor the seq_bits to the ref_bits - resulting in 1 in each position they differ and 0 where they're equal
-        word = seq_bits->words[i] ^ ref_word; 
-
-        // we count the number of different bits. note that identical nucleotides results in 2 equal bits while
-        // different nucleotides results in 0 or 1 equal bits (a 64 bit word contains 32 nucleotides x 2 bit each)
-        nonmatches += __builtin_popcountll (word);
-    }
-    
-    // remove non-matches due to the unused part of the last word
-    if (seq_bits->num_of_bits % 64)
-        nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
-
-    COPY_TIMER (vb->profile.refhash_get_match_len);
-    return (uint32_t)seq_bits->num_of_bits - nonmatches; // this is the number of matches
-}
-
-// returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. returns false if no match found.
-bool refhash_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
-                         PosType *start_gpos, bool *is_forward, bool *is_all_ref) // out
-{
-    START_TIMER;
-
-    uint32_t longest_len=0; // longest number of bits (not bases!) that match
-    uint32_t refhash_word;
-    const PosType seq_len_64 = (PosType)seq_len; // 64 bit version of seq_len
-    
-    PosType best_gpos = -1; // match not found yet
-    bool best_is_forward = false;
-    bool maybe_perfect_match = true;
-
-    // covert seq to 2-bit array
-    BitArray seq_bits = { .num_of_bits = seq_len * 2, .num_of_words = roundup_bits2words64(seq_len * 2)};
-    word_t seq_bits_words[seq_bits.num_of_words];
-    seq_bits.words = seq_bits_words; 
-
-    for (word_t base_i=0; base_i < seq_len_64; base_i++) {
-        uint8_t encoding = nuke_encode[(uint8_t)seq[base_i]];
-    
-        if (encoding == 4) { // not A, C, G or T - usually N
-            maybe_perfect_match = false; // this cannot be a perfect match
-            encoding = 0; // aritrary
-        }
-    
-        bit_array_assign2 (&seq_bits, (base_i << 1), encoding);
-    }
-
-    bit_array_clear_excess_bits_in_top_word (&seq_bits);
-
-    //bit_array_print_bases (&seq_bits, "\nseq_bits fwd", true);
-    //bit_array_print_bases (&seq_bits, "seq_bits rev", false);
-
-    *is_all_ref = false;
-
-    typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
-
-    struct Finds { uint32_t refhash_word; uint32_t i; Direction found; } finds[seq_len];
-    uint32_t num_finds = 0;
-    
-    // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
-    PosType gpos, last_gpos=0;
-
-    // in case of --fast, we check only 1/5 of the bases, and we are content with a match (not searching any further) if it 
-    // has at most 10 SNPs. On our test file, this reduced the number of calls to refhash_get_match_len by about 4X, 
-    // at the cost of the compressed file being about 11% larger
-    uint32_t density = (flag_fast ? 5 : 1);
-    uint32_t max_snps_for_perfection = (flag_fast ? 10 : 2);
-
-    for (uint32_t i=0; i < seq_len; i += density) {    
-        
-        Direction found = NOT_FOUND;
-
-        if (i < seq_len - nukes_per_hash && // room for the hash word
-            seq[i] == HOOK && seq[i+1] != HOOK &&  // take the G - if there is a polymer GGGG... take the last one
-            refhash_get_word_from_seq (vb, &seq[i+1], &refhash_word, 1)) { 
-
-            gpos = (PosType)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the genome
-
-            if (gpos) {
-                gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
-                found = FORWARD;
-            }
-        }
-
-        else if (i >= nukes_per_hash && // room for the hash word
-            seq[i] == HOOK_REV && seq[i-1] != HOOK_REV &&  // take the G - if there is a polymer GGGG... take the last one
-            refhash_get_word_from_seq (vb, &seq[i-1], &refhash_word, -1)) { 
-
-            gpos = (PosType)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the FORWARD genome
-            
-            if (gpos) { 
-                gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
-                found = REVERSE;
-            }
-        }
-
-#       define UPDATE_BEST(fwd)  {               \
-            if (gpos != last_gpos) {             \
-                uint32_t match_len = refhash_get_match_len (vb, &seq_bits, gpos, (fwd)); \
-                if (match_len > longest_len) {   \
-                    longest_len     = match_len; \
-                    best_gpos       = gpos;      \
-                    best_is_forward = (fwd);     \
-                    /* note: we allow 2 snps and we still consider the match good enough and stop looking further */\
-                    /* compared to stopping only if match_len==seq_len, this adds about 1% to the file size, but is significantly faster */\
-                    if (match_len >= (seq_len - max_snps_for_perfection) * 2) { /* we found (almost) the best possible match */ \
-                        *is_all_ref = maybe_perfect_match && (match_len == seq_len*2); /* perfect match */ \
-                        goto done;               \
-                    }                            \
-                }                                \
-                last_gpos = gpos;                \
-            }                                    \
-        }
-
-        if (found != NOT_FOUND && (gpos >= 0) && (gpos + seq_len_64 < genome_size)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
-            finds[num_finds++] = (struct Finds){ .refhash_word = refhash_word, .i = i, .found = found };
-            UPDATE_BEST (found);
-        }
-    }
-
-    // if still no near-perfect matches found, search the additional layers
-    for (unsigned layer_i=1; layer_i < num_layers; layer_i++) {
-        for (uint32_t find_i=0; find_i < num_finds; find_i++) {
-
-            if (finds[find_i].found == NOT_FOUND) continue;
-
-            gpos = (PosType)BGEN32 (refhashs[layer_i][finds[find_i].refhash_word & layer_bitmask[layer_i]]); 
-            if (!gpos) {
-                finds[find_i].found = NOT_FOUND; // if we can't find it in this layer, we won't find it in the next layers either
-                continue;
-            }
-
-            gpos -= (finds[find_i].found == FORWARD ? finds[find_i].i : seq_len_64-1 - finds[find_i].i);
-
-            if ((gpos >= 0) && (gpos + seq_len_64 < genome_size)) {
-
-                UPDATE_BEST (finds[find_i].found);
-            }
-        }
-    }
-
-done:
-    *start_gpos = best_gpos != -1 ? best_gpos : 0;
-    *is_forward = best_is_forward;
-
-    COPY_TIMER (vb->profile.refhash_best_match);
-
-    return best_gpos != -1;
-}
-
 // ----------------------------
 // general stuff
 // ----------------------------
@@ -566,6 +350,7 @@ void refhash_initialize (void)
     }
 
     bits_per_hash  = layer_bits[0];
+    bits_per_hash_is_odd = bits_per_hash % 2;
     nukes_per_hash = (1 + bits_per_hash) / 2; // round up
 
     // allocate memory
@@ -578,7 +363,12 @@ void refhash_initialize (void)
     // base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
     for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
         buf_alloc (evb, &refhash_bufs[layer_i], layer_size[layer_i], 1, "refhash_bufs", layer_i);
-        if (flag_make_reference) buf_zero (&refhash_bufs[layer_i]); // no need to zero in ZIP, as we will be reading the data from the refernce file
+
+        // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
+        // NOT: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
+        // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
+        // and loading of refhash during zip is MUCH faster
+        if (flag_make_reference) buf_set (&refhash_bufs[layer_i], 0xff); 
 
         refhashs[layer_i] = FIRSTENT (uint32_t, refhash_bufs[layer_i]);
     }

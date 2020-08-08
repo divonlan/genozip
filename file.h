@@ -242,6 +242,7 @@ typedef struct File {
 
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
+    uint8_t flags;                     // genozip file flags as read from SectionHeaderGenozipHeader.h.flags
     uint32_t num_components;           // set from genozip header
 
     // Used for WRITING GENOZIP files

@@ -131,7 +131,8 @@ typedef struct {
 
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
 
-#define buf_zero(buf_p) { memset ((buf_p)->data, 0, (buf_p)->size); }
+#define buf_set(buf_p,value) { memset ((buf_p)->data, value, (buf_p)->size); }
+#define buf_zero(buf_p) buf_set(buf_p, 0)
 
 extern void buf_add_to_buffer_list (VBlockP vb, Buffer *buf);
 extern void buf_remove_from_buffer_list (Buffer *buf);

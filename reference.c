@@ -242,6 +242,17 @@ static Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
     return r;
 }
 
+static void ref_show_sequence (void)
+{
+    for (uint32_t range_i=0; range_i < ranges.len; range_i++) {
+        Range *r = ENT (Range, ranges, range_i);
+        if (r->ref.num_of_bits)
+            bit_array_print_bases (stdout, &r->ref, r->chrom_name, true);
+    }
+
+    if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
+}
+
 // entry point of compute thread of reference decompression. this is called when pizzing a file with a stored reference,
 // including reading the reference file itself.
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET sections
@@ -468,6 +479,9 @@ void ref_load_stored_reference (void)
                              ref_uncompress_one_range, 
                              NULL);
 
+    if (flag_show_ref_seq) 
+        ref_show_sequence();
+        
     // now we can safely set the is_set regions originating from non-compacted ranges. we couldn't do it before, because
     // copied-from-FASTA ranges appear first in the genozip file, and after them could be compacted ranges that originate
     // from a full-contig range in EXT_STORE, whose regions copied-from-FASTA are 0s.
@@ -1160,14 +1174,14 @@ static void ref_allocate_loaded_genome (void)
     // but our CHROM contexts also includes alternate chrom names that aren't in the original reference that appear after the reference
     // chroms. we need to make sure ranges.len does not include alternate chroms as that's how we know a chrom is alternate in ref_piz_get_range
     // 3. in case loading from a reference file, the number of contigs will match the number of chroms, so no issues.
-    ranges.len = flag_ref_originates_from_internal ? z_file->contexts[CHROM].word_list.len :
-                                                     ref_contigs_num_contigs();
+    ranges.len = (z_file->flags & GENOZIP_FL_REF_INTERNAL) ? z_file->contexts[CHROM].word_list.len :
+                                                             ref_contigs_num_contigs();
 
     buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", RT_LOADED); 
     buf_zero (&ranges);
 
     // note: genome_size must be full words, so that bit_array_reverse_complement doesn't need to shift
-    genome_size = ROUNDUP64 (ref_contigs_get_genome_size()) + 64; // round up to the nearest 64, and add one word, needed by refhash_get_match_len for bit shifting overflow
+    genome_size = ROUNDUP64 (ref_contigs_get_genome_size()) + 64; // round up to the nearest 64, and add one word, needed by aligner_get_match_len for bit shifting overflow
     genome = (Range){ .chrom_name = CHROM_NAME_GENOME, 
                       .chrom_name_len = strlen (CHROM_NAME_GENOME),
                       .chrom = CHROM_GENOME, 

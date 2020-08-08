@@ -12,6 +12,8 @@
 #include "reference.h"
 #include "regions.h"
 #include "compressor.h"
+#include "aligner.h"
+#include "file.h"
 
 // returns true if section is to be skipped reading / uncompressing
 bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
@@ -46,10 +48,18 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
     const Range *range       = NULL;
     unsigned seq_consumed=0, ref_consumed=0;
 
-    // case: missing pos - pos is 0 - in this case, the sequence is not encoded in the bitmap at all. we just copy it from SEQ_NOREF
+    // case: unaligned sequence - pos is 0 
     if (!pos) {
-        RECONSTRUCT (nonref, vb->seq_len);
-        nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (vb->seq_len);
+        // case: compressed with a reference, using our aligner
+        if (z_file->flags & GENOZIP_FL_ALIGNER) {
+            aligner_reconstruct_seq ((VBlockP)vb, bitmap_ctx, vb->seq_len, false);
+            nonref_ctx->next_local = ROUNDUP_TO_NEAREST_4 (nonref_ctx->next_local);
+        }
+        // case: no reference was used - in this case, the sequence is not encoded in the bitmap at all. we just copy it from SEQ_NOREF
+        else {
+            RECONSTRUCT (nonref, vb->seq_len); 
+            nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (vb->seq_len);
+        }
         return;
     }
 
@@ -62,10 +72,6 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 
     const char *next_cigar = vb->last_cigar; // don't change vb->last_cigar as we may still need it, eg if we have an E2 optional field
     range = ref_piz_get_range (vb_, pos, vb->ref_consumed);
-
-    //ref_print_subrange ("reference", range, 0, 0);
-    //bit_array_print_substr ("all", bitmap, 0, bitmap->num_of_bits, stderr, '1','0',true);
-    //bit_array_print_substr ("start from next_local", bitmap, bitmap_ctx->next_local, bitmap->num_of_bits-bitmap_ctx->next_local, stderr, '1','0',true);
     
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         

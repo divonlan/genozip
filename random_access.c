@@ -392,7 +392,7 @@ void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const 
 
     if (show_index_msg) {
         random_access_show_index (ra_buf, false, show_index_msg);
-        if (exe_type == EXE_GENOCAT) exit(0); // in genocat --show-index, we only show the index, not the data
+        if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-index, we only show the index, not the data
     }
 
     buf_free (&evb->z_data);

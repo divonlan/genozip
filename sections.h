@@ -85,6 +85,7 @@ typedef struct SectionHeader {
 
 // flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
 #define GENOZIP_FL_REF_INTERNAL 0x01  // REF_INTERNAL was used for compressing (i.e. SAM file without reference)
+#define GENOZIP_FL_ALIGNER      0x02  // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
