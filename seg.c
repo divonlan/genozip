@@ -525,7 +525,7 @@ void seg_compound_field (VBlock *vb,
                     // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
                     // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
                     // inequality - we stop the pairing going forward till the end of this VB
-                    !(sf_ctx->inst && CTX_INST_STOP_PAIRING)) {
+                    !(sf_ctx->inst & CTX_INST_STOP_PAIRING)) {
                     
                     WordIndex pair_word_index = base250_decode (&sf_ctx->pair_b250_iter.next_b250);  
                     
