@@ -24,8 +24,9 @@ else
 fi
 
 cmp_2_files() {
-    if [[ `$md5 $1 | cut -d" " -f1` != `$md5 ${2%.*} | cut -d" " -f1` ]]; then
-        echo "MD5 comparison FAILED!"
+    if (( `$md5 $1 ${2%.*} | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
+        echo "MD5 comparison FAILED:"
+        $md5 $1 ${2%.*}
         exit 1
     fi
 }
@@ -35,17 +36,49 @@ test_header() {
     printf "\n${sep}TESTING $1 \n${sep}"
 }
 
+test_count_genocat_lines() {
+    cmd="./genocat ${output}.genozip $2"
+    test_header "$cmd"
+    ./genozip $1 -fo ${output}.genozip || exit 1
+    wc=`$cmd | wc -l`
+    if [[ $wc != $3 ]]; then
+        echo "FAILED - expected $3 lines, but getting $wc"
+        exit 1
+    fi
+}
+
+test_bam() {
+    if `command -v samtools >& /dev/null`; then
+        test_header "$1 - input and output as BAM"
+        grep -v TooBigForSamTools $1 > bam-test.input.sam || exit 1
+        samtools view bam-test.input.sam -OBAM -h > bam-test.input.bam || exit 1
+        ./genozip bam-test.input.bam $2 -fto ${output}.genozip || exit 1
+        ./genounzip ${output}.genozip $2 --force --output bam-test.output.bam || exit 1
+        usleep 200000 # wait for BAM to be flused to the disk
+        cmp_2_files bam-test.input.bam bam-test.output.bam.fake-extension-removed-by-cmp_2_files
+        rm -f bam-test.input.sam bam-test.input.bam bam-test.output.bam
+    fi
+}
+
 # minimal files - expose edge cases where fields have only 1 instance
 files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf genome_23andme_Full_minimal.txt)
 for file in ${files[@]}; do
     test_header "$file - minimal file test"
-    cat $file | tr -d "\r" > unix-nl.$file
+
+    if [ ! -f $file ] ; then echo "$file: File not found"; exit 1; fi
+
+    cat $file | tr -d "\r" > unix-nl.$file || exit 1
     ./genozip $1 unix-nl.$file -ft -o ${output}.genozip || exit 1
 done
+
+test_bam test-file.sam
 
 files=(test-file.vcf test-file.sam test-file.fq test-file.fa test-file.gvf genome_23andme_Full_test-file.txt)
 for file in ${files[@]}; do
     test_header "$file - basic test - Unix-style end-of-line"
+
+    if [ ! -f $file ] ; then echo "$file: File not found"; exit 1; fi
+
     cat $file | tr -d "\r" > unix-nl.$file
     ./genozip $1 unix-nl.$file -ft -o ${output}.genozip || exit 1
 
@@ -121,7 +154,7 @@ for file in ${files[@]}; do
     cp $file $file1
     cat $file | sed 's/PRFX/FILE2/g' > $file2
     ./genozip $1 $file1 $file2 -ft -o ${output}.genozip || exit 1
-    ./genounzip $1 ${output}.genozip -O -t || exit 1
+    ./genounzip $1 ${output}.genozip -u -t || exit 1
     rm $file1 $file2
 
     test_header "$file --optimize - NOT checking correctness, just that it doesn't crash"
@@ -132,6 +165,9 @@ done
 # files represent cases that cannot be fit into test-file.* because they would conflict
 files=(test-file-domqual.fq test-file-domqual.sam test-file-unaligned.sam)
 for file in ${files[@]}; do
+
+    if [ ! -f $file ] ; then echo "$file: File not found"; exit 1; fi
+
     test_header "$file - special case test"
     cat $file | tr -d "\r" > unix-nl.$file
     ./genozip $1 unix-nl.$file -ft -o ${output}.genozip || exit 1
@@ -140,17 +176,6 @@ done
 file=test-file.vcf
 test_header "$file - testing VCF with --sblock=1"
 ./genozip $1 $file --sblock 1 -ft -o ${output}.genozip || exit 1
-
-test_count_genocat_lines() {
-    cmd="./genocat ${output}.genozip $2"
-    test_header "$cmd"
-    ./genozip $1 -fo ${output}.genozip || exit 1
-    wc=`$cmd | wc -l`
-    if [[ $wc != $3 ]]; then
-        echo "FAILED - expected $3 lines, but getting $wc"
-        exit 1
-    fi
-}
 
 # FASTA genocat tests
 test_count_genocat_lines test-file.fa "--sequential" 9
@@ -190,22 +215,15 @@ cut -f1-8 test-file.vcf > test-input.vcf
 ./genozip $1 test-input.vcf -ft -o ${output}.genozip || exit 1
 rm test-input.vcf
 
-if `command -v samtools >& /dev/null`; then
-    test_header "test_file.sam - input and output as BAM"
-    samtools view test-file.sam -OBAM -h > bam-test.input.bam    
-    ./genozip $1 bam-test.input.bam -fto ${output}.genozip || exit 1
-    ./genounzip $1 ${output}.genozip --force --output bam-test.output.bam
-    cmp_2_files bam-test.input.bam bam-test.output.bam.fake-extension
-    rm bam-test.input.bam bam-test.output.bam
-fi
-
-test_header "Testing subsets (~3 VBs) or real world files"
-rm -f td/*.genozip
-./genozip $1 -ft td/* || exit 1
-
 test_header "Testing --make-reference"
 file=test-file-ref.fa 
-./genozip $1 --make-reference $file -o copy.${file}.ref.genozip || exit 1
+./genozip $1 --make-reference $file --force -o copy.${file}.ref.genozip || exit 1
+
+test_header "Testing unaligned SAM with --reference"
+./genozip $1 -f --md5 --reference copy.${file}.ref.genozip test-file-unaligned.sam --test || exit 1
+
+test_bam test-file-unaligned.sam -ecopy.${file}.ref.genozip
+
 rm -f copy.${file}.ref.genozip
 
 test_header "Testing command line with mixed SAM and FASTQ files with --reference"
@@ -213,6 +231,10 @@ echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --reference $GRCh38 td/test.transfly-unsorted.sam td/test.transfly.fq td/test.transfly-sorted.sam || exit 1
 ./genounzip $1 -t -e $GRCh38 td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
+
+test_header "Testing subsets (~3 VBs) or real world files"
+rm -f td/*.genozip
+./genozip $1 -ft td/* || exit 1
 
 test_header "Testing multiple bound SAM with --REFERENCE" 
 rm -f td/*.genozip
