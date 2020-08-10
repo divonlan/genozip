@@ -222,9 +222,12 @@ file=test-file-ref.fa
 test_header "Testing unaligned SAM with --reference"
 ./genozip $1 -f --md5 --reference copy.${file}.ref.genozip test-file-unaligned.sam --test || exit 1
 
+test_header "Testing unaligned SAM with --reference - from stdin"
+cat test-file-unaligned.sam | ./genozip $1 -f --md5 --reference copy.${file}.ref.genozip --test --input sam --output test-file-unaligned.sam.genozip - || exit 1
+
 test_bam test-file-unaligned.sam -ecopy.${file}.ref.genozip
 
-rm -f copy.${file}.ref.genozip
+rm -f copy.${file}.ref.genozip test-file-unaligned.sam.genozip
 
 test_header "Testing command line with mixed SAM and FASTQ files with --reference"
 echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
