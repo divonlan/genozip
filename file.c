@@ -86,6 +86,11 @@ DataType file_get_dt_by_z_ft (FileType z_ft)
     return DT_NONE;
 }
 
+FileType file_get_z_ft_by_dt (DataType dt)
+{
+    return z_ft_by_dt[dt][0];
+}
+
 // possible arguments for --input
 static char *file_compressible_extensions(void)
 {
@@ -607,7 +612,7 @@ void file_close (File **file_p,
         else if (file->mode == READ && file_is_read_via_ext_decompressor (file)) 
             stream_close (&input_decompressor, STREAM_WAIT_FOR_PROCESS);
 
-        else if (file->mode == WRITE && file_is_written_via_ext_compressor (file)) 
+        else if (file->mode == WRITE && file_is_written_via_ext_compressor (file))
             stream_close (&output_compressor, STREAM_WAIT_FOR_PROCESS);
 
         else 
