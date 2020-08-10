@@ -358,7 +358,7 @@ WordIndex ref_contigs_get_by_accession_number (const char *ac, unsigned ac_len)
     for (WordIndex alt_chrom=0 ; alt_chrom < loaded_contigs.len; alt_chrom++) {
         const char *alt_chrom_name = ENT (const char, loaded_contig_dict, ENT (RefContig, loaded_contigs, alt_chrom)->char_index);
         const char *substr = strstr (alt_chrom_name, numeric);
-        if (substr && (substr - alt_chrom_name >= letter_len) && !strnicmp (substr-letter_len, ac, numeric_len + letter_len)) 
+        if (substr && (substr - alt_chrom_name >= letter_len) && !strncasecmp (substr-letter_len, ac, numeric_len + letter_len)) 
             return alt_chrom;
     }
 
