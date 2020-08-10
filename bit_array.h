@@ -307,12 +307,6 @@ extern bit_index_t bit_array_num_bits_set_region(const BitArray* bitarr, bit_ind
 // Get the number of bits not set (length - hamming weight)
 extern bit_index_t bit_array_num_bits_cleared(const BitArray* bitarr);
 
-// Get the number of bits set in on array and not the other.  This is equivalent
-// to hamming weight of the XOR when the two arrays are the same length.
-// e.g. 10101 vs 00111 => hamming distance 2 (XOR is 10010)
-extern bit_index_t bit_array_hamming_distance(const BitArray* arr1,
-                                       const BitArray* arr2);
-
 //
 // Find indices of set/clear bits
 //
@@ -321,8 +315,7 @@ extern bit_index_t bit_array_hamming_distance(const BitArray* arr1,
 // Returns 1 if a bit is set, otherwise 0
 // Index of next set bit is stored in the integer pointed to by result
 // If no next bit is set result is not changed
-extern char bit_array_find_next_set_bit(const BitArray* bitarr, bit_index_t offset,
-                                 bit_index_t* result);
+extern char bit_array_find_next_set_bit(const BitArray* bitarr, bit_index_t offset, bit_index_t* result);
 
 // Find the index of the next bit that is NOT set, at or after `offset`
 // Returns 1 if a bit is NOT set, otherwise 0
@@ -368,17 +361,6 @@ extern char bit_array_find_last_set_bit(const BitArray* bitarr, bit_index_t* res
 // Index of last zero bit is stored in the integer pointed to by `result`
 // If no bit is zero result is not changed
 extern char bit_array_find_last_clear_bit(const BitArray* bitarr, bit_index_t* result);
-
-
-//
-// Sorting
-//
-
-// Put all the 0s before all the 1s
-extern void bit_array_sort_bits(BitArray* bitarr);
-
-// Put all the 1s before all the 0s
-extern void bit_array_sort_bits_rev(BitArray* bitarr);
 
 
 //
@@ -464,6 +446,8 @@ extern void bit_array_and(BitArray* dest, const BitArray* src1, const BitArray* 
 extern void bit_array_or (BitArray* dest, const BitArray* src1, const BitArray* src2);
 extern void bit_array_xor(BitArray* dest, const BitArray* src1, const BitArray* src2);
 extern void bit_array_not(BitArray* dest, const BitArray* src);
+
+//extern void bit_array_or_with (BitArray *dst, bit_index_t dst_start_bit, BitArray *src , bit_index_t src_start_bit, bit_index_t len);
 
 //
 // Comparisons

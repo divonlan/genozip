@@ -181,21 +181,19 @@ static inline void _mask_top_word(BitArray* bitarr)
 
 static inline word_t _get_word(const BitArray* bitarr, bit_index_t start)
 {
-  word_addr_t word_index = bitset64_wrd(start);
-  word_offset_t word_offset = bitset64_idx(start);
+    word_addr_t word_index = bitset64_wrd(start);
+    word_offset_t word_offset = bitset64_idx(start);
 
-  word_t result = bitarr->words[word_index] >> word_offset;
+    word_t result = bitarr->words[word_index] >> word_offset;
 
-  word_offset_t bits_taken = WORD_SIZE - word_offset;
+    word_offset_t bits_taken = WORD_SIZE - word_offset;
 
-  // word_offset is now the number of bits we need from the next word
-  // Check the next word has at least some bits
-  if(word_offset > 0 && start + bits_taken < bitarr->num_of_bits)
-  {
-    result |= bitarr->words[word_index+1] << (WORD_SIZE - word_offset);
-  }
+    // word_offset is now the number of bits we need from the next word
+    // Check the next word has at least some bits
+    if(word_offset > 0 && start + bits_taken < bitarr->num_of_bits)
+        result |= bitarr->words[word_index+1] << (WORD_SIZE - word_offset);
 
-  return result;
+    return result;
 }
 
 // Set 64 bits from a particular start position
@@ -232,14 +230,6 @@ static inline void _set_byte(BitArray *bitarr, bit_index_t start, uint8_t byte)
 {
   word_t w = _get_word(bitarr, start);
   _set_word(bitarr, start, (w & ~(word_t)0xff) | byte);
-}
-
-// 4 bits
-static inline void _set_nibble(BitArray *bitarr, bit_index_t start,
-                               uint8_t nibble)
-{
-  word_t w = _get_word(bitarr, start);
-  _set_word(bitarr, start, (w & ~(word_t)0xf) | nibble);
 }
 
 // Wrap around
@@ -731,36 +721,6 @@ bit_index_t bit_array_num_bits_cleared(const BitArray* bitarr)
 }
 
 
-// Get the number of bits set in on array and not the other.  This is equivalent
-// to hamming weight of the XOR when the two arrays are the same length.
-// e.g. 10101 vs 00111 => hamming distance 2 (XOR is 10010)
-bit_index_t bit_array_hamming_distance(const BitArray* arr1,
-                                       const BitArray* arr2)
-{
-  word_addr_t min_words = MIN(arr1->num_of_words, arr2->num_of_words);
-  word_addr_t max_words = MAX(arr1->num_of_words, arr2->num_of_words);
-
-  bit_index_t hamming_distance = 0;
-  word_addr_t i;
-
-  for(i = 0; i < min_words; i++)
-  {
-    hamming_distance += POPCOUNT(arr1->words[i] ^ arr2->words[i]);
-  }
-
-  if(min_words != max_words)
-  {
-    const BitArray* long_arr
-      = (arr1->num_of_words > arr2->num_of_words ? arr1 : arr2);
-
-    for(i = min_words; i < max_words; i++)
-    {
-      hamming_distance += POPCOUNT(long_arr->words[i]);
-    }
-  }
-
-  return hamming_distance;
-}
 
 //
 // Find indices of set/clear bits
@@ -858,29 +818,6 @@ char bit_array_find_last_set_bit(const BitArray* bitarr, bit_index_t* result)
 char bit_array_find_last_clear_bit(const BitArray* bitarr, bit_index_t* result)
 {
   return bit_array_find_prev_clear_bit(bitarr, bitarr->num_of_bits, result);
-}
-
-//
-// "Sorting" bits
-//
-
-// Put all the 0s before all the 1s
-void bit_array_sort_bits(BitArray* bitarr)
-{
-  bit_index_t num_of_bits_set = bit_array_num_bits_set(bitarr);
-  bit_index_t num_of_bits_cleared = bitarr->num_of_bits - num_of_bits_set;
-  bit_array_set_all(bitarr);
-  CLEAR_REGION(bitarr, 0, num_of_bits_cleared);
-  DEBUG_VALIDATE(bitarr);
-}
-
-// Put all the 1s before all the 0s
-void bit_array_sort_bits_rev(BitArray* bitarr)
-{
-  bit_index_t num_of_bits_set = bit_array_num_bits_set(bitarr);
-  bit_array_clear_all(bitarr);
-  SET_REGION(bitarr, 0, num_of_bits_set);
-  DEBUG_VALIDATE(bitarr);
 }
 
 
@@ -1226,6 +1163,26 @@ void bit_array_not(BitArray* dst, const BitArray* src)
   DEBUG_VALIDATE(dst);
 }
 
+/*
+void bit_array_or_with (BitArray *dst, bit_index_t dst_start_bit, BitArray *src , bit_index_t src_start_bit, bit_index_t len)
+{
+    word_t dst_word, src_word;
+    bit_index_t i, last_word_bits = len % WORD_SIZE; 
+   
+    for (i=0; i < len - (last_word_bits != 0); i += WORD_SIZE) {
+        dst_word = _get_word (dst, dst_start_bit + i);
+        src_word = _get_word (src, src_start_bit + i);
+        _set_word (dst, dst_start_bit + i, dst_word | src_word);
+    }
+
+    // partial last word
+    if (last_word_bits) {
+        dst_word = _get_word (dst, dst_start_bit + i);
+        src_word = _get_word (src, src_start_bit + i) & bitmask64 (last_word_bits);
+        _set_word (dst, dst_start_bit + i, dst_word | src_word);
+    }
+}
+*/
 //
 // Comparisons
 //
@@ -1683,16 +1640,6 @@ bit_index_t bit_array_save(const BitArray* bitarr, FILE* f)
   }
 
   return bytes_written;
-}
-
-// Load a uint64 from little endian format.
-// Works for both big and little endian architectures
-static inline uint64_t le64_to_cpu(const uint8_t *x)
-{
-  return (((uint64_t)(x[0]))       | ((uint64_t)(x[1]) << 8)  |
-          ((uint64_t)(x[2]) << 16) | ((uint64_t)(x[3]) << 24) |
-          ((uint64_t)(x[4]) << 32) | ((uint64_t)(x[5]) << 40) |
-          ((uint64_t)(x[6]) << 48) | ((uint64_t)(x[7]) << 56));
 }
 
 //
