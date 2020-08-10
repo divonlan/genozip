@@ -554,7 +554,15 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
-    z_file->data_type = data_type; // update in case type was not know from file extension
+
+    if (z_file->data_type == DT_NONE) {
+        z_file->data_type = data_type;
+        z_file->type      = file_get_z_ft_by_dt (z_file->data_type);  
+    }
+    else
+        ASSERT (z_file->data_type == data_type, "Error: %s - file extension indicates this is a %s file, but according to its contents it is a %s", 
+                z_name, dt_name (z_file->data_type), dt_name (data_type));
+
     if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --unbind
     
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
@@ -614,7 +622,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // case: we are reading a file that is not expected to be a reference file
     else {
         // case: we are attempting to decompress a reference file - this is not supported
-        if (header->data_type == DT_REF && !(flag_genocat_info_only && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
+        if (data_type == DT_REF && !(flag_genocat_info_only && exe_type == EXE_GENOCAT)) { // we will stop a bit later in this case
             WARN ("%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
             data_type = DT_NONE;
             goto final;
@@ -923,3 +931,4 @@ void zfile_update_compressed_vb_header (VBlock *vb, uint32_t txt_first_line_i)
         crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
                   BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
 }
+

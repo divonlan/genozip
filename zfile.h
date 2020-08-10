@@ -13,6 +13,7 @@
 #include "data_types.h"
 
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
+
 extern void zfile_compress_genozip_header (Md5Hash single_component_md5);
 extern bool zfile_get_genozip_header (FileP file, DataType *dt,
                                       uint64_t *uncomp_data_size, uint32_t *num_samples,
