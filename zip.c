@@ -439,6 +439,9 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
                 next_vb->ready_to_dispatch = true;
             
             else {
+                // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
+                ASSERT0 (next_vb->vblock_i > 1 || evb->lines.len /* txt header data */, "Error: Cannot compress stdin data because its size is 0");
+
                 // this vb has no data
                 dispatcher_input_exhausted (dispatcher);
                 
