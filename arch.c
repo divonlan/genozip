@@ -160,8 +160,11 @@ void spin_initialize_do (const char *name, pthread_spinlock_t *spin, bool *initi
 {
     if (*initialized) return;
 
+#ifdef __APPLE__
+    *spin = OS_UNFAIR_LOCK_INIT;
+#else
     unsigned ret = pthread_spin_init (spin, PTHREAD_PROCESS_PRIVATE);
     ASSERT (!ret, "Error: pthread_spin_init failed for %s: %s", name, strerror (ret));
-
+#endif
     *initialized = true;
 }

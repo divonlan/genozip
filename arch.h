@@ -11,6 +11,9 @@
 #else
 #include "compatibility/visual_c_pthread.h"
 #endif
+#ifdef __APPLE__
+#include <os/lock.h>
+#endif
 
 extern void arch_initialize (void);
 extern unsigned arch_get_num_cores (void);
@@ -40,6 +43,12 @@ extern void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool 
 // -----------
 // spinlock stuff
 // -----------
+
+#ifdef __APPLE__
+#define pthread_spinlock_t os_unfair_lock
+#define pthread_spin_destroy(x) // do nothing
+#endif // __APPLE__
+
 #define SPINLOCK(name) \
     static pthread_spinlock_t name; \
     static bool name##_initialized = false;
@@ -48,11 +57,14 @@ extern void spin_initialize_do (const char *name, pthread_spinlock_t *spin, bool
 #define spin_initialize(name) spin_initialize_do (#name, &name, &name##_initialized)
 #define spin_destroy(name) if (name##_initialized) { pthread_spin_destroy (&name); name##_initialized = false; }
 
+#ifdef __APPLE__
+#define spin_lock(m)   os_unfair_lock_lock(&m)
+#define spin_unlock(m) os_unfair_lock_unlock (&m)
+#else
 #define spin_lock(m)   { int ret = pthread_spin_lock (&m); \
-                          ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
+                         ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
 
 #define spin_unlock(m) { int ret = pthread_spin_unlock (&m); \
-                          ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
-
-
+                         ASSERT (!ret, "Error in %s: pthread_spin_lock failed: %s", __FUNCTION__, strerror (ret)); }
+#endif
 #endif
