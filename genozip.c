@@ -309,6 +309,10 @@ static void main_genounzip (const char *z_filename,
     }
 
     z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
+    
+    // if we can't get the data type by the extension, we get it from the genozip header
+    if (z_file->data_type == DT_NONE) 
+        zfile_read_genozip_header (NULL);
 
     // get output FILE 
     if (txt_filename) {
