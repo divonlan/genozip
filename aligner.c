@@ -263,7 +263,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     else 
         buf_add_bit (&strand_ctx->local, is_forward);
     
-    /*bit_index_t start_bit = */ buf_extend_bits (&bitmap_ctx->local, seq_len);
+    buf_extend_bits (&bitmap_ctx->local, seq_len);
 
     ASSSEG (gpos >= 0 && gpos <= 0xffffffff, seq, "gpos=%"PRId64" is out of range [0,%u]", gpos, 0xffffffff);
     
