@@ -805,7 +805,7 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             case '?' : // unrecognized option - error message already displayed by libc
             default  :
                 fprintf(stderr, "Usage: %s [OPTIONS] filename1 filename2...\nTry %s --help for more information.\n", global_cmd, global_cmd);
-                exit(0);  
+                exit(1);  
         }
     }
 }
