@@ -1217,6 +1217,10 @@ static void ref_allocate_loaded_genome (void)
             ref_contigs_get_chrom_snip (r->chrom, &r->chrom_name, &r->chrom_name_len);
             
             PosType len = rc->max_pos - rc->min_pos + 1;
+
+            ASSERT (r->gpos + len <= genome.ref.num_of_bits / 2, "Error in ref_allocate_loaded_genome: adding range \"%s\": r->gpos(%"PRId64") + len(%"PRId64") (=%"PRId64") is beyond genome_size=%"PRId64,
+                    r->chrom_name, r->gpos, len, r->gpos+len, genome_size);
+
             bit_array_overlay (&r->ref, &genome.ref, r->gpos*2, len*2);
 
             if (has_is_set) 

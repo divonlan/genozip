@@ -83,7 +83,7 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
     // each chrom's gpos must start on a 64bit aligned word
     if (r->gpos % 64 && r->chrom != (r-1)->chrom) // each new chrom needs to have a GPOS aligned to 64, so that we can overload is_set bits between the whole genome and individual chroms
         r->gpos = ROUNDUP64 (r->gpos);
-    
+
     vb->range              = r; // range to compress
     vb->range_num_set_bits = r->ref.num_of_bits / 2;
     vb->ready_to_dispatch  = true;
