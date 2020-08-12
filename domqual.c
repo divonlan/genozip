@@ -59,9 +59,11 @@ static char domqual_has_dominant_value (VBlock *vb, LocalGetLineCallback get_lin
     if (char_counter['F'] > total_len / 2) return 'F'; 
 
     // get most frequent value
-#   define DOMQUAL_MINIMUM_THREADSHOLD 5 // not worth it if less than this (and will fail in SAM with 1)
+#   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
+#   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
+
     for (unsigned c=32; c <= 126; c++)  // printable ASCII only
-        if (char_counter[c] > total_len / 2 && char_counter[c] > DOMQUAL_MINIMUM_THREADSHOLD) 
+        if (((double)char_counter[c] > (double)total_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL) && char_counter[c] > DOMQUAL_THREADSHOLD_NUM_CHARS) 
             return c; // this will be 'F' in case of binned illumina
 
     return -1; // no value has more than 50% in the tested 4-line sample
@@ -160,10 +162,11 @@ static inline bool shorten_run (uint8_t *run, uint32_t dec)
     uint32_t bytes=1; 
     for (uint8_t *b=run; *b == 255; b++) bytes++;
 
-    uint32_t new_runlen = (bytes-1) * 254 + run[bytes-1] - dec;
+    int32_t new_runlen = (bytes-1) * 254 + run[bytes-1] - dec;
+    ASSERT (new_runlen >= 0, "Error in shorten_run: new_runlen=%d is out of range", new_runlen);
 
     bool increment_start = false;
-    uint32_t new_bytes = MAX (1, (new_runlen + 253) / 254); // roundup (if runlen=0, we still need 1 byte)
+    uint32_t new_bytes = MAX (1, ((uint32_t)new_runlen + 253) / 254); // roundup (if runlen=0, we still need 1 byte)
     if (new_bytes < bytes) {
         increment_start = true;
         run++;
@@ -181,10 +184,12 @@ static inline bool shorten_run (uint8_t *run, uint32_t dec)
 // reconstructed a run of the dominant character
 static inline uint32_t domqual_reconstruct_dom_run (VBlockP vb, Context *qdomruns_ctx, char dom, uint32_t max_len)
 {
-    ASSERT (qdomruns_ctx->next_local < qdomruns_ctx->local.len, "Error in domqual_reconstruct_dom_run: unexpectedly reached the end of qdomruns_ctx in vb_i=%u", vb->vblock_i);
+    ASSERT (qdomruns_ctx->next_local < qdomruns_ctx->local.len, "Error in domqual_reconstruct_dom_run: unexpectedly reached the end of qdomruns_ctx in vb_i=%u (first_line=%u len=%u)", 
+            vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len);
 
     uint32_t runlen=0;
     uint8_t this_byte;
+    uint32_t start_next_local = vb->contexts[SAM_QDOMRUNS].next_local;
     do {
         this_byte = NEXTLOCAL (uint8_t, qdomruns_ctx); // might be 0 in beginning of line if previous line consumed entire run
         runlen += (this_byte < 255 ? this_byte : 254); // 0-254 is the length, 255 means length 254 continued in next byte
@@ -192,7 +197,7 @@ static inline uint32_t domqual_reconstruct_dom_run (VBlockP vb, Context *qdomrun
         // case: a run spans multiple lines - take only what we need, and leave the rest for the next line
         // note: if we use max_len exactly, then we still leave a run of 0 length, so next line can start with a "run" as usual
         if (runlen >= max_len) { 
-            bool increment_start = shorten_run (ENT (uint8_t, qdomruns_ctx->local, qdomruns_ctx->next_local-1), max_len);
+            bool increment_start = shorten_run (ENT (uint8_t, qdomruns_ctx->local, start_next_local), max_len);
             if (!increment_start)
                 qdomruns_ctx->next_local--; // unconsume this run as we will consume it again in the next line (but shorter)
             

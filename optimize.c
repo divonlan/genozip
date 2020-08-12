@@ -145,25 +145,40 @@ bool optimize_vcf_pl (const char *snip, unsigned len, char *optimized_snip, unsi
 // ≥ 40  -> 40
 void optimize_phred_quality_string (char *str, unsigned len)
 {
-    static unsigned char phred_mapper[256];
-    static bool phread_mapper_initialized = false;
+#   define P(x) ((x)+33)
+    static uint8_t phred_mapper[256] = {
+        // non Phread ASCII 0-32 - unchanged
+        0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32, 
+        
+        // Phread values 0-93 -> ASCII 33-126
+        P(0),  P(1),  P(6),  P(6),  P(6),  // Phred 0-4: same as Illumina
+        P(6),  P(6),  P(6),  P(6),  P(6),  // Phred 5-9: same as Illumina
+        P(15), P(15), P(15), P(15), P(15), // Phred 10-14: same as Illumina
+        P(15), P(15), P(15), P(15), P(15), // Phred 14-19: same as Illumina
+        P(22), P(22), P(22), P(22), P(22), // Phred 20-24: same as Illumina
+        P(27), P(27), P(27), P(27), P(27), // Phred 25-29: same as Illumina
+        P(33), P(33), P(33), P(33), P(33), // Phred 30-34: same as Illumina
+        P(37), P(37), P(37), P(37), P(37), // Phred 35-39: same as Illumina
+        P(42), P(42), P(42), P(42), P(42), // Phred 40-44
+        P(47), P(47), P(47), P(47), P(47), // Phred 45-49
+        P(52), P(52), P(52), P(52), P(52), // Phred 50-54
+        P(57), P(57), P(57), P(57), P(57), // Phred 59-59
+        P(62), P(62), P(62), P(62), P(62), // Phred 60-64
+        P(67), P(67), P(67), P(67), P(67), // Phred 65-69
+        P(72), P(72), P(72), P(72), P(72), // Phred 70-74
+        P(77), P(77), P(77), P(77), P(77), // Phred 74-79
+        P(82), P(82), P(82), P(82), P(82), // Phred 80-84
+        P(87), P(87), P(87), P(87), P(87), // Phred 85-89
+        P(91), P(91), P(91),               // Phred 90-92
+        P(93),                             // Phred 93: keep maximum value as is (common in Pac Bio)
 
-#   define PHRED(i) ((i)-33)
-
-    // one time initialization
-    if (!phread_mapper_initialized) {
-        for (unsigned i=0; i < 256; i++) {
-            if (i <= 34) phred_mapper[i]=i;  // ASCII 0->34 unchanged
-            else if (PHRED(i) >= 2  && PHRED(i) <= 9 ) phred_mapper[i] = 33 + 6;
-            else if (PHRED(i) >= 10 && PHRED(i) <= 19) phred_mapper[i] = 33 + 15;
-            else if (PHRED(i) >= 20 && PHRED(i) <= 24) phred_mapper[i] = 33 + 22;
-            else if (PHRED(i) >= 25 && PHRED(i) <= 29) phred_mapper[i] = 33 + 27;
-            else if (PHRED(i) >= 30 && PHRED(i) <= 34) phred_mapper[i] = 33 + 33;
-            else if (PHRED(i) >= 35 && PHRED(i) <= 39) phred_mapper[i] = 33 + 37;
-            else if (PHRED(i) >= 40                  ) phred_mapper[i] = 33 + 40;
-        }
-        phread_mapper_initialized = true;
-    }
+        // non Phread ASCII 127-255 - unchanged
+        127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,
+        157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,
+        187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,
+        217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,
+        247,248,249,250,251,252,253,254,255
+    };
 
     // do the mapping
     for (; len; str++, len--) *str = (char)phred_mapper[(uint8_t)*str];
