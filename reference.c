@@ -1188,7 +1188,7 @@ static void ref_allocate_loaded_genome (void)
                       .last_pos = genome_size - 1 };
 
     bit_array_alloc (&genome.ref, genome_size * 2); // 2 bits per base
-    bit_array_clear_all (&genome.ref); // make sure the gaps between the contigs are zero
+    bit_array_clear_all (&genome.ref); // make sure the gaps between the contigs are zero as "matches" can covered gaps as well
 
     // we don't need is_set if we're compressing with REF_EXTERNAL 
     bool has_is_set = primary_command == PIZ || (primary_command == ZIP && flag_reference == REF_EXT_STORE);
