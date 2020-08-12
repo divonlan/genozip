@@ -324,6 +324,7 @@ static const RefContig *ref_contigs_get_contig_do (WordIndex chrom_index, int32_
     else    
         return ref_contigs_get_contig_do (chrom_index, mid_i+1, end_i);
 }
+
 const RefContig *ref_contigs_get_contig (WordIndex chrom_index, bool soft_fail)
 {
     const RefContig *rc = ref_contigs_get_contig_do (chrom_index, 0, loaded_contigs.len-1);
@@ -335,7 +336,9 @@ const RefContig *ref_contigs_get_contig (WordIndex chrom_index, bool soft_fail)
 
 PosType ref_contigs_get_genome_size (void)
 {
-    // note: contigs are sorted by chrom and pos within chrom, NOT by gpos! (chroms might have been added out of order)
+    if (!loaded_contigs.len) return 0;
+
+    // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
     ARRAY (RefContig, rc, loaded_contigs);
     RefContig *rc_with_largest_gpos = &rc[0];
     for (uint64_t i=1; i < loaded_contigs.len; i++) 

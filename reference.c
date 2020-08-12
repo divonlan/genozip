@@ -1188,18 +1188,21 @@ static void ref_allocate_loaded_genome (void)
                       .last_pos = genome_size - 1 };
 
     bit_array_alloc (&genome.ref, genome_size * 2); // 2 bits per base
-    
+    bit_array_clear_all (&genome.ref); // make sure the gaps between the contigs are zero
+
     // we don't need is_set if we're compressing with REF_EXTERNAL 
     bool has_is_set = primary_command == PIZ || (primary_command == ZIP && flag_reference == REF_EXT_STORE);
-    if (has_is_set) bit_array_alloc (&genome.is_set, genome_size); 
-
-    if (primary_command == PIZ) bit_array_clear_all (&genome.is_set); 
+    if (has_is_set) {
+        bit_array_alloc (&genome.is_set, genome_size); 
+        bit_array_clear_all (&genome.is_set); 
+    }
     
     genome_rev = (Range){ .chrom_name = CHROM_NAME_GENOME_REV, 
                           .chrom_name_len = strlen (CHROM_NAME_GENOME_REV),
                           .chrom = CHROM_GENOME_REV, 
                           .last_pos = genome_size - 1 };
     bit_array_alloc (&genome_rev.ref, genome_size * 2); 
+    bit_array_clear_all (&genome_rev.ref); // make sure the gaps between the contigs are zero
 
     // we protect genome->ref while uncompressing reference data, and genome->is_set while segging
     ref_lock_initialize_loaded_genome();
