@@ -394,13 +394,14 @@ bool txtfile_test_data (char first_char,    // first character in every header l
                     successes += test_func (&str[line_start_i], i - line_start_i);
                     num_lines_so_far++;
 
-                    if (num_lines_so_far == num_lines_to_test) break;
+                    if (num_lines_so_far == num_lines_to_test) goto done;
                 }
                 line_start_i = i+1; 
             }
         }
     }
 
+done:
     return (double)successes / (double)num_lines_so_far >= success_threashold;
 }
 
