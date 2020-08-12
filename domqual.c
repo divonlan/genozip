@@ -41,7 +41,7 @@
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
 static char domqual_has_dominant_value (VBlock *vb, LocalGetLineCallback get_line)
 {
-#   define NUM_LINES_IN_SAMPLE 4
+#   define NUM_LINES_IN_SAMPLE 5
 
     uint32_t char_counter[256] = { 0 };
     uint32_t total_len = 0;
@@ -155,30 +155,23 @@ bool domqual_convert_qual_to_domqual (VBlockP vb, LocalGetLineCallback get_line,
 // PIZ side
 //--------------
 
-// shorten a run, including handling multi-bytes run
-static inline bool shorten_run (uint8_t *run, uint32_t dec)
+// shorten a run, including handling multi-bytes run - preparing the run length for the next line, 
+// by deducting the amount that was consumed by this line
+static inline uint32_t shorten_run (uint8_t *run, uint32_t old_num_bytes, uint32_t old_runlen, uint32_t dec)
 {
-    // count bytes of this run
-    uint32_t bytes=1; 
-    for (uint8_t *b=run; *b == 255; b++) bytes++;
-
-    int32_t new_runlen = (bytes-1) * 254 + run[bytes-1] - dec;
+    int32_t new_runlen = old_runlen - dec;
     ASSERT (new_runlen >= 0, "Error in shorten_run: new_runlen=%d is out of range", new_runlen);
 
-    bool increment_start = false;
-    uint32_t new_bytes = MAX (1, ((uint32_t)new_runlen + 253) / 254); // roundup (if runlen=0, we still need 1 byte)
-    if (new_bytes < bytes) {
-        increment_start = true;
-        run++;
-    }
+    uint32_t new_num_bytes = MAX (1, ((uint32_t)new_runlen + 253) / 254); // roundup (if runlen=0, we still need 1 byte)
 
     // update run
-    for (uint32_t i=0; i < new_bytes; i++) {
+    uint32_t increment = old_num_bytes - new_num_bytes;
+    for (uint32_t i=increment; i < old_num_bytes; i++) { // strat the run bytes pushed forward (by increment), if we need less bytes
         run[i] = (new_runlen > 254 ? 255 : new_runlen);
         new_runlen -= 254;
     }
 
-    return increment_start;
+    return increment;
 }
 
 // reconstructed a run of the dominant character
@@ -187,24 +180,23 @@ static inline uint32_t domqual_reconstruct_dom_run (VBlockP vb, Context *qdomrun
     ASSERT (qdomruns_ctx->next_local < qdomruns_ctx->local.len, "Error in domqual_reconstruct_dom_run: unexpectedly reached the end of qdomruns_ctx in vb_i=%u (first_line=%u len=%u)", 
             vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len);
 
-    uint32_t runlen=0;
-    uint8_t this_byte;
+    // read the entire runlength (even bytes that are in excess of max_len)
+    uint32_t runlen=0, num_bytes;
+    uint8_t this_byte=255;
     uint32_t start_next_local = vb->contexts[SAM_QDOMRUNS].next_local;
-    do {
+    for (num_bytes=0; this_byte == 255 && qdomruns_ctx->next_local < qdomruns_ctx->local.len; num_bytes++) {
         this_byte = NEXTLOCAL (uint8_t, qdomruns_ctx); // might be 0 in beginning of line if previous line consumed entire run
         runlen += (this_byte < 255 ? this_byte : 254); // 0-254 is the length, 255 means length 254 continued in next byte
+    }
 
-        // case: a run spans multiple lines - take only what we need, and leave the rest for the next line
-        // note: if we use max_len exactly, then we still leave a run of 0 length, so next line can start with a "run" as usual
-        if (runlen >= max_len) { 
-            bool increment_start = shorten_run (ENT (uint8_t, qdomruns_ctx->local, start_next_local), max_len);
-            if (!increment_start)
-                qdomruns_ctx->next_local--; // unconsume this run as we will consume it again in the next line (but shorter)
-            
-            runlen = max_len;
-            break;
-        }
-    } while (this_byte == 255);
+    // case: a run spans multiple lines - take only what we need, and leave the rest for the next line
+    // note: if we use max_len exactly, then we still leave a run of 0 length, so next line can start with a "run" as usual
+    if (runlen >= max_len) { 
+        uint32_t increment = shorten_run (ENT (uint8_t, qdomruns_ctx->local, start_next_local), num_bytes, runlen, max_len);
+        
+        qdomruns_ctx->next_local = start_next_local + increment; // unconsume this run as we will consume it again in the next line (but shorter)
+        runlen = max_len;
+    }
 
     memset (AFTERENT (char, vb->txt_data), dom, runlen);
     vb->txt_data.len += runlen;
@@ -243,6 +235,6 @@ void domqual_reconstruct (VBlockP vb, ContextP qual_ctx)
         qual_len++;
     }
 
-    ASSERT (qual_len == vb->seq_len, "Error in domqual_reconstruct: expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u line_i=%u", 
-            qual_len, vb->seq_len, vb->vblock_i, vb->line_i);   
+    ASSERT (qual_len == vb->seq_len, "Error in domqual_reconstruct: expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u (last_line=%u, num_lines=%u) line_i=%u", 
+            qual_len, vb->seq_len, vb->vblock_i, vb->first_line + (uint32_t)vb->lines.len-1, (uint32_t)vb->lines.len, vb->line_i);   
 }
