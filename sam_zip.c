@@ -364,9 +364,8 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
         else if (cigar_op == 'D' || cigar_op == 'N') {
             unsigned ref_consumed = (flag_reference == REF_INTERNAL ? MIN (subcigar_len, range_len - next_ref)
                                                                     : subcigar_len);
-
-            next_ref         += ref_consumed;
-            subcigar_len     -= ref_consumed;
+            next_ref     += ref_consumed;
+            subcigar_len -= ref_consumed;
         }
 
         // Hard clippping (H) or padding (P) we do nothing

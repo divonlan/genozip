@@ -3,6 +3,7 @@
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include "genozip.h"
 #include <errno.h>
 #include <sys/types.h>
 #include <stdarg.h>
@@ -87,9 +88,10 @@ static void stream_abort_cannot_exec (const char *exec_name, const char *reason)
 {
     url_kill_curl();
 
-    fprintf (stderr, "%s: %s, %s needs to be installed and in the execution path.\n"
-                     "Note that %s is a separate software package that is not affiliated with genozip in any way.\n",
-             global_cmd, reason, exec_name, exec_name);  
+    fprintf (stderr, "%s: %s, %s needs to be in the execution path.\n", global_cmd, reason, exec_name);  
+
+    if (!strstr (exec_name, "genozip")) // this is NOT genozip run from main_test_after_genozip
+        fprintf (stderr, "Note that %s is a separate software package that is not affiliated with genozip in any way.\n", exec_name);  
 
     exit (99); // special code - if we are a child existing, the parent will catch this error code
 }

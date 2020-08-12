@@ -14,7 +14,7 @@ endif
 LDFLAGS     += -lpthread -lm
 
 ifdef IS_CONDA 
-	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 
+	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION="conda"
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
 
 	ifeq ($(OS),Windows_NT)

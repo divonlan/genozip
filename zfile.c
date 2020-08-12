@@ -434,11 +434,12 @@ int32_t zfile_read_section (File *file,
     
     // check that we received the section type we expect, 
     ASSERT (expected_sec_type == header->section_type,
-            "Error: Unexpected section type: expecting %s, found %s", st_name(expected_sec_type), st_name(header->section_type));
+            "Error: Unexpected section type when reading %s: expecting %s, found %s", 
+            z_name, st_name(expected_sec_type), st_name(header->section_type));
 
     ASSERT (compressed_offset == header_size || expected_sec_type == SEC_GENOZIP_HEADER, // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
-            "Error: invalid header - expecting compressed_offset to be %u but found %u. section_type=%s", 
-            header_size, compressed_offset, st_name(header->section_type));
+            "Error: invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 
+            z_name, header_size, compressed_offset, st_name(header->section_type));
 
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
     buf_alloc (vb, data, header_offset + compressed_offset + data_len, 2, "zfile_read_section", 2);
@@ -563,7 +564,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
         ASSERT (z_file->data_type == data_type, "Error: %s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
-    if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --unbind
+    if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --1d
     
     ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
             "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
