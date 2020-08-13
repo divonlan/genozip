@@ -41,6 +41,9 @@
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
 static char domqual_has_dominant_value (VBlock *vb, LocalGetLineCallback get_line)
 {
+#   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
+#   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
+#   define DOMQUAL_LINE_SAMPLE_LEN 500          // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
 #   define NUM_LINES_IN_SAMPLE 5
 
     uint32_t char_counter[256] = { 0 };
@@ -49,26 +52,48 @@ static char domqual_has_dominant_value (VBlock *vb, LocalGetLineCallback get_lin
         char *qual_data, *unused;
         uint32_t qual_data_len, unused_len;
         get_line (vb, line_i, &qual_data, &qual_data_len, &unused, &unused_len);
+    
+        if (qual_data_len > DOMQUAL_LINE_SAMPLE_LEN) qual_data_len = DOMQUAL_LINE_SAMPLE_LEN; 
+    
         total_len += qual_data_len;
 
         for (unsigned j=0; j < qual_data_len; j++)
             char_counter[(uint8_t)qual_data[j]]++;
     }
 
-    // shortcut for the common case of binned Illumina quality scores
-    if (char_counter['F'] > total_len / 2) return 'F'; 
+    unsigned threshold = MAX ((unsigned)((double)total_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL), DOMQUAL_THREADSHOLD_NUM_CHARS);
 
-    // get most frequent value
+    if (char_counter['F'] > threshold) return 'F'; // shortcut for the common case of binned Illumina quality scores
+
+    for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
+        if (char_counter[c] > threshold) return c; 
+
+    return -1; // no value is dominant
+}
+/*
+for bug 178
+static inline char domqual_get_dom (const char *qual, unsigned qual_len)
+{
 #   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
 #   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
+#   define DOMQUAL_LINE_SAMPLE_LEN 1000         // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
 
-    for (unsigned c=32; c <= 126; c++)  // printable ASCII only
-        if (((double)char_counter[c] > (double)total_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL) && char_counter[c] > DOMQUAL_THREADSHOLD_NUM_CHARS) 
-            return c; // this will be 'F' in case of binned illumina
+    uint32_t char_counter[256] = { 0 };
+    if (qual_len > DOMQUAL_LINE_SAMPLE_LEN) qual_len = DOMQUAL_LINE_SAMPLE_LEN; 
+    
+    unsigned threshold = MAX ((unsigned)((double)qual_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL), DOMQUAL_THREADSHOLD_NUM_CHARS);
 
-    return -1; // no value has more than 50% in the tested 4-line sample
+    for (unsigned i=0; i < qual_len; i++)
+        char_counter[(uint8_t)qual[i]]++;
+
+    if (char_counter['F'] >= threshold) return 'F'; // shortcut for common Illumina binning
+
+    for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
+        if (char_counter[c] > threshold) return c; 
+
+    return 0; // no value has more than 50% 
 }
-
+*/
 static inline void domqual_add_runs (Buffer *qdomruns_buf, uint32_t runlen)
 {
     // add one more bytes to represent the run
@@ -183,7 +208,7 @@ static inline uint32_t domqual_reconstruct_dom_run (VBlockP vb, Context *qdomrun
     // read the entire runlength (even bytes that are in excess of max_len)
     uint32_t runlen=0, num_bytes;
     uint8_t this_byte=255;
-    uint32_t start_next_local = vb->contexts[SAM_QDOMRUNS].next_local;
+    uint32_t start_next_local = qdomruns_ctx->next_local;
     for (num_bytes=0; this_byte == 255 && qdomruns_ctx->next_local < qdomruns_ctx->local.len; num_bytes++) {
         this_byte = NEXTLOCAL (uint8_t, qdomruns_ctx); // might be 0 in beginning of line if previous line consumed entire run
         runlen += (this_byte < 255 ? this_byte : 254); // 0-254 is the length, 255 means length 254 continued in next byte
