@@ -203,6 +203,14 @@ static void vcf_seg_store (VBlock *vb,
     if (src_buf) buf_free (src_buf);
 }
 
+static inline bool vcf_seg_test_svlen (VBlockVCF *vb, const char *svlen_str, unsigned svlen_str_len)
+{
+    int64_t svlen;
+    if (!str_get_int (svlen_str, svlen_str_len, &svlen)) return false;
+
+    int64_t last_delta = vb->contexts[VCF_POS].last_delta; // INFO_END is an alias of POS - so the last delta would be between END and POS
+    return last_delta == -svlen;
+}
 
 static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id, 
                                            const char **this_value, unsigned *this_value_len, char *optimized_snip)
@@ -222,6 +230,13 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
     // POS and END share the same delta stream - the next POS will be a delta vs this END)
     else if (dict_id.num == dict_id_INFO_END) {
         seg_pos_field ((VBlockP)vb, VCF_POS, VCF_POS, true, *this_value, *this_value_len, false); // END is an alias of POS
+        return false; // do not add to dictionary/b250 - we already did it
+    }
+
+    // if SVLEN is negative, it is expected to be minus the delta between END and POS
+    else if (dict_id.num == dict_id_INFO_SVLEN && vcf_seg_test_svlen (vb, *this_value, *this_value_len)) {
+        Context *ctx = mtf_get_ctx (vb, dict_id_INFO_SVLEN);
+        seg_by_ctx ((VBlockP)vb, (char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }, 2, ctx, *this_value_len, NULL);
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -282,7 +297,7 @@ static bool vcf_seg_special_info_subfields(VBlockP vb_, DictId dict_id,
 
                     Context *ctx = mtf_get_ctx (vb, dict_id_INFO_AC);
                     ctx->inst |= CTX_INST_NO_STONS;
-                    seg_by_ctx ((VBlockP)vb, special_snip, 4, ctx, vb->ac_len, NULL);
+                    seg_by_ctx ((VBlockP)vb, special_snip, sizeof(special_snip), ctx, vb->ac_len, NULL);
                 }
             }
 

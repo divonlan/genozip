@@ -508,6 +508,15 @@ void vcf_piz_special_AC (VBlock *vb, Context *ctx, const char *snip, unsigned sn
     RECONSTRUCT (ac_str, ac_str_len);
 }
 
+// the case where SVLEN is minus the delta between END and POS
+void vcf_piz_special_SVLEN (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
+{
+    int64_t value = -vb->contexts[VCF_POS].last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
+    char str[30];
+    unsigned str_len = str_int (value, str);
+    RECONSTRUCT (str, str_len);
+}
+
 // combine all the sections of a variant block to regenerate the variant_data, haplotype_data,
 // genotype_data and phase_data for each row of the variant block
 static void vcf_piz_reconstruct_vb (VBlockVCF *vb)

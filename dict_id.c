@@ -21,7 +21,7 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
          dict_id_FORMAT_PS=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
-         dict_id_INFO_END=0;
+         dict_id_INFO_END=0, dict_id_INFO_SVLEN=0;
 
 // SAM stuff
 uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_OPTION_LB=0, dict_id_OPTION_FI=0, dict_id_OPTION_H0=0,
@@ -97,6 +97,7 @@ void dict_id_initialize (DataType data_type)
 
         // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
         dict_id_INFO_END      = dict_id_vcf_info_sf   (dict_id_make ("END", 3)).num;
+        dict_id_INFO_SVLEN    = dict_id_vcf_info_sf   (dict_id_make ("SVLEN", 5)).num;
         dict_id_FORMAT_MIN_DP = dict_id_vcf_format_sf (dict_id_make ("MIN_DP", 6)).num;
 
         // This appears if the VCF line has a Windows-style \r\n line ending

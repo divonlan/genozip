@@ -66,10 +66,11 @@ extern void gl_deoptimize (char *data, int len);
 // global parameters - set before any thread is created
 extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;
 
-#define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_AC }
+#define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_AC, vcf_piz_special_SVLEN }
 SPECIAL (VCF, 0, REFALT, vcf_piz_special_REFALT);
 SPECIAL (VCF, 1, AC,     vcf_piz_special_AC);
-#define NUM_VCF_SPECIAL 2
+SPECIAL (VCF, 2, SVLEN,  vcf_piz_special_SVLEN);
+#define NUM_VCF_SPECIAL 3
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias                           maps to this ctx          */  \
