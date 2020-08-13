@@ -43,6 +43,12 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
         if (vcf_header->data[i] == '\t')
             tab_count++;
         
+        // some times files have spaces instead of \t 
+        else if (vcf_header->data[i] == ' ') {
+            tab_count++;
+            while (i >= 1 && vcf_header->data[i-1]==' ') i--; // skip run of spaces
+        }
+
         // if this is the beginning of field header line 
         else if (vcf_header->data[i] == '#' && (i==0 || vcf_header->data[i-1] == '\n' || vcf_header->data[i-1] == '\r')) {
         
