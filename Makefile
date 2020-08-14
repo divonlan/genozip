@@ -55,7 +55,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h \
              buffer.h file.h context.h seg.h text_license.h version.h compressor.h stats.h domqual.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
-			 reference.h ref_private.h ref_lock.h refhash.h aligner.h \
+			 reference.h ref_private.h refhash.h aligner.h \
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_unistd.h \
@@ -382,6 +382,9 @@ endif # Darwin
 test:
 	@cat test.sh | tr -d "\r" | bash -
 
+clean-test.sh-files: 
+	@rm -f unix-nl.* windows-nl.* copy.* test-output.genozip td/*.genozip
+
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) *.debug-o
@@ -391,9 +394,9 @@ clean-optimized:
 	@echo Cleaning up optimized
 	@rm -f $(OBJS) $(EXECUTABLES) *.o
 
-clean: clean-debug clean-optimized
+clean: clean-debug clean-optimized clean-test.sh-files
 	@echo Cleaning up
-	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d
+	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump
 
 .PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp
 
