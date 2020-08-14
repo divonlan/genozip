@@ -61,7 +61,7 @@ test_bam() {
 }
 
 # minimal files - expose edge cases where fields have only 1 instance
-files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf genome_23andme_Full_minimal.txt)
+files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.genome_Full.me23.txt)
 for file in ${files[@]}; do
     test_header "$file - minimal file test"
 
@@ -74,7 +74,7 @@ done
 
 test_bam test-file.sam
 
-files=(test-file.vcf test-file.sam test-file.fq test-file.fa test-file.gvf genome_23andme_Full_test-file.txt)
+files=(test-file.vcf test-file.sam test-file.fq test-file.fa test-file.gvf test-file.genome_Full.me23.txt)
 for file in ${files[@]}; do
     test_header "$file - basic test - Unix-style end-of-line"
 
@@ -103,7 +103,7 @@ for file in ${files[@]}; do
     test_header "$file - redirected from stdin"
     cat $file | ./genozip $1 --test --force --output $output --input-type ${file#*.} - || exit 1
 
-    if [ $file != test-file.sam ] && [ $file != genome_23andme_Full_test-file.txt ]; then
+    if [ $file != test-file.sam ] && [ $file != test-file.genome_Full.me23.txt ]; then
         allow_compressed=1;
     else 
         allow_compressed=0;
