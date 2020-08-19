@@ -13,6 +13,7 @@
 #define RA_MISSING_RA_MIN (MAX_POS + 1)
 #define RA_MISSING_RA_MAX (-1)
 
+extern void random_access_initialize(void);
 extern void random_access_update_chrom (VBlockP vb, WordIndex chrom_node_index, const char *chrom_name, unsigned chrom_name_len);
 extern void random_access_update_pos (VBlockP vb, DidIType did_i_pos);
 extern void random_access_increment_last_pos (VBlockP vb, PosType increment);

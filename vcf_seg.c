@@ -450,6 +450,8 @@ static void vcf_seg_haplotype_area (VBlockVCF *vb, ZipDataLineVCF *dl, const cha
             ht_data[ht_i] = '*';
     }
 
+    ASSSEG (!len, str, "Invalid sample genotype in sample_i=%u", sample_i);
+
     if (ploidy==1 && vb->ploidy > 1 && dl->phase_type == PHASE_MIXED_PHASED)
         vb->line_phase_data.data[sample_i] = (char)PHASE_HAPLO;
 }

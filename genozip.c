@@ -41,6 +41,7 @@
 #include "reference.h"
 #include "refhash.h"
 #include "context.h"
+#include "random_access.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -939,6 +940,8 @@ int main (int argc, char **argv)
 {
     //TEST();exit(0);
     arch_initialize();
+    buf_initialize();
+    random_access_initialize();
 
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows
@@ -952,8 +955,6 @@ int main (int argc, char **argv)
     else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
     else                                    exe_type = EXE_GENOZIP; // default
     
-    buf_initialize();
-
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     bool is_short[256] = { 0 }; // indexed by character of short option.

@@ -41,10 +41,10 @@ test_count_genocat_lines() {
     test_header "$cmd"
     ./genozip $1 -fo $output || exit 1
     wc=`$cmd | wc -l`
-    if [[ $wc != $3 ]]; then
+    if (( $wc != $3 )); then
         echo "FAILED - expected $3 lines, but getting $wc"
         exit 1
-    fi
+    fi  
 }
 
 test_bam() {
@@ -85,14 +85,11 @@ for file in ${files[@]}; do
 
     test_header "$file - Window-style end-of-line"
 
-    if [ -n "$is_mac" ]; then
-        sed 's/$/\13/g' unix-nl.$file > windows-nl.$file || exit 1 # note: sed on mac doesn't recognize \r
-    else
+    if [ ! -n "$is_mac" ]; then  # note: sed on mac doesn't recognize \r
         sed 's/$/\r/g' unix-nl.$file > windows-nl.$file || exit 1 # note: sed on mac doesn't recognize \r
+        ./genozip $1 windows-nl.$file -ft -o $output || exit 1
+        rm unix-nl.$file windows-nl.$file
     fi
-
-    ./genozip $1 windows-nl.$file -ft -o $output || exit 1
-    rm unix-nl.$file windows-nl.$file
 
     test_header "$file - as URL"
     ./genozip $1 file://${path}$file -ft -o $output || exit 1
@@ -266,7 +263,7 @@ cp td/test.GFX0241869.filtered.snp.vcf $file2
 ./genounzip $1 -t -e $hg19 --unbind $output || exit 1
 rm -f $file1 $file2 $output
 
-test_header "Testing multiple VCF with --REFERENCE (hg19)" 
+test_header "Testing multiple VCF with --REFERENCE using hg19" 
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --REFERENCE $hg19 td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf td/test.GFX0241869.filtered.snp.vcf || exit 1
 ./genounzip $1 -t td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip td/test.GFX0241869.filtered.snp.vcf.genozip || exit 1

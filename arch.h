@@ -38,7 +38,7 @@ extern void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool 
                           ASSERT (!ret, "Error in %s: pthread_mutex_lock failed: %s", __FUNCTION__, strerror (ret)); }
 
 #define mutex_unlock(m) { int ret = pthread_mutex_unlock (&m); \
-                          ASSERT (!ret, "Error in %s: pthread_mutex_lock failed: %s", __FUNCTION__, strerror (ret)); }
+                          ASSERT (!ret, "Error in %s: pthread_mutex_unlock failed: %s", __FUNCTION__, strerror (ret)); }
 
 // -----------
 // spinlock stuff

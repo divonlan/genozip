@@ -17,9 +17,11 @@
             //"program": "${workspaceFolder}/genols-debug.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             
-            //"args": ["--make-ref", "test-file-ref.fa", "-f", "--show-ref-con"],
-            "args": ["-fmEdata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "bug.sam"],
-            //"args": ["-t", "bug.sam.genozip"],
+            "args": ["td/test.NA12878.sorted.vcf", "-mf"],
+            //"args": ["test-file-domqual.fq.genozip", "-t"],
+            //"args": ["vb9.sam", "-mf@1", "-edata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip"],
+            //"args": ["-fmwEdata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "bug.sam"],
+            //"args": ["-fojunk.bam", "junk.genozip"],
             //"args": ["--show-ref-cont", "td/test.transfly-unsorted.sam.genozip", "-t"],
             //"args": ["-fEdata/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "td/test.transfly-unsorted.sam", "-ft"],
 

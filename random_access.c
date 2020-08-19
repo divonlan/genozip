@@ -16,7 +16,7 @@
 MUTEX (ra_mutex);
 
 void random_access_initialize(void)
-{
+{    
     mutex_initialize (ra_mutex);
 }
 
