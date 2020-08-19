@@ -243,14 +243,14 @@ rm -f td/*.genozip
 ./genozip $1 -f --md5 --REFERENCE $GRCh38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam -o $output || exit 1
 ./genounzip $1 -t $output || exit 1
 
-test_header "Testing paired FASTQ with --reference, FASTQs compressed with xz and bzip2"
+test_header "Testing paired FASTQ with --reference"
 rm -f td/*.genozip
-./genozip $1 -f --md5 -e $GRCh38 --pair td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.xz -o td/pair.genozip || exit 1
+./genozip $1 -f --md5 -e $GRCh38 --pair td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.bz2 -o td/pair.genozip || exit 1
 ./genounzip $1 -t -e $GRCh38 td/pair.genozip || exit 1
 
 test_header "Testing paired FASTQ with --REFERENCE"
 rm -f td/*.genozip
-./genozip $1 --force -m2E $GRCh38 --output td/pair.genozip td/test.divon-R1.100K.fq.bz2 td/test.divon-R2.100K.fq.xz || exit 1
+./genozip $1 --force -m2E $GRCh38 --output td/pair.genozip td/test.divon-R1.100K.fq.bz2 td/test.divon-R2.100K.fq.bz2 || exit 1
 ./genounzip $1 -t td/pair.genozip || exit 1
 
 test_header "Testing multiple bound VCF with --reference (hg19), and unbind"
