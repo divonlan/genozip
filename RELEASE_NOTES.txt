@@ -135,6 +135,9 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 5.0.7
 - bug fixes
 
+5.0.9
+- fix bug with compressing VCF / GVF with an INFO / ATTRS field of '.'
+
 6.0.0
 - Added new data type for reference files - and an option for creating a reference file from a FASTA - --make-reference
 - Added compression against reference for FASTQ, SAM and VCF - new options --reference and --REFERENCE
