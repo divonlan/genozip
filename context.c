@@ -37,7 +37,7 @@ unzip:
 #include "seg.h"
 #include "dict_id.h"
 #include "reference.h"
-#include "arch.h"
+#include "mutex.h"
 
 #define INITIAL_NUM_NODES 10000
 

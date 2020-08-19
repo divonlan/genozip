@@ -21,7 +21,7 @@
 #include "vblock.h"
 #include "strings.h"
 #include "compressor.h"
-#include "arch.h"
+#include "mutex.h"
 
 // globals
 File *z_file   = NULL;

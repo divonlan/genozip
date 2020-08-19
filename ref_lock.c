@@ -4,7 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "arch.h"
+#include "mutex.h"
 #include "ref_private.h"
 
 #define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K

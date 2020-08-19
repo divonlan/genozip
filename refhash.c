@@ -4,7 +4,7 @@
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "arch.h"
+#include "mutex.h"
 #include "reference.h"
 #include "sections.h"
 #include "buffer.h"

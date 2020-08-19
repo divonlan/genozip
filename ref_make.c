@@ -4,7 +4,7 @@
 #include "fast_private.h"
 #include "ref_private.h"
 #include "compressor.h"
-#include "arch.h"
+#include "mutex.h"
 #include "refhash.h"
 #include "random_access.h"
 

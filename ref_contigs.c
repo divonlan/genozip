@@ -12,7 +12,7 @@
 #include "endianness.h"
 #include "strings.h"
 #include "vblock.h"
-#include "arch.h"
+#include "mutex.h"
 #include "seg.h"
 
 static Buffer loaded_contigs              = EMPTY_BUFFER; // array of RefContig

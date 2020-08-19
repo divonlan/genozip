@@ -10,7 +10,7 @@
 #include "file.h"
 #include "endianness.h"
 #include "regions.h"
-#include "arch.h"
+#include "mutex.h"
 #include "zfile.h"
 
 MUTEX (ra_mutex);

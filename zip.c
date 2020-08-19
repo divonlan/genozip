@@ -23,7 +23,7 @@
 #include "reference.h"
 #include "refhash.h"
 #include "progress.h"
-#include "arch.h"
+#include "mutex.h"
 #include "fastq.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)

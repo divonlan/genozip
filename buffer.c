@@ -14,8 +14,7 @@
 #include "strings.h"
 #include "reference.h"
 #include "bit_array.h"
-#include "arch.h"
-
+#include "mutex.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 

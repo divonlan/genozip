@@ -21,7 +21,7 @@
 #include "piz.h"
 #include "zip.h"
 #include "license.h"
-#include "arch.h"
+#include "mutex.h"
 #include "strings.h"
 #include "dict_id.h"
 #include "reference.h"

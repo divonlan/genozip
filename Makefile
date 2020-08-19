@@ -55,7 +55,7 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h \
              buffer.h file.h context.h seg.h text_license.h version.h compressor.h stats.h domqual.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h \
-			 reference.h ref_private.h refhash.h aligner.h \
+			 reference.h ref_private.h refhash.h aligner.h mutex.h \
 			 arch.h license.h data_types.h base64.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fastq.h fast_private.h gff3.h \
              compatibility/visual_c_getopt.h compatibility/visual_c_unistd.h \

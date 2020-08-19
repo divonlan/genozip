@@ -154,17 +154,3 @@ void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool *initia
 
     *initialized = true;
 }
-
-// initialize spin, if its not initialized already
-void spin_initialize_do (const char *name, pthread_spinlock_t *spin, bool *initialized)
-{
-    if (*initialized) return;
-
-#ifdef __APPLE__
-    *spin = OS_UNFAIR_LOCK_INIT;
-#else
-    unsigned ret = pthread_spin_init (spin, PTHREAD_PROCESS_PRIVATE);
-    ASSERT (!ret, "Error: pthread_spin_init failed for %s: %s", name, strerror (ret));
-#endif
-    *initialized = true;
-}

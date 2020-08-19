@@ -19,7 +19,7 @@
 #include "vblock.h"
 #include "context.h"
 #include "hash.h"
-#include "arch.h"
+#include "mutex.h"
 #include "sections.h"
 #include "profiler.h"
 #include "bit_array.h"

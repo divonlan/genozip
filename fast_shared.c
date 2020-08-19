@@ -8,7 +8,7 @@
 #include "endianness.h"
 #include "piz.h"
 #include "dict_id.h"
-#include "arch.h"
+#include "mutex.h"
 #include "strings.h"
 #include "compressor.h"
 #include "regions.h"

@@ -12,7 +12,7 @@
 #include "endianness.h"
 #include "strings.h"
 #include "vblock.h"
-#include "arch.h"
+#include "mutex.h"
 #include "seg.h"
 
 typedef struct { WordIndex user_file_chrom, alt_chrom_in_ref_file; } AltChrom;

@@ -15,7 +15,7 @@
 #include "base250.h"
 #include "endianness.h"
 #include "strings.h"
-#include "arch.h"
+#include "mutex.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 
