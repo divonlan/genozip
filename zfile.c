@@ -433,7 +433,8 @@ int32_t zfile_read_section (File *file,
     unsigned data_len = MAX (data_compressed_len, data_encrypted_len);
     
     // check that we received the section type we expect, 
-    ASSERT (expected_sec_type == header->section_type,
+    ASSERT (expected_sec_type == header->section_type || 
+            (expected_sec_type == SEC_GENOZIP_HEADER && header->flags == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where flags is now
             "Error: Unexpected section type when reading %s: expecting %s, found %s", 
             z_name, st_name(expected_sec_type), st_name(header->section_type));
 
@@ -553,6 +554,15 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     
     SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
 
+    ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
+            "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
+            "You might want to consider upgrading genozip to the newest version.\n",
+            z_name, header->genozip_version, GENOZIP_CODE_VERSION);
+
+    // in version 6, we canceled backward compatability with v1-v5
+    ASSERT (header->genozip_version >= 6, "Error: %s was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
+            z_name, header->genozip_version, header->genozip_version);
+
     data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "Error in zfile_read_genozip_header: unrecognized data_type=%d", data_type);
 
@@ -566,16 +576,6 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --1d
     
-    ASSERT (header->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 
-            "Error: %s cannot be openned because it was compressed with a newer version of genozip (version %u.x.x) while the version you're running is older (version %s).\n"
-            "You might want to consider upgrading genozip to the newest version.\n"
-            "Note: genozip is backward-compatible: newer versions of genozip can always decompress files compressed with older versions",
-            z_name, header->genozip_version, GENOZIP_CODE_VERSION);
-
-    // in version 6, we canceled backward compatability with v1-v5
-    ASSERT (header->genozip_version >= 6, "Error: %s was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
-            z_name, header->genozip_version, header->genozip_version);
-
     ASSERT (header->encryption_type != ENCRYPTION_TYPE_NONE || !crypt_have_password(), 
             "Error: password provided, but file %s is not encrypted", z_name);
 
