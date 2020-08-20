@@ -21,7 +21,7 @@ extern void str_to_lowercase (char *s);
 extern char *str_size (int64_t size, char *str /* out */);
 extern char *str_uint_commas (int64_t n, char *str /* out */);
 extern unsigned str_int (int64_t n, char *str /* out */);
-extern /* _Bool */ bool str_get_int (const char *str, unsigned str_len, int64_t *value);
+extern _Bool str_get_int (const char *str, unsigned str_len, int64_t *value); // note: for a reason beyond me, Docker hub won't compile if its "bool" and not "_Bool"
 #define str_is_int(str,str_len) str_get_int ((str), (str_len), NULL)
 
 #define POINTER_STR_LEN 19
