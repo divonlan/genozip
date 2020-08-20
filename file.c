@@ -96,7 +96,7 @@ static char *file_compressible_extensions(void)
 {
     static char s[1000] = {0};
 
-    for (DataType dt=0; dt < NUM_DATATYPES; dt++) {
+    for (DataType dt=1; dt < NUM_DATATYPES; dt++) { // start from 1, excluding DT_REFERENCE
         sprintf (&s[strlen (s)], "\n%s: ", dt_name (dt));
 
         for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
