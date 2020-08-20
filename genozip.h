@@ -165,6 +165,11 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
                         "ACGT", "~CGT", "FF12", "FF13", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
                         "BGZ",  "XZ",   "BCF",  "BAM" , "CRAM", "ZIP" }
 
+// extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
+#define COMP_ALG_EXTS  {"+", "+.gz", "+.bz",  "+", "+", "+", "+", "+", "+", "+", \
+                        "+", "+", "+", "+", "+", "+", "+", "+", "+", "+", \
+                        "+.bgz", "+.xz", "-.bcf", "-.bam", "-.cram", "+.zip" }
+
 #define COMPRESSOR_CALLBACK(func) \
 extern void func (VBlockP vb, uint32_t vb_line_i, \
                   char **line_data_1, uint32_t *line_data_len_1,\

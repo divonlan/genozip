@@ -446,9 +446,9 @@ void txtfile_write_one_vblock (VBlockP vb)
         Md5Hash piz_hash_so_far = md5_snapshot (&txt_file->md5_ctx_bound);
         ASSERTW (md5_is_equal (vb->md5_hash_so_far, piz_hash_so_far), 
                 "MD5 of reconstructed vblock=%u (%s) differs from original file (%s). To see bad vblock:\n"
-                "head -n%u %s | tail -n%u > bug%s", vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), 
+                "%s %s | head -n%u | tail -n%u > bug%s", vb->vblock_i, md5_display (piz_hash_so_far), md5_display (vb->md5_hash_so_far), 
+                file_viewer (txt_file), file_guess_original_filename (txt_file), 
                 DTP (line_height) * (vb->first_line + (uint32_t)vb->lines.len - 1), 
-                txt_name, 
                 DTP (line_height) * (uint32_t)vb->lines.len,
                 file_plain_text_ext_of_dt (vb->data_type));
     }
@@ -570,7 +570,8 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-
+    txt_file->comp_alg             = header->compression_type;
+    
     if (is_first_txt || flag_unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);
 

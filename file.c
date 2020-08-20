@@ -832,19 +832,44 @@ const char *ft_name (FileType ft)
     return type_name (ft, &file_exts[ft], sizeof(file_exts)/sizeof(file_exts[0]));
 }
 
-const char *file_viewer (File *file)
+const char *file_viewer (const File *file)
 {
     static const char *viewer[NUM_COMPRESSION_ALGS] = { 
-        "cat", "gunzip -d -c", "bzip2 -d -c", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 
-        "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 
-        "gunzip -d -c",   // bgz
-        "xz -d -c",       // xz
-        "bcftools -Ov --version",  // bcf
-        "samtools view -h -OSAM --threads 2", // bam
-        "N/A", // cram
-        "unzip -p" };  // zip
+        /* none */ "cat", 
+        /* gz   */ "gunzip -c", 
+        /* bz2  */ "bzip2 -d -c", 
+        "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 
+        /* bgz  */ "gunzip -c",   
+        /* xz   */ "xz -d -c",    
+        /* bcf  */ "bcftools view", 
+        /* bam  */ "samtools view -h --threads 2",
+        /* cram */ "samtools view -h --threads 2",
+        /* zip  */ "unzip -p" };  // zip
 
     return viewer[file->comp_alg];
+}
+
+// PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
+const char *file_guess_original_filename (const File *file)
+{
+    static const char *comp_alg_exts[NUM_COMPRESSION_ALGS] = COMP_ALG_EXTS; 
+
+    if (file->comp_alg == COMP_NONE) return file->name;
+
+    unsigned len = strlen (file->name) + 10;
+    char *org_name = malloc (len);
+    strcpy (org_name, file->name);
+
+    // remove existing extension if needed (eg when replacing .sam with .bam)
+    if (comp_alg_exts[file->comp_alg][0] == '-') {
+        char *last_dot = strrchr (org_name, '.');
+        if (last_dot) *last_dot = 0;
+    }
+
+    // add new extension
+    strcpy (&org_name[strlen(org_name)], &comp_alg_exts[file->comp_alg][1]);
+
+    return org_name;
 }
 
 const char *file_plain_ext_by_dt (DataType dt)

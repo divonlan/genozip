@@ -319,7 +319,8 @@ extern FileType file_get_z_ft_by_dt (DataType dt);
 extern const char *file_plain_ext_by_dt (DataType dt);
 
 extern const char *ft_name (FileType ft);
-extern const char *file_viewer (File *file);
+extern const char *file_viewer (const File *file);
+extern const char *file_guess_original_filename (const File *file);
 
 #define FILENAME_STDIN  "(stdin)"
 #define FILENAME_STDOUT "(stdout)"
