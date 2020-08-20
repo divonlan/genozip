@@ -36,17 +36,18 @@ The command line options are similar to gzip and samtools/bcftools, so if you ar
 <b><i>Creating a reference file:</i></b><br>
 <b>genozip</b> --make-reference <i>myfasta.fa</i><br>
 <br>
-<b><i>Compressing a FASTQ, BAM or VCF file(s) with a reference (note: the reference is optional, but achieves much better compression):</i></b><br>
+<b><i>Compressing a FASTQ, SAM/BAM or VCF file(s) with a reference:</i></b><br>
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysample1.fq mysample2.fq mysample3.fq<br>
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysample.bam<br>
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysamples.vcf.gz<br>
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> *    <--- compresses all files in the current directory<br>
 <br>
 Notes:<br>
-1. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
-2. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
-3. Compression of BAM and CRAM (but not SAM) files requires samtools to be installed<br>
-4. Use --REFERENCE instead of --reference to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with genounzip without need of the reference file.<br>
+1. genozip can compress with or without a refernece - using a reference often achieves much better compression<br>
+2. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
+3. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
+4. Compression of BAM and CRAM (but not SAM) files requires samtools to be installed<br>
+5. Use --REFERENCE instead of --reference to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with genounzip without need of the reference file.<br>
 <br>
 <b><i>Compressing and uncompressing paired-end reads with --pair - better than compressing FASTQs individually</i></b><br>
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> --pair mysample-R1.fastq.gz mysample-R2.fastq.gz<br>
@@ -64,6 +65,7 @@ my-sam-outputing-method | <b>genozip</b> - --input sam --output <i>mysample.sam.
 Notes:<br>
 1. --regions works with VCF, SAM/BAM, FASTA ; --grep works with FASTQ, FASTA ; --samples works with VCF<br> 
 2. There is no need for a separate indexing step or index file<br>
+3. Many more options (see --help for full list): --no-header ; --header-only ; --sequential ; --list-chroms ; --drop-genotypes ; --GT-only<br>
 <br>
 <b><i>Binding mutiple files into a single genozip file & unbinding:</i></b><br>
 <b>genozip</b> <i>*.fq.gz</i> -o <i>all-samples.fq.genozip</i> <-- binds all .fq.gz files in the current directory<br>
