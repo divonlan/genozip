@@ -219,7 +219,7 @@ decrement-version:
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
-	@echo "Generating meta.yaml (for conda)"
+	@echo "Generating conda/meta.yaml"
 	@(  sed /__README_MD__/Q conda/meta.template.yaml ; \
 	    cat README.md | sed "s/<.\{1,3\}>//g" | grep -v "<!" | sed 's/^/    /' ; \
 		sed '0,/__README_MD__/d' conda/meta.template.yaml \
@@ -229,18 +229,27 @@ conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 		grep -v "^#" \
 		> $@
 
+conda/README.md: conda/README.template.md html-to-md.sed
+	@echo "Generating conda/README.md"
+	@(  sed /__README_MD__/Q conda/README.template.md ; \
+	    ./html-to-md.sed README.md | grep -v "<!" ; \
+		sed '0,/__README_MD__/d' conda/README.template.md \
+	 ) | \
+		grep -v "^#" \
+		> $@
+
 #CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
 CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
 
 # publish to conda-forge 
-conda/.conda-timestamp: conda/meta.yaml conda/build.sh conda/bld.bat
+conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld.bat
 	@echo "Publishing to conda-forge"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo " "
 	@echo "Copying meta.yaml build.sh bld.bat to conda-forge"
-	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
+	@cp conda/meta.yaml conda/build.sh conda/bld.bat conda/README.md $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
-	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml build.sh bld.bat; git push)
+	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml README.md build.sh bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)

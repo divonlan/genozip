@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<!--                                                                                                    -->
-<!-- README.md                                                                                          -->
-<!-- Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>                                              -->
-<!-- Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt -->
-<!--                                                                                                    -->
-<!-- This file needs to be compliant to both Markdown and HTML. It is:                                  -->
-<!-- 1. rendered as README.md by github                                                                 -->
-<!-- 2. copied as HTML to the Mac installer                                                             -->
-<!-- 3. copied into meta.yaml, after removing all the HTML stuff                                        -->
-<!-- 4. rendered as README.md in Docker Hub                                                             -->
-<!--                                                                                                    -->
+<!--                                                                                                      -->
+<!-- README.md                                                                                            -->
+<!-- Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>                                                -->
+<!-- Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt   -->
+<!--                                                                                                      -->
+<!-- This file needs to be compliant to both Markdown and HTML. It is:                                    -->
+<!-- 1. rendered as README.md by github                                                                   -->
+<!-- 2. copied as HTML to the Mac installer                                                               -->
+<!-- 3. copied into meta.yaml, after removing all the HTML stuff                                          -->
+<!-- 4. rendered as README.md in Docker Hub                                                               -->
+<!-- 5. converted to Markdown and embedded in conda/README.template.md to generate conda feedstock README -->
+<!--                                                                                                      -->
 <h1>genozip</h1><br> 
 <br>
 (also available on <b>Conda</b> and <b>Docker Hub</b>)<br>

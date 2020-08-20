@@ -82,4 +82,4 @@ windows-nl.*
 test.*
 docs/*
 utils/*
-
+conda/README.md
