@@ -239,7 +239,8 @@ conda/README.md: conda/README.template.md html-to-md.sed
 		> $@
 
 #CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
-CONDA_RECIPE_DIR = ../genozip-feedstock/recipe
+CONDA_FEEDSTOCK  = ../genozip-feedstock
+CONDA_RECIPE_DIR = $(CONDA_FEEDSTOCK)/recipe
 
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld.bat
@@ -247,9 +248,10 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo " "
 	@echo "Copying meta.yaml build.sh bld.bat to conda-forge"
-	@cp conda/meta.yaml conda/build.sh conda/bld.bat conda/README.md $(CONDA_RECIPE_DIR)
+	@cp conda/README.md $(CONDA_FEEDSTOCK)
+	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
-	@(cd $(CONDA_RECIPE_DIR); git commit -m "update" meta.yaml README.md build.sh bld.bat; git push)
+	@(cd $(CONDA_FEEDSTOCK); git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)
