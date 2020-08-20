@@ -243,11 +243,11 @@ CONDA_FEEDSTOCK  = ../genozip-feedstock
 CONDA_RECIPE_DIR = $(CONDA_FEEDSTOCK)/recipe
 
 # publish to conda-forge 
-conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld.bat
+conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld.bat 
 	@echo "Publishing to conda-forge"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo " "
-	@echo "Copying meta.yaml build.sh bld.bat to conda-forge"
+	@echo "Copying $^ to conda feedstock"
 	@cp conda/README.md $(CONDA_FEEDSTOCK)
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
