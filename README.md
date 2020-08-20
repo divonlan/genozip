@@ -15,7 +15,7 @@
 <br>
 (also available on <b>Conda</b> and <b>Docker Hub</b>)<br>
 <br>
-<b>genozip</b> is a compressor for genomic files - it compresses VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --input --help').<br>
+<b>genozip</b> is a compressor for genomic files - it compresses FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF and 23andMe files. If can even compress them if they are already compressed with .gz .bz2 .xz (for full list of supported file types see 'genozip --input --help').<br>
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
@@ -72,13 +72,13 @@ Notes:<br>
 <b>genozip</b> <i>*.fq.gz</i> -o <i>all-samples.fq.genozip</i> <-- binds all .fq.gz files in the current directory<br>
 <b>genounzip</b> <i>my-project.fq.genozip</i> --unbind <br>
 <br>
-<b><i>Even better compression, with some minor modifications of the data (therefore not lossless, see --help for details):</i></b><br>
+<b><i>Compressing even better, with some minor modifications of the data (therefore not lossless, see --help for details):</i></b><br>
 <b>genozip</b> <i>file.bam</i> --optimize <br>
 <br>
-<b><i>Faster compression, sacrificing a bit of compression ratio:</i></b><br>
+<b><i>Compressing faster, sacrificing a bit of compression ratio:</i></b><br>
 <b>genozip</b> <i>file.bam</i> --fast <br>
 <br>
-<b><i>Encryption (256 bit AES):</i></b><br>
+<b><i>Encrypting (256 bit AES):</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>
 <b>genounzip</b> <i>file.vcf.genozip</i> --password <i>abc</i> <br>
 <br>
@@ -86,7 +86,7 @@ Notes:<br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
 <b>genounzip</b> <i>file.vcf.genozip</i> --md5 <br>
 <br>
-<b><i>Compress and then verify that the compressed file decompresses correctly:</i></b><br>
+<b><i>Compressing and then verifying that the compressed file decompresses correctly:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
 <br>
 <b><i>Citing</i></b><br>
