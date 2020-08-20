@@ -67,7 +67,7 @@ about:
   license_file: 
     - LICENSE.non-commercial.txt
     - LICENSE.commercial.txt
-  summary: Compressor for genomic files (VCF/BCF, SAM/BAM, fastq, fasta, GVF, 23andMe), up to 5x better than gzip and faster too
+  summary: Compressor for genomic files (FASTQ, SAM/BAM/CRAM, VCF/BCF, FASTA, GVF, 23andMe), up to 5x better than gzip and faster too
   description: |
 __README_MD__
 
