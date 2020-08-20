@@ -27,7 +27,26 @@ The command line options are similar to gzip and bcftools, so if you're familiar
 <b>genols</b>    - show metadata of one or more files or the entire directory <br>
 <b>genocat</b>   - view one or more files <br>
 <br>
-<b><i>Some advanced options:</i></b><br>
+<b><i>Some examples:</i></b><br>
+<br>
+<b><i>Creating a reference file:</i></b><br>
+<b>genozip</b> --make-reference <i>myfasta.fa</i>
+<br>
+<b><i>Compressing a FASTQ, BAM or VCF file(s) with a reference (note: the reference is optional, but achieves much better compression):</i></b><br>
+<b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysample.fq<br>
+<b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysample.bam<br>
+<b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysamples.vcf<br>
+<b>genozip</b> --reference <i>myfasta.ref.genozip</i> *    <--- compresses all files in the current directory<br>
+<br>
+Notes:<br>
+1. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
+2. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
+3. Compression of BAM (but not SAM) requires samtools to be installed<br>
+4. Use --REFERENCE instead of --reference to store the relevant parts of the reference file as part of the compressed file itself, which will then allow decompression with genounzip without need of the reference file.<br>
+<br>
+<b><i>Compressing and uncompressing a pair of FASTQ files (paired-end reads) with a reference - better compression than compressing FASTQs individually</i></b><br>
+<b>genozip</b> --reference <i>myfasta.ref.genozip</i> --pair mysample-R1.fastq.gz mysample-R2.fastq.gz
+<b>genounzip</b> --reference <i>myfasta.ref.genozip</i> --unbind mysample-R1+1.fastq.genozip
 <br>
 <b><i>Lookups:</i></b><br>
 <b>genocat</b> -r ^Y,MT <i>file1.vcf</i>       -- displays all chromosomes except Y and MT<br>
@@ -35,18 +54,22 @@ The command line options are similar to gzip and bcftools, so if you're familiar
 <b>genocat</b> -s SMPL1,SMPL2 <i>file1.vcf</i> -- displays 2 samples<br>
 Note: there is no need for a separate indexing step or index file<br>
 <br>
-<b><i>Concatenating & splitting:</i></b><br>
-<b>genozip</b> <i>file1.vcf file2.vcf</i> -o <i>bound.vcf.genozip</i> <br>
-<b>genounzip</b> <i>bound.vcf.genozip</i> -O <br>
+<b><i>Binding all files in the current directory together & unbinding:</i></b><br>
+<b>genozip</b> <i>*.fq.gz</i> -o <i>all-samples.fq.genozip</i> <br>
+<b>genounzip</b> <i>my-project.fq.genozip</i> --unbind <br>
+<br>
+<b><i>Encryption:</i></b><br>
+<b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>
+<b>genounzip</b> <i>file.vcf.genozip</i> --password <i>abc</i> <br>
 <br>
 <b><i>Calculating the MD5:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
 <br>
-<b><i>Encryption:</i></b><br>
-<b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>
+<b><i>Even better compression, with some minor modifications of the data (see --help for details):</i></b><br>
+<b>genozip</b> <i>file.bam</i> --optimize <br>
 <br>
-<b><i>Even better compression, with some minor modifications of the data:</i></b><br>
-<b>genozip</b> <i>file.vcf</i> --optimize <br>
+<b><i>Faster compression, sacrificing a bit of compression ratio:</i></b><br>
+<b>genozip</b> <i>file.bam</i> --fast <br>
 <br>
 <b><i>Compress and then verify that the compressed file decompresses correctly:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
