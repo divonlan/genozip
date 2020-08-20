@@ -11,7 +11,7 @@
 <!-- 4. rendered as README.md in Docker Hub                                                               -->
 <!-- 5. converted to Markdown and embedded in conda/README.template.md to generate conda feedstock README -->
 <!--                                                                                                      -->
-<h1>genozip</h1><br> 
+<h1>genozip</h1><br>
 <br>
 (also available on <b>Conda</b> and <b>Docker Hub</b>)<br>
 <br>
@@ -64,7 +64,7 @@ my-sam-outputing-method | <b>genozip</b> - --input sam --output <i>mysample.sam.
 <b>genocat</b> --samples SMPL1,SMPL2 <i>mysamples.vcf.genozip</i>  <-- displays 2 samples<br>
 <b>genocat</b> --grep August-10 <i>myfasta.fa.genozip</i>  <-- displays contigs/reads that have "August-10" in the header<br>
 Notes:<br>
-1. --regions works with VCF, SAM/BAM, FASTA ; --grep works with FASTQ, FASTA ; --samples works with VCF<br> 
+1. --regions works with VCF, SAM/BAM, FASTA ; --grep works with FASTQ, FASTA ; --samples works with VCF<br>
 2. There is no need for a separate indexing step or index file<br>
 3. Many more options (see --help for full list): --no-header ; --header-only ; --sequential ; --list-chroms ; --drop-genotypes ; --GT-only<br>
 <br>
