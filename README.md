@@ -81,13 +81,14 @@ Notes:<br>
 <b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>
 <b>genounzip</b> <i>file.vcf.genozip</i> --password <i>abc</i> <br>
 <br>
-<b><i>Calculating the MD5 (also included in </i>--test<i>):</i></b><br>
+<b><i>Calculating the MD5 of the underlying textual file (also included in </i>--test<i>):</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --md5 <br>
 <b>genounzip</b> <i>file.vcf.genozip</i> --md5 <br>
 <br>
 <b><i>Compress and then verify that the compressed file decompresses correctly:</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
 <br>
+<b><i>Citing</i></b><br>
 Do you find genozip to be helpful in your research? Please be so kind as to support continued development by citing:<br>
 Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
 <br>
