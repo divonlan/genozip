@@ -43,7 +43,7 @@ The command line options are similar to gzip and samtools/bcftools, so if you ar
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> *    <--- compresses all files in the current directory<br>
 <br>
 Notes:<br>
-1. genozip can compress with or without a refernece - using a reference often achieves much better compression<br>
+1. genozip can compress with or without a reference - using a reference often achieves much better compression<br>
 2. SAM/BAM - compression of aligned or unaligned SAM/BAM files is possible. Sorting makes no difference<br>
 3. Long reads - compression of long reads (Pac Bio / Nanopore) achieves signficantly better results when compressing an aligned BAM vs an unaligned BAM or FASTQ<br>
 4. Compression of BAM and CRAM (but not SAM) files requires samtools to be installed<br>
@@ -77,7 +77,7 @@ Notes:<br>
 <b><i>Faster compression, sacrificing a bit of compression ratio:</i></b><br>
 <b>genozip</b> <i>file.bam</i> --fast <br>
 <br>
-<b><i>Encryption:</i></b><br>
+<b><i>Encryption (256 bit AES):</i></b><br>
 <b>genozip</b> <i>file.vcf</i> --password <i>abc</i> <br>
 <b>genounzip</b> <i>file.vcf.genozip</i> --password <i>abc</i> <br>
 <br>
@@ -89,7 +89,7 @@ Notes:<br>
 <b>genozip</b> <i>file.vcf</i> --test <br>
 <br>
 <b><i>Citing</i></b><br>
-Do you find genozip to be helpful in your research? Please be so kind as to support continued development by citing:<br>
+Do you find genozip useful? Please support continued development by citing:<br>
 Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
 <br>
 Feature requests and bug reports: <b>bugs@genozip.com</b> <br>
