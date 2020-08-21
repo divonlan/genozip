@@ -811,7 +811,7 @@ bool zfile_get_genozip_header (File *file,
 }
 
 // ZIP
-void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
+void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool is_first_txt)
 {
     SectionHeaderTxtHeader header;
     memset (&header, 0, sizeof(header)); // safety
@@ -824,7 +824,8 @@ void zfile_write_txt_header (Buffer *txt_header_text, bool is_first_txt)
     header.num_samples             = BGEN32 (global_vcf_num_samples);
     header.num_lines               = NUM_LINES_UNKNOWN; 
     header.compression_type        = (uint8_t)txt_file->comp_alg; 
-
+    header.md5_header              = header_md5;
+    
     file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);
     header.txt_filename[strlen(header.txt_filename)- (strlen(file_exts[txt_file->type])-4)] = '\0'; // remove the .gz/.bgz/.bz2
     

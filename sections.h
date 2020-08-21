@@ -124,7 +124,7 @@ typedef struct {
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     CompressionAlg compression_type; // compression type of original file
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
-    Md5Hash  md5_hash_compressed;  // ffu: md5 of the original compressed file (e.g. .bam or .fastq.gz) (bug 158)
+    Md5Hash  md5_header;       // MD5 of header
 
 #define TXT_FILENAME_LEN 256
     char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam

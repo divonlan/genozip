@@ -52,7 +52,7 @@ extern void *zfile_read_section_header (uint64_t offset, uint32_t size);
 
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */);
 
-extern void zfile_write_txt_header (BufferP vcf_header_text, bool is_first_vcf);
+extern void zfile_write_txt_header (BufferP vcf_header_text, Md5Hash header_md5, bool is_first_vcf);
 extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
 
 // These two are for all data types except VCF, that has its own

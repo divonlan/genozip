@@ -9,7 +9,7 @@
 #include "genozip.h"
 #include "md5.h"
 
-extern void txtfile_read_header (bool is_first_txt, bool header_required, char first_char);
+extern Md5Hash txtfile_read_header (bool is_first_txt, bool header_required, char first_char);
 extern void txtfile_read_vblock (VBlockP vb);
 
 typedef bool (*TxtFileTestFunc)(const char *, int);

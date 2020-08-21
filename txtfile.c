@@ -98,9 +98,9 @@ finish:
     return bytes_read;
 }
 
-// ZIP: returns the number of lines read 
-void txtfile_read_header (bool is_first_txt, bool header_required,
-                          char first_char)  // first character in every header line
+// ZIP: returns the hash of the header
+Md5Hash txtfile_read_header (bool is_first_txt, bool header_required,
+                             char first_char)  // first character in every header line
 {
     START_TIMER;
 
@@ -163,6 +163,7 @@ void txtfile_read_header (bool is_first_txt, bool header_required,
 finish:        
     // md5 header - with logic related to is_first
     txtfile_update_md5 (evb->txt_data.data, evb->txt_data.len, !is_first_txt);
+    Md5Hash header_md5 = md5_snapshot (&z_file->md5_ctx_single);
 
     // md5 unconsumed_txt - always
     txtfile_update_md5 (txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len, false);
@@ -170,6 +171,8 @@ finish:
     *AFTERENT (char, evb->txt_data) = 0; // null-terminate
 
     COPY_TIMER (evb->profile.txtfile_read_header);
+
+    return header_md5;
 }
 
 // returns true if txt_data[txt_i] is the end of a FASTQ line (= block of 4 lines in the file)
@@ -511,10 +514,12 @@ void txtfile_header_initialize(void)
 // ZIP: reads VCF or SAM header and writes its compressed form to the GENOZIP file
 bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 {    
+    Md5Hash header_md5 = MD5HASH_NONE;
+
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
     if (DTPT(txt_header_required) == HDR_MUST || DTPT(txt_header_required) == HDR_OK)
-        txtfile_read_header (is_first_txt, DTPT(txt_header_required) == HDR_MUST, DTPT(txt_header_1st_char)); // reads into evb->txt_data and evb->lines.len
+        header_md5 = txtfile_read_header (is_first_txt, DTPT(txt_header_required) == HDR_MUST, DTPT(txt_header_1st_char)); // reads into evb->txt_data and evb->lines.len
     
     *txt_line_i += (uint32_t)evb->lines.len;
 
@@ -529,7 +534,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 
     // we always write the txt_header section, even if we don't actually have a header, because the section
     // header contains the data about the file
-    if (z_file) zfile_write_txt_header (&evb->txt_data, is_first_txt); // we write all headers in bound mode too, to support --unbind
+    if (z_file) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     last_txt_header_len = evb->txt_data.len;
 
@@ -576,7 +581,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
         z_file->num_lines = BGEN64 (header->num_lines);
 
     if (flag_unbind) *digest = header->md5_hash_single; // override md5 from genozip header
-        
+
     // now get the text of the txt header itself
     static Buffer header_buf = EMPTY_BUFFER;
     zfile_uncompress_section (evb, header, &header_buf, "header_buf", SEC_TXT_HEADER);
@@ -595,8 +600,17 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
     if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
     // write vcf header if not in bound mode, or, in bound mode, we write the vcf header, only for the first genozip file
-    if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference)
+    if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference) {
         txtfile_write_to_disk (&header_buf);
+
+        if (flag_md5 && !md5_is_zero (header->md5_header)) {
+            Md5Hash reconstructed_header_len = md5_do (header_buf.data, header_buf.len);
+
+            ASSERTW (md5_is_equal (reconstructed_header_len, header->md5_header), 
+                     "MD5 of reconstructed %s header (%s) differs from original file (%s)",
+                     dt_name (z_file->data_type), md5_display (reconstructed_header_len), md5_display (header->md5_header));
+        }
+    }
     
     buf_free (&header_section);
     buf_free (&header_buf);
