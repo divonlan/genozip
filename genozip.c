@@ -376,9 +376,9 @@ static void main_test_after_genozip (char *exec_name, char *z_filename, bool is_
                                   flag_show_memory ? "--show-memory" : SKIP_ARG,
                                   flag_show_time   ? "--show-time"   : SKIP_ARG,
                                   threads_str      ? "--threads"     : SKIP_ARG,
+                                  threads_str      ? threads_str     : SKIP_ARG,
                                   flag_reference == REF_EXTERNAL ? "--reference" : SKIP_ARG,
                                   flag_reference == REF_EXTERNAL ? ref_filename  : SKIP_ARG,
-                                  threads_str      ? threads_str     : SKIP_ARG,
                                   NULL);
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
