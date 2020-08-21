@@ -59,6 +59,7 @@ Notes:<br>
 my-sam-outputing-method | <b>genozip</b> - --input sam --output <i>mysample.sam.genozip</i><br>
 <br>
 <b><i>Lookups:</i></b><br>
+<b>genocat</b> --regions chr1:10000-20000 <i>mysamples.vcf.genozip</i>&nbsp&nbsp&nbsp←displays a specific region<br>
 <b>genocat</b> --regions ^Y,MT <i>mysamples.vcf.genozip</i>   ←displays all chromosomes except Y and MT<br>
 <b>genocat</b> --regions -10000 <i>mysample.sam.genozip</i>   ←displays positions up to 10000<br>
 <b>genocat</b> --samples SMPL1,SMPL2 <i>mysamples.vcf.genozip</i>   ←displays 2 samples<br>
