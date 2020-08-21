@@ -41,7 +41,7 @@ The command line options are similar to gzip and samtools/bcftools, so if you ar
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysample1.fq mysample2.fq mysample3.fq<br>
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysample.bam<br>
 <b>genozip</b> --reference <i>myfasta.ref.genozip</i> mysamples.vcf.gz<br>
-<b>genozip</b> --reference <i>myfasta.ref.genozip</i> *    ← compresses all files in the current directory<br>
+<b>genozip</b> --reference <i>myfasta.ref.genozip</i> *     ←compresses all files in the current directory<br>
 <br>
 Notes:<br>
 1. genozip can compress with or without a reference - using a reference often achieves much better compression<br>
@@ -59,17 +59,17 @@ Notes:<br>
 my-sam-outputing-method | <b>genozip</b> - --input sam --output <i>mysample.sam.genozip</i><br>
 <br>
 <b><i>Lookups:</i></b><br>
-<b>genocat</b> --regions ^Y,MT <i>mysamples.vcf.genozip</i>  ← displays all chromosomes except Y and MT<br>
-<b>genocat</b> --regions -10000 <i>mysample.sam.genozip</i>  ← displays positions up to 10000<br>
-<b>genocat</b> --samples SMPL1,SMPL2 <i>mysamples.vcf.genozip</i>  ← displays 2 samples<br>
-<b>genocat</b> --grep August-10 <i>myfasta.fa.genozip</i>  ← displays contigs/reads that have "August-10" in the header<br>
+<b>genocat</b> --regions ^Y,MT <i>mysamples.vcf.genozip</i>   ←displays all chromosomes except Y and MT<br>
+<b>genocat</b> --regions -10000 <i>mysample.sam.genozip</i>   ←displays positions up to 10000<br>
+<b>genocat</b> --samples SMPL1,SMPL2 <i>mysamples.vcf.genozip</i>   ←displays 2 samples<br>
+<b>genocat</b> --grep August-10 <i>myfasta.fa.genozip</i>   ←displays contigs/reads that have "August-10" in the header<br>
 Notes:<br>
 1. --regions works with VCF, SAM/BAM, FASTA ; --grep works with FASTQ, FASTA ; --samples works with VCF<br>
 2. There is no need for a separate indexing step or index file<br>
 3. Many more options (see --help for full list): --no-header ; --header-only ; --sequential ; --list-chroms ; --drop-genotypes ; --GT-only<br>
 <br>
 <b><i>Binding mutiple files into a single genozip file & unbinding:</i></b><br>
-<b>genozip</b> <i>*.fq.gz</i> -o <i>all-samples.fq.genozip</i> ← binds all .fq.gz files in the current directory<br>
+<b>genozip</b> <i>*.fq.gz</i> -o <i>all-samples.fq.genozip</i>  ←binds all .fq.gz files in the current directory<br>
 <b>genounzip</b> <i>my-project.fq.genozip</i> --unbind <br>
 <br>
 <b><i>Compressing even better, with some minor modifications of the data (therefore not lossless, see --help for details):</i></b><br>
