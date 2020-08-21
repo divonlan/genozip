@@ -59,6 +59,8 @@ bool sam_inspect_txt_header (BufferP txt_header)
             }
 
             line = newline+1;
+
+            *newline = '\n'; // restore
         }
         else 
             line++;
