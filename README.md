@@ -19,7 +19,7 @@
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
-<b>Sign up<b> to receive low-frequency updates related to Genozip: https://tinyurl.com/genozip<br>
+<b>Sign up</b> to receive low-frequency updates related to Genozip: https://tinyurl.com/genozip<br>
 <br>
 The compression is lossless - the decompressed file is 100% identical to the original file.<br>
 Notes: <br>
