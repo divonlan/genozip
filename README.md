@@ -19,6 +19,8 @@
 <br>
 It achieves x2 to x5 better compression ratios than gzip because it leverages some properties specific to genomic data to compress better. It is also a lot faster than gzip.<br>
 <br>
+Sign up to receive low-frequency updates related to Genozip: https://tinyurl.com/genozip<br>
+<br>
 The compression is lossless - the decompressed file is 100% identical to the original file.<br>
 Notes: <br>
 1. Losslessness is relative to the underlying textual file - for example, when compressing a .bam or a .fq.gz file - the losslessness is relative to the underlying SAM or FASTQ file respectively<br>
