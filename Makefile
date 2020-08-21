@@ -251,7 +251,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@cp conda/README.md $(CONDA_FEEDSTOCK)
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
-	@(cd $(CONDA_FEEDSTOCK); git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push)
+	@(cd $(CONDA_FEEDSTOCK); git pull; git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push)
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)
