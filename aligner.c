@@ -109,7 +109,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     uint32_t refhash_word;
     const PosType seq_len_64 = (PosType)seq_len; // 64 bit version of seq_len
     
-    PosType best_gpos = NO_GPOS; // match not found yet
+    PosType gpos, best_gpos = NO_GPOS; // match not found yet
     bool best_is_forward = false;
     bool maybe_perfect_match = true;
 
@@ -123,7 +123,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     
         if (encoding == 4) { // not A, C, G or T - usually N
             maybe_perfect_match = false; // this cannot be a perfect match
-            encoding = 0; // aritrary
+            encoding = 0; // arbitrary
         }
     
         bit_array_assign2 (&seq_bits, (base_i << 1), encoding);
@@ -141,15 +141,13 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
     struct Finds { uint32_t refhash_word; uint32_t i; Direction found; } finds[seq_len];
     uint32_t num_finds = 0;
     
-    // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
-    PosType gpos, last_gpos=NO_GPOS;
-
     // in case of --fast, we check only 1/5 of the bases, and we are content with a match (not searching any further) if it 
     // has at most 10 SNPs. On our test file, this reduced the number of calls to aligner_get_match_len by about 4X, 
     // at the cost of the compressed file being about 11% larger
     uint32_t density = (flag_fast ? 5 : 1);
     uint32_t max_snps_for_perfection = (flag_fast ? 10 : 2);
 
+    // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
     for (uint32_t i=0; i < seq_len; i += density) {    
         
         Direction found = NOT_FOUND;
@@ -179,7 +177,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
         }
 
 #       define UPDATE_BEST(fwd)  {               \
-            if (gpos != last_gpos) {             \
+            if (gpos != best_gpos) {             \
                 uint32_t match_len = aligner_get_match_len (vb, &seq_bits, gpos, (fwd)); \
                 if (match_len > longest_len) {   \
                     longest_len     = match_len; \
@@ -192,7 +190,6 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
                         goto done;               \
                     }                            \
                 }                                \
-                last_gpos = gpos;                \
             }                                    \
         }
 
