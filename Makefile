@@ -98,9 +98,9 @@ else
 SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS)
 endif
 
-OBJS       := $(SRCS:.c=.o)
-DEBUG_OBJS := $(SRCS:.c=.debug-o)
-OPT_OBJS   := $(SRCS:.c=.opt-o) # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+OBJS       := $(SRCS:.c=.o) # libbsc/libbsc.a
+DEBUG_OBJS := $(SRCS:.c=.debug-o)  # libbsc/libbsc.a
+OPT_OBJS   := $(SRCS:.c=.opt-o) # libbsc/libbsc.a # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 
 DEPS       := $(SRCS:.c=.d)
 
@@ -142,6 +142,9 @@ opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 %.opt-o: %.c %.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+#libbsc/libbsc.a:
+#	(cd libbsc; make libbsc.a)
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@

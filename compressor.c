@@ -57,6 +57,10 @@ static void comp_free_all (VBlock *vb)
         buf_free (&vb->compress_bufs[i]);
 }
 
+// -----------------------------------------------------
+// bzlib stuff
+// -----------------------------------------------------
+
 static void *comp_bzalloc (void *vb_, int items, int size)
 {
     return comp_alloc ((VBlock *)vb_, items * size, 1); // all bzlib buffers are constant in size between subsequent compressions
@@ -66,20 +70,6 @@ static void comp_bzfree (void *vb_, void *addr)
 {
     comp_free ((VBlock *)vb_, addr);
 }
-
-static void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size)
-{
-    return comp_alloc ((VBlock *)alloc_stuff->vb, size, 1.15); // lzma 5th buffer (the largest) may vary in size between subsequent compressions
-}
-
-static void lzma_free (ISzAllocPtr alloc_stuff, void *addr)
-{
-    comp_free ((VBlock *)alloc_stuff->vb, addr);
-}
-
-// -----------------------------------------------------
-// bzlib stuff
-// -----------------------------------------------------
 
 static const char *BZ2_errstr (int err)
 {
@@ -393,6 +383,16 @@ static void comp_apply_non_acgt_on_top_of_acgt (char *acgt, const char *non_acgt
 // -----------------------------------------------------
 // lzma stuff
 // -----------------------------------------------------
+
+static void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size)
+{
+    return comp_alloc ((VBlock *)alloc_stuff->vb, size, 1.15); // lzma 5th buffer (the largest) may vary in size between subsequent compressions
+}
+
+static void lzma_free (ISzAllocPtr alloc_stuff, void *addr)
+{
+    comp_free ((VBlock *)alloc_stuff->vb, addr);
+}
 
 static const char *lzma_errstr (SRes res) 
 {
