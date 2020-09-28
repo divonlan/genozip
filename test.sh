@@ -171,10 +171,6 @@ for file in ${files[@]}; do
     ./genozip $1 unix-nl.$file -ft -o $output || exit 1
 done
 
-file=test-file.vcf
-test_header "$file - testing VCF with --sblock=1"
-./genozip $1 $file --sblock 1 -ft -o $output || exit 1
-
 # FASTA genocat tests
 test_count_genocat_lines test-file.fa "--sequential" 9
 test_count_genocat_lines test-file.fa "--header-only" 3
@@ -203,16 +199,15 @@ test_count_genocat_lines test-file.fq "--grep line5 --header-only" 1
 #    fi
 #done
 
-if `command -v gtshark >& /dev/null`; then
-    test_header "test-file.vcf --gtshark"
-    ./genozip $1 test-file.vcf --gtshark -ft -o $output || exit 1
-fi
-
 test_header "test-file.vcf without FORMAT or samples"
 file=test-file.vcf
 cut -f1-8 $file > copy.$file
 ./genozip $1 copy.$file -ft -o $output || exit 1
 rm copy.$file
+
+test_header "Testing subsets (~3 VBs) or real world files"
+rm -f td/*.genozip
+./genozip $1 -ft td/* || exit 1
 
 test_header "Testing --make-reference"
 file=test-file-ref.fa 
@@ -234,14 +229,20 @@ rm -f td/*.genozip
 ./genozip $1 -f --md5 --reference $GRCh38 td/test.transfly-unsorted.sam td/test.transfly.fq td/test.transfly-sorted.sam || exit 1
 ./genounzip $1 -t -e $GRCh38 td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
 
-test_header "Testing subsets (~3 VBs) or real world files"
-rm -f td/*.genozip
-./genozip $1 -ft td/* || exit 1
-
 test_header "Testing multiple bound SAM with --REFERENCE" 
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --REFERENCE $GRCh38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam -o $output || exit 1
 ./genounzip $1 -t $output || exit 1
+
+test_header "Testing SAM with --reference and --password" 
+rm -f td/*.genozip
+./genozip $1 -f --md5 --reference $GRCh38 td/test.transfly-unsorted.sam --password 123 -o $output || exit 1
+./genounzip $1 -t --reference $GRCh38 -p 123 $output || exit 1
+
+test_header "Testing SAM with --REFERENCE and --password" 
+rm -f td/*.genozip
+./genozip $1 -f --md5 --REFERENCE $GRCh38 td/test.transfly-unsorted.sam --password 123 -o $output || exit 1
+./genounzip $1 -t -p 123 $output || exit 1
 
 test_header "Testing paired FASTQ with --reference"
 rm -f td/*.genozip

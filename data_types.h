@@ -44,14 +44,13 @@ typedef struct DataTypeProperties {
     const char *(*seg_txt_line)(VBlockP, const char *field_start_line, bool *has_13);  // Called by Compute thread to Seg one line
     void (*seg_finalize)(VBlockP);     // called by Compute thread at the end of Seg
     void (*compress)(VBlockP);
-    void (*update_header)(VBlockP, uint32_t vcf_first_line_i);
 
     // PIZ callbacks
     void (*piz_initialize)(void); // called after reconstructing the txt header and before compute threads
     bool (*piz_read_one_vb)(VBlockP, SectionListEntryP);
-    void (*uncompress)(VBlockP);
     bool (*is_skip_secetion)(VBlockP, SectionType, DictId);
     void (*reconstruct_seq)(VBlockP, ContextP, const char *, unsigned);
+    bool (*structured_filter)(VBlockP, DictId, ConstStructuredP, unsigned rep, int item); // returns true if rep, item should be reconstructed. if item=-1, this applies to the entire rep  
 
     unsigned num_special;
     PizSpecialCtxHandler special[10];
@@ -68,14 +67,14 @@ typedef struct DataTypeProperties {
 
 #define usz(type) ((unsigned)sizeof(type))
 #define DATA_TYPE_PROPERTIES { \
-/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  zip_inspect_txt_header, zip_initialize      zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  update_header                    piz_initialize         piz_read_one_vb        uncompress                is_skip_secetion           reconstruct_seq            num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
-    { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   ref_make_ref_init,  NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                            NULL,                  NULL,                  NULL,                     NULL,                      NULL,                      0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
-    { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', vcf_inspect_txt_header, vcf_zip_initialize, NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   NULL,               vcf_zip_compress_one_vb,  vcf_update_compressed_vb_header, NULL,                  vcf_piz_read_one_vb,   vcf_piz_uncompress_vb,    vcf_piz_is_skip_section,   NULL,                      NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
-    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', sam_inspect_txt_header, sam_zip_initialize, NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                            NULL,                  NULL,                  sam_piz_reconstruct_vb,   sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
-    { "FASTQ",   NO_RA, 4, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   NULL,               fastq_zip_read_one_vb, fastq_seg_initialize, fastq_seg_txt_line, fastq_seg_finalize, NULL,                     NULL,                            NULL,                  fastq_piz_read_one_vb, fastq_piz_reconstruct_vb, fastq_piz_is_skip_section, fastq_piz_reconstruct_seq, 0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Entries",         { "FIELD", "DESC",   "ERROR!" } }, \
-    { "FASTA",   RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   NULL,               NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               NULL,                     NULL,                            fasta_piz_initialize,  fasta_piz_read_one_vb, fasta_piz_reconstruct_vb, fasta_piz_is_skip_section, NULL,                      NUM_FASTA_SPECIAL,         FASTA_SPECIAL, fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
-    { "GVF",     RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                   NULL,               NULL,                  gff3_seg_initialize,  gff3_seg_txt_line,  NULL,               NULL,                     NULL,                            NULL,                  NULL,                  gff3_piz_reconstruct_vb,  gff3_piz_is_skip_section,  NULL,                      0,                         {},            NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ATTRS",  "ITEMS"  } }, \
-    { "23ANDME", RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                   NULL,               NULL,                  me23_seg_initialize,  me23_seg_txt_line,  NULL,               NULL,                     NULL,                            NULL,                  NULL,                  me23_piz_reconstruct_vb,  me23_piz_is_skip_section,  NULL,                      0,                         {},            NULL,               NULL,                NULL,                   "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }  \
+/*    name       has_ra ht sizeof_vb     sizeof_zip_dataline  txt_headr 1st  zip_inspect_txt_header, zip_initialize      zip_read_one_vb        seg_initialize        seg_txt_line        seg_finalize,       compress                  piz_initialize         piz_read_one_vb        is_skip_secetion           reconstruct_seq            structured_filter num_special        special        release_vb          destroy_vb           cleanup_memory          show_sections_line stat_dict_types                 */ \
+    { "REFERENCE", RA,  1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   ref_make_ref_init,  NULL,                  fasta_seg_initialize, fasta_seg_txt_line, NULL,               ref_make_create_range,    NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
+    { "VCF",     RA,    1, vcf_vb_size,  vcf_vb_zip_dl_size,  HDR_MUST, '#', vcf_inspect_txt_header, NULL,               NULL,                  vcf_seg_initialize,   vcf_seg_txt_line,   vcf_seg_finalize,   NULL,                     NULL,                  NULL,                  vcf_piz_is_skip_section,   NULL,                      vcf_piz_filter,   NUM_VCF_SPECIAL,   VCF_SPECIAL,   vcf_vb_release_vb,  vcf_vb_destroy_vb,   vcf_vb_cleanup_memory,  "Variants",        { "FIELD", "INFO",   "FORMAT" } }, \
+    { "SAM",     RA,    1, sam_vb_size,  sam_vb_zip_dl_size,  HDR_OK,   '@', sam_inspect_txt_header, sam_zip_initialize, NULL,                  sam_seg_initialize,   sam_seg_txt_line,   sam_seg_finalize,   NULL,                     NULL,                  NULL,                  sam_piz_is_skip_section,   sam_piz_reconstruct_seq,   NULL,             NUM_SAM_SPECIAL,   SAM_SPECIAL,   sam_vb_release_vb,  sam_vb_destroy_vb,   NULL,                   "Alignment lines", { "FIELD", "QNAME",  "OPTION" } }, \
+    { "FASTQ",   NO_RA, 4, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   NULL,               fastq_zip_read_one_vb, fastq_seg_initialize, fastq_seg_txt_line, fastq_seg_finalize, NULL,                     NULL,                  fastq_piz_read_one_vb, fastq_piz_is_skip_section, fastq_piz_reconstruct_seq, fastq_piz_filter, 0,                 {},            fast_vb_release_vb, NULL,                NULL,                   "Entries",         { "FIELD", "DESC",   "ERROR!" } }, \
+    { "FASTA",   RA,    1, fast_vb_size, fast_vb_zip_dl_size, HDR_NONE, -1,  NULL,                   NULL,               NULL,                  fasta_seg_initialize, fasta_seg_txt_line, fasta_seg_finalize, NULL,                     fasta_piz_initialize,  fasta_piz_read_one_vb, fasta_piz_is_skip_section, NULL,                      NULL,             NUM_FASTA_SPECIAL, FASTA_SPECIAL, fast_vb_release_vb, NULL,                NULL,                   "Lines",           { "FIELD", "DESC",   "ERROR!" } }, \
+    { "GVF",     RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                   NULL,               NULL,                  gff3_seg_initialize,  gff3_seg_txt_line,  gff3_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "Sequences",       { "FIELD", "ATTRS",  "ITEMS"  } }, \
+    { "23ANDME", RA,    1, 0,            0,                   HDR_OK,   '#', NULL,                   NULL,               NULL,                  me23_seg_initialize,  me23_seg_txt_line,  me23_seg_finalize,  NULL,                     NULL,                  NULL,                  NULL,                      NULL,                      NULL,             0,                 {},            NULL,               NULL,                NULL,                   "SNPs",            { "FIELD", "ERROR!", "ERROR!" } }  \
 }  
 extern DataTypeProperties dt_props[NUM_DATATYPES];
 #define DTP(prop)  (dt_props[(vb)->    data_type].prop)
@@ -84,12 +83,12 @@ extern DataTypeProperties dt_props[NUM_DATATYPES];
 
 // Fields - the CHROM field MUST be the first field (because of mtf_copy_reference_contig_to_chrom_ctx)
 typedef enum { REF_CONTIG, NUM_REF_FIELDS } RefFields;
-typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_GT, VCF_EOL, NUM_VCF_FIELDS } VcfFields;
-typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SEQ_BITMAP, SAM_NONREF, SAM_GPOS, SAM_STRAND, SAM_QUAL, SAM_QDOMRUNS, SAM_EOL, NUM_SAM_FIELDS } SamFields;
-typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_PLUS, FASTQ_E3L, FASTQ_QUAL, FASTQ_QDOMRUNS, FASTQ_E4L, NUM_FASTQ_FIELDS } FastqFields;
-typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_SEQ, FASTA_DESC, FASTA_COMMENT, FASTA_SQBITMAP, FASTA_NONREF, FASTA_GPOS, FASTA_STRAND, NUM_FASTA_FIELDS } FastaFields;
-typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, NUM_GFF3_FIELDS } Gff3Fields;
-typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, NUM_ME23_FIELDS } Me23Fields;  
+typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_EOL, VCF_TOPLEVEL, NUM_VCF_FIELDS } VcfFields;
+typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SEQ_BITMAP, SAM_NONREF, SAM_GPOS, SAM_STRAND, SAM_QUAL, SAM_QDOMRUNS, SAM_EOL, SAM_TOPLEVEL, NUM_SAM_FIELDS } SamFields;
+typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_QUAL, FASTQ_QDOMRUNS, FASTQ_TOPLEVEL, NUM_FASTQ_FIELDS } FastqFields;
+typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_SEQ, FASTA_DESC, FASTA_COMMENT, FASTA_SQBITMAP, FASTA_NONREF, FASTA_GPOS, FASTA_STRAND, FASTA_TOPLEVEL, NUM_FASTA_FIELDS } FastaFields;
+typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, NUM_GFF3_FIELDS } Gff3Fields;
+typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, NUM_ME23_FIELDS } Me23Fields;  
 
 #define MAX_NUM_FIELDS_PER_DATA_TYPE MAX ((int) NUM_REF_FIELDS,    \
                                      MAX ((int) NUM_VCF_FIELDS,    \
@@ -98,6 +97,12 @@ typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, NUM_ME23_
                                      MAX ((int) NUM_FASTA_FIELDS,  \
                                      MAX ((int) NUM_GFF3_FIELDS,   \
                                           (int) NUM_ME23_FIELDS     ))))))
+
+#define MAX_DICTS (MAX_SUBFIELDS*2 + MAX_NUM_FIELDS_PER_DATA_TYPE)  
+//#if MAX_DICTS > 253 // 254 is for future use and 255 is DID_I_NONE
+//#error "MAX_DICTS cannot go beyond 253"
+//#endif
+
 typedef struct DataTypeFields {
     unsigned num_fields;
     int pos, info, eol; // the fields, or -1 if this data type doesn't have them
@@ -106,15 +111,17 @@ typedef struct DataTypeFields {
 
 #define CHROM (DidIType)0 // chrom is always the first field
 
+#define TOPLEVEL "TOPLEVEL"
+
 #define DATA_TYPE_FIELDS { \
 /* num_fields        pos         info        eol        names (including extend fields) - max 8 characters - 2 first chars must be unique within each data type (for dict_id_to_did_i_map) */ \
   {NUM_REF_FIELDS,   -1,         -1,         -1,        { "CONTIG", }, }, \
-  {NUM_VCF_FIELDS,   VCF_POS,    VCF_INFO,   VCF_EOL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "GT", "EOL" },                    }, \
-  {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_EOL,   { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "GPOS", "STRAND", "QUAL", "QDOMRUNS", "EOL" }, }, \
-  {NUM_FASTQ_FIELDS, -1,         -1,         FASTQ_E1L, { "CONTIG", "DESC", "E1L", "SQBITMAP", "NONREF", "GPOS", "STRAND", "E2L", "PLUS", "E3L", "QUAL", "QDOMRUNS", "E4L" },                                                            }, \
-  {NUM_FASTA_FIELDS, -1,         -1,         FASTA_EOL, { "CONTIG", "LINEMETA", "EOL", "SEQ", "DESC", "COMMENT", "SQBITMAP", "NONREF", "GPOS", "STRAND" },                                                         }, \
-  {NUM_GFF3_FIELDS,  GFF3_START, GFF3_ATTRS, GFF3_EOL,  { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "EOL" },               }, \
-  {NUM_ME23_FIELDS,  ME23_POS,   -1,         ME23_EOL,  { "CHROM", "POS", "ID", "GENOTYPE", "EOL" },                                                    }, \
+  {NUM_VCF_FIELDS,   VCF_POS,    VCF_INFO,   VCF_EOL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL } }, \
+  {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_EOL,   { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "GPOS", "STRAND", "QUAL", "QDOMRUNS", "EOL", TOPLEVEL } }, \
+  {NUM_FASTQ_FIELDS, -1,         -1,         FASTQ_E1L, { "CONTIG", "DESC", "E1L", "SQBITMAP", "NONREF", "GPOS", "STRAND", "E2L", "QUAL", "QDOMRUNS", TOPLEVEL } }, \
+  {NUM_FASTA_FIELDS, -1,         -1,         FASTA_EOL, { "CONTIG", "LINEMETA", "EOL", "SEQ", "DESC", "COMMENT", "SQBITMAP", "NONREF", "GPOS", "STRAND", TOPLEVEL } }, \
+  {NUM_GFF3_FIELDS,  GFF3_START, GFF3_ATTRS, GFF3_EOL,  { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "EOL", TOPLEVEL } }, \
+  {NUM_ME23_FIELDS,  ME23_POS,   -1,         ME23_EOL,  { "CHROM", "POS", "ID", "GENOTYPE", "EOL", TOPLEVEL } }, \
 }
 extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTF(prop)  (dt_fields[vb->      data_type].prop)

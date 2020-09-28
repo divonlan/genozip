@@ -7,14 +7,14 @@
 #define FASTA_INCLUDED
 
 #include "genozip.h"
-#include "sections.h"
 
 // ZIP Stuff
-COMPRESSOR_CALLBACK(fasta_zip_get_start_len_line_i_seq)
+COMPRESSOR_CALLBACK(fasta_zip_seq)
 extern void ref_make_create_range (VBlockP vb);
 
 // SEG Stuff
 extern void fasta_seg_initialize();
+extern void fasta_seg_finalize (VBlockP vb);
 extern const char *fasta_seg_txt_line();
 
 // PIZ Stuff
@@ -38,6 +38,6 @@ SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 #define FASTA_DICT_ID_ALIASES 
 
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_FASTA, &dict_id_fields[FASTA_SEQ],          fasta_zip_get_start_len_line_i_seq  }, 
+    { DT_FASTA, &dict_id_fields[FASTA_SEQ],          fasta_zip_seq  }, 
 
 #endif

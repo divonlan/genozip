@@ -31,8 +31,7 @@
 #define TXT_DATA_PER_VB_FAST    "16" // MB with --fast
 extern void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str);
 
-#define MAX_SUBFIELDS 100   // maximum number of VCF_FORMAT subfield types (except for GT), VCF_INFO, SAM_QNAME, SAM_OPTIONAL, GFF3_ATTRS subfield types that is supported in one line.
-#define MAX_DICTS     253   // 254 is for future use and 255 is DID_I_NONE
+#define MAX_SUBFIELDS 64   // Maximum number of items in a Structured (for example: VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc). This value can be increased subject to MAX_DICTS<=253.
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
@@ -41,8 +40,6 @@ extern void vb_set_global_max_memory_per_vb (const char *mem_size_mb_str);
 // ------------------------------------------------------------------------------------------------------------------------
 typedef struct VBlock *VBlockP;
 typedef const struct VBlock *ConstVBlockP;
-typedef struct SubfieldMapper *SubfieldMapperP; 
-typedef const struct SubfieldMapper *ConstSubfieldMapperP; 
 typedef struct File *FileP;
 typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;
@@ -61,6 +58,9 @@ typedef struct BitArray *BitArrayP;
 typedef const struct BitArray *ConstBitArrayP;
 typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
+
+typedef void BgEnBufFunc (BufferP buf);
+typedef BgEnBufFunc (*BgEnBuf);
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
 
@@ -94,10 +94,10 @@ extern CommandType command, primary_command;
 
 // flags set by user's command line options
 extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
-           flag_show_memory, flag_show_dict, flag_show_gt_nodes, flag_show_b250, flag_show_stats, flag_show_headers, flag_show_aliases,
+           flag_show_memory, flag_show_dict, flag_show_b250, flag_show_stats, flag_show_headers, flag_show_aliases,
            flag_show_index, flag_show_gheader, flag_show_ref_contigs, flag_stdout, flag_replace, flag_test, flag_regions,  
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms, 
-           flag_show_vblocks, flag_gtshark, flag_sblock, flag_vblock, flag_gt_only, 
+           flag_show_vblocks, flag_sblock, flag_vblock, flag_gt_only, 
            flag_header_one, flag_fast, flag_multiple_files, flag_sequential, flag_register, flag_show_ref_seq,
            flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_show_ref_alts, flag_pair, flag_genocat_info_only, 
            flag_debug_progress, flag_show_hash, flag_debug_memory, flag_debug_no_singletons, flag_make_reference, flag_reading_reference,
@@ -146,27 +146,28 @@ typedef _Bool bool;
 // IMPORTANT: This is part of the genozip file format. 
 // If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
-    COMP_UNKNOWN=-1, 
-    COMP_NONE=0, COMP_GZ=1, COMP_BZ2=2, COMP_LZMA=3, // internal compressors
+    CODEC_UNKNOWN=-1, 
+    CODEC_NONE=0, CODEC_GZ=1, CODEC_BZ2=2, CODEC_LZMA=3, // internal compressors
     
     // novel codecs
     // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
     // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
-    // COMP_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters
-    COMP_ACGT=10, COMP_NON_ACGT=11, 
+    // CODEC_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters
+    CODEC_ACGT=10, CODEC_NON_ACGT=11, 
+    CODEC_HT=12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
 
-    COMP_BGZ=20, COMP_XZ=21, COMP_BCF=22, COMP_BAM=23, COMP_CRAM=24, COMP_ZIP=25,  // external compressors
+    CODEC_BGZ=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  // external compressors
 
     NUM_COMPRESSION_ALGS
-} CompressionAlg; 
+} Codec; 
 
-// aligned with CompressionAlg ; used in --show-header
-#define COMP_ALG_NAMES {"NONE", "GZ",   "BZ2",  "LZMA", "FFU4", "FFU5", "FFU6", "FFU7", "FFU8", "FFU9", \
-                        "ACGT", "~CGT", "FF12", "FF13", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
+// aligned with Codec ; used in --show-header (max 4 chars)
+#define CODEC_NAMES {"NONE", "GZ",   "BZ2",  "LZMA", "FFU4", "FFU5", "FFU6", "FFU7", "FFU8", "FFU9", \
+                        "ACGT", "~CGT", "HT", "FF13", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
                         "BGZ",  "XZ",   "BCF",  "BAM" , "CRAM", "ZIP" }
 
 // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
-#define COMP_ALG_EXTS  {"+", "+.gz", "+.bz",  "+", "+", "+", "+", "+", "+", "+", \
+#define CODEC_EXTS  {"+", "+.gz", "+.bz",  "+", "+", "+", "+", "+", "+", "+", \
                         "+", "+", "+", "+", "+", "+", "+", "+", "+", "+", \
                         "+.bgz", "+.xz", "-.bcf", "-.bam", "-.cram", "+.zip" }
 

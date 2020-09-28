@@ -39,7 +39,7 @@ const char *WRITEREAD = "wb+";
 
 const char *file_exts[] = FILE_EXTS;
 
-static const struct { FileType in; CompressionAlg comp_alg; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
+static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][30] = TXT_IN_FT_BY_DT;
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 
@@ -68,12 +68,12 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 }
 
 // get compression algorithm by txt file type
-CompressionAlg file_get_comp_alg_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode)
+Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode)
 {
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
-        if (txt_in_ft_by_dt[dt][i].in == txt_ft) return txt_in_ft_by_dt[dt][i].comp_alg;
+        if (txt_in_ft_by_dt[dt][i].in == txt_ft) return txt_in_ft_by_dt[dt][i].codec;
 
-    return (mode == WRITE ? COMP_NONE : COMP_UNKNOWN);
+    return (mode == WRITE ? CODEC_NONE : CODEC_UNKNOWN);
 }
 
 DataType file_get_dt_by_z_ft (FileType z_ft)
@@ -311,17 +311,17 @@ bool file_open_txt (File *file)
     }
 
     // open the file, based on the compression algorithm
-    file->comp_alg = file_get_comp_alg_by_txt_ft (file->data_type, file->type, file->mode);
+    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, file->mode);
 
-    switch (file->comp_alg) { 
-        case COMP_NONE:
+    switch (file->codec) { 
+        case CODEC_NONE:
             // don't actually open the output file if we're just testing in genounzip or PIZing a reference file
             if ((flag_test || flag_reading_reference) && file->mode == WRITE) return true;
 
             file->file = file->is_remote ? url_open (NULL, file->name) : fopen (file->name, file->mode);
             break;
 
-        case COMP_GZ:
+        case CODEC_GZ:
             if (file->mode == READ) {
                 if (file->is_remote) { 
                     FILE *url_fp = url_open (NULL, file->name);
@@ -334,7 +334,7 @@ bool file_open_txt (File *file)
                 file_redirect_output_to_stream (file, "bgzip", "--stdout", NULL);
             break;
         
-        case COMP_BZ2:
+        case CODEC_BZ2:
             if (file->is_remote) {            
                 FILE *url_fp = url_open (NULL, file->name);
                 file->file = BZ2_bzdopen (fileno(url_fp), file->mode); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
@@ -343,7 +343,7 @@ bool file_open_txt (File *file)
                 file->file = BZ2_bzopen (file->name, file->mode);  // for local files we decompress ourselves   
             break;
 
-        case COMP_XZ:
+        case CODEC_XZ:
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
                                                 "To uncompress an .xz file", "xz",       // reason, exec_name
@@ -354,7 +354,7 @@ bool file_open_txt (File *file)
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
 
-        case COMP_ZIP:
+        case CODEC_ZIP:
             input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
                                                 "To uncompress a .zip file", "unzip",    // reason, exec_name
@@ -365,11 +365,11 @@ bool file_open_txt (File *file)
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
 
-        case COMP_BCF:
-        case COMP_BAM: 
-        case COMP_CRAM: {
-            bool bam =  (file->comp_alg == COMP_BAM);
-            bool cram = (file->comp_alg == COMP_CRAM);
+        case CODEC_BCF:
+        case CODEC_BAM: 
+        case CODEC_CRAM: {
+            bool bam =  (file->codec == CODEC_BAM);
+            bool cram = (file->codec == CODEC_CRAM);
 
             if (file->mode == READ) {
                 char reason[100];
@@ -602,11 +602,11 @@ void file_close (File **file_p,
     
     if (file->file) {
 
-        if (file->mode == READ && (file->comp_alg == COMP_GZ || file->comp_alg == COMP_BGZ)) {
+        if (file->mode == READ && (file->codec == CODEC_GZ || file->codec == CODEC_BGZ)) {
             int ret = gzclose_r((gzFile)file->file);
             ASSERTW (!ret, "%s: warning: failed to close file: %s", global_cmd, file_printname (file));
         }
-        else if (file->mode == READ && file->comp_alg == COMP_BZ2)
+        else if (file->mode == READ && file->codec == CODEC_BZ2)
             BZ2_bzclose((BZFILE *)file->file);
         
         else if (file->mode == READ && file_is_read_via_ext_decompressor (file)) 
@@ -754,10 +754,10 @@ bool file_seek (File *file, int64_t offset,
 
 uint64_t file_tell (File *file)
 {
-    if (command == ZIP && file == txt_file && file->comp_alg == COMP_GZ)
+    if (command == ZIP && file == txt_file && file->codec == CODEC_GZ)
         return gzconsumed64 ((gzFile)txt_file->file); 
     
-    if (command == ZIP && file == txt_file && file->comp_alg == COMP_BZ2)
+    if (command == ZIP && file == txt_file && file->codec == CODEC_BZ2)
         return BZ2_consumed ((BZFILE *)txt_file->file); 
 
 #ifdef __APPLE__
@@ -846,28 +846,28 @@ const char *file_viewer (const File *file)
         /* cram */ "samtools view -h --threads 2",
         /* zip  */ "unzip -p" };  // zip
 
-    return viewer[file->comp_alg];
+    return viewer[file->codec];
 }
 
 // PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
 const char *file_guess_original_filename (const File *file)
 {
-    static const char *comp_alg_exts[NUM_COMPRESSION_ALGS] = COMP_ALG_EXTS; 
+    static const char *codec_exts[NUM_COMPRESSION_ALGS] = CODEC_EXTS; 
 
-    if (file->comp_alg == COMP_NONE) return file->name;
+    if (file->codec == CODEC_NONE) return file->name;
 
     unsigned len = strlen (file->name) + 10;
     char *org_name = malloc (len);
     strcpy (org_name, file->name);
 
     // remove existing extension if needed (eg when replacing .sam with .bam)
-    if (comp_alg_exts[file->comp_alg][0] == '-') {
+    if (codec_exts[file->codec][0] == '-') {
         char *last_dot = strrchr (org_name, '.');
         if (last_dot) *last_dot = 0;
     }
 
     // add new extension
-    strcpy (&org_name[strlen(org_name)], &comp_alg_exts[file->comp_alg][1]);
+    strcpy (&org_name[strlen(org_name)], &codec_exts[file->codec][1]);
 
     return org_name;
 }

@@ -32,15 +32,14 @@ unsigned sam_vb_zip_dl_size (void) { return sizeof (ZipDataLineSAM); }
 
 void sam_vb_release_vb (VBlockSAM *vb)
 {
-    memset (&vb->qname_mapper, 0, sizeof (vb->qname_mapper));
-    buf_free (&vb->optional_mapper_buf);
     vb->last_cigar = NULL;
-    vb->ref_consumed = 0;
+    vb->ref_consumed = vb->ref_and_seq_consumed = 0;
+    buf_free (&vb->bd_bi_line);
 }
 
 void sam_vb_destroy_vb (VBlockSAM *vb)
 {
-    buf_destroy (&vb->optional_mapper_buf);
+    buf_destroy (&vb->bd_bi_line);
 }
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string

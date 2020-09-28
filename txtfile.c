@@ -76,13 +76,13 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
         }
 #endif
     }
-    else if (txt_file->comp_alg == COMP_GZ) {
+    else if (txt_file->codec == CODEC_GZ) {
         bytes_read = gzfread (data, 1, max_bytes, (gzFile)txt_file->file);
         
         if (bytes_read)
             txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); 
     }
-    else if (txt_file->comp_alg == COMP_BZ2) { 
+    else if (txt_file->codec == CODEC_BZ2) { 
         bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, data, max_bytes);
 
         if (bytes_read)
@@ -474,10 +474,10 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
 
     bool is_no_ht_vcf = (txt_file->data_type == DT_VCF && vcf_vb_has_haplotype_data(vb));
 
-    switch (txt_file->comp_alg) {
+    switch (txt_file->codec) {
         // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
-        case COMP_GZ:
-        case COMP_BZ2: ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size; break;
+        case CODEC_GZ:
+        case CODEC_BZ2: ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size; break;
 
         // for compressed files for which we don't have their size (eg streaming from an http server) - we use
         // estimates based on a benchmark compression ratio of files with and without genotype data
@@ -485,17 +485,17 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
         // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
         // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
         // the bcf is compressed as it normally is.
-        case COMP_BCF: ratio = is_no_ht_vcf ? 55 : 8.5; break;
+        case CODEC_BCF: ratio = is_no_ht_vcf ? 55 : 8.5; break;
 
-        case COMP_XZ:  ratio = is_no_ht_vcf ? 171 : 12.7; break;
+        case CODEC_XZ:  ratio = is_no_ht_vcf ? 171 : 12.7; break;
 
-        case COMP_BAM: ratio = 7; break;
+        case CODEC_BAM: ratio = 7; break;
 
-        case COMP_CRAM: ratio = 9; break;
+        case CODEC_CRAM: ratio = 9; break;
 
-        case COMP_ZIP: ratio = 3; break;
+        case CODEC_ZIP: ratio = 3; break;
 
-        case COMP_NONE: ratio = 1; break;
+        case CODEC_NONE: ratio = 1; break;
 
         default: ABORT ("Error in txtfile_estimate_txt_data_size: unspecified file_type=%u", txt_file->type);
     }
@@ -553,7 +553,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
     static Buffer header_section = EMPTY_BUFFER;
 
-    int header_offset = zfile_read_section (z_file, evb, 0, NO_SB_I, &header_section, "header_section", 
+    int header_offset = zfile_read_section (z_file, evb, 0, &header_section, "header_section", 
                                             sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, NULL);
     if (header_offset == EOF) {
         buf_free (&header_section);
@@ -575,7 +575,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-    txt_file->comp_alg             = header->compression_type;
+    txt_file->codec             = header->compression_type;
     
     if (is_first_txt || flag_unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);

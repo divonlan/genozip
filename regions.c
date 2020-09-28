@@ -297,10 +297,13 @@ void regions_transform_negative_to_positive_complement()
 // PIZ: we calculate which regions (specified in the command line -r/-R) intersect with 
 // the ra (=a range of a single chrome within a vb) (represented by the parameters of this funciton) - 
 // filling in a bytemap of the intersection, and returning true if there is any intersection at all
-bool regions_get_ra_intersection (uint32_t chrom_word_index, PosType min_pos, PosType max_pos,
+bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos,
                                   char *intersection_array) // optional out
 {
     if (!flag_regions) return true; // nothing to do
+
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, 
+            "Error in regions_is_range_included: chrom_word_index=%d out of range", chrom_word_index);
 
     Buffer *chregs_buf = &chregs[chrom_word_index];
 
@@ -319,7 +322,7 @@ bool regions_get_ra_intersection (uint32_t chrom_word_index, PosType min_pos, Po
 }
 
 // used by ref_display_ref. if an intersection was found - returns the min,max pos and true, otherwise returns false
-bool regions_get_range_intersection (uint32_t chrom_word_index, PosType min_pos, PosType max_pos,
+bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos,
                                      PosType *intersect_min_pos, PosType *intersect_max_pos) // out
 {
     if (!flag_regions) { // if no regions are specified, the entire range "intersects"
@@ -346,8 +349,11 @@ bool regions_get_range_intersection (uint32_t chrom_word_index, PosType min_pos,
 
 // PIZ: check if a (chrom,pos) that comes from a specific line, is included in any positive region of
 // a specific ra (i.e. chromosome)
-bool regions_is_site_included (uint32_t chrom_word_index, PosType pos)
+bool regions_is_site_included (WordIndex chrom_word_index, PosType pos)
 {
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, 
+            "Error in regions_is_site_included: chrom_word_index=%d out of range", chrom_word_index);
+
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
@@ -358,10 +364,13 @@ bool regions_is_site_included (uint32_t chrom_word_index, PosType pos)
 }
 
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
-bool regions_is_range_included (int32_t chrom, PosType start_pos, PosType end_pos, bool completely_included)
+bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, PosType end_pos, bool completely_included)
 {
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, 
+            "Error in regions_is_range_included: chrom_word_index=%d out of range", chrom_word_index);
+
     // it sufficient that the site is included in one (positive) region
-    Buffer *chregs_buf = &chregs[chrom];
+    Buffer *chregs_buf = &chregs[chrom_word_index];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
         Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
 
@@ -379,10 +388,10 @@ bool regions_is_range_included (int32_t chrom, PosType start_pos, PosType end_po
             bool left_flanking_covered=true, right_flanking_covered=true;
 
             if (start_pos < chreg->start_pos) 
-                left_flanking_covered = regions_is_range_included (chrom, start_pos, chreg->start_pos-1, true);
+                left_flanking_covered = regions_is_range_included (chrom_word_index, start_pos, chreg->start_pos-1, true);
 
             if (end_pos > chreg->end_pos) 
-                right_flanking_covered = regions_is_range_included (chrom, chreg->end_pos+1, end_pos, true);
+                right_flanking_covered = regions_is_range_included (chrom_word_index, chreg->end_pos+1, end_pos, true);
 
             return left_flanking_covered && right_flanking_covered;
         }

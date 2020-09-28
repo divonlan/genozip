@@ -429,7 +429,7 @@ static void ref_read_one_range (VBlockP vb)
         ASSERT0 (vb->z_section_headers.len < 2, "Error in ref_read_one_range: unexpected 3rd recursive entry");
 
         int32_t section_offset = 
-            zfile_read_section (z_file, vb, sl_ent->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
+            zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", 
                                 sizeof(SectionHeaderReference), sl_ent->section_type, sl_ent);    
 
         ASSERT (section_offset != EOF, "Error in ref_read_one_range: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);
@@ -649,7 +649,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 
     RESET_FLAG (flag_show_headers);
-    zfile_read_section (ref_file, evb, ra->vblock_i, NO_SB_I, &ref_seq_section, "ref_seq_section", 
+    zfile_read_section (ref_file, evb, ra->vblock_i, &ref_seq_section, "ref_seq_section", 
                         sizeof (SectionHeaderReference), SEC_REFERENCE, *sl);
     RESTORE_FLAG (flag_show_headers);
 
@@ -821,7 +821,7 @@ static void ref_compress_one_range (VBlockP vb)
         LTEN_bit_array (&r->is_set, true);
 
         header.h.section_type          = SEC_REF_IS_SET;  // most of the header is the same as ^
-        header.h.sec_compression_alg   = COMP_BZ2;
+        header.h.codec   = CODEC_BZ2;
         header.h.data_uncompressed_len = BGEN32 (r->is_set.num_of_words * sizeof (uint64_t));
         header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
@@ -837,7 +837,8 @@ static void ref_compress_one_range (VBlockP vb)
     if (r) LTEN_bit_array (&r->ref, true);
 
     header.h.section_type          = SEC_REFERENCE;
-    header.h.sec_compression_alg   = COMP_LZMA;
+    header.h.codec   = CODEC_LZMA;
+    header.h.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
     header.h.data_uncompressed_len = r ? BGEN32 (r->ref.num_of_words * sizeof (uint64_t)) : 0;
     header.num_bases               = r ? BGEN32 (r->ref.num_of_bits / 2) : 0; // less than ref_size(r) if compacted
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NULL);
@@ -1050,18 +1051,18 @@ static void ref_display_ref (void)
     }
 }
 
-#define REV_COMP_GENOME_BASES_PER_THREAD (1 << 27) // 128Mbp
+#define REV_CODEC_GENOME_BASES_PER_THREAD (1 << 27) // 128Mbp
 
 static void ref_reverse_compliment_genome_prepare (VBlock *vb)
 {
-    vb->ready_to_dispatch = (vb->vblock_i-1) * REV_COMP_GENOME_BASES_PER_THREAD < genome_size;
+    vb->ready_to_dispatch = (vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD < genome_size;
 }
 
 static void ref_reverse_compliment_genome_do (VBlock *vb)
 {
     bit_array_reverse_complement_all (&genome_rev.ref, &genome.ref, 
-                                      (vb->vblock_i-1) * REV_COMP_GENOME_BASES_PER_THREAD, 
-                                      REV_COMP_GENOME_BASES_PER_THREAD);
+                                      (vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
+                                      REV_CODEC_GENOME_BASES_PER_THREAD);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
 }

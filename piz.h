@@ -19,25 +19,18 @@ extern bool piz_dispatcher (bool is_first_component, bool is_last_file);
 
 extern uint32_t piz_uncompress_all_ctxs (VBlockP vb, uint32_t pair_vb_i);
 
-extern void piz_map_compound_field (VBlockP vb, bool (*predicate)(DictId), SubfieldMapperP mapper);
-
 // ----------------------------------------------
 // utilities for use by piz_*_reconstruct_vb
 // ----------------------------------------------
 
-extern uint32_t piz_reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep);
+extern int32_t piz_reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep);
 #define piz_reconstruct_from_ctx(vb,did_i,sep) piz_reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep))
 
-extern void piz_reconstruct_one_snip (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
+extern void piz_reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len);
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 
-extern void piz_reconstruct_structured_do (VBlockP vb, ConstStructuredP st, const char *prefixes, uint32_t prefixes_len);
-
-typedef struct PizSubfieldMapper {
-    DidIType num_subfields;        
-    DictId dict_id[MAX_SUBFIELDS];
-} PizSubfieldMapper;
+extern void piz_reconstruct_structured_do (VBlockP vb, DictId dict_id, ConstStructuredP st, const char *prefixes, uint32_t prefixes_len);
 
 #define DECLARE_SNIP const char *snip=NULL; uint32_t snip_len=0
 

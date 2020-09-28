@@ -18,8 +18,6 @@
 #include "domqual.h"
 #include "aligner.h"
 
-static Structured structured_QNAME;
-
 // called by I/O thread 
 void sam_zip_initialize (void)
 {
@@ -70,7 +68,7 @@ bool sam_inspect_txt_header (BufferP txt_header)
 }
 
 // callback function for compress to get data of one line (called by comp_compress_bzlib)
-void sam_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i, 
+void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                         char **line_qual_data, uint32_t *line_qual_len, // out
                                         char **line_u2_data,   uint32_t *line_u2_len) 
 {
@@ -93,74 +91,77 @@ void sam_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
     }
 }
 
-// callback function for compress to get data of one line
-void sam_zip_get_start_len_line_i_bd (VBlock *vb, uint32_t vb_line_i, 
-                                      char **line_bd_data, uint32_t *line_bd_len,  // out 
-                                      char **unused1,  uint32_t *unused2)
+// callback function for compress to get BD_BI data of one line: this is an
+// interlaced line containing a character from BD followed by a character from BI - since these two fields are correlated
+// note: if only one of BD or BI exists, the missing data in the interlaced string will be 0 (this should is not expected to ever happen)
+void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i, 
+                    char **line_data, uint32_t *line_len,  // out 
+                    char **unused1,  uint32_t *unused2)
 {
+    VBlockSAM *vb = (VBlockSAM *)vb_;
+
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+    
+    const char *bd = dl->bdbi_data_start[0] ? ENT (char, vb->txt_data, dl->bdbi_data_start[0]) : NULL;
+    const char *bi = dl->bdbi_data_start[1] ? ENT (char, vb->txt_data, dl->bdbi_data_start[1]) : NULL;
+    
+    if (!bd && !bi) return; // no BD or BI on this line
 
-    *line_bd_data = dl->bd_data_len ? ENT (char, vb->txt_data, dl->bd_data_start) : NULL;
-    *line_bd_len  = dl->bd_data_len;
-    *unused1 = NULL;
-    *unused2 = 0;
-}   
+    buf_alloc (vb, &vb->bd_bi_line, dl->seq_len * 2, 2, "bd_bi_line", 0);
 
-// callback function for compress to get BI data of one line
-// if BD data is available for this line too - we output the character-wise delta as they are correlated
-// we expect the length of BI and BD to be the same, the length of the sequence. this is enforced by sam_seg_optional_field.
-void sam_zip_get_start_len_line_i_bi (VBlock *vb, uint32_t vb_line_i, 
-                                      char **line_bi_data, uint32_t *line_bi_len,  // out 
-                                      char **unused1,  uint32_t *unused2)
-{
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-
-    if (dl->bi_data_len && dl->bd_data_len) {
-
-        ASSERT (dl->bi_data_len == dl->bd_data_len, "Error: expecting dl->bi_data_len=%u to be equal to dl->bd_data_len=%u",
-                dl->bi_data_len, dl->bd_data_len);
-
-        char *bi       = ENT (char, vb->txt_data, dl->bi_data_start);
-        const char *bd = ENT (char, vb->txt_data, dl->bd_data_start);
-
-        // calculate character-wise delta
-        for (unsigned i=0; i < dl->bi_data_len; i++) *(bi++) -= *(bd++);
+    // calculate character-wise delta
+    for (unsigned i=0; i < dl->seq_len; i++) {
+        *ENT (uint8_t, vb->bd_bi_line, i*2    ) = bd ? bd[i] : 0;
+        *ENT (uint8_t, vb->bd_bi_line, i*2 + 1) = bi ? bi[i] : 0;
     }
 
-    *line_bi_data = dl->bi_data_len ? ENT (char, vb->txt_data, dl->bi_data_start) : NULL;
-    *line_bi_len  = dl->bi_data_len;
-    *unused1 = NULL;
-    *unused2 = 0;
+    *line_data = FIRSTENT (char, vb->bd_bi_line);
+    *line_len  = dl->seq_len * 2;
 }   
 
 void sam_seg_initialize (VBlock *vb)
 {
-    // thread safety: this will be initialized by vb_i=1, while it holds a mutex in zip_compress_one_vb
-    static bool structured_initialized = false;
-    if (!structured_initialized) {
-        seg_initialize_compound_structured ((VBlockP)vb, "Q?NAME", &structured_QNAME);
-        structured_initialized = true;
-    }
-
     vb->contexts[SAM_RNAME].inst       = CTX_INST_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SEQ_BITMAP].ltype = LT_BITMAP;
-    vb->contexts[SAM_NONREF].lcomp     = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good ;
+    vb->contexts[SAM_NONREF].lcodec    = flag_optimize_SEQ ? CODEC_LZMA : CODEC_ACGT; // ACGT is a lot faster, but ~5% less good ;
     vb->contexts[SAM_NONREF].ltype     = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype       = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].inst        = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
     vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
     vb->contexts[SAM_STRAND].ltype     = LT_BITMAP;
-    vb->contexts[SAM_STRAND].lcomp     = COMP_NONE; // bz2 and lzma only make it bigger
+    vb->contexts[SAM_STRAND].lcodec    = CODEC_NONE; // bz2 and lzma only make it bigger
     vb->contexts[SAM_GPOS].ltype       = LT_UINT32;
     vb->contexts[SAM_GPOS].flags       = CTX_FL_STORE_INT;
-    vb->contexts[SAM_GPOS].lcomp       = COMP_LZMA;
+    vb->contexts[SAM_GPOS].lcodec      = CODEC_LZMA;
 }
 
 void sam_seg_finalize (VBlockP vb)
 {
     // check if domqual compression is applicable to this quality data, and prepare QUAL/QDOMRUNS local data if it is
-    domqual_convert_qual_to_domqual (vb, sam_zip_get_start_len_line_i_qual, SAM_QUAL);
+    domqual_convert_qual_to_domqual (vb, sam_zip_qual, SAM_QUAL);
+
+    // top level snip
+    Structured top_level = { 
+        .repeats   = vb->lines.len,
+        .flags     = STRUCTURED_TOPLEVEL,
+        .num_items = 13,
+        .items     = { { (DictId)dict_id_fields[SAM_QNAME],      DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_FLAG],       DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_RNAME],      DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_POS],        DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_MAPQ],       DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_CIGAR],      DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_RNEXT],      DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_PNEXT],      DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_TLEN],       DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_SEQ_BITMAP], DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_QUAL],       DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[SAM_OPTIONAL],   DID_I_NONE, ""   },
+                       { (DictId)dict_id_fields[SAM_EOL],        DID_I_NONE, ""   } }
+    };
+
+    seg_structured_by_ctx (vb, &vb->contexts[SAM_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 // TLEN - 3 cases: 
@@ -279,6 +280,8 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
 
         if (range) ref_unlock (lock);
         
+        // note: in case of a missing range (which can be the first range in this seq, or a subsequent range), we zero the entire remaining bitmap.
+        // this is because, absent a reference, we don't know how much ref is consumed by this missing range.
         goto align_nonref_local; 
     }    
 
@@ -310,6 +313,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
                     cigar, seq_len, recursion_level, level_0_cigar, level_0_seq_len);
 
             uint32_t bit_i = bitmap_ctx->next_local; // copy to automatic variable for performance
+            uint32_t start_i = i;
             while (subcigar_len && next_ref < pos_index + ref_len_this_level) {
 
                 // when we have an X we don't enter it into our internal ref, and we wait for a read with a = or M for that site,
@@ -348,6 +352,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
                 next_ref++;
                 i++;
             }
+            vb->ref_and_seq_consumed -= (i - start_i); // update in case a range in a subsequent recursion level is missing and we need to clear the bitmap
             bitmap_ctx->next_local = bit_i;
         } // end if 'M', '=', 'X'
 
@@ -419,7 +424,7 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
             random_access_update_to_entire_chrom ((VBlockP)vb, range->first_pos, range->last_pos);
     }
 align_nonref_local: {
-    // we align nonref_ctx->local to a 4-character boundary. this is because COMP_ACGT squeezes every 4 characters into a byte,
+    // we align nonref_ctx->local to a 4-character boundary. this is because CODEC_ACGT squeezes every 4 characters into a byte,
     // before compressing it with LZMA. In sorted SAM, we want subsequent identical sequences to have the same byte alignment
     // so that LZMA can catch their identicality.
     uint64_t add_chars = (4 - (nonref_ctx->local.len & 3)) & 3;
@@ -477,8 +482,8 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_by_dict_id (vb, nm,     nm_len,     structured_SA_OA.items[5].dict_id, 1 + nm_len);
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
-        pos_ctx->lcomp = COMP_LZMA;
-        pos_ctx->ltype = LT_UINT32;
+        pos_ctx->lcodec  = CODEC_LZMA;
+        pos_ctx->ltype   = LT_UINT32;
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
 
@@ -539,8 +544,8 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         seg_by_dict_id (vb, nm,     nm_len,    structured_XA.items[4].dict_id, 1 + nm_len);
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_XA.items[2].dict_id);
-        pos_ctx->ltype = LT_UINT32;
-        pos_ctx->lcomp = COMP_LZMA;
+        pos_ctx->ltype  = LT_UINT32;
+        pos_ctx->lcodec = CODEC_LZMA;
 
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
@@ -694,44 +699,27 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
     }
 
     // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
-    else if (dict_id.num == dict_id_OPTION_BD) { 
+    else if (dict_id.num == dict_id_OPTION_BD || dict_id.num == dict_id_OPTION_BI) { 
         ASSSEG (value_len == dl->seq_len, field,
-                "Error in %s: Expecting BD data to be of length %u as indicated by CIGAR, but it is %u. BD=%.*s",
-                txt_name, dl->seq_len, value_len, value_len, value);
+                "Error in %s: Expecting data to be of length %u as indicated by CIGAR, but it is %u. %s=%.*s",
+                txt_name, dl->seq_len, value_len, err_dict_id (dict_id), value_len, value);
+        
+        bool is_bi = (dict_id.num == dict_id_OPTION_BI);
+        dl->bdbi_data_start[is_bi] = value - vb->txt_data.data;
 
-        dl->bd_data_start = value - vb->txt_data.data;
-        dl->bd_data_len   = value_len;
+        Context *ctx = mtf_get_ctx (vb, dict_id_OPTION_BD_BI);
+        ctx->txt_len += value_len + 1; // +1 for \t
+        ctx->ltype   = LT_SEQUENCE;
+        ctx->lcodec  = CODEC_LZMA;
 
-        Context *ctx = mtf_get_ctx (vb, dict_id);
-        ctx->local.len += value_len;
-        ctx->txt_len   += value_len + 1; // +1 for \t
-        ctx->ltype      = LT_SEQUENCE;
-        ctx->lcomp = COMP_LZMA;
-    }
+        if (!dl->bdbi_data_start[!is_bi]) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
+            ctx->local.len += value_len * 2;
 
-    else if (dict_id.num == dict_id_OPTION_BI) { 
-        ASSSEG (value_len == dl->seq_len, field,
-                "Error in %s: Expecting BI data to be of length %u as indicated by CIGAR, but it is %u. BI=%.*s",
-                txt_name, dl->seq_len, value_len, value_len, value);
+        // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
+        mtf_get_ctx (vb, dict_id)->inst = CTX_INST_NO_STONS; 
 
-        dl->bi_data_start = value - vb->txt_data.data;
-        dl->bi_data_len   = value_len;
-
-        Context *ctx = mtf_get_ctx (vb, dict_id);
-        ctx->local.len += value_len;
-        ctx->txt_len   += value_len + 1; // +1 for \t
-        ctx->ltype      = LT_SEQUENCE;
-        ctx->lcomp = COMP_LZMA;
-
-        // BI requires a special algorithm to reconstruct from the delta from BD (if one exists)
-        if (dl->bd_data_len) {
-            const char bi_special_snip[2] = { SNIP_SPECIAL, SAM_SPECIAL_BI };
-            seg_by_ctx ((VBlockP)vb, bi_special_snip, 2, ctx, 0, NULL);
-        }
-        else {
-            char bi_lookup_snip = SNIP_LOOKUP;
-            seg_by_ctx ((VBlockP)vb, &bi_lookup_snip, 1, ctx, 0, NULL);
-        }
+        const char special_snip[2] = { SNIP_SPECIAL, SAM_SPECIAL_BDBI };
+        seg_by_dict_id (vb, special_snip, 2, dict_id, 0);
     }
 
     // AS is a value (at least as set by BWA) at most the seq_len, and often equal to it. we modify
@@ -870,7 +858,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     GET_NEXT_ITEM ("QNAME");
-    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, &vb->qname_mapper, structured_QNAME, false, 0, 1 /* \n */);
+    seg_compound_field ((VBlockP)vb, &vb->contexts[SAM_QNAME], field_start, field_len, false, 0, 1 /* \n */);
 
     SEG_NEXT_ITEM (SAM_FLAG);
 
@@ -893,8 +881,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     unsigned last_cigar_len = field_len;
     ((char *)vb->last_cigar)[field_len] = 0; // null-terminate CIGAR string
 
-    GET_NEXT_ITEM ("RNEXT");
-    seg_by_did_i (vb, field_start, field_len, SAM_RNAME, field_len+1); // add to RNAME dictionary
+    SEG_NEXT_ITEM (SAM_RNEXT);
     
     GET_NEXT_ITEM ("PNEXT");
     seg_pos_field (vb_, SAM_PNEXT, SAM_POS, false, field_start, field_len, true);
@@ -902,7 +889,6 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     GET_NEXT_ITEM ("TLEN");
     sam_seg_tlen_field (vb, field_start, field_len, vb->contexts[SAM_PNEXT].last_delta, dl->seq_len);
 
-    // SEQ 
     GET_NEXT_ITEM ("SEQ");
 
     // calculate diff vs. reference (self or imported)
@@ -917,7 +903,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     sam_seg_cigar_field (vb, dl, last_cigar_len, seq, seq_data_len, field_start, field_len);
     
     // OPTIONAL fields - up to MAX_SUBFIELDS of them
-    Structured st = { .repeats=1, .num_items=0, .flags=0 };
+    Structured st = { .repeats=1 };
     char prefixes[MAX_SUBFIELDS * 6 + 2]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by SNIP_STRUCTURED ; +2 for the initial SNIP_STRUCTURED
     prefixes[0] = prefixes[1] = SNIP_STRUCTURED; // initial SNIP_STRUCTURED follow by seperator of empty Structured-wide prefix
     unsigned prefixes_len=2;
@@ -939,10 +925,12 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
         prefixes_len += 6;
     }
 
-    if (st.num_items)
+    if (st.num_items) {
+        st.items[st.num_items-1].seperator[0] = 0; // last Optional field has no tab
         seg_structured_by_ctx (vb_, &vb->contexts[SAM_OPTIONAL], &st, prefixes, prefixes_len, 5 * st.num_items); // account for prefixes eg MX:i:
+    }
     else
-        seg_by_did_i (vb, "", 0, SAM_OPTIONAL, 0); // empty regular snip in case this line has no OPTIONAL
+        seg_by_did_i (vb, NULL, 0, SAM_OPTIONAL, 0); // NULL means MISSING Structured item - will cause deletion of previous separator (\t)
 
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
 

@@ -18,27 +18,15 @@
 #include "piz.h"
 #include "zfile.h"
 
-void seg_init_mapper (VBlock *vb, int field_i, Buffer *mapper_buf, const char *name)
-{
-    if (!buf_is_allocated (&vb->contexts[field_i].ol_mtf)) return;
-        
-    mapper_buf->len = vb->contexts[field_i].ol_mtf.len;
-    
-    buf_alloc (vb, mapper_buf, mapper_buf->len * sizeof (SubfieldMapper), 2, name, 0);
-    
-    for (unsigned i=0; i < mapper_buf->len; i++) 
-        ((SubfieldMapper *)mapper_buf->data)[i].num_subfields = DID_I_NONE;
-}
-
-uint32_t seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
+WordIndex seg_by_ctx (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                      bool *is_new) // optional out
 {
     buf_alloc (vb, &ctx->mtf_i, MAX (vb->lines.len, ctx->mtf_i.len + 1) * sizeof (uint32_t),
                CTX_GROWTH, "contexts->mtf_i", ctx->did_i);
     
-    uint32_t node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
+    WordIndex node_index = mtf_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
 
-    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF, 
+    ASSERT (node_index < ctx->mtf.len + ctx->ol_mtf.len || node_index == WORD_INDEX_EMPTY_SF || node_index == WORD_INDEX_MISSING_SF, 
             "Error in seg_by_did_i: out of range: dict=%s mtf_i=%d mtf.len=%u ol_mtf.len=%u",  
             ctx->name, node_index, (uint32_t)ctx->mtf.len, (uint32_t)ctx->ol_mtf.len);
     
@@ -129,11 +117,11 @@ void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_p
         *snip_len += str_int (parameter, &snip[*snip_len]);
 }
 
-uint32_t seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
+WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
 {
     ASSERT0 (chrom_str_len, "Error in seg_chrom_field: chrom_str_len=0");
 
-    uint32_t chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1);
+    WordIndex chrom_node_index = seg_by_did_i (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1);
 
     random_access_update_chrom ((VBlockP)vb, chrom_node_index, chrom_str, chrom_str_len);
 
@@ -168,7 +156,7 @@ PosType seg_pos_field (VBlock *vb,
     Context *base_ctx = &vb->contexts[base_did_i];
 
     snip_ctx->inst |= CTX_INST_NO_STONS;
-    snip_ctx->lcomp = COMP_LZMA;
+    snip_ctx->lcodec = CODEC_LZMA;
 
     base_ctx->flags |= CTX_FL_STORE_INT;
     base_ctx->inst |= CTX_INST_NO_STONS;
@@ -279,7 +267,7 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
 
     Context *ctx = mtf_get_ctx (vb, dict_id);
     ctx->inst      |= CTX_INST_NO_STONS;
-    ctx->lcomp = COMP_LZMA;
+    ctx->lcodec = CODEC_LZMA;
     ctx->ltype      = LT_UINT32;
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
@@ -305,7 +293,7 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
     const int info_field   = DTF(info);
     const char *field_name = DTF(names)[info_field];
 
-    Structured st = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT };
+    Structured st = { .repeats=1, .num_items=0, .repsep={0,0}, .flags=STRUCTURED_DROP_FINAL_ITEM_SEP };
 
     const char *this_name = info_str, *this_value = NULL;
     int this_name_len = 0, this_value_len=0; // int and not unsigned as it can go negative
@@ -403,16 +391,16 @@ void seg_info_field (VBlock *vb, SegSpecialInfoSubfields seg_special_subfields, 
                             total_names_len /* names inc. = */ + (st.num_items-1) /* the ;s */ + 1 /* \t or \n */);
 }
 
-void seg_structured_by_ctx (VBlock *vb, Context *ctx, Structured *st, 
-                            // prefixes can be one of 3 options:
-                            // 1. NULL
-                            // 2. a "structured-wide prefix" that will be reconstructed once, at the beginning of the Structured
-                            // 3. a "structured-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
-                            //    displayed once per repeat, before their respective items. in this case, the structured-wide prefix
-                            //    may be empty. 
-                            // Each prefix is terminated by a SNIP_STRUCTURED character
-                            const char *prefixes, unsigned prefixes_len, 
-                            unsigned add_bytes)
+WordIndex seg_structured_by_ctx (VBlock *vb, Context *ctx, Structured *st, 
+                                 // prefixes can be one of 3 options:
+                                 // 1. NULL
+                                 // 2. a "structured-wide prefix" that will be reconstructed once, at the beginning of the Structured
+                                 // 3. a "structured-wide prefix" followed by exactly one prefix per item. the per-item prefixes will be
+                                 //    displayed once per repeat, before their respective items. in this case, the structured-wide prefix
+                                 //    may be empty. 
+                                 // Each prefix is terminated by a SNIP_STRUCTURED character
+                                 const char *prefixes, unsigned prefixes_len, 
+                                 unsigned add_bytes)
 {
     st->repeats = BGEN32 (st->repeats);
     char snip[1 + base64_sizeof(Structured) + STRUCTURED_MAX_PREFIXES_LEN]; // maximal size
@@ -425,27 +413,51 @@ void seg_structured_by_ctx (VBlock *vb, Context *ctx, Structured *st,
 
     ctx->flags |= CTX_FL_STRUCTURED;
 
-    seg_by_ctx (vb, snip, snip_len, ctx, add_bytes, NULL); 
+    // store in struct cache
+    return seg_by_ctx (vb, snip, snip_len, ctx, add_bytes, NULL); 
+}
+
+WordIndex vcf_seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len,
+                                  int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
+{
+    if (!other_ctx) goto fallback;
+
+    int64_t my_value;
+    if (!str_get_int (value, value_len, &my_value)) goto fallback;
+
+    int64_t delta = my_value - other_ctx->last_value.i; 
+    if (max_delta >= 0 && (delta > max_delta || delta < -max_delta)) goto fallback;
+
+    char snip[100]; 
+    unsigned snip_len;
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip, &snip_len);
+
+    //ctx      ->inst  |= CTX_INST_NO_STONS;  // FORMAT data can only be in b250, not local (since GT_DATA stores node_indexes) (avoid zip_handle_unique_words_ctxs)
+    other_ctx->inst  |= CTX_INST_NO_STONS;
+    other_ctx->flags |= CTX_FL_STORE_INT;
+
+    return seg_by_ctx ((VBlockP)vb, snip, snip_len, ctx, value_len, NULL);
+
+fallback:
+    return seg_by_ctx ((VBlockP)vb, value, value_len, ctx, value_len, NULL);
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
-
-void seg_initialize_compound_structured (VBlockP vb, char *name_template, Structured *st)
+static inline Structured seg_initialize_compound_structured (VBlockP vb, DictId dict_id, bool type_1_items)
 {
-    memset (st, 0, sizeof (Structured));
-    unsigned name_len = MIN (strlen (name_template), DICT_ID_LEN);
-
-    char name[DICT_ID_LEN] = {}; // modifiable string
-    memcpy (name, name_template, name_len);
+    Structured st = (Structured){ .repeats = 1 };
 
     for (unsigned i=0; i < MAX_COMPOUND_COMPONENTS; i++) {
-        name[1] = (i < 10) ? ('0' + i) : ('a' + (i-10));
-        st->items[i].dict_id = dict_id_type_1 (dict_id_make (name, name_len)); // both FASTQ and SAM use type1 for their compound field (QNAME and DESC respectively)
-        st->items[i].did_i   = DID_I_NONE;
-        mtf_get_ctx (vb, st->items[i].dict_id); // create ctx
+        const uint8_t *id = dict_id.id;
+        uint8_t char2 = (i < 10) ? ('0' + i) : ('a' + (i-10));
+        
+        st.items[i].did_i   = DID_I_NONE;
+        st.items[i].dict_id = (DictId){ .id = { id[0], char2, id[1], id[2], id[3], id[4], id[5], id[6] }};
+        
+        if (type_1_items) st.items[i].dict_id = dict_id_type_1 (st.items[i].dict_id);
     }
 
-    st->repeats = 1;
+    return st;
 }
 
 // We break down the field (eg QNAME in SAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
@@ -458,15 +470,15 @@ void seg_initialize_compound_structured (VBlockP vb, char *name_template, Struct
 // anticipate that usually all lines have the same format, but we allow lines to have different formats.
 void seg_compound_field (VBlock *vb, 
                          Context *field_ctx, const char *field, unsigned field_len, 
-                         SubfieldMapper *mapper, Structured st,
                          bool ws_is_sep, // whitespace is separator - separate by ' ' at '\t'
                          unsigned nonoptimized_len, // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
                          unsigned add_for_eol) // account for characters beyond the component seperators
 {
     const char *snip = field;
     unsigned snip_len = 0;
-    unsigned sf_i = 0;
     unsigned num_double_sep = 0;
+
+    Structured st = seg_initialize_compound_structured ((VBlockP)vb, field_ctx->dict_id, true); 
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
@@ -474,20 +486,11 @@ void seg_compound_field (VBlock *vb,
         char sep = (i==field_len) ? 0 : field[i];
 
         if (!sep || 
-            ((sf_i < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep=='\t' || sep==1))))) {
+            ((st.num_items < MAX_COMPOUND_COMPONENTS-1) && (sep==':' || sep=='/' || sep=='|' || sep=='.' || (ws_is_sep && (sep==' ' || sep=='\t' || sep==1))))) {
         
             // process the subfield that just ended
-            Context *sf_ctx;
-
-            if (mapper->num_subfields == sf_i) { // new subfield in this VB (sf_ctx might exist from previous VBs)
-                sf_ctx = mtf_get_ctx (vb, st.items[sf_i].dict_id);
-                mapper->did_i[sf_i] = sf_ctx->did_i;
-                mapper->num_subfields++;
-            }
-            else 
-                sf_ctx = MAPPER_CTX (mapper, sf_i);
-
-            ASSERT0 (sf_ctx, "Error in seg_compound_field: sf_ctx is NULL");
+            Context *sf_ctx = mtf_get_ctx (vb, st.items[st.num_items].dict_id);
+            ASSERT (sf_ctx, "Error in seg_compound_field: sf_ctx for %s is NULL", err_dict_id (st.items[st.num_items].dict_id));
 
             // allocate memory if needed
             buf_alloc (vb, &sf_ctx->mtf_i, MAX (vb->lines.len, sf_ctx->mtf_i.len + 1) * sizeof (uint32_t),
@@ -559,29 +562,28 @@ void seg_compound_field (VBlock *vb,
 
             // finalize this subfield and get ready for reading the next one
             if (i < field_len) {    
-                st.items[sf_i].seperator[0] = sep;
-                st.items[sf_i].seperator[1] = double_sep ? sep : 0;
+                st.items[st.num_items].seperator[0] = sep;
+                st.items[st.num_items].seperator[1] = double_sep ? sep : 0;
                 snip = &field[i+1];
                 snip_len = 0;
             }
-            sf_i++;
+            st.num_items++;
         }
         else snip_len++;
     }
 
-    st.num_items = sf_i;
-
-    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, (nonoptimized_len ? nonoptimized_len : sf_i + num_double_sep - 1) + add_for_eol);
+    seg_structured_by_ctx (vb, field_ctx, &st, NULL, 0, (nonoptimized_len ? nonoptimized_len : st.num_items + num_double_sep - 1) + add_for_eol);
 }
 
-void seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
-                      SegOptimize optimize) // optional optimization function
+// an array - all elements go into a single item context, multiple repeats
+WordIndex seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len, 
+                           SegOptimize optimize) // optional optimization function
 {   
     const char *str = value; 
     int str_len = (int)value_len; // must be int, not unsigned, for the for loop
     
-    Structured st = { .num_items = 1, .flags = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT, 
-                      .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
+    MiniStructured st = { .num_items = 1, .flags = STRUCTURED_DROP_FINAL_ITEM_SEP, 
+                          .repsep = {0,0}, .items = { { .seperator = {','}, .did_i = DID_I_NONE } } };
     DictId arr_dict_id = dict_id_make ("XX_ARRAY", 8);
     arr_dict_id.id[0]      = FLIP_CASE (dict_id.id[0]);
     arr_dict_id.id[1]      = FLIP_CASE (dict_id.id[1]);
@@ -611,7 +613,33 @@ void seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned va
         str++;
     }
 
-    seg_structured_by_dict_id (vb, dict_id, &st, 0);
+    return seg_structured_by_dict_id (vb, dict_id, (Structured *)&st, 0);
+}
+
+// an comma-separated array - each element goes into its own item context, single repeat (somewhat similar to compound, but 
+// intended for simple arrays - just comma separators, no delta between lines or optimizations)
+WordIndex seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value, int value_len)
+{   
+    Structured st = seg_initialize_compound_structured (vb, dict_id, false);    
+
+    for (st.num_items=0; st.num_items < MAX_COMPOUND_COMPONENTS && value_len > 0; st.num_items++) { // value_len will be -1 after last number
+
+        const char *snip = value;
+        for (; value_len && *value != ','; value++, value_len--) {};
+
+        unsigned number_len = (unsigned)(value - snip);
+
+        if (st.num_items == MAX_COMPOUND_COMPONENTS-1) // final permitted repeat - take entire remaining string
+            number_len += value_len;
+
+        if (value_len > 0) st.items[st.num_items].seperator[0] = ','; 
+        seg_by_dict_id (vb, snip, number_len, st.items[st.num_items].dict_id, number_len + (value_len>0 /* has comma */));
+        
+        value_len--; // skip comma
+        value++;
+    }
+
+    return seg_structured_by_dict_id (vb, dict_id, (Structured *)&st, 0);
 }
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 
@@ -635,18 +663,11 @@ void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigne
     }
 }
 
-// SIGNED NUMBERS ARE NOT UNTEST YET! NOT USE YET BY ANY SEG
-// for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
-// example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
-// compressing better in an array that contains both positive and negative
-#define SAFE_NEGATE(type,n) ((u##type)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
-#define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
-
 void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned add_bytes)
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint8_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int8_t, value);
+    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int8_t, value);
     NEXTENT (uint8_t, ctx->local) = value;
 
     if (add_bytes) ctx->txt_len += add_bytes;
@@ -656,7 +677,7 @@ void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint16_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int16_t, value);
+    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int16_t, value);
     NEXTENT (uint16_t, ctx->local) = BGEN16 (value);
 
     if (add_bytes) ctx->txt_len += add_bytes;
@@ -666,7 +687,7 @@ void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint32_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int32_t, value);
+    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int32_t, value);
     NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
 
     if (add_bytes) ctx->txt_len += add_bytes;
@@ -676,7 +697,7 @@ void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned
 {
     buf_alloc (vb, &ctx->local, MAX (ctx->local.len + 1, vb->lines.len) * sizeof (uint64_t), CTX_GROWTH, ctx->name, ctx->did_i);
 
-    if (lt_is_signed[ctx->ltype]) value = INTERLACE (int64_t, value);
+    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int64_t, value);
     NEXTENT (uint64_t, ctx->local) = BGEN64 (value);
 
     if (add_bytes) ctx->txt_len += add_bytes;
@@ -689,7 +710,7 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
     else 
         vb->num_lines_at_2_3 = vb->line_i + 1;
 
-    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
 
         Context *ctx = &vb->contexts[did_i];
         if (ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists
@@ -738,13 +759,13 @@ static void seg_verify_file_size (VBlock *vb)
 {
     uint32_t reconstructed_vb_size = 0;
 
-    for (unsigned sf_i=0; sf_i < vb->num_dict_ids; sf_i++) 
+    for (unsigned sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         reconstructed_vb_size += vb->contexts[sf_i].txt_len;
         
     if (vb->vb_data_size != reconstructed_vb_size && !flag_optimize) {
 
         fprintf (stderr, "Txt lengths:\n");
-        for (unsigned sf_i=0; sf_i < vb->num_dict_ids; sf_i++) {
+        for (unsigned sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = &vb->contexts[sf_i];
             fprintf (stderr, "%s: %u\n", ctx->name, (uint32_t)ctx->txt_len);
         }
@@ -762,7 +783,7 @@ void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
 
-    mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids); // Create ctx for the fields in the correct order 
+    mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
 
     mtf_verify_field_ctxs (vb);
     

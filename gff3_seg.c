@@ -23,19 +23,28 @@ void gff3_seg_initialize (VBlock *vb)
     vb->contexts[GFF3_ATTRS].inst = CTX_INST_NO_STONS;
 }
 
-// returns true if section is to be skipped reading / uncompressing
-bool gff3_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+void gff3_seg_finalize (VBlockP vb)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+    // top level snip
+    Structured top_level = { 
+        .repeats   = vb->lines.len,
+        .flags     = STRUCTURED_TOPLEVEL,
+        .num_items = 10,
+        .items     = { { (DictId)dict_id_fields[GFF3_SEQID],  DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_SOURCE], DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_TYPE],   DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_START],  DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_END],    DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_SCORE],  DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_STRAND], DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_PHASE],  DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[GFF3_ATTRS],  DID_I_NONE, ""   },
+                       { (DictId)dict_id_fields[GFF3_EOL],    DID_I_NONE, ""   } }
+    };
 
-    //if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
-    //    return true;
-    
-    //if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
-    //    return true;
-
-    return false;
+    seg_structured_by_ctx (vb, &vb->contexts[GFF3_TOPLEVEL], &top_level, 0, 0, 0);
 }
+
 
 // returns length of next expected item, and 0 if unsuccessful
 static unsigned gff3_seg_get_aofs_item_len (const char *str, unsigned len, bool is_last_item)
@@ -131,7 +140,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_ID) {
         Context *ctx = mtf_get_ctx (vb, dict_id);
         seg_pos_field ((VBlockP)vb, ctx->did_i, ctx->did_i, true, *this_value, *this_value_len, false);
-        ctx->lcomp = COMP_BZ2; // cancel LZMA set by seg_pos_field - use BZ2 instead - it compresses better in this case
+        ctx->lcodec = CODEC_BZ2; // cancel LZMA set by seg_pos_field - use BZ2 instead - it compresses better in this case
         return false; // do not add to dictionary/b250 - we already did it
     }
 
@@ -148,7 +157,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_Variant_effect) {
         static const Structured Variant_effect = {
             .num_items   = 4, 
-            .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
+            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="V1arEff" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -162,7 +171,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_sift_prediction) {
         static const Structured sift_prediction = {
             .num_items   = 4, 
-            .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
+            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="S1iftPr" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -176,7 +185,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_polyphen_prediction) {
         static const Structured polyphen_prediction = {
             .num_items   = 4, 
-            .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
+            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
                              { .dict_id={.id="P1olyPhP" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -190,7 +199,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
     if (dict_id.num == dict_id_ATTR_variant_peptide) {
         static const Structured variant_peptide = {
             .num_items   = 3, 
-            .flags       = STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT,
+            .flags       = STRUCTURED_DROP_FINAL_ITEM_SEP,
             .repsep      = {0,0},
             .items       = { { .dict_id={.id="v0arPep" }, .seperator = {' '}, .did_i = DID_I_NONE }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
                              { .dict_id={.id="v1arPep" }, .seperator = {' '}, .did_i = DID_I_NONE },
@@ -207,7 +216,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
         Context *ctx = mtf_get_ctx (vb, dict_id_ATTR_Reference_seq); 
-        ctx->lcomp = COMP_LZMA;
+        ctx->lcodec = CODEC_LZMA;
 
         seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it
@@ -252,38 +261,15 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
     SEG_NEXT_ITEM (GFF3_STRAND);
     SEG_NEXT_ITEM (GFF3_PHASE);
 
-    GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
-    seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len);
-
+    if (separator != '\n') {
+        GET_LAST_ITEM (DTF(names)[GFF3_ATTRS] /* pointer to string to allow pointer comparison */); 
+        seg_info_field (vb, gff3_seg_special_info_subfields, field_start, field_len);
+    }
+    else
+        seg_by_did_i (vb, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed
+             
     SEG_EOL (GFF3_EOL, false);
 
     return next_field;
 }
 
-// this is the compute thread entry point. It receives all data of a variant block and processes it
-// in memory to the uncompressed format. This thread then terminates the I/O thread writes the output.
-void gff3_piz_reconstruct_vb (VBlock *vb)
-{
-    for (vb->line_i=vb->first_line; vb->line_i < vb->first_line + vb->lines.len; vb->line_i++) {
-
-        uint32_t txt_data_start = vb->txt_data.len;
-        vb->dont_show_curr_line = false; 
-
-        piz_reconstruct_from_ctx (vb, GFF3_SEQID,  '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_SOURCE, '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_TYPE,   '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_START,  '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_END,    '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_SCORE,  '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_STRAND, '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_PHASE,  '\t');
-        piz_reconstruct_from_ctx (vb, GFF3_ATTRS,  '\t');
-
-        vb->txt_data.len--; // remove last \t (the line has ended either after PHASE or after the ATTRS)
-
-        piz_reconstruct_from_ctx (vb, GFF3_EOL,    0   );
-
-        // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-        if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
-    }
-}

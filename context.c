@@ -180,12 +180,8 @@ WordIndex mtf_get_next_snip (VBlock *vb, Context *ctx,
             
     WordIndex word_index = base250_decode (&iterator->next_b250);  // if this line has no non-GT subfields, it will not have a ctx 
 
-    // case: a subfield snip is missing - either the genotype data has less subfields than declared in FORMAT, or not provided at all for some (or all) samples.
+    // case: a Structured item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING_SF) {
-        ASSERT (!ctx || (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)), 
-                "Error while reconstructing line %u vb_i=%u: BASE250_MISSING_SF unexpectedly found in b250 data of %s",
-                vb->line_i, vb->vblock_i, ctx->dict_id.num ? ctx->name : "(no ctx)"); // there will be no context if this GT subfield was always missing - never appeared on any sample
-
         if (snip) {
             *snip = NULL; // ignore this dict_id - don't even output a separator
             *snip_len = 0;
@@ -342,16 +338,16 @@ WordIndex mtf_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
 // ZIP only: overlay and/or copy the current state of the global context to the vb, ahead of compressing this vb.
 void mtf_clone_ctx (VBlock *vb)
 {
-    unsigned z_num_dict_ids = __atomic_load_n (&z_file->num_dict_ids, __ATOMIC_RELAXED);
+    unsigned z_num_contexts = __atomic_load_n (&z_file->num_contexts, __ATOMIC_RELAXED);
 
     START_TIMER; // including mutex wait time
 
     // note: because each dictionary has its own mutex, it is possible that we will see only a partial set
     // of dictionaries (eg some but not all of the fields) when we are arrive here while another thread is mid-way 
     // through merging and adding a bunch of dictionaries.
-    // however z_num_dict_ids will always correctly state the number of dictionaries that are available.
+    // however z_num_contexts will always correctly state the number of dictionaries that are available.
 
-    for (DidIType did_i=0; did_i < z_num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < z_num_contexts; did_i++) {
         Context *vb_ctx = &vb->contexts[did_i];
         Context *zf_ctx = &z_file->contexts[did_i];
 
@@ -378,7 +374,7 @@ void mtf_clone_ctx (VBlock *vb)
         vb_ctx->flags    = zf_ctx->flags;
         vb_ctx->ltype    = zf_ctx->ltype;
         vb_ctx->inst     = zf_ctx->inst;
-        vb_ctx->lcomp = zf_ctx->lcomp;
+        vb_ctx->lcodec = zf_ctx->lcodec;
 
         memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
@@ -389,7 +385,7 @@ void mtf_clone_ctx (VBlock *vb)
         mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx", did_i);
     }
 
-    vb->num_dict_ids = z_num_dict_ids;
+    vb->num_contexts = z_num_contexts;
 
     COPY_TIMER (vb->profile.mtf_clone_ctx)
 }
@@ -399,7 +395,7 @@ static void mtf_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictI
     ctx->did_i   = did_i;
     ctx->dict_id = dict_id;
     
-    if (command == ZIP) ctx->lcomp = COMP_BZ2; // default, may be changed in seg
+    if (command == ZIP) ctx->lcodec = CODEC_BZ2; // default, may be changed in seg
 
     memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
     ((char*)ctx->name)[DICT_ID_LEN] = 0;
@@ -476,9 +472,9 @@ void mtf_initialize_for_zip (void)
 // it to z_file
 static Context *mtf_get_zf_ctx (DictId dict_id)
 {
-    DidIType z_num_dict_ids = __atomic_load_n (&z_file->num_dict_ids, __ATOMIC_RELAXED);
+    DidIType z_num_contexts = __atomic_load_n (&z_file->num_contexts, __ATOMIC_RELAXED);
 
-    for (DidIType did_i=0; did_i < z_num_dict_ids; did_i++)
+    for (DidIType did_i=0; did_i < z_num_contexts; did_i++)
         if (dict_id.num == z_file->contexts[did_i].dict_id.num) 
             return &z_file->contexts[did_i];
 
@@ -488,7 +484,7 @@ static Context *mtf_get_zf_ctx (DictId dict_id)
 // ZIP only: called by merging VBs to add a new dict to z_file - copying some stuff from vb_ctx
 static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 {
-    // adding a new dictionary is proctected by a mutex. note that z_file->num_dict_ids is accessed by other threads
+    // adding a new dictionary is proctected by a mutex. note that z_file->num_contexts is accessed by other threads
     // without mutex proction when searching for a dictionary - that's why we update it at the end, after the new
     // zf_ctx is set up with the new dict_id (ready for another thread to search it)
     mtf_lock (merging_vb, &z_file->dicts_mutex, "dicts_mutex", 0);
@@ -497,24 +493,24 @@ static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
     Context *zf_ctx = mtf_get_zf_ctx (vb_ctx->dict_id);
     if (zf_ctx) goto finish;
 
-    ASSERT (z_file->num_dict_ids+1 < MAX_DICTS, // load num_dict_ids - this time with mutex protection - it could have changed
+    ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
             "Error: z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
 
-    zf_ctx = &z_file->contexts[z_file->num_dict_ids];
+    zf_ctx = &z_file->contexts[z_file->num_contexts];
 
     mutex_initialize (zf_ctx->mutex);
 
-    zf_ctx->did_i      = z_file->num_dict_ids; 
+    zf_ctx->did_i      = z_file->num_contexts; 
     zf_ctx->dict_id    = vb_ctx->dict_id;
     zf_ctx->flags      = vb_ctx->flags;
     zf_ctx->inst       = vb_ctx->inst;
-    zf_ctx->lcomp = vb_ctx->lcomp;
+    zf_ctx->lcodec = vb_ctx->lcodec;
     zf_ctx->ltype      = vb_ctx->ltype;
     memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
 
-    // only when the new entry is finalized, do we increment num_dict_ids, atmoically , this is because
+    // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
-    __atomic_store_n (&z_file->num_dict_ids, z_file->num_dict_ids+1, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the mtf_i
+    __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the mtf_i
 
 finish:
     mtf_unlock (merging_vb, &z_file->dicts_mutex, "dicts_mutex", 0);
@@ -590,13 +586,6 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
     // compress incremental part of dictionary added by this vb. note: dispatcher calls this function in the correct order of VBs.
     if (added_chars) {
-        // special optimization for the GL dictionary (it is ineffective with --optimize-GL that already optimizes GL)
-        if (zf_ctx->dict_id.num == dict_id_FORMAT_GL && !flag_optimize_GL) 
-            start_dict = gl_optimize_dictionary (merging_vb, &zf_ctx->dict, ENT (MtfNode, zf_ctx->mtf, start_mtf_len), start_dict_len, added_words);
-
-        // we need to protect z_file->dict_data while we're writing to it. this ensures a single writer
-        // to this data. we also need this mutex embedded in the zf_ctx->mutex, so that fragments of
-        // a dictionary are written in the order they are created. 
         {   START_TIMER; 
             mtf_lock (merging_vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", merging_vb->vblock_i);
             COPY_TIMER (merging_vb->profile.lock_mutex_compress_dict);
@@ -624,10 +613,10 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
     mtf_verify_field_ctxs (merging_vb); // this was useful in the past to catch nasty thread issues
 
     // merge all contexts
-    for (DidIType did_i=0; did_i < merging_vb->num_dict_ids; did_i++) 
+    for (DidIType did_i=0; did_i < merging_vb->num_contexts; did_i++) 
         mtf_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
 
-    // note: z_file->num_dict_ids might be larger than merging_vb->num_dict_ids at this point, for example:
+    // note: z_file->num_contexts might be larger than merging_vb->num_contexts at this point, for example:
     // vb_i=1 started, z_file is empty, created 20 contexts
     // vb_i=2 started, z_file is empty, created 10 contexts
     // vb_i=1 completes, merges 20 contexts to z_file, which has 20 contexts after
@@ -637,40 +626,43 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
         mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
 }
 
-// PIZ only (no thread issues - dictionaries are immutable) - gets did_id if the dictionary exists, 
-// or returns DID_I_NONE, if not. Called by subfield mapper functions only. NOTE: if ctx is local only (not dict)
-// then it will NOT be found, as it is not in z_file
-DidIType mtf_get_existing_did_i_from_z_file (DictId dict_id)
+// PIZ: add aliases to dict_id_to_did_i_map
+void mtf_map_aliases (VBlockP vb)
 {
-    // attempt to get did_i from dict_id mapper
-    DidIType did_i = z_file->dict_id_to_did_i_map[dict_id.map_key];
-    if (did_i != DID_I_NONE && z_file->contexts[did_i].dict_id.num == dict_id.num) return did_i;
+    if (!dict_id_aliases) return;
 
-    for (did_i=0; did_i < z_file->num_dict_ids; did_i++) 
-        if (dict_id.num == z_file->contexts[did_i].dict_id.num) return did_i;
+    for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
+        for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
+            if (dict_id_aliases[alias_i].dst.num == vb->contexts[did_i].dict_id.num && 
+                vb->dict_id_to_did_i_map[dict_id_aliases[alias_i].alias.map_key] == DID_I_NONE)
 
-    return DID_I_NONE; // not found
+                vb->dict_id_to_did_i_map[dict_id_aliases[alias_i].alias.map_key] = did_i;    
 }
 
 // returns an existing did_i in this vb, or DID_I_NONE if there isn't one
-DidIType mtf_get_existing_did_i (VBlockP vb, DictId dict_id)
+DidIType mtf_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_id)
 {
-    DidIType did_i = vb->dict_id_to_did_i_map[dict_id.map_key];
-    if (did_i == DID_I_NONE || vb->contexts[did_i].dict_id.num == dict_id.num) return did_i;
-
     // a different dict_id is in the map, perhaps a hash-clash...
-    for (did_i=0; did_i < vb->num_dict_ids; did_i++) 
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
         if (dict_id.num == vb->contexts[did_i].dict_id.num) return did_i;
+
+    // PIZ only: check if its an alias that's not mapped in mtf_map_aliases (due to contention)
+    if (command != ZIP && dict_id_aliases) {
+        for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
+            if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
+                for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
+                    if (dict_id_aliases[alias_i].dst.num == vb->contexts[did_i].dict_id.num) return did_i;
+            }
+    }
 
     return DID_I_NONE; // not found
 }
 
-ContextP mtf_get_existing_ctx (VBlockP vb, DictId dict_id) 
+ContextP mtf_get_existing_ctx_do (VBlockP vb, DictId dict_id) 
 {
     DidIType did_i = mtf_get_existing_did_i(vb, dict_id); 
     return (did_i == DID_I_NONE) ? NULL : &vb->contexts[did_i]; 
 }
-
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vb_ctx only
@@ -679,47 +671,28 @@ Context *mtf_get_ctx_if_not_found_by_inline (
     DataType dt, 
     DidIType *dict_id_to_did_i_map, 
     DidIType did_i,
-    DidIType *num_dict_ids, 
+    DidIType *num_contexts, 
     DictId dict_id)
 {
     // case: its not in mapper - mapper is occupied by another - perhaps it exists
     // and missing the opportunity to enter mapper - search for it
     if (did_i != DID_I_NONE)    
-        for (did_i=0; did_i < *num_dict_ids; did_i++) 
+        for (did_i=0; did_i < *num_contexts; did_i++) 
             if (dict_id.num == contexts[did_i].dict_id.num) goto done;
 
-    // PIZ only: check if its an alias
-    if (command != ZIP && dict_id_aliases) {
-        for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
-            if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
-
-                // get the context of the dst dictionary (+ create it if it doesn't exist yet)
-                Context *dst_ctx = mtf_get_ctx_do (contexts, dt, dict_id_to_did_i_map, num_dict_ids, dict_id_aliases[alias_i].dst);
-
-                ASSERT (dst_ctx, "Error in mtf_get_ctx_if_not_found_by_inline: cannot find ctx of %.*s which is the destination of the alias %.*s",
-                        DICT_ID_LEN, dict_id_printable (dict_id_aliases[alias_i].dst).id, DICT_ID_LEN, dict_id_printable (dict_id_aliases[alias_i].alias).id);
-                        
-                // if have room in the map - add the alias there pointing to the dst did_i
-                if (did_i == DID_I_NONE) 
-                    dict_id_to_did_i_map[dict_id_aliases[alias_i].alias.map_key] = dst_ctx->did_i;
-
-                return dst_ctx;
-            }
-    }
-
-    did_i = *num_dict_ids; // note: *num_dict_ids cannot be updated until ctx is initialized, see comment below
+    did_i = *num_contexts; // note: *num_contexts cannot be updated until ctx is initialized, see comment below
     
     Context *ctx = &contexts[did_i]; 
 
     //fprintf (stderr, "New context: dict_id=%.8s in did_i=%u \n", dict_id_printable (dict_id).id, did_i);
-    ASSERT (*num_dict_ids+1 < MAX_DICTS, 
+    ASSERT (*num_contexts+1 < MAX_DICTS, 
             "Error: number of dictionaries is greater than MAX_DICTS=%u", MAX_DICTS);
 
     mtf_initialize_ctx (ctx, dt, did_i, dict_id, dict_id_to_did_i_map);
 
     // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-    (*num_dict_ids) = did_i + 1; 
+    (*num_contexts) = did_i + 1; 
 
 done:
     ctx = &contexts[did_i];
@@ -732,9 +705,9 @@ done:
 void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, 
                                         DataType dt,
                                         DidIType *dict_id_to_did_i_map,
-                                        DidIType *num_dict_ids)
+                                        DidIType *num_contexts)
 {
-    *num_dict_ids = MAX (dt_fields[dt].num_fields, *num_dict_ids);
+    *num_contexts = MAX (dt_fields[dt].num_fields, *num_contexts);
 
     for (int f=0; f < dt_fields[dt].num_fields; f++) {
         const char *fname  = dt_fields[dt].names[f];
@@ -782,13 +755,13 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     zfile_uncompress_section (vb, section_data, &fragment, "fragment", header->h.section_type);
 
     // special treatment if this is GL - de-optimize
-    if (header->dict_id.num == dict_id_FORMAT_GL)
-        gl_deoptimize (fragment.data, fragment.len);
+    //if (header->dict_id.num == dict_id_FORMAT_GL)
+    //    gl_deoptimize (fragment.data, fragment.len);
 
     // in piz, the same did_i is used for z_file and vb contexts, meaning that in vbs there could be
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
-    Context *zf_ctx = mtf_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_dict_ids, header->dict_id);
+    Context *zf_ctx = mtf_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
     zf_ctx->flags = header->h.flags;
 
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
@@ -855,7 +828,7 @@ void mtf_overlay_dictionaries_to_vb (VBlock *vb)
             buf_overlay (vb, &vb_ctx->word_list, &zf_ctx->word_list, "ctx->word_list", did_i);
         }
     }
-    vb->num_dict_ids = z_file->num_dict_ids;
+    vb->num_contexts = z_file->num_contexts;
 }
 
 // used by random_access_show_index
@@ -892,7 +865,7 @@ static int sorter_cmp(const void *a, const void *b)
 void mtf_sort_dictionaries_vb_1(VBlock *vb)
 {
     // thread safety note: no issues here, as this is run only by the compute thread of vblock_i=1
-    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
 
         Context *ctx = &vb->contexts[did_i];
 
@@ -948,7 +921,7 @@ void mtf_verify_field_ctxs_do (VBlock *vb, const char *func, uint32_t code_line)
 void mtf_update_stats (VBlock *vb)
 {
     // zf_ctx doesn't store mtf_i, but we just use mtf_i.len as a counter for displaying in genozip_show_sections
-    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++) {
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
         Context *vb_ctx = &vb->contexts[did_i];
     
         Context *zf_ctx = mtf_get_zf_ctx (vb_ctx->dict_id);
@@ -970,6 +943,10 @@ void mtf_free_context (Context *ctx)
     buf_free (&ctx->mtf_i);
     buf_free (&ctx->b250);
     buf_free (&ctx->local);
+    buf_free (&ctx->struct_cache);
+    buf_free (&ctx->struct_index);
+    buf_free (&ctx->struct_len);
+    
     ctx->mtf_i.len = 0; // VCF stores FORMAT length in here for stats, even if mtf_i is not allocated (and therefore buf_free will not cleanup)
     ctx->local.len = 0; // For callback ctxs, length is stored, but data is not copied to local and is kept in vb->txt_data
     ctx->dict_id.num = 0;
@@ -999,6 +976,10 @@ void mtf_destroy_context (Context *ctx)
     buf_destroy (&ctx->global_hash);
     buf_destroy (&ctx->mtf_i);
     buf_destroy (&ctx->b250);
+    buf_destroy (&ctx->struct_cache);
+    buf_destroy (&ctx->struct_index);
+    buf_destroy (&ctx->struct_len);
+
     mutex_destroy (ctx->mutex);
 }
 
@@ -1024,7 +1005,7 @@ void mtf_dump_local (ContextP ctx, bool local /* true = local, false = b250 */)
     mutex_lock (dump_mutex);
 
     if (local)
-        fwrite (ctx->local.data, 1, ctx->local.len * lt_sizeof_one[ctx->ltype], dump_file);
+        fwrite (ctx->local.data, 1, ctx->local.len * lt_desc[ctx->ltype].width, dump_file);
     else
         fwrite (ctx->b250.data, 1, ctx->b250.len, dump_file);
 

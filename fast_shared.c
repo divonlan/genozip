@@ -13,8 +13,6 @@
 #include "compressor.h"
 #include "regions.h"
 
-Structured structured_DESC;
-
 unsigned fast_vb_size (void) { return sizeof (VBlockFAST); }
 unsigned fast_vb_zip_dl_size (void) { return sizeof (ZipDataLineFAST); }
 
@@ -23,7 +21,6 @@ void fast_vb_release_vb (VBlockFAST *vb)
     vb->last_line = 0;
     vb->contig_grepped_out = false;
     vb->pair_num_lines = vb->pair_vb_i = 0;
-    memset (&vb->desc_mapper, 0, sizeof (vb->desc_mapper));
     
     if (z_file && (z_file->data_type == DT_FASTA || z_file->data_type == DT_REF))
         vb->contexts[FASTA_SEQ].local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
@@ -56,8 +53,6 @@ bool fast_piz_test_grep (VBlockFAST *vb)
     piz_uncompress_all_ctxs ((VBlockP)vb, 0);
     vb->grep_stages = GS_UNCOMPRESS; // during uncompress in the compute thread, uncompress only what was not already uncompressed here
 
-    piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper);
-
     // reconstruct each description line and check for string matching with flag_grep
     bool found = false, match = false;
 
@@ -75,7 +70,7 @@ bool fast_piz_test_grep (VBlockFAST *vb)
         match = flag_grep && !!strstr (vb->txt_data.data, flag_grep); // note: this function is also called due to --regions in FASTA
 
         if (!match && flag_regions && vb->data_type == DT_FASTA) 
-            match = fasta_is_grepped_out_due_to_regions (vb, vb->txt_data.data);
+            match = fasta_piz_is_grepped_out_due_to_regions (vb, vb->txt_data.data);
 
         vb->txt_data.len = 0; // reset
 
@@ -92,12 +87,18 @@ bool fast_piz_test_grep (VBlockFAST *vb)
     // i.e the entire VB was a sequence that started in an earlier VB - the grep status of the easier VB is carried forward
     if (vb->data_type == DT_FASTA) 
         // if the last contig of the previous vb was grepped in - then include this VB anyway
-        found = fasta_initialize_contig_grepped_out (vb, desc_ctx->b250.len > 0, match) || found;
+        found = fasta_piz_initialize_contig_grepped_out (vb, desc_ctx->b250.len > 0, match) || found;
 
     // reset iterators - piz_fast*_reconstruct_vb will use them again 
     mtf_init_iterator (desc_ctx);
-    for (unsigned sf_i=0; sf_i < vb->desc_mapper.num_subfields; sf_i++) 
-        mtf_init_iterator (&vb->contexts[vb->desc_mapper.did_i[sf_i]]);
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
+        
+        Context *ctx = &vb->contexts[did_i];
+        if (dict_id_is_type_1 (ctx->dict_id)) {
+            mtf_init_iterator (ctx);
+            ctx->last_delta = ctx->last_value.d = 0;
+        }
+    }
 
     return found; 
 }

@@ -257,7 +257,8 @@ extern void bit_array_toggle_bits(BitArray* bitarr, size_t n, ...);
 extern void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_t len);
 
 // Clear all the bits in a region
-extern void bit_array_clear_region(BitArray* bitarr, bit_index_t start, bit_index_t len);
+#define bit_array_clear_region(bitarr,start,len) bit_array_clear_region_do (bitarr, start, len, __FUNCTION__, __LINE__)
+extern void bit_array_clear_region_do (BitArray* bitarr, bit_index_t start, bit_index_t len, const char *func, unsigned code_line);
 
 // Toggle all the bits in a region
 extern void bit_array_toggle_region(BitArray* bitarr, bit_index_t start, bit_index_t len);

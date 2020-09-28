@@ -18,7 +18,6 @@ typedef struct {
 // IMPORTANT: if changing fields in VBlockFAST, also update vb_fast_release_vb 
 typedef struct VBlockFAST {     // for FASTA and FASTQ
     VBLOCK_COMMON_FIELDS
-    SubfieldMapper desc_mapper; // FASTA and FASTQ - ZIP & PIZ
 
     // FASTQ - pairing stuff - used if we are the 2nd file in the pair 
     uint32_t pair_vb_i;      // the equivalent vb_i in the first file, or 0 if this is the first file
@@ -35,10 +34,8 @@ typedef struct VBlockFAST {     // for FASTA and FASTQ
 #define DATA_LINE(i) ENT (ZipDataLineFAST, vb->lines, i)
 
 extern bool fast_piz_test_grep (VBlockFAST *vb);
-extern bool fasta_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep);
-extern bool fasta_is_grepped_out_due_to_regions (VBlockFAST *vb, const char *line_start);
-
-extern Structured structured_DESC;
+extern bool fasta_piz_initialize_contig_grepped_out (VBlockFAST *vb, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep);
+extern bool fasta_piz_is_grepped_out_due_to_regions (VBlockFAST *vb, const char *line_start);
 
 #define dict_id_is_fast_desc_sf dict_id_is_type_1
 #define dict_id_fast_desc_sf dict_id_type_1

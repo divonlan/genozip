@@ -12,14 +12,10 @@
 #include "aes.h"
 #include "context.h"
 #include "bit_array.h"
-
+#include "data_types.h"
 #ifndef DID_I_NONE // also defined in move_to_front.h
 #define DID_I_NONE   255
 #endif
-typedef struct SubfieldMapper {
-    DidIType num_subfields;        // DID_I_NONE if this mapper is not defined
-    DidIType did_i[MAX_SUBFIELDS]; // array in the order the subfields appears in FORMAT or INFO - each an index into vb->contexts[]
-} SubfieldMapper;
 
 #define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != DID_I_NONE) ? &vb->contexts[(mapper)->did_i[(sf)]] : NULL)
 
@@ -51,6 +47,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t vb_data_read_size;/* ZIP only: amount of data read in txtfile_read_block() (either plain VCF or gz or bz2) for this VB */\
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
+    uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
     Md5Hash md5_hash_so_far;   /* partial calculation of MD5 up to and including this VB */ \
     \
     bool dont_show_curr_line;  /* PIZ only - line currently in reconstruction is grepped out due to --grep or --regions and should not be displayed */\
@@ -95,7 +92,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer compressed;                /* used by various zfile functions */\
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
-    DidIType num_dict_ids;            /* total number of dictionaries of all types */\
+    DidIType num_contexts;            /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
     DidIType dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
     \
@@ -111,7 +108,16 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* Compressor stuff */ \
     Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
-    bool has_non_agct;                         /* the last context compressed with COMP_ACGT has characters that are not A,C,G,T */
+    bool has_non_agct;                         /* the last context compressed with CODEC_ACGT has characters that are not A,C,G,T */ \
+    \
+    /* used by CODEC_HT (for VCF haplotype matrix) */ \
+    ContextP ht_ctx, ht_index_ctx;    /* haplotype matrix context */ \
+    uint32_t num_haplotypes_per_line; \
+    Buffer helper_index_buf;          /* used by zip_do_haplotypes */ \
+    Buffer ht_columns_data;           /* used by piz_get_ht_permutation_lookups */ \
+    Buffer column_of_zeros;           /* used by comp_ht_calculate_columns */  \
+    Buffer ht_one_array;              /* one line or column */ \
+    uint32_t ht_one_array_line_i;     /* line or column number to which ht_one_array belongs */ 
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

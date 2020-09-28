@@ -498,9 +498,9 @@ void buf_overlay_do (VBlock *vb, Buffer *overlaid_buf, Buffer *regular_buf, cons
         overlaid_buf->type = BUF_UNALLOCATED;
     }
     
-    ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error: cannot buf_overlay to a buffer %s already in use", buf_desc (overlaid_buf));
-    ASSERT (regular_buf->type == BUF_REGULAR, "Error: regular_buf %s in buf_overlay must be a regular buffer", buf_desc (regular_buf));
-    ASSERT (regular_buf->overlayable, "Error: buf_overlay: buffer %s is not overlayble", buf_desc (regular_buf));
+    ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Error in %s:%u: cannot buf_overlay to a buffer %s already in use", func, code_line, buf_desc (overlaid_buf));
+    ASSERT (regular_buf->type == BUF_REGULAR, "Error in %s:%u: regular_buf %s in buf_overlay must be a regular buffer", func, code_line, buf_desc (regular_buf));
+    ASSERT (regular_buf->overlayable, "Error in %s:%u: buf_overlay: buffer %s is not overlayble", func, code_line, buf_desc (regular_buf));
 
     overlaid_buf->size        = 0;
     overlaid_buf->len         = 0;
@@ -763,3 +763,65 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
     return next_bit;
 }
  
+void BGEN_u8_buf (Buffer *buf)
+{
+}
+
+void BGEN_u16_buf (Buffer *buf)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint16_t num_big_en = *ENT (uint16_t, *buf, i);
+        *ENT (uint16_t, *buf, i) = BGEN16 (num_big_en);            
+    }
+}
+
+void BGEN_u32_buf (Buffer *buf)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint32_t num_big_en = *ENT (uint32_t, *buf, i);
+        *ENT (uint32_t, *buf, i) = BGEN32 (num_big_en);            
+    }
+}
+
+void BGEN_u64_buf (Buffer *buf)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint64_t num_big_en = *ENT (uint64_t, *buf, i);
+        *ENT (uint64_t, *buf, i) = BGEN64 (num_big_en);            
+    }
+}
+
+void BGEN_deinterlace_d8_buf (Buffer *buf)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint8_t unum = *ENT (uint8_t, *buf, i);
+        *ENT (int8_t, *buf, i) = DEINTERLACE(int8_t,unum); 
+   }
+}
+
+void BGEN_deinterlace_d16_buf (Buffer *buf)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint16_t num_big_en = *ENT (uint16_t, *buf, i);
+        uint16_t unum = BGEN16 (num_big_en);
+        *ENT (int16_t, *buf, i) = DEINTERLACE(int16_t,unum); 
+   }
+}
+
+void BGEN_deinterlace_d32_buf (Buffer *buf)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint32_t num_big_en = *ENT (uint32_t, *buf, i);
+        uint32_t unum = BGEN32 (num_big_en);
+        *ENT (int32_t, *buf, i) = DEINTERLACE(int32_t,unum); 
+   }
+}
+
+void BGEN_deinterlace_d64_buf (Buffer *buf)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint64_t num_big_en = *ENT (uint64_t, *buf, i);
+        uint64_t unum = BGEN64 (num_big_en);
+        *ENT (int64_t, *buf, i) = DEINTERLACE(int64_t,unum); 
+   }
+}

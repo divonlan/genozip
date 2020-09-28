@@ -14,9 +14,6 @@
 #include "txtfile.h"
 #include "reference.h"
 
-// VCF: used for allocating compressed SEC_VCF_GT_DATA bytes to the ctxs that contributed to it, pro-rated by the number
-// of words each ctx contributed
-static struct { uint64_t words_total, words_so_far, comp_bytes_so_far; } vcf_gt_data_tracker;
 static int *count_per_section = NULL;
 
 // a concatenation of all bound txt_names that contributed to this genozip file
@@ -33,13 +30,11 @@ static Buffer bound_txt_names = EMPTY_BUFFER;
 #define LAST_OVERHEAD            -8
 
 static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
-                             int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
-                             double format_proportion /* only needed for FORMAT subfields - number of words of this dict_id in gt_data divided by all words in gt_data */)
+                             int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size)
 {
     if (!count_per_section) count_per_section = calloc (z_file->section_list_buf.len, sizeof (int));
 
     *dict_compressed_size = *b250_compressed_size = *local_compressed_size = 0;
-    uint64_t total_gt_data=0;
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
 
@@ -75,8 +70,7 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
             *local_compressed_size += sec_size;
 
         else if (section->section_type == SEC_VB_HEADER && overhead_sec == OVERHEAD_SEC_VB_HDR)
-            *local_compressed_size += (z_file->data_type == DT_VCF) ? sizeof (SectionHeaderVbHeaderVCF) // payload is haplotype index which goes to VCF_GT
-                                                                    : sec_size;
+            *local_compressed_size += sec_size;
 
         else if (section->section_type == SEC_GENOZIP_HEADER && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
             *local_compressed_size += z_file->disk_size - section->offset;
@@ -98,34 +92,9 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
 
         else if ((section->section_type == SEC_RANDOM_ACCESS || section->section_type == SEC_REF_RAND_ACC) && overhead_sec == OVERHEAD_SEC_RA_INDEX)
             *local_compressed_size += sec_size;
-        
-        else if ((section->section_type == SEC_VCF_HT_DATA && dict_id.num == dict_id_fields[VCF_GT]) ||
-                 (section->section_type == SEC_VCF_PHASE_DATA && dict_id.num == dict_id_fields[VCF_GT]))
-            *local_compressed_size += sec_size;
-            
-        // we allocate the size of SEC_VCF_GT_DATA by the proportion of words due to this FORMAT dict_id
-        else if (section->section_type == SEC_VCF_GT_DATA && dict_id_is_vcf_format_sf (dict_id)) {
-
-            if (vcf_gt_data_tracker.words_so_far != vcf_gt_data_tracker.words_total) {
-                uint64_t increment = (uint64_t)(format_proportion * (double)(sec_size));
-                *b250_compressed_size += increment;
-                vcf_gt_data_tracker.comp_bytes_so_far += increment;
-            }
-            else
-                total_gt_data += sec_size;
-        }
-
-        else if (z_file->data_type == DT_VCF && section->section_type == SEC_VB_HEADER && dict_id.num == dict_id_fields[VCF_GT]) {// squeezed index is part of GT data
-            *local_compressed_size += sec_size - sizeof (SectionHeaderVbHeaderVCF); // section header already accounted for
-            count_per_section[i]--; // we already counted SEC_VB_HEADER above. this is just accounting for the squeeze payload
-        }
-
+                    
         else count_per_section[i]--; // acually... not count_per_section!
     }
-
-    // case: the last dict_id contributing to gt_data. take everything that's remaining to make sure all the components add up
-    if (z_file->data_type == DT_VCF && dict_id_is_vcf_format_sf (dict_id) && vcf_gt_data_tracker.words_so_far == vcf_gt_data_tracker.words_total)
-        *b250_compressed_size = total_gt_data - vcf_gt_data_tracker.comp_bytes_so_far;
 }
 
 static void stats_check_count (uint64_t all_comp_total)
@@ -137,7 +106,7 @@ static void stats_check_count (uint64_t all_comp_total)
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
         if (!count_per_section[i]) 
             fprintf (stderr, "Section not counted: %s section_i=%u\n", st_name (sections[i].section_type), i);
-        else if (count_per_section[i] > 1 && ENT (SectionListEntry, z_file->section_list_buf, i)->section_type != SEC_VCF_GT_DATA) // note: SEC_VCF_GT_DATA is expected to have 1 count per FORMAT dict. to do: verify this.
+        else if (count_per_section[i] > 1) 
             fprintf (stderr, "Section overcounted: %s section_i=%u dict=%.8s counted %u times\n", st_name (sections[i].section_type), i, dict_id_printable (sections[i].dict_id).id, count_per_section[i]);
 
     char s1[20], s2[20];
@@ -166,20 +135,8 @@ static void stats_show_file_metadata (void)
         fprintf (stderr, "Individuals: %u   ", global_vcf_num_samples);
 
     fprintf (stderr, "%s: %s   Dictionaries: %u   Vblocks: %u   Sections: %u\n", 
-                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_dict_ids, 
+                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_contexts, 
                 z_file->num_vbs, (uint32_t)z_file->section_list_buf.len);
-}
-
-static void initialize_vcf_gt_data_tracker (void)
-{
-    memset (&vcf_gt_data_tracker, 0, sizeof (vcf_gt_data_tracker));
-
-    for (uint32_t i=0; i < z_file->num_dict_ids; i++) { 
-
-        const Context *ctx = &z_file->contexts[i];
-        if (dict_id_is_vcf_format_sf (ctx->dict_id))
-            vcf_gt_data_tracker.words_total += ctx->mtf_i.len;
-    }
 }
 
 typedef struct {
@@ -205,23 +162,13 @@ void stats_show_stats (void)
     StatsByLine sbl[MAX_DICTS+50], *s = sbl;
     memset (sbl, 0, sizeof(sbl));
 
-    if (z_file->data_type == DT_VCF) initialize_vcf_gt_data_tracker();
-
-    for (int i=LAST_OVERHEAD; i < (int)z_file->num_dict_ids; i++) { 
+    for (int i=LAST_OVERHEAD; i < (int)z_file->num_contexts; i++) { 
 
         Context *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
-
-        // for FORMAT subfields, we compress all of them together in GT_DATA, because they are often correlated
-        // we allocate their compressed size as the proportion of GT_DATA words that are of this subfield
-        double format_proportion = 0;
-        if (z_file->data_type == DT_VCF && ctx && dict_id_is_vcf_format_sf (ctx->dict_id)) {
-            format_proportion = (double)ctx->mtf_i.len / (double)vcf_gt_data_tracker.words_total;
-            vcf_gt_data_tracker.words_so_far += ctx->mtf_i.len;
-        }
    
         int64_t dict_compressed_size, b250_compressed_size, local_compressed_size, txt_len;
         stats_get_sizes (ctx ? ctx->dict_id : DICT_ID_NONE, ctx ? 0 : i, 
-                         &dict_compressed_size, &b250_compressed_size, &local_compressed_size, format_proportion);
+                         &dict_compressed_size, &b250_compressed_size, &local_compressed_size);
 
         s->total_comp_size = dict_compressed_size + b250_compressed_size + local_compressed_size;
 

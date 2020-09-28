@@ -132,13 +132,6 @@ static const char *help_genozip[] = {
     "FASTQ-specific options (ignored for other file types):",
     "   -2 --pair         Compress pairs of paired-end consecutive files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired read fastq files with an identical number of reads, --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To unbind the genozip file back to its original FASTQ files, use genounzip --unbind",
     "",
-    "VCF-specific options (ignored for other file types):",
-    "   -S --sblock       <number>. Set the number of samples per sample block. By default, it is set to "VCF_SAMPLES_PER_VBLOCK". When compressing or decompressing a vblock, the samples within the block are divided to sample blocks which are compressed separately. A higher value will result in a better compression ratio, while a lower value will result in faster 'genocat --samples' lookups",
-    "",
-    "   -K --gtshark      Use gtshark instead of the default bzlib as the final compression step for allele data (the GT subfield in the sample data). ",
-    "                     Note: For this to work, gtshark needs to be installed - it is a separate software package that is not affiliated with genozip in any way. It can be found here: https://github.com/refresh-bio/GTShark",
-    "                     Note: gtshark also needs to be installed for decompressing files that were compressed with this option. ",
-    "",
     "genozip is available for free for non-commercial use and some other limited use cases. See 'genozip -L for details'. Commercial use requires a commercial license",
 };
 
@@ -156,15 +149,13 @@ static const char *help_genozip_developer[] = {
     "",
     "   Z    -W --SHOW-STATS   Show more detailed stats",
     "",
-    "   Z    --show-alleles    (VCF only) Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
+    "   ZUC  --show-alleles    (VCF only) Output allele values to stdout. Each row corresponds to a row in the VCF file. Mixed-ploidy regions are padded, and 2-digit allele values are replaced by an ascii character",
     "",
     "   ZUC  --show-dict       Show dictionary fragments written for each vblock (works for genounzip too). When used with genocat, only the dict data is shown, not the file contents",
     "",
     "   ZUC  --show-one-dict   <field-name>. Show the dictionary for this field in a tab-separated list - <field-name> may be one of the fields 1-9 (CHROM to FORMAT) or a INFO tag or a FORMAT tag (works for genounzip too). When used with genocat, only the index is shown, not the file contents",
     "",
     "   ZUC  --list-chroms     List the names of the chromosomes (or contigs) included in the file",
-    "",
-    "   Z    --show-gt-nodes   (VCF only) Show transposed GT matrix - each value is an index into its dictionary",
     "",
     "   ZUC  --show-b250       Show b250 sections content - each value shows the line (counting from 1) and the index into its dictionary (note: REF and ALT are compressed together as they are correlated). This also works with genounzip and genocat, but without the line numbers. When used with genocat, only the dict data is shown, not the file contents",
     "",
@@ -384,6 +375,8 @@ static const char *help_genols[] = {
 };
 
 static const char *help_footer[] = {
+    "",
+    "Citing: Lan, D., et al. Bioinformatics, Volume 36, Issue 13, July 2020, Pages 4091-4092",
     "",
     "Bug reports and feature requests: bugs@genozip.com",
     "Commercial license inquiries: sales@genozip.com",

@@ -15,12 +15,7 @@
 #include "dict_id.h"
 #include "zfile.h"
 
-const char *lt_names[NUM_LOCAL_TYPES]     = LOCALTYPE_NAMES;
-const char lt_to_sam_map[NUM_LOCAL_TYPES] = "\0cCsSiI\0\0f\0\0\0\0" ;
-const int lt_sizeof_one[NUM_LOCAL_TYPES]  = { 1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 1, 8, 1 };
-const bool lt_is_signed[NUM_LOCAL_TYPES]  = { 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0 };
-const int64_t lt_min[NUM_LOCAL_TYPES]     = { 0, -128, 0, -16384, 0,    -2147483648, 0,         -0x8000000000000000LL, 0,                     0, 0, 0, 0, 0 };
-const int64_t lt_max[NUM_LOCAL_TYPES]     = { 0, 127, 255, 16383, 32767, 2147483647, 4294967295, 0x7fffffffffffffffLL, 0xffffffffffffffffULL, 0, 0, 0, 0, 0 };
+const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)

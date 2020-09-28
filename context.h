@@ -21,8 +21,8 @@
 #define MAX_WORD_INDEX (MAX_WORDS_IN_CTX-1)
 #define WORD_INDEX_NONE       -1
 #define WORD_INDEX_ONE_UP     -2 // the value is the one more than the previous value
-#define WORD_INDEX_EMPTY_SF   -3 // subfield is missing, terminating : present
-#define WORD_INDEX_MISSING_SF -4 // subfield is missing at end of cell, no :
+#define WORD_INDEX_EMPTY_SF   -3 // empty string
+#define WORD_INDEX_MISSING_SF -4 // structured item missing, remove preceding separator
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
 // We use characters that cannot appear in a snip - i.e. other than ASCII 32-127, \t (\x9) \n (\xA) \r (\xD)
@@ -40,7 +40,12 @@
 
 // structured snip: it starts with SNIP_STRUCTURED, following by a base64 of a big endian Structured
 #pragma pack(1)
-#define STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT 0x01
+#define STRUCTURED_DROP_FINAL_ITEM_SEP   0x01
+#define STRUCTURED_DROP_FINAL_REPEAT_SEP 0x02
+#define STRUCTURED_FILTER_REPEATS        0x04
+#define STRUCTURED_FILTER_ITEMS          0x08
+#define STRUCTURED_TOPLEVEL             0x10
+
 #define STRUCTURED_MAX_REPEATS 4294967294UL // one less than maxuint32 to make it easier to loop with st.repeats without overflow 
 #define STRUCTURED_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 
@@ -100,6 +105,14 @@ typedef struct { // initialize with mtf_init_iterator()
 #define CTX_INST_NO_CALLBACK  0x10 // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
 #define CTX_INST_LOCAL_PARAM  0x20 // copy local.param to SectionHeaderCtx
 
+// SIGNED NUMBERS ARE NOT UNTEST YET! NOT USE YET BY ANY SEG
+// for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
+// example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
+// compressing better in an array that contains both positive and negative
+#define SAFE_NEGATE(type,n) ((u##type)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
+#define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
+#define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
+
 typedef union {
     int64_t i;
     double d;
@@ -131,7 +144,7 @@ typedef struct Context {
     Buffer mtf_i;              // contains 32bit indices into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
     
     // settings
-    CompressionAlg lcomp; // algorithm used to compress local
+    Codec lcodec;              // codec used to compress local
     uint8_t inst;              // instructions for seg/zip - ORed CTX_INST_ values
 
     // hash stuff 
@@ -171,6 +184,12 @@ typedef struct Context {
     uint32_t last_line_i;      // PIZ only: the last line_i this ctx was encountered
     LastValueType last_value;  // PIZ only: last value from which to conduct a delta. 
     int64_t last_delta;        // PIZ only: last delta value calculated
+
+    // Structured cache 
+    Buffer struct_cache;       // An array of Structured which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
+    Buffer struct_index;       // Array of uint32_t - index into struct_cache. Each item corresponds to word_index (PIZ) or node_index (ZIP)
+    Buffer struct_len;         // Array of uint16_t - length of item in cache
+    
 } Context;
 
 #define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
@@ -193,23 +212,29 @@ extern MtfNode *mtf_node_zf_do (const Context *ctx, int32_t node_index, const ch
 #define mtf_node_zf(ctx, node_index, snip_in_dict, snip_len) mtf_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
 
-extern Context *mtf_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, DidIType *num_dict_ids, DictId dict_id);
+extern Context *mtf_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, DidIType *num_contexts, DictId dict_id);
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids, (DictId)(dict_id))
-
-static inline Context *mtf_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_dict_ids, DictId dict_id)
+#define mtf_get_ctx(vb,dict_id) mtf_get_ctx_do (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts, (DictId)(dict_id))
+static inline Context *mtf_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id)
 {
     DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];
     if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
         return &contexts[did_i];
     else    
-        return mtf_get_ctx_if_not_found_by_inline (contexts, dt, dict_id_to_did_i_map, did_i, num_dict_ids, dict_id);
+        return mtf_get_ctx_if_not_found_by_inline (contexts, dt, dict_id_to_did_i_map, did_i, num_contexts, dict_id);
 }
 
-extern DidIType mtf_get_existing_did_i (VBlockP vb, DictId dict_id);
-extern DidIType mtf_get_existing_did_i_from_z_file (DictId dict_id);
-extern ContextP mtf_get_existing_ctx (VBlockP vb, DictId dict_id); // returns NULL if context doesn't exist
+extern DidIType mtf_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_id);
+#define mtf_get_existing_did_i(vb,dict_id) mtf_get_existing_did_i_do (vb, (DictId)dict_id, vb->contexts, vb->dict_id_to_did_i_map)
+static inline DidIType mtf_get_existing_did_i_do (VBlockP vb, DictId dict_id, Context *contexts, DidIType *dict_id_to_did_i_map)
+{
+    DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];
+    if (did_i == DID_I_NONE || contexts[did_i].dict_id.num == dict_id.num) return did_i;
+    return mtf_get_existing_did_i_if_not_found_by_inline (vb, dict_id);
+}    
+extern ContextP mtf_get_existing_ctx_do (VBlockP vb, DictId dict_id); // returns NULL if context doesn't exist
+#define mtf_get_existing_ctx(vb,dict_id) mtf_get_existing_ctx_do ((VBlockP)vb, (DictId)dict_id)
 
 extern void mtf_integrate_dictionary_fragment (VBlockP vb, char *data);
 extern void mtf_overlay_dictionaries_to_vb (VBlockP vb);
@@ -221,13 +246,14 @@ extern void mtf_initialize_for_zip (void);
 extern void mtf_update_stats (VBlockP vb);
 extern void mtf_free_context (Context *ctx);
 extern void mtf_destroy_context (Context *ctx);
+extern void mtf_map_aliases (VBlockP vb);
 
 extern void mtf_vb_1_lock (VBlockP vb);
 extern MtfNode *mtf_get_node_by_word_index (Context *ctx, WordIndex word_index);
 extern const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
 
-extern void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_dict_ids);
+extern void mtf_initialize_primary_field_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
 extern void mtf_initialize_binary_dump (const char *field, DictId *dict_id, const char *filename_ext);
 extern void mtf_dump_local (ContextP ctx, bool local);

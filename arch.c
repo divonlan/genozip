@@ -52,7 +52,7 @@ void arch_initialize(void)
 
     // verify that type sizes are as required (types that appear in section headers written to the genozip format)
     ASSERT0 (sizeof (SectionType)    ==1, "Error: expecting sizeof (SectionType)==1");
-    ASSERT0 (sizeof (CompressionAlg) ==1, "Error: expecting sizeof (CompressionAlg)==1");
+    ASSERT0 (sizeof (Codec) ==1, "Error: expecting sizeof (Codec)==1");
     ASSERT0 (sizeof (LocalType)      ==1, "Error: expecting sizeof (LocalType)==1");
 
     io_thread_id = pthread_self();

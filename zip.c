@@ -59,7 +59,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
         progress_finalize_component_time ("Done", md5);
 
     else if (ratio2 >= 0) {
-        if (txt_file->comp_alg == COMP_NONE || ratio2 < 1.05)  // source file was plain txt or ratio2 is low (nothing to brag about)
+        if (txt_file->codec == CODEC_NONE || ratio2 < 1.05)  // source file was plain txt or ratio2 is low (nothing to brag about)
             progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio, md5);
         
         else // source was compressed
@@ -71,7 +71,7 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
 // we move it to local instead of needlessly cluttering the global dictionary
 static void zip_handle_unique_words_ctxs (VBlock *vb)
 {
-    for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
+    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
     
         if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
@@ -92,18 +92,17 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
 void zip_generate_and_compress_ctxs (VBlock *vb)
 {
     // generate & write b250 data for all primary fields
-    for (int did_i=0 ; did_i < vb->num_dict_ids ; did_i++) {
+    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
 
-        if (ctx->mtf_i.len && 
-            (vb->data_type != DT_VCF || !dict_id_is_vcf_format_sf (ctx->dict_id))) { // skip VCF FORMAT subfields, as they get compressed into SEC_GT_DATA instead
+        if (ctx->mtf_i.len) {
             
             zip_generate_b250_section (vb, ctx);
 
             if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
                 mtf_dump_local (ctx, false);
 
-            zfile_compress_b250_data (vb, ctx, COMP_BZ2);
+            zfile_compress_b250_data (vb, ctx, CODEC_BZ2);
         }
 
         if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty
@@ -148,7 +147,7 @@ void zip_generate_b250_section (VBlock *vb, Context *ctx)
             unsigned num_numerals = base250_len (node->word_index.encoded.numerals);
             uint8_t *numerals     = node->word_index.encoded.numerals;
             
-            bool one_up = (n == prev + 1) && (ctx->dict_id.num != dict_id_fields[VCF_GT]) && (i > 0);
+            bool one_up = (n == prev + 1) && (i > 0);
 
             if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
                 NEXTENT(uint8_t, ctx->b250) = (uint8_t)BASE250_ONE_UP;
@@ -299,10 +298,7 @@ static void zip_compress_one_vb (VBlock *vb)
         txtfile_estimate_txt_data_size (vb);
     }
 
-    if (vb->data_type == DT_VCF)
-        vcf_zip_generate_ht_gt_compress_vb_header (vb);
-    else
-        zfile_compress_generic_vb_header (vb); // vblock header
+    zfile_compress_vb_header (vb); // vblock header
 
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section() and
     // vcf_zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
@@ -312,13 +308,6 @@ static void zip_compress_one_vb (VBlock *vb)
     // merge in random access - IF it is used
     if (DTP(has_random_access)) 
         random_access_merge_in_vb (vb);
-
-    // optimize FORMAT/GL data in local (we have already optimized the data in dict elsewhere)
-    if (vb->data_type == DT_VCF) {
-        DidIType gl_did_i =  mtf_get_existing_did_i (vb, (DictId)dict_id_FORMAT_GL);
-        if (gl_did_i != DID_I_NONE) 
-            gl_optimize_local (vb, &vb->contexts[gl_did_i].local);
-    }
 
     // generate & compress b250 and local data for all ctxs (for reference files we don't output VBs)
     if (!flag_make_reference)
@@ -395,7 +384,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
             if (!processed_vb) continue; // no running compute threads 
 
             // update z_data in memory (its not written to disk yet)
-            (DTPZ(update_header) ? DTPZ(update_header) : zfile_update_compressed_vb_header)(processed_vb, txt_line_i); 
+            zfile_update_compressed_vb_header (processed_vb, txt_line_i); 
 
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;

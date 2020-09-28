@@ -27,15 +27,16 @@ else
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native
 endif 
 
-
 MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
           zip.c piz.c seg.c zfile.c domqual.c aligner.c \
 		  reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
-		  vcf_zip.c vcf_piz.c vcf_seg.c vcf_zfile.c vcf_gloptimize.c vcf_vblock.c vcf_gtshark.c vcf_squeeze.c vcf_samples.c vcf_header.c \
-          sam_zip.c sam_piz.c sam_shared.c  \
-		  fasta.c fastq.c fast_shared.c \
-		  gff3.c me23.c \
-		  buffer.c random_access.c sections.c compressor.c base64.c \
+		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_samples.c vcf_header.c \
+          sam_seg.c sam_piz.c sam_shared.c  \
+		  fasta_seg.c fasta_piz.c fastq.c fast_shared.c \
+		  gff3_seg.c \
+		  me23_seg.c \
+		  buffer.c random_access.c sections.c base64.c \
+		  compressor.c comp_bz2.c comp_lzma.c comp_acgt.c comp_ht.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c
 

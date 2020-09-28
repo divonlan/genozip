@@ -94,8 +94,8 @@ Notes:<br>
 <br>
 <b><i>Citing</i></b><br>
 Do you find genozip useful? Please support continued development by citing:<br>
-Lan, D., et al. (2020) <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
-<br>
+Lan, D., et al. <i>Bioinformatics</i>, 36, 4091–4092, July 2020, https://doi.org/10.1093/bioinformatics/btaa290<br>
+<br> 
 Feature requests and bug reports: <b>bugs@genozip.com</b> <br>
 <br>
 <b>genozip</b> is free for non-commercial use. For a commercial license, please contact <b>sales@genozip.com</b> <br>

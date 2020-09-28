@@ -13,20 +13,18 @@
 
 extern void seg_all_data_lines (VBlockP vb); 
 
-extern void seg_init_mapper (VBlockP vb, int field_i, BufferP mapper_buf, const char *name);
-
 extern const char *seg_get_next_item (void *vb, const char *str, int *str_len, 
                                       bool allow_newline, bool allow_tab, bool allow_colon, 
                                       unsigned *len, char *separator, bool *has_13, // out
                                       const char *item_name);
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool *has_13 /* out */, const char *item_name);
 
-extern uint32_t seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
-#define seg_by_dict_id(vb,str,len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, str, len, mtf_get_ctx (vb, (DictId)dict_id), add_bytes, NULL)
-#define seg_by_did_i_ex(vb,str,len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, is_new);
-#define seg_by_did_i(vb,str,len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, str, len, &vb->contexts[did_i], add_bytes, NULL);
+extern WordIndex seg_by_ctx (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
+#define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx ((VBlockP)vb, snip, snip_len, mtf_get_ctx (vb, (DictId)dict_id), add_bytes, NULL)
+#define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx ((VBlockP)vb, snip, snip_len, &vb->contexts[did_i], add_bytes, is_new);
+#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx ((VBlockP)vb, snip, snip_len, &vb->contexts[did_i], add_bytes, NULL);
 
-extern uint32_t seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
+extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
 
 extern PosType seg_scan_pos_snip (VBlockP vb, const char *snip, unsigned snip_len, bool allow_nonsense);
 
@@ -42,7 +40,7 @@ extern void seg_id_field (VBlockP vb, DictId dict_id, const char *id_snip, unsig
 
 typedef bool (*SegSpecialInfoSubfields)(VBlockP vb, DictId dict_id, const char **this_value, unsigned *this_value_len, char *optimized_snip);
 
-extern void seg_structured_by_ctx (VBlockP vb, ContextP ctx, StructuredP st, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
+extern WordIndex seg_structured_by_ctx (VBlockP vb, ContextP ctx, StructuredP st, const char *prefixes, unsigned prefixes_len, unsigned add_bytes);
 #define seg_structured_by_dict_id(vb,dict_id,st,add_bytes) seg_structured_by_ctx ((VBlockP)vb, mtf_get_ctx (vb, dict_id), st, NULL, 0, add_bytes)
 
 extern void seg_info_field (VBlockP vb, SegSpecialInfoSubfields seg_special_subfields, const char *info_str, unsigned info_len);
@@ -54,12 +52,14 @@ extern void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, u
 extern void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
 extern void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes);
 
-extern void seg_initialize_compound_structured (VBlockP vb, char *name_template, Structured *st);
+extern WordIndex vcf_seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
+
 extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
-                                SubfieldMapperP mapper, Structured st, bool ws_is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
+                                bool ws_is_sep, unsigned nonoptimized_len, unsigned add_for_eol);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
-extern void seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, SegOptimize optimize);
+extern WordIndex seg_array_field (VBlockP vb, DictId dict_id, const char *value, unsigned value_len, SegOptimize optimize);
+extern WordIndex seg_hetero_array_field (VBlockP vb, DictId dict_id, const char *value, int value_len);
 
 extern void seg_prepare_snip_other (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
                                     char *snip, unsigned *snip_len);

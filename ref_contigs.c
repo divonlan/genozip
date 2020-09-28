@@ -112,7 +112,7 @@ void ref_contigs_compress (void)
     BGEN_ref_contigs (&created_contigs);
 
     created_contigs.len *= sizeof (RefContig);
-    zfile_compress_section_data_alg (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, COMP_LZMA); // compresses better with LZMA than BZLIB
+    zfile_compress_section_data_alg (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
     
     buf_free (&created_contigs);
 }
@@ -172,7 +172,7 @@ void ref_contigs_sort_chroms (void)
 void ref_contigs_load_contigs (void)
 {
     SectionListEntry *sl = sections_get_offset_first_section_of_type (SEC_REF_CONTIGS, false);
-    zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_CONTIGS, sl);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_CONTIGS, sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, &loaded_contigs, "loaded_contigs", SEC_REF_CONTIGS);
 

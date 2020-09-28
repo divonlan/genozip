@@ -24,19 +24,21 @@ void vb_release_vb (VBlock *vb)
 {
     if (!vb) return; // nothing to release
 
-    vb->first_line = vb->vblock_i = vb->txt_data_next_offset = 0;
+    vb->first_line = vb->vblock_i = vb->txt_data_next_offset = vb->num_haplotypes_per_line = 0;
+    vb->ht_one_array_line_i = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
-    vb->num_dict_ids = 0;
+    vb->num_contexts = 0;
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
-    vb->vb_position_txt_file = 0;
+    vb->vb_position_txt_file = vb->line_start = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = 0;
     vb->dont_show_curr_line = vb->has_non_agct = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->chrom_name = NULL;
     vb->prev_range = NULL;
+    vb->ht_ctx = vb->ht_index_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->md5_hash_so_far = MD5HASH_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
@@ -56,6 +58,10 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
+    buf_free(&vb->helper_index_buf);
+    buf_free(&vb->ht_columns_data);
+    buf_free(&vb->ht_one_array);
+    buf_free(&vb->column_of_zeros);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
@@ -94,6 +100,10 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->show_b250_buf);
     buf_destroy (&vb->section_list_buf);
     buf_destroy (&vb->region_ra_intersection_matrix);
+    buf_destroy (&vb->helper_index_buf);
+    buf_destroy (&vb->ht_columns_data);
+    buf_destroy (&vb->ht_one_array);
+    buf_destroy (&vb->column_of_zeros);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)

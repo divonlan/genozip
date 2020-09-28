@@ -26,6 +26,7 @@
 #include "refhash.h"
 #include "progress.h"
 #include "domqual.h"
+#include "profiler.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 // Special values:
@@ -55,58 +56,43 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
     return new_value;
 }
 
+#define ASSERT_IN_BOUNDS \
+    ASSERT (ctx->next_local < ctx->local.len, \
+            "Error reconstructing txt_line=%u: unexpected end of ctx->local data in %s (len=%u)", vb->line_i, ctx->name, (uint32_t)ctx->local.len);
+
 static uint32_t piz_reconstruct_from_local_text (VBlock *vb, Context *ctx)
 {
     uint32_t start = ctx->next_local; 
     ARRAY (char, data, ctx->local);
 
     while (ctx->next_local < ctx->local.len && data[ctx->next_local] != SNIP_SEP) ctx->next_local++;
-    ASSERT (ctx->next_local < ctx->local.len, 
-            "Error reconstructing txt_line=%u: unexpected end of ctx->local data in %s (len=%u)", vb->line_i, ctx->name, (uint32_t)ctx->local.len);
+    ASSERT_IN_BOUNDS;
 
     char *snip = &data[start];
     uint32_t snip_len = ctx->next_local - start; 
     ctx->next_local++; /* skip the tab */ 
 
-    piz_reconstruct_one_snip (vb, ctx, snip, snip_len);
+    piz_reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, snip, snip_len);
 
     return snip_len;
 }
 
-// for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
-// example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
-// compressing better in an array that contains both positive and negative
-// NOT TESTED YET
-#define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
-
 static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char seperator /* 0 if none */)
 {
-    unsigned width = lt_sizeof_one[ctx->ltype];
-    bool is_signed = lt_is_signed [ctx->ltype];
+#   define GETNUMBER(signedtype) { \
+        u ## signedtype unum = NEXTLOCAL (u ## signedtype, ctx); \
+        num = (int64_t)(lt_desc[ctx->ltype].is_signed ? (signedtype)unum : unum); \
+    }
 
-    ASSERT (ctx->next_local < ctx->local.len,  // len is in units of width
-            "Error in piz_reconstruct_from_local_int while reconstructing txt_line=%u: unexpected end of %s data (ctx->local.len=%u next=%u)", 
-            vb->line_i, ctx->name, (uint32_t)ctx->local.len, ctx->next_local); 
+    ASSERT_IN_BOUNDS;
 
     int64_t num=0;
-    if (width == 4) { // check 4 first, as its the most popular
-        uint32_t num_big_en = NEXTLOCAL (uint32_t, ctx);
-        uint32_t unum = BGEN32 (num_big_en); 
-        num = (int64_t)(is_signed ? DEINTERLACE(int32_t,unum) : unum);
-    }
-    else if (width == 2) {
-        uint16_t num_big_en = NEXTLOCAL (uint16_t, ctx);
-        uint16_t unum = BGEN16 (num_big_en); 
-        num = (int64_t)(is_signed ? DEINTERLACE(int16_t,unum) : unum);
-    }
-    else if (width == 1) {
-        uint8_t unum = NEXTLOCAL (uint8_t, ctx); 
-        num = (int64_t)(is_signed ? DEINTERLACE(int8_t,unum) : unum);
-    }
-    else if (width == 8) { // note: for uint64_t the function returns the number correctly, it just needs to be casted to uint64_t
-        uint64_t num_big_en = NEXTLOCAL (uint64_t, ctx); 
-        uint64_t unum = BGEN64 (num_big_en); 
-        num = (int64_t)(is_signed ? DEINTERLACE(int64_t,unum) : unum);
+    switch (lt_desc[ctx->ltype].width) {
+        case 4: GETNUMBER (int32_t); break;
+        case 2: GETNUMBER (int16_t); break;
+        case 1: GETNUMBER (int8_t ); break;
+        case 8: GETNUMBER (int64_t); break;
+        default: break; // never reached
     }
 
     // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
@@ -114,6 +100,35 @@ static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char se
     if (seperator) RECONSTRUCT1 (seperator);
 
     return num;
+}
+
+// reconstruct a allele value from haplotype matrix (used in VCF)
+static void piz_reconstruct_from_local_ht (VBlock *vb, Context *ctx)
+{
+    if (vb->dont_show_curr_line) return;
+
+    // get one row of the haplotype matrix for this line into vb->ht_one_array if we don't have it already
+    if (vb->ht_one_array_line_i != vb->line_i) {
+        comp_ht_get_one_line (vb);
+        vb->ht_one_array.len = 0; // length of data consumed
+        vb->ht_one_array_line_i = vb->line_i;
+    }
+
+    // find next allele - skipping unused spots ('*')
+    uint8_t ht = '*';
+    while (ht == '*' && vb->ht_one_array.len < vb->num_haplotypes_per_line)
+        ht = *ENT(uint8_t, vb->ht_one_array, vb->ht_one_array.len++);
+
+    if (ht == '.' || IS_DIGIT(ht)) 
+        RECONSTRUCT1 (ht);
+    
+    else if (ht == '*') 
+        ABORT ("Error reconstructing txt_line=%u: unexpected end of ctx->local data in %s (len=%u)", 
+               vb->line_i, ctx->name, (uint32_t)ctx->local.len)
+    
+    else { // allele 10 to 99 (ascii 58 to 147)
+        RECONSTRUCT_INT (ht - '0');
+    }
 }
 
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
@@ -158,58 +173,137 @@ static inline void piz_reconstruct_structured_prefix (VBlockP vb, const char **p
     (*prefixes_len) -= len + 1;
 }
 
-void piz_reconstruct_structured_do (VBlock *vb, const Structured *st, const char *prefixes, uint32_t prefixes_len)
+void piz_reconstruct_structured_do (VBlock *vb, DictId dict_id, const Structured *st, const char *prefixes, uint32_t prefixes_len)
 {
-    ASSERT (prefixes_len <= STRUCTURED_MAX_PREFIXES_LEN, "Error in piz_reconstruct_structured_do: prefixes_len=%u longer than STRUCTURED_MAX_PREFIXES_LEN=%u", 
-            prefixes_len, STRUCTURED_MAX_PREFIXES_LEN);
-
-    ASSERT (!prefixes || prefixes[prefixes_len-1] == SNIP_STRUCTURED, "Error in piz_reconstruct_structured_do: prefixes array does end with a SNIP_STRUCTURED: %.*s",
-            prefixes_len, prefixes);
+    TimeSpecType profiler_timer={0}; 
+    if (flag_show_time && (st->flags & STRUCTURED_TOPLEVEL)) 
+        clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
     // structured wide prefix - it will be missing if Structured has no prefixes, or empty if it has only items prefixes
     piz_reconstruct_structured_prefix (vb, &prefixes, &prefixes_len); // item prefix (we will have one per item or none at all)
 
+    ASSERT (DTP (structured_filter) || !(st->flags & STRUCTURED_FILTER_REPEATS) || !(st->flags & STRUCTURED_FILTER_ITEMS), 
+            "Error: data_type=%s doesn't support structured_filter", dt_name (vb->data_type));
+
     for (uint32_t rep_i=0; rep_i < st->repeats; rep_i++) {
+
+        // case this is the top-level snip
+        if (st->flags & STRUCTURED_TOPLEVEL) {
+            vb->line_i = vb->first_line + rep_i;
+            vb->line_start = vb->txt_data.len;
+            vb->dont_show_curr_line = false; 
+        }
+    
+        if ((st->flags & STRUCTURED_FILTER_REPEATS) && !DTP (structured_filter) (vb, dict_id, st, rep_i, -1)) continue; // repeat is filtered out
 
         const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t item_prefixes_len = prefixes_len;
 
         for (unsigned i=0; i < st->num_items; i++) {
 
+            if ((st->flags & STRUCTURED_FILTER_ITEMS) && !DTP (structured_filter) (vb, dict_id, st, rep_i, i)) continue; // item is filtered out
+
             piz_reconstruct_structured_prefix (vb, &item_prefixes, &item_prefixes_len); // item prefix
 
             const StructuredItem *item = &st->items[i];
-            if (item->dict_id.num) // not a prefix-only item
-                piz_reconstruct_from_ctx (vb, mtf_get_ctx (vb, item->dict_id)->did_i, 0);
+            int32_t reconstructed_len=0;
+            if (item->dict_id.num)  // not a prefix-only item
+                reconstructed_len = piz_reconstruct_from_ctx (vb, item->did_i, 0);
             
+            if (reconstructed_len == -1 && i > 0)  // not WORD_INDEX_MISSING_SF - delete previous item's separator
+                vb->txt_data.len -= ((item-1)->seperator[0] != 0) + ((item-1)->seperator[1] != 0);
+
+            // emit this item's separator even if this item is missing - next item will delete it if also missing (last item in Samples doesn't have a seperator)
             if (item->seperator[0]) RECONSTRUCT1 (item->seperator[0]);
             if (item->seperator[1]) RECONSTRUCT1 (item->seperator[1]);
         }
 
-        if (st->repsep[0]) RECONSTRUCT1 (st->repsep[0]);
-        if (st->repsep[1]) RECONSTRUCT1 (st->repsep[1]);
+        if (rep_i+1 < st->repeats || !(st->flags & STRUCTURED_DROP_FINAL_REPEAT_SEP)) {
+            if (st->repsep[0]) RECONSTRUCT1 (st->repsep[0]);
+            if (st->repsep[1]) RECONSTRUCT1 (st->repsep[1]);
+        }
+
+        // in top level: after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
+        if ((st->flags & STRUCTURED_TOPLEVEL) && vb->dont_show_curr_line) 
+            vb->txt_data.len = vb->line_start; 
     }
 
-    if ((st->flags & STRUCTURED_DROP_LAST_SEP_OF_LAST_ELEMENT))
+    if (st->flags & STRUCTURED_DROP_FINAL_ITEM_SEP)
         vb->txt_data.len -= (st->items[st->num_items-1].seperator[0] != 0) + 
                             (st->items[st->num_items-1].seperator[1] != 0);
+
+    if (st->flags & STRUCTURED_TOPLEVEL)   
+        COPY_TIMER (vb->profile.piz_reconstruct_vb);
 }
 
-static void piz_reconstruct_structured (VBlock *vb, const char *snip, unsigned snip_len)
+static void piz_reconstruct_structured (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)
 {
     ASSERT (snip_len <= base64_sizeof(Structured), "Error in piz_reconstruct_structured: snip_len=%u exceed base64_sizeof(Structured)=%u",
             snip_len, base64_sizeof(Structured));
 
-    Structured st;
+    Structured st, *st_p=NULL;
+    const char *prefixes;
+    uint32_t prefixes_len;
 
-    unsigned b64_len = snip_len;
-    base64_decode (snip, &b64_len, (uint8_t*)&st);
-    st.repeats = BGEN32 (st.repeats);
-    bool has_prefixes = (b64_len < snip_len);
+    bool cache_exists = buf_is_allocated (&ctx->struct_cache);
+    uint16_t cache_item_len;
 
-    piz_reconstruct_structured_do (vb, &st, 
-                                   has_prefixes ? &snip[b64_len+1] : NULL,
-                                   has_prefixes ? snip_len - (b64_len+1) : 0);
+    // if this structured exists in the cache - use the cached one
+    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *ENT (uint16_t, ctx->struct_len, word_index)))) {
+        st_p = (Structured *)ENT (char, ctx->struct_cache, *ENT (uint32_t, ctx->struct_index, word_index));
+        
+        unsigned st_size = sizeof_structured (*st_p);
+        prefixes = (char *)st_p + st_size; // prefixes are stored after the Structured
+        prefixes_len = cache_item_len - st_size;
+    }
+
+    // case: not cached - decode it and optionally cache it
+    if (!st_p) {
+        // decode
+        unsigned b64_len = snip_len;
+        base64_decode (snip, &b64_len, (uint8_t*)&st);
+        st.repeats = BGEN32 (st.repeats);
+
+        // get the did_i for each dict_id
+        for (uint8_t item_i=0; item_i < st.num_items; item_i++)
+            if (st.items[item_i].dict_id.num)  // not a prefix-only item
+                st.items[item_i].did_i = mtf_get_existing_did_i (vb, st.items[item_i].dict_id);
+
+        // get prefixes
+        unsigned st_size = sizeof_structured (st);
+        st_p         = &st;
+        prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL;
+        prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
+
+        ASSERT (prefixes_len <= STRUCTURED_MAX_PREFIXES_LEN, "Error in piz_reconstruct_structured: prefixes_len=%u longer than STRUCTURED_MAX_PREFIXES_LEN=%u", 
+                prefixes_len, STRUCTURED_MAX_PREFIXES_LEN);
+
+        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == SNIP_STRUCTURED, "Error in piz_reconstruct_structured: prefixes array does end with a SNIP_STRUCTURED: %.*s",
+                prefixes_len, prefixes);
+
+        // cache it if it is cacheable 
+        if (word_index != WORD_INDEX_NONE) {
+
+            ASSERT (st_size + prefixes_len <= 65535, "st_size=%u + prefixes_len=%u too large", st_size, prefixes_len);
+
+            // first encounter with Structured for this context - allocate the cache
+            if (!cache_exists) {
+                buf_alloc (vb, &ctx->struct_index, ctx->word_list.len * sizeof (uint32_t), 1, "context->struct_index", ctx->did_i);
+                buf_alloc (vb, &ctx->struct_len,   ctx->word_list.len * sizeof (uint16_t),  1, "context->struct_len",   ctx->did_i);
+                buf_zero (&ctx->struct_len);
+            }
+
+            // place Structured followed by prefix in the cache
+            *ENT (uint32_t, ctx->struct_index, word_index) = (uint32_t)ctx->struct_cache.len;
+            *ENT (uint16_t, ctx->struct_len,   word_index) = (uint16_t)(st_size + prefixes_len);
+
+            buf_alloc (vb, &ctx->struct_cache, ctx->struct_cache.len + st_size + prefixes_len, 2, "context->struct_cache", ctx->did_i);
+            buf_add (&ctx->struct_cache, st_p, st_size);
+            if (prefixes_len) buf_add (&ctx->struct_cache, prefixes, prefixes_len);
+        }
+    }
+
+    piz_reconstruct_structured_do (vb, ctx->dict_id, st_p, prefixes, prefixes_len); 
 }
 
 static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len)
@@ -221,7 +315,7 @@ static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsi
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
 
-    Context *other_ctx = mtf_get_ctx (vb, dict_id);
+    Context *other_ctx = mtf_get_existing_ctx (vb, dict_id);
 
     *snip     += b64_len + 1;
     *snip_len -= b64_len + 1;
@@ -229,7 +323,9 @@ static Context *piz_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsi
     return other_ctx;
 }
 
-void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, unsigned snip_len)
+void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, 
+                               WordIndex word_index, // WORD_INDEX_NONE if not used. Needed only if this snip might be a Structured that needs to be cached
+                               const char *snip, unsigned snip_len)
 {
     if (!snip_len) return; // nothing to do
     
@@ -275,7 +371,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
     }
     case SNIP_PAIR_LOOKUP:
         mtf_get_next_snip (vb, snip_ctx, &snip_ctx->pair_b250_iter, &snip, &snip_len);
-        piz_reconstruct_one_snip (vb, snip_ctx, snip, snip_len); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
+        piz_reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
 
     case SNIP_SELF_DELTA:
@@ -300,7 +396,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
     }
 
     case SNIP_STRUCTURED:
-        piz_reconstruct_structured (vb, snip+1, snip_len-1);
+        piz_reconstruct_structured (vb, snip_ctx, word_index, snip+1, snip_len-1);
         break;
 
     case SNIP_SPECIAL:
@@ -347,9 +443,11 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx, const char *snip, 
     snip_ctx->last_line_i = vb->line_i;
 }
 
-// returns reconstructed length
-uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
+// returns reconstructed length or -1 if snip is missing and item's operator should not be emitted
+int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
 {
+    ASSERT (did_i < vb->num_contexts, "Error in piz_reconstruct_from_ctx_do: did_i=%u out of range: vb->num_contexts=%u", did_i, vb->num_contexts);
+
     Context *ctx = &vb->contexts[did_i];
 
     ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "Error in piz_reconstruct_from_ctx: ctx not initialized (dict_id=0)");
@@ -364,10 +462,13 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
     if (ctx->b250.len) {         
         DECLARE_SNIP;
         uint32_t word_index = LOAD_SNIP(ctx->did_i); 
-        piz_reconstruct_one_snip (vb, ctx, snip, snip_len);        
+
+        if (!snip) return -1; // WORD_INDEX_MISSING_SF - remove preceding separator
+        
+        piz_reconstruct_one_snip (vb, ctx, word_index, snip, snip_len);        
 
         // handle chrom and pos to determine whether this line should be grepped-out in case of --regions
-        if (did_i == CHROM) { // test original did_i, not the alias target
+        if (did_i == CHROM) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
             vb->chrom_node_index = word_index;
             vb->chrom_name       = snip; // used for reconstruction from external reference
             vb->chrom_name_len   = snip_len;
@@ -382,6 +483,9 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
         if (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_UINT64)
             piz_reconstruct_from_local_int(vb, ctx, 0);
         
+        else if (ctx->ltype == LT_HT)
+            piz_reconstruct_from_local_ht (vb, ctx);
+
         else if (ctx->ltype == LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
         
@@ -414,22 +518,7 @@ uint32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
 
     if (sep) RECONSTRUCT1 (sep); 
 
-    return (uint32_t)(vb->txt_data.len - start);
-}
-
-void piz_map_compound_field (VBlock *vb, bool (*predicate)(DictId), SubfieldMapper *mapper)
-{
-    mapper->num_subfields = 0;
-
-    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++)
-        if (predicate (vb->contexts[did_i].dict_id)) {
-         
-            char index_char = vb->contexts[did_i].dict_id.id[1];
-            unsigned index = IS_DIGIT(index_char) ? index_char - '0' : 10 + index_char - 'a';
-         
-            mapper->did_i[index] = did_i;
-            mapper->num_subfields++;
-        }
+    return (int32_t)(vb->txt_data.len - start);
 }
 
 uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
@@ -446,7 +535,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 
         bool is_local = header->h.section_type == SEC_LOCAL;
         if (header->h.section_type == SEC_B250 || is_local) {
-            Context *ctx = mtf_get_ctx (vb, header->dict_id);
+            Context *ctx = mtf_get_ctx (vb, header->dict_id); // creates the context
             ctx->flags |= header->h.flags;
             ctx->ltype = header->ltype;
 
@@ -472,11 +561,13 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
                 mtf_dump_local (ctx, false);
 
 #           define adjust_lens(buf) { \
-                buf.len /= lt_sizeof_one[ctx->ltype]; \
+                buf.len /= lt_desc[ctx->ltype].width; \
                 if (ctx->ltype == LT_BITMAP) { \
                     buf.param = buf.len * 64; /* number of bits. note: this might be higher than the number of bits on the ZIP side, since we are rounding up the word boundary */ \
                     LTEN_bit_array (buf_get_bitarray (&buf), true); \
                 } \
+                else if (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_UINT64)    \
+                    lt_desc[ctx->ltype].file_to_native (&buf); \
             }
 
             if      (is_pair_section) adjust_lens (ctx->pair)
@@ -494,6 +585,16 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
     // if all we wanted is to dump some data, we're done
     if (exe_type == EXE_GENOCAT && (dump_one_b250_dict_id.num || dump_one_local_dict_id.num)) exit_ok;
 
+    // initialize pair iterators (pairs only exist in fastq)
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
+        Context *ctx = &vb->contexts[did_i];
+        if (buf_is_allocated (&ctx->pair))
+            ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair),
+                                                  .prev_word_index = -1 };
+    }
+
+    mtf_map_aliases (vb);
+
     return section_i;
 }
 
@@ -501,31 +602,49 @@ static void piz_uncompress_one_vb (VBlock *vb)
 {
     START_TIMER;
 
-    // we read the header and ctxs for all data_types, except VCF that does its own special handling
-    if (vb->data_type != DT_VCF) {
-        ARRAY (const uint32_t, section_index, vb->z_section_headers); 
+    ASSERT0 (!flag_reference || genome.ref.num_of_bits, "Error in piz_uncompress_one_vb: reference is not loaded correctly");
 
-        SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
-        vb->first_line       = BGEN32 (header->first_line);      
-        vb->lines.len        = BGEN32 (header->num_lines);       
-        vb->vb_data_size     = BGEN32 (header->vb_data_size);    
-        vb->longest_line_len = BGEN32 (header->longest_line_len);
-        vb->md5_hash_so_far  = header->md5_hash_so_far;
-        if (flag_unbind) vb->vblock_i = BGEN32 (header->h.vblock_i); /* in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher because the dispatcher is re-initialized for every component */ 
+    // we read the header and ctxs for all data_types
+    ARRAY (const uint32_t, section_index, vb->z_section_headers); 
 
-        if (flag_show_vblocks) 
-            fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
-                     vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
+    SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)(vb->z_data.data + section_index[0]);
+    vb->first_line       = BGEN32 (header->first_line);      
+    vb->lines.len        = BGEN32 (header->num_lines);       
+    vb->vb_data_size     = BGEN32 (header->vb_data_size);    
+    vb->longest_line_len = BGEN32 (header->longest_line_len);
+    vb->num_haplotypes_per_line = BGEN32 (header->num_haplotypes_per_line);
+    vb->md5_hash_so_far  = header->md5_hash_so_far;
 
-        buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
+    // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
+    // because the dispatcher is re-initialized for every vcf component
+    if (flag_unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
 
-        piz_uncompress_all_ctxs (vb, false);
+    // global_vcf_num_samples=0 unless this is VCF
+    ASSERT (!global_vcf_num_samples || global_vcf_num_samples == BGEN32 (header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_vcf_num_samples, BGEN32 (header->num_samples));
+    global_vcf_num_samples = BGEN32 (header->num_samples);
 
-        // genocat --show-b250 only shows the b250 info and not the file data (shown when uncompressing via zfile_uncompress_section)
-        if (flag_show_b250 && exe_type == EXE_GENOCAT) goto done;
-    }
+    if (flag_show_vblocks) 
+        fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
+                    vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len, vb->vb_data_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    DTP(uncompress)(vb);
+    buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
+
+    piz_uncompress_all_ctxs (vb, false);
+
+    // de-optimize FORMAT/GL data in local (we have already de-optimized the data in dict elsewhere)
+    // TO DO: move GL to be a special snip (or an array?)
+    //if (vb->data_type == DT_VCF) {
+    //    DidIType gl_did_i =  mtf_get_existing_did_i ((VBlockP)vb, (DictId)dict_id_FORMAT_GL);
+    //    if (gl_did_i != DID_I_NONE) 
+    //        gl_deoptimize (vb->contexts[gl_did_i].local.data, vb->contexts[gl_did_i].local.len);
+    //}
+
+    // genocat --show-b250 only shows the b250 info and not the file data (shown when uncompressing via zfile_uncompress_section)
+    if (flag_show_b250 && exe_type == EXE_GENOCAT) goto done;
+
+    // reconstruct from top level snip
+    DidIType toplevel_did_i = mtf_get_existing_did_i (vb, dict_id_field (dict_id_make (TOPLEVEL, strlen(TOPLEVEL))));
+    piz_reconstruct_from_ctx (vb, toplevel_did_i, 0);
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -535,13 +654,13 @@ done:
 static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
 {
     // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
-    mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_dict_ids);
+    mtf_initialize_primary_field_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
 
     while ((*next_sl)->section_type == SEC_B250 || (*next_sl)->section_type == SEC_LOCAL) {
         uint32_t section_start = vb->z_data.len;
         *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = section_start; 
 
-        int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
+        int32_t ret = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", sizeof(SectionHeaderCtx), 
                                           (*next_sl)->section_type, *next_sl); // returns 0 if section is skipped
 
         if (ret) vb->z_section_headers.len++;
@@ -636,8 +755,7 @@ static bool piz_read_one_vb (VBlock *vb)
 
     SectionListEntry *sl = sections_vb_first (vb->vblock_i, false); 
 
-    int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, NO_SB_I, &vb->z_data, "z_data", 
-                                                   z_file->data_type == DT_VCF ? sizeof (SectionHeaderVbHeaderVCF) : sizeof (SectionHeaderVbHeader), 
+    int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", sizeof (SectionHeaderVbHeader), 
                                                    SEC_VB_HEADER, sl++); 
 
     ASSERT (vb_header_offset != EOF, "Error: unexpected end-of-file while reading vblock_i=%u", vb->vblock_i);

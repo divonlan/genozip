@@ -124,16 +124,16 @@ bool domqual_convert_qual_to_domqual (VBlockP vb, LocalGetLineCallback get_line,
     qual_ctx->local.len = 0; 
     qual_ctx->inst |= CTX_INST_NO_CALLBACK | CTX_INST_LOCAL_PARAM;
     qual_ctx->ltype = LT_DOMQUAL;
-    qual_ctx->lcomp = COMP_LZMA;
+    qual_ctx->lcodec = CODEC_LZMA;
 
     qdomruns_ctx->ltype = LT_UINT8;
-    qdomruns_ctx->lcomp = COMP_LZMA;
+    qdomruns_ctx->lcodec = CODEC_LZMA;
 
     uint32_t runlen = 0;
     
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {   
-        char *qual[2];
-        uint32_t qual_len[2];
+        char *qual[2] = {0};
+        uint32_t qual_len[2] = {0};
         get_line (vb, line_i, &qual[0], &qual_len[0], &qual[1], &qual_len[1]);
 
         // grow if needed
@@ -144,7 +144,7 @@ bool domqual_convert_qual_to_domqual (VBlockP vb, LocalGetLineCallback get_line,
 
             if (!qual[side]) continue;
 
-            for (uint32_t i=0; i < qual_len[side]; i++) {
+            for (uint32_t i=0; i < qual_len[side]; i++) {    
                 if (qual[side][i] == dom) 
                     runlen++;
                 

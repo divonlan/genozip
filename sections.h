@@ -28,36 +28,25 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_LOCAL           = 12, 
     SEC_ALT_CHROMS      = 13,
 
-    // vcf specific    
-    SEC_VCF_GT_DATA     = 20,  
-    SEC_VCF_PHASE_DATA  = 21,
-    SEC_VCF_HT_DATA     = 22,                               
-    SEC_VCF_HT_GTSHARK  = 23,
-
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
 
 // this data must be perfectly aligned with SectionType.
-#define SECTIONTYPE_ABOUT {  \
-    {"SEC_RANDOM_ACCESS"},   \
-    {"SEC_REFERENCE"},       \
-    {"SEC_REF_IS_SET"},      \
-    {"SEC_REF_HASH"},        \
-    {"SEC_REF_RAND_ACC"},    \
-    {"SEC_REF_CONTIGS"},     \
-    {"SEC_GENOZIP_HEADER"},  \
-    {"SEC_DICT_ID_ALIASES"}, \
-    {"SEC_TXT_HEADER"},      \
-    {"SEC_VB_HEADER"},       \
-    {"SEC_DICT"},            \
-    {"SEC_B250"},            \
-    {"SEC_LOCAL"},           \
-    {"SEC_ALT_CHROMS"},      \
-    {}, {}, {}, {}, {}, {},  \
-    {"SEC_VCF_GT_DATA"},     \
-    {"SEC_VCF_PHASE_DATA"},  \
-    {"SEC_VCF_HT_DATA"},     \
-    {"SEC_VCF_HT_GTSHARK"},  \
+#define SECTIONTYPE_ABOUT {    \
+    {"SEC_RANDOM_ACCESS"},     \
+    {"SEC_REFERENCE"},         \
+    {"SEC_REF_IS_SET"},        \
+    {"SEC_REF_HASH"},          \
+    {"SEC_REF_RAND_ACC"},      \
+    {"SEC_REF_CONTIGS"},       \
+    {"SEC_GENOZIP_HEADER"},    \
+    {"SEC_DICT_ID_ALIASES"},   \
+    {"SEC_TXT_HEADER"},        \
+    {"SEC_VB_HEADER"},         \
+    {"SEC_DICT"},              \
+    {"SEC_B250"},              \
+    {"SEC_LOCAL"},             \
+    {"SEC_ALT_CHROMS"},        \
 }
 
 // Section headers - big endian
@@ -78,7 +67,7 @@ typedef struct SectionHeader {
     uint32_t data_uncompressed_len;
     uint32_t vblock_i;               // VB with in file starting from 1 ; 0 for Txt Header
     SectionType section_type;        // 1 byte
-    CompressionAlg sec_compression_alg; // 1 byte
+    Codec    codec;                  // 1 byte
     uint8_t  flags;                  // CTX_FL_*
     uint8_t  ffu;
 } SectionHeader; 
@@ -122,7 +111,7 @@ typedef struct {
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t num_samples;      // VCF only: number of samples in the original VCF file
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
-    CompressionAlg compression_type; // compression type of original file
+    Codec compression_type;    // compression type of original file
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
 
@@ -130,46 +119,22 @@ typedef struct {
     char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
 } SectionHeaderTxtHeader; 
 
-#define VB_HEADER_COMMON_FIELDS \
-    SectionHeader h;            \
-    uint32_t first_line;       /* line (starting from 1) of this vblock in the single txt file */ \
-                               /* if this value is 0, then this is the terminating section of the file. after it is either EOF or a TXT Header section of the next bound file */ \
-    uint32_t num_lines;        /* number of records in this vblock */ \
-                                \
-    /* features of the data */  \
-    uint32_t vb_data_size;     /* size of vblock as it appears in the source file */ \
-    uint32_t z_data_bytes;     /* total bytes of this vblock in the genozip file including all sections and their headers */ \
-    uint32_t longest_line_len; /* length of the longest line in this vblock */ \
-                                \
-    Md5Hash md5_hash_so_far;   /* partial calculation of MD5 up to and including this VB */
-
-// A generic VB header - used for all data types but VCF
 typedef struct {
-    VB_HEADER_COMMON_FIELDS
-} SectionHeaderVbHeader; 
-
-// VCF VB header
-typedef struct {
-    VB_HEADER_COMMON_FIELDS
-
-    uint8_t phase_type;
-    
-    // flags
-    uint8_t has_genotype_data : 1;     // 1 if there is at least one variant in the block that has FORMAT with have anything except for GT 
-    uint8_t is_gtshark        : 1;     // 1 if the haplotype sections are compressed with gtshark instead of bzip2
-    uint8_t for_future_use    : 6;
-    uint16_t ploidy;
-
+    SectionHeader h;            
+    uint32_t first_line;       // line (starting from 1) of this vblock in the single txt file 
+                               // if this value is 0, then this is the terminating section of the file. after it is either EOF or a TXT Header section of the next bound file 
+    uint32_t num_lines;        // number of records in this vblock 
+                                
     // features of the data
-    uint32_t num_samples;
-    uint32_t num_haplotypes_per_line;  // 0 if no haplotypes
-    uint32_t num_sample_blocks;
-    uint32_t num_samples_per_block;
-    uint32_t max_gt_line_len;
+    uint32_t vb_data_size;     // size of vblock as it appears in the source file 
+    uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers 
+    uint32_t longest_line_len; // length of the longest line in this vblock 
+    uint32_t num_samples;      // VCF only
+    uint32_t num_haplotypes_per_line; // VCF only
+                                
+    Md5Hash md5_hash_so_far;   // partial calculation of MD5 up to and including this VB */
 
-    uint16_t haplotype_index_checksum;
-    uint16_t unused;
-} SectionHeaderVbHeaderVCF; 
+} SectionHeaderVbHeader; 
 
 typedef struct {
     SectionHeader h;           // we use h.flags to store the first 4 bits of ctx->flags, also stored in SectionHeaderCtx. This is because VCF FORMAT contexts have no SectionHeaderCtx.
@@ -194,16 +159,37 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_SEQUENCE = 11,  // length of data extracted is determined by vb->seq_len
     LT_BITMAP   = 12,  // a bitmap
     LT_DOMQUAL  = 13,  // quality scores in domqual format
+    LT_HT       = 14,  // haplotypes - 48->147 for allele values or '.' or '*' for missing value
     NUM_LOCAL_TYPES
 } LocalType;
 
-// 3 letter names for --show-headers
-#define LOCALTYPE_NAMES { "TXT", "I8 ", "U8 ", "I16", "U16", "I32", "U32", "I64", "U64", "F32", "F64", "SEQ", "BMP", "DOM" }
-extern const char *lt_names[NUM_LOCAL_TYPES];
-extern const char lt_to_sam_map[NUM_LOCAL_TYPES];
-extern const int lt_sizeof_one[NUM_LOCAL_TYPES];
-extern const bool lt_is_signed[NUM_LOCAL_TYPES];
-extern const int64_t lt_min[NUM_LOCAL_TYPES], lt_max[NUM_LOCAL_TYPES];
+typedef struct LocalTypeDesc {
+    const char *name;
+    const char sam_char;
+    unsigned width;
+    bool is_signed;
+    BgEnBuf file_to_native;
+} LocalTypeDesc;
+
+extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
+#define LOCALTYPE_DESC { \
+/*   name   sam  wid signed file_to_native */ \
+   { "TXT", 0,   1,  0,     0                        }, \
+   { "I8 ", 'c', 1,  1,     BGEN_deinterlace_d8_buf  }, \
+   { "U8 ", 'C', 1,  0,     BGEN_u8_buf              }, \
+   { "I16", 's', 2,  1,     BGEN_deinterlace_d16_buf }, \
+   { "U16", 'S', 2,  0,     BGEN_u16_buf             }, \
+   { "I32", 'i', 4,  1,     BGEN_deinterlace_d32_buf }, \
+   { "U32", 'I', 4,  0,     BGEN_u32_buf             }, \
+   { "I64", 0,   8,  1,     BGEN_deinterlace_d64_buf }, \
+   { "U64", 0,   8,  0,     BGEN_u64_buf             }, \
+   { "F32", 'f', 4,  0,     0                        }, \
+   { "F64", 0,   8,  0,     0                        }, \
+   { "SEQ", 0,   1,  0,     0                        }, \
+   { "BMP", 0,   8,  0,     0                        }, \
+   { "DOM", 0,   1,  0,     0                        }, \
+   { "HT ", 0,   1,  0,     0                        }  \
+}
 
 // flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz
 #define CTX_FL_STORE_INT    0x01 // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)

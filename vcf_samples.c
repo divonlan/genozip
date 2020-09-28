@@ -110,32 +110,8 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
     for (unsigned s=0; s < cmd_samples_buf.len; s++) 
         ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, cmd_samples_buf, s));
 
+    // if the user filtered out all samples, its equivalent of drop_genotypes
+    if (!global_vcf_num_displayed_samples) flag_drop_genotypes = true;
+
     //for (i=0; i<global_vcf_num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }
-
-// PIZ only: calculates whether a sample block is included, based on --samples. this is called once per sample block
-// in vcf_zfile_read_one_vb to set vb->is_sb_included, and thereafter vb->is_sb_included is used
-bool samples_get_is_sb_included (uint32_t num_samples_per_block, uint32_t sb_i)
-{
-    if (!flag_samples) return true; // all sample blocks are included if --samples if not specified
-
-    for (uint32_t sample_i = sb_i * num_samples_per_block; 
-         sample_i < MIN ((sb_i+1) * num_samples_per_block, global_vcf_num_samples);
-         sample_i++)
-
-         if (samples_am_i_included(sample_i)) return true; // at least one sample is included - means the sample block is included
-
-    return false; // no sample in this sample block is included - means the whole sample block is excluded
-}
-
-
-bool vcf_is_sb_included (void *vb_, uint32_t sb_i)
-{
-    VBlockVCFP vb = (VBlockVCFP)vb_;
-
-    ASSERT (!flag_samples || sb_i < vb->is_sb_included.len, "Error in vcf_is_sb_included: sb_i=%u out of range - len=%u", sb_i, (unsigned)vb->is_sb_included.len);
-
-    return !flag_samples || *ENT(bool, vb->is_sb_included, sb_i);
-}
-
-

@@ -522,12 +522,12 @@ void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
 
 
 // Clear all the bits in a region
-void bit_array_clear_region(BitArray* bitarr, bit_index_t start, bit_index_t len)
+void bit_array_clear_region_do (BitArray* bitarr, bit_index_t start, bit_index_t len, const char *func, unsigned code_line)
 {
   if (!len) return; // nothing to do 
 
-  ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_clear_region: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
-          start, len, bitarr->num_of_bits); // divon fixed bug
+  ASSERT (start + len - 1 <= bitarr->num_of_bits, "Error in bit_array_clear_region (called from %s:%u): Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bitarr->num_of_bits(%"PRId64")",
+          func, code_line, start, len, bitarr->num_of_bits); // divon fixed bug
 
   CLEAR_REGION(bitarr, start, len);
 //  DEBUG_VALIDATE(bitarr);

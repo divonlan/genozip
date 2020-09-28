@@ -55,7 +55,7 @@ void ref_alt_chroms_compress (void)
     }
 
     z_file->alt_chrom_map.len *= sizeof (AltChrom);
-    zfile_compress_section_data_alg (evb, SEC_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, COMP_LZMA); // compresses better with LZMA than BZLIB
+    zfile_compress_section_data_alg (evb, SEC_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
 
     buf_free (&z_file->alt_chrom_map);
 }
@@ -65,7 +65,7 @@ void ref_alt_chroms_load (void)
     SectionListEntry *sl = sections_get_offset_first_section_of_type (SEC_ALT_CHROMS, true);
     if (!sl) return; // we don't have alternate chroms
 
-    zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_ALT_CHROMS, sl);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_ALT_CHROMS, sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", SEC_ALT_CHROMS);
 

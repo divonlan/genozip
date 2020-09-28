@@ -56,11 +56,11 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file d
 
 // the flags - representing command line options - available globally
 int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
-    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_show_gt_nodes=0, flag_multiple_files=0,
+    flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_stats=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_list_chroms=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
-    flag_show_vblocks=0, flag_gtshark=0, flag_sblock=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0,
+    flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_show_hash, flag_register=0, flag_debug_no_singletons=0, flag_genocat_info_only=0,
     flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_ref_use_aligner=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
@@ -661,14 +661,12 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,      1 }
         #define _9D {"optimize-DESC", no_argument,       &flag_optimize_DESC,    1 }
         #define _9S {"optimize-SEQ",  no_argument,       &flag_optimize_SEQ,     1 }
-        #define _gt {"gtshark",       no_argument,       &flag_gtshark,          1 } 
         #define _pe {"pair",          no_argument,       &flag_pair,   PAIR_READ_1 } 
         #define _th {"threads",       required_argument, 0, '@'                    }
         #define _u  {"unbind",        no_argument,       &flag_unbind,           1 }
         #define _o  {"output",        required_argument, 0, 'o'                    }
         #define _p  {"password",      required_argument, 0, 'p'                    }
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
-        #define _S  {"sblock",        required_argument, 0, 'S'                    }
         #define _r  {"regions",       required_argument, 0, 'r'                    }
         #define _s  {"samples",       required_argument, 0, 's'                    }
         #define _e  {"reference",     required_argument, 0, 'e'                    }
@@ -689,7 +687,6 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _d1 {"show-one-dict", required_argument, 0, '\3'                   }
         #define _d2 {"show-dict-one", required_argument, 0, '\3'                   }
         #define _lc {"list-chroms",   no_argument,       &flag_list_chroms,      1 } // identical to --show-one-dict for the CHROM dict of the data type
-        #define _sg {"show-gt-nodes", no_argument,       &flag_show_gt_nodes,    1 } 
         #define _s2 {"show-b250",     no_argument,       &flag_show_b250,        1 } 
         #define _s5 {"show-one-b250", required_argument, 0, '\2'                   }
         #define _s6 {"show-b250-one", required_argument, 0, '\2'                   }
@@ -720,18 +717,18 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                    _ss, _SS, _sd, _sT, _d1, _d2, _lc, _sg, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _S, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _gt, _pe, _fa,          _rg, _sR, _sC, _rA, _rS, _me, _sA, _sI, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                                  _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT,          _sd, _sT, _d1, _d2, _lc,      _s2, _s5, _s6, _s7, _s8, _S7, _S8,      _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,         _dm, _dp,                                                                                    _fs, _g,      _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                        _st, _sm,                                       _dm,                                                                                                                                          _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                    _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_ds, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _pe, _fa,          _rg, _sR, _sC, _rA, _rS, _me, _sA, _sI, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                             _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT,          _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                    _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                   _st, _sm,                                 _dm,                                                                                                                                     _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:o:p:B:S:9KwWFe:E:2uz",  // genozip
-            "czfhLqQt^V@:uo:p:me:",                     // genounzip
-            "hLVp:qf",                                  // genols
-            "hLV@:p:qQ1r:s:H1Go:fg:e:E:"              // genocat
+            "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2uz",  // genozip
+            "czfhLqQt^V@:uo:p:me:",                  // genounzip
+            "hLVp:qf",                               // genols
+            "hLV@:p:qQ1r:s:H1Go:fg:e:E:"             // genocat
         };
 
         int option_index = -1;
@@ -760,7 +757,6 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             case '9' : flag_optimize      = 1      ; break;
             case 'w' : flag_show_stats    = 1      ; break;
             case 'W' : flag_show_stats    = 2      ; break;
-            case 'K' : flag_gtshark       = 1      ; break;
             case '2' : flag_pair    = PAIR_READ_1  ; break;
             case 't' : flag_test          = 1      ; break; 
                        // fall through for genocat -r
@@ -783,9 +779,6 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             case '\3' : dict_id_show_one_dict  = dict_id_make (optarg, strlen (optarg)); break;
             case 'B' : vb_set_global_max_memory_per_vb (optarg); 
                        flag_vblock = true;
-                       break;
-            case 'S' : vcf_zip_set_global_samples_per_block (optarg); 
-                       flag_sblock = true;
                        break;
             case 'p' : crypt_set_password (optarg) ; break;
 
@@ -867,8 +860,6 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
         ASSINP (num_files % 2 == 0, "%s: when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", global_cmd, OT("pair", "2"));
     }
 
-    if (flag_gtshark) stream_abort_if_cannot_run ("gtshark", "To use the --gtshark option"); 
-
     // deal with final setting of flag_quiet that suppresses warnings 
     
     // don't show progress or warning when outputing to stdout (note: we are "quiet" even if output doesn't go to the terminal
@@ -876,7 +867,7 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     if (flag_stdout) flag_quiet=true; 
     
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
-    if (flag_show_dict || flag_show_gt_nodes || flag_show_b250 || flag_show_headers || flag_show_threads ||
+    if (flag_show_dict || flag_show_b250 || flag_show_headers || flag_show_threads ||
         dict_id_show_one_b250.num || dict_id_show_one_dict.num || flag_show_reference ||
         flag_show_alleles || flag_show_vblocks || (flag_show_index && command==PIZ))
         flag_quiet=true; // don't show progress
@@ -888,7 +879,6 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 
     // default values, if not overridden by the user
     if (!flag_vblock) vb_set_global_max_memory_per_vb (flag_fast ? TXT_DATA_PER_VB_FAST : TXT_DATA_PER_VB_DEFAULT); 
-    if (!flag_sblock) vcf_zip_set_global_samples_per_block (VCF_SAMPLES_PER_VBLOCK); 
 
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.

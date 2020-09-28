@@ -142,37 +142,37 @@ extern const char *file_exts[];
 
 // txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file
-#define TXT_IN_FT_BY_DT  { { { FASTA,     COMP_NONE, REF_GENOZIP   }, { FASTA_GZ, COMP_GZ,  REF_GENOZIP   },\
-                             { FASTA_BZ2, COMP_BZ2,  REF_GENOZIP   }, { FASTA_XZ, COMP_XZ,  REF_GENOZIP   },\
-                             { FA,        COMP_NONE, REF_GENOZIP   }, { FA_GZ,    COMP_GZ,  REF_GENOZIP   },\
-                             { FA_BZ2,    COMP_BZ2,  REF_GENOZIP   }, { FA_XZ,    COMP_XZ,  REF_GENOZIP   }, { 0, 0, 0 }, }, \
-                           { { VCF,       COMP_NONE, VCF_GENOZIP   }, { VCF_GZ,   COMP_GZ,  VCF_GENOZIP   }, { VCF_BGZ, COMP_GZ,  VCF_GENOZIP },\
-                             { VCF_BZ2,   COMP_BZ2,  VCF_GENOZIP   }, { VCF_XZ,   COMP_XZ,  VCF_GENOZIP   },\
-                             { BCF,       COMP_BCF,  VCF_GENOZIP   }, { BCF_GZ,   COMP_BCF, VCF_GENOZIP   }, { BCF_BGZ, COMP_BCF, VCF_GENOZIP }, {0, 0, 0} },\
-                           { { SAM,       COMP_NONE, SAM_GENOZIP   }, { SAM_GZ,   COMP_GZ,  SAM_GENOZIP   }, { SAM_BGZ, COMP_GZ,  SAM_GENOZIP },\
-                             { SAM_BZ2,   COMP_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   COMP_XZ,  SAM_GENOZIP   },\
-                             { BAM,       COMP_BAM,  SAM_GENOZIP   }, { CRAM,     COMP_CRAM,SAM_GENOZIP   }, { 0, 0, 0 }, },\
-                           { { FASTQ,     COMP_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, COMP_GZ,  FASTQ_GENOZIP },\
-                             { FASTQ_BZ2, COMP_BZ2,  FASTQ_GENOZIP }, { FASTQ_XZ, COMP_XZ,  FASTQ_GENOZIP },\
-                             { FQ,        COMP_NONE, FQ_GENOZIP    }, { FQ_GZ,    COMP_GZ,  FQ_GENOZIP    },\
-                             { FQ_BZ2,    COMP_BZ2,  FQ_GENOZIP    }, { FQ_XZ,    COMP_XZ,  FQ_GENOZIP    }, { 0, 0, 0 } },\
-                           { { FASTA,     COMP_NONE, FASTA_GENOZIP }, { FASTA_GZ, COMP_GZ,  FASTA_GENOZIP },\
-                             { FASTA_BZ2, COMP_BZ2,  FASTA_GENOZIP }, { FASTA_XZ, COMP_XZ,  FASTA_GENOZIP },\
-                             { FAA,       COMP_NONE, FAA_GENOZIP   }, { FAA_GZ,   COMP_GZ,  FAA_GENOZIP   },\
-                             { FAA_BZ2,   COMP_BZ2,  FAA_GENOZIP   }, { FAA_XZ,   COMP_XZ,  FAA_GENOZIP   },\
-                             { FFN,       COMP_NONE, FFN_GENOZIP   }, { FFN_GZ,   COMP_GZ,  FFN_GENOZIP   },\
-                             { FFN_BZ2,   COMP_BZ2,  FFN_GENOZIP   }, { FFN_XZ,   COMP_XZ,  FFN_GENOZIP   },\
-                             { FNN,       COMP_NONE, FNN_GENOZIP   }, { FNN_GZ,   COMP_GZ,  FNN_GENOZIP   },\
-                             { FNN_BZ2,   COMP_BZ2,  FNN_GENOZIP   }, { FNN_XZ,   COMP_XZ,  FNN_GENOZIP   },\
-                             { FNA,       COMP_NONE, FNA_GENOZIP   }, { FNA_GZ,   COMP_GZ,  FNA_GENOZIP   },\
-                             { FNA_BZ2,   COMP_BZ2,  FNA_GENOZIP   }, { FNA_XZ,   COMP_XZ,  FNA_GENOZIP   },\
-                             { FA,        COMP_NONE, FA_GENOZIP    }, { FA_GZ,    COMP_GZ,  FA_GENOZIP    },\
-                             { FA_BZ2,    COMP_BZ2,  FA_GENOZIP    }, { FA_XZ,    COMP_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
-                           {/* { GFF3,      COMP_NONE, GFF3_GENOZIP  }, { GFF3_GZ,  COMP_GZ,  GFF3_GENOZIP  },\
-                             { GFF3_BZ2,  COMP_BZ2,  GFF3_GENOZIP  }, { GFF3_XZ,  COMP_XZ,  GFF3_GENOZIP  },*/ \
-                             { GVF,       COMP_NONE, GVF_GENOZIP   }, { GVF_GZ,   COMP_GZ,  GVF_GENOZIP   },\
-                             { GVF_BZ2,   COMP_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   COMP_XZ,  GVF_GENOZIP   }, { 0, 0, 0 } },\
-                           { { ME23,      COMP_NONE, ME23_GENOZIP  }, { ME23_ZIP, COMP_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
+#define TXT_IN_FT_BY_DT  { { { FASTA,     CODEC_NONE, REF_GENOZIP   }, { FASTA_GZ, CODEC_GZ,  REF_GENOZIP   },\
+                             { FASTA_BZ2, CODEC_BZ2,  REF_GENOZIP   }, { FASTA_XZ, CODEC_XZ,  REF_GENOZIP   },\
+                             { FA,        CODEC_NONE, REF_GENOZIP   }, { FA_GZ,    CODEC_GZ,  REF_GENOZIP   },\
+                             { FA_BZ2,    CODEC_BZ2,  REF_GENOZIP   }, { FA_XZ,    CODEC_XZ,  REF_GENOZIP   }, { 0, 0, 0 }, }, \
+                           { { VCF,       CODEC_NONE, VCF_GENOZIP   }, { VCF_GZ,   CODEC_GZ,  VCF_GENOZIP   }, { VCF_BGZ, CODEC_GZ,  VCF_GENOZIP },\
+                             { VCF_BZ2,   CODEC_BZ2,  VCF_GENOZIP   }, { VCF_XZ,   CODEC_XZ,  VCF_GENOZIP   },\
+                             { BCF,       CODEC_BCF,  VCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, VCF_GENOZIP   }, { BCF_BGZ, CODEC_BCF, VCF_GENOZIP }, {0, 0, 0} },\
+                           { { SAM,       CODEC_NONE, SAM_GENOZIP   }, { SAM_GZ,   CODEC_GZ,  SAM_GENOZIP   }, { SAM_BGZ, CODEC_GZ,  SAM_GENOZIP },\
+                             { SAM_BZ2,   CODEC_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   CODEC_XZ,  SAM_GENOZIP   },\
+                             { BAM,       CODEC_BAM,  SAM_GENOZIP   }, { CRAM,     CODEC_CRAM,SAM_GENOZIP   }, { 0, 0, 0 }, },\
+                           { { FASTQ,     CODEC_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, CODEC_GZ,  FASTQ_GENOZIP },\
+                             { FASTQ_BZ2, CODEC_BZ2,  FASTQ_GENOZIP }, { FASTQ_XZ, CODEC_XZ,  FASTQ_GENOZIP },\
+                             { FQ,        CODEC_NONE, FQ_GENOZIP    }, { FQ_GZ,    CODEC_GZ,  FQ_GENOZIP    },\
+                             { FQ_BZ2,    CODEC_BZ2,  FQ_GENOZIP    }, { FQ_XZ,    CODEC_XZ,  FQ_GENOZIP    }, { 0, 0, 0 } },\
+                           { { FASTA,     CODEC_NONE, FASTA_GENOZIP }, { FASTA_GZ, CODEC_GZ,  FASTA_GENOZIP },\
+                             { FASTA_BZ2, CODEC_BZ2,  FASTA_GENOZIP }, { FASTA_XZ, CODEC_XZ,  FASTA_GENOZIP },\
+                             { FAA,       CODEC_NONE, FAA_GENOZIP   }, { FAA_GZ,   CODEC_GZ,  FAA_GENOZIP   },\
+                             { FAA_BZ2,   CODEC_BZ2,  FAA_GENOZIP   }, { FAA_XZ,   CODEC_XZ,  FAA_GENOZIP   },\
+                             { FFN,       CODEC_NONE, FFN_GENOZIP   }, { FFN_GZ,   CODEC_GZ,  FFN_GENOZIP   },\
+                             { FFN_BZ2,   CODEC_BZ2,  FFN_GENOZIP   }, { FFN_XZ,   CODEC_XZ,  FFN_GENOZIP   },\
+                             { FNN,       CODEC_NONE, FNN_GENOZIP   }, { FNN_GZ,   CODEC_GZ,  FNN_GENOZIP   },\
+                             { FNN_BZ2,   CODEC_BZ2,  FNN_GENOZIP   }, { FNN_XZ,   CODEC_XZ,  FNN_GENOZIP   },\
+                             { FNA,       CODEC_NONE, FNA_GENOZIP   }, { FNA_GZ,   CODEC_GZ,  FNA_GENOZIP   },\
+                             { FNA_BZ2,   CODEC_BZ2,  FNA_GENOZIP   }, { FNA_XZ,   CODEC_XZ,  FNA_GENOZIP   },\
+                             { FA,        CODEC_NONE, FA_GENOZIP    }, { FA_GZ,    CODEC_GZ,  FA_GENOZIP    },\
+                             { FA_BZ2,    CODEC_BZ2,  FA_GENOZIP    }, { FA_XZ,    CODEC_XZ,  FA_GENOZIP    }, { 0, 0, 0 } },\
+                           {/* { GFF3,      CODEC_NONE, GFF3_GENOZIP  }, { GFF3_GZ,  CODEC_GZ,  GFF3_GENOZIP  },\
+                             { GFF3_BZ2,  CODEC_BZ2,  GFF3_GENOZIP  }, { GFF3_XZ,  CODEC_XZ,  GFF3_GENOZIP  },*/ \
+                             { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
+                             { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { 0, 0, 0 } },\
+                           { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { 0, 0, 0 } } }
 
 // Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting
@@ -201,14 +201,14 @@ extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings -
 // ---------------------------
 
 #define file_is_read_via_ext_decompressor(file) \
-  (file->comp_alg == COMP_XZ || file->comp_alg == COMP_ZIP || file->comp_alg == COMP_BCF || file->comp_alg == COMP_BAM || file->comp_alg == COMP_CRAM)
+  (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_BAM || file->codec == CODEC_CRAM)
 
 #define file_is_read_via_int_decompressor(file) \
-  (file->comp_alg == COMP_GZ || file->comp_alg == COMP_BGZ || file->comp_alg == COMP_BZ2)
+  (file->codec == CODEC_GZ || file->codec == CODEC_BGZ || file->codec == CODEC_BZ2)
 
-#define file_is_written_via_ext_compressor(file) (file->comp_alg == COMP_BCF || file->comp_alg == COMP_GZ)
+#define file_is_written_via_ext_compressor(file) (file->codec == CODEC_BCF || file->codec == CODEC_GZ)
 
-#define file_is_plain_or_ext_decompressor(file) (file->comp_alg == COMP_NONE || file_is_read_via_ext_decompressor(file))
+#define file_is_plain_or_ext_decompressor(file) (file->codec == CODEC_NONE || file_is_read_via_ext_decompressor(file))
 
 typedef struct File {
     void *file;
@@ -220,7 +220,7 @@ typedef struct File {
     bool is_remote;                    // true if file is downloaded from a url
     bool redirected;                   // true if this file is redirected from stdin/stdout
     DataType data_type;
-    CompressionAlg comp_alg;            // txt_file: compression algorithm used with this file
+    Codec codec;            // txt_file: compression algorithm used with this file
 
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
@@ -256,8 +256,8 @@ typedef struct File {
 
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     pthread_mutex_t dicts_mutex;
-    bool dicts_mutex_initialized;      // this mutex protects contexts and num_dict_ids from concurrent adding of a new dictionary
-    DidIType num_dict_ids;             // length of populated subfield_ids and mtx_ctx;
+    bool dicts_mutex_initialized;      // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
+    DidIType num_contexts;             // length of populated subfield_ids and mtx_ctx;
     
     DidIType dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
     Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs

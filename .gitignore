@@ -71,7 +71,6 @@ mac/.from_remote_timestamp
 *.swp
 .notarize.out
 mac/*.pkg
-analyze hgdp_wgs.20190516.full.chr1.vcf and gtshark/*
 fastq/*
 lzma/unused
 !backward-compatibility-test/*.genozip

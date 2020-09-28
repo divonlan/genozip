@@ -14,25 +14,27 @@
 #include "piz.h"
 #include "dict_id.h"
 
-#define DATA_LINE(i) ENT (ZipDataLineME23, vb->lines, i)
-
 void me23_seg_initialize (VBlock *vb)
 {
     vb->contexts[ME23_CHROM].inst = CTX_INST_NO_STONS; // needs b250 node_index for random access
+    vb->contexts[ME23_GENOTYPE].ltype = LT_SEQUENCE;
 }
 
-// returns true if section is to be skipped reading / uncompressing
-bool me23_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+void me23_seg_finalize (VBlockP vb)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT sections
+    // top level snip
+    Structured top_level = { 
+        .repeats   = vb->lines.len,
+        .flags     = STRUCTURED_TOPLEVEL,
+        .num_items = 5,
+        .items     = { { (DictId)dict_id_fields[ME23_ID],       DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[ME23_CHROM],    DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[ME23_POS],      DID_I_NONE, "\t" },
+                       { (DictId)dict_id_fields[ME23_GENOTYPE], DID_I_NONE, ""   },
+                       { (DictId)dict_id_fields[ME23_EOL],      DID_I_NONE, ""   } }
+    };
 
-    //if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
-    //    return true;
-    
-    //if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
-    //    return true;
-
-    return false;
+    seg_structured_by_ctx (vb, &vb->contexts[ME23_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *has_13)     // index in vb->txt_data where this line starts
@@ -60,12 +62,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
             global_cmd, txt_name, field_len, field_len, field_start);
 
     seg_add_to_local_fixed (vb, &vb->contexts[ME23_GENOTYPE], field_start, field_len); 
-    vb->contexts[ME23_GENOTYPE].ltype = LT_SEQUENCE;
-    
-    // note: we don't use ACGT because the genotype contains frequent "--" causing a large NON_AGCT section and making
-    // the compression gains negligible, but the execution time 50% higher
-    //vb->contexts[ME23_GENOTYPE].lcomp = COMP_ACGT;
-    
+        
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
     seg_by_did_i (vb, lookup, 2, ME23_GENOTYPE, field_len + 1);
 
@@ -74,20 +71,3 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, bool *h
     return next_field;
 }
 
-void me23_piz_reconstruct_vb (VBlock *vb)
-{
-    for (vb->line_i=vb->first_line; vb->line_i < vb->first_line + vb->lines.len; vb->line_i++) {
-
-        uint32_t txt_data_start = vb->txt_data.len;
-        vb->dont_show_curr_line = false; 
-
-        piz_reconstruct_from_ctx (vb, ME23_ID,    '\t');
-        piz_reconstruct_from_ctx (vb, ME23_CHROM, '\t');
-        piz_reconstruct_from_ctx (vb, ME23_POS,   '\t');
-        piz_reconstruct_from_ctx (vb, ME23_GENOTYPE, 0);
-        piz_reconstruct_from_ctx (vb, ME23_EOL, 0);
-
-        // after consuming the line's data, if it is not to be outputted - trim txt_data back to start of line
-        if (vb->dont_show_curr_line) vb->txt_data.len = txt_data_start; 
-    }
-}

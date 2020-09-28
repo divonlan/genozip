@@ -24,22 +24,21 @@ extern bool zfile_get_genozip_header (FileP file, DataType *dt,
 
 extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
                                              BufferP section_data, LocalGetLineCallback callback, uint32_t total_len, 
-                                             CompressionAlg comp_alg);
+                                             Codec codec);
 #define zfile_compress_section_data(vb, section_type, section_data) \
-    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, COMP_BZ2)
+    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2)
 
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);
 
 extern void zfile_compress_dictionary_data (VBlockP vb, ContextP ctx, 
                                             uint32_t num_words, const char *data, uint32_t num_chars);
-extern void zfile_compress_b250_data  (VBlockP vb, ContextP ctx, CompressionAlg comp_alg);
+extern void zfile_compress_b250_data  (VBlockP vb, ContextP ctx, Codec codec);
 extern void zfile_compress_local_data (VBlockP vb, ContextP ctx);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_unbind)
 #define SEEK_NONE ((uint64_t)-1)
-#define NO_SB_I ((uint32_t)-1)
-extern int32_t zfile_read_section (FileP file, VBlockP vb, uint32_t original_vb_i, uint32_t sb_i, /* NO_SB_I if not a sample related section */
+extern int32_t zfile_read_section (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                    BufferP data /* buffer to append */, const char *buf_name,
                                    unsigned header_size, SectionType expected_sec_type, 
                                    ConstSectionListEntryP sl); 
@@ -56,7 +55,7 @@ extern void zfile_write_txt_header (BufferP vcf_header_text, Md5Hash header_md5,
 extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Md5Hash *md5);
 
 // These two are for all data types except VCF, that has its own
-extern void zfile_compress_generic_vb_header (VBlockP vb);
+extern void zfile_compress_vb_header (VBlockP vb);
 extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_line_i);
 
 #ifdef __APPLE__

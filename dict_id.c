@@ -19,7 +19,8 @@ uint64_t dict_id_fields[MAX_NUM_FIELDS_PER_DATA_TYPE];
 
 // VCF stuff
 uint64_t dict_id_FORMAT_PL=0, dict_id_FORMAT_GL=0, dict_id_FORMAT_GP=0, dict_id_FORMAT_DP=0, dict_id_FORMAT_MIN_DP=0, 
-         dict_id_FORMAT_PS=0,
+         dict_id_FORMAT_PS=0, dict_id_FORMAT_GT=0, dict_id_FORMAT_GT_HT=0, dict_id_FORMAT_GT_HT_INDEX=0,
+         dict_id_FORMAT_AD=0, dict_id_FORMAT_ADALL=0, dict_id_FORMAT_GQ=0,
          dict_id_INFO_AC=0, dict_id_INFO_AF=0, dict_id_INFO_AN=0, dict_id_INFO_DP=0, dict_id_INFO_VQSLOD=0,
          dict_id_INFO_END=0, dict_id_INFO_SVLEN=0;
 
@@ -32,7 +33,7 @@ uint64_t dict_id_OPTION_AM=0, dict_id_OPTION_AS=0, dict_id_OPTION_CM=0, dict_id_
          dict_id_OPTION_X0=0, dict_id_OPTION_X1=0, dict_id_OPTION_XA=0, dict_id_OPTION_XN=0, dict_id_OPTION_XM=0, dict_id_OPTION_XO=0,
          dict_id_OPTION_XG=0, dict_id_OPTION_XS=0, dict_id_OPTION_XE=0,
          dict_id_OPTION_mc=0, dict_id_OPTION_ms=0,
-         dict_id_OPTION_BD=0, dict_id_OPTION_BI=0,
+         dict_id_OPTION_BD=0, dict_id_OPTION_BI=0, dict_id_OPTION_BD_BI=0,
          dict_id_OPTION_ZM=0,
   
          // private genozip dict
@@ -83,12 +84,16 @@ void dict_id_initialize (DataType data_type)
 
     switch (data_type) { 
     case DT_VCF:
+        dict_id_FORMAT_GT     = dict_id_vcf_format_sf (dict_id_make ("GT", 2)).num;
+        dict_id_FORMAT_GT_HT  = dict_id_vcf_format_sf (dict_id_make ("@HT", 3)).num; // different first 2 letters than GT, for lookup table
+        dict_id_FORMAT_GT_HT_INDEX  = dict_id_vcf_format_sf (dict_id_make ("@INDEXHT", 8)).num; // different first 2 letters
         dict_id_FORMAT_PL     = dict_id_vcf_format_sf (dict_id_make ("PL", 2)).num;
         dict_id_FORMAT_GP     = dict_id_vcf_format_sf (dict_id_make ("GP", 2)).num;
         dict_id_FORMAT_GL     = dict_id_vcf_format_sf (dict_id_make ("GL", 2)).num;
         dict_id_FORMAT_DP     = dict_id_vcf_format_sf (dict_id_make ("DP", 2)).num;
-        dict_id_FORMAT_PS     = dict_id_vcf_format_sf (dict_id_make ("PS", 2)).num;
-        
+        dict_id_FORMAT_GQ     = dict_id_vcf_format_sf (dict_id_make ("GQ", 2)).num;
+        dict_id_FORMAT_AD     = dict_id_vcf_format_sf (dict_id_make ("AD", 2)).num;
+        dict_id_FORMAT_ADALL  = dict_id_vcf_format_sf (dict_id_make ("ADALL", 5)).num;
         dict_id_INFO_AC       = dict_id_vcf_info_sf   (dict_id_make ("AC", 2)).num;
         dict_id_INFO_AF       = dict_id_vcf_info_sf   (dict_id_make ("AF", 2)).num;
         dict_id_INFO_AN       = dict_id_vcf_info_sf   (dict_id_make ("AN", 2)).num;
@@ -109,6 +114,7 @@ void dict_id_initialize (DataType data_type)
         dict_id_OPTION_CC = sam_dict_id_optnl_sf (dict_id_make ("CC:Z", 4)).num;
         dict_id_OPTION_BD = sam_dict_id_optnl_sf (dict_id_make ("BD:Z", 4)).num;
         dict_id_OPTION_BI = sam_dict_id_optnl_sf (dict_id_make ("BI:Z", 4)).num;
+        dict_id_OPTION_BD_BI = sam_dict_id_optnl_sf (dict_id_make ("BD_BI", 5)).num;
         dict_id_OPTION_CM = sam_dict_id_optnl_sf (dict_id_make ("CM:i", 4)).num;
         dict_id_OPTION_E2 = sam_dict_id_optnl_sf (dict_id_make ("E2:Z", 4)).num;
         dict_id_OPTION_FI = sam_dict_id_optnl_sf (dict_id_make ("FI:i", 4)).num;
@@ -236,7 +242,7 @@ void dict_id_read_aliases (void)
 
     buf_free (&dict_id_aliases_buf); // needed in case this is the 2nd+ file being pizzed
 
-    zfile_read_section (z_file, evb, 0, NO_SB_I, &compressed_aliases, "dict_id_aliases_buf", 
+    zfile_read_section (z_file, evb, 0, &compressed_aliases, "dict_id_aliases_buf", 
                         sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
 
     SectionHeader *header = (SectionHeader *)compressed_aliases.data;

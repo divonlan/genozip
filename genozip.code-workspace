@@ -29,7 +29,10 @@
 			"rb_tree.h": "c",
 			"math.h": "c",
 			"stdlib.h": "c",
-			"zlib.h": "c"
+			"zlib.h": "c",
+			"istream": "c",
+			"ostream": "c",
+			"tuple": "c"
 		},
 		"files.autoSave": "onFocusChange",
 		"files.exclude": {

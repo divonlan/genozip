@@ -41,17 +41,6 @@ void fastq_zip_read_one_vb (VBlockP vb)
         fastq_txtfile_count_lines (vb);
 }
 
-static void fastq_initialize_pair_iterators (VBlockFAST *vb)
-{
-    // initialize pair iterators
-    for (DidIType did_i=0; did_i < vb->num_dict_ids; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
-        if (buf_is_allocated (&ctx->pair) && dict_id_is_type_1 (ctx->dict_id)) // DESC components
-            ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair),
-                                                  .prev_word_index = -1 };
-    }
-}
-
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
 // eg. "../../fqs/sample.1.fq.gz" -> "@sample-1:"
 static void fastq_get_optimized_desc_read_name (VBlockFAST *vb)
@@ -70,26 +59,19 @@ static void fastq_get_optimized_desc_read_name (VBlockFAST *vb)
 
 void fastq_seg_initialize (VBlockFAST *vb)
 {
-    // thread safety: this will be initialized by vb_i=1, while it holds a mutex in zip_compress_one_vb
-    static bool structured_initialized = false;
-    if (!structured_initialized) {
-        seg_initialize_compound_structured ((VBlockP)vb, "D?ESC", &structured_DESC); 
-        structured_initialized = true;
-    }
-
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
         vb->contexts[FASTQ_STRAND].ltype   = LT_BITMAP;
-        vb->contexts[FASTQ_STRAND].lcomp   = COMP_NONE; // bz2 and lzma only make it bigger
+        vb->contexts[FASTQ_STRAND].lcodec   = CODEC_NONE; // bz2 and lzma only make it bigger
 
         vb->contexts[FASTQ_GPOS].ltype     = LT_UINT32;
         vb->contexts[FASTQ_GPOS].flags     = CTX_FL_STORE_INT;
-        vb->contexts[FASTQ_GPOS].lcomp     = COMP_LZMA;
+        vb->contexts[FASTQ_GPOS].lcodec     = CODEC_LZMA;
     }
 
     vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
 
     vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
-    vb->contexts[FASTQ_NONREF].lcomp   = flag_optimize_SEQ ? COMP_LZMA : COMP_ACGT; // ACGT is a lot faster, but ~5% less good
+    vb->contexts[FASTQ_NONREF].lcodec   = flag_optimize_SEQ ? CODEC_LZMA : CODEC_ACGT; // ACGT is a lot faster, but ~5% less good
 
     vb->contexts[FASTQ_QUAL].ltype     = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
     vb->contexts[FASTQ_QUAL].inst      = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
@@ -97,12 +79,10 @@ void fastq_seg_initialize (VBlockFAST *vb)
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst  = CTX_INST_PAIR_LOCAL;
         vb->contexts[FASTQ_STRAND].inst  = CTX_INST_PAIR_LOCAL; 
-        vb->contexts[FASTQ_STRAND].lcomp = COMP_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. We set it explicitly to override the COMP_NONE possibly inherited from the last vb of the previous bound file
+        vb->contexts[FASTQ_STRAND].lcodec = CODEC_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. We set it explicitly to override the CODEC_NONE possibly inherited from the last vb of the previous bound file
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
-
-        fastq_initialize_pair_iterators (vb);
     }
 
     if (flag_optimize_DESC) 
@@ -112,7 +92,23 @@ void fastq_seg_initialize (VBlockFAST *vb)
 void fastq_seg_finalize (VBlockP vb)
 {
     // check if domqual compression is applicable to this quality data, and prepare QUAL/QDOMRUNS local data if it is
-    domqual_convert_qual_to_domqual (vb, fastq_zip_get_start_len_line_i_qual, FASTQ_QUAL);
+    domqual_convert_qual_to_domqual (vb, fastq_zip_qual, FASTQ_QUAL);
+
+    // top level snip
+    Structured top_level = { 
+        .repeats   = vb->lines.len,
+        .flags     = STRUCTURED_TOPLEVEL | STRUCTURED_FILTER_ITEMS | STRUCTURED_FILTER_REPEATS,
+        .num_items = 7,
+        .items     = { { (DictId)dict_id_fields[FASTQ_DESC],     DID_I_NONE, ""  },
+                       { (DictId)dict_id_fields[FASTQ_E1L],      DID_I_NONE, ""  }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
+                       { (DictId)dict_id_fields[FASTQ_SQBITMAP], DID_I_NONE, ""  },
+                       { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, "+" }, // + is the "separator" after the 2nd end-of-line
+                       { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  },
+                       { (DictId)dict_id_fields[FASTQ_QUAL],     DID_I_NONE, ""  },
+                       { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  } }
+    };
+
+    seg_structured_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, 0);
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
@@ -165,7 +161,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
             ((sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) && sl->section_type == SEC_LOCAL)) { // these are local sections
             
             *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = vb->z_data.len; 
-            int32_t ret = zfile_read_section (z_file, (VBlockP)vb, vb->pair_vb_i, NO_SB_I, &vb->z_data, "data", sizeof(SectionHeaderCtx), 
+            int32_t ret = zfile_read_section (z_file, (VBlockP)vb, vb->pair_vb_i, &vb->z_data, "data", sizeof(SectionHeaderCtx), 
                                               sl->section_type, sl); // returns 0 if section is skipped
             ASSERT (ret != EOF, "Error in fastq_read_pair_1_data: vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, err_dict_id (sl->dict_id));
             vb->z_section_headers.len++;
@@ -241,7 +237,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     }
 
     // we segment it using / | : and " " as separators. 
-    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, &vb->desc_mapper, structured_DESC, true, unoptimized_len, 0);
+    seg_compound_field ((VBlockP)vb, &vb->contexts[FASTQ_DESC], field_start, field_len, true, unoptimized_len, 0);
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
@@ -266,15 +262,14 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     seg_by_ctx ((VBlockP)vb, snip, 1 + seq_len_str_len, &vb->contexts[FASTQ_SQBITMAP], 0, 0); 
     vb->contexts[FASTQ_NONREF].txt_len += dl->seq_len; // account for the txt data in NONREF
 
-    SEG_EOL (FASTQ_E1L, true);
+    SEG_EOL (FASTQ_E2L, true);
 
-    // PLUS - next line is expected to be a "+"
+    // PLUS - next line is expected to be a "+" (note: we don't seg the +, it is recorded a separator in the top level Structured)
     GET_LAST_ITEM ("+");
     ASSSEG (*field_start=='+' && field_len==1, field_start, "%s: Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
             global_cmd, field_len, field_start);
 
-    seg_by_did_i (vb, "+", 1, FASTQ_PLUS, 1);
-    SEG_EOL (FASTQ_E1L, true);
+    SEG_EOL (FASTQ_E2L, 2); // account for ascii-10 and the +
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
     dl->qual_data_start = next_field - vb->txt_data.data;
@@ -283,7 +278,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     vb->contexts[FASTQ_QUAL].txt_len   += dl->seq_len;
 
     // End Of Line    
-    SEG_EOL (FASTQ_E1L, true);
+    SEG_EOL (FASTQ_E2L, true);
 
     ASSSEG (field_len == dl->seq_len, field_start, "%s: Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ=%.*s\nQUAL==%.*s",
             global_cmd, dl->seq_len, field_len, dl->seq_len, seq_start, field_len, field_start);
@@ -292,7 +287,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
 }
 
 // callback function for compress to get data of one line (called by comp_compress_bzlib)
-void fastq_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i, 
+void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                           char **line_qual_data, uint32_t *line_qual_len, // out
                                           char **unused_data,   uint32_t *unused_len) 
 {
@@ -300,8 +295,6 @@ void fastq_zip_get_start_len_line_i_qual (VBlock *vb, uint32_t vb_line_i,
      
     *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
     *line_qual_len  = dl->seq_len;
-    *unused_data    = NULL;
-    *unused_len     = 0;
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
@@ -313,9 +306,12 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     if (!vb) return false; // we don't skip reading any SEC_DICT sections
 
-    // note that piz_read_global_area rewrites --header-only as flag_header_one
+    // note that piz_read_global_area rewrites --header-only as flag_header_one: skip all items but DESC and E1L
     if (flag_header_one && 
-        (dict_id.num == dict_id_fields[FASTQ_NONREF] || dict_id.num == dict_id_fields[FASTQ_QUAL] || dict_id.num == dict_id_fields[FASTQ_PLUS]))
+        (dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || dict_id.num == dict_id_fields[FASTQ_NONREF] || 
+         dict_id.num == dict_id_fields[FASTQ_GPOS]     || dict_id.num == dict_id_fields[FASTQ_STRAND] || 
+         dict_id.num == dict_id_fields[FASTQ_E2L]      || dict_id.num == dict_id_fields[FASTQ_QUAL]   || 
+         dict_id.num == dict_id_fields[FASTQ_QDOMRUNS]))
         return true;
         
     // when grepping by I/O thread - skipping all sections but DESC
@@ -328,13 +324,31 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[FASTQ_DESC] || dict_id_is_fast_desc_sf (dict_id)))
         return true;
 
-//    if (dump_one_b250_dict_id.num && dump_one_b250_dict_id.num != dict_id.num)
-//        return true;
-    
-//    if (dump_one_local_dict_id.num && dump_one_local_dict_id.num != dict_id.num)
-//        return true;
-
     return false;
+}
+
+// filtering during reconstruction: called by piz_reconstruct_structured_do for each fastq record (repeat) and each toplevel item
+bool fastq_piz_filter (VBlock *vb, DictId dict_id, const Structured *st, unsigned fastq_record_i, int item_i)
+{
+    if (dict_id.num == dict_id_fields[FASTQ_TOPLEVEL]) {
+        if (item_i < 0)   // filter for repeat (FASTQ record)
+            vb->line_i = 4 * (vb->first_line + fastq_record_i); // each vb line is a fastq record which is 4 txt lines (needed for --pair)
+
+        else { // filter for item
+
+            // case: --grep (note: appears before --header-one filter below, so both can be used together)
+            if (flag_grep && item_i == 2 /* first EOL */) {
+                *AFTERENT (char, vb->txt_data) = 0; // for strstr
+                if (!strstr (ENT (char, vb->txt_data, vb->line_start), flag_grep))
+                    vb->dont_show_curr_line = true; // piz_reconstruct_structured_do will rollback the line
+            }
+
+            // case: --header-one or --header-only: dont show items 2+. note that piz_read_global_area rewrites --header-only as flag_header_one
+            if (flag_header_one && item_i >= 2) return false; // skip this item
+        }
+    }
+
+    return true; // show this item as normal
 }
 
 // PIZ: SEQ reconstruction 
@@ -347,41 +361,4 @@ void fastq_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *se
     vb->seq_len = (uint32_t)seq_len_64;
 
     aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
-}
-
-void fastq_piz_reconstruct_vb (VBlockFAST *vb)
-{
-    ASSERT0 (!flag_reference || genome.ref.num_of_bits, "Error in fastq_piz_reconstruct_vb: reference is not loaded correctly");
-
-    fastq_initialize_pair_iterators (vb);
-
-    if (!flag_grep) piz_map_compound_field ((VBlockP)vb, dict_id_is_fast_desc_sf, &vb->desc_mapper); // it not already done during grep
-
-    for (uint32_t vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
-
-        vb->line_i = 4 * (vb->first_line + vb_line_i); // each vb line is a fastq record which is 4 txt lines
-        vb->dont_show_curr_line = false; // might become true due --regions or --grep
-        
-        uint32_t txt_data_start_line = vb->txt_data.len;
-
-        piz_reconstruct_from_ctx (vb, FASTQ_DESC, 0);
-        piz_reconstruct_from_ctx (vb, FASTQ_E1L,  0);
-
-        // minor bug here: since all the EOL fields are aliases, in case header_one, we dont consume the
-        // missing line EOLs and they will show wrong ones to the remaining lines. minor bc in virtually all files,
-        // the EOL is identical in all lines
-        if (!flag_header_one) { // note that piz_read_global_area rewrites --header-only as flag_header_one
-            piz_reconstruct_from_ctx (vb, FASTQ_SQBITMAP, 0);
-            piz_reconstruct_from_ctx (vb, FASTQ_E2L,  0);
-            piz_reconstruct_from_ctx (vb, FASTQ_PLUS, 0);
-            piz_reconstruct_from_ctx (vb, FASTQ_E3L,  0);
-            piz_reconstruct_from_ctx (vb, FASTQ_QUAL, 0);
-            piz_reconstruct_from_ctx (vb, FASTQ_E4L,  0);
-        }
-
-        // case: we're grepping, and this line doesn't match
-        *AFTERENT (char, vb->txt_data) = 0; // for strstr
-        if (vb->dont_show_curr_line || (flag_grep && !strstr (ENT (char, vb->txt_data, txt_data_start_line), flag_grep)))
-            vb->txt_data.len = txt_data_start_line; // rollback
-    }
 }

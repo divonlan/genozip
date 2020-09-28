@@ -362,8 +362,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
 
         // first file of a pair ("pair 1") or a non-pair fastq or sam
         if (!is_pair_2) {
-            uint32_t gpos_bgen = NEXTLOCAL (uint32_t, gpos_ctx);
-            gpos = BGEN32 (gpos_bgen); 
+            gpos = NEXTLOCAL (uint32_t, gpos_ctx);
             is_forward = NEXTLOCALBIT (strand_ctx);        
         }
 
@@ -374,7 +373,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             is_forward = NEXTLOCALBIT (strand_ctx) ? is_forward_pair_1 : !is_forward_pair_1;
 
             // gpos: reconstruct, then cancel the reconstruction and just use last_value
-            uint32_t reconstructed_len = piz_reconstruct_from_ctx (vb, gpos_ctx->did_i, 0);
+            int32_t reconstructed_len = piz_reconstruct_from_ctx (vb, gpos_ctx->did_i, 0);
             vb->txt_data.len -= reconstructed_len; // roll back reconstruction
             gpos = gpos_ctx->last_value.i;
         }

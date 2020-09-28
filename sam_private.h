@@ -10,18 +10,17 @@
 #include "vblock.h"
 
 typedef struct {
-    uint32_t qual_data_start, u2_data_start, bd_data_start, bi_data_start; // start within vb->txt_data
-    uint32_t qual_data_len, u2_data_len, bd_data_len, bi_data_len;             // length within vb->txt_data
+    uint32_t qual_data_start, u2_data_start, bdbi_data_start[2]; // start within vb->txt_data
+    uint32_t qual_data_len, u2_data_len; // length within vb->txt_data
     uint32_t seq_len;        // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 } ZipDataLineSAM;
 
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
-    SubfieldMapper qname_mapper;   // ZIP & PIZ
-    Buffer optional_mapper_buf;    // PIZ: an array of type PizSubfieldMapper - one entry per entry in vb->contexts[SAM_OPTIONAL].mtf
     const char *last_cigar;        // ZIP/PIZ: last CIGAR
     uint32_t ref_consumed;         // ZIP/PIZ: how many bp of reference are consumed according to the last_cigar
     uint32_t ref_and_seq_consumed; // ZIP: how many bp in the last seq consumes both ref and seq, according to CIGAR
+    Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
 } VBlockSAM;
 
 typedef VBlockSAM *VBlockSAMP;

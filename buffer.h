@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "genozip.h"
+#include "endianness.h"
 
 struct variant_block_; 
 
@@ -152,5 +153,9 @@ extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits);
 #define buf_get_bitarray(buf) ((BitArray*)(&(buf)->data))
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
+
+// endianness
+extern BgEnBufFunc BGEN_u8_buf, BGEN_u16_buf, BGEN_u32_buf, BGEN_u64_buf, 
+                   BGEN_deinterlace_d8_buf, BGEN_deinterlace_d16_buf, BGEN_deinterlace_d32_buf, BGEN_deinterlace_d64_buf;
 
 #endif

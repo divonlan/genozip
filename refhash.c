@@ -199,7 +199,7 @@ static void refhash_compress_one_vb (VBlockP vb)
     // BZ2 pros : BZ2 is about 8x faster than LZMA in generating the reference (56 sec vs 7:42 min on my PC for GRCh38), also, it compresses sparse arrays much better (eg in the case of a small reference)
     // LZMA pros: LZMA it saves 4-6 seconds (on my PC) in loading the generated reference for compressing fasta/fastq due to faster decompression. The reference file is ~1.5% smaller.
     SectionHeaderRefHash header = { .h.section_type          = SEC_REF_HASH, 
-                                    .h.sec_compression_alg   = num_zeros*sizeof(uint32_t) > uncompressed_size/2 ? COMP_BZ2 : COMP_LZMA, // if its sparse, go with BZ2
+                                    .h.codec   = num_zeros*sizeof(uint32_t) > uncompressed_size/2 ? CODEC_BZ2 : CODEC_LZMA, // if its sparse, go with BZ2
                                     .h.data_uncompressed_len = BGEN32 (uncompressed_size),
                                     .h.vblock_i              = BGEN32 (vb->vblock_i),
                                     .h.magic                 = BGEN32 (GENOZIP_MAGIC),
@@ -270,7 +270,7 @@ static void refhash_read_one_vb (VBlockP vb)
     if (!sections_get_next_section_of_type (&sl_ent, &ref_hash_cursor, SEC_REF_HASH, SEC_NONE))
         return; // no more refhash sections
 
-    int32_t section_offset = zfile_read_section (z_file, vb, sl_ent->vblock_i, NO_SB_I, &vb->z_data, 
+    int32_t section_offset = zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, 
                                                  "z_data", sizeof(SectionHeaderRefHash), sl_ent->section_type, sl_ent);
 
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)

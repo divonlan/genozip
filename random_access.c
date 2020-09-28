@@ -65,7 +65,7 @@ void random_access_update_pos (VBlock *vb, DidIType did_i_pos)
 {
     PosType this_pos = vb->contexts[did_i_pos].last_value.i;
 
-    if (!this_pos) return; // ignore pos=0 (in SAM, it means unmapped POS)
+    if (this_pos <= 0) return; // ignore pos<=0 (in SAM, 0 means unmapped POS)
 
     RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
 
@@ -383,7 +383,7 @@ void random_access_get_ra_info (uint32_t vblock_i, WordIndex *chrom_index, PosTy
 void random_access_load_ra_section (SectionType sec_type, Buffer *ra_buf, const char *buf_name, const char *show_index_msg)
 {
     SectionListEntry *ra_sl = sections_get_offset_first_section_of_type (sec_type, false);
-    zfile_read_section (z_file, evb, 0, NO_SB_I, &evb->z_data, "z_data", sizeof (SectionHeader), sec_type, ra_sl);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), sec_type, ra_sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, ra_buf, buf_name, sec_type);
 
@@ -405,6 +405,6 @@ void random_access_compress (Buffer *ra_buf, SectionType sec_type, const char *m
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 
     ra_buf->len *= sizeof (RAEntry); // change len to count bytes
-    zfile_compress_section_data_alg (evb, sec_type, ra_buf, 0,0, COMP_LZMA); // ra data compresses better with LZMA than BZLIB
+    zfile_compress_section_data_alg (evb, sec_type, ra_buf, 0,0, CODEC_LZMA); // ra data compresses better with LZMA than BZLIB
     ra_buf->len /= sizeof (RAEntry); // restore
 }
