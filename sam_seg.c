@@ -112,7 +112,7 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
     // calculate character-wise delta
     for (unsigned i=0; i < dl->seq_len; i++) {
         *ENT (uint8_t, vb->bd_bi_line, i*2    ) = bd ? bd[i] : 0;
-        *ENT (uint8_t, vb->bd_bi_line, i*2 + 1) = bi ? bi[i] : 0;
+        *ENT (uint8_t, vb->bd_bi_line, i*2 + 1) = bi ? bi[i] - bd[i] : 0;
     }
 
     *line_data = FIRSTENT (char, vb->bd_bi_line);

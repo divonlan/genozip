@@ -175,3 +175,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - bug fixes
 - new --test-seg debug option
 - change default number of threads to 1.4 * number of cores
+
+7.0.2
+- Even better SAM BD/BI alg

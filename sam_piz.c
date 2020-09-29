@@ -174,11 +174,14 @@ void sam_piz_special_BD_BI (VBlock *vb, Context *ctx, const char *snip, unsigned
     ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, err_dict_id (ctx->dict_id));
 
     char *dst        = AFTERENT (char, vb->txt_data);
-    const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2 + (ctx->dict_id.num == dict_id_OPTION_BI));
+    const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2);
     uint32_t seq_len = vb->seq_len; // automatic var for effeciency
 
-    for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src;
-
+    if (ctx->dict_id.num == dict_id_OPTION_BD)
+        for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src;
+    else
+        for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src + *(src+1);
+    
     vb->txt_data.len += vb->seq_len;    
     ctx->next_local  += vb->seq_len;
 }
