@@ -162,6 +162,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Removed gloptimization - too small of a benefit for non-standard code
 - Change all data types to be fully recursive starting at TOPLEVEL, removing data-type specific reconstruction loop
 - Added caching of Structured in PIZ
+- Better BD and BI compression for SAM
 - Not backward compatible
 - Bug fixes
 
