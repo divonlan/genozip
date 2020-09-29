@@ -100,7 +100,8 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_a
            flag_show_vblocks, flag_sblock, flag_vblock, flag_gt_only, 
            flag_header_one, flag_fast, flag_multiple_files, flag_sequential, flag_register, flag_show_ref_seq,
            flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_show_ref_alts, flag_pair, flag_genocat_info_only, 
-           flag_debug_progress, flag_show_hash, flag_debug_memory, flag_debug_no_singletons, flag_make_reference, flag_reading_reference,
+           flag_test_seg, flag_debug_progress, flag_show_hash, flag_debug_memory, 
+           flag_make_reference, flag_reading_reference,
 
            flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
            flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC, flag_optimize_SEQ,

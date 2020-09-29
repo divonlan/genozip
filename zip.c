@@ -310,7 +310,7 @@ static void zip_compress_one_vb (VBlock *vb)
         random_access_merge_in_vb (vb);
 
     // generate & compress b250 and local data for all ctxs (for reference files we don't output VBs)
-    if (!flag_make_reference)
+    if (!flag_make_reference && !flag_test_seg)
         zip_generate_and_compress_ctxs (vb);
 
     // compress data-type specific sections
@@ -389,7 +389,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
             max_lines_per_vb = MAX (max_lines_per_vb, processed_vb->lines.len);
             txt_line_i += (uint32_t)processed_vb->lines.len;
 
-            if (!flag_make_reference)
+            if (!flag_make_reference && !flag_test_seg)
                 zip_output_processed_vb (processed_vb, &processed_vb->section_list_buf, true, PD_VBLOCK_DATA);
             else 
                 zip_update_txt_counters (processed_vb, true); // normally called from zip_output_processed_vb
@@ -448,12 +448,12 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
     // go back and update some fields in the txt header's section header and genozip header -
     // only if we can go back - i.e. is a normal file, not redirected
     Md5Hash single_component_md5 = MD5HASH_NONE;
-    if (z_file && !z_file->redirected && txt_header_header_pos >= 0) 
+    if (z_file && !flag_test_seg && !z_file->redirected && txt_header_header_pos >= 0) 
         success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_md5);
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
-    if (is_last_file || !flag_bind) 
+    if ((is_last_file || !flag_bind) && !flag_test_seg)
         zip_write_global_area (dispatcher, single_component_md5);
 
     zip_display_compression_ratio (dispatcher, flag_bind ? MD5HASH_NONE : single_component_md5, is_last_file || !flag_bind); // Done for reference + final compression ratio calculation

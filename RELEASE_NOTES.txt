@@ -164,3 +164,8 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Added caching of Structured in PIZ
 - Not backward compatible
 - Bug fixes
+
+7.0.1
+- bug fixes
+- new --test-seg debug option
+- change default number of threads to 1.4 * number of cores

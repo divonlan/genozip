@@ -489,7 +489,8 @@ static bool file_open_z (File *file)
 
     ASSERT (!file->is_remote, "Error: it is not possible to access remote genozip files; when attempting to open %s", file->name);
     
-    file->file = fopen (file->name, file->mode);
+    if (!flag_test_seg)
+        file->file = fopen (file->name, file->mode);
 
     // initialize read buffer indices
     if (file->mode == READ || file->mode == WRITEREAD) 
@@ -497,7 +498,7 @@ static bool file_open_z (File *file)
 
     file_initialize_z_file_data (file);
 
-    return file->file != 0;
+    return file->file != 0 || flag_test_seg;
 }
 
 File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
@@ -737,7 +738,7 @@ bool file_seek (File *file, int64_t offset,
 
     if (soft_fail) {
         if (!flag_stdout) {
-            ASSERTW (!ret, errno == EINVAL ? "Error while reading file %s: it is too small%s" 
+            ASSERTW (!ret, errno == EINVAL ? "Warning: Error while reading file %s: it is too small%s" 
                                            : "Warning: fseeko failed on file %s: %s", 
                     file_printname (file),  errno == EINVAL ? "" : strerror (errno));
         }

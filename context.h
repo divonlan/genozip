@@ -44,7 +44,7 @@
 #define STRUCTURED_DROP_FINAL_REPEAT_SEP 0x02
 #define STRUCTURED_FILTER_REPEATS        0x04
 #define STRUCTURED_FILTER_ITEMS          0x08
-#define STRUCTURED_TOPLEVEL             0x10
+#define STRUCTURED_TOPLEVEL              0x10
 
 #define STRUCTURED_MAX_REPEATS 4294967294UL // one less than maxuint32 to make it easier to loop with st.repeats without overflow 
 #define STRUCTURED_MAX_PREFIXES_LEN 1000 // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="

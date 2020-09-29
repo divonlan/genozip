@@ -534,7 +534,7 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 
     // we always write the txt_header section, even if we don't actually have a header, because the section
     // header contains the data about the file
-    if (z_file) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
+    if (z_file && !flag_test_seg) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     last_txt_header_len = evb->txt_data.len;
 

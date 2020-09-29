@@ -69,7 +69,7 @@ static const char *help_genozip[] = {
     "",
     "   -t --test         After compressing normally, decompresss in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting textual (vcf, sam) decompressed file to that of the original textual file. This option also activates --md5",
     "",
-    "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+    "   -@ --threads      <number>. Specify the maximum number of threads. By default, genozip uses all the threads it needs to maximize usage of all available cores",
     "",
     "   -B --vblock       <number between 1 and 2048>. Set the maximum size of data (in megabytes) of the source textual (VCF, SAM, FASTQ etc) data that can go into one vblock. By default, this is set to "TXT_DATA_PER_VB_DEFAULT" MB. Smaller values will result in faster subsetting with --regions and --grep, while larger values will result in better compression. Note that memory consumption of both genozip and genounzip is linear with the vblock value used for compression",
     "",
@@ -191,6 +191,8 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-aliases    See contents of SEC_DICT_ID_ALIASES section",
     "",
+    "   Z    --test-seg        Debug segmenting - runs the segmenter, but doesn't compress and doesn't write the output",
+    "",
     "   ZUCL --debug-memory    Buffer allocations and destructions",
     "",
     "   ZUC  --debug-progress  See raw numbers that feed into the progress indicator",
@@ -250,7 +252,7 @@ static const char *help_genounzip[] = {
     "",
     "   -t --test         Decompress in memory (i.e. without writing the decompressed file to disk) - comparing the MD5 of the resulting decompressed file to that of the original VCF. Works only if the file was compressed with --md5",
     "",
-    "   -@ --threads      <number>. Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+    "   -@ --threads      <number>. Specify the maximum number of threads. By default, genozip uses all the threads it needs to maximize usage of all available cores",
 #if !defined _WIN32 && !defined __APPLE__ // not relevant for personal computers
     "                     Tip: if you are concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
 #endif
@@ -328,7 +330,7 @@ static const char *help_genocat[] = {
     "",
     "   -p --password     Provide password to access file(s) that were compressed with --password",
     "",
-    "   -@ --threads      Specify the maximum number of threads. By default, this is set to the number of cores available. The number of threads actually used may be less, if sufficient to balance CPU and I/O",
+    "   -@ --threads      Specify the maximum number of threads. By default, genozip uses all the threads it needs to maximize usage of all available cores",
 #if !defined _WIN32 && !defined __APPLE__ // not relevant for personal computers
     "                     Tip: if you're concerned about sharing the computer with other users, rather than using --threads to reduce the number of threads, a better option would be to use the command nice, e.g. 'nice genozip....'. This yields CPU to other users if needed, but still uses all the cores that are available",
 #endif

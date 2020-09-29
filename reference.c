@@ -165,8 +165,14 @@ const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t n
     Range *r = ENT (Range, ranges, index);
     if (!r->ref.num_of_words) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
-    ASSERT (first_pos_needed + num_nucleotides_needed - 1 <= r->last_pos, "Error in ref_piz_get_range: out of range reconstructing txt_line_i=%u: pos=%"PRId64" num_nucleotides_needed=%u but range->last_pos=%"PRId64,
-            vb->line_i, first_pos_needed, num_nucleotides_needed, r->last_pos);
+    if (first_pos_needed + num_nucleotides_needed - 1 <= r->last_pos) {
+        // this can happen if the reference originated from REF_INTERNAL, and the latter part of the range requested
+        // originated from a missing range due to hash contention, and this missing part also happens to be
+        // at the end of the chromosome, thereby causing r->last_pos to be less than the length of the chromosome. 
+        // we return the range anyway, as the missing parts will have is_set=0 and seq_bitmap=0, retrieving from nonref
+
+        // TODO: r->last_pos in REF_INTERNAL should include the missing ranges at the end of the chromosome
+    }
 
     vb->prev_range = r;
     vb->prev_range_chrom_node_index = vb->chrom_node_index;
@@ -224,21 +230,7 @@ static Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
     uint32_t chrom_name_len;
     mtf_get_snip_by_word_index (&ctx->word_list, &ctx->dict, chrom, chrom_name, &chrom_name_len);
     Range *r = ENT (Range, ranges, chrom); // in PIZ, we have one range per chrom
-/*    Range *alt_r = NULL;
 
-    // this range contains no data, search for another range with an alternative chrom name in z_file (eg 'chr22' -> '22')
-    if (r->last_pos == RA_MISSING_RA_MAX) {
-        WordIndex alt_chrom = ref_alt_chroms_zip_get_alt_index (*chrom_name, chrom_name_len, WI_ZFILE_CHROM, WORD_INDEX_NONE);
-
-        ASSERT (alt_chrom != WORD_INDEX_NONE, "Error in ref_get_range_by_chrom #2: chrom=%d \"%s\" appears as a reference section, but it doesn't appear in the file data",
-                chrom, *chrom_name);
-
-        alt_r = ENT (Range, ranges, alt_chrom);
-        memcpy (&alt_r->ref, &r->ref, sizeof (r->ref)); // copy bitmap structures to alt_r (they are overlaying genome)
-        memcpy (&alt_r->is_set, &r->is_set, sizeof (r->is_set)); // copy bitmap structures to alt_r (they are overlaying genome)
-    }
-
-    return alt_r ? alt_r : r; */
     return r;
 }
 
@@ -502,23 +494,59 @@ static inline uint32_t ref_range_id_by_hash (VBlockP vb, uint32_t range_i)
 {
     ASSERT0 (vb->chrom_name_len > 0, "Error in ref_range_id_by_hash: vb->chrom_name_len==0");
 
+    uint32_t value, n=0;
+    bool is_major_chrom=false;
+
     // step 1: get number embedded in the chrom name
-    uint32_t n=0;
     for (unsigned i=0; i < vb->chrom_name_len; i++)
         if (IS_DIGIT (vb->chrom_name[i])) 
             n = n*10 + (vb->chrom_name[i] - '0');
 
-    // if there are no digits, take the last 4 characters
-    if (!n)
-        n = (                           (((uint32_t)vb->chrom_name[vb->chrom_name_len-1]) ^ 0x1f))            ^ 
-            (vb->chrom_name_len >= 2 ? ((((uint32_t)vb->chrom_name[vb->chrom_name_len-2]) ^ 0x1f) << 3)  : 0) ^
-            (vb->chrom_name_len >= 3 ? ((((uint32_t)vb->chrom_name[vb->chrom_name_len-3]) ^ 0x1f) << 4)  : 0) ^ 
-            (vb->chrom_name_len >= 4 ? ((((uint32_t)vb->chrom_name[vb->chrom_name_len-4]) ^ 0x1f) << 5)  : 0) ;
+    // short name - possibly a major chromosome
+    if (vb->chrom_name_len <= 5) {
+        is_major_chrom=true; // possible major...
 
-    // step: calculate the hash - 10 bit for n, 10 bit for range_i
-    uint32_t chr_component = (vb->chrom_name_len <= 6) ? (n & 0x1f) : ((n % 896) + 128); // first 128 entries are reserved for the major chromosomes, heuristically identified as name length 6 or less
+        // chromosome name contains a number of 1-124 and chromosome name is short - major chromosomes
+        if (n >= 1 && n <= 124) {
+            // we're good
+        }
+        // other major chromosomes - a number 125-127 (note: these are for human, we can add here others for other popular species)
+        #define IS_CHROM(s) (vb->chrom_name_len == strlen(s) && !memcmp (vb->chrom_name, s, strlen(s))) // hopefully the compiler optimizes away strlen(const s) 
+        else if (IS_CHROM ("X") || IS_CHROM ("chrX")) n = 125;
+        else if (IS_CHROM ("Y") || IS_CHROM ("chrY")) n = 126;
+        else if (IS_CHROM ("M") || IS_CHROM ("chrM") || IS_CHROM ("MT") || IS_CHROM ("chrMT")) n = 127; // note: even though MT is short, it is major, as we might have many reads for it and we don't want hash contention
 
-    uint32_t value = chr_component | (((range_i & 0x3ff) ^ ((n*3) & 0x3ff)) << 10);
+        else is_major_chrom = false; // not major
+    }
+
+    // non-major chromosomse - if n is too small (perhaps indicating non-uniqueness of the number) 
+    // get a new n (a number 0->28668) derived from the last 8 characters of the chromosome name
+    if (!is_major_chrom && n < 10000) 
+        n = (uint32_t)( ((                          ((uint64_t)vb->chrom_name[vb->chrom_name_len-1]) << 0)       |   
+                        (vb->chrom_name_len >= 2 ? (((uint64_t)vb->chrom_name[vb->chrom_name_len-2]) << 8)  : 0) |
+                        (vb->chrom_name_len >= 3 ? (((uint64_t)vb->chrom_name[vb->chrom_name_len-3]) << 16) : 0) | 
+                        (vb->chrom_name_len >= 4 ? (((uint64_t)vb->chrom_name[vb->chrom_name_len-4]) << 24) : 0) |
+                        (vb->chrom_name_len >= 5 ? (((uint64_t)vb->chrom_name[vb->chrom_name_len-5]) << 32) : 0) |
+                        (vb->chrom_name_len >= 6 ? (((uint64_t)vb->chrom_name[vb->chrom_name_len-6]) << 40) : 0) |
+                        (vb->chrom_name_len >= 7 ? (((uint64_t)vb->chrom_name[vb->chrom_name_len-7]) << 48) : 0) |
+                        (vb->chrom_name_len >= 8 ? (((uint64_t)vb->chrom_name[vb->chrom_name_len-8]) << 56) : 0) ) % 28669); // 28669 is prime -> even distribution
+
+    // a non-major chromosome with a number that appears unique - just mod it into 0-28668
+    else if (!is_major_chrom)
+        n %= 28669;
+
+    // major chromosomes - we have up to 127 of them, each can have 1024 ranges of 1Mbp each
+    if (is_major_chrom)
+        value = (0b111 << 17)  |   // top 3 MSb 111
+                (n     << 10)  |   // chromosome component - 7 bits (values 1-127)
+                (range_i & 0x3ff); // range_i component - 10 bits (up to 1024 ranges of 1 Mbp each =REF_NUM_DENOVO_SITES_PER_RANGE)
+    
+    // non-major chromosomes - we have 28669 slots for for them - fit into 15 bit with top 3 MSB being 000->110 
+    // (as 111 is major chromosomes) each can have 32 ranges of 1Mbp each
+    else
+        value = (n << 5) |         // chromosome component - 15 bits, top 3 MSB are NOT 111 (values 0 - 28668)
+                (range_i & 0x1f);  // range_i component - 5 bits (up to 32 ranges of 1 Mbp each)
+
     return value; 
 }
 
@@ -1255,7 +1283,7 @@ static void ref_create_contig_ranges_for_loaded_genome (void)
 }
 
 // case 1: in case of ZIP with external reference, called by ref_load_stored_reference during piz_read_global_area of the reference file
-// case 2: in case of PIZ: also called from ref_load_stored_reference one_range_per_contig=true
+// case 2: in case of PIZ: also called from ref_load_stored_reference with RT_LOADED
 // case 3: in case of ZIP of SAM using internal reference - called from sam_zip_initialize
 // note: ranges allocation must be called by the I/O thread as it adds a buffer to evb buf_list
 void ref_initialize_ranges (RangesType ranges_type)
