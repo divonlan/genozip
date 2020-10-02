@@ -702,10 +702,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
     }
 
     // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
-    else if (dict_id.num == dict_id_OPTION_BD || dict_id.num == dict_id_OPTION_BI) { 
-        ASSSEG (value_len == dl->seq_len, field,
-                "Error in %s: Expecting data to be of length %u as indicated by CIGAR, but it is %u. %s=%.*s",
-                txt_name, dl->seq_len, value_len, err_dict_id (dict_id), value_len, value);
+    else if ((dict_id.num == dict_id_OPTION_BD || dict_id.num == dict_id_OPTION_BI) && value_len == vb->seq_len) {
         
         bool is_bi = (dict_id.num == dict_id_OPTION_BI);
         dl->bdbi_data_start[is_bi] = value - vb->txt_data.data;

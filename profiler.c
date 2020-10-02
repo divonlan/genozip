@@ -15,6 +15,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(write);
     ADD(compressor_bz2);
     ADD(compressor_lzma);
+    ADD(zip_generate_and_compress_ctxs);
     ADD(piz_reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
@@ -27,7 +28,11 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
+    ADD(domqual_convert_qual_to_domqual);
+    ADD(mtf_merge_in_vb_ctx);
     ADD(comp_ht_count_alt_alleles);
+    ADD(comp_acgt_pack);
+    ADD(comp_compress_non_acgt);
     ADD(md5);
     ADD(lock_mutex_compress_dict);
     ADD(lock_mutex_zf_ctx);
@@ -104,20 +109,25 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (md5, 2);
         PRINT (write, 1);
         fprintf (stderr, "GENOZIP compute threads %u\n", ms(p->compute));
-        PRINT (compressor_bz2, 1);
-        PRINT (compressor_lzma, 1);
+        PRINT (mtf_clone_ctx, 1);
         PRINT (seg_all_data_lines, 1);
         PRINT (aligner_best_match, 2);
         PRINT (aligner_get_match_len, 3);
         PRINT (aligner_get_word_from_seq, 3);
         PRINT (sam_seg_seq_field,2);
-        PRINT (comp_compress_ht, 1);
-        PRINT (comp_ht_count_alt_alleles, 2);
-        PRINT (mtf_clone_ctx, 1);
-        PRINT (lock_mutex_zf_ctx, 1);
+        PRINT (domqual_convert_qual_to_domqual, 2);
+        PRINT (mtf_merge_in_vb_ctx, 1);
+        PRINT (lock_mutex_zf_ctx, 2);
         PRINT (mtf_merge_in_vb_ctx_one_dict_id, 2);
         PRINT (lock_mutex_compress_dict, 2);
-        PRINT (zfile_compress_dictionary_data, 3);
+        PRINT (zfile_compress_dictionary_data, 2);
+        PRINT (zip_generate_and_compress_ctxs, 1);
+        PRINT (compressor_bz2, 2);
+        PRINT (compressor_lzma, 2);
+        PRINT (comp_acgt_pack, 3);
+        PRINT (comp_compress_non_acgt, 2);
+        PRINT (comp_compress_ht,2);
+        PRINT (comp_ht_count_alt_alleles, 3);
     }    
 
     PRINT (buf_alloc, 0);

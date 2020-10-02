@@ -602,6 +602,8 @@ finish:
 // ZIP only: merge new words added in this vb into the z_file.contexts, and compresses dictionaries.
 void mtf_merge_in_vb_ctx (VBlock *merging_vb)
 {
+    START_TIMER;
+
     // vb_i=1 goes first, as it has the sorted dictionaries, other vbs can go in
     // arbitrary order. at the end of this function, vb_i releases the mutex it locked along time ago,
     // while the other vbs wait for vb_1 by attempting to lock the mutex
@@ -624,6 +626,8 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
 
     if (merging_vb->vblock_i == 1)  
         mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
+
+    COPY_TIMER (merging_vb->profile.mtf_merge_in_vb_ctx);
 }
 
 // PIZ: add aliases to dict_id_to_did_i_map

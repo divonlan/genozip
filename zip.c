@@ -89,8 +89,10 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
 }
 
 // generate & write b250 data for all primary fields of this data type
-void zip_generate_and_compress_ctxs (VBlock *vb)
+static void zip_generate_and_compress_ctxs (VBlock *vb)
 {
+    START_TIMER;
+
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = &vb->contexts[did_i];
@@ -116,6 +118,8 @@ void zip_generate_and_compress_ctxs (VBlock *vb)
             zfile_compress_local_data (vb, ctx);
         }
     }
+
+    COPY_TIMER (vb->profile.zip_generate_and_compress_ctxs);
 }
 
 // here we translate the mtf_i indices creating during seg_* to their finally dictionary indices in base-250.

@@ -28,6 +28,7 @@
 #include "vblock.h"
 #include "data_types.h"
 #include "piz.h"
+#include "profiler.h"
 
 #define NO_DOMS '\x1'
 
@@ -107,6 +108,8 @@ static inline void domqual_add_runs (Buffer *qdomruns_buf, uint32_t runlen)
 
 bool domqual_convert_qual_to_domqual (VBlockP vb, LocalGetLineCallback get_line, int qual_field)
 {
+    START_TIMER;
+
     const char dom = domqual_has_dominant_value (vb, get_line);
     if (dom == -1) return false; // we can't do domqual - just go ahead and compress the qual data directly
 
@@ -173,6 +176,9 @@ bool domqual_convert_qual_to_domqual (VBlockP vb, LocalGetLineCallback get_line,
         domqual_add_runs (qdomruns_buf, runlen); // add final dom runs
         NEXTENT (char, *qual_buf) = NO_DOMS;
     }
+
+    COPY_TIMER (vb->profile.domqual_convert_qual_to_domqual);
+
     return true;
 }
 

@@ -65,6 +65,8 @@ static const uint8_t non_acgt_encode[256] =
 // are used at the beginning of the resulting array, and any uncomplete 64bit word at the end, is stored back in carry
 void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned bits_consumed, bool do_lten, bool do_lten_partial_final_word)
 {
+    START_TIMER;
+    
     buf_alloc (vb, &vb->compressed, 
                (vb->compressed.len + roundup_bits2words64 (data_len * 2)) * sizeof (uint64_t), // note: len is in words
                2, buf_is_allocated (&vb->compressed) ? NULL : "compress", 0); // NULL if already allocated, to avoid overwriting param which is overlayed with BitArray->num_of_bits
@@ -95,6 +97,8 @@ void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned b
     // original order, and improves compression ratio by about 2%
     if (do_lten)
         LTEN_bit_array (packed, do_lten_partial_final_word);
+
+    COPY_TIMER (vb->profile.comp_acgt_pack)
 }
 
 void comp_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream)
@@ -148,7 +152,7 @@ bool comp_compress_non_acgt (VBlock *vb, Codec alg,
                              char *compressed, uint32_t *compressed_len /* in/out */, 
                              bool soft_fail)
 {
-    // no timer here because the embedded compression has a timer
+    START_TIMER;
 
     // option 1 - compress contiguous data
     if (uncompressed) 
@@ -170,6 +174,8 @@ bool comp_compress_non_acgt (VBlock *vb, Codec alg,
     }
     else 
         ABORT0 ("Error in comp_compress_non_acgt: neither src_data nor callback is provided");
+    
+    COPY_TIMER (vb->profile.comp_compress_non_acgt); // excluding bzlib
     
     // now do the compression on the non-agct data
     // note: we don't support soft-fail because the allocated amount (uncompressed_len/2) is plenty for our textual data,

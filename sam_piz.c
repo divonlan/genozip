@@ -80,17 +80,19 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
 
             if ((cigar_op & CIGAR_CONSUMES_REFERENCE) && NEXTLOCALBIT (bitmap_ctx)) /* copy from reference */ {
 
-                uint32_t idx = (pos - range->first_pos) + ref_consumed ;
+                if (!vb->dont_show_curr_line) { // note: if this line is excluded with --regions, then the reference section covering it might not be loaded
+                    uint32_t idx = (pos - range->first_pos) + ref_consumed ;
 
-                if (!ref_is_nucleotide_set (range, idx) && !vb->dont_show_curr_line) { // note: if this line is excluded with --regions, then the reference section covering it might not be loaded
-                    ref_print_is_set (range, pos + ref_consumed);
-                    ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u (vb_i=%u: last_txt_line=%u num_lines=%u): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
-                           " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
-                           vb->line_i, vb->vblock_i, (uint32_t)(vb->first_line + vb->lines.len - 1), (uint32_t)vb->lines.len, range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
+                    if (!ref_is_nucleotide_set (range, idx)) { 
+                        ref_print_is_set (range, pos + ref_consumed);
+                        ABORT ("Error in sam_piz_reconstruct_seq: while reconstructing line %u (vb_i=%u: last_txt_line=%u num_lines=%u): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
+                            " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
+                            vb->line_i, vb->vblock_i, (uint32_t)(vb->first_line + vb->lines.len - 1), (uint32_t)vb->lines.len, range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
+                    }
+
+                    char ref = ref_get_nucleotide (range, idx);
+                    RECONSTRUCT1 (ref); 
                 }
-
-                char ref = ref_get_nucleotide (range, idx);
-                RECONSTRUCT1 (ref); 
             }
             else 
                 RECONSTRUCT1 (*nonref++);
