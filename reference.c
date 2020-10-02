@@ -849,7 +849,7 @@ static void ref_compress_one_range (VBlockP vb)
         LTEN_bit_array (&r->is_set, true);
 
         header.h.section_type          = SEC_REF_IS_SET;  // most of the header is the same as ^
-        header.h.codec   = CODEC_BZ2;
+        header.h.codec                 = CODEC_BZ2;
         header.h.data_uncompressed_len = BGEN32 (r->is_set.num_of_words * sizeof (uint64_t));
         header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
         comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, (char *)r->is_set.words, NULL);
@@ -865,7 +865,7 @@ static void ref_compress_one_range (VBlockP vb)
     if (r) LTEN_bit_array (&r->ref, true);
 
     header.h.section_type          = SEC_REFERENCE;
-    header.h.codec   = CODEC_LZMA;
+    header.h.codec                 = CODEC_LZMA;
     header.h.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
     header.h.data_uncompressed_len = r ? BGEN32 (r->ref.num_of_words * sizeof (uint64_t)) : 0;
     header.num_bases               = r ? BGEN32 (r->ref.num_of_bits / 2) : 0; // less than ref_size(r) if compacted
