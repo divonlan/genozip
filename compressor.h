@@ -14,7 +14,7 @@ extern void comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
                            const char *uncompressed_data, // option 1 - compress contiguous data
                            LocalGetLineCallback callback); // option 2 - compress data one line at a time
 
-extern void comp_uncompress (VBlockP vb, Codec alg, 
+extern void comp_uncompress (VBlockP vb, Codec codec, 
                              const char *compressed_data, uint32_t compressed_data_len,
                              char *uncompressed_data, uint64_t uncompressed_len);
 

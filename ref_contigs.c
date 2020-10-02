@@ -112,7 +112,7 @@ void ref_contigs_compress (void)
     BGEN_ref_contigs (&created_contigs);
 
     created_contigs.len *= sizeof (RefContig);
-    zfile_compress_section_data_alg (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
+    zfile_compress_section_data_codec (evb, SEC_REF_CONTIGS, &created_contigs, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
     
     buf_free (&created_contigs);
 }

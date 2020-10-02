@@ -154,7 +154,7 @@ struct ISeqInStream
 
   // all the remaining fields (except for Read) were added by Divon
   void *vb;                    
-  Codec alg;     // CODEC_LZMA or CODEC_ACGT
+  Codec codec;            // CODEC_LZMA or CODEC_ACGT
   unsigned line_i;        // current partially-consumed line, or next line if no partially consumed line
   unsigned avail_in;      // total bytes remaining
   

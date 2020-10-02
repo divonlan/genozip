@@ -55,7 +55,7 @@ void ref_alt_chroms_compress (void)
     }
 
     z_file->alt_chrom_map.len *= sizeof (AltChrom);
-    zfile_compress_section_data_alg (evb, SEC_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
+    zfile_compress_section_data_codec (evb, SEC_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
 
     buf_free (&z_file->alt_chrom_map);
 }

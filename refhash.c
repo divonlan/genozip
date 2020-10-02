@@ -189,7 +189,7 @@ static void refhash_compress_one_vb (VBlockP vb)
 {
     uint32_t uncompressed_size = MIN (make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
     
-    // calculate density to decide on compression alg
+    // calculate density to decide on compression codec
     const uint32_t *hash_data = ENT (const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
     uint32_t num_zeros=0;
     for (uint32_t i=0 ; i < uncompressed_size / sizeof (uint32_t); i++)

@@ -146,7 +146,7 @@ static inline void comp_non_acgt_transform (char *data, uint32_t len)
 // -- an a,c,g or t character is encoded as 1 (its encoded by CODEC_ACGT the same as its uppercase counterpart
 // -- any other character remains as is
 // We modify the source data (and hence NON-AGCT compression is destructive!) and then recursively compress it with bz2.
-bool comp_compress_non_acgt (VBlock *vb, Codec alg,
+bool comp_compress_non_acgt (VBlock *vb, Codec codec,
                              const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                              LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
                              char *compressed, uint32_t *compressed_len /* in/out */, 

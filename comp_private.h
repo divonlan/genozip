@@ -9,7 +9,7 @@
 #include "compressor.h"
 
 typedef bool CompressorFunc (VBlockP vb, 
-                             Codec alg,
+                             Codec codec,
                              const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                              LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
                              char *compressed, uint32_t *compressed_len /* in/out */, 

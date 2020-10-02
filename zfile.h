@@ -22,11 +22,11 @@ extern bool zfile_get_genozip_header (FileP file, DataType *dt,
                                       char *ref_filename, unsigned ref_filename_len,  // caller allocates space 
                                       Md5Hash *ref_file_md5);
 
-extern void zfile_compress_section_data_alg (VBlockP vb, SectionType section_type, 
+extern void zfile_compress_section_data_codec (VBlockP vb, SectionType section_type, 
                                              BufferP section_data, LocalGetLineCallback callback, uint32_t total_len, 
                                              Codec codec);
 #define zfile_compress_section_data(vb, section_type, section_data) \
-    zfile_compress_section_data_alg ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2)
+    zfile_compress_section_data_codec ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2)
 
 typedef enum {DICTREAD_ALL, DICTREAD_CHROM_ONLY, DICTREAD_EXCEPT_CHROM} ReadChromeType;
 extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, ReadChromeType read_chrom);

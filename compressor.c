@@ -54,7 +54,7 @@ void comp_free_all (VBlock *vb)
 }
 
 // CODEC_NONE (no compression)
-static bool comp_compress_none (VBlock *vb, Codec alg,
+static bool comp_compress_none (VBlock *vb, Codec codec,
                                 const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                                 LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
                                 char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -90,10 +90,10 @@ static void comp_uncompress_none (VBlock *vb,
     memcpy (uncompressed_data, compressed, compressed_len);
 }
 
-static bool comp_compress_error (VBlock *vb, Codec alg, const char *uncompressed, uint32_t uncompressed_len, LocalGetLineCallback callback,
+static bool comp_compress_error (VBlock *vb, Codec codec, const char *uncompressed, uint32_t uncompressed_len, LocalGetLineCallback callback,
                                  char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
-    ABORT0 ("Error in comp_compress: Unsupported section compression algorithm");
+    ABORT0 ("Error in comp_compress: Unsupported section compression codecorithm");
     return false;
 }
 
@@ -102,7 +102,7 @@ static void comp_uncompress_error (VBlock *vb,
                                    const char *compressed, uint32_t compressed_len,
                                    char *uncompressed_data, uint64_t uncompressed_len)
 {
-    ABORT0 ("Error in comp_uncompress: Unsupported section compression algorithm");
+    ABORT0 ("Error in comp_uncompress: Unsupported section compression codecorithm");
 }
 
 #define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
@@ -235,7 +235,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         zfile_show_header (header, vb->vblock_i ? vb : NULL); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 
-void comp_uncompress (VBlock *vb, Codec alg, 
+void comp_uncompress (VBlock *vb, Codec codec, 
                       const char *compressed, uint32_t compressed_len,
                       char *uncompressed_data, uint64_t uncompressed_len)
 {
@@ -248,7 +248,7 @@ void comp_uncompress (VBlock *vb, Codec alg,
         NA, NA, NA, NA, NA, NA  };
 #   undef NA
 
-    uncompressors[alg] (vb, compressed, compressed_len, uncompressed_data, uncompressed_len);
+    uncompressors[codec] (vb, compressed, compressed_len, uncompressed_data, uncompressed_len);
 
     comp_free_all (vb); // just in case
 }
@@ -259,7 +259,7 @@ static Codec vcf_zip_get_best_gt_compressor (VBlock *vb, Buffer *test_data)
     static Codec best_gt_data_compressor = CODEC_UNKNOWN;
     static Buffer compressed = EMPTY_BUFFER; // no thread issues as protected my mutex
 
-    // get best compression algorithm for gt data - lzma or bzlib - their performance varies considerably with
+    // get best compression codec for gt data - lzma or bzlib - their performance varies considerably with
     // the type of data - with either winning by a big margin
     pthread_mutex_lock (&best_gt_data_compressor_mutex);    
 

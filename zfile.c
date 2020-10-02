@@ -57,7 +57,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%-19s %*.*s %6s%-3s %6s%-3s %7s%-3s alg=%-4.4s vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
+    sprintf (str, "%-19s %*.*s %6s%-3s %6s%-3s %7s%-3s codec=%-4.4s vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
              st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
              comp_names[header->codec],
@@ -297,10 +297,10 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 // compress section - two options for input data - 
 // 1. contiguous data in section_data 
 // 2. line by line data - by providing a callback + total_len
-void zfile_compress_section_data_alg (VBlock *vb, SectionType section_type, 
-                                      Buffer *section_data,          // option 1 - compress contiguous data
-                                      LocalGetLineCallback callback, uint32_t total_len, // option 2 - compress data one line at a time
-                                      Codec codec)
+void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type, 
+                                        Buffer *section_data,          // option 1 - compress contiguous data
+                                        LocalGetLineCallback callback, uint32_t total_len, // option 2 - compress data one line at a time
+                                        Codec codec)
 {
     SectionHeader header;
     memset (&header, 0, sizeof(header)); // safety

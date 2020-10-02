@@ -66,7 +66,7 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
                             &instream->next_in_1, &instream->avail_in_1,
                             &instream->next_in_2, &instream->avail_in_2);
 
-        if (instream->alg == CODEC_ACGT && (instream->avail_in_1 || instream->avail_in_2)) {
+        if (instream->codec == CODEC_ACGT && (instream->avail_in_1 || instream->avail_in_2)) {
 
             // pack into vb->compressed
             if (instream->avail_in_1) comp_acgt_pack (vb, instream->next_in_1, instream->avail_in_1, instream->bits_consumed, !instream->avail_in_2, false); 
@@ -86,7 +86,7 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
     // pack ACGT last partial byte, if there is one
     if (instream->line_i == ((VBlockP)instream->vb)->lines.len && 
         !instream->avail_in_1 && !instream->avail_in_2 &&
-        instream->alg == CODEC_ACGT) 
+        instream->codec == CODEC_ACGT) 
     
         comp_acgt_pack_last_partial_word (vb, instream); // also does BGEN
 
@@ -128,7 +128,7 @@ static size_t comp_lzma_data_out_callback (const ISeqOutStream *p, const void *b
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_compress_lzma (VBlock *vb, Codec alg,
+bool comp_compress_lzma (VBlock *vb, Codec codec,
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                          LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
                          char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -157,20 +157,20 @@ bool comp_compress_lzma (VBlock *vb, Codec alg,
 
     bool success = true;
 
-    if (alg == CODEC_ACGT) 
+    if (codec == CODEC_ACGT) 
         vb->compressed.len = vb->compressed.param = 0; // reset bit array num_of_words and num_of_bits 
 
     // option 1 - compress contiguous data
     if (uncompressed) {
 
-        if (alg == CODEC_ACGT) 
+        if (codec == CODEC_ACGT) 
             comp_acgt_pack (vb, uncompressed, uncompressed_len, 0, true, true); // pack into the vb->compressed buffer
 
         SizeT data_compressed_len64 = (SizeT)*compressed_len - LZMA_PROPS_SIZE;
         res = LzmaEnc_MemEncode (lzma_handle, 
                                 (uint8_t *)compressed + LZMA_PROPS_SIZE, &data_compressed_len64, 
-                                (uint8_t *)(alg == CODEC_ACGT ? vb->compressed.data : uncompressed),
-                                alg == CODEC_ACGT ? vb->compressed.len * sizeof (int64_t) : uncompressed_len,
+                                (uint8_t *)(codec == CODEC_ACGT ? vb->compressed.data : uncompressed),
+                                codec == CODEC_ACGT ? vb->compressed.len * sizeof (int64_t) : uncompressed_len,
                                 true, NULL, &alloc_stuff, &alloc_stuff);
         
         *compressed_len = (uint32_t)data_compressed_len64 + LZMA_PROPS_SIZE;
@@ -180,7 +180,7 @@ bool comp_compress_lzma (VBlock *vb, Codec alg,
 
         ISeqInStream instream =   { .Read          = comp_lzma_data_in_callback, 
                                     .vb            = vb,
-                                    .alg           = alg,
+                                    .codec           = codec,
                                     .line_i        = 0,
                                     .avail_in      = uncompressed_len,
                                     .bits_consumed = 0,

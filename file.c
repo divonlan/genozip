@@ -67,7 +67,7 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
     return UNKNOWN_FILE_TYPE;
 }
 
-// get compression algorithm by txt file type
+// get codec by txt file type
 Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, FileMode mode)
 {
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
@@ -310,7 +310,7 @@ bool file_open_txt (File *file)
         }
     }
 
-    // open the file, based on the compression algorithm
+    // open the file, based on the codec
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, file->mode);
 
     switch (file->codec) { 
