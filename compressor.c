@@ -115,6 +115,8 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 { 
     ASSERT0 (!uncompressed_data || !callback, "Error in comp_compress: expecting either uncompressed_data or callback but not both");
 
+    ASSERT0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "Error in comp_compress: corrupt header - bad magic");
+
     // if the user requested --fast - we always use BZLIB, never LZMA
     if (flag_fast && header->codec == CODEC_LZMA)
         header->codec = CODEC_BZ2;
