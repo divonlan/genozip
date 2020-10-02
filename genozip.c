@@ -202,11 +202,9 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     const unsigned FILENAME_WIDTH = 40;
 
-    const char *head_format   = "\n%5s %11s %10s %10s %6s %s  %*s %s\n";
-    const char *foot_format_1 = "\nTotal:            %10s %10s %5uX\n";
-    const char *foot_format_2 = "\nTotal:            %10s %10s %5.1fX\n";
-    const char *item_format_1 = "%5s %11s %10s %10s %5uX  %s  %s%s%*s %s\n";
-    const char *item_format_2 = "%5s %11s %10s %10s %5.1fX  %s  %s%s%*s %s\n";
+    const char *head_format = "\n%5s %11s %10s %10s %6s %s  %*s %s\n";
+    const char *foot_format = "\nTotal:            %10s %10s %5.*fX\n";
+    const char *item_format = "%5s %11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -218,7 +216,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
             str_size(total_uncompressed_len, txt_size_str);
             double ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
 
-            bufprintf (evb, &str_buf, ratio < 100 ? foot_format_2 : foot_format_1, z_size_str, txt_size_str, ratio);
+            bufprintf (evb, &str_buf, foot_format, z_size_str, txt_size_str, ratio < 100, ratio);
         }
         
         ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension", 
@@ -259,8 +257,8 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     
     // TODO: have an option to print ref_file_name and ref_file_md5
     
-    bufprintf (evb, &str_buf, ratio < 100 ? item_format_2 : item_format_1, indiv_str, num_lines_str, 
-               z_size_str, txt_size_str, ratio, 
+    bufprintf (evb, &str_buf, item_format, indiv_str, num_lines_str, 
+               z_size_str, txt_size_str, ratio < 100, ratio, 
                md5_display (md5_hash_bound),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                is_subdir ? -MAX (1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH,
