@@ -145,11 +145,10 @@ void progress_udpate_status (const char *status)
 
 void progress_finalize_component (const char *status)
 {
-    if (flag_quiet) return;
-
-    progress_udpate_status (status);
-
-    fprintf (stderr, "\n");
+    if (!flag_quiet) {
+        progress_udpate_status (status);
+        fprintf (stderr, "\n");
+    }
 
     component_name = NULL;
     last_len = 0;
