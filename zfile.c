@@ -30,7 +30,7 @@ bool is_v6_or_above=true;
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
-void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */)
+void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, char rw)
 {
     static const char *comp_names[NUM_COMPRESSION_ALGS] = CODEC_NAMES;
 
@@ -57,8 +57,8 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%-19s %*.*s %6s%-3s %6s%-3s %7s%-3s codec=%-4.4s vb_i=%-3u comp_offset=%-6u uncomp_len=%-7u comp_len=%-6u enc_len=%-6u magic=%8.8x\n",
-             st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
+    sprintf (str, "%c %-19s %*.*s %6s%-3s %6s%-3s %7s%-3s codec=%-4.4s vb=%-3u z_offset=%-6u txt_len=%-7u z_len=%-6u enc_len=%-6u magic=%8.8x\n",
+             rw, st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
              comp_names[header->codec],
              BGEN32 (header->vblock_i), BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
@@ -422,7 +422,7 @@ int32_t zfile_read_section (File *file,
     ASSERT (is_magical, "Error: corrupt data (magic is wrong) when attempting to read section %s of vblock_i=%u in file %s", 
             st_name (expected_sec_type), vb->vblock_i, z_name);
 
-    if (flag_show_headers) zfile_show_header (header, NULL);
+    if (flag_show_headers) zfile_show_header (header, NULL, 'R');
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));

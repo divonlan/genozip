@@ -155,22 +155,19 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
     sl++;
     buf_alloc (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers", 1); // room for section headers  
 
-    RESET_FLAG (flag_show_headers); // we're in zip mode, don't show pair headers being uncompressed
     while (sl->section_type == SEC_B250 || sl->section_type == SEC_LOCAL) {
         
         if (((dict_id_is_type_1 (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC]) && sl->section_type == SEC_B250) ||
             ((sl->dict_id.num == dict_id_fields[FASTQ_GPOS] || sl->dict_id.num == dict_id_fields[FASTQ_STRAND]) && sl->section_type == SEC_LOCAL)) { // these are local sections
             
-            *ENT (uint32_t, vb->z_section_headers, vb->z_section_headers.len) = vb->z_data.len; 
+            NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
             int32_t ret = zfile_read_section (z_file, (VBlockP)vb, vb->pair_vb_i, &vb->z_data, "data", sizeof(SectionHeaderCtx), 
                                               sl->section_type, sl); // returns 0 if section is skipped
             ASSERT (ret != EOF, "Error in fastq_read_pair_1_data: vb_i=%u failed to read from pair_vb=%u dict_id=%s", vb->vblock_i, vb->pair_vb_i, err_dict_id (sl->dict_id));
-            vb->z_section_headers.len++;
         }
         
         sl++;
     }
-    RESTORE_FLAG (flag_show_headers);
 
     file_seek (z_file, save_offset, SEEK_SET, false); // restore
     z_file->disk_so_far = save_disk_so_far;

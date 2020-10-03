@@ -234,7 +234,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     z_data->len += total_z_len;
 
     if (flag_show_headers) 
-        zfile_show_header (header, vb->vblock_i ? vb : NULL); // store and print upon about for vb sections, and print immediately for non-vb sections
+        zfile_show_header (header, vb->vblock_i ? vb : NULL, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 
 void comp_uncompress (VBlock *vb, Codec codec, 
