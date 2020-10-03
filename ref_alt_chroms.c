@@ -67,7 +67,7 @@ void ref_alt_chroms_load (void)
 
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_ALT_CHROMS, sl);
 
-    zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", SEC_ALT_CHROMS);
+    zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", 0, SEC_ALT_CHROMS);
 
     if (flag_show_ref_alts) 
         fprintf (stderr, "\nAlternative chroms (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");

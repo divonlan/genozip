@@ -511,6 +511,8 @@ void seg_compound_field (VBlock *vb,
                 sf_ctx->flags |= CTX_FL_STORE_INT;
                 sf_ctx->last_value.i = this_value;
             }
+            else if (flag_pair == PAIR_READ_1)
+                sf_ctx->inst |= CTX_INST_NO_STONS; // prevent singletons, so pair-2 can compare to us
             
             // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
             // i.e. its already in the dictionary and hash table - so no resources wasted
@@ -545,7 +547,9 @@ void seg_compound_field (VBlock *vb,
                         sf_ctx->inst |= CTX_INST_PAIR_B250;
                         static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
                         word_index = mtf_evaluate_snip_seg ((VBlockP)vb, sf_ctx, lookup_pair_snip, 1, NULL);
-                    }   
+                    } else
+                        // To improve: currently, pairing stops at the first non-match
+                        sf_ctx->inst |= CTX_INST_STOP_PAIRING;                
                 }
                 else
                     sf_ctx->inst |= CTX_INST_STOP_PAIRING;

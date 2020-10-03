@@ -584,7 +584,7 @@ bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipp
 
     // now get the text of the txt header itself
     static Buffer header_buf = EMPTY_BUFFER;
-    zfile_uncompress_section (evb, header, &header_buf, "header_buf", SEC_TXT_HEADER);
+    zfile_uncompress_section (evb, header, &header_buf, "header_buf", 0, SEC_TXT_HEADER);
 
     bool is_vcf = (z_file->data_type == DT_VCF);
 

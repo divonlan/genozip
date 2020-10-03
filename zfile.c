@@ -110,6 +110,7 @@ void zfile_uncompress_section (VBlock *vb,
                                void *section_header_p,
                                void *uncompressed_data, // Buffer * or char *
                                const char *uncompressed_data_buf_name, // a name if Buffer, NULL if char *
+                               uint32_t expected_vb_i,
                                SectionType expected_section_type) 
 {
     START_TIMER;
@@ -135,12 +136,9 @@ void zfile_uncompress_section (VBlock *vb,
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error in zfile_uncompress_section: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
-    bool expecting_vb_i = expected_section_type != SEC_DICT && 
-                          expected_section_type != SEC_TXT_HEADER && expected_section_type != SEC_REFERENCE && expected_section_type != SEC_REF_IS_SET;
-                          
-    ASSERT (vblock_i == vb->vblock_i || !expecting_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
+    ASSERT (vblock_i == expected_vb_i || !expected_vb_i, // dictionaries are uncompressed by the I/O thread with pseduo_vb (vb_i=0) 
              "Error in zfile_uncompress_section: bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
-             vblock_i, vb->vblock_i, st_name (expected_section_type));
+             vblock_i, expected_vb_i, st_name (expected_section_type));
 
     // decrypt data (in-place) if needed
     if (data_encrypted_len) 
@@ -631,7 +629,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // global bools to help testing
     is_v6_or_above = (z_file->genozip_version >= 6);
          
-    zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", SEC_GENOZIP_HEADER);
+    zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
     z_file->section_list_buf.len /= sizeof (SectionListEntry); // fix len
     BGEN_sections_list();
 

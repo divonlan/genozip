@@ -58,7 +58,8 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSERT (ctx->next_local < ctx->local.len, \
-            "Error reconstructing txt_line=%u: unexpected end of ctx->local data in %s (len=%u)", vb->line_i, ctx->name, (uint32_t)ctx->local.len);
+            "Error reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u)", \
+            vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len);
 
 static uint32_t piz_reconstruct_from_local_text (VBlock *vb, Context *ctx)
 {
@@ -123,8 +124,8 @@ static void piz_reconstruct_from_local_ht (VBlock *vb, Context *ctx)
         RECONSTRUCT1 (ht);
     
     else if (ht == '*') 
-        ABORT ("Error reconstructing txt_line=%u: unexpected end of ctx->local data in %s (len=%u)", 
-               vb->line_i, ctx->name, (uint32_t)ctx->local.len)
+        ABORT ("Error in piz_reconstruct_from_local_ht: reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u)", 
+               vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len)
     
     else { // allele 10 to 99 (ascii 58 to 147)
         RECONSTRUCT_INT (ht - '0');
@@ -543,15 +544,14 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
             if ((ctx->flags & CTX_FL_PAIRED) && !pair_vb_i) 
                 pair_vb_i = fastq_get_pair_vb_i (vb);
 
-            bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" (that come after all sections of pair2 on section_index)
-            if (is_pair_section) 
-                header->h.vblock_i = BGEN32 (vb->vblock_i); // set vb_i to pass the sanity check in zfile_uncompress_section
+            bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" 
 
             Buffer *target_buf = is_local ? &ctx->local : &ctx->b250;
 
             zfile_uncompress_section (vb, header, 
                                       is_pair_section ? &ctx->pair      : target_buf, 
                                       is_pair_section ? "contexts.pair" : is_local ? "contexts.local" : "contexts.b250", 
+                                      is_pair_section ? pair_vb_i : vb->vblock_i,
                                       header->h.section_type); 
 
             if (!is_pair_section && is_local && dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
@@ -624,7 +624,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
 
-    piz_uncompress_all_ctxs (vb, false);
+    piz_uncompress_all_ctxs (vb, 0);
 
     // genocat --show-b250 only shows the b250 info and not the file data (shown when uncompressing via zfile_uncompress_section)
     if (flag_show_b250 && exe_type == EXE_GENOCAT) goto done;

@@ -177,4 +177,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - change default number of threads to 1.4 * number of cores
 
 7.0.2
-- Even better SAM BD/BI alg
+- Even better SAM BD/BI codec
+
+7.0.3
+- Bug fixes

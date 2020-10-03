@@ -174,7 +174,7 @@ void ref_contigs_load_contigs (void)
     SectionListEntry *sl = sections_get_offset_first_section_of_type (SEC_REF_CONTIGS, false);
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_CONTIGS, sl);
 
-    zfile_uncompress_section (evb, evb->z_data.data, &loaded_contigs, "loaded_contigs", SEC_REF_CONTIGS);
+    zfile_uncompress_section (evb, evb->z_data.data, &loaded_contigs, "loaded_contigs", 0, SEC_REF_CONTIGS);
 
     loaded_contigs.len /= sizeof (RefContig);
     BGEN_ref_contigs (&loaded_contigs);

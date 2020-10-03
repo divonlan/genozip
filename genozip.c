@@ -104,7 +104,7 @@ void main_exit (bool show_stack, bool is_error)
 
     url_kill_curl();
     file_kill_external_compressors(); 
- 
+
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
     if (primary_command == ZIP && z_file && z_file->name && !flag_reading_reference) {
         char save_name[strlen (z_file->name)+1];

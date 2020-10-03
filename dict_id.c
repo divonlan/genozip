@@ -246,7 +246,7 @@ void dict_id_read_aliases (void)
                         sizeof(SectionHeader), SEC_DICT_ID_ALIASES, NULL);    
 
     SectionHeader *header = (SectionHeader *)compressed_aliases.data;
-    zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", SEC_DICT_ID_ALIASES);
+    zfile_uncompress_section (evb, header, &dict_id_aliases_buf, "dict_id_aliases_buf", 0, SEC_DICT_ID_ALIASES);
 
     buf_destroy (&compressed_aliases);
 

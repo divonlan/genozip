@@ -258,7 +258,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
     ASSERT (start + size <= layer_size[layer_i], "Error in refhash_uncompress_one_vb: expecting start=%u + size=%u <= layer_size=%u",
             start, size, layer_size[layer_i]);
 
-    zfile_uncompress_section (vb, header, &refhashs[layer_i][start / sizeof(uint32_t)], NULL, SEC_REF_HASH);
+    zfile_uncompress_section (vb, header, &refhashs[layer_i][start / sizeof(uint32_t)], NULL, 0, SEC_REF_HASH);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
 }
