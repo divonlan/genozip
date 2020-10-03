@@ -136,36 +136,38 @@ bool comp_compress_ht (VBlock *vb, Codec codec,
 }
 
 
-// for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
+// PIZ: for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
 // transposed, each column will be a row, or a contiguous array, in the section data. This function returns an array
 // of pointers, each pointer being a beginning of column data within the section array
-void comp_ht_calculate_columns (VBlock *vb)
+void comp_ht_piz_calculate_columns (VBlock *vb)
 {
-    vb->num_haplotypes_per_line = vb->ht_ctx->local.len / vb->lines.len;
-    
-    buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * (vb->num_haplotypes_per_line + 7), 1, "ht_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
+    uint32_t num_haplotypes_per_line = vb->num_haplotypes_per_line = (uint32_t)(vb->ht_ctx->local.len / vb->lines.len);
+
+    vb->ht_one_array.len = num_haplotypes_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
+    buf_alloc (vb, &vb->ht_one_array, vb->ht_one_array.len, 1, "ht_one_array", vb->vblock_i);
+    buf_alloc (vb, &vb->ht_columns_data, sizeof (char *) * vb->ht_one_array.len, 1, "ht_columns_data", 0); // realloc for exact size (+15 is padding for 64b operations)
 
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: haplotype columns are permuted only within their own sample block
     ARRAY (const char *, ht_columns_data, vb->ht_columns_data); 
     ARRAY (const unsigned, permutatation_index, vb->ht_index_ctx->local);
     
-    ASSERT0 (permutatation_index, "Error in comp_ht_calculate_columns: ht_index_ctx.local is empty");
+    ASSERT0 (permutatation_index, "Error in comp_ht_piz_calculate_columns: ht_index_ctx.local is empty");
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output
     buf_alloc (vb, &vb->column_of_zeros, MAX (txt_file->max_lines_per_vb, vb->lines.len), 1, "column_of_zeros", 0);
     buf_zero (&vb->column_of_zeros);
 
-    for (uint32_t ht_i = 0; ht_i < vb->num_haplotypes_per_line; ht_i++) 
+    for (uint32_t ht_i = 0; ht_i < num_haplotypes_per_line; ht_i++) 
         ht_columns_data[ht_i] = ENT (char, vb->ht_ctx->local, permutatation_index[ht_i] * vb->lines.len);
 
-    for (unsigned ht_i=vb->num_haplotypes_per_line; ht_i < vb->num_haplotypes_per_line + 7; ht_i++)
+    for (unsigned ht_i=num_haplotypes_per_line; ht_i < num_haplotypes_per_line + 7; ht_i++)
         ht_columns_data[ht_i] = vb->column_of_zeros.data;
 }
 
-// build haplotype for a line - reversing the permutation and the transposal.
-void comp_ht_get_one_line (VBlock *vb)
+// PIZ: build haplotype for a line - reversing the permutation and the transposal.
+void comp_ht_piz_get_one_line (VBlock *vb)
 {
     START_TIMER;
 
@@ -205,5 +207,5 @@ void comp_ht_get_one_line (VBlock *vb)
     if (flag_show_alleles)
         printf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->ht_one_array.len, vb->ht_one_array.data);
 
-    COPY_TIMER (vb->profile.comp_ht_get_one_line);
+    COPY_TIMER (vb->profile.comp_ht_piz_get_one_line);
 }

@@ -132,7 +132,7 @@ static void stats_show_file_metadata (void)
 
     char ls[30];
     if (z_file->data_type == DT_VCF) 
-        fprintf (stderr, "Individuals: %u   ", global_vcf_num_samples);
+        fprintf (stderr, "Samples: %u   ", vcf_header_get_num_samples());
 
     fprintf (stderr, "%s: %s   Dictionaries: %u   Vblocks: %u   Sections: %u\n", 
                 DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_contexts, 

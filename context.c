@@ -272,10 +272,11 @@ static WordIndex mtf_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
 
     // case: vb singleton turns out to be a global singleton - we add it to local and return the SNIP_LOOKUP node
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
+    // note: local is dedicated to singletons and contains nothing else, since CTX_INST_NO_STONS is not set
     if (node_index < 0) {
         seg_add_to_local_text (merging_vb, vb_ctx, snip, snip_len, 0);
         
-        char lookup = SNIP_LOOKUP;
+        static char lookup = SNIP_LOOKUP;
         return mtf_evaluate_snip_merge (merging_vb, zf_ctx, vb_ctx, &lookup, 1, 2 /* not singleton */, node, is_new);
     }
 
@@ -766,7 +767,6 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
     // a non-contiguous array of contexts (some are missing if not used by this vb)
 
     Context *zf_ctx = mtf_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, header->dict_id);
-    zf_ctx->flags = header->h.flags;
 
     // append fragment to dict. If there is no room - old memory is abandoned (so that VBs that are overlaying
     // it continue to work uninterrupted) and a new memory is allocated, where the old dict is joined by the new fragment
@@ -847,6 +847,7 @@ MtfNode *mtf_get_node_by_word_index (Context *ctx, WordIndex word_index)
     return NULL; // never reaches here
 }
 
+// get snip by normal word index (doesn't support WORD_INDEX_*)
 const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
                                         const char **snip, uint32_t *snip_len)
 {

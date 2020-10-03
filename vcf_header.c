@@ -16,15 +16,15 @@
 #include "strings.h"
 
 // Globals
-uint32_t global_vcf_num_samples           = 0; // number of samples in the file
-uint32_t global_vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that global_vcf_num_samples if --samples is used
-Buffer global_vcf_header_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
+uint32_t vcf_num_samples           = 0; // number of samples in the file
+uint32_t vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that vcf_num_samples if --samples is used
+static Buffer vcf_header_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
 
 void vcf_header_initialize (void)
 {
-    global_vcf_num_samples           = 0;
-    global_vcf_num_displayed_samples = 0;
-    buf_free (&global_vcf_header_line);
+    vcf_num_samples           = 0;
+    vcf_num_displayed_samples = 0;
+    buf_free (&vcf_header_line);
 }
 
 bool vcf_inspect_txt_header (Buffer *txt_header)
@@ -53,14 +53,14 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
         else if (vcf_header->data[i] == '#' && (i==0 || vcf_header->data[i-1] == '\n' || vcf_header->data[i-1] == '\r')) {
         
             // if first vcf file - copy the header to the global
-            if (!buf_is_allocated (&global_vcf_header_line)) {
-                buf_copy (evb, &global_vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "global_vcf_header_line", 0);
+            if (!buf_is_allocated (&vcf_header_line)) {
+                buf_copy (evb, &vcf_header_line, vcf_header, 1, i, vcf_header->len - i, "vcf_header_line", 0);
                 vcf_header_line_filename = filename;
             }
 
             // ZIP only: subsequent files - if we're in bound mode just compare to make sure the header is the same
             else if (flag_bind && 
-                     (vcf_header->len-i != global_vcf_header_line.len || memcmp (global_vcf_header_line.data, &vcf_header->data[i], global_vcf_header_line.len))) {
+                     (vcf_header->len-i != vcf_header_line.len || memcmp (vcf_header_line.data, &vcf_header->data[i], vcf_header_line.len))) {
 
                 fprintf (stderr, "%s: skipping %s: it has a different VCF header line than %s, see below:\n"
                                  "========= %s =========\n"
@@ -69,21 +69,21 @@ bool vcf_header_set_globals(const char *filename, Buffer *vcf_header)
                                  "%.*s"
                                  "=======================================\n", 
                          global_cmd, filename, vcf_header_line_filename,
-                         vcf_header_line_filename, (uint32_t)global_vcf_header_line.len, global_vcf_header_line.data,
+                         vcf_header_line_filename, (uint32_t)vcf_header_line.len, vcf_header_line.data,
                          filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
                 return false;
             }
 
             //count samples
-            global_vcf_num_samples = (tab_count >= 9) ? tab_count-8 : 0; 
+            vcf_num_samples = (tab_count >= 9) ? tab_count-8 : 0; 
             // note: a VCF file without samples may or may not have a "FORMAT" in the header, i.e. tab_count==7 or 8 (8 or 9 fields).
             // however, even if it has a FORMAT in the header, it won't have a FORMAT column in the data
             
-            global_vcf_num_displayed_samples = global_vcf_num_samples;
+            vcf_num_displayed_samples = vcf_num_samples;
 
             ASSERT (tab_count >= 7, "Error: invalid VCF file - field header line contains only %d fields, expecting at least 8", tab_count+1);
 
-            // if --samples is used, update vcf_header and global_vcf_num_displayed_samples
+            // if --samples is used, update vcf_header and vcf_num_displayed_samples
             if (flag_samples) samples_digest_vcf_header (vcf_header);
 
             return true; 
@@ -119,4 +119,9 @@ void vcf_header_keep_only_last_line (Buffer *vcf_header_buf)
             memcpy (vcf_header_buf->data, &vcf_header_buf->data[i+1], vcf_header_buf->len);
             break;
         }
+}
+
+uint32_t vcf_header_get_num_samples (void)
+{
+    return vcf_num_samples;
 }

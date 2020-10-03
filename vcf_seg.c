@@ -58,7 +58,7 @@ void vcf_seg_finalize (VBlockP vb_)
     seg_structured_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
 
     if (flag_show_alleles && vb->ht_ctx) {
-        printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, global_vcf_num_samples, vb->ploidy, (unsigned)vb->ht_ctx->local.len);
+        printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_ctx->local.len);
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++)
             printf ("Line %-2u: %.*s\n", line_i, vb->num_haplotypes_per_line, ENT (char, vb->ht_ctx->local, line_i * vb->num_haplotypes_per_line));
@@ -137,7 +137,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     const char *str = field_start;
     int len = field_len;
 
-    if (!global_vcf_num_samples) {
+    if (!vcf_num_samples) {
         seg_by_did_i_ex (vb, field_start, field_len, VCF_FORMAT, field_len + 1 /* \n */, NULL);
         return; // if we're not expecting any samples, no need to analyze the FORMAT field
     }
@@ -328,10 +328,10 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
 static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigned sample_i, uint32_t max_new_size)
 {
     // protect against highly unlikely case that we don't have enough consumed txt data to store increased-ploidy ht data 
-    ASSERT (new_ploidy * vb->line_i * global_vcf_num_samples <= max_new_size, 
+    ASSERT (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
             "Error: haplotype data overflow due to increased ploidy on line %u", vb->line_i);
 
-    uint32_t num_samples = vb->line_i * global_vcf_num_samples + sample_i; // all samples in previous lines + previous samples in current line
+    uint32_t num_samples = vb->line_i * vcf_num_samples + sample_i; // all samples in previous lines + previous samples in current line
     char *ht_data = vb->ht_ctx->local.data;
 
     // copy the haplotypes backwards (to avoid overlap), padding with '*'
@@ -345,7 +345,7 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
     }
 
     vb->ploidy = new_ploidy;
-    vb->num_haplotypes_per_line = vb->ploidy * global_vcf_num_samples;
+    vb->num_haplotypes_per_line = vb->ploidy * vcf_num_samples;
 }
 
 static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataLineVCF *dl, const char *cell, unsigned cell_len, unsigned sample_i)
@@ -373,7 +373,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 
     if (!vb->ploidy) {
         vb->ploidy = gt.repeats; // very first sample in the vb
-        vb->num_haplotypes_per_line = vb->ploidy * global_vcf_num_samples;
+        vb->num_haplotypes_per_line = vb->ploidy * vcf_num_samples;
     }
 
     if (sample_i == 0 && vb->line_i == 0) {
@@ -551,7 +551,7 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
                                     bool *has_13)
 {
     // Structured for samples - we have:
-    // - repeats as the number of samples in the line (<= global_vcf_num_samples)
+    // - repeats as the number of samples in the line (<= vcf_num_samples)
     // - num_items as the number of FORMAT subfields (inc. GT)
 
     Structured samples = *ENT (Structured, vb->format_mapper_buf, dl->format_mtf_i); // make a copy of the template
@@ -570,18 +570,18 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
 
         vcf_seg_one_sample (vb, dl, &samples, samples.repeats, field_start, field_len, true, &num_colons, has_13);
 
-        ASSSEG (samples.repeats < global_vcf_num_samples || separator == '\n', next_field,
-                "Error: invalid VCF file - expecting a newline after the last sample (sample #%u)", global_vcf_num_samples);
+        ASSSEG (samples.repeats < vcf_num_samples || separator == '\n', next_field,
+                "Error: invalid VCF file - expecting a newline after the last sample (sample #%u)", vcf_num_samples);
     }
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
-    if (samples.repeats < global_vcf_num_samples) {
+    if (samples.repeats < vcf_num_samples) {
         ASSERTW (false, "Warning: the number of samples in vb->line_i=%u is %u, different than the VCF column header line which has %u samples",
-                 vb->line_i, samples.repeats, global_vcf_num_samples);
+                 vb->line_i, samples.repeats, vcf_num_samples);
 
         if (dl->has_haplotype_data) {
-            char *ht_data = ENT (char, vb->ht_ctx->local, vb->line_i * vb->ploidy * global_vcf_num_samples + vb->ploidy * samples.repeats);
-            memset (ht_data, '*', vb->ploidy * (global_vcf_num_samples - samples.repeats));
+            char *ht_data = ENT (char, vb->ht_ctx->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
+            memset (ht_data, '*', vb->ploidy * (vcf_num_samples - samples.repeats));
         }
     }
     
@@ -662,7 +662,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
     SEG_NEXT_ITEM (VCF_FILTER);
 
     // INFO
-    if (global_vcf_num_samples)
+    if (vcf_num_samples)
         GET_NEXT_ITEM (DTF(names)[VCF_INFO]) // pointer to string to allow pointer comparison 
     else
         GET_MAYBE_LAST_ITEM (DTF(names)[VCF_INFO]); // may or may not have a FORMAT field
@@ -694,7 +694,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, bool *h
         seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0);
     }
 
-    ASSERTW (has_samples || !global_vcf_num_samples, "Warning: vb->line_i=%u has no samples", vb->line_i);
+    ASSERTW (has_samples || !vcf_num_samples, "Warning: vb->line_i=%u has no samples", vb->line_i);
 
     SEG_EOL (VCF_EOL, false);
 

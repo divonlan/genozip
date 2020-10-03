@@ -16,6 +16,7 @@ char *vcf_samples_is_included;                // a bytemap indicating for each s
 static char **vcf_sample_names;               // an array of char * to null-terminated names of samples 
 static char *vcf_sample_names_data;           // vcf_sample_names point into here
 
+// called from genozip.c for processing the --samples flag
 void vcf_samples_add  (const char *samples_str)
 {
     ASSERT0 (samples_str, "Error: samples_str is NULL");
@@ -55,7 +56,7 @@ static void samples_accept (Buffer *vcf_header_buf, const char *sample_str)
 {
     buf_add_string (evb, vcf_header_buf, sample_str);
     buf_add_string (evb, vcf_header_buf, "\t");
-    global_vcf_num_displayed_samples++;
+    vcf_num_displayed_samples++;
 }
 
 // processes the vcf header sample line according to the --samples option, removing samples that are not required
@@ -64,17 +65,22 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
 {
     static const char *standard = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t";
 
-    int i=vcf_header_buf->len-2 ; for (; i >= 0; i--) // -2 - skip last newline
-        if (vcf_header_buf->data[i] == '\n') { 
+    int32_t num_samples=-8;
+    int i=vcf_header_buf->len-2 ; for (; i >= 0; i--)  // -2 - skip last newline
+     
+        if (vcf_header_buf->data[i] == '\t')
+            num_samples++;
+
+        else if (vcf_header_buf->data[i] == '\n') { 
             bool header_matches_standard = !memcmp (&vcf_header_buf->data[i+1], standard, MIN (strlen (standard), vcf_header_buf->len-(i+1)));
             if (!header_matches_standard) flag_samples = false;
             RETURNW0 (header_matches_standard,, "Warning: found non-standard VCF sample header line. Ingoring --samples");
 
             break;
         }
-
-    vcf_samples_is_included = malloc (global_vcf_num_samples);
-    memset (vcf_samples_is_included, cmd_is_negative_samples, global_vcf_num_samples); // 0 if not included unless list says so (positive) and vice versa
+    
+    vcf_samples_is_included = malloc (num_samples);
+    memset (vcf_samples_is_included, cmd_is_negative_samples, num_samples); // 0 if not included unless list says so (positive) and vice versa
 
     unsigned vcf_names_start_index = i + 1 + strlen(standard);
     unsigned vcf_names_data_len = vcf_header_buf->len - vcf_names_start_index;
@@ -82,14 +88,14 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
     memcpy (vcf_sample_names_data, &vcf_header_buf->data[vcf_names_start_index], vcf_names_data_len);
     vcf_sample_names_data[vcf_names_data_len-1] = '\t'; // change last separator from \n to \t
 
-    vcf_sample_names = malloc (global_vcf_num_samples * sizeof (char *));
+    vcf_sample_names = malloc (num_samples * sizeof (char *));
 
     vcf_header_buf->len = vcf_names_start_index;
     char *next_token = vcf_sample_names_data;
     
     // go through the vcf file's samples and add those that are consistent with the --samples requested
-    global_vcf_num_displayed_samples = 0;
-    for (unsigned i=0; i < global_vcf_num_samples; i++) {
+    vcf_num_displayed_samples = 0;
+    for (unsigned i=0; i < num_samples; i++) {
         vcf_sample_names[i] = strtok_r (next_token, "\t", &next_token);
 
         for (unsigned s=0; s < cmd_samples_buf.len; s++)
@@ -111,7 +117,7 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
         ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", *ENT(char *, cmd_samples_buf, s));
 
     // if the user filtered out all samples, its equivalent of drop_genotypes
-    if (!global_vcf_num_displayed_samples) flag_drop_genotypes = true;
+    if (!vcf_num_displayed_samples) flag_drop_genotypes = true;
 
-    //for (i=0; i<global_vcf_num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
+    //for (i=0; i<num_samples; i++) fprintf (stderr, "%u ", vcf_samples_is_included[i]); 
 }

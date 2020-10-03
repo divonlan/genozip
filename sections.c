@@ -272,7 +272,6 @@ void sections_show_gheader (SectionHeaderGenozipHeader *header)
     fprintf (stderr, "  genozip_version: %u\n",         header->genozip_version);
     fprintf (stderr, "  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
     fprintf (stderr, "  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-    fprintf (stderr, "  num_samples: %u\n",             BGEN32 (header->num_samples));
     fprintf (stderr, "  uncompressed_data_size: %s\n",  str_uint_commas (BGEN64 (header->uncompressed_data_size), size_str));
     fprintf (stderr, "  num_items_bound: %"PRIu64"\n", BGEN64 (header->num_items_bound));
     fprintf (stderr, "  num_sections: %u\n",            num_sections);

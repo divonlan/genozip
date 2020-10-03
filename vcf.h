@@ -35,6 +35,7 @@ extern bool vcf_inspect_txt_header (BufferP txt_header);
 extern bool vcf_header_set_globals (const char *filename, BufferP vcf_header);
 extern void vcf_header_trim_header_line (BufferP vcf_header_buf);
 extern void vcf_header_keep_only_last_line (BufferP vcf_header_buf);
+extern uint32_t vcf_header_get_num_samples (void);
 
 // VBlock stuff
 extern void vcf_vb_release_vb();
@@ -46,9 +47,6 @@ extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
 // Samples stuff
 extern void vcf_samples_add  (const char *samples_str);
-
-// global parameters - set before any thread is created
-extern uint32_t global_vcf_num_samples, global_vcf_num_displayed_samples;
 
 #define VCF_SPECIAL { vcf_piz_special_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_AC, vcf_piz_special_SVLEN }
 SPECIAL (VCF, 0, REFALT, vcf_piz_special_REFALT);

@@ -20,7 +20,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
     ADD(comp_compress_ht);
-    ADD(comp_ht_get_one_line);
+    ADD(comp_ht_piz_get_one_line);
     ADD(sam_seg_seq_field);
     ADD(zfile_compress_dictionary_data);
     ADD(zfile_uncompress_section);
@@ -99,7 +99,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (zfile_uncompress_section, 1);
         PRINT (piz_reconstruct_vb, 1);
         PRINT (piz_get_line_subfields, 2);
-        PRINT (comp_ht_get_one_line, 2);
+        PRINT (comp_ht_piz_get_one_line, 2);
     }
     else { // compress
         fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");

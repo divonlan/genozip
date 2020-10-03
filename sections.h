@@ -60,16 +60,16 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 // endianity bugs will be discovered more readily this way
 
 typedef struct SectionHeader {
-    uint32_t magic; 
-    uint32_t compressed_offset;      // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
-    uint32_t data_encrypted_len;     // = data_compressed_len + padding if encrypted, 0 if not
-    uint32_t data_compressed_len;
-    uint32_t data_uncompressed_len;
-    uint32_t vblock_i;               // VB with in file starting from 1 ; 0 for Txt Header
-    SectionType section_type;        // 1 byte
-    Codec    codec;                  // 1 byte
-    uint8_t  flags;                  // CTX_FL_*
-    uint8_t  ffu;
+    uint32_t    magic; 
+    uint32_t    compressed_offset;    // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
+    uint32_t    data_encrypted_len;   // = data_compressed_len + padding if encrypted, 0 if not
+    uint32_t    data_compressed_len;
+    uint32_t    data_uncompressed_len;
+    uint32_t    vblock_i;             // VB with in file starting from 1 ; 0 for Txt Header
+    SectionType section_type;         // 1 byte
+    Codec       codec;                // 1 byte
+    uint8_t     flags;                // CTX_FL_*
+    uint8_t     ffu;
 } SectionHeader; 
 
 // flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
@@ -80,14 +80,12 @@ typedef struct {
     uint8_t  genozip_version;
     uint8_t  encryption_type;         // one of ENC_TYPE_*
     uint16_t data_type;               // one of DATA_TYPE_*
-    uint32_t num_samples;             // number of samples. "samples" is data_type-dependent. 
+    uint32_t unused; 
     uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
     uint64_t num_items_bound;         // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
     uint32_t num_components;          // number of txt bound components in this file (1 if no binding)
-
     Md5Hash  md5_hash_bound;          // md5 of original txt file, or 0s if no hash was calculated. if this is a binding - this is the md5 of the entire bound file.
-
     uint8_t  password_test[16];       // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
     char created[FILE_METADATA_LEN];    
@@ -103,18 +101,17 @@ typedef struct {
     uint32_t magic;
 } SectionFooterGenozipHeader;
 
-// The text file header section appears once in the file (or multiple times in case of bound file), and includes the VCF file header 
+// The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
 typedef struct {
     SectionHeader h;
     uint64_t txt_data_size;    // number of bytes in the original txt file. 
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
-    uint32_t num_samples;      // VCF only: number of samples in the original VCF file
+    uint32_t unused; 
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
-    Codec compression_type;    // compression type of original file
+    Codec    compression_type; // compression type of original file
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
-
 #define TXT_FILENAME_LEN 256
     char txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always a .vcf or .sam, even if the original was eg .vcf.gz or .bam
 } SectionHeaderTxtHeader; 
@@ -124,20 +121,15 @@ typedef struct {
     uint32_t first_line;       // line (starting from 1) of this vblock in the single txt file 
                                // if this value is 0, then this is the terminating section of the file. after it is either EOF or a TXT Header section of the next bound file 
     uint32_t num_lines;        // number of records in this vblock 
-                                
-    // features of the data
     uint32_t vb_data_size;     // size of vblock as it appears in the source file 
     uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len; // length of the longest line in this vblock 
-    uint32_t num_samples;      // VCF only
-    uint32_t num_haplotypes_per_line; // VCF only
-                                
-    Md5Hash md5_hash_so_far;   // partial calculation of MD5 up to and including this VB */
-
+    uint64_t unused; 
+    Md5Hash md5_hash_so_far;   // partial calculation of MD5 up to and including this VB 
 } SectionHeaderVbHeader; 
 
 typedef struct {
-    SectionHeader h;           // we use h.flags to store the first 4 bits of ctx->flags, also stored in SectionHeaderCtx. This is because VCF FORMAT contexts have no SectionHeaderCtx.
+    SectionHeader h;           
     uint32_t num_snips;        // number of items in dictionary
     DictId dict_id;           
 } SectionHeaderDictionary; 

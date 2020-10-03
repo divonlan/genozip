@@ -64,10 +64,7 @@ void vcf_piz_special_FORMAT (VBlock *vb, Context *ctx, const char *snip, unsigne
         vb->ht_ctx       = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT);
         vb->ht_index_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
         
-        vb->ht_one_array.len = vb->num_haplotypes_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
-        buf_alloc (vb, &vb->ht_one_array, vb->ht_one_array.len, 1, "ht_one_array", vb->vblock_i);
-
-        comp_ht_calculate_columns (vb);
+        comp_ht_piz_calculate_columns (vb);
     }
 }
 

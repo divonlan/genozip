@@ -115,7 +115,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t num_haplotypes_per_line; \
     Buffer helper_index_buf;          /* used by zip_do_haplotypes */ \
     Buffer ht_columns_data;           /* used by piz_get_ht_permutation_lookups */ \
-    Buffer column_of_zeros;           /* used by comp_ht_calculate_columns */  \
+    Buffer column_of_zeros;           /* used by comp_ht_piz_calculate_columns */  \
     Buffer ht_one_array;              /* one line or column */ \
     uint32_t ht_one_array_line_i;     /* line or column number to which ht_one_array belongs */ 
 

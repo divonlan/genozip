@@ -244,10 +244,10 @@ rm -f td/*.genozip
 ./genozip $1 -f --md5 --REFERENCE $GRCh38 td/test.transfly-unsorted.sam --password 123 -o $output || exit 1
 ./genounzip $1 -t -p 123 $output || exit 1
 
-test_header "Testing paired FASTQ with --reference"
+test_header "Testing paired FASTQ with --reference, --password and --md5"
 rm -f td/*.genozip
-./genozip $1 -f --md5 -e $GRCh38 --pair td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.bz2 -o td/pair.genozip || exit 1
-./genounzip $1 -t -e $GRCh38 td/pair.genozip || exit 1
+./genozip $1 -f --md5 -e $GRCh38 --pair -p 1234 td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.bz2 -o td/pair.genozip || exit 1
+./genounzip $1 -t --password 1234 -e $GRCh38 td/pair.genozip || exit 1
 
 test_header "Testing paired FASTQ with --REFERENCE"
 rm -f td/*.genozip

@@ -538,7 +538,7 @@ void seg_compound_field (VBlock *vb,
                     
                     sf_ctx->pair_b250_iter.prev_word_index = pair_word_index;
                     
-                    // note: in the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
+                    // note: if the pair word is a singleton in pair_1 file, then pair_word_index will be the index of {SNIP_LOOKUP}
                     // rather than the snip (as replaced in mtf_evaluate_snip_merge), therefore this condition will fail. This is quite
                     // rare, so not worth handling this case
                     if (word_index == pair_word_index) {

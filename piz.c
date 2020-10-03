@@ -109,7 +109,7 @@ static void piz_reconstruct_from_local_ht (VBlock *vb, Context *ctx)
 
     // get one row of the haplotype matrix for this line into vb->ht_one_array if we don't have it already
     if (vb->ht_one_array_line_i != vb->line_i) {
-        comp_ht_get_one_line (vb);
+        comp_ht_piz_get_one_line (vb);
         vb->ht_one_array.len = 0; // length of data consumed
         vb->ht_one_array_line_i = vb->line_i;
     }
@@ -612,16 +612,11 @@ static void piz_uncompress_one_vb (VBlock *vb)
     vb->lines.len        = BGEN32 (header->num_lines);       
     vb->vb_data_size     = BGEN32 (header->vb_data_size);    
     vb->longest_line_len = BGEN32 (header->longest_line_len);
-    vb->num_haplotypes_per_line = BGEN32 (header->num_haplotypes_per_line);
     vb->md5_hash_so_far  = header->md5_hash_so_far;
 
     // in case of --unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every vcf component
     if (flag_unbind) vb->vblock_i = BGEN32 (header->h.vblock_i);
-
-    // global_vcf_num_samples=0 unless this is VCF
-    ASSERT (!global_vcf_num_samples || global_vcf_num_samples == BGEN32 (header->num_samples), "Error: Expecting variant block to have %u samples, but it has %u", global_vcf_num_samples, BGEN32 (header->num_samples));
-    global_vcf_num_samples = BGEN32 (header->num_samples);
 
     if (flag_show_vblocks) 
         fprintf (stderr, "vb_i=%u first_line=%u num_lines=%u txt_size=%u genozip_size=%u longest_line_len=%u\n",
@@ -630,14 +625,6 @@ static void piz_uncompress_one_vb (VBlock *vb)
     buf_alloc (vb, &vb->txt_data, vb->vb_data_size + 10000, 1.1, "txt_data", vb->vblock_i); // +10000 as sometimes we pre-read control data (eg structured templates) and then roll back
 
     piz_uncompress_all_ctxs (vb, false);
-
-    // de-optimize FORMAT/GL data in local (we have already de-optimized the data in dict elsewhere)
-    // TO DO: move GL to be a special snip (or an array?)
-    //if (vb->data_type == DT_VCF) {
-    //    DidIType gl_did_i =  mtf_get_existing_did_i ((VBlockP)vb, (DictId)dict_id_FORMAT_GL);
-    //    if (gl_did_i != DID_I_NONE) 
-    //        gl_deoptimize (vb->contexts[gl_did_i].local.data, vb->contexts[gl_did_i].local.len);
-    //}
 
     // genocat --show-b250 only shows the b250 info and not the file data (shown when uncompressing via zfile_uncompress_section)
     if (flag_show_b250 && exe_type == EXE_GENOCAT) goto done;

@@ -25,7 +25,7 @@ extern const uint8_t acgt_encode[256];
 extern const char acgt_decode[4];
 #define ACGT_DECODE(bitarr,idx) acgt_decode[bit_array_get ((bitarr), ((int64_t)(idx))*2) + (bit_array_get ((bitarr), ((int64_t)(idx))*2 + 1) << 1)]
 
-extern void comp_ht_get_one_line (VBlockP vb);
-extern void comp_ht_calculate_columns (VBlockP vb);
+extern void comp_ht_piz_get_one_line (VBlockP vb);
+extern void comp_ht_piz_calculate_columns (VBlockP vb);
 
 #endif

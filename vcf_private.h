@@ -42,6 +42,8 @@ typedef struct VBlockVCF {
 typedef VBlockVCF *VBlockVCFP;
 
 // Samples stuff
+extern uint32_t vcf_num_samples; // ZIP
+extern uint32_t vcf_num_displayed_samples; // genocat with --samples
 extern void samples_digest_vcf_header (Buffer *vcf_header_buf);
 extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag_samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples

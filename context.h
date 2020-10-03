@@ -23,7 +23,6 @@
 #define WORD_INDEX_ONE_UP     -2 // the value is the one more than the previous value
 #define WORD_INDEX_EMPTY_SF   -3 // empty string
 #define WORD_INDEX_MISSING_SF -4 // structured item missing, remove preceding separator
-#define WORD_INDEX_SINGLETON  -5 // translated to SNIP_LOOKUP
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
 // We use characters that cannot appear in a snip - i.e. other than ASCII 32-127, \t (\x9) \n (\xA) \r (\xD)

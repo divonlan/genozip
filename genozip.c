@@ -198,13 +198,13 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     static bool first_file = true;
     static unsigned files_listed=0, files_ignored=0;
     static int64_t total_uncompressed_len=0, total_compressed_len=0;
-    char z_size_str[20], txt_size_str[20], num_lines_str[20], indiv_str[20];
+    char z_size_str[20], txt_size_str[20], num_lines_str[20];
 
     const unsigned FILENAME_WIDTH = 40;
 
-    const char *head_format = "\n%5s %11s %10s %10s %6s %s  %*s %s\n";
+    const char *head_format = "\n%11s %10s %10s %6s %s  %*s %s\n";
     const char *foot_format = "\nTotal:            %10s %10s %5.*fX\n";
-    const char *item_format = "%5s %11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
+    const char *item_format = "%11s %10s %10s %5.*fX  %s  %s%s%*s %s\n";
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
@@ -226,7 +226,7 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     }
 
     if (first_file) {
-        bufprintf (evb, &str_buf, head_format, "Indiv", "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
+        bufprintf (evb, &str_buf, head_format, "Records", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
         first_file = false;
     }
     
@@ -239,11 +239,10 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
 
     z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
     uint64_t txt_data_size, num_lines;
-    uint32_t num_samples;
     Md5Hash md5_hash_bound, license_hash, ref_file_md5;
     char created[FILE_METADATA_LEN];
     char ref_file_name[REF_FILENAME_LEN];
-    bool success = zfile_get_genozip_header (z_file, NULL, &txt_data_size, &num_samples, &num_lines, 
+    bool success = zfile_get_genozip_header (z_file, NULL, &txt_data_size, &num_lines, 
                                              &md5_hash_bound, created, FILE_METADATA_LEN, &license_hash,
                                              ref_file_name, REF_FILENAME_LEN, &ref_file_md5);
     if (!success) goto finish;
@@ -253,11 +252,10 @@ static void main_genols (const char *z_filename, bool finalize, const char *subd
     str_size (z_file->disk_size, z_size_str);
     str_size (txt_data_size, txt_size_str);
     str_uint_commas (num_lines, num_lines_str);
-    str_uint_commas (num_samples, indiv_str);
     
     // TODO: have an option to print ref_file_name and ref_file_md5
     
-    bufprintf (evb, &str_buf, item_format, indiv_str, num_lines_str, 
+    bufprintf (evb, &str_buf, item_format, num_lines_str, 
                z_size_str, txt_size_str, ratio < 100, ratio, 
                md5_display (md5_hash_bound),
                (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
@@ -536,7 +534,7 @@ static DataType main_get_file_dt (const char *filename)
         // case: we don't know yet what file type this is - we need to read the genozip header to determine
         if (dt == DT_NONE && filename) {
             File *genozip_file = file_open (filename, READ, Z_FILE, DT_NONE);
-            zfile_get_genozip_header (genozip_file, &dt, 0,0,0,0,0,0,0,0,0,0);
+            zfile_get_genozip_header (genozip_file, &dt,0,0,0,0,0,0,0,0,0);
             file_close (&genozip_file, false);
         }
     }

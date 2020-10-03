@@ -33,7 +33,7 @@ void vcf_vb_destroy_vb (VBlockVCF *vb)
 // free memory allocations that assume subsequent files will have the same number of samples.
 void vcf_vb_cleanup_memory (VBlock *vb_)
 {
-    global_vcf_num_samples = 0;
+    vcf_num_samples = 0;
 }
 
 
