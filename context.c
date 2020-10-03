@@ -68,10 +68,10 @@ void mtf_vb_1_lock (VBlockP vb)
 
 // ZIP: add a snip to the dictionary the first time it is encountered in the VCF file.
 // the dictionary will be written to GENOZIP and used to reconstruct the MTF during decompression
-typedef enum { DICT_VB, DICT_ZF, DICT_ZF_SINGLTON } DictType;
+typedef enum { DICT_VB, DICT_ZF, DICT_ZF_SINGLETON } DictType;
 static inline CharIndex mtf_insert_to_dict (VBlock *vb_of_dict, Context *ctx, DictType type, const char *snip, uint32_t snip_len)
 {
-    Buffer *dict = (type == DICT_ZF_SINGLTON) ? &ctx->ol_dict : &ctx->dict;
+    Buffer *dict = (type == DICT_ZF_SINGLETON) ? &ctx->ol_dict : &ctx->dict;
 
     static const char *buf_name[3] = { "contexts->dict", "zf_ctx->dict", "zf_ctx->ol_dict" };
     buf_alloc (vb_of_dict, dict, MAX ((dict->len + snip_len + 1), INITIAL_NUM_NODES * MIN (10, snip_len)), 
@@ -242,7 +242,7 @@ static WordIndex mtf_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
     // 1. we keep it in ol_mtf and the index in the node is negative to indicate that
     // 2. we insert it to ol_dict instead of dict - i.e. it doesn't get written the dict section
     // 3. we move it to the local section of this vb
-    // 4. we set the word_index of its mtf to be the word_index of the SNIP_LOOKUP_TEXT snip
+    // 4. we set the word_index of its mtf to be the word_index of the SNIP_LOOKUP snip
     bool is_singleton_in_vb = (count == 1 && (vb_ctx->ltype == LT_TEXT) && !(vb_ctx->inst & CTX_INST_NO_STONS)); // is singleton in this VB
 
     // attempt to get the node from the hash table
@@ -268,9 +268,9 @@ static WordIndex mtf_evaluate_snip_merge (VBlock *merging_vb, Context *zf_ctx, C
     *node = LASTENT (MtfNode, *mtf);
     memset (*node, 0, sizeof(MtfNode)); // safety
     (*node)->snip_len   = snip_len;
-    (*node)->char_index = mtf_insert_to_dict (evb, zf_ctx, (is_singleton_in_global ? DICT_ZF_SINGLTON : DICT_ZF), snip, snip_len);
+    (*node)->char_index = mtf_insert_to_dict (evb, zf_ctx, (is_singleton_in_global ? DICT_ZF_SINGLETON : DICT_ZF), snip, snip_len);
 
-    // case: vb singleton turns out to be a global singleton - we add it to local and return the SNIP_LOOKUP_TEXT node
+    // case: vb singleton turns out to be a global singleton - we add it to local and return the SNIP_LOOKUP node
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
     if (node_index < 0) {
         seg_add_to_local_text (merging_vb, vb_ctx, snip, snip_len, 0);

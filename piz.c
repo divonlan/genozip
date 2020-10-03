@@ -526,7 +526,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 {
     ARRAY (const unsigned, section_index, vb->z_section_headers);
     
-    uint32_t section_i = 1;
+    uint32_t section_i = pair_vb_i ? 0 : 1; // normally, we skip the VB header, but when uncompressing paired sections there is no VB header
     while (section_i < vb->z_section_headers.len) {
 
         if (section_i == vb->z_section_headers.len) break; // no more sections left

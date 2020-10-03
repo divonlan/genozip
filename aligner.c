@@ -267,6 +267,9 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     // case: we're the 2nd of the pair - store a delta if its small enough, or a lookup from local if not
     bool store_local = true;
     if (gpos_ctx->inst & CTX_INST_PAIR_LOCAL) {
+
+        ASSERT (buf_is_allocated (&gpos_ctx->pair), "Error in aligner_seg_seq vb_i=%u: expecting gpos_ctx->pair to be allocated", vb->vblock_i);
+        
         PosType pair_gpos = (PosType) BGEN32 (*ENT (uint32_t, gpos_ctx->pair, vb->line_i)); // same location, in the pair's local
         PosType gpos_delta = gpos - pair_gpos; 
 

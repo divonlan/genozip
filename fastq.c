@@ -60,28 +60,29 @@ static void fastq_get_optimized_desc_read_name (VBlockFAST *vb)
 void fastq_seg_initialize (VBlockFAST *vb)
 {
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-        vb->contexts[FASTQ_STRAND].ltype   = LT_BITMAP;
-        vb->contexts[FASTQ_STRAND].lcodec   = CODEC_NONE; // bz2 and lzma only make it bigger
+        vb->contexts[FASTQ_STRAND].ltype  = LT_BITMAP;
+        vb->contexts[FASTQ_STRAND].lcodec = CODEC_NONE; // bz2 and lzma only make it bigger
 
-        vb->contexts[FASTQ_GPOS].ltype     = LT_UINT32;
-        vb->contexts[FASTQ_GPOS].flags     = CTX_FL_STORE_INT;
-        vb->contexts[FASTQ_GPOS].lcodec     = CODEC_LZMA;
+        vb->contexts[FASTQ_GPOS].ltype    = LT_UINT32;
+        vb->contexts[FASTQ_GPOS].flags    = CTX_FL_STORE_INT;
+        vb->contexts[FASTQ_GPOS].lcodec   = CODEC_LZMA;
     }
 
     vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
 
     vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
-    vb->contexts[FASTQ_NONREF].lcodec   = flag_optimize_SEQ ? CODEC_LZMA : CODEC_ACGT; // ACGT is a lot faster, but ~5% less good
+    vb->contexts[FASTQ_NONREF].lcodec  = flag_optimize_SEQ ? CODEC_LZMA : CODEC_ACGT; // ACGT is a lot faster, but ~5% less good
 
     vb->contexts[FASTQ_QUAL].ltype     = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
     vb->contexts[FASTQ_QUAL].inst      = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
 
      if (flag_pair == PAIR_READ_2) {
-        vb->contexts[FASTQ_GPOS]  .inst  = CTX_INST_PAIR_LOCAL;
-        vb->contexts[FASTQ_STRAND].inst  = CTX_INST_PAIR_LOCAL; 
+        vb->contexts[FASTQ_GPOS]  .inst   = CTX_INST_PAIR_LOCAL;
+        vb->contexts[FASTQ_STRAND].inst   = CTX_INST_PAIR_LOCAL; 
         vb->contexts[FASTQ_STRAND].lcodec = CODEC_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. We set it explicitly to override the CODEC_NONE possibly inherited from the last vb of the previous bound file
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
+
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
     }
 
@@ -147,14 +148,14 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
     if (!sl) return false;
 
     // get num_lines from vb header
-    SectionHeaderVbHeader *vb_header = zfile_read_section_header (sl->offset, sizeof (SectionHeaderVbHeader));
-    ASSERT0 (vb_header, "Error in fastq_read_pair_1_data: failed to read vb_header of pair file");
-
+    SectionHeaderVbHeader *vb_header = zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, sizeof (SectionHeaderVbHeader), SEC_VB_HEADER);
     vb->pair_num_lines = BGEN32 (vb_header->num_lines);
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     sl++;
     buf_alloc (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers", 1); // room for section headers  
+
+    RESET_FLAG (flag_show_headers); // we're in zip mode, don't show pair headers being uncompressed
     while (sl->section_type == SEC_B250 || sl->section_type == SEC_LOCAL) {
         
         if (((dict_id_is_type_1 (sl->dict_id) || sl->dict_id.num == dict_id_fields[FASTQ_DESC]) && sl->section_type == SEC_B250) ||
@@ -169,6 +170,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
         
         sl++;
     }
+    RESTORE_FLAG (flag_show_headers);
 
     file_seek (z_file, save_offset, SEEK_SET, false); // restore
     z_file->disk_so_far = save_disk_so_far;

@@ -443,7 +443,7 @@ fallback:
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
-static inline Structured seg_initialize_compound_structured (VBlockP vb, DictId dict_id, bool type_1_items)
+static inline Structured seg_initialize_structured_array (VBlockP vb, DictId dict_id, bool type_1_items)
 {
     Structured st = (Structured){ .repeats = 1 };
 
@@ -478,7 +478,7 @@ void seg_compound_field (VBlock *vb,
     unsigned snip_len = 0;
     unsigned num_double_sep = 0;
 
-    Structured st = seg_initialize_compound_structured ((VBlockP)vb, field_ctx->dict_id, true); 
+    Structured st = seg_initialize_structured_array ((VBlockP)vb, field_ctx->dict_id, true); 
 
     // add each subfield to its dictionary - 2nd char is 0-9,a-z
     for (unsigned i=0; i <= field_len; i++) { // one more than field_len - to finalize the last subfield
@@ -524,6 +524,7 @@ void seg_compound_field (VBlock *vb,
                 // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
                 // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
                 // doesn't result in an error (TO DO: overcome this, bug 159)
+                // note: this can also happen if the there is no sf_ctx->pair do it being fully singletons and moved to local 
                 if (sf_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, sf_ctx->pair) &&
                     // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
                     // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
@@ -620,7 +621,7 @@ WordIndex seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsign
 // intended for simple arrays - just comma separators, no delta between lines or optimizations)
 WordIndex seg_hetero_array_field (VBlock *vb, DictId dict_id, const char *value, int value_len)
 {   
-    Structured st = seg_initialize_compound_structured (vb, dict_id, false);    
+    Structured st = seg_initialize_structured_array (vb, dict_id, false);    
 
     for (st.num_items=0; st.num_items < MAX_COMPOUND_COMPONENTS && value_len > 0; st.num_items++) { // value_len will be -1 after last number
 

@@ -405,8 +405,6 @@ int32_t zfile_read_section (File *file,
     ASSERT (header, "Error in zfile_read_section: Failed to read data from file %s while expecting section type %s: %s", 
             z_name, st_name(expected_sec_type), strerror (errno));
     
-    if (flag_show_headers) zfile_show_header (header, NULL);
-
     bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
 
     // SEC_REFERENCE is never encrypted when originating from a reference file, it is encrypted (if the file is encrypted) if it originates from REF_INTERNAL 
@@ -427,6 +425,8 @@ int32_t zfile_read_section (File *file,
 
     ASSERT (is_magical, "Error: corrupt data (magic is wrong) when attempting to read section %s of vblock_i=%u in file %s", 
             st_name (expected_sec_type), vb->vblock_i, z_name);
+
+    if (flag_show_headers) zfile_show_header (header, NULL);
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
@@ -459,17 +459,42 @@ int32_t zfile_read_section (File *file,
     return header_offset;
 }
 
-// Read one section header - NOT thread-safe, should only be called by the I/O thread
-void *zfile_read_section_header (uint64_t offset, uint32_t size)
+// Read one section header - returns the header in vb->compressed
+void *zfile_read_section_header (VBlockP vb, uint64_t offset, 
+                                 uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
+                                 unsigned header_size, SectionType expected_sec_type)
 {
     // get the uncompressed size from one of the headers - they are all the same size, and the reference file is never encrypted
     file_seek (z_file, offset, SEEK_SET, false);
 
-    static Buffer one_header_buf = EMPTY_BUFFER;
-    buf_alloc (evb, &one_header_buf, size, 4, "one_header_buf", 0);
-    one_header_buf.len = 0;
+    bool is_encrypted =  (z_file->data_type != DT_REF) && 
+                         (expected_sec_type != SEC_GENOZIP_HEADER) &&
+                         crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
+        
+    buf_alloc (evb, &vb->compressed, header_size, 4, "compressed", 0); 
+    vb->compressed.len = 0;
 
-    return zfile_read_from_disk (z_file, evb, &one_header_buf, size, false); 
+    SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size, false); 
+
+    ASSERT (header, "Error in zfile_read_section_header: Failed to read header of section type %s from file %s: %s", 
+            st_name(expected_sec_type), z_name, strerror (errno));
+
+    bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
+
+    // decrypt header 
+    if (is_encrypted) {
+        ASSERT (BGEN32 (header->magic) != GENOZIP_MAGIC, 
+                "Error in zfile_read_section_header: password provided, but file %s is not encrypted (sec_type=%s)", z_name, st_name (header->section_type));
+
+        crypt_do (vb, (uint8_t*)header, header_size, original_vb_i, expected_sec_type, true); 
+    
+        is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC; // update after decryption
+    }
+
+    ASSERT (is_magical, "Error in zfile_read_section_header: corrupt data (magic is wrong) when attempting to read header of section %s in file %s", 
+            st_name (expected_sec_type), z_name);
+
+    return header;
 }
 
 // PIZ

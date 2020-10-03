@@ -222,8 +222,7 @@ static inline bool sections_has_global_area_section (SectionType st)
 bool sections_has_reference(void)     { return sections_has_global_area_section (SEC_REFERENCE); }
 bool sections_has_random_access(void) { return sections_has_global_area_section (SEC_RANDOM_ACCESS); }
 
-// called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
-// NOT THREAD SAFE - can only be called by I/O thread
+// I/O thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
 void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
 {
     ASSERT0 (flag_reading_reference, "Error in sections_get_refhash_details: can only be called while reading reference");
@@ -232,7 +231,7 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
         SectionListEntry *sl = ENT (SectionListEntry, z_file->section_list_buf, i);
         if (sl->section_type == SEC_REF_HASH) {
 
-            SectionHeaderRefHash *header = zfile_read_section_header (sl->offset, sizeof (SectionHeaderRefHash));
+            SectionHeaderRefHash *header = zfile_read_section_header (evb, sl->offset, 0, sizeof (SectionHeaderRefHash), SEC_REF_HASH);
             if (num_layers) *num_layers = header->num_layers;
             if (base_layer_bits) *base_layer_bits = header->layer_bits + header->layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
             return;
