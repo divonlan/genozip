@@ -135,3 +135,4 @@ void vcf_piz_special_SVLEN (VBlock *vb, Context *ctx, const char *snip, unsigned
     unsigned str_len = str_int (value, str);
     RECONSTRUCT (str, str_len);
 }
+

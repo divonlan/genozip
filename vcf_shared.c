@@ -6,6 +6,7 @@
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
 // it means a block of lines from the text file. 
 
+#include <math.h>
 #include "vcf_private.h"
 
 unsigned vcf_vb_size (void) { return sizeof (VBlockVCF); }
@@ -35,5 +36,3 @@ void vcf_vb_cleanup_memory (VBlock *vb_)
 {
     vcf_num_samples = 0;
 }
-
-
