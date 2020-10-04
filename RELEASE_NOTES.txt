@@ -181,3 +181,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 7.0.3
 - Bug fixes
+
+7.0.4
+- Bug fixes
