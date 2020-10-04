@@ -757,7 +757,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
 
     uint32_t num_snips = BGEN32 (header->num_snips);
 
-    zfile_uncompress_section (vb, section_data, &fragment, "fragment", 0, SEC_DICT);
+    zfile_uncompress_section (vb, section_data, &fragment, "fragenogment", 0, SEC_DICT);
 
     // special treatment if this is GL - de-optimize
     //if (header->dict_id.num == dict_id_FORMAT_GL)

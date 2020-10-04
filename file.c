@@ -835,7 +835,7 @@ const char *ft_name (FileType ft)
 
 const char *file_viewer (const File *file)
 {
-    static const char *viewer[NUM_COMPRESSION_ALGS] = { 
+    static const char *viewer[NUM_CODECS] = { 
         /* none */ "cat", 
         /* gz   */ "gunzip -c", 
         /* bz2  */ "bzip2 -d -c", 
@@ -853,7 +853,7 @@ const char *file_viewer (const File *file)
 // PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
 const char *file_guess_original_filename (const File *file)
 {
-    static const char *codec_exts[NUM_COMPRESSION_ALGS] = CODEC_EXTS; 
+    static const char *codec_exts[NUM_CODECS] = CODEC_EXTS; 
 
     if (file->codec == CODEC_NONE) return file->name;
 

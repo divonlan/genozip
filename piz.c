@@ -796,7 +796,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
     if (!flag_unbind && !flag_reading_reference && !txt_file->file) file_open_txt (txt_file);
 
     // read and write txt header. in unbind mode this also opens txt_file
-    piz_successful = txtfile_genozip_to_txt_header (&original_file_digest);
+    piz_successful = txtfile_genozip_to_txt_header (NULL, &original_file_digest);
     
     ASSERT (piz_successful || !is_first_component, "Error: failed to read %s header in %s", dt_name (z_file->data_type), z_name);
 
@@ -844,7 +844,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
 
                 case SEC_TXT_HEADER: // 2nd+ txt header of a bound file
                     if (!flag_unbind) {
-                        txtfile_genozip_to_txt_header (NULL); // skip 2nd+ txt header if binding
+                        txtfile_genozip_to_txt_header (sl_ent, NULL); // skip 2nd+ txt header if unbinding
                         continue;
                     }
                     break; // eof if splitting

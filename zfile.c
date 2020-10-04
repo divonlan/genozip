@@ -30,10 +30,8 @@ bool is_v6_or_above=true;
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
-void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, char rw)
+void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, uint64_t offset, char rw)
 {
-    static const char *comp_names[NUM_COMPRESSION_ALGS] = CODEC_NAMES;
-
     if (flag_reading_reference) return; // don't show headers of reference file
     
     DictId dict_id = {0};
@@ -57,10 +55,10 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%c %-19s %*.*s %6s%-3s %6s%-3s %7s%-3s codec=%-4.4s vb=%-3u z_offset=%-6u txt_len=%-7u z_len=%-6u enc_len=%-6u magic=%8.8x\n",
-             rw, st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
-             header->flags ? "flags=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
-             comp_names[header->codec],
+    sprintf (str, "%c %-9"PRIu64" %-19s %*.*s %4s%-3s %6s%-3s %7s%-3s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-6u enc_len=%-6u mgc=%8.8x\n",
+             rw, offset, st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
+             header->flags ? "flg=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
+             codec_name (header->codec),
              BGEN32 (header->vblock_i), BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
              BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic));
 
@@ -417,10 +415,10 @@ int32_t zfile_read_section (File *file,
         is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC; // update after decryption
     }
 
-    ASSERT (is_magical, "Error: corrupt data (magic is wrong) when attempting to read section %s of vblock_i=%u in file %s", 
-            st_name (expected_sec_type), vb->vblock_i, z_name);
+    if (flag_show_headers) zfile_show_header (header, NULL, sl ? sl->offset : 0, 'R');
 
-    if (flag_show_headers) zfile_show_header (header, NULL, 'R');
+    ASSERT (is_magical, "Error in zfile_read_section: corrupt data (magic is wrong) when attempting to read section %s of vblock_i=%u component=%u in file %s", 
+            st_name (expected_sec_type), vb->vblock_i, z_file->num_txt_components_so_far, z_name);
 
     unsigned compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));

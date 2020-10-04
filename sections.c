@@ -17,8 +17,8 @@
 
 const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
 
-// ZIP only: create section list that goes into the genozip header, as we are creating the sections
-void sections_add_to_list (VBlock *vb, const SectionHeader *header)
+// ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
+uint64_t sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {
     DictId dict_id = DICT_ID_NONE;
 
@@ -65,6 +65,8 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
     ent->vblock_i         = BGEN32 (header->vblock_i); // big endian in header - convert back to native
     ent->dict_id          = dict_id;
     ent->offset           = offset;  // this is a partial offset (within d) - we will correct it later
+
+    return offset;
 }
 
 // Called by ZIP I/O thread. concatenates a vb or dictionary section list to the z_file section list - just before 

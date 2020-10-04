@@ -122,7 +122,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         header->codec = CODEC_BZ2;
 
 #   define NA  comp_compress_error
-    static Compressor compressors[NUM_COMPRESSION_ALGS] = { 
+    static Compressor compressors[NUM_CODECS] = { 
         comp_compress_none, NA, comp_compress_bzlib,  comp_compress_lzma, NA, NA, NA, NA, NA, NA, 
         comp_compress_lzma /* acgt */, comp_compress_non_acgt, 
         comp_compress_ht, comp_compress_lzma /* ht_index */, 
@@ -130,7 +130,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         NA, NA, NA, NA, NA, NA  };
 #   undef NA
 
-    ASSERT (header->codec < NUM_COMPRESSION_ALGS, "Error in comp_compress: unsupported section compressor=%u", header->codec);
+    ASSERT (header->codec < NUM_CODECS, "Error in comp_compress: unsupported section compressor=%u", header->codec);
 
     unsigned compressed_offset     = BGEN32 (header->compressed_offset);
     unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
@@ -228,13 +228,14 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         total_z_len = compressed_offset + data_compressed_len;
 
     // add section to the list - except for genozip header which we already added in zfile_compress_genozip_header()
+    uint64_t offset=0;
     if (header->section_type != SEC_GENOZIP_HEADER)
-        sections_add_to_list (vb, header);
+        offset = sections_add_to_list (vb, header);
 
     z_data->len += total_z_len;
 
     if (flag_show_headers) 
-        zfile_show_header (header, vb->vblock_i ? vb : NULL, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
+        zfile_show_header (header, vb->vblock_i ? vb : NULL, offset, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
 }
 
 void comp_uncompress (VBlock *vb, Codec codec, 
@@ -244,7 +245,7 @@ void comp_uncompress (VBlock *vb, Codec codec,
     ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
 
 #   define NA  comp_uncompress_error
-    static Uncompressor uncompressors[NUM_COMPRESSION_ALGS] = { 
+    static Uncompressor uncompressors[NUM_CODECS] = { 
         comp_uncompress_none, NA, comp_uncompress_bzlib,  comp_uncompress_lzma, NA, NA, NA, NA, NA, NA, 
         comp_uncompress_acgt, comp_uncompress_non_acgt, comp_uncompress_bzlib /* ht */, NA, NA, NA, NA, NA, NA, NA,
         NA, NA, NA, NA, NA, NA  };
@@ -253,6 +254,17 @@ void comp_uncompress (VBlock *vb, Codec codec,
     uncompressors[codec] (vb, compressed, compressed_len, uncompressed_data, uncompressed_len);
 
     comp_free_all (vb); // just in case
+}
+
+const char *codec_name (Codec codec)
+{
+    static const char *comp_names[NUM_CODECS] = CODEC_NAMES;
+
+    if (codec >=0 && codec < NUM_CODECS) 
+        return comp_names[codec];
+
+    else
+        return "BAD!";    
 }
 
 /*

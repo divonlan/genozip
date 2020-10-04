@@ -260,7 +260,7 @@ typedef struct RefContig {
 #pragma pack()
 
 // zip stuff
-extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
+extern uint64_t sections_add_to_list (VBlockP vb, const SectionHeader *header);
 extern void sections_list_concat (VBlockP vb, BufferP section_list_buf);
 
 // piz stuff

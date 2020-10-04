@@ -159,7 +159,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
     CODEC_BGZ=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  // external compressors
 
-    NUM_COMPRESSION_ALGS
+    NUM_CODECS
 } Codec; 
 
 // aligned with Codec ; used in --show-header (max 4 chars)

@@ -548,13 +548,13 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 }
 
 // PIZ: returns offset of header within data, EOF if end of file
-bool txtfile_genozip_to_txt_header (Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
+bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest) // NULL if we're just skipped this header (2nd+ header in bound file)
 {
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
     static Buffer header_section = EMPTY_BUFFER;
 
     int header_offset = zfile_read_section (z_file, evb, 0, &header_section, "header_section", 
-                                            sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, NULL);
+                                            sizeof(SectionHeaderTxtHeader), SEC_TXT_HEADER, sl);
     if (header_offset == EOF) {
         buf_free (&header_section);
         return false; // empty file (or in case of unbind mode - no more components) - not an error

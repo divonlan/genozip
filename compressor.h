@@ -18,6 +18,8 @@ extern void comp_uncompress (VBlockP vb, Codec codec,
                              const char *compressed_data, uint32_t compressed_data_len,
                              char *uncompressed_data, uint64_t uncompressed_len);
 
+extern const char *codec_name (Codec codec);
+
 // a hacky addition to bzip2
 extern uint64_t BZ2_consumed (void *bz_file);
 

@@ -249,10 +249,17 @@ rm -f td/*.genozip
 ./genozip $1 -f --md5 -e $GRCh38 --pair -p 1234 td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.bz2 -o td/pair.genozip || exit 1
 ./genounzip $1 -t --password 1234 -e $GRCh38 td/pair.genozip || exit 1
 
-test_header "Testing paired FASTQ with --REFERENCE"
+test_header "Testing 4 paired FASTQ with --REFERENCE"
 rm -f td/*.genozip
-./genozip $1 --force -m2E $GRCh38 --output td/pair.genozip td/test.divon-R1.100K.fq.bz2 td/test.divon-R2.100K.fq.bz2 || exit 1
+file1=td/test.divon-R1.100K.fq.bz2
+file2=td/test.divon-R2.100K.fq.bz2
+file3=copy.$(basename $file1)
+file4=copy.$(basename $file2)
+cp -f file1 file3
+cp -f file2 file4
+./genozip $1 --force -m2E $GRCh38 --output $output $file1 $file2 $file3 $file4 || exit 1
 ./genounzip $1 -t td/pair.genozip || exit 1
+rm $file3 $file4 $output
 
 test_header "Testing multiple bound VCF with --reference (hg19), and unbind"
 rm -f td/*.genozip
