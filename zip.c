@@ -25,6 +25,7 @@
 #include "progress.h"
 #include "mutex.h"
 #include "fastq.h"
+#include "stats.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)
 {
@@ -259,11 +260,16 @@ static void zip_write_global_area (Dispatcher dispatcher, Md5Hash single_compone
 
     if (store_ref) 
         random_access_compress (&ref_stored_ra, SEC_REF_RAND_ACC, flag_show_ref_index ? "Reference random-access index contents (result of --show-ref-index)" : NULL);
-    
+
+    // flush to disk before stats
+    zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
+
+    stats_compress();
+
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header (single_component_md5);    
 
-    // output to disk random access and genozip header sections to disk
+    // output to disk stats and genozip header sections to disk
     zip_output_processed_vb (evb, NULL, false, PD_VBLOCK_DATA);  
 }
 
@@ -351,7 +357,7 @@ void zip_dispatcher (const char *txt_basename, bool is_last_file)
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
-    dict_id_initialize(z_file->data_type);
+    dict_id_initialize (z_file->data_type);
 
     uint32_t txt_line_i = 1; // the next line to be read (first line = 1)
     

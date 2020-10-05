@@ -184,3 +184,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 7.0.4
 - Bug fixes
+
+7.0.5
+- Add --stats and --STATS to genocat/genounzip by introducing a new section SEC_STATS ; remove limitation of only one file when -w or -W

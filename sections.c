@@ -45,7 +45,7 @@ uint64_t sections_add_to_list (VBlock *vb, const SectionHeader *header)
         name   = "z_file->section_list_dict_buf";
         offset = z_file->dict_data.len;
     }
-    else if (!vb->vblock_i) {  // case 2 - vcf header, random access, genotype header
+    else if (!vb->vblock_i) {  // case 2 - txt header, random access etc
         buf    = &z_file->section_list_buf;
         alc_vb = evb; // z_file buffer goes to evb
         name   = "z_file->section_list_buf";
@@ -316,14 +316,14 @@ const char *st_name(SectionType sec_type)
 }
 
 // called by PIZ I/O
-SectionListEntry *sections_get_offset_first_section_of_type (SectionType st, bool soft_fail)
+SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail)
 {
     ARRAY (SectionListEntry, sl, z_file->section_list_buf);
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++)
         if (sl[i].section_type == st) return &sl[i];
 
-    ASSERT (soft_fail, "Error in sections_get_offset_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
+    ASSERT (soft_fail, "Error in sections_get_first_section_of_type: Cannot find section_type=%s in z_file", st_name (st));
 
     return NULL;
 }

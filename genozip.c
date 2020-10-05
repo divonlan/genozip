@@ -460,7 +460,7 @@ static void main_genozip (const char *txt_filename,
     txt_file->basename = file_basename (txt_filename, false, FILENAME_STDIN, NULL, 0);
     zip_dispatcher (txt_file->basename, is_last_file);
 
-    if (flag_show_stats && is_last_file) stats_show_stats();
+    if (flag_show_stats && (!flag_bind || is_last_file)) stats_display();
 
     bool remove_txt_file = z_file && flag_replace && txt_filename;
 
@@ -714,18 +714,18 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                    _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _pe, _fa,          _rg, _sR, _sC, _rA, _rS, _me, _sA, _sI, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                                  _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                             _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT,          _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                    _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                   _st, _sm,                                 _dm,                                                                                                                                            _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _pe, _fa,          _rg, _sR, _sC, _rA, _rS, _me, _sA, _sI, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                             _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                    _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                            _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[] = { // same order as ExeType
             "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2uz",  // genozip
-            "czfhLqQt^V@:uo:p:me:",                  // genounzip
+            "czfhLqQt^V@:uo:p:me:wW",                // genounzip
             "hLVp:qf",                               // genols
-            "hLV@:p:qQ1r:s:H1Go:fg:e:E:"             // genocat
+            "hLV@:p:qQ1r:s:H1Go:fg:e:E:wW"           // genocat
         };
 
         int option_index = -1;
@@ -915,8 +915,6 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
                              (flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
                               flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num ||
                               flag_show_reference || flag_show_ref_contigs || flag_show_ref_index || flag_show_ref_hash || flag_show_ref_alts || flag_show_ref_seq);
-
-    ASSINP (num_files <= 1 || flag_bind || !flag_show_stats, "%s: --show-stats can only work on one file at time", global_cmd);
 }
 
 void TEST()

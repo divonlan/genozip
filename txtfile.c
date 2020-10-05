@@ -511,7 +511,7 @@ void txtfile_header_initialize(void)
     vcf_header_initialize(); // we don't yet know the data type, but we initialize the VCF stuff just in case, no harm.
 }
 
-// ZIP: reads VCF or SAM header and writes its compressed form to the GENOZIP file
+// ZIP: reads txt header and writes its compressed form to the GENOZIP file
 bool txtfile_header_to_genozip (uint32_t *txt_line_i)
 {    
     Md5Hash header_md5 = MD5HASH_NONE;
@@ -536,7 +536,9 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     // header contains the data about the file
     if (z_file && !flag_test_seg) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
-    last_txt_header_len = evb->txt_data.len;
+    // for stats: combined length of txt headers in this bound file, or only one file if not bound
+    if (!flag_bind) last_txt_header_len=0;
+    last_txt_header_len += evb->txt_data.len; 
 
     z_file->num_txt_components_so_far++; // when compressing
 

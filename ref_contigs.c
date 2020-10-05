@@ -171,7 +171,7 @@ void ref_contigs_sort_chroms (void)
 // read and uncompress a contigs section (when pizzing the reference file or pizzing a data file with a stored reference)
 void ref_contigs_load_contigs (void)
 {
-    SectionListEntry *sl = sections_get_offset_first_section_of_type (SEC_REF_CONTIGS, false);
+    SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, false);
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_CONTIGS, sl);
 
     zfile_uncompress_section (evb, evb->z_data.data, &loaded_contigs, "loaded_contigs", 0, SEC_REF_CONTIGS);

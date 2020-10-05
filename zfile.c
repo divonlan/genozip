@@ -704,7 +704,7 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionListEntry));
-    header.h.codec   = CODEC_BZ2;
+    header.h.codec                 = CODEC_BZ2;
     header.h.flags                 = ((flag_reference == REF_INTERNAL ? GENOZIP_FL_REF_INTERNAL : 0) |
                                       (flag_ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0) );
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;

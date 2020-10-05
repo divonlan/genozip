@@ -27,6 +27,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_B250            = 11, 
     SEC_LOCAL           = 12, 
     SEC_ALT_CHROMS      = 13,
+    SEC_STATS           = 14,
 
     NUM_SEC_TYPES // fake section for counting
 } SectionType;
@@ -47,6 +48,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_B250"},              \
     {"SEC_LOCAL"},             \
     {"SEC_ALT_CHROMS"},        \
+    {"SEC_STATS"},             \
 }
 
 // Section headers - big endian
@@ -270,7 +272,7 @@ extern SectionType sections_peek (uint32_t cursor);
 extern uint32_t sections_count_sections (SectionType st);
 
 extern bool sections_has_more_components(void);
-extern SectionListEntry *sections_get_offset_first_section_of_type (SectionType st, bool soft_fail);
+extern SectionListEntry *sections_get_first_section_of_type (SectionType st, bool soft_fail);
 extern SectionListEntry *sections_vb_first (uint32_t vb_i, bool soft_fail);
 extern bool sections_seek_to (SectionType st, bool first);
 extern void sections_get_prev_file_vb_i (const SectionListEntry *sl, uint32_t *prev_file_first_vb_i, uint32_t *prev_file_last_vb_i);

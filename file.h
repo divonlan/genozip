@@ -274,6 +274,9 @@ typedef struct File {
     uint32_t sl_cursor, sl_dir_cursor; // PIZ: next index into section_list for searching for sections
     uint32_t num_txt_components_so_far;
 
+    // stats strings (z_file only)
+    Buffer stats_buf_1, stats_buf_2;
+
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;
 

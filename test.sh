@@ -255,18 +255,18 @@ file1=td/test.divon-R1.100K.fq.bz2
 file2=td/test.divon-R2.100K.fq.bz2
 file3=copy.$(basename $file1)
 file4=copy.$(basename $file2)
-cp -f file1 file3
-cp -f file2 file4
+cp -f $file1 $file3
+cp -f $file2 $file4
 ./genozip $1 --force -m2E $GRCh38 --output $output $file1 $file2 $file3 $file4 || exit 1
-./genounzip $1 -t td/pair.genozip || exit 1
+./genounzip $1 -t $output || exit 1
 rm $file3 $file4 $output
 
 test_header "Testing multiple bound VCF with --reference (hg19), and unbind"
 rm -f td/*.genozip
 file1=copy1.test-file.vcf
 file2=copy2.test-file.vcf
-cp td/test.GFX0241869.filtered.snp.vcf $file1
-cp td/test.GFX0241869.filtered.snp.vcf $file2
+cp -f td/test.GFX0241869.filtered.snp.vcf $file1
+cp -f td/test.GFX0241869.filtered.snp.vcf $file2
 ./genozip $1 -f --md5 --reference $hg19 $file1 $file2 --output $output || exit 1
 ./genounzip $1 -t -e $hg19 --unbind $output || exit 1
 rm -f $file1 $file2 $output

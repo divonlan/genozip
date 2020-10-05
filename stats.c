@@ -13,6 +13,7 @@
 #include "vblock.h"
 #include "txtfile.h"
 #include "reference.h"
+#include "zfile.h"
 
 static int *count_per_section = NULL;
 
@@ -20,7 +21,7 @@ static int *count_per_section = NULL;
 static Buffer bound_txt_names = EMPTY_BUFFER;
 
 #define OVERHEAD_SEC_VB_HDR      -1
-#define OVERHEAD_SEC_GENOZIP_HDR -2
+#define OVERHEAD_SEC_ALIASES     -2
 #define OVERHEAD_SEC_TXT_HDR     -3
 #define OVERHEAD_SEC_RA_INDEX    -4
 #define OVERHEAD_SEC_REFERENCE   -5 // used only for REF_EXT_STORE
@@ -32,14 +33,13 @@ static Buffer bound_txt_names = EMPTY_BUFFER;
 static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size)
 {
-    if (!count_per_section) count_per_section = calloc (z_file->section_list_buf.len, sizeof (int));
-
     *dict_compressed_size = *b250_compressed_size = *local_compressed_size = 0;
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
 
         SectionListEntry *section = ENT (SectionListEntry, z_file->section_list_buf, i);
-        int64_t sec_size = (section+1)->offset - section->offset;
+        int64_t after_sec = (i == z_file->section_list_buf.len - 1) ? z_file->disk_so_far : (section+1)->offset;
+        int64_t sec_size = after_sec - section->offset;
 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
         
@@ -66,40 +66,24 @@ static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_B250)
             *b250_compressed_size += sec_size;
 
-        else if (section->dict_id.num == dict_id.num && section->section_type == SEC_LOCAL)
+        else if ((section->dict_id.num == dict_id.num && section->section_type == SEC_LOCAL) ||
+                 (section->section_type == SEC_VB_HEADER       && overhead_sec == OVERHEAD_SEC_VB_HDR) ||
+                 (section->section_type == SEC_DICT_ID_ALIASES && overhead_sec == OVERHEAD_SEC_ALIASES) ||
+                 (section->section_type == SEC_REF_CONTIGS     && overhead_sec == OVERHEAD_SEC_REF_CONTIGS) ||
+                 (section->section_type == SEC_ALT_CHROMS      && overhead_sec == OVERHEAD_SEC_ALT_CHROMS) ||
+                 (section->section_type == SEC_REF_HASH        && overhead_sec == OVERHEAD_SEC_REF_HASH) ||
+                 (section->section_type == SEC_TXT_HEADER      && overhead_sec == OVERHEAD_SEC_TXT_HDR) ||
+                 (section->section_type == SEC_RANDOM_ACCESS   && overhead_sec == OVERHEAD_SEC_RA_INDEX) ||
+                 (section->section_type == SEC_REF_RAND_ACC    && overhead_sec == OVERHEAD_SEC_RA_INDEX))
             *local_compressed_size += sec_size;
-
-        else if (section->section_type == SEC_VB_HEADER && overhead_sec == OVERHEAD_SEC_VB_HDR)
-            *local_compressed_size += sec_size;
-
-        else if (section->section_type == SEC_GENOZIP_HEADER && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
-            *local_compressed_size += z_file->disk_size - section->offset;
-
-        else if (section->section_type == SEC_DICT_ID_ALIASES && overhead_sec == OVERHEAD_SEC_GENOZIP_HDR)
-            *local_compressed_size += sec_size;
-
-        else if (section->section_type == SEC_REF_CONTIGS && overhead_sec == OVERHEAD_SEC_REF_CONTIGS)
-            *local_compressed_size += sec_size;
-
-        else if (section->section_type == SEC_ALT_CHROMS && overhead_sec == OVERHEAD_SEC_ALT_CHROMS)
-            *local_compressed_size += sec_size;
-
-        else if (section->section_type == SEC_REF_HASH && overhead_sec == OVERHEAD_SEC_REF_HASH)
-            *local_compressed_size += sec_size;
-
-        else if (section->section_type == SEC_TXT_HEADER && overhead_sec == OVERHEAD_SEC_TXT_HDR)
-            *local_compressed_size += sec_size;
-
-        else if ((section->section_type == SEC_RANDOM_ACCESS || section->section_type == SEC_REF_RAND_ACC) && overhead_sec == OVERHEAD_SEC_RA_INDEX)
-            *local_compressed_size += sec_size;
-                    
+             
         else count_per_section[i]--; // acually... not count_per_section!
     }
 }
 
 static void stats_check_count (uint64_t all_comp_total)
 {
-    if (all_comp_total == z_file->disk_size) return; // all good
+    if (all_comp_total == z_file->disk_so_far) return; // all good
 
     ARRAY (SectionListEntry, sections, z_file->section_list_buf);
 
@@ -111,32 +95,33 @@ static void stats_check_count (uint64_t all_comp_total)
 
     char s1[20], s2[20];
     ASSERTW (false, "Hmm... incorrect calculation for GENOZIP sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             str_uint_commas (all_comp_total, s1), str_uint_commas (z_file->disk_size, s2), (int32_t)(z_file->disk_size - all_comp_total));
+             str_uint_commas (all_comp_total, s1), str_uint_commas (z_file->disk_so_far, s2), (int32_t)(z_file->disk_so_far - all_comp_total));
 }
 
-static void stats_show_file_metadata (void)
+static void stats_show_file_metadata (Buffer *buf)
 {
-    fprintf (stderr, "\n\n");
-    if (txt_file->name) fprintf (stderr, "%s file(s): %.*s\n", dt_name (z_file->data_type), (int)bound_txt_names.len, bound_txt_names.data);
+    buf_add (buf, "\n\n", 2);
+    if (txt_file->name) bufprintf (evb, buf, "%s file(s): %.*s\n", dt_name (z_file->data_type), (int)bound_txt_names.len, bound_txt_names.data);
     
-    if (flag_reference == REF_INTERNAL && z_file->data_type == DT_SAM)
-        fprintf (stderr, "Reference: Internal ('SEQ' line: 'comp dict'=stored reference, 'comp 250'=bitmap, 'comp local'=non-refereance bases)\n");
+    if (flag_reference == REF_INTERNAL && z_file->data_type == DT_SAM) {
+        bufprintf (evb, buf, "Reference: Internal ('SEQ' line: 'comp dict'=stored reference, 'comp 250'=bitmap, 'comp local'=non-refereance bases)%s\n", "");
+    }
     else if (flag_reference == REF_EXTERNAL) {
         if (z_file->data_type == DT_SAM)
-            fprintf (stderr, "Reference: %s ('SEQ' line: 'comp 250'=bitmap, 'comp local'=non-refereance bases)\n", ref_filename);
+            bufprintf (evb, buf, "Reference: %s ('SEQ' line: 'comp 250'=bitmap, 'comp local'=non-refereance bases)\n", ref_filename)
         else
-            fprintf (stderr, "Reference: %s (not stored in genozip file)\n", ref_filename);
+            bufprintf (evb, buf, "Reference: %s (not stored in genozip file)\n", ref_filename);
     }
     else if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE)
-        fprintf (stderr, "Reference: %s (size appears in 'Reference' line)\n", ref_filename);
+        bufprintf (evb, buf, "Reference: %s (size appears in 'Reference' line)\n", ref_filename);
 
     char ls[30];
     if (z_file->data_type == DT_VCF) 
-        fprintf (stderr, "Samples: %u   ", vcf_header_get_num_samples());
+        bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
 
-    fprintf (stderr, "%s: %s   Dictionaries: %u   Vblocks: %u   Sections: %u\n", 
-                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_contexts, 
-                z_file->num_vbs, (uint32_t)z_file->section_list_buf.len);
+    bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u   Sections: %u\n", 
+               DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_contexts, 
+               z_file->num_vbs, (uint32_t)z_file->section_list_buf.len);
 }
 
 typedef struct {
@@ -152,15 +137,22 @@ static int stats_sort_by_total_comp_size(const void *a, const void *b)
     return (((StatsByLine*)b)->total_comp_size > ((StatsByLine*)a)->total_comp_size) ? 1 : -1; // use comparison (>) and not minus (-) as the retun value is only 32 bit
 }
 
-void stats_show_stats (void)
+// generate the stats text - all sections except genozip header and the stats section itself 
+void stats_compress (void)
 {
-    stats_show_file_metadata();
+    buf_alloc (evb, &z_file->stats_buf_1, 50000, 1, "z_file->stats_buf_1", 0); // should be more than enough
+    buf_alloc (evb, &z_file->stats_buf_2, 20000, 1, "z_file->stats_buf_2", 0); 
+
+    stats_show_file_metadata(&z_file->stats_buf_1);
+    stats_show_file_metadata(&z_file->stats_buf_2);
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_comp_total=0, all_txt=0;
 
     //prepare data
     StatsByLine sbl[MAX_DICTS+50], *s = sbl;
     memset (sbl, 0, sizeof(sbl));
+
+    count_per_section = calloc (z_file->section_list_buf.len, sizeof (int));
 
     for (int i=LAST_OVERHEAD; i < (int)z_file->num_contexts; i++) { 
 
@@ -172,7 +164,7 @@ void stats_show_stats (void)
 
         s->total_comp_size = dict_compressed_size + b250_compressed_size + local_compressed_size;
 
-        ASSERTW0 (s->total_comp_size >= 0, "Hmm... s->total_comp_size is negative");
+        ASSERTW (s->total_comp_size >= 0, "Hmm... s->total_comp_size=%"PRId64" is negative for overhead=%d", s->total_comp_size, i);
 
         if (ctx && !ctx->mtf_i.len && !ctx->txt_len && !ctx->b250.len && !s->total_comp_size) continue;
 
@@ -190,7 +182,7 @@ void stats_show_stats (void)
 
         /* Name         */ 
         if (ctx)                              strcpy (s->name, ctx->name); 
-        else if (i==OVERHEAD_SEC_GENOZIP_HDR) strcpy (s->name, "genozip hdr");
+        else if (i==OVERHEAD_SEC_ALIASES)     strcpy (s->name, "aliases");
         else if (i==OVERHEAD_SEC_VB_HDR)      strcpy (s->name, "VBlock hdrs");
         else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
         else if (i==OVERHEAD_SEC_RA_INDEX)    strcpy (s->name, "--regions index");
@@ -226,7 +218,7 @@ void stats_show_stats (void)
         /* comp total     */ str_size (s->total_comp_size, s->comp_total);
         /* comp ratio     */ s->comp_ratio = (double)txt_len / (double)s->total_comp_size;
         /* % of txt       */ s->pc_txt     = 100.0 * (double)txt_len / (double)z_file->txt_data_so_far_bind;
-        /* % of genozip   */ s->pc_genozip = 100.0 * (double)s->total_comp_size / (double)z_file->disk_size;
+        /* % of genozip   */ s->pc_genozip = 100.0 * (double)s->total_comp_size / (double)z_file->disk_so_far;
 
         s++;
     }
@@ -235,14 +227,12 @@ void stats_show_stats (void)
     // sort by total compressed size
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_total_comp_size);
 
-    fprintf (stderr, "\nSections (sorted by %% of genozip file):\n");
-    if (flag_show_stats == 1) {
-        fprintf (stderr, "NAME                  TXT      %%       ZIP      %%   RATIO\n");
-    }
-    else {
-        fprintf (stderr, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  \n");
-        fprintf (stderr, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
-    }
+    bufprintf (evb, &z_file->stats_buf_1, "\nSections (sorted by %% of genozip file):%s\n", "");
+    bufprintf (evb, &z_file->stats_buf_1, "NAME                  TXT      %%       ZIP      %%   RATIO%s\n", "");
+
+    bufprintf (evb, &z_file->stats_buf_2, "\nSections (sorted by %% of genozip file):%s\n", "");
+    bufprintf (evb, &z_file->stats_buf_2, "did_i Name            Type            #Words  Snips-(%% of #Words)        Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
+    bufprintf (evb, &z_file->stats_buf_2, "                                     in file   Dict  Local   Both         Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
 
     for (uint32_t i=0; i < num_stats; i++) { // don't show primary fields as they are already showed above
 
@@ -250,44 +240,79 @@ void stats_show_stats (void)
         if (!s->total_comp_size) continue;
 
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
-        if (flag_show_stats == 1) {
-            fprintf (stderr, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                     s->name, s->txt, s->pc_txt, s->comp_total, s->pc_genozip, s->comp_ratio);
-        }
-        else {
-            fprintf (stderr, "%-2.2s    %-15.15s %-6.6s %15s  %4.*f%%  %4.*f%%  %4.*f%% %12s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-                     s->did_i, s->name, s->type, s->words, 
-                     PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
-                     s->hash, s->pc_hash_occupancy, // Up to here - these don't appear in the total
-                     s->uncomp_dict, s->comp_dict, s->comp_b250, s->comp_data, s->comp_total, s->txt, s->comp_ratio, s->pc_txt, s->pc_genozip);
-        }
+        bufprintf (evb, &z_file->stats_buf_1, "%-15.15s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                   s->name, s->txt, s->pc_txt, s->comp_total, s->pc_genozip, s->comp_ratio);
+
+        bufprintf (evb, &z_file->stats_buf_2, "%-2.2s    %-15.15s %-6.6s %15s  %4.*f%%  %4.*f%%  %4.*f%% %12s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+                    s->did_i, s->name, s->type, s->words, 
+                    PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
+                    s->hash, s->pc_hash_occupancy, // Up to here - these don't appear in the total
+                    s->uncomp_dict, s->comp_dict, s->comp_b250, s->comp_data, s->comp_total, s->txt, s->comp_ratio, s->pc_txt, s->pc_genozip);
     }
 
     double all_comp_ratio = (double)all_txt / (double)all_comp_total;
     double all_pc_txt     = 100.0 * (double)all_txt        / (double)z_file->txt_data_so_far_bind;
-    double all_pc_genozip = 100.0 * (double)all_comp_total / (double)z_file->disk_size;
+    double all_pc_genozip = 100.0 * (double)all_comp_total / (double)z_file->disk_so_far;
     
     char s1[20], s2[20], s3[20], s4[20], s5[20], s6[20];
-    if (flag_show_stats == 1) {
-        fprintf (stderr, "TOTAL           "
-                    "%9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                    str_size (all_txt, s6), all_pc_txt, str_size (all_comp_total, s5), all_pc_genozip, all_comp_ratio);
-    }
-    else {
-        fprintf (stderr, "TOTAL                                                                               "
-                    "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-                    str_size (all_uncomp_dict, s1), str_size (all_comp_dict, s2),  str_size (all_comp_b250, s3), 
-                    str_size (all_comp_data, s4),   str_size (all_comp_total, s5), str_size (all_txt, s6), 
-                    all_comp_ratio, all_pc_txt, all_pc_genozip);
-    }
-    stats_check_count(all_comp_total);
 
-    // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_size is 
+    bufprintf (evb, &z_file->stats_buf_1, "TOTAL           "
+                "%9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                str_size (all_txt, s6), all_pc_txt, str_size (all_comp_total, s5), all_pc_genozip, all_comp_ratio);
+
+    bufprintf (evb, &z_file->stats_buf_2, "TOTAL                                                                               "
+                "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+                str_size (all_uncomp_dict, s1), str_size (all_comp_dict, s2),  str_size (all_comp_b250, s3), 
+                str_size (all_comp_data, s4),   str_size (all_comp_total, s5), str_size (all_txt, s6), 
+                all_comp_ratio, all_pc_txt, all_pc_genozip);
+
+    stats_check_count (all_comp_total);
+
+    // note: we use txt_data_so_far_single and not txt_data_size_single, because the latter has estimated size if disk_so_far is 
     // missing, while txt_data_so_far_single is what was actually processed
     ASSERTW (all_txt == z_file->txt_data_so_far_bind || flag_optimize || flag_make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_uint_commas (all_txt, s1), str_uint_commas (z_file->txt_data_so_far_bind, s2), 
              (int32_t)(z_file->txt_data_so_far_bind - all_txt)); 
+
+    zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf_1);
+    zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf_2);
+
+    FREE (count_per_section);
+}
+
+void stats_display (void)
+{
+    Buffer *buf = flag_show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2;
+
+    if (!buf_is_allocated (buf)) return; // no stats available
+
+    buf_print (buf , false);
+
+    SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, false);
+
+    if (z_file->disk_size < (1<<20)) { // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
+        char s[20];
+        // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 2 sections in the file - since stats text is generated before these sections are compressed
+        printf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (z_file->disk_size - sl->offset, s));
+    }
+
+    printf ("\n");
+}
+
+void stats_read_and_display (void)
+{
+    SectionListEntry *sl = sections_get_first_section_of_type (SEC_STATS, true);
+    if (!sl) return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)
+
+    // read and uncompress the requested stats section
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_STATS, sl + (flag_show_stats==2));
+    zfile_uncompress_section (evb, evb->z_data.data, flag_show_stats == 1 ? &z_file->stats_buf_1 : &z_file->stats_buf_2, "z_file->stats_buf", 0, SEC_STATS);
+    buf_free (&evb->z_data);
+    
+    stats_display();
+
+    if (exe_type == EXE_GENOCAT) exit_ok; // if this is genocat - we're done
 }
 
 // concatenate txt names of bound files so we can show them all

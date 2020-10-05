@@ -62,7 +62,7 @@ void ref_alt_chroms_compress (void)
 
 void ref_alt_chroms_load (void)
 {
-    SectionListEntry *sl = sections_get_offset_first_section_of_type (SEC_ALT_CHROMS, true);
+    SectionListEntry *sl = sections_get_first_section_of_type (SEC_ALT_CHROMS, true);
     if (!sl) return; // we don't have alternate chroms
 
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_ALT_CHROMS, sl);
