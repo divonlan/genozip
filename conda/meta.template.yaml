@@ -40,6 +40,7 @@ requirements:
   run:
     - {{native}}gcc-libs         # [win]
     - bzip2
+    - curl
 
 test:
 #  source_files: 
