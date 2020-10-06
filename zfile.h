@@ -62,6 +62,4 @@ extern void zfile_update_compressed_vb_header (VBlockP vb, uint32_t vcf_first_li
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif
 
-extern bool is_v6_or_above;
-
 #endif

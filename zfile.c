@@ -26,8 +26,6 @@
 #include "dict_id.h"
 #include "reference.h"
 
-bool is_v6_or_above=true;
-
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
 void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, uint64_t offset, char rw)
@@ -623,10 +621,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     z_file->genozip_version   = header->genozip_version;
     z_file->flags             = header->h.flags;
     if (digest) *digest       = header->md5_hash_bound; 
-    
-    // global bools to help testing
-    is_v6_or_above = (z_file->genozip_version >= 6);
-         
+             
     zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
     z_file->section_list_buf.len /= sizeof (SectionListEntry); // fix len
     BGEN_sections_list();

@@ -14,6 +14,7 @@
 #include "txtfile.h"
 #include "reference.h"
 #include "zfile.h"
+#include "version.h"
 
 static int *count_per_section = NULL;
 
@@ -100,8 +101,11 @@ static void stats_check_count (uint64_t all_comp_total)
 
 static void stats_show_file_metadata (Buffer *buf)
 {
-    buf_add (buf, "\n\n", 2);
-    if (txt_file->name) bufprintf (evb, buf, "%s file(s): %.*s\n", dt_name (z_file->data_type), (int)bound_txt_names.len, bound_txt_names.data);
+    bufprintf (evb, buf, "%s", "\n\n");
+    if (txt_file->name) 
+        bufprintf (evb, buf, "%s file%s: %.*s\n", dt_name (z_file->data_type), 
+                   memchr (bound_txt_names.data, ' ', bound_txt_names.len) ? "s" : "", // a space separator indicates more than one file
+                   (int)bound_txt_names.len, bound_txt_names.data);
     
     if (flag_reference == REF_INTERNAL && z_file->data_type == DT_SAM) {
         bufprintf (evb, buf, "Reference: Internal ('SEQ' line: 'comp dict'=stored reference, 'comp 250'=bitmap, 'comp local'=non-refereance bases)%s\n", "");
@@ -122,6 +126,11 @@ static void stats_show_file_metadata (Buffer *buf)
     bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u   Sections: %u\n", 
                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines, ls), z_file->num_contexts, 
                z_file->num_vbs, (uint32_t)z_file->section_list_buf.len);
+
+    char timestr[100];
+    time_t now = time (NULL);
+    strftime (timestr, 100, "%Y-%m-%d %H:%M:%S", gmtime (&now));
+    bufprintf (evb, buf, "Genozip version: %s Date compressed: %s UTC\n", GENOZIP_CODE_VERSION, timestr);
 }
 
 typedef struct {
@@ -140,11 +149,8 @@ static int stats_sort_by_total_comp_size(const void *a, const void *b)
 // generate the stats text - all sections except genozip header and the stats section itself 
 void stats_compress (void)
 {
-    buf_alloc (evb, &z_file->stats_buf_1, 50000, 1, "z_file->stats_buf_1", 0); // should be more than enough
-    buf_alloc (evb, &z_file->stats_buf_2, 20000, 1, "z_file->stats_buf_2", 0); 
-
     stats_show_file_metadata(&z_file->stats_buf_1);
-    stats_show_file_metadata(&z_file->stats_buf_2);
+    buf_copy (evb, &z_file->stats_buf_2, &z_file->stats_buf_1, 0,0,0, "z_file->stats_buf_2", 0);
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_comp_total=0, all_txt=0;
 
