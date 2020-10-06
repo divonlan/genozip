@@ -118,7 +118,7 @@ static void license_submit (const char *institution, const char *name, const cha
     char url[600];
     sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, ip, license_num);
 
-    url_read_string (url, NULL, 0);
+    url_read_string (url, NULL, 0, "Failed to register the license");
 
     free (institutionE); free (nameE); free (emailE); free (osE);
 }
@@ -191,7 +191,7 @@ uint32_t license_get (void)
     license_exit_if_not_confirmed (confirm);
 
     const char *os = arch_get_os();
-    const char *ip = arch_get_ip_addr();
+    const char *ip = arch_get_ip_addr ("Failed to register the license");
     unsigned cores = arch_get_num_cores();
     license_num    = license_generate_num();
 

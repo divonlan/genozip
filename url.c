@@ -32,10 +32,11 @@ bool url_is_url (const char *filename)
 // returns error string if curl itself (not server) failed, or NULL if successful
 static void url_do_curl (const char *url, bool head,
                          char *stdout_data, unsigned *stdout_len,
-                         char *error, unsigned *error_len)
+                         char *error, unsigned *error_len,
+                         const char *reason) // optional text in case curl execution fails
 {
     curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0,
-                          "To read from a URL",
+                          reason ? reason : "To read from a URL",
                           "curl", url, 
                           head ? "--head" : NULL,
                           NULL); // not silent - we want to collect errors
@@ -77,60 +78,6 @@ static void url_do_curl (const char *url, bool head,
 
     *error_len = strlen (error);
 }
-/*
-// for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
-// note that the file_size availability is at the discretion of the web/ftp site. 
-// in case of an error, returns the error string
-const char *url_get_status (const char *url, bool *file_exists, int64_t *file_size)
-{
-    *file_exists = false;
-    *file_size = 0;
-    char response[CURL_RESPONSE_LEN];
-    char *error = malloc (CURL_RESPONSE_LEN);
-    unsigned response_len, error_len;
-
-    // run 'curl --head url'
-    url_do_curl (url, true, response, &response_len, error, &error_len);
-    if (error_len) return error;
-
-    // Get the first line of text - since curl completed successfully, we expect this to always exist
-    char *first_eol = strchr (response, '\r'); // in case of Windows-style end-of-line
-    if (!first_eol) first_eol = strchr (response, '\n'); // try again, with \n
-
-    // case: we got exit_code=0 (OK) but no response. this happens, for example, in some FTP servers when the URL is a directory
-    if (!first_eol) {
-        strcpy (error, "Server did not respond to curl -I. Please check the URL");
-        return error;
-    }
-
-    // for HTTP urls, the status (success or error) is the first line. For now, we will copy the first line regardless of url type
-    strncpy (error, response, first_eol - response);
-    error[first_eol - response] = '\0';
-
-    // case HTTP: check status
-    if (strstr (error, "http") || strstr (error, "HTTP")) {
-        if (strstr (error, "200")) 
-            *file_exists = true;
-        else
-            return error;
-    } 
-        
-    const char *len_start = NULL;
-    if      ((len_start = strstr (response, "content-length:"))) len_start += strlen ("content-length:");
-    else if ((len_start = strstr (response, "Content-Length:"))) len_start += strlen ("Content-Length:");
-
-    // Case: we got the file length - file exists even if we didn't get an HTTP status (eg because URL is not http)
-    if (len_start) {
-        *file_size = strtoull (len_start, NULL, 10);
-        *file_exists = true; // if we got its length, we know it exists (for non-HTTP, this is the way we check existence)
-    }
-    else *file_size = -1; // file possibly exists (if this is HTTP and response was 200), but length is unknown
-
-    free (error);
-
-    return NULL; // no error
-}
-*/
 
 static int url_do_curl_head (const char *url,
                              char *stdout_data, unsigned *stdout_len,
@@ -221,12 +168,13 @@ const char *url_get_status (const char *url, bool *file_exists, int64_t *file_si
 
 
 // reads a string response from a URL, returns a null-terminated string and the number of characters (excluding \0)
-uint32_t url_read_string (const char *url, char *data, uint32_t data_size)
+uint32_t url_read_string (const char *url, char *data, uint32_t data_size,
+                          const char *reason) // optional text in case curl execution fails
 {
     char response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
     unsigned response_len, error_len;
 
-    url_do_curl (url, false, response, &response_len, error, &error_len);
+    url_do_curl (url, false, response, &response_len, error, &error_len, reason);
 
     ASSERT (!error_len || response_len, "Error accessing the Internet: %s", error);
 

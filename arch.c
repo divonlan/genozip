@@ -124,11 +124,11 @@ const char *arch_get_os (void)
     return os;
 }
 
-const char *arch_get_ip_addr (void)
+const char *arch_get_ip_addr (const char *reason) // optional text in case curl execution fails
 {
     static char ip_str[1000];
 
-    url_read_string ("https://api.ipify.org", ip_str, sizeof(ip_str));
+    url_read_string ("https://api.ipify.org", ip_str, sizeof(ip_str), reason);
 
     return ip_str;
 }
