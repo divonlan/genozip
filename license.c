@@ -17,6 +17,7 @@
 #include "md5.h"
 #include "url.h"
 #include "license.h"
+#include "version.h"
 
 void license_display (void)
 {
@@ -94,11 +95,23 @@ static uint32_t licence_retrieve_locally (void)
 
 static void license_submit (const char *institution, const char *name, const char *email, 
                             char commerical, char update, 
-                            const char *os, unsigned cores, const char *ip, uint32_t license_num)
+                            const char *os, unsigned cores, const char *ip, const char *dist, uint32_t license_num)
 {
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396
 
+    // FORM_ID is in the url when you preview your form
     #define PREFIX "https://docs.google.com/forms/d/e/1FAIpQLSc6pSBIOBsS5Pu-JNvfnLWV2Z1W7k-4f2pKRo5rTbiU_sCnIw/formResponse"
+    
+    /* To get entry IDs: 1. go to preview of the form 2. right-click Inspect 3. go to "console" tab 4. run this code:
+    function loop(e){
+    if(e.children)
+    for(let i=0;i<e.children.length;i++){
+        let c = e.children[i], n = c.getAttribute('name');
+        if(n) console.log(`${c.getAttribute('aria-label')}: ${n}`);
+        loop(e.children[i]);
+     }
+    }; loop(document.body);
+    */
     char *url_format = PREFIX
                        "?entry.344252538=%.100s"
                        "&entry.926671216=%.50s"
@@ -108,7 +121,9 @@ static void license_submit (const char *institution, const char *name, const cha
                        "&entry.81542373=%s"
                        "&entry.1668073218=%u"
                        "&entry.1943454647=%s"
-                       "&entry.1655649315=%u";
+                       "&entry.1655649315=%u"
+                       "&entry.186159495=%s"
+                       "&entry.1598028195=%s";
 
     char *institutionE = url_esc_non_valid_chars (institution);
     char *nameE        = url_esc_non_valid_chars (name);
@@ -116,7 +131,7 @@ static void license_submit (const char *institution, const char *name, const cha
     char *osE          = url_esc_non_valid_chars (os);
 
     char url[600];
-    sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, ip, license_num);
+    sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, ip, license_num, GENOZIP_CODE_VERSION, dist);
 
     url_read_string (url, NULL, 0, "Failed to register the license");
 
@@ -192,6 +207,7 @@ uint32_t license_get (void)
 
     const char *os = arch_get_os();
     const char *ip = arch_get_ip_addr ("Failed to register the license");
+    const char *dist = arch_get_distribution();
     unsigned cores = arch_get_num_cores();
     license_num    = license_generate_num();
 
@@ -202,12 +218,13 @@ uint32_t license_get (void)
     fprintf (stderr, "Commercial: %s\n", commercial[0]=='Y' ? "Yes" : "No");
     fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
     fprintf (stderr, "System info: OS=%s cores=%u IP=%s\n", os, cores, ip);
+    fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
     fprintf (stderr, "genozip license number: %u\n\n", license_num);
 
     str_query_user ("Proceed with completing the registration? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
     license_exit_if_not_confirmed (confirm);
     
-    license_submit (institution, name, email, commercial[0], update[0], os, cores, ip, license_num);
+    license_submit (institution, name, email, commercial[0], update[0], os, cores, ip, dist, license_num);
 
     license_store_locally (license_num);
 

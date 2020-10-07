@@ -14,7 +14,7 @@ endif
 LDFLAGS     += -lpthread -lm
 
 ifdef IS_CONDA 
-	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION="conda"
+	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
 
 	ifeq ($(OS),Windows_NT)
@@ -24,7 +24,7 @@ ifdef IS_CONDA
 	endif
 else
 	CC=gcc
-	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native
+	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native 
 endif 
 
 MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
@@ -271,9 +271,14 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (6) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build and watch the build - it should be fine"
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
 
-windows/%.exe: %.exe
-	@echo Copying $<
-	@cp -f $< $@ 
+# Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
+delete-arch: 
+	@rm -f arch.o
+
+windows/%.exe: CFLAGS += -DDISTRIBUTION=\"InstallForge\"
+windows/%.exe: delete-arch $(OBJS)
+	@echo Linking $@
+	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
 windows/readme.txt: $(EXECUTABLES)
 	@echo Generating $@
@@ -293,7 +298,7 @@ WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genoc
                          windows/LICENSE.for-installer.txt windows/readme.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt
+windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt LICENSE.non-commercial.txt 
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
@@ -307,6 +312,7 @@ windows/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) LICENSE.commercial.txt 
 	@(git stage windows/genozip.ifp $@ ; exit 0)
 	@(git commit -m windows_files_for_version_$(version) windows/genozip.ifp $@ ; exit 0)
 	@git push
+	@rm -f arch.o # remove this arch.o which contains DISTRIBUTION
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
@@ -413,5 +419,5 @@ clean: clean-debug clean-optimized clean-test.sh-files
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump
 
-.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp
+.PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch
 

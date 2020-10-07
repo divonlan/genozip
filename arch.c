@@ -144,6 +144,17 @@ bool arch_am_i_in_docker (void)
     return true;
 }
 
+const char *arch_get_distribution (void)
+{
+#ifdef DISTRIBUTION
+    return DISTRIBUTION;
+#endif
+    
+    if (arch_am_i_in_docker()) return "Docker";
+
+    else return "github";
+}
+
 // initialize mutex, if its not initialized already
 void mutex_initialize_do (const char *name, pthread_mutex_t *mutex, bool *initialized)
 {

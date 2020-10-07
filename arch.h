@@ -17,6 +17,7 @@ extern unsigned arch_get_num_cores (void);
 extern const char *arch_get_ip_addr (const char *reason);
 extern const char *arch_get_os (void);
 extern bool arch_am_i_in_docker (void);
+extern const char *arch_get_distribution (void);
 extern bool arch_am_i_io_thread (void);
 extern void cancel_io_thread (void);
 
