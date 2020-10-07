@@ -14,13 +14,13 @@
 // region as parsed from the --regions option
 typedef struct {
     const char *chrom;        // NULL means all chromosomes (i.e. not a specific chromosome)
-    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
+    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
     PosType end_pos;         // the region searched will include both the start and the end
 } Region;
 
 // region of a specific chromosome
 typedef struct {
-    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=0xffffffff
+    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
     PosType end_pos;         // the region searched will include both the start and the end
 } Chreg; // = Chromosome Region
 
@@ -31,69 +31,51 @@ static uint32_t num_chroms;
 
 static bool is_negative_regions = false; // true if the user used ^ to negate the regions
 
-typedef enum {RPT_SINGLTON, RPT_START_ONLY, RPT_END_ONLY, RPT_BOTH_START_END} RegionPosType;
-
-static bool regions_parse_pos (const char *str, 
-                               RegionPosType *type, PosType *start_pos, PosType *end_pos) // optional outs - only if case of true
+// returns true if this is valid pos range string 
+static bool regions_parse_pos (const char *str, Region *reg) 
 {
     unsigned len = strlen (str);
 
-    // pos needs to be one of 4 formats: N -N N- or N-N. Where N is a non-negative integer less than 0xffffffff
-    // if there are two numbers - the first must be not larger than the second.
-    int hyphen_found = false;
-    bool digit_found  = false;
-    for (unsigned i=0; i < len; i++) {
-        if (str[i] == '-') {
-            if (hyphen_found) goto fail; // only one hyphen is permitted
-            hyphen_found = true;
-        }
-        else if (IS_DIGIT (str[i]))
-            digit_found = true;
-        else
-            goto fail; // only digits and hyphen are allowed
-    }
-    if (!digit_found) goto fail; // at least one digit is required
+    reg->start_pos = 0;
+    reg->end_pos   = MAX_POS;
 
-    // this doesn't have the same power as regex in validating the format exactly, for example,
-    // if the user gives a number longer than 10 digits, we will take the first 10. but that's fine -
-    // i don't want to deal with finding a good cross-platform regex library just for this
+    // case: "-1000"
+    if (str[0] == '-') return str_get_int (&str[1], len-1, &reg->end_pos);
 
-    uint32_t num1, num2;
-    bool hyphen_first = str[0]=='-';
-    bool hyphen_last  = str[len-1]=='-';
+    // case: "1000-"
+    if (str[len-1] == '-') return str_get_int (str, len-1, &reg->start_pos);
 
-    int count = sscanf (&str[hyphen_first], "%10u-%10u", &num1, &num2); // if first char is -, start from 2nd char
-    
-    if (count == 2) {
-        if (type) *type = RPT_BOTH_START_END;
-        if (num1 > num2) goto fail;   // a range such 100-1 is not permitted
-        if (start_pos) { *start_pos = num1; *end_pos = num2; }
-    }
-    else if (hyphen_first) {
-        if (type) *type = RPT_END_ONLY;
-        if (start_pos) { *start_pos = 0; *end_pos = num1; }
-    }
-    else if (hyphen_last) {
-        if (type) *type = RPT_START_ONLY;
-        if (start_pos) { *start_pos = num1; *end_pos = 0xfffffffe; }
-    }
-    else {
-        if (type) *type = RPT_SINGLTON;
-        if (start_pos) { *start_pos = *end_pos = num1; }
+    // case: "1000-1500" (start 1000, end 1500)
+    const char *sep = strchr (str, '-');
+    if (sep) {
+        if (!str_get_int (str, sep - str, &reg->start_pos)) return false;
+        if (!str_get_int (sep+1, str+len-(sep+1), &reg->end_pos)) return false;
+
+        if (reg->start_pos > reg->end_pos) { PosType tmp = reg->start_pos ; reg->start_pos = reg->end_pos ; reg->end_pos = tmp; }
+        return true;
     }
 
+    // case "1000+500" (start 1000, length 500)
+    sep = strchr (str, '+');
+    if (sep) {
+        if (!str_get_int (str, sep - str, &reg->start_pos)) return false;
+        PosType region_len;
+        if (!str_get_int (sep+1, str+len-(sep+1), &region_len)) return false;
+        reg->end_pos = reg->start_pos + region_len - 1;
+        return true;
+    }
+
+    // case: "1000"
+    if (!str_get_int (str, len, &reg->start_pos)) return false;
+    reg->end_pos = reg->start_pos;
     return true;
-
-fail:
-    if (start_pos) { *start_pos = 0; *end_pos = 0xffffffff; }
-    return false;
 }
 
 static bool regions_is_valid_chrom (const char *str)
 {
     // if it looks like a non-singleton range, we take it as not being a pos
-    RegionPosType pos_type;
-    if (regions_parse_pos (str, &pos_type, NULL, NULL) && pos_type != RPT_SINGLTON) return false;
+    Region reg;
+    if (regions_parse_pos (str, &reg) && reg.start_pos != reg.end_pos) return false;
 
     // per VCF 4.2 specification, the limitations on CHROM are it is not allowed to contain whitespace or a colon
     unsigned len = strlen (str);
@@ -134,20 +116,15 @@ void regions_add (const char *region_str)
 
         ASSERT (before_colon, "Error: invalid region string: %s", region_str);
 
-        Region *reg = &((Region *)regions_buf.data)[regions_buf.len++]; // update after possible realloc
-        Region *reg2 = NULL;
-
-        reg->start_pos = 0;
-        reg->end_pos = 0xffffffff;
-        reg->chrom = NULL;
+        Region *reg = &NEXTENT (Region, regions_buf);
+        *reg = (Region){ .chrom = NULL, .start_pos = 0, .end_pos = MAX_POS };
 
         // case: we have both chrom and pos - easy!
         if (after_colon && after_colon[0]) {
             ASSERT (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", region_str);
             reg->chrom = before_colon;
             
-            ASSERT (regions_parse_pos (after_colon, NULL, &reg->start_pos, &reg->end_pos), 
-                    "Error: Invalid position range in region string: %s", region_str);
+            ASSERT (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: %s", region_str);
         }
 
         // case: only one substring. we need to determine if the single substring is a pos or a chrom. if it
@@ -157,7 +134,7 @@ void regions_add (const char *region_str)
             if (regions_is_valid_chrom (before_colon)) 
                 reg->chrom = before_colon;
 
-            bool has_pos = regions_parse_pos (before_colon, NULL, &reg->start_pos, &reg->end_pos);
+            bool has_pos = regions_parse_pos (before_colon, reg);
 
             // make sure at least one of them is valid
             ASSERT (reg->chrom || has_pos, "Error: Invalid region string: %s", region_str);
@@ -167,16 +144,16 @@ void regions_add (const char *region_str)
 #define MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS 50
             if (reg->chrom && has_pos) {
 
+                // if large number - have two regions: entire chrom of this number, and all chroms at this pos
                 if (reg->start_pos > MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS) {
-                    reg2 = &((Region *)regions_buf.data)[regions_buf.len++];
-                    reg2->chrom = reg->chrom;
-                    reg ->chrom = NULL;
-                    reg2->start_pos = 0;
-                    reg2->end_pos = 0xffffffff;
+                    NEXTENT (Region, regions_buf) = (Region){ .chrom = reg->chrom, .start_pos = 0, .end_pos = MAX_POS };
+                    reg->chrom = NULL;
                 }
-                else {
+
+                // if small number - assume it is a single entire chrom
+                else { 
                     reg->start_pos = 0;
-                    reg->end_pos = 0xffffffff;
+                    reg->end_pos = MAX_POS;
                 }
             }
         }
@@ -240,7 +217,7 @@ void regions_transform_negative_to_positive_complement()
         buf_alloc (evb, &chregs[chr_i], sizeof (Chreg), 1, "chregs", chr_i);
         Chreg *chreg = ENT (Chreg, chregs[chr_i], 0);
         chreg->start_pos   = 0;
-        chreg->end_pos     = 0xffffffff;
+        chreg->end_pos     = MAX_POS;
         chregs[chr_i].len  = 1;
 
         // process each negative regions - substract from positive chreg 
