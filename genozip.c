@@ -63,7 +63,8 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
     flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_test_seg=0,
     flag_show_hash, flag_register=0, flag_genocat_info_only=0,
-    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, flag_ref_use_aligner=0,
+    flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, 
+    flag_ref_use_aligner=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
     flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0, flag_optimize_SEQ=0,
     flag_show_ref_contigs=0, flag_show_ref_alts=0, flag_show_ref_seq=0,
@@ -71,8 +72,7 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
 
 ReferenceType flag_reference = REF_NONE;
 uint64_t flag_stdin_size = 0;
-char *flag_grep = NULL;
-char *flag_show_is_set = NULL;
+char *flag_grep = NULL, *flag_show_is_set = NULL;
 
 DictId dict_id_show_one_b250  = DICT_ID_NONE,  // argument of --show-b250-one
        dict_id_show_one_dict  = DICT_ID_NONE,  // argument of --show-dict-one
@@ -707,17 +707,17 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _rS {"show-ref-seq",  no_argument,       &flag_show_ref_seq,     1 }  
         #define _sI {"show-is-set",   required_argument, 0, '~',                   }  
         #define _sA {"show-aliases",  no_argument,       &flag_show_aliases,     1 }  
-        #define _dS {"test-seg",      no_argument,       &flag_test_seg,        1 }  
+        #define _dS {"test-seg",      no_argument,       &flag_test_seg,         1 }  
         #define _dm {"debug-memory",  no_argument,       &flag_debug_memory,     1 }  
         #define _dp {"debug-progress",no_argument,       &flag_debug_progress,   1 }  
         #define _dh {"show-hash",     no_argument,       &flag_show_hash,        1 }  
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _pe, _fa,          _rg, _sR, _sC, _rA, _rS, _me, _sA, _sI, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _pe, _fa,          _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sI, _00 };
         static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                             _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
         static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                    _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
-        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                            _00 };
+        static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -956,8 +956,10 @@ int main (int argc, char **argv)
         else if (command == -1 && optind == argc && !out_filename && 
                  (isatty(0) || arch_am_i_in_docker()) && isatty(1)) {
             // case: --register
-            if (flag_register) 
+            if (flag_register) {
                 license_get();
+                exit (0);
+            }
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
             if (exe_type == EXE_GENOCAT && flag_reference) 
