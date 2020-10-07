@@ -171,7 +171,7 @@ static const char *help_genozip_developer[] = {
     "",
     "   ZUC  --show-reference  Show the ranges included the SEC_REFERENCE sections",    
     "",
-    "   ZUC  --show-ref-seq    Show the reference sequences. By default, a newline is inserted every 160 bases. To avoid this newline, combine with --sequential. When used with genocat, only this is shown, not the file contents",
+    "   ZUC  --show-ref-seq    Show the reference sequences. Combine with --regions to see specific regions. Combine with --sequential to omit newlines. '-' appears in unset loci. When used with genocat, only this is shown, not the file contents",
     "",
     "   ZUC  --show-ref-index  Show the content of the random access index of the reference data (SEC_REF_RAND_ACC section). When used with genocat, only the index is shown, not the file contents",
     "",

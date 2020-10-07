@@ -71,8 +71,9 @@ void ref_contigs_compress (void)
 
         // in case of REF_INTERNAL, chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
         if (r->chrom == WORD_INDEX_NONE)
-            r->chrom = ref_contigs_get_word_index (r->chrom_name, r->chrom_name_len, WI_REF_CONTIG, false); // this changes first/last_pos, removing flanking regions
+            r->chrom = ref_contigs_get_word_index (r->chrom_name, r->chrom_name_len, WI_REF_CONTIG, false);
 
+        // first range of a contig
         if (!last || r->chrom != last->chrom_index) {
 
             // if gpos of the first range in this contig has been increased due to removing flaking regions

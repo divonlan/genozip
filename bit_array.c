@@ -925,28 +925,6 @@ void bit_array_print_binary_word_do (word_t word, const char *msg)
     bit_array_print_do (&bitarr, msg);
 }
 
-// Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
-void bit_array_print_bases_region (FILE *file, const BitArray *bitarr, 
-                                   bit_index_t start_base, bit_index_t num_of_bases, const char *msg, bool is_forward)
-{
-    static const char fwd[2][2] = { { 'A', 'C' }, {'G', 'T'} };
-    static const char rev[2][2] = { { 'T', 'G' }, {'C', 'A'} };
-
-    fprintf (file, "%s: ", msg);
-
-    if (is_forward)
-        for (bit_index_t i=start_base*2; i < (start_base + num_of_bases)*2; i+=2) {
-            fprintf (file, "%c", fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
-            if (!flag_sequential && ((i-start_base*2) % 320 == 318)) fputc ('\n', file);
-        }
-    else 
-        for (int64_t i=(start_base+num_of_bases-1)*2; i >= start_base*2; i-=2) { // signed type
-          fprintf(file, "%c", rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)]);
-          if (!flag_sequential && (((start_base+num_of_bases-1)*2-i) % 320 == 318)) fputc ('\n', file);
-        }
-    fprintf (file, "\n");
-}
-
 // Print a string representations for a given region, using given on/off characters.
 void bit_array_print_substr(const char *msg, 
                             const BitArray* bitarr,
@@ -1539,6 +1517,16 @@ void bit_array_remove_flanking (BitArray* bitarr, bit_index_t lsb_flanking, bit_
 
   bitarr->num_of_bits -= lsb_flanking + msb_flanking;
   bitarr->num_of_words = roundup_bits2words64 (bitarr->num_of_bits);   
+}
+
+// shortens an array to a certain number of bits (divon)
+void bit_array_truncate (BitArray* bitarr, bit_index_t new_num_of_bits)
+{
+  ASSERT (new_num_of_bits <= bitarr->num_of_bits, "Error in bit_array_truncate: expecting new_num_of_bits=%"PRIu64" to be <= bitarr->num_of_bits=%"PRIu64,
+          new_num_of_bits, bitarr->num_of_bits);
+
+  bitarr->num_of_bits  = new_num_of_bits;
+  bitarr->num_of_words = roundup_bits2words64 (new_num_of_bits);   
 }
 
 //

@@ -97,6 +97,9 @@ extern void ref_alt_chroms_compress (void);
 #define ref_get_nucleotide(range,idx)   acgt_decode[(bit_array_get (&(range)->ref, (idx) * 2 + 1) << 1) | \
                                                      bit_array_get (&(range)->ref, (idx) * 2)]
 
+// display
+extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitArrayP is_set, PosType first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
+
 // globals
 extern const char *ref_filename;
 extern Md5Hash ref_md5;

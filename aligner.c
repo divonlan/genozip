@@ -131,8 +131,8 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
 
     bit_array_clear_excess_bits_in_top_word (&seq_bits);
 
-    //bit_array_print_bases (&seq_bits, "\nseq_bits fwd", true);
-    //bit_array_print_bases (&seq_bits, "seq_bits rev", false);
+    //ref_print_bases (&seq_bits, "\nseq_bits fwd", true);
+    //ref_print_bases (&seq_bits, "seq_bits rev", false);
 
     *is_all_ref = false;
 

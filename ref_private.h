@@ -33,10 +33,6 @@ extern WordIndex ref_contigs_get_by_accession_number (const char *ac, unsigned a
 
 extern Buffer ranges; // param is RangesType
 
-// used when compressing a reference and contigs buffer. note: ref_prepare_range_for_compress sets is_set.num_of_bits=0 
-// for unused ranges. also, in make_ref mode, is_set is always 0, and ref is 0 for unused ranges. 
-#define ref_is_range_used(r) ((r)->ref.num_of_bits && ((r)->is_set.num_of_bits || flag_make_reference))
-
 #define ROUNDUP64(x) (((x) + 63) & ~(typeof(x))0x3f) // round up to the nearest 64
 #define ROUNDDOWN64(x) ((x)      & ~(typeof(x))0x3f) // round down to the nearest 64
 #endif

@@ -396,9 +396,6 @@ extern void bit_array_print_do (const BitArray* bitarr, const char *msg);
 extern void bit_array_print_binary_word_do (word_t word, const char *msg);
 #define bit_array_print_binary_word(word) bit_array_print_binary_word_do (word, #word)
 
-extern void bit_array_print_bases_region (FILE *file, const BitArray *bitarr, bit_index_t start_base, bit_index_t num_of_bases, const char *msg, bool is_forward);
-#define bit_array_print_bases(file, bitarr, msg, is_forward) bit_array_print_bases_region ((file), (bitarr), 0, (bitarr)->num_of_bits/2, (msg), (is_forward))
-
 // Print a string representations for a given region, using given on/off
 // characters. Reverse prints from highest to lowest -- this is useful for
 // printing binary numbers
@@ -481,6 +478,9 @@ extern int bit_array_cmp_words(const BitArray *bitarr,
 
 // removes flanking bits on boths sides, shrinking bitarr (divon)
 void bit_array_remove_flanking (BitArray* bitarr, bit_index_t lsb_flanking, bit_index_t msb_flanking);
+
+// shortens an array to a certain number of bits (divon)
+void bit_array_truncate (BitArray* bitarr, bit_index_t new_num_of_bits);
 
 // Shift array left/right.  
 void bit_array_shift_right_shrink (BitArray* bitarr, bit_index_t shift_dist);
