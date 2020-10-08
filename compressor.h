@@ -9,6 +9,8 @@
 #include "genozip.h"
 #include "data_types.h"
 
+extern void comp_initialize (void);
+
 extern void comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
                            SectionHeaderP header, 
                            const char *uncompressed_data, // option 1 - compress contiguous data

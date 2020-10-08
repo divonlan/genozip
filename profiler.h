@@ -15,12 +15,13 @@
 #endif
 
 typedef struct {
-    int64_t wallclock, read, compute, compressor_bz2, compressor_lzma, write, piz_read_one_vb, comp_ht_piz_get_one_line, 
+    int64_t wallclock, read, compute, compressor_bz2, compressor_lzma, compressor_bsc, 
+        write, piz_read_one_vb, comp_ht_piz_get_one_line, 
         sam_seg_seq_field, domqual_convert_qual_to_domqual, comp_compress_non_acgt, comp_acgt_pack,
         piz_get_line_subfields,  zip_generate_and_compress_ctxs, mtf_merge_in_vb_ctx,
         zfile_uncompress_section,
         piz_reconstruct_vb, buf_alloc, txtfile_read_header, txtfile_read_vblock,
-        seg_all_data_lines, comp_compress_ht, comp_ht_count_alt_alleles,
+        seg_all_data_lines, comp_ht_compress, comp_ht_count_alt_alleles,
         mtf_integrate_dictionary_fragment, mtf_clone_ctx, mtf_merge_in_vb_ctx_one_dict_id,
         md5,zfile_compress_dictionary_data, aligner_best_match, aligner_get_word_from_seq,
         lock_mutex_compress_dict, lock_mutex_zf_ctx, aligner_get_match_len, generate_rev_complement_genome,

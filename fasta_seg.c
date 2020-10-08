@@ -20,7 +20,9 @@ void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i,
 {
     ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
     *line_seq_len  = dl->seq_len;
-    *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
+    
+    if (line_seq_data) // if NULL, only length was requested
+        *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
 }   
 
 void fasta_seg_initialize (VBlockFAST *vb)

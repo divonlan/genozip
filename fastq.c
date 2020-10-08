@@ -285,15 +285,18 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     return next_field;
 }
 
-// callback function for compress to get data of one line (called by comp_compress_bzlib)
+// callback function for compress to get data of one line (called by comp_bzlib_compress)
 void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                           char **line_qual_data, uint32_t *line_qual_len, // out
                                           char **unused_data,   uint32_t *unused_len) 
 {
     ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
-     
-    *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
+
     *line_qual_len  = dl->seq_len;
+    
+    if (!line_qual_data) return; // only lengths were requested
+
+    *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM

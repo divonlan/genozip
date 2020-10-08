@@ -15,11 +15,12 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(write);
     ADD(compressor_bz2);
     ADD(compressor_lzma);
+    ADD(compressor_bsc);
     ADD(zip_generate_and_compress_ctxs);
     ADD(piz_reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
-    ADD(comp_compress_ht);
+    ADD(comp_ht_compress);
     ADD(comp_ht_piz_get_one_line);
     ADD(sam_seg_seq_field);
     ADD(zfile_compress_dictionary_data);
@@ -124,9 +125,10 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (zip_generate_and_compress_ctxs, 1);
         PRINT (compressor_bz2, 2);
         PRINT (compressor_lzma, 2);
+        PRINT (compressor_bsc, 2);
         PRINT (comp_acgt_pack, 3);
         PRINT (comp_compress_non_acgt, 2);
-        PRINT (comp_compress_ht,2);
+        PRINT (comp_ht_compress,2);
         PRINT (comp_ht_count_alt_alleles, 3);
     }    
 

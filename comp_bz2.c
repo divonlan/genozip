@@ -63,7 +63,7 @@ uint64_t BZ2_consumed (void *bz_file)
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_compress_bzlib (VBlock *vb, Codec codec,
+bool comp_bzlib_compress (VBlock *vb, Codec codec,
                           const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                           LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
                           char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -104,7 +104,7 @@ bool comp_compress_bzlib (VBlock *vb, Codec codec,
 
         for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
 
-            ASSERT (!strm.avail_in, "Error in comp_compress_bzlib: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
+            ASSERT (!strm.avail_in, "Error in comp_bzlib_compress: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
 
             // initialize to 0
             char *next_in_2=0;     strm.next_in=0;
@@ -144,7 +144,7 @@ bool comp_compress_bzlib (VBlock *vb, Codec codec,
         }
     }
     else 
-        ABORT0 ("Error in comp_compress_bzlib: neither src_data nor callback is provided");
+        ABORT0 ("Error in comp_bzlib_compress: neither src_data nor callback is provided");
     
     ret = BZ2_bzCompressEnd (&strm);
     ASSERT (ret == BZ_OK, "Error: BZ2_bzCompressEnd failed: %s", BZ2_errstr (ret));
@@ -156,7 +156,7 @@ bool comp_compress_bzlib (VBlock *vb, Codec codec,
     return success;
 }
 
-void comp_uncompress_bzlib (VBlock *vb, 
+void comp_bzlib_uncompress (VBlock *vb, 
                             const char *compressed, uint32_t compressed_len,
                             char *uncompressed_data, uint64_t uncompressed_len)
 {

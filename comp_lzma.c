@@ -128,7 +128,7 @@ static size_t comp_lzma_data_out_callback (const ISeqOutStream *p, const void *b
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_compress_lzma (VBlock *vb, Codec codec,
+bool comp_lzma_compress (VBlock *vb, Codec codec,
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                          LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
                          char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -211,7 +211,7 @@ bool comp_compress_lzma (VBlock *vb, Codec codec,
     return success;
 }
 
-void comp_uncompress_lzma (VBlock *vb, 
+void comp_lzma_uncompress (VBlock *vb, 
                            const char *compressed, uint32_t compressed_len,
                            char *uncompressed_data, uint64_t uncompressed_len)
 {

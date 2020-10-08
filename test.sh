@@ -108,7 +108,7 @@ for file in ${files[@]}; do
 
     if `command -v gzip >& /dev/null` && [ $allow_compressed == 1 ]; then
         test_header "${file} - with gzip"
-        cp $file copy.$file
+        cp -f $file copy.$file
         gzip copy.$file
         ./genozip $1 copy.${file}.gz -ft -o $output || exit 1
         rm copy.${file}.gz
@@ -116,7 +116,7 @@ for file in ${files[@]}; do
     
     if `command -v bzip2 >& /dev/null` && [ $allow_compressed == 1 ]; then
         test_header "${file} - with bzip2"
-        cp $file copy.$file
+        cp -f $file copy.$file
         bzip2 copy.$file
         ./genozip $1 copy.${file}.bz2 -ft -o $output || exit 1
         rm copy.${file}.bz2
@@ -124,7 +124,7 @@ for file in ${files[@]}; do
     
     if `command -v xz >& /dev/null` && [ $allow_compressed == 1 ]; then
         test_header "${file} - with xz"
-        cp $file copy.$file
+        cp -f $file copy.$file
         xz copy.$file
         ./genozip $1 copy.${file}.xz -ft -o $output || exit 1
         rm copy.${file}.xz
@@ -140,8 +140,8 @@ for file in ${files[@]}; do
     test_header "$file - non-bound multiple files"
     file1=copy1.$file
     file2=copy2.$file
-    cp $file $file1
-    cp $file $file2
+    cp -f $file $file1
+    cp -f $file $file2
     ./genozip $1 $file1 $file2 -ft || exit 1
     ./genounzip $1 ${file1}.genozip ${file2}.genozip -t || exit 1
     rm $file1 $file2 ${file1}.genozip ${file2}.genozip
@@ -149,7 +149,7 @@ for file in ${files[@]}; do
     test_header "$file - bind & unbind"
     file1=copy1.$file
     file2=copy2.$file
-    cp $file $file1
+    cp -f $file $file1
     cat $file | sed 's/PRFX/FILE2/g' > $file2
     ./genozip $1 $file1 $file2 -ft -o $output || exit 1
     ./genounzip $1 $output -u -t || exit 1
@@ -170,6 +170,14 @@ for file in ${files[@]}; do
     cat $file | tr -d "\r" > unix-nl.$file
     ./genozip $1 unix-nl.$file -ft -o $output || exit 1
 done
+
+# Test binding SAM files with lots of contigs (no reference)
+test_header "binding SAM files with lots of contigs (no reference)"
+file=td/test.transfly-unsorted.sam
+cp -f $file copy.unsorted1.sam
+cp -f $file copy.unsorted2.sam
+./genozip $1 copy.unsorted1.sam copy.unsorted2.sam -ft -o $output || exit 1
+rm -f copy.unsorted1.sam copy.unsorted2.sam $output
 
 # FASTA genocat tests
 test_count_genocat_lines test-file.fa "--sequential" 9
@@ -205,51 +213,51 @@ cut -f1-8 $file > copy.$file
 ./genozip $1 copy.$file -ft -o $output || exit 1
 rm copy.$file
 
-test_header "Testing subsets (~3 VBs) or real world files"
+test_header "subsets (~3 VBs) or real world files"
 rm -f td/*.genozip
 ./genozip $1 -ft td/* || exit 1
 
-test_header "Testing --make-reference"
+test_header "--make-reference"
 file=test-file-ref.fa 
 ./genozip $1 --make-reference $file --force -o copy.${file}.ref.genozip || exit 1
 
-test_header "Testing unaligned SAM with --reference"
+test_header "unaligned SAM with --reference"
 ./genozip $1 -f --md5 --reference copy.${file}.ref.genozip test-file-unaligned.sam --test || exit 1
 
-test_header "Testing unaligned SAM with --reference - from stdin"
+test_header "unaligned SAM with --reference - from stdin"
 cat test-file-unaligned.sam | ./genozip $1 -f --md5 --reference copy.${file}.ref.genozip --test --input sam --output $output - || exit 1
 
 test_bam test-file-unaligned.sam -ecopy.${file}.ref.genozip
 
 rm -f copy.${file}.ref.genozip $output
 
-test_header "Testing command line with mixed SAM and FASTQ files with --reference"
+test_header "command line with mixed SAM and FASTQ files with --reference"
 echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --reference $GRCh38 td/test.transfly-unsorted.sam td/test.transfly.fq td/test.transfly-sorted.sam || exit 1
 ./genounzip $1 -t -e $GRCh38 td/test.transfly-unsorted.sam.genozip td/test.transfly-sorted.sam.genozip || exit 1
 
-test_header "Testing multiple bound SAM with --REFERENCE" 
+test_header "multiple bound SAM with --REFERENCE" 
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --REFERENCE $GRCh38 td/test.transfly-unsorted.sam td/test.transfly-sorted.sam -o $output || exit 1
 ./genounzip $1 -t $output || exit 1
 
-test_header "Testing SAM with --reference and --password" 
+test_header "SAM with --reference and --password" 
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --reference $GRCh38 td/test.transfly-unsorted.sam --password 123 -o $output || exit 1
 ./genounzip $1 -t --reference $GRCh38 -p 123 $output || exit 1
 
-test_header "Testing SAM with --REFERENCE and --password" 
+test_header "SAM with --REFERENCE and --password" 
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --REFERENCE $GRCh38 td/test.transfly-unsorted.sam --password 123 -o $output || exit 1
 ./genounzip $1 -t -p 123 $output || exit 1
 
-test_header "Testing paired FASTQ with --reference, --password and --md5"
+test_header "paired FASTQ with --reference, --password and --md5"
 rm -f td/*.genozip
 ./genozip $1 -f --md5 -e $GRCh38 --pair -p 1234 td/test.divon-R1.100K.fq.bz2  td/test.divon-R2.100K.fq.bz2 -o td/pair.genozip || exit 1
 ./genounzip $1 -t --password 1234 -e $GRCh38 td/pair.genozip || exit 1
 
-test_header "Testing 4 paired FASTQ with --REFERENCE"
+test_header "4 paired FASTQ with --REFERENCE"
 rm -f td/*.genozip
 file1=td/test.divon-R1.100K.fq.bz2
 file2=td/test.divon-R2.100K.fq.bz2
@@ -261,7 +269,7 @@ cp -f $file2 $file4
 ./genounzip $1 -t $output || exit 1
 rm $file3 $file4 $output
 
-test_header "Testing multiple bound VCF with --reference (hg19), and unbind"
+test_header "multiple bound VCF with --reference (hg19), and unbind"
 rm -f td/*.genozip
 file1=copy1.test-file.vcf
 file2=copy2.test-file.vcf
@@ -271,7 +279,7 @@ cp -f td/test.GFX0241869.filtered.snp.vcf $file2
 ./genounzip $1 -t -e $hg19 --unbind $output || exit 1
 rm -f $file1 $file2 $output
 
-test_header "Testing multiple VCF with --REFERENCE using hg19" 
+test_header "multiple VCF with --REFERENCE using hg19" 
 rm -f td/*.genozip
 ./genozip $1 -f --md5 --REFERENCE $hg19 td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf td/test.GFX0241869.filtered.snp.vcf || exit 1
 ./genounzip $1 -t td/test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.genozip td/test.GFX0241869.filtered.snp.vcf.genozip || exit 1

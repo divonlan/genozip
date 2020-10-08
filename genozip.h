@@ -148,7 +148,7 @@ typedef _Bool bool;
 // If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=-1, 
-    CODEC_NONE=0, CODEC_GZ=1, CODEC_BZ2=2, CODEC_LZMA=3, // internal compressors
+    CODEC_NONE=0, CODEC_GZ=1, CODEC_BZ2=2, CODEC_LZMA=3, CODEC_BSC=4, // internal compressors
     
     // novel codecs
     // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
@@ -163,14 +163,14 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 } Codec; 
 
 // aligned with Codec ; used in --show-header (max 4 chars)
-#define CODEC_NAMES {"NONE", "GZ",   "BZ2",  "LZMA", "FFU4", "FFU5", "FFU6", "FFU7", "FFU8", "FFU9", \
-                        "ACGT", "~CGT", "HT", "FF13", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
-                        "BGZ",  "XZ",   "BCF",  "BAM" , "CRAM", "ZIP" }
+#define CODEC_NAMES {"NONE", "GZ", "BZ2", "LZMA", "BSC", "FFU5", "FFU6", "FFU7", "FFU8", "FFU9", \
+                     "ACGT", "~CGT", "HT", "FF13", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
+                     "BGZ", "XZ", "BCF", "BAM", "CRAM", "ZIP" }
 
 // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
 #define CODEC_EXTS  {"+", "+.gz", "+.bz",  "+", "+", "+", "+", "+", "+", "+", \
-                        "+", "+", "+", "+", "+", "+", "+", "+", "+", "+", \
-                        "+.bgz", "+.xz", "-.bcf", "-.bam", "-.cram", "+.zip" }
+                     "+", "+", "+", "+", "+", "+", "+", "+", "+", "+", \
+                     "+.bgz", "+.xz", "-.bcf", "-.bam", "-.cram", "+.zip" }
 
 #define COMPRESSOR_CALLBACK(func) \
 extern void func (VBlockP vb, uint32_t vb_line_i, \

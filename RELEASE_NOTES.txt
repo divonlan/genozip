@@ -186,4 +186,10 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Bug fixes
 
 7.0.5
-- Add --stats and --STATS to genocat/genounzip by introducing a new section SEC_STATS ; remove limitation of only one file when -w or -W
+- Add --show-stats and --SHOW-STATS to genocat/genounzip by introducing a new section SEC_STATS ; remove limitation of only one file when -w or -W
+
+7.0.6
+- --show-ref-seq can now work in combination with --regions in genocat/genounzip
+- Better license registration flow
+- Consume ~0.5GB (for human data) less RAM in genounzip of SAM files compressed without a reference 
+- In --regions, allow specification or ranges using length eg "chr22:1000+151" - equivalent to "chr22:1000-1150"

@@ -53,43 +53,6 @@ void comp_free_all (VBlock *vb)
         buf_free (&vb->compress_bufs[i]);
 }
 
-// CODEC_NONE (no compression)
-static bool comp_compress_none (VBlock *vb, Codec codec,
-                                const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                                LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
-                                char *compressed, uint32_t *compressed_len /* in/out */, 
-                                bool soft_fail)
-{
-    if (*compressed_len < uncompressed_len && soft_fail) return false;
-    ASSERT0 (*compressed_len >= uncompressed_len, "Error in comp_compress_none: compressed_len too small");
-
-    if (callback) {
-        char *next = compressed;
-        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
-            char *start1=0, *start2=0;
-            uint32_t len1=0, len2=0;        
-            callback (vb, line_i, &start1, &len1, &start2, &len2);
-            memcpy (next, start1, len1);
-            next += len1;
-            memcpy (next, start2, len2);
-            next += len2;
-        }
-    }
-    else
-        memcpy (compressed, uncompressed, uncompressed_len);
-
-    *compressed_len = uncompressed_len;
-
-    return true;
-}
-
-static void comp_uncompress_none (VBlock *vb, 
-                                  const char *compressed, uint32_t compressed_len,
-                                  char *uncompressed_data, uint64_t uncompressed_len)
-{
-    memcpy (uncompressed_data, compressed, compressed_len);
-}
-
 static bool comp_compress_error (VBlock *vb, Codec codec, const char *uncompressed, uint32_t uncompressed_len, LocalGetLineCallback callback,
                                  char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
@@ -104,6 +67,13 @@ static void comp_uncompress_error (VBlock *vb,
 {
     ABORT0 ("Error in comp_uncompress: Unsupported section compression codecorithm");
 }
+
+static uint32_t comp_est_size_default (uint64_t uncompressed_len)
+{
+    return (uint32_t)MAX (uncompressed_len / 2, 500);
+}
+
+static CodecArgs codec_args[NUM_CODECS] = CODEC_ARGS;
 
 #define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
 
@@ -120,15 +90,6 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     // if the user requested --fast - we always use BZLIB, never LZMA
     if (flag_fast && header->codec == CODEC_LZMA)
         header->codec = CODEC_BZ2;
-
-#   define NA  comp_compress_error
-    static Compressor compressors[NUM_CODECS] = { 
-        comp_compress_none, NA, comp_compress_bzlib,  comp_compress_lzma, NA, NA, NA, NA, NA, NA, 
-        comp_compress_lzma /* acgt */, comp_compress_non_acgt, 
-        comp_compress_ht, comp_compress_lzma /* ht_index */, 
-        NA, NA, NA, NA, NA, NA,
-        NA, NA, NA, NA, NA, NA  };
-#   undef NA
 
     ASSERT (header->codec < NUM_CODECS, "Error in comp_compress: unsupported section compressor=%u", header->codec);
 
@@ -152,8 +113,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION && header->codec != CODEC_HT) 
         header->codec = CODEC_NONE;
 
-    uint32_t est_compressed_len = 
-        (header->codec != CODEC_NONE) ? MAX (data_uncompressed_len / 2, 500) : data_uncompressed_len;
+    uint32_t est_compressed_len = codec_args[header->codec].est_size (data_uncompressed_len); 
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
@@ -166,10 +126,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         bool success = 
-            compressors[header->codec](vb, header->codec, uncompressed_data, data_uncompressed_len,
-                                                     callback,  
-                                                     &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                                     true);
+            codec_args[header->codec].compress (vb, header->codec, uncompressed_data, data_uncompressed_len,
+                                                callback,  
+                                                &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                                true);
         comp_free_all (vb); // just in case
 
         // if output buffer is too small, increase it, and try again
@@ -179,11 +139,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
 
-            compressors[header->codec](vb, header->codec,
-                                                     uncompressed_data, data_uncompressed_len,
-                                                     callback,  
-                                                     &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                                     false);
+            codec_args[header->codec].compress (vb, header->codec,
+                                                uncompressed_data, data_uncompressed_len,
+                                                callback,  
+                                                &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                                false);
 
             comp_free_all (vb); // just in case
         }
@@ -244,14 +204,7 @@ void comp_uncompress (VBlock *vb, Codec codec,
 {
     ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
 
-#   define NA  comp_uncompress_error
-    static Uncompressor uncompressors[NUM_CODECS] = { 
-        comp_uncompress_none, NA, comp_uncompress_bzlib,  comp_uncompress_lzma, NA, NA, NA, NA, NA, NA, 
-        comp_uncompress_acgt, comp_uncompress_non_acgt, comp_uncompress_bzlib /* ht */, NA, NA, NA, NA, NA, NA, NA,
-        NA, NA, NA, NA, NA, NA  };
-#   undef NA
-
-    uncompressors[codec] (vb, compressed, compressed_len, uncompressed_data, uncompressed_len);
+    codec_args[codec].uncompress (vb, compressed, compressed_len, uncompressed_data, uncompressed_len);
 
     comp_free_all (vb); // just in case
 }
@@ -265,6 +218,11 @@ const char *codec_name (Codec codec)
 
     else
         return "BAD!";    
+}
+
+void comp_initialize (void)
+{
+    comp_bsc_initialize();
 }
 
 /*
@@ -285,10 +243,10 @@ static Codec vcf_zip_get_best_gt_compressor (VBlock *vb, Buffer *test_data)
     uint32_t uncompressed_len = MIN (test_data->len, TEST_BLOCK_SIZE);
 
     uint32_t bzlib_comp_len = compressed.size;
-    comp_compress_bzlib (vb, CODEC_BZ2, test_data->data, uncompressed_len, NULL, compressed.data, &bzlib_comp_len, false);
+    comp_bzlib_compress (vb, CODEC_BZ2, test_data->data, uncompressed_len, NULL, compressed.data, &bzlib_comp_len, false);
     
     uint32_t lzma_comp_len = compressed.size;
-    comp_compress_lzma (vb, CODEC_LZMA, test_data->data, uncompressed_len, NULL, compressed.data, &lzma_comp_len, false);
+    comp_lzma_compress (vb, CODEC_LZMA, test_data->data, uncompressed_len, NULL, compressed.data, &lzma_comp_len, false);
     
     if      (bzlib_comp_len < uncompressed_len && bzlib_comp_len < lzma_comp_len) best_gt_data_compressor = CODEC_BZ2;
     else if (lzma_comp_len  < uncompressed_len && lzma_comp_len < bzlib_comp_len) best_gt_data_compressor = CODEC_LZMA;

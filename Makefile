@@ -11,11 +11,12 @@ ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
 
-LDFLAGS     += -lpthread -lm
+LDFLAGS     += -lpthread -lm 
 
 ifdef IS_CONDA 
 	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
+	CXXFLAGS = -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -DNDEBUG -std=c++17
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -25,6 +26,8 @@ ifdef IS_CONDA
 else
 	CC=gcc
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native 
+	CXX = g++
+	CXXFLAGS = -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -DNDEBUG -std=c++17
 endif 
 
 MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
@@ -36,7 +39,7 @@ MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_
 		  gff3_seg.c \
 		  me23_seg.c \
 		  buffer.c random_access.c sections.c base64.c \
-		  compressor.c comp_bz2.c comp_lzma.c comp_acgt.c comp_ht.c \
+		  compressor.c comp_bz2.c comp_lzma.c comp_acgt.c comp_ht.c comp_bsc.c comp_none.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c
 
@@ -47,6 +50,11 @@ ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
 
 LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
+
+BSC_C_SRCS   = bsc/divsufsort.c
+
+BSC_CPP_SRCS = bsc/adler32.cpp bsc/bwt.cpp bsc/coder.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/detectors.cpp \
+			   bsc/preprocessing.cpp bsc/libbsc.cpp bsc/lzp.cpp bsc/platform.cpp      
 
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
@@ -93,17 +101,19 @@ endif
 
 ifndef IS_CONDA 
 # local - static link everything
-SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_C_SRCS) $(LZMA_SRCS)
+CPP_SRCS = $(BSC_CPP_SRCS)
 else 
 # conda - use packages for bzip2
-SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_C_SRCS)
+CPP_SRCS = $(BSC_CPP_SRCS)
 endif
 
-OBJS       := $(SRCS:.c=.o) # libbsc/libbsc.a
-DEBUG_OBJS := $(SRCS:.c=.debug-o)  # libbsc/libbsc.a
-OPT_OBJS   := $(SRCS:.c=.opt-o) # libbsc/libbsc.a # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+OBJS       := $(C_SRCS:.c=.o) $(CPP_SRCS:.cpp=.o)
+DEBUG_OBJS := $(C_SRCS:.c=.debug-o) $(CPP_SRCS:.cpp=.debug-o)
+OPT_OBJS   := $(C_SRCS:.c=.opt-o) $(CPP_SRCS:.cpp=.opt-o)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 
-DEPS       := $(SRCS:.c=.d)
+DEPS       := $(C_SRCS:.c=.d) $(CPP_SRCS:.cpp=.d) 
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
@@ -112,18 +122,23 @@ OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE) 
 ifeq ($(CC),gcc)
 	OPTFLAGS += -Ofast -std=gnu99
 	DEBUGFLAGS += -std=gnu99 -DDEBUG -g -O0
+	OXXPTFLAGS = -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math 
 else
 	OPTFLAGS += -O2
 	DEBUGFLAGS += -DDEBUG -g -O0
+	OXXPTFLAGS = -O3 -fomit-frame-pointer -fstrict-aliasing -ffast-math 
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
+all   : CXXFLAGS += $(OXXPTFLAGS) 
 all   : $(EXECUTABLES) LICENSE.non-commercial.txt
 
 debug : CFLAGS += $(DEBUGFLAGS)
+debug : CXXFLAGS += $(DEBUGFLAGS)
 debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 
 opt   : CFLAGS += -g $(OPTFLAGS)
+opt   : CXXFLAGS += $(OXXPTFLAGS) 
 opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
@@ -132,11 +147,19 @@ opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
+%.d: %.cpp
+	@echo Calculating dependencies $<
+	@$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
+
 %.o: %.c %.d
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-%.debug-o: %.c %.d
+%.o: %.cpp %.d
+	@echo Compiling $<
+	@$(CXX) -c -o $@ $< $(CXXFLAGS)
+
+%.debug-o: %.c %.dls
 	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
@@ -144,16 +167,13 @@ opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-#libbsc/libbsc.a:
-#	(cd libbsc; make libbsc.a)
-
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
  
 genozip-debug$(EXE): $(DEBUG_OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS) 
 
 genozip-opt$(EXE): $(OPT_OBJS)
 	@echo Linking $@

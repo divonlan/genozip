@@ -180,7 +180,7 @@ bool comp_compress_non_acgt (VBlock *vb, Codec codec,
     // now do the compression on the non-agct data
     // note: we don't support soft-fail because the allocated amount (uncompressed_len/2) is plenty for our textual data,
     // and we can't allow re-calling of this routine as the xor will undo itself
-    return comp_compress_bzlib (vb, CODEC_BZ2, uncompressed, uncompressed_len, callback, compressed, compressed_len, false);
+    return comp_bzlib_compress (vb, CODEC_BZ2, uncompressed, uncompressed_len, callback, compressed, compressed_len, false);
 }
 
 static void comp_apply_non_acgt_on_top_of_acgt (char *acgt, const char *non_acgt, uint64_t len)
@@ -206,7 +206,7 @@ void comp_uncompress_non_acgt (VBlock *vb,
     comp_apply_non_acgt_on_top_of_acgt (uncompressed_data, vb->compressed.data, uncompressed_len);
 }
 
-void comp_uncompress_acgt (VBlock *vb, 
+void comp_acgt_uncompress (VBlock *vb, 
                            const char *compressed, uint32_t compressed_len,
                            char *uncompressed_data, uint64_t uncompressed_len)
 {

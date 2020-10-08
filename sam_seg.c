@@ -67,17 +67,20 @@ bool sam_inspect_txt_header (BufferP txt_header)
     return true;
 }
 
-// callback function for compress to get data of one line (called by comp_compress_bzlib)
+// callback function for compress to get data of one line (called by comp_bzlib_compress)
 void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                         char **line_qual_data, uint32_t *line_qual_len, // out
                                         char **line_u2_data,   uint32_t *line_u2_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-     
-    *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
+
     *line_qual_len  = dl->qual_data_len;
-    *line_u2_data   = dl->u2_data_start ? ENT (char, vb->txt_data, dl->u2_data_start) : NULL;
     *line_u2_len    = dl->u2_data_len;
+
+    if (!line_qual_data) return; // only lengths were requested
+
+    *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
+    *line_u2_data   = dl->u2_data_start ? ENT (char, vb->txt_data, dl->u2_data_start) : NULL;
 
     // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
     if (dl->qual_data_len == 1 && (*line_qual_data)[0] == '*') 
@@ -99,9 +102,12 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
                     char **unused1,  uint32_t *unused2)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
-
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     
+    *line_len  = dl->seq_len * 2;
+
+    if (!line_data) return; // only length was requested
+
     const char *bd = dl->bdbi_data_start[0] ? ENT (char, vb->txt_data, dl->bdbi_data_start[0]) : NULL;
     const char *bi = dl->bdbi_data_start[1] ? ENT (char, vb->txt_data, dl->bdbi_data_start[1]) : NULL;
     
@@ -116,7 +122,6 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
     }
 
     *line_data = FIRSTENT (char, vb->bd_bi_line);
-    *line_len  = dl->seq_len * 2;
 }   
 
 void sam_seg_initialize (VBlock *vb)

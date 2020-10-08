@@ -927,6 +927,7 @@ int main (int argc, char **argv)
     arch_initialize();
     buf_initialize();
     random_access_initialize();
+    comp_initialize();
 
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows

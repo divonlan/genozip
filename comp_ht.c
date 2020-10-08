@@ -59,7 +59,7 @@ static HaploTypeSortHelperIndex *comp_ht_count_alt_alleles (VBlock *vb)
     return helper_index;
 }
 
-static void comp_compress_ht_one_array (VBlockP vb, uint32_t ht_i, 
+static void comp_ht_compress_one_array (VBlockP vb, uint32_t ht_i, 
                                          char **line_data_1, uint32_t *line_data_len_1,
                                          char **line_data_2, uint32_t *line_data_len_2)
 {
@@ -85,7 +85,7 @@ static void comp_compress_ht_one_array (VBlockP vb, uint32_t ht_i,
 // sort haplogroups by alt allele count within the variant group, create an index for it, and split
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_compress_ht (VBlock *vb, Codec codec,
+bool comp_ht_compress (VBlock *vb, Codec codec,
                        const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                        LocalGetLineCallback callback,                       // option 2 - not supported
                        char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -107,7 +107,7 @@ bool comp_compress_ht (VBlock *vb, Codec codec,
     // compress the matrix one column at a time, by the order of helper index
     uint64_t save_lines_len = vb->lines.len;
     vb->lines.len = vb->num_haplotypes_per_line; // temporarily set vb->lines.len to number of columns, as this is the number of time the callback will be called
-    bool success = comp_compress_bzlib (vb, codec, 0, 0, comp_compress_ht_one_array, compressed, compressed_len, soft_fail);
+    bool success = comp_bzlib_compress (vb, codec, 0, 0, comp_ht_compress_one_array, compressed, compressed_len, soft_fail);
     vb->lines.len = save_lines_len;
 
     if (!success) return false; // soft fail
@@ -130,7 +130,7 @@ bool comp_compress_ht (VBlock *vb, Codec codec,
     for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
         hp_index[ht_i] = BGEN32 (helper_index[ht_i].index_in_sorted_line);
 
-    COPY_TIMER (vb->profile.comp_compress_ht);
+    COPY_TIMER (vb->profile.comp_ht_compress);
 
     return true;
 }
