@@ -402,6 +402,9 @@ static void ref_read_one_range (VBlockP vb)
     if (!sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE, SEC_REF_IS_SET))
         return; // no more reference sections
 
+    ASSERT (sl_ent->vblock_i == vb->vblock_i, "Error in ref_read_one_range: mismatch: sl_ent->vblock_i=%u but vb->vblock_i=%u",
+            sl_ent->vblock_i, vb->vblock_i);
+
     // if the user specified --regions, check if this ref range is needed
     bool range_is_included = true;
     RAEntry *ra = NULL;
@@ -433,11 +436,11 @@ static void ref_read_one_range (VBlockP vb)
         
         WordIndex chrom = BGEN32 (header->chrom_word_index);
         if (chrom == NODE_INDEX_NONE) return; // we're done - terminating empty section that sometimes appears (eg in unaligned SAM that don't have any reference and yet are REF_INTERNAL)
-
-        // if this is SEC_REF_IS_SET, read the SEC_REFERENCE section now
-        if (header->h.section_type == SEC_REF_IS_SET) 
-            ref_read_one_range (vb);
     }
+
+    // if this is SEC_REF_IS_SET, read the SEC_REFERENCE section now (even if its not included - we need to advance the cursor)
+    if (sl_ent->section_type == SEC_REF_IS_SET) 
+        ref_read_one_range (vb);
 
     vb->ready_to_dispatch = true; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
 }
@@ -945,7 +948,7 @@ static int ref_contigs_range_sorter (const void *a, const void *b)
 // sorts denovo ranges by chrom and pos, removes unused ranges from ranges, 
 static void ref_finalize_denovo_ranges (void)
 {
-    // create contigs from CHROM dictinoary
+    // create contigs from CHROM dictionary
     ref_contigs_generate_data_if_denovo();
 
     // calculate all chrom indices
