@@ -17,7 +17,7 @@ void str_to_lowercase (char *s)
             *s += 'a' - 'A';
 }
 
-char *str_size (int64_t size, char *str /* out */)
+char *str_size (uint64_t size, char *str /* out */)
 {
     if      (size > (1LL << 50)) sprintf (str, "%3.1lf PB", ((double)size) / (double)(1LL << 50));
     else if (size > (1LL << 40)) sprintf (str, "%3.1lf TB", ((double)size) / (double)(1LL << 40));

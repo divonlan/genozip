@@ -397,8 +397,15 @@ uint64_t buf_alloc_do (VBlock *vb,
 
     if (!requested_size) return 0; // nothing to do
 
+#define REQUEST_TOO_BIG_THREADSHOLD (4ULL*1024*1024*1024) // 4 GB
+    char s[30];
+    ASSERTW (requested_size < REQUEST_TOO_BIG_THREADSHOLD, "Warning: buf_alloc called from %s:%u requested %s. This is suspeciously high and might indicate a bug",
+             func, code_line, str_size (requested_size, s));
+
     // sanity checks
-    ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "Error: cannot buf_alloc an overlayed buffer. details: %s", buf_desc (buf));
+    ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "Error in buf_alloc_do called from %s:%u: cannot buf_alloc an overlayed buffer. details: %s", 
+            func, code_line, buf_desc (buf));
+
     ASSERT0 (vb, "Error in buf_alloc_do: null vb");
 
     // case 1: we have enough memory already
@@ -413,8 +420,8 @@ uint64_t buf_alloc_do (VBlock *vb,
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
     uint64_t new_size = (uint64_t)(requested_size * grow_at_least_factor + 7) & 0xfffffffffffffff8ULL; // aligned to 8 bytes
 
-    ASSERT (new_size >= requested_size, "Error: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb_i=%u", 
-            buf_desc (buf), requested_size, new_size, vb->vblock_i); // floating point paranoia
+    ASSERT (new_size >= requested_size, "Error in buf_alloc_do called from %s:%u: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb_i=%u", 
+            func, code_line, buf_desc (buf), requested_size, new_size, vb->vblock_i); // floating point paranoia
 
     // case 2: buffer was allocated already in the past - allocate new memory and copy over the data
     if (buf->memory) {
@@ -469,8 +476,8 @@ uint64_t buf_alloc_do (VBlock *vb,
     else {
         __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
         char *memory = (char *)malloc (new_size + overhead_size);
-        ASSERT (memory != BUFFER_BEING_MODIFIED, "Error: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
-                buf_desc(buf), new_size);
+        ASSERT (memory != BUFFER_BEING_MODIFIED, "Error in buf_alloc_do called from %s:%u: malloc didn't assign, very weird! buffer %s new_size=%"PRIu64,
+                func, code_line, buf_desc(buf), new_size);
 
         buf->type   = BUF_REGULAR;
 
