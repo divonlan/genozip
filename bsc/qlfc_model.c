@@ -28,6 +28,11 @@ for full list of contributors.
 See also the bsc and libbsc web site:
   http://libbsc.com/ for more information.
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 --*/
 
 #include <stdlib.h>
@@ -49,21 +54,21 @@ int bsc_qlfc_init_static_model()
 {
     for (int mixer = 0; mixer < ALPHABET_SIZE; ++mixer)
     {
-        g_QlfcStatisticalModel.mixerOfRank[mixer].Init();
-        g_QlfcStatisticalModel.mixerOfRankEscape[mixer].Init();
-        g_QlfcStatisticalModel.mixerOfRun[mixer].Init();
+        MixerInit (&g_QlfcStatisticalModel.mixerOfRank[mixer]);
+        MixerInit (&g_QlfcStatisticalModel.mixerOfRankEscape[mixer]);
+        MixerInit (&g_QlfcStatisticalModel.mixerOfRun[mixer]);
     }
     for (int bit = 0; bit < 8; ++bit)
     {
-        g_QlfcStatisticalModel.mixerOfRankMantissa[bit].Init();
+        MixerInit (&g_QlfcStatisticalModel.mixerOfRankMantissa[bit]);
         for (int context = 0; context < 8; ++context)
-            g_QlfcStatisticalModel.mixerOfRankExponent[context][bit].Init();
+            MixerInit (&g_QlfcStatisticalModel.mixerOfRankExponent[context][bit]);
     }
     for (int bit = 0; bit < 32; ++bit)
     {
-        g_QlfcStatisticalModel.mixerOfRunMantissa[bit].Init();
+        MixerInit (&g_QlfcStatisticalModel.mixerOfRunMantissa[bit]);
         for (int context = 0; context < 32; ++context)
-            g_QlfcStatisticalModel.mixerOfRunExponent[context][bit].Init();
+            MixerInit (&g_QlfcStatisticalModel.mixerOfRunExponent[context][bit]);
     }
 
     bsc_qlfc_memset_2048(&g_QlfcStatisticalModel.Rank, sizeof(g_QlfcStatisticalModel.Rank));
@@ -76,7 +81,3 @@ void bsc_qlfc_init_model(QlfcStatisticalModel * model)
 {
     memcpy(model, &g_QlfcStatisticalModel, sizeof(QlfcStatisticalModel));
 }
-
-/*-----------------------------------------------------------*/
-/* End                                        qlfc_model.cpp */
-/*-----------------------------------------------------------*/

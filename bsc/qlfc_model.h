@@ -30,156 +30,157 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #ifndef _LIBBSC_QLFC_MODEL_H
 #define _LIBBSC_QLFC_MODEL_H
 
 #include "predictor.h"
 
-const int M_RANK_TS_TH0 =    1; const int M_RANK_TS_AR0 =   57;
-const int M_RANK_TS_TH1 = -111; const int M_RANK_TS_AR1 =   31;
-const int M_RANK_TC_TH0 =  291; const int M_RANK_TC_AR0 =  250;
-const int M_RANK_TC_TH1 =  154; const int M_RANK_TC_AR1 =  528;
-const int M_RANK_TP_TH0 =  375; const int M_RANK_TP_AR0 =  163;
-const int M_RANK_TP_TH1 =  313; const int M_RANK_TP_AR1 =  639;
-const int M_RANK_TM_TH0 =  -41; const int M_RANK_TM_AR0 =   96;
-const int M_RANK_TM_TH1 =   53; const int M_RANK_TM_AR1 =   49;
-const int M_RANK_TM_LR0 =   20; const int M_RANK_TM_LR1 =   47;
-const int M_RANK_TM_LR2 =   27;
+static const int M_RANK_TS_TH0 =    1; static const int M_RANK_TS_AR0 =   57;
+static const int M_RANK_TS_TH1 = -111; static const int M_RANK_TS_AR1 =   31;
+static const int M_RANK_TC_TH0 =  291; static const int M_RANK_TC_AR0 =  250;
+static const int M_RANK_TC_TH1 =  154; static const int M_RANK_TC_AR1 =  528;
+static const int M_RANK_TP_TH0 =  375; static const int M_RANK_TP_AR0 =  163;
+static const int M_RANK_TP_TH1 =  313; static const int M_RANK_TP_AR1 =  639;
+static const int M_RANK_TM_TH0 =  -41; static const int M_RANK_TM_AR0 =   96;
+static const int M_RANK_TM_TH1 =   53; static const int M_RANK_TM_AR1 =   49;
+static const int M_RANK_TM_LR0 =   20; static const int M_RANK_TM_LR1 =   47;
+static const int M_RANK_TM_LR2 =   27;
 
-const int M_RANK_ES_TH0 = -137; const int M_RANK_ES_AR0 =   17;
-const int M_RANK_ES_TH1 =  482; const int M_RANK_ES_AR1 =   40;
-const int M_RANK_EC_TH0 =   61; const int M_RANK_EC_AR0 =  192;
-const int M_RANK_EC_TH1 =  200; const int M_RANK_EC_AR1 =  133;
-const int M_RANK_EP_TH0 =   54; const int M_RANK_EP_AR0 = 1342;
-const int M_RANK_EP_TH1 =  578; const int M_RANK_EP_AR1 = 1067;
-const int M_RANK_EM_TH0 =  -11; const int M_RANK_EM_AR0 =  318;
-const int M_RANK_EM_TH1 =  144; const int M_RANK_EM_AR1 =  848;
-const int M_RANK_EM_LR0 =   49; const int M_RANK_EM_LR1 =   41;
-const int M_RANK_EM_LR2 =   40;
+static const int M_RANK_ES_TH0 = -137; static const int M_RANK_ES_AR0 =   17;
+static const int M_RANK_ES_TH1 =  482; static const int M_RANK_ES_AR1 =   40;
+static const int M_RANK_EC_TH0 =   61; static const int M_RANK_EC_AR0 =  192;
+static const int M_RANK_EC_TH1 =  200; static const int M_RANK_EC_AR1 =  133;
+static const int M_RANK_EP_TH0 =   54; static const int M_RANK_EP_AR0 = 1342;
+static const int M_RANK_EP_TH1 =  578; static const int M_RANK_EP_AR1 = 1067;
+static const int M_RANK_EM_TH0 =  -11; static const int M_RANK_EM_AR0 =  318;
+static const int M_RANK_EM_TH1 =  144; static const int M_RANK_EM_AR1 =  848;
+static const int M_RANK_EM_LR0 =   49; static const int M_RANK_EM_LR1 =   41;
+static const int M_RANK_EM_LR2 =   40;
 
-const int M_RANK_MS_TH0 = -145; const int M_RANK_MS_AR0 =   18;
-const int M_RANK_MS_TH1 =  114; const int M_RANK_MS_AR1 =   24;
-const int M_RANK_MC_TH0 =  -43; const int M_RANK_MC_AR0 =   69;
-const int M_RANK_MC_TH1 =  -36; const int M_RANK_MC_AR1 =   78;
-const int M_RANK_MP_TH0 =   -2; const int M_RANK_MP_AR0 = 1119;
-const int M_RANK_MP_TH1 =   11; const int M_RANK_MP_AR1 = 1181;
-const int M_RANK_MM_TH0 = -203; const int M_RANK_MM_AR0 =   20;
-const int M_RANK_MM_TH1 = -271; const int M_RANK_MM_AR1 =   15;
-const int M_RANK_MM_LR0 =  263; const int M_RANK_MM_LR1 =  175;
-const int M_RANK_MM_LR2 =   17;
+static const int M_RANK_MS_TH0 = -145; static const int M_RANK_MS_AR0 =   18;
+static const int M_RANK_MS_TH1 =  114; static const int M_RANK_MS_AR1 =   24;
+static const int M_RANK_MC_TH0 =  -43; static const int M_RANK_MC_AR0 =   69;
+static const int M_RANK_MC_TH1 =  -36; static const int M_RANK_MC_AR1 =   78;
+static const int M_RANK_MP_TH0 =   -2; static const int M_RANK_MP_AR0 = 1119;
+static const int M_RANK_MP_TH1 =   11; static const int M_RANK_MP_AR1 = 1181;
+static const int M_RANK_MM_TH0 = -203; static const int M_RANK_MM_AR0 =   20;
+static const int M_RANK_MM_TH1 = -271; static const int M_RANK_MM_AR1 =   15;
+static const int M_RANK_MM_LR0 =  263; static const int M_RANK_MM_LR1 =  175;
+static const int M_RANK_MM_LR2 =   17;
 
-const int M_RANK_PS_TH0 =  -99; const int M_RANK_PS_AR0 =   32;
-const int M_RANK_PS_TH1 =  318; const int M_RANK_PS_AR1 =   42;
-const int M_RANK_PC_TH0 =   17; const int M_RANK_PC_AR0 =  101;
-const int M_RANK_PC_TH1 = 1116; const int M_RANK_PC_AR1 =  246;
-const int M_RANK_PP_TH0 =   22; const int M_RANK_PP_AR0 =  964;
-const int M_RANK_PP_TH1 =   -2; const int M_RANK_PP_AR1 = 1110;
-const int M_RANK_PM_TH0 = -194; const int M_RANK_PM_AR0 =   21;
-const int M_RANK_PM_TH1 = -129; const int M_RANK_PM_AR1 =   20;
-const int M_RANK_PM_LR0 =  480; const int M_RANK_PM_LR1 =  202;
-const int M_RANK_PM_LR2 =   17;
+static const int M_RANK_PS_TH0 =  -99; static const int M_RANK_PS_AR0 =   32;
+static const int M_RANK_PS_TH1 =  318; static const int M_RANK_PS_AR1 =   42;
+static const int M_RANK_PC_TH0 =   17; static const int M_RANK_PC_AR0 =  101;
+static const int M_RANK_PC_TH1 = 1116; static const int M_RANK_PC_AR1 =  246;
+static const int M_RANK_PP_TH0 =   22; static const int M_RANK_PP_AR0 =  964;
+static const int M_RANK_PP_TH1 =   -2; static const int M_RANK_PP_AR1 = 1110;
+static const int M_RANK_PM_TH0 = -194; static const int M_RANK_PM_AR0 =   21;
+static const int M_RANK_PM_TH1 = -129; static const int M_RANK_PM_AR1 =   20;
+static const int M_RANK_PM_LR0 =  480; static const int M_RANK_PM_LR1 =  202;
+static const int M_RANK_PM_LR2 =   17;
 
-const int M_RUN_TS_TH0 =  -93; const int M_RUN_TS_AR0 =   34;
-const int M_RUN_TS_TH1 =   -4; const int M_RUN_TS_AR1 =   51;
-const int M_RUN_TC_TH0 =  139; const int M_RUN_TC_AR0 =  423;
-const int M_RUN_TC_TH1 =  244; const int M_RUN_TC_AR1 =  162;
-const int M_RUN_TP_TH0 =  275; const int M_RUN_TP_AR0 =  450;
-const int M_RUN_TP_TH1 =   -6; const int M_RUN_TP_AR1 =  579;
-const int M_RUN_TM_TH0 =  -68; const int M_RUN_TM_AR0 =   25;
-const int M_RUN_TM_TH1 =    1; const int M_RUN_TM_AR1 =   64;
-const int M_RUN_TM_LR0 =   15; const int M_RUN_TM_LR1 =   50;
-const int M_RUN_TM_LR2 =   78;
+static const int M_RUN_TS_TH0 =  -93; static const int M_RUN_TS_AR0 =   34;
+static const int M_RUN_TS_TH1 =   -4; static const int M_RUN_TS_AR1 =   51;
+static const int M_RUN_TC_TH0 =  139; static const int M_RUN_TC_AR0 =  423;
+static const int M_RUN_TC_TH1 =  244; static const int M_RUN_TC_AR1 =  162;
+static const int M_RUN_TP_TH0 =  275; static const int M_RUN_TP_AR0 =  450;
+static const int M_RUN_TP_TH1 =   -6; static const int M_RUN_TP_AR1 =  579;
+static const int M_RUN_TM_TH0 =  -68; static const int M_RUN_TM_AR0 =   25;
+static const int M_RUN_TM_TH1 =    1; static const int M_RUN_TM_AR1 =   64;
+static const int M_RUN_TM_LR0 =   15; static const int M_RUN_TM_LR1 =   50;
+static const int M_RUN_TM_LR2 =   78;
 
-const int M_RUN_ES_TH0 = -116; const int M_RUN_ES_AR0 =   31;
-const int M_RUN_ES_TH1 =   43; const int M_RUN_ES_AR1 =   45;
-const int M_RUN_EC_TH0 =  165; const int M_RUN_EC_AR0 =  222;
-const int M_RUN_EC_TH1 =   30; const int M_RUN_EC_AR1 =  324;
-const int M_RUN_EP_TH0 =  315; const int M_RUN_EP_AR0 =  857;
-const int M_RUN_EP_TH1 =  109; const int M_RUN_EP_AR1 =  867;
-const int M_RUN_EM_TH0 =  -14; const int M_RUN_EM_AR0 =  215;
-const int M_RUN_EM_TH1 =   61; const int M_RUN_EM_AR1 =   73;
-const int M_RUN_EM_LR0 =   35; const int M_RUN_EM_LR1 =   37;
-const int M_RUN_EM_LR2 =   42;
+static const int M_RUN_ES_TH0 = -116; static const int M_RUN_ES_AR0 =   31;
+static const int M_RUN_ES_TH1 =   43; static const int M_RUN_ES_AR1 =   45;
+static const int M_RUN_EC_TH0 =  165; static const int M_RUN_EC_AR0 =  222;
+static const int M_RUN_EC_TH1 =   30; static const int M_RUN_EC_AR1 =  324;
+static const int M_RUN_EP_TH0 =  315; static const int M_RUN_EP_AR0 =  857;
+static const int M_RUN_EP_TH1 =  109; static const int M_RUN_EP_AR1 =  867;
+static const int M_RUN_EM_TH0 =  -14; static const int M_RUN_EM_AR0 =  215;
+static const int M_RUN_EM_TH1 =   61; static const int M_RUN_EM_AR1 =   73;
+static const int M_RUN_EM_LR0 =   35; static const int M_RUN_EM_LR1 =   37;
+static const int M_RUN_EM_LR2 =   42;
 
-const int M_RUN_MS_TH0 = -176; const int M_RUN_MS_AR0 =   14;
-const int M_RUN_MS_TH1 = -141; const int M_RUN_MS_AR1 =   21;
-const int M_RUN_MC_TH0 =   84; const int M_RUN_MC_AR0 =  172;
-const int M_RUN_MC_TH1 =   37; const int M_RUN_MC_AR1 =  263;
-const int M_RUN_MP_TH0 =    2; const int M_RUN_MP_AR0 =   15;
-const int M_RUN_MP_TH1 = -197; const int M_RUN_MP_AR1 =   20;
-const int M_RUN_MM_TH0 =  -27; const int M_RUN_MM_AR0 =  142;
-const int M_RUN_MM_TH1 = -146; const int M_RUN_MM_AR1 =   27;
-const int M_RUN_MM_LR0 =   51; const int M_RUN_MM_LR1 =   44;
-const int M_RUN_MM_LR2 =   80;
+static const int M_RUN_MS_TH0 = -176; static const int M_RUN_MS_AR0 =   14;
+static const int M_RUN_MS_TH1 = -141; static const int M_RUN_MS_AR1 =   21;
+static const int M_RUN_MC_TH0 =   84; static const int M_RUN_MC_AR0 =  172;
+static const int M_RUN_MC_TH1 =   37; static const int M_RUN_MC_AR1 =  263;
+static const int M_RUN_MP_TH0 =    2; static const int M_RUN_MP_AR0 =   15;
+static const int M_RUN_MP_TH1 = -197; static const int M_RUN_MP_AR1 =   20;
+static const int M_RUN_MM_TH0 =  -27; static const int M_RUN_MM_AR0 =  142;
+static const int M_RUN_MM_TH1 = -146; static const int M_RUN_MM_AR1 =   27;
+static const int M_RUN_MM_LR0 =   51; static const int M_RUN_MM_LR1 =   44;
+static const int M_RUN_MM_LR2 =   80;
 
-const int F_RANK_TS_TH0 = -116; const int F_RANK_TS_AR0 =   33;
-const int F_RANK_TS_TH1 =  -78; const int F_RANK_TS_AR1 =   34;
-const int F_RANK_TC_TH0 =   -2; const int F_RANK_TC_AR0 =  282;
-const int F_RANK_TC_TH1 =   12; const int F_RANK_TC_AR1 =  274;
-const int F_RANK_TP_TH0 =    4; const int F_RANK_TP_AR0 =  697;
-const int F_RANK_TP_TH1 =   55; const int F_RANK_TP_AR1 = 1185;
-const int F_RANK_TM_LR0 =   17; const int F_RANK_TM_LR1 =   14;
-const int F_RANK_TM_LR2 =    1;
+static const int F_RANK_TS_TH0 = -116; static const int F_RANK_TS_AR0 =   33;
+static const int F_RANK_TS_TH1 =  -78; static const int F_RANK_TS_AR1 =   34;
+static const int F_RANK_TC_TH0 =   -2; static const int F_RANK_TC_AR0 =  282;
+static const int F_RANK_TC_TH1 =   12; static const int F_RANK_TC_AR1 =  274;
+static const int F_RANK_TP_TH0 =    4; static const int F_RANK_TP_AR0 =  697;
+static const int F_RANK_TP_TH1 =   55; static const int F_RANK_TP_AR1 = 1185;
+static const int F_RANK_TM_LR0 =   17; static const int F_RANK_TM_LR1 =   14;
+static const int F_RANK_TM_LR2 =    1;
 
-const int F_RANK_ES_TH0 = -177; const int F_RANK_ES_AR0 =   23;
-const int F_RANK_ES_TH1 = -370; const int F_RANK_ES_AR1 =   11;
-const int F_RANK_EC_TH0 =  -14; const int F_RANK_EC_AR0 =  271;
-const int F_RANK_EC_TH1 =    3; const int F_RANK_EC_AR1 =  308;
-const int F_RANK_EP_TH0 =   -3; const int F_RANK_EP_AR0 =  788;
-const int F_RANK_EP_TH1 =  135; const int F_RANK_EP_AR1 = 1364;
-const int F_RANK_EM_LR0 =   22; const int F_RANK_EM_LR1 =    6;
-const int F_RANK_EM_LR2 =    4;
+static const int F_RANK_ES_TH0 = -177; static const int F_RANK_ES_AR0 =   23;
+static const int F_RANK_ES_TH1 = -370; static const int F_RANK_ES_AR1 =   11;
+static const int F_RANK_EC_TH0 =  -14; static const int F_RANK_EC_AR0 =  271;
+static const int F_RANK_EC_TH1 =    3; static const int F_RANK_EC_AR1 =  308;
+static const int F_RANK_EP_TH0 =   -3; static const int F_RANK_EP_AR0 =  788;
+static const int F_RANK_EP_TH1 =  135; static const int F_RANK_EP_AR1 = 1364;
+static const int F_RANK_EM_LR0 =   22; static const int F_RANK_EM_LR1 =    6;
+static const int F_RANK_EM_LR2 =    4;
 
-const int F_RANK_MS_TH0 = -254; const int F_RANK_MS_AR0 =   16;
-const int F_RANK_MS_TH1 = -177; const int F_RANK_MS_AR1 =   20;
-const int F_RANK_MC_TH0 =  -55; const int F_RANK_MC_AR0 =   73;
-const int F_RANK_MC_TH1 =  -54; const int F_RANK_MC_AR1 =   74;
-const int F_RANK_MP_TH0 =   -6; const int F_RANK_MP_AR0 =  575;
-const int F_RANK_MP_TH1 = 1670; const int F_RANK_MP_AR1 = 1173;
-const int F_RANK_MM_LR0 =   15; const int F_RANK_MM_LR1 =   10;
-const int F_RANK_MM_LR2 =    7;
+static const int F_RANK_MS_TH0 = -254; static const int F_RANK_MS_AR0 =   16;
+static const int F_RANK_MS_TH1 = -177; static const int F_RANK_MS_AR1 =   20;
+static const int F_RANK_MC_TH0 =  -55; static const int F_RANK_MC_AR0 =   73;
+static const int F_RANK_MC_TH1 =  -54; static const int F_RANK_MC_AR1 =   74;
+static const int F_RANK_MP_TH0 =   -6; static const int F_RANK_MP_AR0 =  575;
+static const int F_RANK_MP_TH1 = 1670; static const int F_RANK_MP_AR1 = 1173;
+static const int F_RANK_MM_LR0 =   15; static const int F_RANK_MM_LR1 =   10;
+static const int F_RANK_MM_LR2 =    7;
 
-const int F_RANK_PS_TH0 = -126; const int F_RANK_PS_AR0 =   32;
-const int F_RANK_PS_TH1 = -126; const int F_RANK_PS_AR1 =   32;
-const int F_RANK_PC_TH0 =  -33; const int F_RANK_PC_AR0 =  120;
-const int F_RANK_PC_TH1 =  -25; const int F_RANK_PC_AR1 =  157;
-const int F_RANK_PP_TH0 =   -6; const int F_RANK_PP_AR0 =  585;
-const int F_RANK_PP_TH1 =  150; const int F_RANK_PP_AR1 =  275;
-const int F_RANK_PM_LR0 =   16; const int F_RANK_PM_LR1 =   11;
-const int F_RANK_PM_LR2 =    5;
+static const int F_RANK_PS_TH0 = -126; static const int F_RANK_PS_AR0 =   32;
+static const int F_RANK_PS_TH1 = -126; static const int F_RANK_PS_AR1 =   32;
+static const int F_RANK_PC_TH0 =  -33; static const int F_RANK_PC_AR0 =  120;
+static const int F_RANK_PC_TH1 =  -25; static const int F_RANK_PC_AR1 =  157;
+static const int F_RANK_PP_TH0 =   -6; static const int F_RANK_PP_AR0 =  585;
+static const int F_RANK_PP_TH1 =  150; static const int F_RANK_PP_AR1 =  275;
+static const int F_RANK_PM_LR0 =   16; static const int F_RANK_PM_LR1 =   11;
+static const int F_RANK_PM_LR2 =    5;
 
-const int F_RUN_TS_TH0 =  -68; const int F_RUN_TS_AR0 =   38;
-const int F_RUN_TS_TH1 = -112; const int F_RUN_TS_AR1 =   36;
-const int F_RUN_TC_TH0 =   -4; const int F_RUN_TC_AR0 =  221;
-const int F_RUN_TC_TH1 =  -13; const int F_RUN_TC_AR1 =  231;
-const int F_RUN_TP_TH0 =    0; const int F_RUN_TP_AR0 =    0;
-const int F_RUN_TP_TH1 =    0; const int F_RUN_TP_AR1 =    0;
-const int F_RUN_TM_LR0 =   14; const int F_RUN_TM_LR1 =   18;
-const int F_RUN_TM_LR2 =    0;
+static const int F_RUN_TS_TH0 =  -68; static const int F_RUN_TS_AR0 =   38;
+static const int F_RUN_TS_TH1 = -112; static const int F_RUN_TS_AR1 =   36;
+static const int F_RUN_TC_TH0 =   -4; static const int F_RUN_TC_AR0 =  221;
+static const int F_RUN_TC_TH1 =  -13; static const int F_RUN_TC_AR1 =  231;
+static const int F_RUN_TP_TH0 =    0; static const int F_RUN_TP_AR0 =    0;
+static const int F_RUN_TP_TH1 =    0; static const int F_RUN_TP_AR1 =    0;
+static const int F_RUN_TM_LR0 =   14; static const int F_RUN_TM_LR1 =   18;
+static const int F_RUN_TM_LR2 =    0;
 
-const int F_RUN_ES_TH0 =  -90; const int F_RUN_ES_AR0 =   45;
-const int F_RUN_ES_TH1 =  -92; const int F_RUN_ES_AR1 =   44;
-const int F_RUN_EC_TH0 =   -3; const int F_RUN_EC_AR0 =  325;
-const int F_RUN_EC_TH1 =  -11; const int F_RUN_EC_AR1 =  341;
-const int F_RUN_EP_TH0 =   24; const int F_RUN_EP_AR0 =  887;
-const int F_RUN_EP_TH1 =   -4; const int F_RUN_EP_AR1 =  765;
-const int F_RUN_EM_LR0 =   14; const int F_RUN_EM_LR1 =   15;
-const int F_RUN_EM_LR2 =    3;
+static const int F_RUN_ES_TH0 =  -90; static const int F_RUN_ES_AR0 =   45;
+static const int F_RUN_ES_TH1 =  -92; static const int F_RUN_ES_AR1 =   44;
+static const int F_RUN_EC_TH0 =   -3; static const int F_RUN_EC_AR0 =  325;
+static const int F_RUN_EC_TH1 =  -11; static const int F_RUN_EC_AR1 =  341;
+static const int F_RUN_EP_TH0 =   24; static const int F_RUN_EP_AR0 =  887;
+static const int F_RUN_EP_TH1 =   -4; static const int F_RUN_EP_AR1 =  765;
+static const int F_RUN_EM_LR0 =   14; static const int F_RUN_EM_LR1 =   15;
+static const int F_RUN_EM_LR2 =    3;
 
-const int F_RUN_MS_TH0 = -275; const int F_RUN_MS_AR0 =   14;
-const int F_RUN_MS_TH1 = -185; const int F_RUN_MS_AR1 =   22;
-const int F_RUN_MC_TH0 =  -18; const int F_RUN_MC_AR0 =  191;
-const int F_RUN_MC_TH1 =  -15; const int F_RUN_MC_AR1 =  241;
-const int F_RUN_MP_TH0 =  -73; const int F_RUN_MP_AR0 =   54;
-const int F_RUN_MP_TH1 = -214; const int F_RUN_MP_AR1 =   19;
-const int F_RUN_MM_LR0 =    7; const int F_RUN_MM_LR1 =   15;
-const int F_RUN_MM_LR2 =   10;
+static const int F_RUN_MS_TH0 = -275; static const int F_RUN_MS_AR0 =   14;
+static const int F_RUN_MS_TH1 = -185; static const int F_RUN_MS_AR1 =   22;
+static const int F_RUN_MC_TH0 =  -18; static const int F_RUN_MC_AR0 =  191;
+static const int F_RUN_MC_TH1 =  -15; static const int F_RUN_MC_AR1 =  241;
+static const int F_RUN_MP_TH0 =  -73; static const int F_RUN_MP_AR0 =   54;
+static const int F_RUN_MP_TH1 = -214; static const int F_RUN_MP_AR1 =   19;
+static const int F_RUN_MM_LR0 =    7; static const int F_RUN_MM_LR1 =   15;
+static const int F_RUN_MM_LR2 =   10;
 
-struct QlfcStatisticalModel
-{
-
-public:
-
+typedef struct {
     ProbabilityMixer mixerOfRank[ALPHABET_SIZE];
     ProbabilityMixer mixerOfRankExponent[8][8];
     ProbabilityMixer mixerOfRankMantissa[8];
@@ -188,27 +189,27 @@ public:
     ProbabilityMixer mixerOfRunExponent[32][32];
     ProbabilityMixer mixerOfRunMantissa[32];
 
-    struct Rank
+    struct 
     {
         short StaticModel;
         short StateModel[ALPHABET_SIZE];
         short CharModel[ALPHABET_SIZE];
 
-        struct Exponent
+        struct
         {
             short StaticModel[8];
             short StateModel[ALPHABET_SIZE][8];
             short CharModel[ALPHABET_SIZE][8];
         } Exponent;
 
-        struct Mantissa
+        struct
         {
             short StaticModel[ALPHABET_SIZE];
             short StateModel[ALPHABET_SIZE][ALPHABET_SIZE];
             short CharModel[ALPHABET_SIZE][ALPHABET_SIZE];
         } Mantissa[8];
 
-        struct Escape
+        struct
         {
             short StaticModel[ALPHABET_SIZE];
             short StateModel[ALPHABET_SIZE][ALPHABET_SIZE];
@@ -217,20 +218,20 @@ public:
 
     } Rank;
 
-    struct Run
+    struct 
     {
         short StaticModel;
         short StateModel[ALPHABET_SIZE];
         short CharModel[ALPHABET_SIZE];
 
-        struct Exponent
+        struct
         {
             short StaticModel[32];
             short StateModel[ALPHABET_SIZE][32];
             short CharModel[ALPHABET_SIZE][32];
         } Exponent;
 
-        struct Mantissa
+        struct
         {
             short StaticModel[32];
             short StateModel[ALPHABET_SIZE][32];
@@ -238,7 +239,7 @@ public:
         } Mantissa[32];
 
     } Run;
-};
+} QlfcStatisticalModel;
 
 int  bsc_qlfc_init_static_model();
 void bsc_qlfc_init_model(QlfcStatisticalModel * model);

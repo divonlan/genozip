@@ -30,6 +30,11 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <stdlib.h>
 #include <memory.h>
 
@@ -127,8 +132,8 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
 
     RangeCoder coder;
 
-    coder.InitEncoder(output, outputSize);
-    coder.EncodeWord((unsigned int)inputSize);
+    InitEncoder(&coder, output, outputSize);
+    EncodeWord(&coder, (unsigned int)inputSize);
 
     unsigned char usedChar[ALPHABET_SIZE];
     for (int i = 0; i < ALPHABET_SIZE; ++i) usedChar[i] = 0;
@@ -156,7 +161,7 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
 
             if (bit0 && bit1)
             {
-                coder.EncodeBit(currentChar & (1 << bit));
+                EncodeBit(&coder, currentChar & (1 << bit));
             }
         }
 
@@ -171,7 +176,7 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
 
     for (const unsigned char * inputEnd = input + inputSize; input < inputEnd;)
     {
-        if (coder.CheckEOB())
+        if (CheckEOB(&coder))
         {
             return LIBBSC_NOT_COMPRESSIBLE;
         }
@@ -217,22 +222,22 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
 
                 int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-                ProbabilityCounter::UpdateBit0(*statePredictor,  M_RANK_TS_TH0, M_RANK_TS_AR0);
-                ProbabilityCounter::UpdateBit0(*charPredictor,   M_RANK_TC_TH0, M_RANK_TC_AR0);
-                ProbabilityCounter::UpdateBit0(*staticPredictor, M_RANK_TP_TH0, M_RANK_TP_AR0);
+                ProbCounter_UpdateBit0(statePredictor,  M_RANK_TS_TH0, M_RANK_TS_AR0);
+                ProbCounter_UpdateBit0(charPredictor,   M_RANK_TC_TH0, M_RANK_TC_AR0);
+                ProbCounter_UpdateBit0(staticPredictor, M_RANK_TP_TH0, M_RANK_TP_AR0);
 
-                coder.EncodeBit0(mixer->MixupAndUpdateBit0(probability0, probability1, probability2, M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH0, M_RANK_TM_AR0));
+                EncodeBit0(&coder, MixupAndUpdateBit0 (mixer, probability0, probability1, probability2, M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH0, M_RANK_TM_AR0));
             }
             else
             {
                 {
                     int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-                    ProbabilityCounter::UpdateBit1(*statePredictor,  M_RANK_TS_TH1, M_RANK_TS_AR1);
-                    ProbabilityCounter::UpdateBit1(*charPredictor,   M_RANK_TC_TH1, M_RANK_TC_AR1);
-                    ProbabilityCounter::UpdateBit1(*staticPredictor, M_RANK_TP_TH1, M_RANK_TP_AR1);
+                    ProbCounter_UpdateBit1(statePredictor,  M_RANK_TS_TH1, M_RANK_TS_AR1);
+                    ProbCounter_UpdateBit1(charPredictor,   M_RANK_TC_TH1, M_RANK_TC_AR1);
+                    ProbCounter_UpdateBit1(staticPredictor, M_RANK_TP_TH1, M_RANK_TP_AR1);
 
-                    coder.EncodeBit1(mixer->MixupAndUpdateBit1(probability0, probability1, probability2, M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH1, M_RANK_TM_AR1));
+                    EncodeBit1(&coder, MixupAndUpdateBit1 (mixer, probability0, probability1, probability2, M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH1, M_RANK_TM_AR1));
                 }
 
                 int bitRankSize = bsc_log2_256(rank); rankHistory[currentChar] = bitRankSize;
@@ -246,11 +251,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                 {
                     int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-                    ProbabilityCounter::UpdateBit1(*statePredictor,  M_RANK_ES_TH1, M_RANK_ES_AR1);
-                    ProbabilityCounter::UpdateBit1(*charPredictor,   M_RANK_EC_TH1, M_RANK_EC_AR1);
-                    ProbabilityCounter::UpdateBit1(*staticPredictor, M_RANK_EP_TH1, M_RANK_EP_AR1);
+                    ProbCounter_UpdateBit1(statePredictor,  M_RANK_ES_TH1, M_RANK_ES_AR1);
+                    ProbCounter_UpdateBit1(charPredictor,   M_RANK_EC_TH1, M_RANK_EC_AR1);
+                    ProbCounter_UpdateBit1(staticPredictor, M_RANK_EP_TH1, M_RANK_EP_AR1);
 
-                    coder.EncodeBit1(mixer->MixupAndUpdateBit1(probability0, probability1, probability2, M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH1, M_RANK_EM_AR1));
+                    EncodeBit1(&coder, MixupAndUpdateBit1 (mixer, probability0, probability1, probability2, M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH1, M_RANK_EM_AR1));
 
                     mixer = & model->mixerOfRankExponent[history <= bit ? bit + 1 : history][bit + 1];
                 }
@@ -258,11 +263,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                 {
                     int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-                    ProbabilityCounter::UpdateBit0(*statePredictor,  M_RANK_ES_TH0, M_RANK_ES_AR0);
-                    ProbabilityCounter::UpdateBit0(*charPredictor,   M_RANK_EC_TH0, M_RANK_EC_AR0);
-                    ProbabilityCounter::UpdateBit0(*staticPredictor, M_RANK_EP_TH0, M_RANK_EP_AR0);
+                    ProbCounter_UpdateBit0(statePredictor,  M_RANK_ES_TH0, M_RANK_ES_AR0);
+                    ProbCounter_UpdateBit0(charPredictor,   M_RANK_EC_TH0, M_RANK_EC_AR0);
+                    ProbCounter_UpdateBit0(staticPredictor, M_RANK_EP_TH0, M_RANK_EP_AR0);
 
-                    coder.EncodeBit0(mixer->MixupAndUpdateBit0(probability0, probability1, probability2, M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH0, M_RANK_EM_AR0));
+                    EncodeBit0(&coder, MixupAndUpdateBit0 (mixer, probability0, probability1, probability2, M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH0, M_RANK_EM_AR0));
                 }
 
                 statePredictor  = & model->Rank.Mantissa[bitRankSize].StateModel[state][0];
@@ -276,11 +281,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                     {
                         int probability0 = charPredictor[context], probability1 = statePredictor[context], probability2 = staticPredictor[context];
 
-                        ProbabilityCounter::UpdateBit1(statePredictor[context],  M_RANK_MS_TH1, M_RANK_MS_AR1);
-                        ProbabilityCounter::UpdateBit1(charPredictor[context],   M_RANK_MC_TH1, M_RANK_MC_AR1);
-                        ProbabilityCounter::UpdateBit1(staticPredictor[context], M_RANK_MP_TH1, M_RANK_MP_AR1);
+                        ProbCounter_UpdateBit1(&statePredictor[context],  M_RANK_MS_TH1, M_RANK_MS_AR1);
+                        ProbCounter_UpdateBit1(&charPredictor[context],   M_RANK_MC_TH1, M_RANK_MC_AR1);
+                        ProbCounter_UpdateBit1(&staticPredictor[context], M_RANK_MP_TH1, M_RANK_MP_AR1);
 
-                        coder.EncodeBit1(mixer->MixupAndUpdateBit1(probability0, probability1, probability2, M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH1, M_RANK_MM_AR1));
+                        EncodeBit1(&coder, MixupAndUpdateBit1 (mixer, probability0, probability1, probability2, M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH1, M_RANK_MM_AR1));
 
                         context += context + 1;
                     }
@@ -288,11 +293,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                     {
                         int probability0 = charPredictor[context], probability1 = statePredictor[context], probability2 = staticPredictor[context];
 
-                        ProbabilityCounter::UpdateBit0(statePredictor[context],  M_RANK_MS_TH0, M_RANK_MS_AR0);
-                        ProbabilityCounter::UpdateBit0(charPredictor[context],   M_RANK_MC_TH0, M_RANK_MC_AR0);
-                        ProbabilityCounter::UpdateBit0(staticPredictor[context], M_RANK_MP_TH0, M_RANK_MP_AR0);
+                        ProbCounter_UpdateBit0(&statePredictor[context],  M_RANK_MS_TH0, M_RANK_MS_AR0);
+                        ProbCounter_UpdateBit0(&charPredictor[context],   M_RANK_MC_TH0, M_RANK_MC_AR0);
+                        ProbCounter_UpdateBit0(&staticPredictor[context], M_RANK_MP_TH0, M_RANK_MP_AR0);
 
-                        coder.EncodeBit0(mixer->MixupAndUpdateBit0(probability0, probability1, probability2, M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH0, M_RANK_MM_AR0));
+                        EncodeBit0(&coder, MixupAndUpdateBit0 (mixer, probability0, probability1, probability2, M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH0, M_RANK_MM_AR0));
 
                         context += context;
                     }
@@ -315,11 +320,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                 {
                     int probability0 = charPredictor[context], probability1 = statePredictor[context], probability2 = staticPredictor[context];
 
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  M_RANK_PS_TH1, M_RANK_PS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   M_RANK_PC_TH1, M_RANK_PC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], M_RANK_PP_TH1, M_RANK_PP_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  M_RANK_PS_TH1, M_RANK_PS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   M_RANK_PC_TH1, M_RANK_PC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], M_RANK_PP_TH1, M_RANK_PP_AR1);
 
-                    coder.EncodeBit1(mixer->MixupAndUpdateBit1(probability0, probability1, probability2, M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH1, M_RANK_PM_AR1));
+                    EncodeBit1(&coder, MixupAndUpdateBit1 (mixer, probability0, probability1, probability2, M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH1, M_RANK_PM_AR1));
 
                     context += context + 1;
                 }
@@ -327,11 +332,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                 {
                     int probability0 = charPredictor[context], probability1 = statePredictor[context], probability2 = staticPredictor[context];
 
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  M_RANK_PS_TH0, M_RANK_PS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   M_RANK_PC_TH0, M_RANK_PC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], M_RANK_PP_TH0, M_RANK_PP_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  M_RANK_PS_TH0, M_RANK_PS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   M_RANK_PC_TH0, M_RANK_PC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], M_RANK_PP_TH0, M_RANK_PP_AR0);
 
-                    coder.EncodeBit0(mixer->MixupAndUpdateBit0(probability0, probability1, probability2, M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH0, M_RANK_PM_AR0));
+                    EncodeBit0(&coder, MixupAndUpdateBit0 (mixer, probability0, probability1, probability2, M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH0, M_RANK_PM_AR0));
 
                     context += context;
                 }
@@ -353,22 +358,22 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
 
             int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-            ProbabilityCounter::UpdateBit0(*statePredictor,  M_RUN_TS_TH0, M_RUN_TS_AR0);
-            ProbabilityCounter::UpdateBit0(*charPredictor,   M_RUN_TC_TH0, M_RUN_TC_AR0);
-            ProbabilityCounter::UpdateBit0(*staticPredictor, M_RUN_TP_TH0, M_RUN_TP_AR0);
+            ProbCounter_UpdateBit0(statePredictor,  M_RUN_TS_TH0, M_RUN_TS_AR0);
+            ProbCounter_UpdateBit0(charPredictor,   M_RUN_TC_TH0, M_RUN_TC_AR0);
+            ProbCounter_UpdateBit0(staticPredictor, M_RUN_TP_TH0, M_RUN_TP_AR0);
 
-            coder.EncodeBit0(mixer->MixupAndUpdateBit0(probability0, probability1, probability2, M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH0, M_RUN_TM_AR0));
+            EncodeBit0(&coder, MixupAndUpdateBit0 (mixer, probability0, probability1, probability2, M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH0, M_RUN_TM_AR0));
         }
         else
         {
             {
                 int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-                ProbabilityCounter::UpdateBit1(*statePredictor,  M_RUN_TS_TH1, M_RUN_TS_AR1);
-                ProbabilityCounter::UpdateBit1(*charPredictor,   M_RUN_TC_TH1, M_RUN_TC_AR1);
-                ProbabilityCounter::UpdateBit1(*staticPredictor, M_RUN_TP_TH1, M_RUN_TP_AR1);
+                ProbCounter_UpdateBit1(statePredictor,  M_RUN_TS_TH1, M_RUN_TS_AR1);
+                ProbCounter_UpdateBit1(charPredictor,   M_RUN_TC_TH1, M_RUN_TC_AR1);
+                ProbCounter_UpdateBit1(staticPredictor, M_RUN_TP_TH1, M_RUN_TP_AR1);
 
-                coder.EncodeBit1(mixer->MixupAndUpdateBit1(probability0, probability1, probability2, M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH1, M_RUN_TM_AR1));
+                EncodeBit1(&coder, MixupAndUpdateBit1 (mixer, probability0, probability1, probability2, M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH1, M_RUN_TM_AR1));
             }
 
             int bitRunSize = bsc_log2(runSize); runHistory[currentChar] = (runHistory[currentChar] + 3 * bitRunSize + 3) >> 2;
@@ -382,22 +387,22 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
             {
                 int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-                ProbabilityCounter::UpdateBit1(*statePredictor,  M_RUN_ES_TH1, M_RUN_ES_AR1);
-                ProbabilityCounter::UpdateBit1(*charPredictor,   M_RUN_EC_TH1, M_RUN_EC_AR1);
-                ProbabilityCounter::UpdateBit1(*staticPredictor, M_RUN_EP_TH1, M_RUN_EP_AR1);
+                ProbCounter_UpdateBit1(statePredictor,  M_RUN_ES_TH1, M_RUN_ES_AR1);
+                ProbCounter_UpdateBit1(charPredictor,   M_RUN_EC_TH1, M_RUN_EC_AR1);
+                ProbCounter_UpdateBit1(staticPredictor, M_RUN_EP_TH1, M_RUN_EP_AR1);
 
-                coder.EncodeBit1(mixer->MixupAndUpdateBit1(probability0, probability1, probability2, M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH1, M_RUN_EM_AR1));
+                EncodeBit1(&coder, MixupAndUpdateBit1 (mixer, probability0, probability1, probability2, M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH1, M_RUN_EM_AR1));
 
                 mixer = & model->mixerOfRunExponent[history <= bit ? bit + 1 : history][bit + 1];
             }
             {
                 int probability0 = *charPredictor, probability1 = *statePredictor, probability2 = *staticPredictor;
 
-                ProbabilityCounter::UpdateBit0(*statePredictor,  M_RUN_ES_TH0, M_RUN_ES_AR0);
-                ProbabilityCounter::UpdateBit0(*charPredictor,   M_RUN_EC_TH0, M_RUN_EC_AR0);
-                ProbabilityCounter::UpdateBit0(*staticPredictor, M_RUN_EP_TH0, M_RUN_EP_AR0);
+                ProbCounter_UpdateBit0(statePredictor,  M_RUN_ES_TH0, M_RUN_ES_AR0);
+                ProbCounter_UpdateBit0(charPredictor,   M_RUN_EC_TH0, M_RUN_EC_AR0);
+                ProbCounter_UpdateBit0(staticPredictor, M_RUN_EP_TH0, M_RUN_EP_AR0);
 
-                coder.EncodeBit0(mixer->MixupAndUpdateBit0(probability0, probability1, probability2, M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH0, M_RUN_EM_AR0));
+                EncodeBit0(&coder, MixupAndUpdateBit0 (mixer, probability0, probability1, probability2, M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH0, M_RUN_EM_AR0));
             }
 
             statePredictor  = & model->Run.Mantissa[bitRunSize].StateModel[state][0];
@@ -411,11 +416,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                 {
                     int probability0 = charPredictor[context], probability1 = statePredictor[context], probability2 = staticPredictor[context];
 
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  M_RUN_MS_TH1, M_RUN_MS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   M_RUN_MC_TH1, M_RUN_MC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], M_RUN_MP_TH1, M_RUN_MP_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  M_RUN_MS_TH1, M_RUN_MS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   M_RUN_MC_TH1, M_RUN_MC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], M_RUN_MP_TH1, M_RUN_MP_AR1);
 
-                    coder.EncodeBit1(mixer->MixupAndUpdateBit1(probability0, probability1, probability2, M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH1, M_RUN_MM_AR1));
+                    EncodeBit1(&coder, MixupAndUpdateBit1 (mixer, probability0, probability1, probability2, M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH1, M_RUN_MM_AR1));
 
                     if (bitRunSize <= 5) context += context + 1; else context++;
                 }
@@ -423,11 +428,11 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
                 {
                     int probability0 = charPredictor[context], probability1 = statePredictor[context], probability2 = staticPredictor[context];
 
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  M_RUN_MS_TH0, M_RUN_MS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   M_RUN_MC_TH0, M_RUN_MC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], M_RUN_MP_TH0, M_RUN_MP_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  M_RUN_MS_TH0, M_RUN_MS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   M_RUN_MC_TH0, M_RUN_MC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], M_RUN_MP_TH0, M_RUN_MP_AR0);
 
-                    coder.EncodeBit0(mixer->MixupAndUpdateBit0(probability0, probability1, probability2, M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH0, M_RUN_MM_AR0));
+                    EncodeBit0(&coder, MixupAndUpdateBit0 (mixer, probability0, probability1, probability2, M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH0, M_RUN_MM_AR0));
 
                     if (bitRunSize <= 5) context += context + 0; else context++;
                 }
@@ -439,7 +444,7 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
         contextRun   = ((contextRun   << 1) | (runSize < 3 ? 1    : 0)) & 0xf;
     }
 
-    return coder.FinishEncoder();
+    return FinishEncoder(&coder);
 }
 
 static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigned char * output, unsigned char * buffer, int inputSize, int outputSize, QlfcStatisticalModel * model)
@@ -464,8 +469,8 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
 
     RangeCoder coder;
 
-    coder.InitEncoder(output, outputSize);
-    coder.EncodeWord((unsigned int)inputSize);
+    InitEncoder(&coder, output, outputSize);
+    EncodeWord(&coder, (unsigned int)inputSize);
 
     unsigned char usedChar[ALPHABET_SIZE];
     for (int i = 0; i < ALPHABET_SIZE; ++i) usedChar[i] = 0;
@@ -493,7 +498,7 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
 
             if (bit0 && bit1)
             {
-                coder.EncodeBit(currentChar & (1 << bit));
+                EncodeBit(&coder,currentChar & (1 << bit));
             }
         }
 
@@ -508,7 +513,7 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
 
     for (const unsigned char * inputEnd = input + inputSize; input < inputEnd;)
     {
-        if (coder.CheckEOB())
+        if (CheckEOB(&coder))
         {
             return LIBBSC_NOT_COMPRESSIBLE;
         }
@@ -553,22 +558,22 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
 
                 int probability = ((*charPredictor) * F_RANK_TM_LR0 + (*statePredictor) * F_RANK_TM_LR1 + (*staticPredictor) * F_RANK_TM_LR2) >> 5;
 
-                ProbabilityCounter::UpdateBit0(*statePredictor,  F_RANK_TS_TH0, F_RANK_TS_AR0);
-                ProbabilityCounter::UpdateBit0(*charPredictor,   F_RANK_TC_TH0, F_RANK_TC_AR0);
-                ProbabilityCounter::UpdateBit0(*staticPredictor, F_RANK_TP_TH0, F_RANK_TP_AR0);
+                ProbCounter_UpdateBit0(statePredictor,  F_RANK_TS_TH0, F_RANK_TS_AR0);
+                ProbCounter_UpdateBit0(charPredictor,   F_RANK_TC_TH0, F_RANK_TC_AR0);
+                ProbCounter_UpdateBit0(staticPredictor, F_RANK_TP_TH0, F_RANK_TP_AR0);
 
-                coder.EncodeBit0(probability);
+                EncodeBit0(&coder,probability);
             }
             else
             {
                 {
                     int probability = ((*charPredictor) * F_RANK_TM_LR0 + (*statePredictor) * F_RANK_TM_LR1 + (*staticPredictor) * F_RANK_TM_LR2) >> 5;
 
-                    ProbabilityCounter::UpdateBit1(*statePredictor,  F_RANK_TS_TH1, F_RANK_TS_AR1);
-                    ProbabilityCounter::UpdateBit1(*charPredictor,   F_RANK_TC_TH1, F_RANK_TC_AR1);
-                    ProbabilityCounter::UpdateBit1(*staticPredictor, F_RANK_TP_TH1, F_RANK_TP_AR1);
+                    ProbCounter_UpdateBit1(statePredictor,  F_RANK_TS_TH1, F_RANK_TS_AR1);
+                    ProbCounter_UpdateBit1(charPredictor,   F_RANK_TC_TH1, F_RANK_TC_AR1);
+                    ProbCounter_UpdateBit1(staticPredictor, F_RANK_TP_TH1, F_RANK_TP_AR1);
 
-                    coder.EncodeBit1(probability);
+                    EncodeBit1(&coder,probability);
                 }
 
                 int bitRankSize = bsc_log2_256(rank); rankHistory[currentChar] = bitRankSize;
@@ -581,21 +586,21 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
                 {
                     int probability = ((*charPredictor) * F_RANK_EM_LR0 + (*statePredictor) * F_RANK_EM_LR1 + (*staticPredictor) * F_RANK_EM_LR2) >> 5;
 
-                    ProbabilityCounter::UpdateBit1(*statePredictor,  F_RANK_ES_TH1, F_RANK_ES_AR1);
-                    ProbabilityCounter::UpdateBit1(*charPredictor,   F_RANK_EC_TH1, F_RANK_EC_AR1);
-                    ProbabilityCounter::UpdateBit1(*staticPredictor, F_RANK_EP_TH1, F_RANK_EP_AR1);
+                    ProbCounter_UpdateBit1(statePredictor,  F_RANK_ES_TH1, F_RANK_ES_AR1);
+                    ProbCounter_UpdateBit1(charPredictor,   F_RANK_EC_TH1, F_RANK_EC_AR1);
+                    ProbCounter_UpdateBit1(staticPredictor, F_RANK_EP_TH1, F_RANK_EP_AR1);
 
-                    coder.EncodeBit1(probability);
+                    EncodeBit1(&coder,probability);
                 }
                 if (bitRankSize < maxRank)
                 {
                     int probability = ((*charPredictor) * F_RANK_EM_LR0 + (*statePredictor) * F_RANK_EM_LR1 + (*staticPredictor) * F_RANK_EM_LR2) >> 5;
 
-                    ProbabilityCounter::UpdateBit0(*statePredictor,  F_RANK_ES_TH0, F_RANK_ES_AR0);
-                    ProbabilityCounter::UpdateBit0(*charPredictor,   F_RANK_EC_TH0, F_RANK_EC_AR0);
-                    ProbabilityCounter::UpdateBit0(*staticPredictor, F_RANK_EP_TH0, F_RANK_EP_AR0);
+                    ProbCounter_UpdateBit0(statePredictor,  F_RANK_ES_TH0, F_RANK_ES_AR0);
+                    ProbCounter_UpdateBit0(charPredictor,   F_RANK_EC_TH0, F_RANK_EC_AR0);
+                    ProbCounter_UpdateBit0(staticPredictor, F_RANK_EP_TH0, F_RANK_EP_AR0);
 
-                    coder.EncodeBit0(probability);
+                    EncodeBit0(&coder,probability);
                 }
 
                 statePredictor  = & model->Rank.Mantissa[bitRankSize].StateModel[state][0];
@@ -608,19 +613,19 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
 
                     if (rank & (1 << bit))
                     {
-                        ProbabilityCounter::UpdateBit1(statePredictor[context],  F_RANK_MS_TH1, F_RANK_MS_AR1);
-                        ProbabilityCounter::UpdateBit1(charPredictor[context],   F_RANK_MC_TH1, F_RANK_MC_AR1);
-                        ProbabilityCounter::UpdateBit1(staticPredictor[context], F_RANK_MP_TH1, F_RANK_MP_AR1);
+                        ProbCounter_UpdateBit1(&statePredictor[context],  F_RANK_MS_TH1, F_RANK_MS_AR1);
+                        ProbCounter_UpdateBit1(&charPredictor[context],   F_RANK_MC_TH1, F_RANK_MC_AR1);
+                        ProbCounter_UpdateBit1(&staticPredictor[context], F_RANK_MP_TH1, F_RANK_MP_AR1);
 
-                        coder.EncodeBit1(probability); context += context + 1;
+                        EncodeBit1(&coder,probability); context += context + 1;
                     }
                     else
                     {
-                        ProbabilityCounter::UpdateBit0(statePredictor[context],  F_RANK_MS_TH0, F_RANK_MS_AR0);
-                        ProbabilityCounter::UpdateBit0(charPredictor[context],   F_RANK_MC_TH0, F_RANK_MC_AR0);
-                        ProbabilityCounter::UpdateBit0(staticPredictor[context], F_RANK_MP_TH0, F_RANK_MP_AR0);
+                        ProbCounter_UpdateBit0(&statePredictor[context],  F_RANK_MS_TH0, F_RANK_MS_AR0);
+                        ProbCounter_UpdateBit0(&charPredictor[context],   F_RANK_MC_TH0, F_RANK_MC_AR0);
+                        ProbCounter_UpdateBit0(&staticPredictor[context], F_RANK_MP_TH0, F_RANK_MP_AR0);
 
-                        coder.EncodeBit0(probability); context += context;
+                        EncodeBit0(&coder,probability); context += context;
                     }
                 }
             }
@@ -639,19 +644,19 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
 
                 if (rank & (1 << bit))
                 {
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  F_RANK_PS_TH1, F_RANK_PS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   F_RANK_PC_TH1, F_RANK_PC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], F_RANK_PP_TH1, F_RANK_PP_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  F_RANK_PS_TH1, F_RANK_PS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   F_RANK_PC_TH1, F_RANK_PC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], F_RANK_PP_TH1, F_RANK_PP_AR1);
 
-                    coder.EncodeBit1(probability); context += context + 1;
+                    EncodeBit1(&coder,probability); context += context + 1;
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  F_RANK_PS_TH0, F_RANK_PS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   F_RANK_PC_TH0, F_RANK_PC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], F_RANK_PP_TH0, F_RANK_PP_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  F_RANK_PS_TH0, F_RANK_PS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   F_RANK_PC_TH0, F_RANK_PC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], F_RANK_PP_TH0, F_RANK_PP_AR0);
 
-                    coder.EncodeBit0(probability); context += context;
+                    EncodeBit0(&coder,probability); context += context;
                 }
             }
         }
@@ -670,22 +675,22 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
 
             int probability = ((*charPredictor) * F_RUN_TM_LR0 + (*statePredictor) * F_RUN_TM_LR1 + (*staticPredictor) * F_RUN_TM_LR2) >> 5;
 
-            ProbabilityCounter::UpdateBit0(*statePredictor,  F_RUN_TS_TH0, F_RUN_TS_AR0);
-            ProbabilityCounter::UpdateBit0(*charPredictor,   F_RUN_TC_TH0, F_RUN_TC_AR0);
-            ProbabilityCounter::UpdateBit0(*staticPredictor, F_RUN_TP_TH0, F_RUN_TP_AR0);
+            ProbCounter_UpdateBit0(statePredictor,  F_RUN_TS_TH0, F_RUN_TS_AR0);
+            ProbCounter_UpdateBit0(charPredictor,   F_RUN_TC_TH0, F_RUN_TC_AR0);
+            ProbCounter_UpdateBit0(staticPredictor, F_RUN_TP_TH0, F_RUN_TP_AR0);
 
-            coder.EncodeBit0(probability);
+            EncodeBit0(&coder,probability);
         }
         else
         {
             {
                 int probability = ((*charPredictor) * F_RUN_TM_LR0 + (*statePredictor) * F_RUN_TM_LR1 + (*staticPredictor) * F_RUN_TM_LR2) >> 5;
 
-                ProbabilityCounter::UpdateBit1(*statePredictor,  F_RUN_TS_TH1, F_RUN_TS_AR1);
-                ProbabilityCounter::UpdateBit1(*charPredictor,   F_RUN_TC_TH1, F_RUN_TC_AR1);
-                ProbabilityCounter::UpdateBit1(*staticPredictor, F_RUN_TP_TH1, F_RUN_TP_AR1);
+                ProbCounter_UpdateBit1(statePredictor,  F_RUN_TS_TH1, F_RUN_TS_AR1);
+                ProbCounter_UpdateBit1(charPredictor,   F_RUN_TC_TH1, F_RUN_TC_AR1);
+                ProbCounter_UpdateBit1(staticPredictor, F_RUN_TP_TH1, F_RUN_TP_AR1);
 
-                coder.EncodeBit1(probability);
+                EncodeBit1(&coder,probability);
             }
 
             int bitRunSize = bsc_log2(runSize); runHistory[currentChar] = (runHistory[currentChar] + 3 * bitRunSize + 3) >> 2;
@@ -698,20 +703,20 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
             {
                 int probability = ((*charPredictor) * F_RUN_EM_LR0 + (*statePredictor) * F_RUN_EM_LR1 + (*staticPredictor) * F_RUN_EM_LR2) >> 5;
 
-                ProbabilityCounter::UpdateBit1(*statePredictor,  F_RUN_ES_TH1, F_RUN_ES_AR1);
-                ProbabilityCounter::UpdateBit1(*charPredictor,   F_RUN_EC_TH1, F_RUN_EC_AR1);
-                ProbabilityCounter::UpdateBit1(*staticPredictor, F_RUN_EP_TH1, F_RUN_EP_AR1);
+                ProbCounter_UpdateBit1(statePredictor,  F_RUN_ES_TH1, F_RUN_ES_AR1);
+                ProbCounter_UpdateBit1(charPredictor,   F_RUN_EC_TH1, F_RUN_EC_AR1);
+                ProbCounter_UpdateBit1(staticPredictor, F_RUN_EP_TH1, F_RUN_EP_AR1);
 
-                coder.EncodeBit1(probability);
+                EncodeBit1(&coder,probability);
             }
             {
                 int probability = ((*charPredictor) * F_RUN_EM_LR0 + (*statePredictor) * F_RUN_EM_LR1 + (*staticPredictor) * F_RUN_EM_LR2) >> 5;
 
-                ProbabilityCounter::UpdateBit0(*statePredictor,  F_RUN_ES_TH0, F_RUN_ES_AR0);
-                ProbabilityCounter::UpdateBit0(*charPredictor,   F_RUN_EC_TH0, F_RUN_EC_AR0);
-                ProbabilityCounter::UpdateBit0(*staticPredictor, F_RUN_EP_TH0, F_RUN_EP_AR0);
+                ProbCounter_UpdateBit0(statePredictor,  F_RUN_ES_TH0, F_RUN_ES_AR0);
+                ProbCounter_UpdateBit0(charPredictor,   F_RUN_EC_TH0, F_RUN_EC_AR0);
+                ProbCounter_UpdateBit0(staticPredictor, F_RUN_EP_TH0, F_RUN_EP_AR0);
 
-                coder.EncodeBit0(probability);
+                EncodeBit0(&coder,probability);
             }
 
             statePredictor  = & model->Run.Mantissa[bitRunSize].StateModel[state][0];
@@ -723,19 +728,19 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
                 int probability = (charPredictor[context] * F_RUN_MM_LR0 + statePredictor[context] * F_RUN_MM_LR1 + staticPredictor[context] * F_RUN_MM_LR2) >> 5;
                 if (runSize & (1 << bit))
                 {
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  F_RUN_MS_TH1, F_RUN_MS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   F_RUN_MC_TH1, F_RUN_MC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], F_RUN_MP_TH1, F_RUN_MP_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  F_RUN_MS_TH1, F_RUN_MS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   F_RUN_MC_TH1, F_RUN_MC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], F_RUN_MP_TH1, F_RUN_MP_AR1);
 
-                    coder.EncodeBit1(probability); if (bitRunSize <= 5) context += context + 1; else context++;
+                    EncodeBit1(&coder,probability); if (bitRunSize <= 5) context += context + 1; else context++;
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  F_RUN_MS_TH0, F_RUN_MS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   F_RUN_MC_TH0, F_RUN_MC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], F_RUN_MP_TH0, F_RUN_MP_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  F_RUN_MS_TH0, F_RUN_MS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   F_RUN_MC_TH0, F_RUN_MC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], F_RUN_MP_TH0, F_RUN_MP_AR0);
 
-                    coder.EncodeBit0(probability); if (bitRunSize <= 5) context += context + 0; else context++;
+                    EncodeBit0(&coder,probability); if (bitRunSize <= 5) context += context + 0; else context++;
                 }
             }
         }
@@ -745,7 +750,7 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
         contextRun   = ((contextRun   << 1) | (runSize < 3 ? 1    : 0)) & 0xf;
     }
 
-    return coder.FinishEncoder();
+    return FinishEncoder(&coder);
 }
 
 int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned char * output, QlfcStatisticalModel * model)
@@ -768,8 +773,8 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
         rankHistory[i] = runHistory[i] = 0;
     }
 
-    coder.InitDecoder(input);
-    int n = (int)coder.DecodeWord();
+    InitDecoder(&coder, input);
+    int n = (int)DecodeWord(&coder);
 
     unsigned char usedChar[ALPHABET_SIZE];
     for (int i = 0; i < ALPHABET_SIZE; ++i) usedChar[i] = 0;
@@ -797,7 +802,7 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
 
             if (bit0 && bit1)
             {
-                currentChar += currentChar + coder.DecodeBit();
+                currentChar += currentChar + DecodeBit (&coder);
             }
             else
             {
@@ -831,12 +836,12 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
         int rank = 1;
         if (avgRank < 32)
         {
-            if (coder.DecodeBit(mixer->Mixup(*charPredictor, *statePredictor, *staticPredictor)))
+            if (DecodeBitProb (&coder, Mixup (mixer, *charPredictor, *statePredictor, *staticPredictor)))
             {
-                ProbabilityCounter::UpdateBit1(*statePredictor,  M_RANK_TS_TH1, M_RANK_TS_AR1);
-                ProbabilityCounter::UpdateBit1(*charPredictor,   M_RANK_TC_TH1, M_RANK_TC_AR1);
-                ProbabilityCounter::UpdateBit1(*staticPredictor, M_RANK_TP_TH1, M_RANK_TP_AR1);
-                mixer->UpdateBit1(M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH1, M_RANK_TM_AR1);
+                ProbCounter_UpdateBit1(statePredictor,  M_RANK_TS_TH1, M_RANK_TS_AR1);
+                ProbCounter_UpdateBit1(charPredictor,   M_RANK_TC_TH1, M_RANK_TC_AR1);
+                ProbCounter_UpdateBit1(staticPredictor, M_RANK_TP_TH1, M_RANK_TP_AR1);
+                UpdateBit1 (mixer, M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH1, M_RANK_TM_AR1);
 
                 statePredictor  = & model->Rank.Exponent.StateModel[state][0];
                 charPredictor   = & model->Rank.Exponent.CharModel[currentChar][0];
@@ -847,21 +852,21 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
                 while (true)
                 {
                     if (bitRankSize == maxRank) break;
-                    if (coder.DecodeBit(mixer->Mixup(*charPredictor, *statePredictor, *staticPredictor)))
+                    if (DecodeBitProb (&coder, Mixup (mixer, *charPredictor, *statePredictor, *staticPredictor)))
                     {
-                        ProbabilityCounter::UpdateBit1(*statePredictor,  M_RANK_ES_TH1, M_RANK_ES_AR1); statePredictor++;
-                        ProbabilityCounter::UpdateBit1(*charPredictor,   M_RANK_EC_TH1, M_RANK_EC_AR1); charPredictor++;
-                        ProbabilityCounter::UpdateBit1(*staticPredictor, M_RANK_EP_TH1, M_RANK_EP_AR1); staticPredictor++;
-                        mixer->UpdateBit1(M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH1, M_RANK_EM_AR1);
+                        ProbCounter_UpdateBit1(statePredictor,  M_RANK_ES_TH1, M_RANK_ES_AR1); statePredictor++;
+                        ProbCounter_UpdateBit1(charPredictor,   M_RANK_EC_TH1, M_RANK_EC_AR1); charPredictor++;
+                        ProbCounter_UpdateBit1(staticPredictor, M_RANK_EP_TH1, M_RANK_EP_AR1); staticPredictor++;
+                        UpdateBit1 (mixer, M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH1, M_RANK_EM_AR1);
                         bitRankSize++;
                         mixer = & model->mixerOfRankExponent[history < bitRankSize ? bitRankSize : history][bitRankSize];
                     }
                     else
                     {
-                        ProbabilityCounter::UpdateBit0(*statePredictor,  M_RANK_ES_TH0, M_RANK_ES_AR0);
-                        ProbabilityCounter::UpdateBit0(*charPredictor,   M_RANK_EC_TH0, M_RANK_EC_AR0);
-                        ProbabilityCounter::UpdateBit0(*staticPredictor, M_RANK_EP_TH0, M_RANK_EP_AR0);
-                        mixer->UpdateBit0(M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH0, M_RANK_EM_AR0);
+                        ProbCounter_UpdateBit0(statePredictor,  M_RANK_ES_TH0, M_RANK_ES_AR0);
+                        ProbCounter_UpdateBit0(charPredictor,   M_RANK_EC_TH0, M_RANK_EC_AR0);
+                        ProbCounter_UpdateBit0(staticPredictor, M_RANK_EP_TH0, M_RANK_EP_AR0);
+                        UpdateBit0 (mixer, M_RANK_EM_LR0, M_RANK_EM_LR1, M_RANK_EM_LR2, M_RANK_EM_TH0, M_RANK_EM_AR0);
                         break;
                     }
                 }
@@ -875,20 +880,20 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
 
                 for (int bit = bitRankSize - 1; bit >= 0; --bit)
                 {
-                    if (coder.DecodeBit(mixer->Mixup(charPredictor[rank], statePredictor[rank], staticPredictor[rank])))
+                    if (DecodeBitProb (&coder, Mixup (mixer, charPredictor[rank], statePredictor[rank], staticPredictor[rank])))
                     {
-                        ProbabilityCounter::UpdateBit1(statePredictor[rank],  M_RANK_MS_TH1, M_RANK_MS_AR1);
-                        ProbabilityCounter::UpdateBit1(charPredictor[rank],   M_RANK_MC_TH1, M_RANK_MC_AR1);
-                        ProbabilityCounter::UpdateBit1(staticPredictor[rank], M_RANK_MP_TH1, M_RANK_MP_AR1);
-                        mixer->UpdateBit1(M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH1, M_RANK_MM_AR1);
+                        ProbCounter_UpdateBit1(&statePredictor[rank],  M_RANK_MS_TH1, M_RANK_MS_AR1);
+                        ProbCounter_UpdateBit1(&charPredictor[rank],   M_RANK_MC_TH1, M_RANK_MC_AR1);
+                        ProbCounter_UpdateBit1(&staticPredictor[rank], M_RANK_MP_TH1, M_RANK_MP_AR1);
+                        UpdateBit1 (mixer, M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH1, M_RANK_MM_AR1);
                         rank += rank + 1;
                     }
                     else
                     {
-                        ProbabilityCounter::UpdateBit0(statePredictor[rank],  M_RANK_MS_TH0, M_RANK_MS_AR0);
-                        ProbabilityCounter::UpdateBit0(charPredictor[rank],   M_RANK_MC_TH0, M_RANK_MC_AR0);
-                        ProbabilityCounter::UpdateBit0(staticPredictor[rank], M_RANK_MP_TH0, M_RANK_MP_AR0);
-                        mixer->UpdateBit0(M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH0, M_RANK_MM_AR0);
+                        ProbCounter_UpdateBit0(&statePredictor[rank],  M_RANK_MS_TH0, M_RANK_MS_AR0);
+                        ProbCounter_UpdateBit0(&charPredictor[rank],   M_RANK_MC_TH0, M_RANK_MC_AR0);
+                        ProbCounter_UpdateBit0(&staticPredictor[rank], M_RANK_MP_TH0, M_RANK_MP_AR0);
+                        UpdateBit0 (mixer, M_RANK_MM_LR0, M_RANK_MM_LR1, M_RANK_MM_LR2, M_RANK_MM_TH0, M_RANK_MM_AR0);
                         rank += rank;
                     }
                 }
@@ -896,10 +901,10 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
             else
             {
                 rankHistory[currentChar] = 0;
-                ProbabilityCounter::UpdateBit0(*statePredictor, M_RANK_TS_TH0,  M_RANK_TS_AR0);
-                ProbabilityCounter::UpdateBit0(*charPredictor, M_RANK_TC_TH0,   M_RANK_TC_AR0);
-                ProbabilityCounter::UpdateBit0(*staticPredictor, M_RANK_TP_TH0, M_RANK_TP_AR0);
-                mixer->UpdateBit0(M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH0, M_RANK_TM_AR0);
+                ProbCounter_UpdateBit0(statePredictor, M_RANK_TS_TH0,  M_RANK_TS_AR0);
+                ProbCounter_UpdateBit0(charPredictor, M_RANK_TC_TH0,   M_RANK_TC_AR0);
+                ProbCounter_UpdateBit0(staticPredictor, M_RANK_TP_TH0, M_RANK_TP_AR0);
+                UpdateBit0 (mixer, M_RANK_TM_LR0, M_RANK_TM_LR1, M_RANK_TM_LR2, M_RANK_TM_TH0, M_RANK_TM_AR0);
             }
         }
         else
@@ -913,20 +918,20 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
             {
                 mixer = & model->mixerOfRankEscape[context];
 
-                if (coder.DecodeBit(mixer->Mixup(charPredictor[context], statePredictor[context], staticPredictor[context])))
+                if (DecodeBitProb (&coder, Mixup (mixer, charPredictor[context], statePredictor[context], staticPredictor[context])))
                 {
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  M_RANK_PS_TH1, M_RANK_PS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   M_RANK_PC_TH1, M_RANK_PC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], M_RANK_PP_TH1, M_RANK_PP_AR1);
-                    mixer->UpdateBit1(M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH1, M_RANK_PM_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  M_RANK_PS_TH1, M_RANK_PS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   M_RANK_PC_TH1, M_RANK_PC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], M_RANK_PP_TH1, M_RANK_PP_AR1);
+                    UpdateBit1 (mixer, M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH1, M_RANK_PM_AR1);
                     context += context + 1; rank += rank + 1;
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  M_RANK_PS_TH0, M_RANK_PS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   M_RANK_PC_TH0, M_RANK_PC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], M_RANK_PP_TH0, M_RANK_PP_AR0);
-                    mixer->UpdateBit0(M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH0, M_RANK_PM_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  M_RANK_PS_TH0, M_RANK_PS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   M_RANK_PC_TH0, M_RANK_PC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], M_RANK_PP_TH0, M_RANK_PP_AR0);
+                    UpdateBit0 (mixer, M_RANK_PM_LR0, M_RANK_PM_LR1, M_RANK_PM_LR2, M_RANK_PM_TH0, M_RANK_PM_AR0);
                     context += context; rank += rank;
                 }
             }
@@ -952,12 +957,12 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
         mixer           = & model->mixerOfRun[currentChar];
 
         int runSize = 1;
-        if (coder.DecodeBit(mixer->Mixup(*charPredictor, *statePredictor, *staticPredictor)))
+        if (DecodeBitProb (&coder, Mixup (mixer, *charPredictor, *statePredictor, *staticPredictor)))
         {
-            ProbabilityCounter::UpdateBit1(*statePredictor,  M_RUN_TS_TH1, M_RUN_TS_AR1);
-            ProbabilityCounter::UpdateBit1(*charPredictor,   M_RUN_TC_TH1, M_RUN_TC_AR1);
-            ProbabilityCounter::UpdateBit1(*staticPredictor, M_RUN_TP_TH1, M_RUN_TP_AR1);
-            mixer->UpdateBit1(M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH1, M_RUN_TM_AR1);
+            ProbCounter_UpdateBit1(statePredictor,  M_RUN_TS_TH1, M_RUN_TS_AR1);
+            ProbCounter_UpdateBit1(charPredictor,   M_RUN_TC_TH1, M_RUN_TC_AR1);
+            ProbCounter_UpdateBit1(staticPredictor, M_RUN_TP_TH1, M_RUN_TP_AR1);
+            UpdateBit1 (mixer, M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH1, M_RUN_TM_AR1);
 
             statePredictor  = & model->Run.Exponent.StateModel[state][0];
             charPredictor   = & model->Run.Exponent.CharModel[currentChar][0];
@@ -967,20 +972,20 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
             int bitRunSize = 1;
             while (true)
             {
-                if (coder.DecodeBit(mixer->Mixup(*charPredictor, *statePredictor, *staticPredictor)))
+                if (DecodeBitProb (&coder, Mixup (mixer, *charPredictor, *statePredictor, *staticPredictor)))
                 {
-                    ProbabilityCounter::UpdateBit1(*statePredictor,  M_RUN_ES_TH1, M_RUN_ES_AR1); statePredictor++;
-                    ProbabilityCounter::UpdateBit1(*charPredictor,   M_RUN_EC_TH1, M_RUN_EC_AR1); charPredictor++;
-                    ProbabilityCounter::UpdateBit1(*staticPredictor, M_RUN_EP_TH1, M_RUN_EP_AR1); staticPredictor++;
-                    mixer->UpdateBit1(M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH1, M_RUN_EM_AR1);
+                    ProbCounter_UpdateBit1(statePredictor,  M_RUN_ES_TH1, M_RUN_ES_AR1); statePredictor++;
+                    ProbCounter_UpdateBit1(charPredictor,   M_RUN_EC_TH1, M_RUN_EC_AR1); charPredictor++;
+                    ProbCounter_UpdateBit1(staticPredictor, M_RUN_EP_TH1, M_RUN_EP_AR1); staticPredictor++;
+                    UpdateBit1 (mixer, M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH1, M_RUN_EM_AR1);
                     bitRunSize++; mixer = & model->mixerOfRunExponent[history < bitRunSize ? bitRunSize : history][bitRunSize];
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(*statePredictor,  M_RUN_ES_TH0, M_RUN_ES_AR0);
-                    ProbabilityCounter::UpdateBit0(*charPredictor,   M_RUN_EC_TH0, M_RUN_EC_AR0);
-                    ProbabilityCounter::UpdateBit0(*staticPredictor, M_RUN_EP_TH0, M_RUN_EP_AR0);
-                    mixer->UpdateBit0(M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH0, M_RUN_EM_AR0);
+                    ProbCounter_UpdateBit0(statePredictor,  M_RUN_ES_TH0, M_RUN_ES_AR0);
+                    ProbCounter_UpdateBit0(charPredictor,   M_RUN_EC_TH0, M_RUN_EC_AR0);
+                    ProbCounter_UpdateBit0(staticPredictor, M_RUN_EP_TH0, M_RUN_EP_AR0);
+                    UpdateBit0 (mixer, M_RUN_EM_LR0, M_RUN_EM_LR1, M_RUN_EM_LR2, M_RUN_EM_TH0, M_RUN_EM_AR0);
                     break;
                 }
             }
@@ -994,20 +999,20 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
 
             for (int context = 1, bit = bitRunSize - 1; bit >= 0; --bit)
             {
-                if (coder.DecodeBit(mixer->Mixup(charPredictor[context], statePredictor[context], staticPredictor[context])))
+                if (DecodeBitProb (&coder, Mixup (mixer, charPredictor[context], statePredictor[context], staticPredictor[context])))
                 {
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  M_RUN_MS_TH1, M_RUN_MS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   M_RUN_MC_TH1, M_RUN_MC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], M_RUN_MP_TH1, M_RUN_MP_AR1);
-                    mixer->UpdateBit1(M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH1, M_RUN_MM_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  M_RUN_MS_TH1, M_RUN_MS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   M_RUN_MC_TH1, M_RUN_MC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], M_RUN_MP_TH1, M_RUN_MP_AR1);
+                    UpdateBit1 (mixer, M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH1, M_RUN_MM_AR1);
                     runSize += runSize + 1; if (bitRunSize <= 5) context += context + 1; else context++;
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  M_RUN_MS_TH0, M_RUN_MS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   M_RUN_MC_TH0, M_RUN_MC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], M_RUN_MP_TH0, M_RUN_MP_AR0);
-                    mixer->UpdateBit0(M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH0, M_RUN_MM_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  M_RUN_MS_TH0, M_RUN_MS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   M_RUN_MC_TH0, M_RUN_MC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], M_RUN_MP_TH0, M_RUN_MP_AR0);
+                    UpdateBit0 (mixer, M_RUN_MM_LR0, M_RUN_MM_LR1, M_RUN_MM_LR2, M_RUN_MM_TH0, M_RUN_MM_AR0);
                     runSize += runSize; if (bitRunSize <= 5) context += context; else context++;
                 }
             }
@@ -1016,10 +1021,10 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
         else
         {
             runHistory[currentChar] = (runHistory[currentChar] + 2) >> 2;
-            ProbabilityCounter::UpdateBit0(*statePredictor,  M_RUN_TS_TH0, M_RUN_TS_AR0);
-            ProbabilityCounter::UpdateBit0(*charPredictor,   M_RUN_TC_TH0, M_RUN_TC_AR0);
-            ProbabilityCounter::UpdateBit0(*staticPredictor, M_RUN_TP_TH0, M_RUN_TP_AR0);
-            mixer->UpdateBit0(M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH0, M_RUN_TM_AR0);
+            ProbCounter_UpdateBit0(statePredictor,  M_RUN_TS_TH0, M_RUN_TS_AR0);
+            ProbCounter_UpdateBit0(charPredictor,   M_RUN_TC_TH0, M_RUN_TC_AR0);
+            ProbCounter_UpdateBit0(staticPredictor, M_RUN_TP_TH0, M_RUN_TP_AR0);
+            UpdateBit0 (mixer, M_RUN_TM_LR0, M_RUN_TM_LR1, M_RUN_TM_LR2, M_RUN_TM_TH0, M_RUN_TM_AR0);
         }
 
         contextRank0 = ((contextRank0 << 1) | (rank == 0   ? 1    : 0)) & 0x7;
@@ -1052,8 +1057,8 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
         rankHistory[i] = runHistory[i] = 0;
     }
 
-    coder.InitDecoder(input);
-    int n = (int)coder.DecodeWord();
+    InitDecoder(&coder, input);
+    int n = (int)DecodeWord(&coder);
 
     unsigned char usedChar[ALPHABET_SIZE];
     for (int i = 0; i < ALPHABET_SIZE; ++i) usedChar[i] = 0;
@@ -1081,7 +1086,7 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
 
             if (bit0 && bit1)
             {
-                currentChar += currentChar + coder.DecodeBit();
+                currentChar += currentChar + DecodeBit(&coder);
             }
             else
             {
@@ -1114,11 +1119,11 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
         int rank = 1;
         if (avgRank < 32)
         {
-            if (coder.DecodeBit((*charPredictor * F_RANK_TM_LR0 + *statePredictor * F_RANK_TM_LR1 + *staticPredictor * F_RANK_TM_LR2) >> 5))
+            if (DecodeBitProb(&coder, (*charPredictor * F_RANK_TM_LR0 + *statePredictor * F_RANK_TM_LR1 + *staticPredictor * F_RANK_TM_LR2) >> 5))
             {
-                ProbabilityCounter::UpdateBit1(*statePredictor,  F_RANK_TS_TH1, F_RANK_TS_AR1);
-                ProbabilityCounter::UpdateBit1(*charPredictor,   F_RANK_TC_TH1, F_RANK_TC_AR1);
-                ProbabilityCounter::UpdateBit1(*staticPredictor, F_RANK_TP_TH1, F_RANK_TP_AR1);
+                ProbCounter_UpdateBit1(statePredictor,  F_RANK_TS_TH1, F_RANK_TS_AR1);
+                ProbCounter_UpdateBit1(charPredictor,   F_RANK_TC_TH1, F_RANK_TC_AR1);
+                ProbCounter_UpdateBit1(staticPredictor, F_RANK_TP_TH1, F_RANK_TP_AR1);
 
                 statePredictor  = & model->Rank.Exponent.StateModel[state][0];
                 charPredictor   = & model->Rank.Exponent.CharModel[currentChar][0];
@@ -1128,18 +1133,18 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
                 while (true)
                 {
                     if (bitRankSize == maxRank) break;
-                    if (coder.DecodeBit((*charPredictor * F_RANK_EM_LR0 + *statePredictor * F_RANK_EM_LR1 + *staticPredictor * F_RANK_EM_LR2) >> 5))
+                    if (DecodeBitProb (&coder, (*charPredictor * F_RANK_EM_LR0 + *statePredictor * F_RANK_EM_LR1 + *staticPredictor * F_RANK_EM_LR2) >> 5))
                     {
-                        ProbabilityCounter::UpdateBit1(*statePredictor,  F_RANK_ES_TH1, F_RANK_ES_AR1); statePredictor++;
-                        ProbabilityCounter::UpdateBit1(*charPredictor,   F_RANK_EC_TH1, F_RANK_EC_AR1); charPredictor++;
-                        ProbabilityCounter::UpdateBit1(*staticPredictor, F_RANK_EP_TH1, F_RANK_EP_AR1); staticPredictor++;
+                        ProbCounter_UpdateBit1(statePredictor,  F_RANK_ES_TH1, F_RANK_ES_AR1); statePredictor++;
+                        ProbCounter_UpdateBit1(charPredictor,   F_RANK_EC_TH1, F_RANK_EC_AR1); charPredictor++;
+                        ProbCounter_UpdateBit1(staticPredictor, F_RANK_EP_TH1, F_RANK_EP_AR1); staticPredictor++;
                         bitRankSize++;
                     }
                     else
                     {
-                        ProbabilityCounter::UpdateBit0(*statePredictor,  F_RANK_ES_TH0, F_RANK_ES_AR0);
-                        ProbabilityCounter::UpdateBit0(*charPredictor,   F_RANK_EC_TH0, F_RANK_EC_AR0);
-                        ProbabilityCounter::UpdateBit0(*staticPredictor, F_RANK_EP_TH0, F_RANK_EP_AR0);
+                        ProbCounter_UpdateBit0(statePredictor,  F_RANK_ES_TH0, F_RANK_ES_AR0);
+                        ProbCounter_UpdateBit0(charPredictor,   F_RANK_EC_TH0, F_RANK_EC_AR0);
+                        ProbCounter_UpdateBit0(staticPredictor, F_RANK_EP_TH0, F_RANK_EP_AR0);
                         break;
                     }
                 }
@@ -1152,18 +1157,18 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
 
                 for (int bit = bitRankSize - 1; bit >= 0; --bit)
                 {
-                    if (coder.DecodeBit((charPredictor[rank] * F_RANK_MM_LR0 + statePredictor[rank] * F_RANK_MM_LR1 + staticPredictor[rank] * F_RANK_MM_LR2) >> 5))
+                    if (DecodeBitProb (&coder, (charPredictor[rank] * F_RANK_MM_LR0 + statePredictor[rank] * F_RANK_MM_LR1 + staticPredictor[rank] * F_RANK_MM_LR2) >> 5))
                     {
-                        ProbabilityCounter::UpdateBit1(statePredictor[rank],  F_RANK_MS_TH1, F_RANK_MS_AR1);
-                        ProbabilityCounter::UpdateBit1(charPredictor[rank],   F_RANK_MC_TH1, F_RANK_MC_AR1);
-                        ProbabilityCounter::UpdateBit1(staticPredictor[rank], F_RANK_MP_TH1, F_RANK_MP_AR1);
+                        ProbCounter_UpdateBit1(&statePredictor[rank],  F_RANK_MS_TH1, F_RANK_MS_AR1);
+                        ProbCounter_UpdateBit1(&charPredictor[rank],   F_RANK_MC_TH1, F_RANK_MC_AR1);
+                        ProbCounter_UpdateBit1(&staticPredictor[rank], F_RANK_MP_TH1, F_RANK_MP_AR1);
                         rank += rank + 1;
                     }
                     else
                     {
-                        ProbabilityCounter::UpdateBit0(statePredictor[rank],  F_RANK_MS_TH0, F_RANK_MS_AR0);
-                        ProbabilityCounter::UpdateBit0(charPredictor[rank],   F_RANK_MC_TH0, F_RANK_MC_AR0);
-                        ProbabilityCounter::UpdateBit0(staticPredictor[rank], F_RANK_MP_TH0, F_RANK_MP_AR0);
+                        ProbCounter_UpdateBit0(&statePredictor[rank],  F_RANK_MS_TH0, F_RANK_MS_AR0);
+                        ProbCounter_UpdateBit0(&charPredictor[rank],   F_RANK_MC_TH0, F_RANK_MC_AR0);
+                        ProbCounter_UpdateBit0(&staticPredictor[rank], F_RANK_MP_TH0, F_RANK_MP_AR0);
                         rank += rank;
                     }
                 }
@@ -1171,9 +1176,9 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
             else
             {
                 rankHistory[currentChar] = 0;
-                ProbabilityCounter::UpdateBit0(*statePredictor,  F_RANK_TS_TH0, F_RANK_TS_AR0);
-                ProbabilityCounter::UpdateBit0(*charPredictor,   F_RANK_TC_TH0, F_RANK_TC_AR0);
-                ProbabilityCounter::UpdateBit0(*staticPredictor, F_RANK_TP_TH0, F_RANK_TP_AR0);
+                ProbCounter_UpdateBit0(statePredictor,  F_RANK_TS_TH0, F_RANK_TS_AR0);
+                ProbCounter_UpdateBit0(charPredictor,   F_RANK_TC_TH0, F_RANK_TC_AR0);
+                ProbCounter_UpdateBit0(staticPredictor, F_RANK_TP_TH0, F_RANK_TP_AR0);
             }
         }
         else
@@ -1185,18 +1190,18 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
             rank = 0;
             for (int context = 1, bit = maxRank; bit >= 0; --bit)
             {
-                if (coder.DecodeBit((charPredictor[context] * F_RANK_PM_LR0 + statePredictor[context] * F_RANK_PM_LR1 + staticPredictor[context] * F_RANK_PM_LR2) >> 5))
+                if (DecodeBitProb (&coder, (charPredictor[context] * F_RANK_PM_LR0 + statePredictor[context] * F_RANK_PM_LR1 + staticPredictor[context] * F_RANK_PM_LR2) >> 5))
                 {
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  F_RANK_PS_TH1, F_RANK_PS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   F_RANK_PC_TH1, F_RANK_PC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], F_RANK_PP_TH1, F_RANK_PP_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  F_RANK_PS_TH1, F_RANK_PS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   F_RANK_PC_TH1, F_RANK_PC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], F_RANK_PP_TH1, F_RANK_PP_AR1);
                     context += context + 1; rank += rank + 1;
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  F_RANK_PS_TH0, F_RANK_PS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   F_RANK_PC_TH0, F_RANK_PC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], F_RANK_PP_TH0, F_RANK_PP_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  F_RANK_PS_TH0, F_RANK_PS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   F_RANK_PC_TH0, F_RANK_PC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], F_RANK_PP_TH0, F_RANK_PP_AR0);
                     context += context; rank += rank;
                 }
             }
@@ -1221,11 +1226,11 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
         staticPredictor = & model->Run.StaticModel;
 
         int runSize = 1;
-        if (coder.DecodeBit((*charPredictor * F_RUN_TM_LR0 + *statePredictor * F_RUN_TM_LR1 + *staticPredictor * F_RUN_TM_LR2) >> 5))
+        if (DecodeBitProb (&coder, (*charPredictor * F_RUN_TM_LR0 + *statePredictor * F_RUN_TM_LR1 + *staticPredictor * F_RUN_TM_LR2) >> 5))
         {
-            ProbabilityCounter::UpdateBit1(*statePredictor,  F_RUN_TS_TH1, F_RUN_TS_AR1);
-            ProbabilityCounter::UpdateBit1(*charPredictor,   F_RUN_TC_TH1, F_RUN_TC_AR1);
-            ProbabilityCounter::UpdateBit1(*staticPredictor, F_RUN_TP_TH1, F_RUN_TP_AR1);
+            ProbCounter_UpdateBit1(statePredictor,  F_RUN_TS_TH1, F_RUN_TS_AR1);
+            ProbCounter_UpdateBit1(charPredictor,   F_RUN_TC_TH1, F_RUN_TC_AR1);
+            ProbCounter_UpdateBit1(staticPredictor, F_RUN_TP_TH1, F_RUN_TP_AR1);
 
             statePredictor  = & model->Run.Exponent.StateModel[state][0];
             charPredictor   = & model->Run.Exponent.CharModel[currentChar][0];
@@ -1234,18 +1239,18 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
             int bitRunSize = 1;
             while (true)
             {
-                if (coder.DecodeBit((*charPredictor * F_RUN_EM_LR0 + *statePredictor * F_RUN_EM_LR1 + *staticPredictor * F_RUN_EM_LR2) >> 5))
+                if (DecodeBitProb (&coder, (*charPredictor * F_RUN_EM_LR0 + *statePredictor * F_RUN_EM_LR1 + *staticPredictor * F_RUN_EM_LR2) >> 5))
                 {
-                    ProbabilityCounter::UpdateBit1(*statePredictor,  F_RUN_ES_TH1, F_RUN_ES_AR1); statePredictor++;
-                    ProbabilityCounter::UpdateBit1(*charPredictor,   F_RUN_EC_TH1, F_RUN_EC_AR1); charPredictor++;
-                    ProbabilityCounter::UpdateBit1(*staticPredictor, F_RUN_EP_TH1, F_RUN_EP_AR1); staticPredictor++;
+                    ProbCounter_UpdateBit1(statePredictor,  F_RUN_ES_TH1, F_RUN_ES_AR1); statePredictor++;
+                    ProbCounter_UpdateBit1(charPredictor,   F_RUN_EC_TH1, F_RUN_EC_AR1); charPredictor++;
+                    ProbCounter_UpdateBit1(staticPredictor, F_RUN_EP_TH1, F_RUN_EP_AR1); staticPredictor++;
                     bitRunSize++;
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(*statePredictor,  F_RUN_ES_TH0, F_RUN_ES_AR0);
-                    ProbabilityCounter::UpdateBit0(*charPredictor,   F_RUN_EC_TH0, F_RUN_EC_AR0);
-                    ProbabilityCounter::UpdateBit0(*staticPredictor, F_RUN_EP_TH0, F_RUN_EP_AR0);
+                    ProbCounter_UpdateBit0(statePredictor,  F_RUN_ES_TH0, F_RUN_ES_AR0);
+                    ProbCounter_UpdateBit0(charPredictor,   F_RUN_EC_TH0, F_RUN_EC_AR0);
+                    ProbCounter_UpdateBit0(staticPredictor, F_RUN_EP_TH0, F_RUN_EP_AR0);
                     break;
                 }
             }
@@ -1258,18 +1263,18 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
 
             for (int context = 1, bit = bitRunSize - 1; bit >= 0; --bit)
             {
-                if (coder.DecodeBit((charPredictor[context] * F_RUN_MM_LR0 + statePredictor[context] * F_RUN_MM_LR1 + staticPredictor[context] * F_RUN_MM_LR2) >> 5))
+                if (DecodeBitProb (&coder, (charPredictor[context] * F_RUN_MM_LR0 + statePredictor[context] * F_RUN_MM_LR1 + staticPredictor[context] * F_RUN_MM_LR2) >> 5))
                 {
-                    ProbabilityCounter::UpdateBit1(statePredictor[context],  F_RUN_MS_TH1, F_RUN_MS_AR1);
-                    ProbabilityCounter::UpdateBit1(charPredictor[context],   F_RUN_MC_TH1, F_RUN_MC_AR1);
-                    ProbabilityCounter::UpdateBit1(staticPredictor[context], F_RUN_MP_TH1, F_RUN_MP_AR1);
+                    ProbCounter_UpdateBit1(&statePredictor[context],  F_RUN_MS_TH1, F_RUN_MS_AR1);
+                    ProbCounter_UpdateBit1(&charPredictor[context],   F_RUN_MC_TH1, F_RUN_MC_AR1);
+                    ProbCounter_UpdateBit1(&staticPredictor[context], F_RUN_MP_TH1, F_RUN_MP_AR1);
                     runSize += runSize + 1; if (bitRunSize <= 5) context += context + 1; else context++;
                 }
                 else
                 {
-                    ProbabilityCounter::UpdateBit0(statePredictor[context],  F_RUN_MS_TH0, F_RUN_MS_AR0);
-                    ProbabilityCounter::UpdateBit0(charPredictor[context],   F_RUN_MC_TH0, F_RUN_MC_AR0);
-                    ProbabilityCounter::UpdateBit0(staticPredictor[context], F_RUN_MP_TH0, F_RUN_MP_AR0);
+                    ProbCounter_UpdateBit0(&statePredictor[context],  F_RUN_MS_TH0, F_RUN_MS_AR0);
+                    ProbCounter_UpdateBit0(&charPredictor[context],   F_RUN_MC_TH0, F_RUN_MC_AR0);
+                    ProbCounter_UpdateBit0(&staticPredictor[context], F_RUN_MP_TH0, F_RUN_MP_AR0);
                     runSize += runSize; if (bitRunSize <= 5) context += context; else context++;
                 }
             }
@@ -1278,9 +1283,9 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
         else
         {
             runHistory[currentChar] = (runHistory[currentChar] + 2) >> 2;
-            ProbabilityCounter::UpdateBit0(*statePredictor,  F_RUN_TS_TH0, F_RUN_TS_AR0);
-            ProbabilityCounter::UpdateBit0(*charPredictor,   F_RUN_TC_TH0, F_RUN_TC_AR0);
-            ProbabilityCounter::UpdateBit0(*staticPredictor, F_RUN_TP_TH0, F_RUN_TP_AR0);
+            ProbCounter_UpdateBit0(statePredictor,  F_RUN_TS_TH0, F_RUN_TS_AR0);
+            ProbCounter_UpdateBit0(charPredictor,   F_RUN_TC_TH0, F_RUN_TC_AR0);
+            ProbCounter_UpdateBit0(staticPredictor, F_RUN_TP_TH0, F_RUN_TP_AR0);
         }
 
         contextRank0 = ((contextRank0 << 1) | (rank == 0   ? 1    : 0)) & 0x7;
@@ -1295,9 +1300,11 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
 
 int bsc_qlfc_static_encode_block(void *vb, const unsigned char * input, unsigned char * output, int inputSize, int outputSize)
 {
-    if (QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel)))
+    QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel));
+    if (model)
     {
-        if (unsigned char * buffer = (unsigned char *)bsc_malloc (vb, inputSize * sizeof(unsigned char)))
+        unsigned char * buffer = (unsigned char *)bsc_malloc (vb, inputSize * sizeof(unsigned char));
+        if (buffer)
         {
             int result = bsc_qlfc_static_encode (vb, input, output, buffer, inputSize, outputSize, model);
 
@@ -1312,9 +1319,11 @@ int bsc_qlfc_static_encode_block(void *vb, const unsigned char * input, unsigned
 
 int bsc_qlfc_adaptive_encode_block (void *vb, const unsigned char * input, unsigned char * output, int inputSize, int outputSize)
 {
-    if (QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel)))
+    QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel));
+    if (model)
     {
-        if (unsigned char * buffer = (unsigned char *)bsc_malloc (vb, inputSize * sizeof(unsigned char)))
+        unsigned char * buffer = (unsigned char *)bsc_malloc (vb, inputSize * sizeof(unsigned char));
+        if (buffer)
         {
             int result = bsc_qlfc_adaptive_encode (vb, input, output, buffer, inputSize, outputSize, model);
 
@@ -1329,7 +1338,8 @@ int bsc_qlfc_adaptive_encode_block (void *vb, const unsigned char * input, unsig
 
 int bsc_qlfc_static_decode_block(void *vb, const unsigned char * input, unsigned char * output)
 {
-    if (QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel)))
+    QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel));
+    if (model)
     {
         int result = bsc_qlfc_static_decode(vb, input, output, model);
 
@@ -1342,7 +1352,8 @@ int bsc_qlfc_static_decode_block(void *vb, const unsigned char * input, unsigned
 
 int bsc_qlfc_adaptive_decode_block(void *vb, const unsigned char * input, unsigned char * output)
 {
-    if (QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel)))
+    QlfcStatisticalModel * model = (QlfcStatisticalModel *)bsc_malloc (vb, sizeof(QlfcStatisticalModel));
+    if (model)
     {
         int result = bsc_qlfc_adaptive_decode(vb, input, output, model);
 
@@ -1352,7 +1363,3 @@ int bsc_qlfc_adaptive_decode_block(void *vb, const unsigned char * input, unsign
     };
     return LIBBSC_NOT_ENOUGH_MEMORY;
 }
-
-/*-----------------------------------------------------------*/
-/* End                                              qlfc.cpp */
-/*-----------------------------------------------------------*/

@@ -16,7 +16,6 @@ LDFLAGS     += -lpthread -lm
 ifdef IS_CONDA 
 	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2 
-	CXXFLAGS = -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -DNDEBUG -std=c++17
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -26,8 +25,6 @@ ifdef IS_CONDA
 else
 	CC=gcc
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native 
-	CXX = g++
-	CXXFLAGS = -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -DNDEBUG -std=c++17
 endif 
 
 MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
@@ -51,10 +48,7 @@ BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c b
 
 LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
-BSC_C_SRCS = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/platform.c \
-             bsc/coder.c bsc/libbsc.c bsc/lzp.c  
-
-BSC_CPP_SRCS = bsc/qlfc_model.cpp bsc/qlfc.cpp
+BSC_SRC    = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/platform.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
 
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
@@ -103,19 +97,17 @@ endif
 
 ifndef IS_CONDA 
 # local - static link everything
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_C_SRCS) $(LZMA_SRCS)
-CPP_SRCS = $(BSC_CPP_SRCS)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRC) $(LZMA_SRCS)
 else 
 # conda - use packages for bzip2
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_C_SRCS)
-CPP_SRCS = $(BSC_CPP_SRCS)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRC)
 endif
 
-OBJS       := $(C_SRCS:.c=.o) $(CPP_SRCS:.cpp=.o)
-DEBUG_OBJS := $(C_SRCS:.c=.debug-o) $(CPP_SRCS:.cpp=.debug-o)
-OPT_OBJS   := $(C_SRCS:.c=.opt-o) $(CPP_SRCS:.cpp=.opt-o)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+OBJS       := $(C_SRCS:.c=.o)
+DEBUG_OBJS := $(C_SRCS:.c=.debug-o) 
+OPT_OBJS   := $(C_SRCS:.c=.opt-o)   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 
-DEPS       := $(C_SRCS:.c=.d) $(CPP_SRCS:.cpp=.d) 
+DEPS       := $(C_SRCS:.c=.d) 
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
@@ -132,15 +124,12 @@ else
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
-all   : CXXFLAGS += $(OXXPTFLAGS) 
 all   : $(EXECUTABLES) LICENSE.non-commercial.txt
 
 debug : CFLAGS += $(DEBUGFLAGS)
-debug : CXXFLAGS += $(DEBUGFLAGS)
 debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 
 opt   : CFLAGS += -g $(OPTFLAGS)
-opt   : CXXFLAGS += $(OXXPTFLAGS) 
 opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
@@ -149,33 +138,17 @@ opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
-%.d: %.cpp
-	@echo Calculating dependencies $<
-	@$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
-
 %.o: %.c %.d
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
-
-%.o: %.cpp %.d
-	@echo Compiling $<
-	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 %.debug-o: %.c %.d
 	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-%.debug-o: %.cpp %.d
-	@echo "Compiling $< (debug)"
-	@$(CXX) -c -o $@ $< $(CXXFLAGS)
-
 %.opt-o: %.c %.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
-
-%.opt-o: %.cpp %.d
-	@echo "Compiling $< (opt)"
-	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@
