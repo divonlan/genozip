@@ -30,6 +30,11 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <stdlib.h>
 #include <string.h>
 #include <memory.h>
@@ -150,7 +155,8 @@ static int bsc_compress_inplace (void *vb, unsigned char * data, int n, int lzpH
         return index;
     }
 
-    if (unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize + 4096))
+    unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize + 4096);
+    if (buffer)
     {
         int result = bsc_coder_compress(vb, data, buffer, lzSize, coder, features);
         if (result >= LIBBSC_NO_ERROR) memcpy(data + LIBBSC_HEADER_SIZE, buffer, result);
@@ -250,7 +256,8 @@ int bsc_compress (void *vb, const unsigned char * input, unsigned char * output,
         return index;
     }
 
-    if (unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize + 4096))
+    unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize + 4096);
+    if (buffer)
     {
         int result = bsc_coder_compress(vb, output, buffer, lzSize, coder, features);
         if (result >= LIBBSC_NO_ERROR) memcpy(output + LIBBSC_HEADER_SIZE, buffer, result);
@@ -418,7 +425,8 @@ static int bsc_decompress_inplace (void *vb, unsigned char * data, int inputSize
 
     if (mode != (mode & 0xff))
     {
-        if (unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize))
+        unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize);
+        if (buffer)
         {
             memcpy(buffer, data, lzSize);
             result = bsc_lzp_decompress(vb, buffer, data, lzSize, lzpHashSize, lzpMinLen, features);
@@ -504,7 +512,8 @@ int bsc_decompress (void *vb, const unsigned char * input, int inputSize, unsign
 
     if (mode != (mode & 0xff))
     {
-        if (unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize))
+        unsigned char * buffer = (unsigned char *)bsc_malloc (vb, lzSize);
+        if (buffer)
         {
             memcpy(buffer, output, lzSize);
             result = bsc_lzp_decompress (vb, buffer, output, lzSize, lzpHashSize, lzpMinLen, features);

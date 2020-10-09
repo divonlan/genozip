@@ -30,12 +30,15 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <stdlib.h>
 #include <string.h>
 #include <memory.h>
-
 #include "platform.h"
-
 #include "libbsc.h"
 
 static void * bsc_wrap_zero_malloc(void *vb, size_t size)
@@ -94,49 +97,7 @@ int bsc_platform_init(int features,
     {
 	bsc_free_fn = free;
     }
-/*
-#if defined(_WIN32)
 
-    if (features & LIBBSC_FEATURE_LARGEPAGES)
-    {
-        HANDLE hToken = 0;
-        if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &hToken))
-        {
-            LUID luid;
-            if (LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &luid))
-            {
-                TOKEN_PRIVILEGES tp;
-
-                tp.PrivilegeCount = 1;
-                tp.Privileges[0].Luid = luid;
-                tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-                AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), 0, 0);
-            }
-
-            CloseHandle(hToken);
-        }
-
-        {
-            if (HMODULE hKernel = GetModuleHandle(TEXT("kernel32.dll")))
-            {
-                typedef SIZE_T (WINAPI * GetLargePageMinimumProcT)();
-
-                GetLargePageMinimumProcT largePageMinimumProc = (GetLargePageMinimumProcT)GetProcAddress(hKernel, "GetLargePageMinimum");
-                if (largePageMinimumProc != NULL)
-                {
-                    SIZE_T largePageSize = largePageMinimumProc();
-
-                    if ((largePageSize & (largePageSize - 1)) != 0) largePageSize = 0;
-
-                    g_LargePageSize = largePageSize;
-                }
-            }
-        }
-    }
-
-#endif
-*/
     return LIBBSC_NO_ERROR;
 }
 

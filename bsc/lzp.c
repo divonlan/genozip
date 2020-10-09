@@ -30,6 +30,11 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
@@ -56,7 +61,8 @@ static int bsc_lzp_encode_block (void *vb, const unsigned char * input, const un
         return LIBBSC_NOT_COMPRESSIBLE;
     }
 
-    if (int * lookup = (int *)bsc_zero_malloc (vb, (int)(1 << hashSize) * sizeof(int)))
+    int * lookup = (int *)bsc_zero_malloc (vb, (int)(1 << hashSize) * sizeof(int));
+    if (lookup)
     {
         unsigned int            mask        = (int)(1 << hashSize) - 1;
         const unsigned char *   inputStart  = input;
@@ -74,7 +80,8 @@ static int bsc_lzp_encode_block (void *vb, const unsigned char * input, const un
         while ((input < inputMinLenEnd) && (output < outputEOB))
         {
             unsigned int index = ((context >> 15) ^ context ^ (context >> 3)) & mask;
-            int value = lookup[index]; lookup[index] = (int)(input - inputStart);
+            int value = lookup[index]; 
+            lookup[index] = (int)(input - inputStart);
             if (value > 0)
             {
                 const unsigned char * reference = inputStart + value;
@@ -110,11 +117,10 @@ static int bsc_lzp_encode_block (void *vb, const unsigned char * input, const un
                 }
                 else
                 {
-
-LIBBSC_LZP_MATCH_NOT_FOUND:
-
-                    unsigned char next = *output++ = *input++; context = (context << 8) | next;
-                    if (next == LIBBSC_LZP_MATCH_FLAG) *output++ = 255;
+LIBBSC_LZP_MATCH_NOT_FOUND:{
+                        unsigned char next = *output++ = *input++;  context = (context << 8) | next;
+                        if (next == LIBBSC_LZP_MATCH_FLAG) *output++ = 255;
+                    }
                 }
             }
             else
@@ -153,7 +159,8 @@ static int bsc_lzp_decode_block (void *vb, const unsigned char * input, const un
         return LIBBSC_UNEXPECTED_EOB;
     }
 
-    if (int * lookup = (int *)bsc_zero_malloc (vb, (int)(1 << hashSize) * sizeof(int)))
+    int * lookup = (int *)bsc_zero_malloc (vb, (int)(1 << hashSize) * sizeof(int));
+    if (lookup)
     {
         unsigned int            mask        = (int)(1 << hashSize) - 1;
         const unsigned char *   outputStart = output;
@@ -173,7 +180,7 @@ static int bsc_lzp_decode_block (void *vb, const unsigned char * input, const un
                 input++;
                 if (*input != 255)
                 {
-                    int len = minLen; while (true) { len += *input; if (*input++ != 254) break; }
+                    int len = minLen; while (1) { len += *input; if (*input++ != 254) break; }
 
                     const unsigned char * reference = outputStart + value;
                           unsigned char * outputEnd = output + len;
