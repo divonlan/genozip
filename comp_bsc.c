@@ -8,8 +8,6 @@
 #include "vblock.h"
 #include "buffer.h"
 #include "bsc/libbsc.h"
-#include "bsc/filters.h"
-#include "bsc/platform.h"
 
 static const char *comp_bsc_errstr (int err)
 {

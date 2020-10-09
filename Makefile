@@ -51,10 +51,10 @@ BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c b
 
 LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
-BSC_C_SRCS   = bsc/divsufsort.c
+BSC_C_SRCS = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/platform.c \
+             bsc/coder.c bsc/libbsc.c bsc/lzp.c  
 
-BSC_CPP_SRCS = bsc/adler32.cpp bsc/bwt.cpp bsc/coder.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/detectors.cpp \
-			   bsc/preprocessing.cpp bsc/libbsc.cpp bsc/lzp.cpp bsc/platform.cpp      
+BSC_CPP_SRCS = bsc/qlfc_model.cpp bsc/qlfc.cpp
 
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
@@ -74,7 +74,9 @@ CONDA_INCS = aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h 
 			 zlib/crc32.h zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/zlib.h zlib/zutil.h \
 			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
-			 lzma/Precomp.h lzma/Threads.h 
+			 lzma/Precomp.h lzma/Threads.h \
+			 bsc/adler32.h bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
+			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h
 			 
 
 ifeq ($(CC),cl)

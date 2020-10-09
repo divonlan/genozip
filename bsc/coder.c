@@ -30,6 +30,11 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <stdlib.h>
 #include <memory.h>
 
@@ -40,11 +45,7 @@ See also the bsc and libbsc web site:
 
 int bsc_coder_init(int features)
 {
-    int result = LIBBSC_NO_ERROR;
-
-    if (result == LIBBSC_NO_ERROR) result = bsc_qlfc_init(features);
-
-    return result;
+    return bsc_qlfc_init(features);
 }
 
 static INLINE int bsc_coder_num_blocks(int n)

@@ -30,12 +30,16 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
 
 #include "adler32.h"
-
 #include "platform.h"
 #include "libbsc.h"
 

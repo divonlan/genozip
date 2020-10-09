@@ -88,7 +88,7 @@ for file in ${files[@]}; do
     if [ ! -n "$is_mac" ]; then  # note: sed on mac doesn't recognize \r
         sed 's/$/\r/g' unix-nl.$file > windows-nl.$file || exit 1 # note: sed on mac doesn't recognize \r
         ./genozip $1 windows-nl.$file -ft -o $output || exit 1
-        rm unix-nl.$file windows-nl.$file
+        rm -f unix-nl.$file windows-nl.$file
     fi
 
     test_header "$file - as URL"
@@ -109,25 +109,25 @@ for file in ${files[@]}; do
     if `command -v gzip >& /dev/null` && [ $allow_compressed == 1 ]; then
         test_header "${file} - with gzip"
         cp -f $file copy.$file
-        gzip copy.$file
+        gzip -f copy.$file
         ./genozip $1 copy.${file}.gz -ft -o $output || exit 1
-        rm copy.${file}.gz
+        rm -f copy.${file}.gz
     fi
     
     if `command -v bzip2 >& /dev/null` && [ $allow_compressed == 1 ]; then
         test_header "${file} - with bzip2"
         cp -f $file copy.$file
-        bzip2 copy.$file
+        bzip2 -f copy.$file
         ./genozip $1 copy.${file}.bz2 -ft -o $output || exit 1
-        rm copy.${file}.bz2
+        rm -f copy.${file}.bz2
     fi
     
     if `command -v xz >& /dev/null` && [ $allow_compressed == 1 ]; then
         test_header "${file} - with xz"
         cp -f $file copy.$file
-        xz copy.$file
+        xz -f copy.$file
         ./genozip $1 copy.${file}.xz -ft -o $output || exit 1
-        rm copy.${file}.xz
+        rm -f copy.${file}.xz
     fi
         
     if [ -z "$is_windows" ]; then # windows can't redirect binary data
@@ -144,7 +144,7 @@ for file in ${files[@]}; do
     cp -f $file $file2
     ./genozip $1 $file1 $file2 -ft || exit 1
     ./genounzip $1 ${file1}.genozip ${file2}.genozip -t || exit 1
-    rm $file1 $file2 ${file1}.genozip ${file2}.genozip
+    rm -f $file1 $file2 ${file1}.genozip ${file2}.genozip
 
     test_header "$file - bind & unbind"
     file1=copy1.$file
@@ -153,7 +153,7 @@ for file in ${files[@]}; do
     cat $file | sed 's/PRFX/FILE2/g' > $file2
     ./genozip $1 $file1 $file2 -ft -o $output || exit 1
     ./genounzip $1 $output -u -t || exit 1
-    rm $file1 $file2
+    rm -f $file1 $file2
 
     test_header "$file --optimize - NOT checking correctness, just that it doesn't crash"
     ./genozip $1 $file -f --optimize -o $output || exit 1
@@ -172,12 +172,12 @@ for file in ${files[@]}; do
 done
 
 # Test binding SAM files with lots of contigs (no reference)
-test_header "binding SAM files with lots of contigs (no reference)"
-file=td/test.transfly-unsorted.sam
-cp -f $file copy.unsorted1.sam
-cp -f $file copy.unsorted2.sam
-./genozip $1 copy.unsorted1.sam copy.unsorted2.sam -ft -o $output || exit 1
-rm -f copy.unsorted1.sam copy.unsorted2.sam $output
+#test_header "binding SAM files with lots of contigs (no reference)"
+#file=td/test.transfly-unsorted.sam
+#cp -f $file copy.unsorted1.sam
+#cp -f $file copy.unsorted2.sam
+#./genozip $1 copy.unsorted1.sam copy.unsorted2.sam -ft -o $output || exit 1
+#rm -f copy.unsorted1.sam copy.unsorted2.sam $output
 
 # FASTA genocat tests
 test_count_genocat_lines test-file.fa "--sequential" 9
@@ -211,7 +211,7 @@ test_header "test-file.vcf without FORMAT or samples"
 file=test-file.vcf
 cut -f1-8 $file > copy.$file
 ./genozip $1 copy.$file -ft -o $output || exit 1
-rm copy.$file
+rm -f copy.$file
 
 test_header "subsets (~3 VBs) or real world files"
 rm -f td/*.genozip
@@ -267,7 +267,7 @@ cp -f $file1 $file3
 cp -f $file2 $file4
 ./genozip $1 --force -m2E $GRCh38 --output $output $file1 $file2 $file3 $file4 || exit 1
 ./genounzip $1 -t $output || exit 1
-rm $file3 $file4 $output
+rm -f $file3 $file4 $output
 
 test_header "multiple bound VCF with --reference (hg19), and unbind"
 rm -f td/*.genozip

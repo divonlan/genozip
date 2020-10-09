@@ -30,6 +30,11 @@ See also the bsc and libbsc web site:
 
 --*/
 
+// ------------------------------------------------------------------
+//   All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
 #include <stdlib.h>
 #include <memory.h>
 
@@ -85,9 +90,11 @@ static int bsc_unbwt_mergedTL_serial(void *vb, unsigned char * RESTRICT T, unsig
 
 static int bsc_unbwt_biPSI_serial(void *vb, unsigned char * RESTRICT T, unsigned int * RESTRICT P, int n, int index)
 {
-    if (int * RESTRICT bucket = (int *)bsc_zero_malloc (vb, ALPHABET_SIZE * ALPHABET_SIZE * sizeof(int)))
+    int * RESTRICT bucket = (int *)bsc_zero_malloc (vb, ALPHABET_SIZE * ALPHABET_SIZE * sizeof(int));
+    if (bucket)
     {
-        if (unsigned short * RESTRICT fastbits = (unsigned short *)bsc_malloc (vb, ((1 + (1 << BWT_NUM_FASTBITS)) * sizeof(unsigned short))))
+        unsigned short * RESTRICT fastbits = (unsigned short *)bsc_malloc (vb, ((1 + (1 << BWT_NUM_FASTBITS)) * sizeof(unsigned short)));
+        if (fastbits)
         {
             int count[ALPHABET_SIZE]; memset(count, 0, ALPHABET_SIZE * sizeof(int));
 
@@ -185,7 +192,8 @@ int bsc_bwt_decode(void *vb, unsigned char * T, int n, int index, unsigned char 
     {
         return LIBBSC_NO_ERROR;
     }
-    if (unsigned int * P = (unsigned int *)bsc_malloc (vb, (n + 1) * sizeof(unsigned int)))
+    unsigned int * P = (unsigned int *)bsc_malloc (vb, (n + 1) * sizeof(unsigned int));
+    if (P)
     {
         int result = bsc_unbwt_reconstruct_serial(vb, T, P, n, index);
         bsc_free (vb, P);
@@ -193,7 +201,3 @@ int bsc_bwt_decode(void *vb, unsigned char * T, int n, int index, unsigned char 
     };
     return LIBBSC_NOT_ENOUGH_MEMORY;
 }
-
-/*-----------------------------------------------------------*/
-/* End                                               bwt.cpp */
-/*-----------------------------------------------------------*/
