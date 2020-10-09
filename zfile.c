@@ -376,9 +376,10 @@ int32_t zfile_read_section (File *file,
             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i);
 
     if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
-
     unsigned unencrypted_header_size = header_size;
 
+    // note: for an encrypted file, while reading the reference, we don't yet know until getting the header whether it
+    // will be an SEC_REF_IS_SET (encrypted) or SEC_REFERENCE (not encrypted if originating from external, encryptd if de-novo)
     bool is_encrypted =  (z_file->data_type != DT_REF) && 
                          (expected_sec_type != SEC_GENOZIP_HEADER) &&
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
@@ -390,6 +391,7 @@ int32_t zfile_read_section (File *file,
     if (sl) file_seek (file, sl->offset, SEEK_SET, false);
 
     SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
+    unsigned bytes_read = header_size;
 
     // case: we're done! no more bound files
     if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
@@ -402,7 +404,7 @@ int32_t zfile_read_section (File *file,
     // SEC_REFERENCE is never encrypted when originating from a reference file, it is encrypted (if the file is encrypted) if it originates from REF_INTERNAL 
     if (is_encrypted && header->section_type == SEC_REFERENCE && !header->data_encrypted_len) {
         is_encrypted = false;
-        header_size = unencrypted_header_size;
+        header_size  = unencrypted_header_size;
     }
 
     // decrypt header (note: except for SEC_GENOZIP_HEADER - this header is never encrypted)
@@ -427,6 +429,9 @@ int32_t zfile_read_section (File *file,
     unsigned data_encrypted_len  = BGEN32 (header->data_encrypted_len);
 
     unsigned data_len = MAX (data_compressed_len, data_encrypted_len);
+
+    // in case where we already read part of the body (eg if is_encrypted was initially set and then unset) (remaining_data_len might be negative)
+    int remaining_data_len = (int)data_len - (int)(bytes_read - header_size); 
     
     // check that we received the section type we expect, 
     ASSERT (expected_sec_type == header->section_type || 
@@ -443,10 +448,8 @@ int32_t zfile_read_section (File *file,
     header = (SectionHeader *)&data->data[header_offset]; // update after realloc
 
     // read section data - but only if header size is as expected
-    if (data_len && compressed_offset == header_size) {
-//fprintf (stderr, "XXXX alloced header_offset=%u + compressed_offset=%u + data_len=%u ; size=%u - len=%u = %u\n",
-//header_offset, compressed_offset, data_len, (unsigned)data->size, (unsigned)data->len, (unsigned)data->size-(unsigned)data->len);
-        ASSERT (zfile_read_from_disk (file, vb, data, data_len, false), 
+    if (remaining_data_len > 0 && compressed_offset == header_size) {
+        ASSERT (zfile_read_from_disk (file, vb, data, remaining_data_len, false), 
                 "Error: failed to read section data, section_type=%s: %s", st_name(header->section_type), strerror (errno));
     }
 
