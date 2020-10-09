@@ -150,6 +150,6 @@ void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len)
 
 const char *encryption_name (EncryptionType encryption_type)
 {
-    static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
+    static const char *names[NUM_ENCRYPTION_TYPES] = ENC_NAMES;
     return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));
 }

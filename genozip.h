@@ -146,12 +146,12 @@ typedef _Bool bool;
 
 // encryption types - these values are part of the genozip file format and cannot be easily changed
 typedef enum __attribute__ ((__packed__)) { // 1 byte
-    ENCRYPTION_TYPE_NONE   = 0,
-    ENCRYPTION_TYPE_AES256 = 1,
+    ENC_NONE   = 0,
+    ENC_AES256 = 1,
     NUM_ENCRYPTION_TYPES
 } EncryptionType;
 
-#define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit" }
+#define ENC_NAMES { "No encryption", "AES 256 bit" }
 
 // IMPORTANT: This is part of the genozip file format. 
 // If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size

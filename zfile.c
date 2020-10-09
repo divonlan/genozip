@@ -608,7 +608,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
 
     if (txt_file) txt_file->data_type = data_type; // txt_file is still NULL in case of --1d
     
-    ASSERT (header->encryption_type != ENCRYPTION_TYPE_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
+    ASSERT (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
             "Error: password provided, but file %s is not encrypted", z_name);
 
     ASSERT (BGEN32 (header->h.compressed_offset) == sizeof (SectionHeaderGenozipHeader),
@@ -616,7 +616,7 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
             (unsigned)sizeof (SectionHeaderGenozipHeader), BGEN32 (header->h.compressed_offset));
 
     // get & test password, if file is encrypted
-    if (header->encryption_type != ENCRYPTION_TYPE_NONE) {
+    if (header->encryption_type != ENC_NONE) {
 
         if (!crypt_have_password()) crypt_prompt_for_password();
 
@@ -713,7 +713,7 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
                                       (flag_ref_use_aligner           ? GENOZIP_FL_ALIGNER      : 0) );
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)z_file->data_type);
-    header.encryption_type         = is_encrypted ? ENCRYPTION_TYPE_AES256 : ENCRYPTION_TYPE_NONE;
+    header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
     header.uncompressed_data_size  = BGEN64 (z_file->txt_data_so_far_bind);
     header.num_items_bound         = BGEN64 (z_file->num_lines);
     header.num_sections            = BGEN32 (num_sections); 
