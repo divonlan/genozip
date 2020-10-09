@@ -559,9 +559,9 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
                 pthread_mutex_unlock (&overlay_mutex);            
             }
             
-            buf->data = NULL; 
-            buf->len = 0;
-            buf->param = 0;
+            buf->data        = NULL; 
+            buf->len         = 0;
+            buf->param       = 0;
             buf->overlayable = false;
             
             // name, param, memory and size are not changed

@@ -39,8 +39,8 @@ bool comp_bsc_compress (VBlock *vb, Codec codec,
     if (callback) {
 
         // copy data to vb->compressed
+        ASSERT0 (!vb->compressed.len, "Error in comp_bsc_compress: expecting vb->compress to be free, but its not");
         buf_alloc (vb, &vb->compressed, uncompressed_len, 1.2, "compressed", 0);
-        vb->compressed.len = 0;
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0, *start2=0;

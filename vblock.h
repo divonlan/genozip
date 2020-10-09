@@ -89,7 +89,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     Buffer z_section_headers;         /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
     \
-    Buffer compressed;                /* used by various zfile functions */\
+    Buffer compressed;                /* helper buffer for writing to/from zfile: used by various functions. user must assert that its free before use, and buf_free after use. */\
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     DidIType num_contexts;            /* total number of dictionaries of all types */\

@@ -151,6 +151,8 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t first_vb_i_of_pair_1, uint32_
     SectionHeaderVbHeader *vb_header = zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, sizeof (SectionHeaderVbHeader), SEC_VB_HEADER);
     vb->pair_num_lines = BGEN32 (vb_header->num_lines);
 
+    buf_free (&vb_->compressed); // allocated by zfile_read_section_header
+
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     sl++;
     buf_alloc (vb, &vb->z_section_headers, MAX ((MAX_DICTS * 2 + 50),  vb->z_section_headers.len + MAX_SUBFIELDS + 10) * sizeof(uint32_t), 0, "z_section_headers", 1); // room for section headers  

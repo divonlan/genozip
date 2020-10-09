@@ -236,6 +236,8 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
             SectionHeaderRefHash *header = zfile_read_section_header (evb, sl->offset, 0, sizeof (SectionHeaderRefHash), SEC_REF_HASH);
             if (num_layers) *num_layers = header->num_layers;
             if (base_layer_bits) *base_layer_bits = header->layer_bits + header->layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
+
+            buf_free (&evb->compressed); // allocated by zfile_read_section_header
             return;
         }
         else if (sl->section_type == SEC_REFERENCE)

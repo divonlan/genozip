@@ -336,6 +336,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len), "Error in ref_uncompress_one_range: when uncompressing SEC_REF_IS_SET: uncomp_len=%u inconsistent with len=%"PRId64, uncomp_len, ref_sec_len); 
 
         // uncompress into r->is_set, via vb->compress
+        ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compress to be free, but its not");
         zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", 0, SEC_REF_IS_SET);
 
         BitArray *is_set = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len);
@@ -345,6 +346,8 @@ static void ref_uncompress_one_range (VBlockP vb)
         RefLock lock = ref_lock (sec_start_gpos, ref_sec_len); 
         bit_array_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len); // initialization of is_set - case 3
         ref_unlock (lock);
+
+        buf_free (&vb->compressed);
 
         // display contents of is_set if user so requested
         if (flag_show_is_set && !strcmp (chrom_name, flag_show_is_set)) 
@@ -406,6 +409,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
 
     // uncompress into r->ref, via vb->compress
+    ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compress to be free, but its not");
     zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", 0, SEC_REFERENCE);
 
     // lock - while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
@@ -426,6 +430,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
 
     ref_unlock (lock);
+    buf_free (&vb->compressed);
 
 finish:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined. 

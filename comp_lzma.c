@@ -157,8 +157,7 @@ bool comp_lzma_compress (VBlock *vb, Codec codec,
 
     bool success = true;
 
-    if (codec == CODEC_ACGT) 
-        vb->compressed.len = vb->compressed.param = 0; // reset bit array num_of_words and num_of_bits 
+    ASSERT0 (codec != CODEC_ACGT || (!vb->compressed.len && !vb->compressed.param), "Error in comp_lzma_compress codec=ACGT: expecting vb->compress to be free, but its not");
 
     // option 1 - compress contiguous data
     if (uncompressed) {
@@ -205,6 +204,8 @@ bool comp_lzma_compress (VBlock *vb, Codec codec,
         ASSERT (res == SZ_OK, "Error: LzmaEnc_MemEncode failed: %s", lzma_errstr (res));
 
     LzmaEnc_Destroy (lzma_handle, &alloc_stuff, &alloc_stuff);
+
+    buf_free (&vb->compressed);
 
     COPY_TIMER(vb->profile.compressor_lzma);
 

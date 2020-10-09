@@ -348,7 +348,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, unsigned
 
         unsigned memcpy_len = MIN (len, file->z_last_read - file->z_next_read);
 
-        ASSERT (buf_has_space (buf, memcpy_len), "Error in zfile_read_from_disk: buf is out of space: len=%u memcpy_len=%u len_save=%u but remaining space in buffer=%u",
+        ASSERT (buf_has_space (buf, memcpy_len), "Error in zfile_read_from_disk: buf is out of space: len=%u memcpy_len=%u len_save=%u but remaining space in buffer=%u (tip: run with --show-headers to see where it fails)",
                 len, memcpy_len, len_save, (uint32_t)(buf->size - buf->len));
 
         buf_add (buf, file->read_buffer + file->z_next_read, memcpy_len);
@@ -444,6 +444,8 @@ int32_t zfile_read_section (File *file,
 
     // read section data - but only if header size is as expected
     if (data_len && compressed_offset == header_size) {
+//fprintf (stderr, "XXXX alloced header_offset=%u + compressed_offset=%u + data_len=%u ; size=%u - len=%u = %u\n",
+//header_offset, compressed_offset, data_len, (unsigned)data->size, (unsigned)data->len, (unsigned)data->size-(unsigned)data->len);
         ASSERT (zfile_read_from_disk (file, vb, data, data_len, false), 
                 "Error: failed to read section data, section_type=%s: %s", st_name(header->section_type), strerror (errno));
     }
@@ -451,7 +453,7 @@ int32_t zfile_read_section (File *file,
     return header_offset;
 }
 
-// Read one section header - returns the header in vb->compressed
+// Read one section header - returns the header in vb->compressed - caller needs to free vb->compressed
 void *zfile_read_section_header (VBlockP vb, uint64_t offset, 
                                  uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
                                  unsigned header_size, SectionType expected_sec_type)
@@ -463,8 +465,10 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
                          (expected_sec_type != SEC_GENOZIP_HEADER) &&
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
         
+    ASSERT (!vb->compressed.len, "Error in zfile_read_section_header vb_i=%u expected_sec_type=%s: expecting vb->compress to be free, but its not",
+            vb->vblock_i, st_name (expected_sec_type));
+    
     buf_alloc (evb, &vb->compressed, header_size, 4, "compressed", 0); 
-    vb->compressed.len = 0;
 
     SectionHeader *header = zfile_read_from_disk (z_file, evb, &vb->compressed, header_size, false); 
 
