@@ -45,7 +45,7 @@ See also the bsc and libbsc web site:
 
 #define LIBBSC_LZP_MATCH_FLAG 	0xf2
 
-static INLINE int bsc_lzp_num_blocks(int n)
+static inline int bsc_lzp_num_blocks(int n)
 {
     if (n <       256 * 1024)   return 1;
     if (n <  4 * 1024 * 1024)   return 2;

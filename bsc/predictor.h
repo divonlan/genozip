@@ -95,7 +95,7 @@ static inline int Mixup(ProbabilityMixer *mixer, const int probability0, const i
     return mixer->mixedProbability = (3 * probability + mappedProbability) >> 2;
 };
 
-static inline int MixupAndUpdateBit0(ProbabilityMixer * RESTRICT mixer, 
+static inline int MixupAndUpdateBit0(ProbabilityMixer * restrict mixer, 
                                      const int probability0,  const int probability1,  const int probability2,
                                      const int learningRate0, const int learningRate1, const int learningRate2,
                                      const int threshold,     const int adaptationRate

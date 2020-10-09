@@ -40,14 +40,14 @@ extern void zfile_compress_local_data (VBlockP vb, ContextP ctx);
 #define SEEK_NONE ((uint64_t)-1)
 extern int32_t zfile_read_section (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                    BufferP data /* buffer to append */, const char *buf_name,
-                                   unsigned header_size, SectionType expected_sec_type, 
+                                   uint32_t header_size, SectionType expected_sec_type, 
                                    ConstSectionListEntryP sl); 
 
 extern void zfile_uncompress_section (VBlockP vb, void *section_header, 
                                       void *uncompressed_data, const char *uncompressed_data_buf_name,
                                       uint32_t expected_vb_i, SectionType expected_section_type);
 
-extern void *zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, unsigned header_size, SectionType expected_sec_type);
+extern void *zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, uint32_t header_size, SectionType expected_sec_type);
 
 extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
 

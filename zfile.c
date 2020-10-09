@@ -311,7 +311,7 @@ void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type,
 // reads exactly the length required, error otherwise. manages read buffers to optimize I/O performance.
 // this doesn't make a big difference for SSD, but makes a huge difference for HD
 // return true if data was read as requested, false if file has reached EOF and error otherwise
-static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, unsigned len, bool fail_quietly_if_not_enough_data)
+static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t len, bool fail_quietly_if_not_enough_data)
 {
     START_TIMER;
 
@@ -319,8 +319,8 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, unsigned
 
     void *start = (void *)&buf->data[buf->len];
 
-    unsigned memcpyied = 0;
-    unsigned len_save  = len;
+    uint32_t memcpyied = 0;
+    uint32_t len_save  = len;
 
     while (len) {
 
@@ -346,7 +346,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, unsigned
             }
         }
 
-        unsigned memcpy_len = MIN (len, file->z_last_read - file->z_next_read);
+        uint32_t memcpy_len = MIN (len, file->z_last_read - file->z_next_read);
 
         ASSERT (buf_has_space (buf, memcpy_len), "Error in zfile_read_from_disk: buf is out of space: len=%u memcpy_len=%u len_save=%u but remaining space in buffer=%u (tip: run with --show-headers to see where it fails)",
                 len, memcpy_len, len_save, (uint32_t)(buf->size - buf->len));
@@ -369,14 +369,14 @@ int32_t zfile_read_section (File *file,
                             VBlock *vb, 
                             uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
                             Buffer *data, const char *buf_name, // buffer to append 
-                            unsigned header_size, SectionType expected_sec_type,
+                            uint32_t header_size, SectionType expected_sec_type,
                             const SectionListEntry *sl)   // NULL for no seeking
 {
     ASSERT (!sl || expected_sec_type == sl->section_type, "Error in zfile_read_section: expected_sec_type=%s but encountered sl->section_type=%s. vb_i=%u",
             st_name (expected_sec_type), st_name(sl->section_type), vb->vblock_i);
 
     if (sl && file == z_file && piz_is_skip_section (vb, expected_sec_type, sl->dict_id)) return 0; // skip if this section is not needed according to flags
-    unsigned unencrypted_header_size = header_size;
+    uint32_t unencrypted_header_size = header_size;
 
     // note: for an encrypted file, while reading the reference, we don't yet know until getting the header whether it
     // will be an SEC_REF_IS_SET (encrypted) or SEC_REFERENCE (not encrypted if originating from external, encryptd if de-novo)
@@ -384,14 +384,14 @@ int32_t zfile_read_section (File *file,
                          (expected_sec_type != SEC_GENOZIP_HEADER) &&
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
-    unsigned header_offset = data->len;
+    uint32_t header_offset = data->len;
     buf_alloc (vb, data, header_offset + header_size, 2, buf_name, 1);
     
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
     if (sl) file_seek (file, sl->offset, SEEK_SET, false);
 
     SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, false); // note: header in file can be shorter than header_size if its an earlier version
-    unsigned bytes_read = header_size;
+    uint32_t bytes_read = header_size;
 
     // case: we're done! no more bound files
     if (!header && expected_sec_type == SEC_TXT_HEADER) return EOF; 
@@ -422,16 +422,16 @@ int32_t zfile_read_section (File *file,
     ASSERT (is_magical, "Error in zfile_read_section: corrupt data (magic is wrong) when attempting to read section %s of vblock_i=%u component=%u in file %s", 
             st_name (expected_sec_type), vb->vblock_i, z_file->num_txt_components_so_far, z_name);
 
-    unsigned compressed_offset   = BGEN32 (header->compressed_offset);
+    uint32_t compressed_offset   = BGEN32 (header->compressed_offset);
     ASSERT (compressed_offset, "Error: header.compressed_offset is 0 when reading section_type=%s", st_name(expected_sec_type));
 
-    unsigned data_compressed_len = BGEN32 (header->data_compressed_len);
-    unsigned data_encrypted_len  = BGEN32 (header->data_encrypted_len);
+    uint32_t data_compressed_len = BGEN32 (header->data_compressed_len);
+    uint32_t data_encrypted_len  = BGEN32 (header->data_encrypted_len);
 
-    unsigned data_len = MAX (data_compressed_len, data_encrypted_len);
+    uint32_t data_len = MAX (data_compressed_len, data_encrypted_len);
 
     // in case where we already read part of the body (eg if is_encrypted was initially set and then unset) (remaining_data_len might be negative)
-    int remaining_data_len = (int)data_len - (int)(bytes_read - header_size); 
+    int32_t remaining_data_len = (int32_t)data_len - (int32_t)(bytes_read - header_size); 
     
     // check that we received the section type we expect, 
     ASSERT (expected_sec_type == header->section_type || 
@@ -459,7 +459,7 @@ int32_t zfile_read_section (File *file,
 // Read one section header - returns the header in vb->compressed - caller needs to free vb->compressed
 void *zfile_read_section_header (VBlockP vb, uint64_t offset, 
                                  uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the I/O thread (vb=0)
-                                 unsigned header_size, SectionType expected_sec_type)
+                                 uint32_t header_size, SectionType expected_sec_type)
 {
     // get the uncompressed size from one of the headers - they are all the same size, and the reference file is never encrypted
     file_seek (z_file, offset, SEEK_SET, false);
@@ -573,8 +573,8 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
     // header might be smaller for older versions - we limit our reading of it to the entire section size so we don't
     // fail due to end-of-file. This is just so we can observe the section number, and give a proper error message
     // for unsupported version<=5 files.
-    unsigned sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
-                                          (unsigned)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
+    uint32_t sizeof_genozip_header = MIN (sizeof (SectionHeaderGenozipHeader),
+                                          (uint32_t)(z_file->disk_size - footer_offset - sizeof(SectionFooterGenozipHeader)));
     
     ret = zfile_read_section (z_file, evb, 0, &evb->z_data, "genozip_header", sizeof_genozip_header, SEC_GENOZIP_HEADER, &dummy_sl);
 
@@ -888,7 +888,7 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     // rewind to beginning of current (latest) vcf header - nothing to do if we can't
     if (!file_seek (z_file, pos_of_current_vcf_header, SEEK_SET, true)) return false;
 
-    unsigned len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
+    uint32_t len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
 
     // update the header of the single (current) vcf. 
     SectionHeaderTxtHeader *curr_header = &z_file->txt_header_single;

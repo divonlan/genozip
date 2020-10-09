@@ -51,7 +51,7 @@ int bsc_qlfc_init(int features)
     return bsc_qlfc_init_static_model();
 }
 
-static unsigned char * bsc_qlfc_transform(void *vb, const unsigned char * RESTRICT input, unsigned char * RESTRICT buffer, int n, unsigned char * RESTRICT MTFTable)
+static unsigned char * bsc_qlfc_transform(void *vb, const unsigned char * restrict input, unsigned char * restrict buffer, int n, unsigned char * restrict MTFTable)
 {
     unsigned char Flag[ALPHABET_SIZE];
 
@@ -209,10 +209,10 @@ static int bsc_qlfc_adaptive_encode(void *vb, const unsigned char * input, unsig
         int                 history         =   rankHistory[currentChar];
         int                 state           =   model_rank_state(contextRank4, contextRun, history);
 
-        short *            RESTRICT statePredictor  = & model->Rank.StateModel[state];
-        short *            RESTRICT charPredictor   = & model->Rank.CharModel[currentChar];
-        short *            RESTRICT staticPredictor = & model->Rank.StaticModel;
-        ProbabilityMixer * RESTRICT mixer           = & model->mixerOfRank[currentChar];
+        short *            restrict statePredictor  = & model->Rank.StateModel[state];
+        short *            restrict charPredictor   = & model->Rank.CharModel[currentChar];
+        short *            restrict staticPredictor = & model->Rank.StaticModel;
+        ProbabilityMixer * restrict mixer           = & model->mixerOfRank[currentChar];
 
         if (avgRank < 32)
         {
@@ -546,9 +546,9 @@ static int bsc_qlfc_static_encode(void *vb, const unsigned char * input, unsigne
         int                 history         =   rankHistory[currentChar];
         int                 state           =   model_rank_state(contextRank4, contextRun, history);
 
-        short * RESTRICT    statePredictor  = & model->Rank.StateModel[state];
-        short * RESTRICT    charPredictor   = & model->Rank.CharModel[currentChar];
-        short * RESTRICT    staticPredictor = & model->Rank.StaticModel;
+        short * restrict    statePredictor  = & model->Rank.StateModel[state];
+        short * restrict    charPredictor   = & model->Rank.CharModel[currentChar];
+        short * restrict    staticPredictor = & model->Rank.StaticModel;
 
         if (avgRank < 32)
         {
@@ -828,10 +828,10 @@ int bsc_qlfc_adaptive_decode(void *vb, const unsigned char * input, unsigned cha
         int                 history         =   rankHistory[currentChar];
         int                 state           =   model_rank_state(contextRank4, contextRun, history);
 
-        short *            RESTRICT statePredictor  = & model->Rank.StateModel[state];
-        short *            RESTRICT charPredictor   = & model->Rank.CharModel[currentChar];
-        short *            RESTRICT staticPredictor = & model->Rank.StaticModel;
-        ProbabilityMixer * RESTRICT mixer           = & model->mixerOfRank[currentChar];
+        short *            restrict statePredictor  = & model->Rank.StateModel[state];
+        short *            restrict charPredictor   = & model->Rank.CharModel[currentChar];
+        short *            restrict staticPredictor = & model->Rank.StaticModel;
+        ProbabilityMixer * restrict mixer           = & model->mixerOfRank[currentChar];
 
         int rank = 1;
         if (avgRank < 32)
@@ -1112,9 +1112,9 @@ int bsc_qlfc_static_decode(void *vb, const unsigned char * input, unsigned char 
         int                 history         =   rankHistory[currentChar];
         int                 state           =   model_rank_state(contextRank4, contextRun, history);
 
-        short * RESTRICT    statePredictor  = & model->Rank.StateModel[state];
-        short * RESTRICT    charPredictor   = & model->Rank.CharModel[currentChar];
-        short * RESTRICT    staticPredictor = & model->Rank.StaticModel;
+        short * restrict    statePredictor  = & model->Rank.StateModel[state];
+        short * restrict    charPredictor   = & model->Rank.CharModel[currentChar];
+        short * restrict    staticPredictor = & model->Rank.StaticModel;
 
         int rank = 1;
         if (avgRank < 32)

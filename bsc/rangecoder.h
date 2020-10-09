@@ -39,7 +39,6 @@ See also the bsc and libbsc web site:
 #ifndef _LIBBSC_CODER_RANGECODER_H
 #define _LIBBSC_CODER_RANGECODER_H
 
-#include <stdbool.h>
 #include "platform.h"
 
 typedef struct 
@@ -59,10 +58,10 @@ typedef struct
     unsigned int ari_cache;
     unsigned int ari_range;
 
-    const unsigned short * RESTRICT ari_input;
-          unsigned short * RESTRICT ari_output;
-          unsigned short * RESTRICT ari_outputEOB;
-          unsigned short * RESTRICT ari_outputStart;
+    const unsigned short * restrict ari_input;
+          unsigned short * restrict ari_output;
+          unsigned short * restrict ari_outputEOB;
+          unsigned short * restrict ari_outputStart;
 } RangeCoder;
 
 // private functions

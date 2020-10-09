@@ -46,22 +46,23 @@ See also the bsc and libbsc web site:
 #include "lzp.h"
 #include "coder.h"
 
+void* (* bsc_malloc)(void *vb, uint64_t size) = NULL;
+void  (* bsc_free)(void *vb, void* address) = NULL;
+
 int bsc_init_full(int features, 
                   void* (* malloc)(void *vb, size_t size), 
-                  void* (* zero_malloc)(void *vb, size_t size), 
                   void (* free)(void *vb, void* address))
 {
-    int result = LIBBSC_NO_ERROR;
-
-    if (result == LIBBSC_NO_ERROR) result = bsc_platform_init(features, malloc, zero_malloc, free);
-    if (result == LIBBSC_NO_ERROR) result = bsc_coder_init(features);
-
-    return result;
+    bsc_malloc = malloc;
+    bsc_free   = free;
+    return bsc_coder_init(features);
 }
 
-int bsc_init(int features)
+void *bsc_zero_malloc (void *vb, uint64_t size)
 {
-    return bsc_init_full(features, NULL, NULL, NULL);
+    void *address = bsc_malloc (vb, size);
+    if (address) memset (address, 0, size);
+    return address;
 }
 
 int bsc_store(void *vb, const unsigned char * input, unsigned char * output, int n, int features)

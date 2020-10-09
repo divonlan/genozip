@@ -100,6 +100,6 @@ static void comp_bsc_free (void *vb, void *addr)
 
 void comp_bsc_initialize (void)
 {
-    bsc_init_full (LIBBSC_FEATURE_FASTMODE, comp_bsc_malloc, NULL, comp_bsc_free);
+    bsc_init_full (LIBBSC_FEATURE_FASTMODE, comp_bsc_malloc, comp_bsc_free);
 }
 

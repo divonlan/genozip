@@ -80,7 +80,7 @@ typedef struct SectionHeader {
 typedef struct {
     SectionHeader h;
     uint8_t  genozip_version;
-    uint8_t  encryption_type;         // one of ENC_TYPE_*
+    EncryptionType encryption_type;   // one of ENC_TYPE_*
     uint16_t data_type;               // one of DATA_TYPE_*
     uint32_t unused; 
     uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file

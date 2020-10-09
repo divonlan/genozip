@@ -37,18 +37,6 @@
 #include "libbsc.h"
 
 /*- Constants -*/
-#if defined(INLINE)
-# undef INLINE
-#endif
-#if !defined(INLINE)
-# define INLINE __inline
-#endif
-#if defined(ALPHABET_SIZE) && (ALPHABET_SIZE < 1)
-# undef ALPHABET_SIZE
-#endif
-#if !defined(ALPHABET_SIZE)
-# define ALPHABET_SIZE (256)
-#endif
 #define BUCKET_A_SIZE (ALPHABET_SIZE)
 #define BUCKET_B_SIZE (ALPHABET_SIZE * ALPHABET_SIZE)
 #if defined(SS_INSERTIONSORT_THRESHOLD)
@@ -144,7 +132,7 @@ static const int lg_table[256]= {
 
 #if (SS_BLOCKSIZE == 0) || (SS_INSERTIONSORT_THRESHOLD < SS_BLOCKSIZE)
 
-static INLINE
+static inline
 int
 ss_ilg(int n) {
 #if SS_BLOCKSIZE == 0
@@ -187,7 +175,7 @@ static const int sqq_table[256] = {
 247, 248, 248, 249, 249, 250, 250, 251, 251, 252, 252, 253, 253, 254, 254, 255
 };
 
-static INLINE
+static inline
 int
 ss_isqrt(int x) {
   int y, e;
@@ -220,7 +208,7 @@ ss_isqrt(int x) {
 /*---------------------------------------------------------------------------*/
 
 /* Compares two suffixes. */
-static INLINE
+static inline
 int
 ss_compare(const unsigned char *T,
            const int *p1, const int *p2,
@@ -271,7 +259,7 @@ ss_insertionsort(const unsigned char *T, const int *PA,
 
 #if (SS_BLOCKSIZE == 0) || (SS_INSERTIONSORT_THRESHOLD < SS_BLOCKSIZE)
 
-static INLINE
+static inline
 void
 ss_fixdown(const unsigned char *Td, const int *PA,
            int *SA, int i, int size) {
@@ -313,7 +301,7 @@ ss_heapsort(const unsigned char *Td, const int *PA, int *SA, int size) {
 /*---------------------------------------------------------------------------*/
 
 /* Returns the median of three elements. */
-static INLINE
+static inline
 int *
 ss_median3(const unsigned char *Td, const int *PA,
            int *v1, int *v2, int *v3) {
@@ -327,7 +315,7 @@ ss_median3(const unsigned char *Td, const int *PA,
 }
 
 /* Returns the median of five elements. */
-static INLINE
+static inline
 int *
 ss_median5(const unsigned char *Td, const int *PA,
            int *v1, int *v2, int *v3, int *v4, int *v5) {
@@ -342,7 +330,7 @@ ss_median5(const unsigned char *Td, const int *PA,
 }
 
 /* Returns the pivot element. */
-static INLINE
+static inline
 int *
 ss_pivot(const unsigned char *Td, const int *PA, int *first, int *last) {
   int *middle;
@@ -370,7 +358,7 @@ ss_pivot(const unsigned char *Td, const int *PA, int *first, int *last) {
 /*---------------------------------------------------------------------------*/
 
 /* Binary partition for substrings. */
-static INLINE
+static inline
 int *
 ss_partition(const int *PA,
                     int *first, int *last, int depth) {
@@ -531,7 +519,7 @@ ss_mintrosort(const unsigned char *T, const int *PA,
 
 #if SS_BLOCKSIZE != 0
 
-static INLINE
+static inline
 void
 ss_blockswap(int *a, int *b, int n) {
   int t;
@@ -540,7 +528,7 @@ ss_blockswap(int *a, int *b, int n) {
   }
 }
 
-static INLINE
+static inline
 void
 ss_rotate(int *first, int *middle, int *last) {
   int *a, *b, t;
@@ -900,7 +888,7 @@ sssort(const unsigned char *T, const int *PA,
 
 /*---------------------------------------------------------------------------*/
 
-static INLINE
+static inline
 int
 tr_ilg(int n) {
   return (n & 0xffff0000) ?
@@ -935,7 +923,7 @@ tr_insertionsort(const int *ISAd, int *first, int *last) {
 
 /*---------------------------------------------------------------------------*/
 
-static INLINE
+static inline
 void
 tr_fixdown(const int *ISAd, int *SA, int i, int size) {
   int j, k;
@@ -976,7 +964,7 @@ tr_heapsort(const int *ISAd, int *SA, int size) {
 /*---------------------------------------------------------------------------*/
 
 /* Returns the median of three elements. */
-static INLINE
+static inline
 int *
 tr_median3(const int *ISAd, int *v1, int *v2, int *v3) {
   int *t;
@@ -989,7 +977,7 @@ tr_median3(const int *ISAd, int *v1, int *v2, int *v3) {
 }
 
 /* Returns the median of five elements. */
-static INLINE
+static inline
 int *
 tr_median5(const int *ISAd,
            int *v1, int *v2, int *v3, int *v4, int *v5) {
@@ -1004,7 +992,7 @@ tr_median5(const int *ISAd,
 }
 
 /* Returns the pivot element. */
-static INLINE
+static inline
 int *
 tr_pivot(const int *ISAd, int *first, int *last) {
   int *middle;
@@ -1039,14 +1027,14 @@ struct _trbudget_t {
   int count;
 };
 
-static INLINE
+static inline
 void
 trbudget_init(trbudget_t *budget, int chance, int incval) {
   budget->chance = chance;
   budget->remain = budget->incval = incval;
 }
 
-static INLINE
+static inline
 int
 trbudget_check(trbudget_t *budget, int size) {
   if(size <= budget->remain) { budget->remain -= size; return 1; }
@@ -1059,7 +1047,7 @@ trbudget_check(trbudget_t *budget, int size) {
 
 /*---------------------------------------------------------------------------*/
 
-static INLINE
+static inline
 void
 tr_partition(const int *ISAd,
              int *first, int *middle, int *last,

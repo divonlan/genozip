@@ -48,7 +48,7 @@ int bsc_coder_init(int features)
     return bsc_qlfc_init(features);
 }
 
-static INLINE int bsc_coder_num_blocks(int n)
+static inline int bsc_coder_num_blocks(int n)
 {
     if (n <       256 * 1024)   return 1;
     if (n <  4 * 1024 * 1024)   return 2;

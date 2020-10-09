@@ -54,7 +54,7 @@ int bsc_bwt_encode(void *vb, unsigned char * T, int n, unsigned char * num_index
     return index;
 }
 
-static int bsc_unbwt_mergedTL_serial(void *vb, unsigned char * RESTRICT T, unsigned int * RESTRICT P, int n, int index)
+static int bsc_unbwt_mergedTL_serial(void *vb, unsigned char * restrict T, unsigned int * restrict P, int n, int index)
 {
     unsigned int bucket[ALPHABET_SIZE];
 
@@ -88,12 +88,12 @@ static int bsc_unbwt_mergedTL_serial(void *vb, unsigned char * RESTRICT T, unsig
 
 #define BWT_NUM_FASTBITS (17)
 
-static int bsc_unbwt_biPSI_serial(void *vb, unsigned char * RESTRICT T, unsigned int * RESTRICT P, int n, int index)
+static int bsc_unbwt_biPSI_serial(void *vb, unsigned char * restrict T, unsigned int * restrict P, int n, int index)
 {
-    int * RESTRICT bucket = (int *)bsc_zero_malloc (vb, ALPHABET_SIZE * ALPHABET_SIZE * sizeof(int));
+    int * restrict bucket = (int *)bsc_zero_malloc (vb, ALPHABET_SIZE * ALPHABET_SIZE * sizeof(int));
     if (bucket)
     {
-        unsigned short * RESTRICT fastbits = (unsigned short *)bsc_malloc (vb, ((1 + (1 << BWT_NUM_FASTBITS)) * sizeof(unsigned short)));
+        unsigned short * restrict fastbits = (unsigned short *)bsc_malloc (vb, ((1 + (1 << BWT_NUM_FASTBITS)) * sizeof(unsigned short)));
         if (fastbits)
         {
             int count[ALPHABET_SIZE]; memset(count, 0, ALPHABET_SIZE * sizeof(int));
@@ -107,7 +107,7 @@ static int bsc_unbwt_biPSI_serial(void *vb, unsigned char * RESTRICT T, unsigned
                 int tmp = sum; sum += count[c]; count[c] = tmp;
                 if (count[c] != sum)
                 {
-                    int * RESTRICT bucket_p = &bucket[c << 8];
+                    int * restrict bucket_p = &bucket[c << 8];
 
                     int hi = index; if (sum < hi) hi = sum;
                     for (int i = count[c]; i < hi; ++i) bucket_p[T[i]]++;
@@ -122,7 +122,7 @@ static int bsc_unbwt_biPSI_serial(void *vb, unsigned char * RESTRICT T, unsigned
             {
                 if (c == lastc) sum++;
 
-                int * RESTRICT bucket_p = &bucket[c];
+                int * restrict bucket_p = &bucket[c];
                 for (int d = 0; d < ALPHABET_SIZE; ++d)
                 {
                     int tmp = sum; sum += bucket_p[d << 8]; bucket_p[d << 8] = tmp;

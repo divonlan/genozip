@@ -144,6 +144,15 @@ typedef _Bool bool;
     extern void func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len); \
     static const int dt##_SPECIAL_##name = (num + 32); /* +32 to make it printable ASCII that can go into a snip */
 
+// encryption types - these values are part of the genozip file format and cannot be easily changed
+typedef enum __attribute__ ((__packed__)) { // 1 byte
+    ENCRYPTION_TYPE_NONE   = 0,
+    ENCRYPTION_TYPE_AES256 = 1,
+    NUM_ENCRYPTION_TYPES
+} EncryptionType;
+
+#define ENCRYPTION_TYPE_NAMES { "No encryption", "AES 256 bit" }
+
 // IMPORTANT: This is part of the genozip file format. 
 // If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte

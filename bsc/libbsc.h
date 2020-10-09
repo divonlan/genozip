@@ -74,13 +74,6 @@ extern "C" {
 #endif
 
     /**
-    * You should call this function (or @ref bsc_init_full) before you call any of the other functions in libbsc.
-    * @param features - the set of additional features.
-    * @return LIBBSC_NO_ERROR if no error occurred, error code otherwise.
-    */
-    int bsc_init(int features);
-
-    /**
     * You should call this function (or @ref bsc_init) before you call any of the other functions in libbsc.
     * @param features - the set of additional features.
     * @param malloc - function to use to allocate buffers
@@ -89,7 +82,6 @@ extern "C" {
     * @return LIBBSC_NO_ERROR if no error occurred, error code otherwise.
     */
     int bsc_init_full(int features, void* (* malloc)(void *vb, size_t size), 
-                      void* (* zero_malloc)(void *vb, size_t size), 
                       void (* free)(void *vb, void* address));
 
     /**
@@ -145,6 +137,3 @@ extern "C" {
 
 #endif
 
-/*-------------------------------------------------*/
-/* End                                    libbsc.h */
-/*-------------------------------------------------*/

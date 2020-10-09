@@ -46,17 +46,17 @@ bool crypt_prompt_for_password()
     return true;
 }
 
-unsigned crypt_padded_len (unsigned len)
+uint32_t crypt_padded_len (uint32_t len)
 {
     return len + (password ? (AES_BLOCKLEN - (len % AES_BLOCKLEN)) % AES_BLOCKLEN : 0);
 }
 
 // returns true if encrypted
-bool crypt_get_encrypted_len (unsigned *data_encrypted_len /* in/out */, unsigned *padding_len /* optional out */)
+bool crypt_get_encrypted_len (uint32_t *data_encrypted_len /* in/out */, uint32_t *padding_len /* optional out */)
 {
     if (!password) return false;
 
-    unsigned pad_len = (AES_BLOCKLEN - (*data_encrypted_len % AES_BLOCKLEN)) % AES_BLOCKLEN;
+    uint32_t pad_len = (AES_BLOCKLEN - (*data_encrypted_len % AES_BLOCKLEN)) % AES_BLOCKLEN;
     *data_encrypted_len += pad_len; // we are guaranteed there's room for our padding, bc we kept encryption_padding_reserve bytes for it
 
     if (padding_len) *padding_len = pad_len;
@@ -64,7 +64,7 @@ bool crypt_get_encrypted_len (unsigned *data_encrypted_len /* in/out */, unsigne
     return true;
 }
 
-unsigned crypt_max_padding_len()
+uint32_t crypt_max_padding_len()
 {
     return AES_BLOCKLEN-1;
 }
@@ -78,7 +78,7 @@ static void crypt_generate_aes_key (VBlock *vb,
 {
     const char *salt   = "frome";     
     const char *pepper = "vaughan";   
-    static unsigned pw_len=0, salt_len=0, pepper_len=0;
+    static uint32_t pw_len=0, salt_len=0, pepper_len=0;
 
     ASSERT0 (password, "Error in crypt_generate_aes_key - password is NULL");
 
@@ -113,7 +113,7 @@ static void crypt_generate_aes_key (VBlock *vb,
 }
 
 // we generate a different key for each block by salting the password with vb_i, sec_type and is_header
-void crypt_do (VBlock *vb, uint8_t *data, unsigned data_len, 
+void crypt_do (VBlock *vb, uint8_t *data, uint32_t data_len, 
                uint32_t vb_i, SectionType sec_type, bool is_header)  // used to generate an aes key unique to each block
 {
     // generate an AES key just for this one section - combining the pasword with vb_i and sec_i
@@ -130,25 +130,25 @@ void crypt_do (VBlock *vb, uint8_t *data, unsigned data_len,
     //fprintf (stderr, "AFTR: data len=%u: %s\n", data_len, aes_display_data (data, data_len));
 }
 
-void crypt_continue (VBlock *vb, uint8_t *data, unsigned data_len)
+void crypt_continue (VBlock *vb, uint8_t *data, uint32_t data_len)
 {
     //fprintf (stderr, "continue: data_len=%u\n", data_len);
     aes_xcrypt_buffer (vb, data, data_len);
 }
 
 // pad data to AES_BLOCKLEN boundary
-void crypt_pad (uint8_t *data, unsigned data_len, unsigned padding_len)
+void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len)
 {
     if (!padding_len) return; // nothing to do
 
     // use md5 to generate non-trival padding - the hash of the last 100 bytes of data
-    unsigned src_len = MIN (data_len, 100);
+    uint32_t src_len = MIN (data_len, 100);
     Md5Hash hash = md5_do (&data[data_len-src_len], src_len);
     
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }
 
-const char *encryption_name (unsigned encryption_type)
+const char *encryption_name (EncryptionType encryption_type)
 {
     static const char *names[NUM_ENCRYPTION_TYPES] = ENCRYPTION_TYPE_NAMES;
     return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));

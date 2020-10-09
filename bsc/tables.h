@@ -1857,12 +1857,12 @@ static const unsigned char model_run_state_table[8192] =
       85, 170, 219, 171,   0,   0,   0,   0,  94, 170, 219,   1,   0,   0,   0,   0,  94, 170, 219, 140,   0,   0,   0,   0,  94, 170, 219, 248,   0,   0,   0,   0,
 };
 
-static INLINE int bsc_log2_256(const int n)
+static inline int bsc_log2_256(const int n)
 {
     return bsc_log2_table[n];
 }
 
-static INLINE int bsc_log2(const int n)
+static inline int bsc_log2(const int n)
 {
     if (n < 0x100)     return 0  + bsc_log2_table[n >>  0];
     if (n < 0x10000)   return 8  + bsc_log2_table[n >>  8];
@@ -1870,22 +1870,22 @@ static INLINE int bsc_log2(const int n)
     return 24 + bsc_log2_table[n >> 24];
 }
 
-static INLINE int bsc_stretch(const int p)
+static inline int bsc_stretch(const int p)
 {
     return bsc_stretch_table[p];
 }
 
-static INLINE int bsc_squash(const int s)
+static inline int bsc_squash(const int s)
 {
     return bsc_squash_table[2048 + s];
 }
 
-static INLINE int model_rank_state(const int contextRank4, const int contextRun, const int rankSizeHistory)
+static inline int model_rank_state(const int contextRank4, const int contextRun, const int rankSizeHistory)
 {
     return model_rank_state_table[(contextRun << 11) | (contextRank4 << 3) | (rankSizeHistory)];
 }
 
-static INLINE int model_run_state(const int contextRank0, const int contextRun, const int rank, const int runSizeHistory)
+static inline int model_run_state(const int contextRank0, const int contextRun, const int rank, const int runSizeHistory)
 {
     return model_run_state_table[(contextRank0 << 10) | (contextRun << 6) | ((rank < 7 ? rank : 7) << 3) | (runSizeHistory < 7 ? runSizeHistory : 7)];
 }
