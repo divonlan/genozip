@@ -161,7 +161,7 @@ bool comp_non_acgt_compress (VBlock *vb, Codec codec,
     // option 2 - compress data one line at a time
     else if (callback) {
 
-        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             char *data_1=0, *data_2=0;
             uint32_t data_1_len=0, data_2_len=0;

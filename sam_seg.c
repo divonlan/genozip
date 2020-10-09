@@ -104,21 +104,21 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     
-    *line_len  = dl->seq_len * 2;
-
-    if (!line_data) return; // only length was requested
-
     const char *bd = dl->bdbi_data_start[0] ? ENT (char, vb->txt_data, dl->bdbi_data_start[0]) : NULL;
     const char *bi = dl->bdbi_data_start[1] ? ENT (char, vb->txt_data, dl->bdbi_data_start[1]) : NULL;
     
     if (!bd && !bi) return; // no BD or BI on this line
+
+    *line_len  = dl->seq_len * 2;
+
+    if (!line_data) return; // only length was requested
 
     buf_alloc (vb, &vb->bd_bi_line, dl->seq_len * 2, 2, "bd_bi_line", 0);
 
     // calculate character-wise delta
     for (unsigned i=0; i < dl->seq_len; i++) {
         *ENT (uint8_t, vb->bd_bi_line, i*2    ) = bd ? bd[i] : 0;
-        *ENT (uint8_t, vb->bd_bi_line, i*2 + 1) = bi ? bi[i] - bd[i] : 0;
+        *ENT (uint8_t, vb->bd_bi_line, i*2 + 1) = bi ? bi[i] - (bd ? bd[i] : 0) : 0;
     }
 
     *line_data = FIRSTENT (char, vb->bd_bi_line);

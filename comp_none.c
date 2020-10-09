@@ -19,14 +19,14 @@ bool comp_none_compress (VBlock *vb, Codec codec,
 
     if (callback) {
         char *next = compressed;
-        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0, *start2=0;
             uint32_t len1=0, len2=0;        
+            
             callback (vb, line_i, &start1, &len1, &start2, &len2);
-            memcpy (next, start1, len1);
-            next += len1;
-            memcpy (next, start2, len2);
-            next += len2;
+
+            if (start1 && len1) { memcpy (next, start1, len1); next += len1; }
+            if (start2 && len2) { memcpy (next, start2, len2); next += len2; }
         }
     }
     else

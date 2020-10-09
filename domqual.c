@@ -49,7 +49,7 @@ static char domqual_has_dominant_value (VBlock *vb, LocalGetLineCallback get_lin
 
     uint32_t char_counter[256] = { 0 };
     uint32_t total_len = 0;
-    for (unsigned line_i=0; line_i < MIN (NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
+    for (uint32_t line_i=0; line_i < MIN (NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
         char *qual_data, *unused;
         uint32_t qual_data_len, unused_len;
         get_line (vb, line_i, &qual_data, &qual_data_len, &unused, &unused_len);

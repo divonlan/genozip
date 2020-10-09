@@ -44,7 +44,7 @@ bool comp_bsc_compress (VBlock *vb, Codec codec,
         buf_alloc (vb, &vb->compressed, uncompressed_len, 1.2, "compressed", 0);
         vb->compressed.len = 0;
 
-        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0, *start2=0;
             uint32_t len1=0, len2=0;        
             callback (vb, line_i, &start1, &len1, &start2, &len2);

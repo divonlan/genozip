@@ -103,7 +103,7 @@ bool comp_bzlib_compress (VBlock *vb, Codec codec,
     // option 2 - compress data one line at a time
     else if (callback) {
 
-        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             ASSERT (!strm.avail_in, "Error in comp_bzlib_compress: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
 
