@@ -348,8 +348,11 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, unsigned
 
         unsigned memcpy_len = MIN (len, file->z_last_read - file->z_next_read);
 
+        ASSERT (buf_has_space (buf, memcpy_len), "Error in zfile_read_from_disk: buf is out of space: len=%u memcpy_len=%u len_save=%u but remaining space in buffer=%u",
+                len, memcpy_len, len_save, (uint32_t)(buf->size - buf->len));
+
         buf_add (buf, file->read_buffer + file->z_next_read, memcpy_len);
-        len                 -= memcpy_len;
+        len               -= memcpy_len;
         file->z_next_read += memcpy_len;
 
         memcpyied += memcpy_len;

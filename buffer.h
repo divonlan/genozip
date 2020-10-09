@@ -109,9 +109,11 @@ extern void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, uint64_
 
 extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 
+#define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
+
 #define buf_add(buf, new_data, new_data_len) { uint32_t new_len = (new_data_len); /* copy in case caller uses ++ */ \
-                                               ASSERT ((buf)->len + new_len <= (buf)->size, \
-                                                       "Error in buf_add call in %s:%u: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
+                                               ASSERT (buf_has_space(buf, new_len), \
+                                                       "Error in buf_add called from %s:%u: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
                                                        __FUNCTION__, __LINE__, buf_desc (buf), (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
                                                memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
                                                (buf)->len += new_len; }
