@@ -138,7 +138,7 @@ VBlockPool *vb_get_pool (void)
     return pool;
 }
 
-void vb_external_vb_initialize(void)
+void vb_initialize_evb(void)
 {
     ASSERT0 (!evb, "Error: evb already initialized");
 

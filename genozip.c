@@ -66,7 +66,7 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
     flag_reading_reference=0, flag_make_reference=0, flag_show_reference=0, flag_show_ref_index=0, flag_show_ref_hash=0, 
     flag_ref_use_aligner=0,
     flag_optimize_sort=0, flag_optimize_PL=0, flag_optimize_GL=0, flag_optimize_GP=0, flag_optimize_VQSLOD=0, 
-    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0, flag_optimize_SEQ=0,
+    flag_optimize_QUAL=0, flag_optimize_Vf=0, flag_optimize_ZM=0, flag_optimize_DESC=0,
     flag_show_ref_contigs=0, flag_show_ref_alts=0, flag_show_ref_seq=0,
     flag_pair=NOT_PAIRED_END;
 
@@ -657,7 +657,6 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _9f {"optimize-Vf",   no_argument,       &flag_optimize_Vf,      1 }
         #define _9Z {"optimize-ZM",   no_argument,       &flag_optimize_ZM,      1 }
         #define _9D {"optimize-DESC", no_argument,       &flag_optimize_DESC,    1 }
-        #define _9S {"optimize-SEQ",  no_argument,       &flag_optimize_SEQ,     1 }
         #define _pe {"pair",          no_argument,       &flag_pair,   PAIR_READ_1 } 
         #define _th {"threads",       required_argument, 0, '@'                    }
         #define _u  {"unbind",        no_argument,       &flag_unbind,           1 }
@@ -714,9 +713,9 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _9S, _pe, _fa,          _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sI, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                             _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                    _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa,          _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sI, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                        _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                               _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
@@ -893,14 +892,12 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     // if --optimize was selected, all optimizations are turned on
     if (flag_optimize)
         flag_optimize_sort = flag_optimize_PL = flag_optimize_GL = flag_optimize_GP   = flag_optimize_VQSLOD = 
-        flag_optimize_QUAL = flag_optimize_Vf = flag_optimize_ZM = flag_optimize_DESC = flag_optimize_SEQ = true;
+        flag_optimize_QUAL = flag_optimize_Vf = flag_optimize_ZM = flag_optimize_DESC = true;
     
     // if any optimization flag is on, we turn on flag_optimize
     if (flag_optimize_sort || flag_optimize_PL || flag_optimize_GL || flag_optimize_GP   || flag_optimize_VQSLOD ||
-        flag_optimize_QUAL || flag_optimize_Vf || flag_optimize_ZM || flag_optimize_DESC || flag_optimize_SEQ)
+        flag_optimize_QUAL || flag_optimize_Vf || flag_optimize_ZM || flag_optimize_DESC)
         flag_optimize = true;
-
-    if (flag_fast) flag_optimize_SEQ = false; // if --fast, SEQ is compressed with ACGT (if we left flag_optimize_SEQ==true, it would be set to LZMA and fast will change it to BZ2 - very lousy compression for SEQ data)
 
     // if using the -o option - check that we don't have duplicate filenames (even in different directory) as they
     // will overwrite each other if extracted with --unbind
@@ -925,7 +922,8 @@ int main (int argc, char **argv)
 {
     //TEST();exit(0);
     arch_initialize();
-    buf_initialize();
+    buf_initialize(); 
+    vb_initialize_evb();
     random_access_initialize();
     comp_initialize();
 

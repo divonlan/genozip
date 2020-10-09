@@ -11,6 +11,8 @@
 #include "file.h"
 #include "endianness.h"
 
+#define HT_MATRIX_CODEC CODEC_BZ2 // better than BSC and LZMA. Note: changing this value changes the file format, decompression uses the value from this define, not passed in the file.
+
 typedef struct {
     int num_alt_alleles;
     uint32_t index_in_original_line;
@@ -107,7 +109,7 @@ bool comp_ht_compress (VBlock *vb, Codec codec,
     // compress the matrix one column at a time, by the order of helper index
     uint64_t save_lines_len = vb->lines.len;
     vb->lines.len = vb->num_haplotypes_per_line; // temporarily set vb->lines.len to number of columns, as this is the number of time the callback will be called
-    bool success = comp_bzlib_compress (vb, codec, 0, 0, comp_ht_compress_one_array, compressed, compressed_len, soft_fail);
+    bool success  = codec_args[HT_MATRIX_CODEC].compress (vb, codec, 0, uncompressed_len, comp_ht_compress_one_array, compressed, compressed_len, soft_fail);
     vb->lines.len = save_lines_len;
 
     if (!success) return false; // soft fail
@@ -135,6 +137,10 @@ bool comp_ht_compress (VBlock *vb, Codec codec,
     return true;
 }
 
+uint32_t comp_ht_est_size (uint64_t uncompressed_len)
+{
+    return codec_args[HT_MATRIX_CODEC].est_size (uncompressed_len);
+}
 
 // PIZ: for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
 // transposed, each column will be a row, or a contiguous array, in the section data. This function returns an array
@@ -208,4 +214,11 @@ void comp_ht_piz_get_one_line (VBlock *vb)
         printf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->ht_one_array.len, vb->ht_one_array.data);
 
     COPY_TIMER (vb->profile.comp_ht_piz_get_one_line);
+}
+
+void comp_ht_uncompress (VBlock *vb, 
+                         const char *compressed, uint32_t compressed_len,
+                         char *uncompressed_data, uint64_t uncompressed_len)
+{
+    return codec_args[HT_MATRIX_CODEC].uncompress (vb, compressed, compressed_len, uncompressed_data, uncompressed_len);
 }

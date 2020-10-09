@@ -125,7 +125,7 @@ typedef struct VBlock {
 
 extern void vb_cleanup_memory(void);
 extern VBlock *vb_get_vb (unsigned vblock_i);
-extern void vb_external_vb_initialize(void);
+extern void vb_initialize_evb(void);
 extern void vb_release_vb (VBlock *vb);
 
 typedef struct {

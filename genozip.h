@@ -104,7 +104,7 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_a
            flag_make_reference, flag_reading_reference,
 
            flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
-           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC, flag_optimize_SEQ,
+           flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC,
 
 // flags set in code, that impact reference
             flag_ref_use_aligner;

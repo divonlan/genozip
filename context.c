@@ -396,7 +396,7 @@ static void mtf_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictI
     ctx->did_i   = did_i;
     ctx->dict_id = dict_id;
     
-    if (command == ZIP) ctx->lcodec = CODEC_BZ2; // default, may be changed in seg
+    if (command == ZIP) ctx->lcodec = CODEC_BSC; // default, may be changed in seg
 
     memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
     ((char*)ctx->name)[DICT_ID_LEN] = 0;

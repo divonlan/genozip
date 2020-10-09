@@ -65,13 +65,13 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
         vb->contexts[FASTQ_GPOS].ltype    = LT_UINT32;
         vb->contexts[FASTQ_GPOS].flags    = CTX_FL_STORE_INT;
-        vb->contexts[FASTQ_GPOS].lcodec   = CODEC_LZMA;
+        vb->contexts[FASTQ_GPOS].lcodec   = CODEC_LZMA; // BSC is almost exactly the same time and size
     }
 
     vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
 
     vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
-    vb->contexts[FASTQ_NONREF].lcodec  = flag_optimize_SEQ ? CODEC_LZMA : CODEC_ACGT; // ACGT is a lot faster, but ~5% less good
+    vb->contexts[FASTQ_NONREF].lcodec  = CODEC_ACGT; // better than LZMA and BSC
 
     vb->contexts[FASTQ_QUAL].ltype     = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
     vb->contexts[FASTQ_QUAL].inst      = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)

@@ -64,8 +64,9 @@ uint64_t BZ2_consumed (void *bz_file)
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool comp_bzlib_compress (VBlock *vb, Codec codec,
-                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                          LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
+                          const char *uncompressed,       // option 1 - compress contiguous data
+                          uint32_t uncompressed_len, 
+                          LocalGetLineCallback callback,  // option 2 - compress data one line at a tim
                           char *compressed, uint32_t *compressed_len /* in/out */, 
                           bool soft_fail)
 {

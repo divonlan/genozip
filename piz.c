@@ -152,7 +152,8 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const
     }
     else {
         len = vb->seq_len;
-        ASSERT (ctx->next_local + len <= ctx->local.len, "Error reading txt_line=%u: unexpected end of %s data", vb->line_i, ctx->name);
+        ASSERT (ctx->next_local + len <= ctx->local.len, "Error reading txt_line=%u vb_i=%u: unexpected end of %s data", 
+                vb->line_i, vb->vblock_i, ctx->name);
 
         if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
     }

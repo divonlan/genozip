@@ -159,7 +159,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
         vb->ht_index_ctx  = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
         vb->ht_index_ctx->ltype = LT_UINT32;
-        vb->ht_index_ctx->lcodec = CODEC_LZMA;
+        vb->ht_index_ctx->lcodec = CODEC_BSC; // 4-5% better than LZMA, only slightly slower
     }
 
     bool last_item = false;

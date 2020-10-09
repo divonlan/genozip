@@ -53,7 +53,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%c %-9"PRIu64" %-19s %*.*s %4s%-3s %6s%-3s %7s%-3s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-6u enc_len=%-6u mgc=%8.8x\n",
+    sprintf (str, "%c %-9"PRIu64" %-19s %*.*s %4s%-3s %6s%-3s %7s%-3s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
              rw, offset, st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
              header->flags ? "flg=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
              codec_name (header->codec),
@@ -194,7 +194,7 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
         .h.section_type          = SEC_DICT,
         .h.data_uncompressed_len = BGEN32 (num_chars),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
-        .h.codec                 = CODEC_BZ2,
+        .h.codec                 = CODEC_BSC,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .num_snips               = BGEN32 (num_words),
         .dict_id                 = ctx->dict_id
@@ -211,7 +211,6 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
 
     if (flag_list_chroms && ctx->did_i == CHROM)
         str_print_null_seperated_data (data, num_chars, false, vb->data_type == DT_SAM);
-
 
     z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
     comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);

@@ -35,8 +35,8 @@ void fasta_seg_initialize (VBlockFAST *vb)
         vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
         Context *seq_ctx = &vb->contexts[FASTA_SEQ];
-        seq_ctx->lcodec = flag_optimize_SEQ ? CODEC_LZMA : CODEC_ACGT; // ACGT is a lot faster, but ~5% less good 
-        seq_ctx->ltype = LT_SEQUENCE;
+        seq_ctx->lcodec  = CODEC_ACGT; // ACGT is better than LZMA and BSC
+        seq_ctx->ltype   = LT_SEQUENCE;
 
         if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)
             vb->contexts[FASTA_SEQ].inst |= CTX_INST_NO_CALLBACK; // override callback if we are segmenting to a reference

@@ -69,6 +69,8 @@ Md5Hash ref_md5 = MD5HASH_NONE;
 #define CHROM_GENOME_REV 1
 #define CHROM_NAME_GENOME_REV "GENOME_REV"
 
+#define ref_is_range_used(r) ((r)->ref.num_of_bits && ((r)->is_set.num_of_bits || flag_make_reference))
+
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void ref_unload_reference (bool force_clean_all)
 {
@@ -234,12 +236,44 @@ static Range *ref_get_range_by_chrom (WordIndex chrom, const char **chrom_name)
     return r;
 }
 
+// Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
+static void ref_print_bases (FILE *file, const BitArray *bitarr, 
+                             bit_index_t start_base, bit_index_t num_of_bases, bool is_forward)
+{
+    static const char fwd[2][2] = { { 'A', 'C' }, {'G', 'T'} };
+    static const char rev[2][2] = { { 'T', 'G' }, {'C', 'A'} };
+
+#define BASES_PER_LINE 100
+
+    if (is_forward)
+        for (bit_index_t i=start_base*2; i < (start_base + num_of_bases)*2; i+=2) {
+            if (!flag_sequential && (i-start_base*2) % (BASES_PER_LINE*2) == 0)
+                fprintf (stderr, "%8"PRIu64": ", i/2);
+            fputc (fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)], file);
+            if (!flag_sequential && ((i-start_base*2) % (BASES_PER_LINE*2) == 2*(BASES_PER_LINE-1))) fputc ('\n', file);
+        }
+    
+    else 
+        for (int64_t i=(start_base+num_of_bases-1)*2; i >= start_base*2; i-=2) { // signed type
+            fputc (rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)], file);
+            if (!flag_sequential && (((start_base+num_of_bases-1)*2-i) % (BASES_PER_LINE*2) == (BASES_PER_LINE-1)*2)) fputc ('\n', file);
+        }
+    
+    fputc ('\n', file);
+}
+
 static void ref_show_sequence (void)
 {
     for (uint32_t range_i=0; range_i < ranges.len; range_i++) {
         Range *r = ENT (Range, ranges, range_i);
+
+        // get first pos and last pos, potentially modified by --regions
+        PosType first_pos, last_pos;
+        if (!r->ref.num_of_bits ||
+            !regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, &first_pos, &last_pos)) continue;
+
         if (r->ref.num_of_bits)
-            bit_array_print_bases (stdout, &r->ref, r->chrom_name, true);
+            ref_print_bases (stderr, &r->ref, first_pos, last_pos-first_pos+1, true);
     }
 
     if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
@@ -399,8 +433,9 @@ finish:
 
 static void ref_read_one_range (VBlockP vb)
 {
-    if (!sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE, SEC_REF_IS_SET))
-        return; // no more reference sections
+    if (!sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE, SEC_REF_IS_SET) || // no more reference sections
+        sl_ent->vblock_i == 0) // final, empty section sometimes exist (see ref_compress_ref)
+        return; // we're done
 
     ASSERT (sl_ent->vblock_i == vb->vblock_i, "Error in ref_read_one_range: mismatch: sl_ent->vblock_i=%u but vb->vblock_i=%u",
             sl_ent->vblock_i, vb->vblock_i);
@@ -412,7 +447,8 @@ static void ref_read_one_range (VBlockP vb)
         if (vb->vblock_i > ref_stored_ra.len) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
         ra = ENT (RAEntry, ref_stored_ra, vb->vblock_i-1);
-        ASSERT (ra->vblock_i == vb->vblock_i, "Error in ref_read_one_range: expecting ra->vblock_i(%u) == vb->vblock_i(%u)", ra->vblock_i, vb->vblock_i);
+        ASSERT (ra->vblock_i == vb->vblock_i, "Error in ref_read_one_range: expecting ra->vblock_i(%u) == vb->vblock_i(%u)", 
+                ra->vblock_i, vb->vblock_i);
 
         range_is_included = regions_is_ra_included (ra); 
     }
@@ -1005,9 +1041,10 @@ void ref_compress_ref (void)
     
     // SAM require at least one reference section, but if the SAM is unaligned, there will be none - create one empty section
     // (this will also happen if SAM has just only reference section, we will just needless write another tiny section - no harm)
+    // incidentally, will also be written in case of a small (one vb) reference - no harm
     if (z_file->data_type == DT_SAM && num_vbs_dispatched==1) {
         evb->range = NULL;
-        ref_compress_one_range (evb); // incidentally, will also be written in case of a small (one vb) reference - no harm
+        ref_compress_one_range (evb); // written with vb_i=0
     }
 
     // compress reference random access (note: in case of a reference file, SEC_REF_RAND_ACC will be identical to SEC_RANDOM_ACCESS. That's ok, its tiny)
@@ -1142,6 +1179,7 @@ void ref_load_external_reference (bool display, bool is_last_file)
     RESET_FLAG (flag_md5);
     RESET_FLAG (flag_show_time);
     RESET_FLAG (flag_show_memory);
+    RESET_FLAG (flag_show_stats);
     RESET_FLAG (flag_no_header);
     RESET_FLAG (flag_header_one);
     RESET_FLAG (flag_header_only);
@@ -1169,6 +1207,7 @@ void ref_load_external_reference (bool display, bool is_last_file)
     RESTORE_FLAG (flag_md5);
     RESTORE_FLAG (flag_show_time);
     RESTORE_FLAG (flag_show_memory);
+    RESTORE_FLAG (flag_show_stats);
     RESTORE_FLAG (flag_no_header);
     RESTORE_FLAG (flag_header_one);
     RESTORE_FLAG (flag_header_only);

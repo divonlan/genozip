@@ -29,8 +29,9 @@ static const char *comp_bsc_errstr (int err)
 }
 
 bool comp_bsc_compress (VBlock *vb, Codec codec,
-                        const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                        LocalGetLineCallback callback,                       // option 2 - compress data one line at a tim
+                        const char *uncompressed,      // option 1 - compress contiguous data
+                        uint32_t uncompressed_len, 
+                        LocalGetLineCallback callback, // option 2 - compress data one line at a time
                         char *compressed, uint32_t *compressed_len /* in/out */, 
                         bool soft_fail)
 {
@@ -39,23 +40,17 @@ bool comp_bsc_compress (VBlock *vb, Codec codec,
     // libbsc doesn't allow piecemiel compression, so we need to copy all the data in case of callback
     if (callback) {
 
-        // get uncompressed_len
-        uncompressed_len=0;
-        for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
-            uint32_t len1=0, len2=0;        
-            callback (vb, line_i, NULL, &len1, NULL, &len2); // with NULL, only the length is returned
-            uncompressed_len += len1 + len2;
-        }
-
         // copy data to vb->compressed
         buf_alloc (vb, &vb->compressed, uncompressed_len, 1.2, "compressed", 0);
+        vb->compressed.len = 0;
+
         for (unsigned line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0, *start2=0;
             uint32_t len1=0, len2=0;        
             callback (vb, line_i, &start1, &len1, &start2, &len2);
 
-            if (start1) buf_add (&vb->compressed, start1, len1);
-            if (start2) buf_add (&vb->compressed, start2, len2);
+            if (start1 && len1) buf_add (&vb->compressed, start1, len1);
+            if (start2 && len2) buf_add (&vb->compressed, start2, len2);
         }
 
         uncompressed = vb->compressed.data;
@@ -72,7 +67,11 @@ bool comp_bsc_compress (VBlock *vb, Codec codec,
         ret = bsc_store (vb, (const uint8_t *)uncompressed, (uint8_t *)compressed, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
     ASSERT (ret >= LIBBSC_NO_ERROR, "Error in comp_bsc_compress: %s", comp_bsc_errstr (ret));
-              
+
+    if (callback) buf_free (&vb->compressed);
+
+    *compressed_len = ret;
+
     return true;
 }
 
@@ -92,13 +91,7 @@ uint32_t comp_bsc_est_size (uint64_t uncompressed_len)
 
 static void *comp_bsc_malloc (void *vb, size_t size)
 {
-    return comp_alloc ((VBlock *)vb, size, 1); 
-}
-
-static void *comp_bsc_calloc (void *vb, size_t size)
-{
-    void *mem = comp_alloc ((VBlock *)vb, size, 1); 
-    memset (mem, 0, size);
+    void *mem =  comp_alloc ((VBlock *)vb, size, 1.5); 
     return mem;
 }
 
@@ -109,5 +102,6 @@ static void comp_bsc_free (void *vb, void *addr)
 
 void comp_bsc_initialize (void)
 {
-    bsc_init_full (LIBBSC_FEATURE_FASTMODE, comp_bsc_malloc, comp_bsc_calloc, comp_bsc_free);
+    bsc_init_full (LIBBSC_FEATURE_FASTMODE, comp_bsc_malloc, NULL, comp_bsc_free);
 }
+

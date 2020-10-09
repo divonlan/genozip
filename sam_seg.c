@@ -128,9 +128,10 @@ void sam_seg_initialize (VBlock *vb)
 {
     vb->contexts[SAM_RNAME].inst       = CTX_INST_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SEQ_BITMAP].ltype = LT_BITMAP;
-    vb->contexts[SAM_NONREF].lcodec    = flag_optimize_SEQ ? CODEC_LZMA : CODEC_ACGT; // ACGT is a lot faster, but ~5% less good ;
+    vb->contexts[SAM_NONREF].lcodec    = CODEC_ACGT; // better than LZMA and BSC
     vb->contexts[SAM_NONREF].ltype     = LT_SEQUENCE;
     vb->contexts[SAM_QUAL].ltype       = LT_SEQUENCE;
+    vb->contexts[SAM_QUAL].lcodec      = CODEC_BSC;
     vb->contexts[SAM_QUAL].inst        = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
     vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
@@ -707,7 +708,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
     }
 
     // BD and BI set by older versions of GATK's BQSR is expected to be seq_len (seen empircally, documentation is lacking)
-    else if ((dict_id.num == dict_id_OPTION_BD || dict_id.num == dict_id_OPTION_BI) && value_len == vb->seq_len) {
+    else if ((dict_id.num == dict_id_OPTION_BD || dict_id.num == dict_id_OPTION_BI) && value_len == dl->seq_len) {
         
         bool is_bi = (dict_id.num == dict_id_OPTION_BI);
         dl->bdbi_data_start[is_bi] = value - vb->txt_data.data;
@@ -715,7 +716,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         Context *ctx = mtf_get_ctx (vb, dict_id_OPTION_BD_BI);
         ctx->txt_len += value_len + 1; // +1 for \t
         ctx->ltype   = LT_SEQUENCE;
-        ctx->lcodec  = CODEC_LZMA;
+        ctx->lcodec  = CODEC_BSC;
 
         if (!dl->bdbi_data_start[!is_bi]) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
             ctx->local.len += value_len * 2;

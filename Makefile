@@ -159,13 +159,21 @@ opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 	@echo Compiling $<
 	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
-%.debug-o: %.c %.dls
+%.debug-o: %.c %.d
 	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+%.debug-o: %.cpp %.d
+	@echo "Compiling $< (debug)"
+	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 %.opt-o: %.c %.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+%.opt-o: %.cpp %.d
+	@echo "Compiling $< (opt)"
+	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 genozip$(EXE): $(OBJS)
 	@echo Linking $@

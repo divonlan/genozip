@@ -146,7 +146,7 @@ static inline void comp_non_acgt_transform (char *data, uint32_t len)
 // -- an a,c,g or t character is encoded as 1 (its encoded by CODEC_ACGT the same as its uppercase counterpart
 // -- any other character remains as is
 // We modify the source data (and hence NON-AGCT compression is destructive!) and then recursively compress it with bz2.
-bool comp_compress_non_acgt (VBlock *vb, Codec codec,
+bool comp_non_acgt_compress (VBlock *vb, Codec codec,
                              const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                              LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
                              char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -173,9 +173,9 @@ bool comp_compress_non_acgt (VBlock *vb, Codec codec,
         }
     }
     else 
-        ABORT0 ("Error in comp_compress_non_acgt: neither src_data nor callback is provided");
+        ABORT0 ("Error in comp_non_acgt_compress: neither src_data nor callback is provided");
     
-    COPY_TIMER (vb->profile.comp_compress_non_acgt); // excluding bzlib
+    COPY_TIMER (vb->profile.comp_non_acgt_compress); // excluding bzlib
     
     // now do the compression on the non-agct data
     // note: we don't support soft-fail because the allocated amount (uncompressed_len/2) is plenty for our textual data,
@@ -194,7 +194,7 @@ static void comp_apply_non_acgt_on_top_of_acgt (char *acgt, const char *non_acgt
         else if (non_acgt[i]) acgt[i] = non_acgt[i];
 }
 
-void comp_uncompress_non_acgt (VBlock *vb, 
+void comp_non_acgt_uncompress (VBlock *vb, 
                                const char *compressed, uint32_t compressed_len,
                                char *uncompressed_data, uint64_t uncompressed_len)
 {

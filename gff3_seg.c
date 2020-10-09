@@ -216,7 +216,7 @@ static bool gff3_seg_special_info_subfields (VBlockP vb, DictId dict_id, const c
 
         // note: all three are stored together in dict_id_ATTR_Reference_seq as they are correlated
         Context *ctx = mtf_get_ctx (vb, dict_id_ATTR_Reference_seq); 
-        ctx->lcodec = CODEC_LZMA;
+        ctx->lcodec = CODEC_BSC; // better than LZMA and BZ2
 
         seg_add_to_local_text (vb, ctx, *this_value, *this_value_len, *this_value_len);
         return false; // do not add to dictionary/b250 - we already did it

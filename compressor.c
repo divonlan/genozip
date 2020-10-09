@@ -12,6 +12,8 @@
 #include "zfile.h"
 #include "strings.h"
 
+#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
+
 // -----------------------------------------------------
 // memory functions that serve the compression libraries
 // -----------------------------------------------------
@@ -25,6 +27,7 @@ void *comp_alloc (VBlock *vb, int size, double grow_at_least_factor)
     for (unsigned i=0; i < NUM_COMPRESS_BUFS ; i++) 
         if (!buf_is_allocated (&vb->compress_bufs[i])) {
             buf_alloc (vb, &vb->compress_bufs[i], size, grow_at_least_factor, "compress_bufs", i);
+            //printf ("comp_alloc: %u bytes buf=%u\n", size, i);
             return vb->compress_bufs[i].data;
         }
 
@@ -39,6 +42,7 @@ void comp_free (VBlock *vb, void *addr)
     for (unsigned i=0; i < NUM_COMPRESS_BUFS ; i++) 
         if (vb->compress_bufs[i].data == addr) {
             buf_free (&vb->compress_bufs[i]);
+            //printf ("comp_free: buf=%u\n", i);
             return;
         }
 
@@ -73,9 +77,7 @@ static uint32_t comp_est_size_default (uint64_t uncompressed_len)
     return (uint32_t)MAX (uncompressed_len / 2, 500);
 }
 
-static CodecArgs codec_args[NUM_CODECS] = CODEC_ARGS;
-
-#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
+CodecArgs codec_args[NUM_CODECS] = CODEC_ARGS;
 
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
@@ -87,8 +89,8 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     ASSERT0 (BGEN32 (header->magic) == GENOZIP_MAGIC, "Error in comp_compress: corrupt header - bad magic");
 
-    // if the user requested --fast - we always use BZLIB, never LZMA
-    if (flag_fast && header->codec == CODEC_LZMA)
+    // if the user requested --fast - we always use BZLIB, never LZMA or BSC
+    if (flag_fast && (header->codec == CODEC_LZMA || header->codec == CODEC_BSC))
         header->codec = CODEC_BZ2;
 
     ASSERT (header->codec < NUM_CODECS, "Error in comp_compress: unsupported section compressor=%u", header->codec);
@@ -223,6 +225,29 @@ const char *codec_name (Codec codec)
 void comp_initialize (void)
 {
     comp_bsc_initialize();
+}
+
+void comp_unit_test (Codec codec)
+{
+    int size = 1000000;
+    //int size = 3380084;
+    char *data = malloc(size);
+    for (int i=0; i < size; i++) data[i] = 'A' + (i%26);
+
+    //FILE *fp = fopen ("bugq.bz2", "rb");
+    //ASSERT0 (fread (data, 1, size, fp) == size, "read failed");
+
+    uint32_t comp_len = codec_args[codec].est_size (size);
+    char *comp = malloc (comp_len);
+
+    codec_args[codec].compress (evb, CODEC_BSC, data, size, 0, comp, &comp_len, false);
+
+    char *uncomp = malloc (size);
+    codec_args[codec].uncompress (evb, comp, comp_len, uncomp, size);
+
+    printf ("Unit test %s!\n", memcmp (data, uncomp, size) ? "failed" : "succeeded");
+
+    exit(0);
 }
 
 /*

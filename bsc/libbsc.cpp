@@ -183,9 +183,7 @@ static int bsc_compress_inplace (void *vb, unsigned char * data, int n, int lzpH
 int bsc_compress (void *vb, const unsigned char * input, unsigned char * output, int n, int lzpHashSize, int lzpMinLen, int blockSorter, int coder, int features)
 {
     if (input == output)
-    {
         return bsc_compress_inplace (vb, output, n, lzpHashSize, lzpMinLen, blockSorter, coder, features);
-    }
 
     int             indexes[256];
     unsigned char   num_indexes;
@@ -257,18 +255,16 @@ int bsc_compress (void *vb, const unsigned char * input, unsigned char * output,
         int result = bsc_coder_compress(vb, output, buffer, lzSize, coder, features);
         if (result >= LIBBSC_NO_ERROR) memcpy(output + LIBBSC_HEADER_SIZE, buffer, result);
         bsc_free (vb, buffer);
+
         if ((result < LIBBSC_NO_ERROR) || (result + 1 + 4 * num_indexes >= n))
-        {
             return bsc_store(vb, input, output, n, features);
-        }
-        {
-            if (num_indexes > 0)
-            {
-                memcpy(output + LIBBSC_HEADER_SIZE + result, indexes, 4 * num_indexes);
-            }
-            output[LIBBSC_HEADER_SIZE + result + 4 * num_indexes] = num_indexes;
-            result += 1 + 4 * num_indexes;
-        }
+
+        if (num_indexes > 0)
+            memcpy(output + LIBBSC_HEADER_SIZE + result, indexes, 4 * num_indexes);
+
+        output[LIBBSC_HEADER_SIZE + result + 4 * num_indexes] = num_indexes;
+        result += 1 + 4 * num_indexes;
+
         *(int *)(output +  0) = result + LIBBSC_HEADER_SIZE;
         *(int *)(output +  4) = n;
         *(int *)(output +  8) = mode;

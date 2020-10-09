@@ -8,14 +8,14 @@
 #include "vblock.h"
 #include "buffer.h"
 
-bool comp_compress_none (VBlock *vb, Codec codec,
+bool comp_none_compress (VBlock *vb, Codec codec,
                          const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
                          LocalGetLineCallback callback,                        // option 2 - compress data one line at a tim
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
     if (*compressed_len < uncompressed_len && soft_fail) return false;
-    ASSERT0 (*compressed_len >= uncompressed_len, "Error in comp_compress_none: compressed_len too small");
+    ASSERT0 (*compressed_len >= uncompressed_len, "Error in comp_none_compress: compressed_len too small");
 
     if (callback) {
         char *next = compressed;
@@ -37,7 +37,7 @@ bool comp_compress_none (VBlock *vb, Codec codec,
     return true;
 }
 
-void comp_uncompress_none (VBlock *vb, 
+void comp_none_uncompress (VBlock *vb, 
                            const char *compressed, uint32_t compressed_len,
                            char *uncompressed_data, uint64_t uncompressed_len)
 {

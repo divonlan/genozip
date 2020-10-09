@@ -16,19 +16,19 @@ typedef bool CompressorFunc (VBlockP vb,
                              bool soft_fail);
 typedef CompressorFunc (*Compressor);
 
-extern CompressorFunc comp_bzlib_compress, comp_lzma_compress, comp_compress_non_acgt, comp_ht_compress, comp_bsc_compress, 
-                      comp_compress_none;
+extern CompressorFunc comp_bzlib_compress, comp_lzma_compress, comp_non_acgt_compress, comp_ht_compress, comp_bsc_compress, 
+                      comp_none_compress;
 
 typedef void UncompressorFunc (VBlockP vb, 
                                const char *compressed, uint32_t compressed_len,
                                char *uncompressed_data, uint64_t uncompressed_len);
 
-extern UncompressorFunc comp_bzlib_uncompress, comp_lzma_uncompress, comp_acgt_uncompress, comp_uncompress_non_acgt,
-                        comp_bsc_uncompress, comp_uncompress_none;
+extern UncompressorFunc comp_bzlib_uncompress, comp_lzma_uncompress, comp_acgt_uncompress, comp_non_acgt_uncompress,
+                        comp_bsc_uncompress, comp_ht_uncompress, comp_none_uncompress;
 
 typedef uint32_t EstSizeFunc (uint64_t uncompressed_len);
 
-extern EstSizeFunc comp_none_est_size, comp_bsc_est_size;
+extern EstSizeFunc comp_none_est_size, comp_bsc_est_size, comp_ht_est_size;
 
 typedef struct {
     CompressorFunc *compress;
@@ -37,21 +37,22 @@ typedef struct {
 } CodecArgs;
 
 #define CODEC_ARGS { \
-    /* NONE */ { comp_compress_none,     comp_uncompress_none,     comp_none_est_size    }, \
+    /* NONE */ { comp_none_compress,     comp_none_uncompress,     comp_none_est_size    }, \
     /* GZ   */ { comp_compress_error,    comp_uncompress_error,    comp_est_size_default }, \
     /* BZ2  */ { comp_bzlib_compress,    comp_bzlib_uncompress,    comp_est_size_default }, \
-    /* LZMA */ { comp_lzma_compress,     comp_uncompress_none,     comp_est_size_default }, \
-    /* BSC  */ { comp_bsc_compress,      comp_uncompress_none,     comp_bsc_est_size     }, \
+    /* LZMA */ { comp_lzma_compress,     comp_lzma_uncompress,     comp_est_size_default }, \
+    /* BSC  */ { comp_bsc_compress,      comp_bsc_uncompress,      comp_bsc_est_size     }, \
     /* FFU5 */ { comp_compress_error,    comp_uncompress_error,    comp_est_size_default }, \
     /* FFU6 */ { comp_compress_error,    comp_uncompress_error,    comp_est_size_default }, \
     /* FFU7 */ { comp_compress_error,    comp_uncompress_error,    comp_est_size_default }, \
     /* FFU8 */ { comp_compress_error,    comp_uncompress_error,    comp_est_size_default }, \
     /* FFU9 */ { comp_compress_error,    comp_uncompress_error,    comp_est_size_default }, \
     /* ACGT */ { comp_lzma_compress,     comp_acgt_uncompress,     comp_est_size_default }, \
-    /* ~CGT */ { comp_compress_non_acgt, comp_uncompress_non_acgt, comp_est_size_default }, \
-    /* HT   */ { comp_ht_compress,       comp_bzlib_uncompress,    comp_est_size_default }, \
+    /* ~CGT */ { comp_non_acgt_compress, comp_non_acgt_uncompress, comp_est_size_default }, \
+    /* HT   */ { comp_ht_compress,       comp_ht_uncompress,       comp_ht_est_size      }, \
 }
 
+extern CodecArgs codec_args[NUM_CODECS];
 
 typedef UncompressorFunc (*Uncompressor);
 

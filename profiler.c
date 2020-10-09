@@ -33,7 +33,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(mtf_merge_in_vb_ctx);
     ADD(comp_ht_count_alt_alleles);
     ADD(comp_acgt_pack);
-    ADD(comp_compress_non_acgt);
+    ADD(comp_non_acgt_compress);
     ADD(md5);
     ADD(lock_mutex_compress_dict);
     ADD(lock_mutex_zf_ctx);
@@ -127,7 +127,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_lzma, 2);
         PRINT (compressor_bsc, 2);
         PRINT (comp_acgt_pack, 3);
-        PRINT (comp_compress_non_acgt, 2);
+        PRINT (comp_non_acgt_compress, 2);
         PRINT (comp_ht_compress,2);
         PRINT (comp_ht_count_alt_alleles, 3);
     }    

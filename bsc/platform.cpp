@@ -38,39 +38,6 @@ See also the bsc and libbsc web site:
 
 #include "libbsc.h"
 
-#if defined(_WIN32)
-  #include <windows.h>
-  SIZE_T g_LargePageSize = 0;
-#endif
-
-static void * bsc_default_malloc(void *vb, size_t size)
-{
-#if defined(_WIN32)
-    if ((g_LargePageSize != 0) && (size >= 256 * 1024))
-    {
-        void * address = VirtualAlloc(0, (size + g_LargePageSize - 1) & (~(g_LargePageSize - 1)), MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
-        if (address != NULL) return address;
-    }
-    return VirtualAlloc(0, size, MEM_COMMIT, PAGE_READWRITE);
-#else
-    return malloc(size);
-#endif
-}
-
-static void * bsc_default_zero_malloc(void *vb, size_t size)
-{
-#if defined(_WIN32)
-    if ((g_LargePageSize != 0) && (size >= 256 * 1024))
-    {
-        void * address = VirtualAlloc(0, (size + g_LargePageSize - 1) & (~(g_LargePageSize - 1)), MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
-        if (address != NULL) return address;
-    }
-    return VirtualAlloc(0, size, MEM_COMMIT, PAGE_READWRITE);
-#else
-    return calloc(1, size);
-#endif
-}
-
 static void * bsc_wrap_zero_malloc(void *vb, size_t size)
 {
     void *address = bsc_malloc (vb, size);
@@ -81,18 +48,9 @@ static void * bsc_wrap_zero_malloc(void *vb, size_t size)
     return address;
 }
 
-static void bsc_default_free(void *vb, void * address)
-{
-#if defined(_WIN32)
-    VirtualFree(address, 0, MEM_RELEASE);
-#else
-    free(address);
-#endif
-}
-
-static void* (* bsc_malloc_fn)(void *vb, size_t size) = bsc_default_malloc;
-static void* (* bsc_zero_malloc_fn)(void *vb, size_t size) = bsc_default_zero_malloc;
-static void  (* bsc_free_fn)(void *vb, void* address) = bsc_default_free;
+static void* (* bsc_malloc_fn)(void *vb, size_t size) = NULL;
+static void* (* bsc_zero_malloc_fn)(void *vb, size_t size) = NULL;
+static void  (* bsc_free_fn)(void *vb, void* address) = NULL;
 
 void* bsc_malloc (void *vb, size_t size)
 {
@@ -136,7 +94,7 @@ int bsc_platform_init(int features,
     {
 	bsc_free_fn = free;
     }
-
+/*
 #if defined(_WIN32)
 
     if (features & LIBBSC_FEATURE_LARGEPAGES)
@@ -178,7 +136,7 @@ int bsc_platform_init(int features,
     }
 
 #endif
-
+*/
     return LIBBSC_NO_ERROR;
 }
 

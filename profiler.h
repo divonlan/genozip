@@ -17,7 +17,7 @@
 typedef struct {
     int64_t wallclock, read, compute, compressor_bz2, compressor_lzma, compressor_bsc, 
         write, piz_read_one_vb, comp_ht_piz_get_one_line, 
-        sam_seg_seq_field, domqual_convert_qual_to_domqual, comp_compress_non_acgt, comp_acgt_pack,
+        sam_seg_seq_field, domqual_convert_qual_to_domqual, comp_non_acgt_compress, comp_acgt_pack,
         piz_get_line_subfields,  zip_generate_and_compress_ctxs, mtf_merge_in_vb_ctx,
         zfile_uncompress_section,
         piz_reconstruct_vb, buf_alloc, txtfile_read_header, txtfile_read_vblock,

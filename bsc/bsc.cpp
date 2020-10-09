@@ -39,6 +39,11 @@ See also the bsc and libbsc web site:
 #include <math.h>
 #include <memory.h>
 
+#if defined(_WIN32)
+  #include <windows.h>
+  SIZE_T g_LargePageSize = 0;
+#endif
+
 #include "libbsc.h"
 #include "filters.h"
 #include "platform.h"
@@ -109,6 +114,43 @@ int paramFeatures()
 #endif
 
 int segmentedBlock[256];
+
+static void * bsc_default_malloc(void *vb, size_t size)
+{
+#if defined(_WIN32)
+    if ((g_LargePageSize != 0) && (size >= 256 * 1024))
+    {
+        void * address = VirtualAlloc(0, (size + g_LargePageSize - 1) & (~(g_LargePageSize - 1)), MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+        if (address != NULL) return address;
+    }
+    return VirtualAlloc(0, size, MEM_COMMIT, PAGE_READWRITE);
+#else
+    return malloc(size);
+#endif
+}
+
+static void * bsc_default_zero_malloc(void *vb, size_t size)
+{
+#if defined(_WIN32)
+    if ((g_LargePageSize != 0) && (size >= 256 * 1024))
+    {
+        void * address = VirtualAlloc(0, (size + g_LargePageSize - 1) & (~(g_LargePageSize - 1)), MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+        if (address != NULL) return address;
+    }
+    return VirtualAlloc(0, size, MEM_COMMIT, PAGE_READWRITE);
+#else
+    return calloc(1, size);
+#endif
+}
+
+static void bsc_default_free(void *vb, void * address)
+{
+#if defined(_WIN32)
+    VirtualFree(address, 0, MEM_RELEASE);
+#else
+    free(address);
+#endif
+}
 
 void Compression(char * argv[])
 {
@@ -733,7 +775,7 @@ int main(int argc, char * argv[])
 
     ProcessCommandline(argc, argv);
 
-    if (bsc_init(paramFeatures()) != LIBBSC_NO_ERROR)
+    if (bsc_init_full (paramFeatures(), bsc_default_malloc, bsc_default_zero_malloc, bsc_default_free) != LIBBSC_NO_ERROR)
     {
         fprintf(stderr, "\nInternal program error, please contact the author!\n");
         exit(2);

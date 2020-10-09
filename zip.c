@@ -105,7 +105,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
             if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
                 mtf_dump_local (ctx, false);
 
-            zfile_compress_b250_data (vb, ctx, CODEC_BZ2);
+            zfile_compress_b250_data (vb, ctx, CODEC_BSC);
         }
 
         if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty

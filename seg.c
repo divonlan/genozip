@@ -156,7 +156,7 @@ PosType seg_pos_field (VBlock *vb,
     Context *base_ctx = &vb->contexts[base_did_i];
 
     snip_ctx->inst |= CTX_INST_NO_STONS;
-    snip_ctx->lcodec = CODEC_LZMA;
+    snip_ctx->lcodec = CODEC_LZMA; // better than BSC and BZ2
 
     base_ctx->flags |= CTX_FL_STORE_INT;
     base_ctx->inst |= CTX_INST_NO_STONS;
@@ -266,9 +266,9 @@ void seg_id_field (VBlock *vb, DictId dict_id, const char *id_snip, unsigned id_
     }
 
     Context *ctx = mtf_get_ctx (vb, dict_id);
-    ctx->inst      |= CTX_INST_NO_STONS;
-    ctx->lcodec = CODEC_LZMA;
-    ctx->ltype      = LT_UINT32;
+    ctx->inst  |= CTX_INST_NO_STONS;
+    ctx->lcodec = CODEC_LZMA; // better than BSC and BZ2
+    ctx->ltype  = LT_UINT32;
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;

@@ -32,7 +32,6 @@ static uint64_t abandoned_mem_high_watermark = 0;
 void buf_initialize()
 {
     mutex_initialize (overlay_mutex);
-    vb_external_vb_initialize();
 }
 
 static const char *bt_str (const Buffer *buf)
