@@ -111,8 +111,8 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 
 #define buf_add(buf, new_data, new_data_len) { uint32_t new_len = (new_data_len); /* copy in case caller uses ++ */ \
                                                ASSERT ((buf)->len + new_len <= (buf)->size, \
-                                                       "Error in buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
-                                                       buf_desc (buf), (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
+                                                       "Error in buf_add call in %s:%u: buffer %s is out of space: len=%u size=%u new_data_len=%u", \
+                                                       __FUNCTION__, __LINE__, buf_desc (buf), (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);\
                                                memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
                                                (buf)->len += new_len; }
 
