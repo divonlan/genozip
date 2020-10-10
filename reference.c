@@ -909,7 +909,7 @@ static void ref_compress_one_range (VBlockP vb)
     if (r) LTEN_bit_array (&r->ref, true);
 
     header.h.section_type          = SEC_REFERENCE;
-    header.h.codec                 = CODEC_LZMA;
+    header.h.codec                 = CODEC_LZMA; // better than BSC: slightly better compression and compression speed, 2.5X faster decompression
     header.h.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
     header.h.data_uncompressed_len = r ? BGEN32 (r->ref.num_of_words * sizeof (uint64_t)) : 0;
     header.num_bases               = r ? BGEN32 (r->ref.num_of_bits / 2) : 0; // less than ref_size(r) if compacted

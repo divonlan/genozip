@@ -224,6 +224,8 @@ decrement-version:
 	@git tag genozip-$(version)
 	@git push origin genozip-$(version)
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@
+	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
+	@echo "'Tag version' and 'Release title' are both: genozip-$(version)"
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating conda/meta.yaml"
