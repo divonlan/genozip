@@ -591,6 +591,8 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 {
     if (flag_reference != REF_EXTERNAL && flag_reference != REF_EXT_STORE) return;
 
+    if (exe_type == EXE_GENOCAT && flag_show_stats) return; // we don't need the reference if we're just showing stats (ignore here if user provided it)
+    
     int old_flag_ref_use_aligner = flag_ref_use_aligner;
     DataType dt = main_get_file_dt (filename);
     flag_ref_use_aligner = (old_flag_ref_use_aligner || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
@@ -909,7 +911,7 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 
     // cases where genocat is used to view some information, but not the file contents
     flag_genocat_info_only = exe_type == EXE_GENOCAT &&
-                             (flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
+                             (flag_show_stats || flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
                               flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num ||
                               flag_show_reference || flag_show_ref_contigs || flag_show_ref_index || flag_show_ref_hash || flag_show_ref_alts || flag_show_ref_seq);
 }

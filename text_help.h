@@ -58,7 +58,7 @@ static const char *help_genozip[] = {
     "",
     "   -p --password     <password>. Password-protected - encrypted with 256-bit AES",
     "",
-    "   -m --md5          Calculate the MD5 hash of the original textual file (vcf, sam). When the resulting file is decompressed, this MD5 will be compared to the MD5 of the textual decompressed file.",
+    "   -m --md5          Calculate the MD5 hash of the original textual file (vcf, sam...). When the resulting file is decompressed, this MD5 will be compared to the MD5 of the textual decompressed file. This also enables using 'genounzip --test' and viewing the MD5 with genols.",
     "                     Note: for compressed files, e.g. myfile.vcf.gz or myfile.bam, the MD5 calculated is that of the original, uncompressed textual file - myfile.vcf or myfile.sam respectively.",
     "",
     "   -I --input-size   <file size in bytes> genozip configures its internal data structures to optimize execution speed based on the file size. When redirecting the input file with < or |, genozip cannot determine its size, and this might result in slower execution. This problem can be overcome by using this flag to inform genozip of the file size",    
