@@ -75,7 +75,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
     vb->contexts[FASTQ_QUAL].ltype     = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
     vb->contexts[FASTQ_QUAL].inst      = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
-    vb->contexts[FASTQ_QUAL].lcodec    = CODEC_BZ2; // note: BZ2 is just very slightly less good than BSC for QUAL (and a lot better than LZMA), but a lot faster than BSC
+    vb->contexts[FASTQ_QUAL].lcodec    = CODEC_BSC; // for QUAL scores that fail DomQual, BSC is ~15% better than BZ2, which is better than LZMA 
 
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst   = CTX_INST_PAIR_LOCAL;
