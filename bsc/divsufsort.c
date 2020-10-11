@@ -1771,71 +1771,57 @@ construct_BWT_indexes(const unsigned char *T, int *SA,
 
 /*- Function -*/
 
-int
-divsufsort(void *vb, const unsigned char *T, int *SA, int n, int openMP) {
-  int *bucket_A, *bucket_B;
-  int m;
-  int err = 0;
+int divsufsort(void *vb, const unsigned char *T, int *SA, int n, int openMP) 
+{
+    int bucket_A[BUCKET_A_SIZE], bucket_B[BUCKET_B_SIZE];
+    int m;
 
-  /* Check arguments. */
-  if((T == NULL) || (SA == NULL) || (n < 0)) { return -1; }
-  else if(n == 0) { return 0; }
-  else if(n == 1) { SA[0] = 0; return 0; }
-  else if(n == 2) { m = (T[0] < T[1]); SA[m ^ 1] = 0, SA[m] = 1; return 0; }
+    /* Check arguments. */
+    if((T == NULL) || (SA == NULL) || (n < 0)) { return LIBBSC_BAD_PARAMETER; }
+    else if(n == 0) goto done;
+    else if(n == 1) { SA[0] = 0; goto done; }
+    else if(n == 2) { m = (T[0] < T[1]); SA[m ^ 1] = 0, SA[m] = 1; goto done; }
 
-  bucket_A = (int *)bsc_malloc(vb, BUCKET_A_SIZE * sizeof(int));
-  bucket_B = (int *)bsc_malloc(vb, BUCKET_B_SIZE * sizeof(int));
-
-  /* Suffixsort. */
-  if((bucket_A != NULL) && (bucket_B != NULL)) {
+    /* Suffixsort. */
     m = sort_typeBstar(T, SA, bucket_A, bucket_B, n, openMP);
     construct_SA(T, SA, bucket_A, bucket_B, n, m);
-  } else {
-    err = -2;
-  }
 
-  bsc_free (vb, bucket_B);
-  bsc_free (vb, bucket_A);
-
-  return err;
+done:
+    return LIBBSC_NO_ERROR; // success
 }
 
-int
-divbwt(void *vb, const unsigned char *T, unsigned char *U, int *A, int n, unsigned char * num_indexes, int * indexes, int openMP) {
-  int *B;
-  int *bucket_A, *bucket_B;
-  int m, pidx, i;
+int divbwt (void *vb, const unsigned char *T, unsigned char *U, int *A, int n, unsigned char * num_indexes, int * indexes, int openMP) 
+{
+    int *B;
+    int bucket_A[BUCKET_A_SIZE], bucket_B[BUCKET_B_SIZE];
+    int m, pidx, i;
 
-  /* Check arguments. */
-  if((T == NULL) || (U == NULL) || (n < 0)) { return -1; }
-  else if(n <= 1) { if(n == 1) { U[0] = T[0]; } return n; }
+    /* Check arguments. */
+    if((T == NULL) || (U == NULL) || (n < 0)) { return LIBBSC_BAD_PARAMETER; }
+    else if(n <= 1) { if(n == 1) { U[0] = T[0]; } return n; }
 
-  if((B = A) == NULL) { B = (int *)bsc_malloc(vb, (size_t)(n + 1) * sizeof(int)); }
-  bucket_A = (int *)bsc_malloc(vb, BUCKET_A_SIZE * sizeof(int));
-  bucket_B = (int *)bsc_malloc(vb, BUCKET_B_SIZE * sizeof(int));
+    if((B = A) == NULL) { B = (int *)bsc_malloc(vb, (size_t)(n + 1) * sizeof(int)); }
 
-  /* Burrows-Wheeler Transform. */
-  if((B != NULL) && (bucket_A != NULL) && (bucket_B != NULL)) {
-    m = sort_typeBstar(T, B, bucket_A, bucket_B, n, openMP);
+    /* Burrows-Wheeler Transform. */
+    if (B != NULL) {
+        m = sort_typeBstar(T, B, bucket_A, bucket_B, n, openMP);
 
-    if (num_indexes == NULL || indexes == NULL) {
-        pidx = construct_BWT(T, B, bucket_A, bucket_B, n, m);
+        if (num_indexes == NULL || indexes == NULL) {
+            pidx = construct_BWT(T, B, bucket_A, bucket_B, n, m);
+        } else {
+            pidx = construct_BWT_indexes(T, B, bucket_A, bucket_B, n, m, num_indexes, indexes);
+        }
+
+        /* Copy to output string. */
+        U[0] = T[n - 1];
+        for(i = 0; i < pidx; ++i) { U[i + 1] = (unsigned char)B[i]; }
+        for(i += 1; i < n; ++i) { U[i] = (unsigned char)B[i]; }
+        pidx += 1;
     } else {
-        pidx = construct_BWT_indexes(T, B, bucket_A, bucket_B, n, m, num_indexes, indexes);
+        pidx = -2;
     }
 
-    /* Copy to output string. */
-    U[0] = T[n - 1];
-    for(i = 0; i < pidx; ++i) { U[i + 1] = (unsigned char)B[i]; }
-    for(i += 1; i < n; ++i) { U[i] = (unsigned char)B[i]; }
-    pidx += 1;
-  } else {
-    pidx = -2;
-  }
+    if(A == NULL) { bsc_free (vb, B); }
 
-  bsc_free (vb, bucket_B);
-  bsc_free (vb, bucket_A);
-  if(A == NULL) { bsc_free (vb, B); }
-
-  return pidx;
+    return pidx;
 }
