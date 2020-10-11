@@ -62,7 +62,7 @@ typedef const struct RAEntry *ConstRAEntryP;
 typedef void BgEnBufFunc (BufferP buf);
 typedef BgEnBufFunc (*BgEnBuf);
 
-typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT } ExeType;
+typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPES } ExeType;
 
 #pragma pack(1) // structures that are part of the genozip format are packed.
 #define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/GFF3 specs don't limit the field name (tag) length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)

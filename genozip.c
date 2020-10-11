@@ -58,7 +58,7 @@ uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file d
 int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_stats=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
-    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_list_chroms=0,
+    flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_best=0, flag_list_chroms=0,
     flag_drop_genotypes=0, flag_no_header=0, flag_header_only=0, flag_header_one=0, flag_noisy=0, flag_show_aliases=0,
     flag_show_vblocks=0, flag_vblock=0, flag_gt_only=0, flag_sequential=0,
     flag_debug_memory=0, flag_debug_progress=0, flag_test_seg=0,
@@ -153,10 +153,10 @@ static void main_sigsegv_handler (int sig)
 
 static void main_print_help (bool explicit)
 {
-    static const char **texts[] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
+    static const char **texts[NUM_EXE_TYPES+1] = {help_genozip, help_genounzip, help_genols, help_genocat, help_genozip_developer}; // same order as ExeType
     static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
     
-    if (flag_force) exe_type = (ExeType)4; // -h -f shows developer help
+    if (flag_force) exe_type = NUM_EXE_TYPES; // -h -f shows developer help
 
     str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
                     flag_force ? "                          " : "                     ",  "\n", 0);
@@ -632,7 +632,7 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _i  {"input-type",    required_argument, 0, 'i'                    }
         #define _I  {"stdin-size",    required_argument, 0, 'I'                    }
         #define _c  {"stdout",        no_argument,       &flag_stdout,           1 }
-        #define _d  {"decompress",    no_argument,       &command, PIZ           }
+        #define _d  {"decompress",    no_argument,       &command, PIZ             }
         #define _f  {"force",         no_argument,       &flag_force,            1 }
         #define _h  {"help",          no_argument,       &command, HELP            }
         #define _l  {"list",          no_argument,       &command, LIST            }
@@ -648,6 +648,7 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _m  {"md5",           no_argument,       &flag_md5,              1 }
         #define _t  {"test",          no_argument,       &flag_test,             1 }
         #define _fa {"fast",          no_argument,       &flag_fast,             1 }
+        #define _bs {"best",          no_argument,       &flag_best,             1 }
         #define _9  {"optimize",      no_argument,       &flag_optimize,         1 } // US spelling
         #define _99 {"optimise",      no_argument,       &flag_optimize,         1 } // British spelling
         #define _9s {"optimize-sort", no_argument,       &flag_optimize_sort,    1 }
@@ -715,14 +716,14 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa,          _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sI, _00 };
-        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                        _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
-        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                               _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genozip_lo[]    = { _i, _I, _c, _d, _f, _h, _l, _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e, _E,                                     _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv, _B, _dm, _dp, _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe, _fa, _bs,         _rg, _sR,      _sC, _rA, _rS, _me, _sA, _sI, _00 };
+        static Option genounzip_lo[]  = {         _c,     _f, _h,     _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zc, _m, _th, _u, _o, _p, _e,                                         _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                            _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
+        static Option genocat_lo[]    = {                 _f, _h,     _L1, _L2, _q, _Q,          _V,                   _th,     _o, _p,         _r, _s, _G, _1, _H0, _H1, _Gt, _GT, _ss, _SS, _sd, _sT, _d1, _d2, _lc, _s2, _s5, _s6, _s7, _s8, _S7, _S8, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _sv,     _dm, _dp,                                                                                   _fs, _g, _sR, _sC, _rA, _rS,      _sA, _sI, _00 };
         static Option genols_lo[]     = {                 _f, _h,     _L1, _L2, _q,              _V,                                _p, _e,                                                                                                                    _st, _sm,                                   _dm,                                                                                                                                          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
-        static const char *short_options[] = { // same order as ExeType
+        static const char *short_options[NUM_EXE_TYPES] = { // same order as ExeType
             "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2uz",  // genozip
             "czfhLqQt^V@:uo:p:me:wW",                // genounzip
             "hLVp:qf",                               // genols
@@ -827,6 +828,7 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     ASSINP (!flag_test        || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("test", "t"), OT("optimize", "9"));
     ASSINP (!flag_md5         || !flag_optimize,                    "%s: option %s is incompatable with %s", global_cmd, OT("md5", "m"), OT("optimize", "9"));
     ASSINP (!flag_samples     || !flag_drop_genotypes,              "%s: option %s is incompatable with %s", global_cmd, OT("samples", "s"), OT("drop-genotypes", "G"));
+    ASSINP (!flag_best        || !flag_fast,                        "%s: option %s is incompatable with --best", global_cmd, OT("fast", "t"));
     ASSINP (!flag_test        || !flag_make_reference,              "%s: option %s is incompatable with --make-reference", global_cmd, OT("test", "t"));
     ASSINP (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
     ASSINP (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
