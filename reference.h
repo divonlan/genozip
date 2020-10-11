@@ -19,12 +19,13 @@
 // not set yet, it is necesarry to lock the mutex and test again, and initialize if still not set.
 
 typedef struct Range {
+    uint32_t range_id;           // index of range within Buffer ranges
     BitArray ref;                // actual reference data - 2-bit array
     BitArray is_set;             // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
     const char *chrom_name;
     unsigned chrom_name_len;
     WordIndex chrom;             // index to the chrom of the external reference
-    uint32_t range_i;
+    uint32_t range_i;            // range ordinal number within contig
     PosType first_pos, last_pos; // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
     PosType gpos;                // position of this range in the "global position" 
     uint32_t copied_first_index, copied_len; // ZIP with REF_EXT_STORE: the subset of this range that was copied directly from the fasta file and doesn't need to be compressed

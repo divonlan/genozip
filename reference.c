@@ -621,6 +621,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const ch
         return range; // range already initialized or cannot be initialized ^ - we're done
     }
 
+    range->range_id       = range_id;
     range->range_i        = range_i;
     range->first_pos      = range_i2pos (range_i);
     range->last_pos       = range->first_pos + REF_NUM_DENOVO_SITES_PER_RANGE - 1;
@@ -1255,6 +1256,9 @@ static void ref_allocate_loaded_genome (void)
 
     buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", RT_LOADED); 
     buf_zero (&ranges);
+    
+    for (uint32_t range_id=0; range_id < ranges.len; range_id++) 
+        ENT (Range, ranges, range_id)->range_id = range_id;
 
     // note: genome_size must be full words, so that bit_array_reverse_complement doesn't need to shift
     genome_size = ROUNDUP64 (ref_contigs_get_genome_size()) + 64; // round up to the nearest 64, and add one word, needed by aligner_get_match_len for bit shifting overflow
@@ -1340,11 +1344,12 @@ void ref_initialize_ranges (RangesType ranges_type)
         ref_create_contig_ranges_for_loaded_genome();
     }
     else {
-        ranges.len = REF_NUM_DENOVO_RANGES;
+        if (buf_is_allocated (&ranges)) return; // case: 2nd+ bound file
 
+        ranges.len = REF_NUM_DENOVO_RANGES;
+    
         buf_alloc (evb, &ranges, ranges.len * sizeof (Range), 1, "ranges", RT_DENOVO); 
         buf_zero (&ranges);
-
         ref_lock_initialize_denovo_genome();
     }
 }
@@ -1428,4 +1433,3 @@ const char *ref_get_cram_ref (void)
 done:
     return samtools_T_option;
 }
-

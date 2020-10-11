@@ -18,7 +18,7 @@
 #include "domqual.h"
 #include "aligner.h"
 
-// called by I/O thread 
+// called by I/O thread (zip_initialize callback)
 void sam_zip_initialize (void)
 {
     // if there is no external reference provided, then we create our internal one, and store it
