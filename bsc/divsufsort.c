@@ -1797,8 +1797,9 @@ int divbwt (void *vb, const unsigned char *T, unsigned char *U, int *A, int n, u
     int m, pidx, i;
 
     /* Check arguments. */
-    if((T == NULL) || (U == NULL) || (n < 0)) { return LIBBSC_BAD_PARAMETER; }
-    else if(n <= 1) { if(n == 1) { U[0] = T[0]; } return n; }
+    ASSERT0 (T && U && n>=0, "Error in divbwt: bad parameter");
+
+    if(n <= 1) { if(n == 1) { U[0] = T[0]; } return n; }
 
     if((B = A) == NULL) { B = (int *)bsc_malloc(vb, (size_t)(n + 1) * sizeof(int)); }
 

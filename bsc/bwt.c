@@ -173,10 +173,8 @@ static int bsc_unbwt_reconstruct_serial(void *vb, unsigned char * T, unsigned in
 
 int bsc_bwt_decode(void *vb, unsigned char * T, int n, int index, unsigned char num_indexes, int * indexes, int features)
 {
-    if ((T == NULL) || (n < 0) || (index <= 0) || (index > n))
-    {
-        return LIBBSC_BAD_PARAMETER;
-    }
+    ASSERT0 (T && n>=0 && index>0 && index <= n, "Error in bsc_bwt_decode: bad parameter");
+
     if (n <= 1)
     {
         return LIBBSC_NO_ERROR;

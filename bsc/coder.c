@@ -62,7 +62,8 @@ static int bsc_coder_encode_block(void *vb, const unsigned char * input, unsigne
     if (coder == LIBBSC_CODER_QLFC_STATIC)   return bsc_qlfc_static_encode_block  (vb, input, output, inputSize, outputSize);
     if (coder == LIBBSC_CODER_QLFC_ADAPTIVE) return bsc_qlfc_adaptive_encode_block(vb, input, output, inputSize, outputSize);
 
-    return LIBBSC_BAD_PARAMETER;
+    ABORT0 ("Error in bsc_coder_encode_block: bad parameter");
+    return 0;
 }
 
 static void bsc_coder_split_blocks(void *vb, const unsigned char * input, int n, int nBlocks, int * blockStart, int * blockSize)
@@ -148,36 +149,31 @@ static int bsc_coder_compress_serial(void *vb, const unsigned char * input, unsi
 }
 
 
-int bsc_coder_compress(void *vb, const unsigned char * input, unsigned char * output, int n, int coder, int features)
+int bsc_coder_compress (void *vb, const unsigned char * input, unsigned char * output, int n, int coder, int features)
 {
-    if ((coder != LIBBSC_CODER_QLFC_STATIC) && (coder != LIBBSC_CODER_QLFC_ADAPTIVE))
-    {
-        return LIBBSC_BAD_PARAMETER;
-    }
-
+    ASSERT0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "Error in bsc_coder_compress: bad parameter");
     return bsc_coder_compress_serial(vb,input, output, n, coder);
 }
 
 
-static int bsc_coder_decode_block(void *vb, const unsigned char * input, unsigned char * output, int coder)
+static int bsc_coder_decode_block (void *vb, const unsigned char * input, unsigned char * output, int coder)
 {
-    if (coder == LIBBSC_CODER_QLFC_STATIC)   return bsc_qlfc_static_decode_block  (vb, input, output);
-    if (coder == LIBBSC_CODER_QLFC_ADAPTIVE) return bsc_qlfc_adaptive_decode_block(vb, input, output);
+    ASSERT0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "Error in bsc_coder_decode_block: bad parameter");
 
-    return LIBBSC_BAD_PARAMETER;
+    if (coder == LIBBSC_CODER_QLFC_STATIC)   
+        return bsc_qlfc_static_decode_block  (vb, input, output);
+    else
+        return bsc_qlfc_adaptive_decode_block(vb, input, output);
 }
 
-int bsc_coder_decompress(void *vb, const unsigned char * input, unsigned char * output, int coder, int features)
+int bsc_coder_decompress (void *vb, const unsigned char * input, unsigned char * output, int coder, int features)
 {
-    if ((coder != LIBBSC_CODER_QLFC_STATIC) && (coder != LIBBSC_CODER_QLFC_ADAPTIVE))
-    {
-        return LIBBSC_BAD_PARAMETER;
-    }
+    ASSERT0 (coder == LIBBSC_CODER_QLFC_STATIC || coder == LIBBSC_CODER_QLFC_ADAPTIVE, "Error in bsc_coder_decompress: bad parameter");
 
     int nBlocks = input[0];
     if (nBlocks == 1)
     {
-        return bsc_coder_decode_block(vb, input + 1, output, coder);
+        return bsc_coder_decode_block (vb, input + 1, output, coder);
     }
 
     int decompressionResult[ALPHABET_SIZE];

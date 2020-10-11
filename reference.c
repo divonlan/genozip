@@ -1343,7 +1343,7 @@ void ref_initialize_ranges (RangesType ranges_type)
         ref_allocate_loaded_genome();
         ref_create_contig_ranges_for_loaded_genome();
     }
-    else {
+    else { // RT_DENOVO
         if (buf_is_allocated (&ranges)) return; // case: 2nd+ bound file
 
         ranges.len = REF_NUM_DENOVO_RANGES;

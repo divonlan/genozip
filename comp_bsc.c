@@ -64,7 +64,7 @@ bool comp_bsc_compress (VBlock *vb, Codec codec,
     if (ret == LIBBSC_NOT_COMPRESSIBLE)
         ret = bsc_store (vb, (const uint8_t *)uncompressed, (uint8_t *)compressed, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERT (ret >= LIBBSC_NO_ERROR, "Error in comp_bsc_compress: %s", comp_bsc_errstr (ret));
+    ASSERT (ret >= LIBBSC_NO_ERROR, "Error in comp_bsc_compress: bsc_compress or bsc_store returned %s", comp_bsc_errstr (ret));
 
     if (callback) buf_free (&vb->compressed);
 
