@@ -295,8 +295,8 @@ void stats_compress (void)
 
         /* comp b250      */ str_size (b250_compressed_size, s->comp_b250);
         /* comp data      */ str_size (local_compressed_size, s->comp_data);
-        /* % of txt       */ s->pc_of_txt     = 100.0 * (double)s->txt_size / (double)z_file->txt_data_so_far_bind;
-        /* % of genozip   */ s->pc_of_z = 100.0 * (double)s->z_size / (double)z_file->disk_so_far;
+        /* % of txt       */ s->pc_of_txt = 100.0 * (double)s->txt_size / (double)z_file->txt_data_so_far_bind;
+        /* % of genozip   */ s->pc_of_z   = 100.0 * (double)s->z_size / (double)z_file->disk_so_far;
 
         s++;
     }
@@ -304,8 +304,8 @@ void stats_compress (void)
 
 
     double all_comp_ratio = (double)all_txt_size / (double)all_z_size;
-    double all_pc_of_txt     = 100.0 * (double)all_txt_size        / (double)z_file->txt_data_so_far_bind;
-    double all_pc_of_z = 100.0 * (double)all_z_size / (double)z_file->disk_so_far;
+    double all_pc_of_txt  = 100.0 * (double)all_txt_size        / (double)z_file->txt_data_so_far_bind;
+    double all_pc_of_z    = 100.0 * (double)all_z_size / (double)z_file->disk_so_far;
 
     // long form stats from --show-STATS    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
