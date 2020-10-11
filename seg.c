@@ -852,9 +852,9 @@ void seg_all_data_lines (VBlock *vb)
         buf_free (&eol_ctx->local);
     }
 
-    if (!flag_make_reference) seg_verify_file_size (vb);
-
     if (DTP(seg_finalize)) DTP(seg_finalize) (vb); // data-type specific finalization
+
+    if (!flag_make_reference) seg_verify_file_size (vb);
 
     COPY_TIMER(vb->profile.seg_all_data_lines);
 }

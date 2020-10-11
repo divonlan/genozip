@@ -109,7 +109,7 @@ void fastq_seg_finalize (VBlockP vb)
                        { (DictId)dict_id_fields[FASTQ_E2L],      DID_I_NONE, ""  } }
     };
 
-    seg_structured_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, 0);
+    seg_structured_by_ctx (vb, &vb->contexts[FASTQ_TOPLEVEL], &top_level, 0, 0, vb->lines.len); // account for '+' - one for each line
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
@@ -270,7 +270,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     ASSSEG (*field_start=='+' && field_len==1, field_start, "%s: Invalid FASTQ file format: expecting middle line to be a \"+\" (with no spaces) but it is \"%.*s\"",
             global_cmd, field_len, field_start);
 
-    SEG_EOL (FASTQ_E2L, 2); // account for ascii-10 and the +
+    SEG_EOL (FASTQ_E2L, true); // account for ascii-10
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
     dl->qual_data_start = next_field - vb->txt_data.data;
