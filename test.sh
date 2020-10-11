@@ -172,12 +172,12 @@ for file in ${files[@]}; do
 done
 
 # Test binding SAM files with lots of contigs (no reference)
-#test_header "binding SAM files with lots of contigs (no reference)"
-#file=td/test.transfly-unsorted.sam
-#cp -f $file copy.unsorted1.sam
-#cp -f $file copy.unsorted2.sam
-#./genozip $1 copy.unsorted1.sam copy.unsorted2.sam -ft -o $output || exit 1
-#rm -f copy.unsorted1.sam copy.unsorted2.sam $output
+test_header "binding SAM files with lots of contigs (no reference)"
+file=td/test.transfly-unsorted.sam
+cp -f $file copy.unsorted1.sam
+cp -f $file copy.unsorted2.sam
+./genozip $1 copy.unsorted1.sam copy.unsorted2.sam -ft -o $output || exit 1
+rm -f copy.unsorted1.sam copy.unsorted2.sam $output
 
 # FASTA genocat tests
 test_count_genocat_lines test-file.fa "--sequential" 9
