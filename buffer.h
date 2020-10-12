@@ -73,9 +73,11 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               const char *name, int64_t param);
 
 // efficient wrapper
-#define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) \
-    ((!(buf)->data || (buf)->size < (requested_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (requested_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
-                                                    : (buf)->size) 
+#define buf_alloc(vb, buf, requested_size, grow_at_least_factor, name, param) { \
+    uint64_t new_req_size = (requested_size); /* make copy to allow ++ */ \
+    ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do ((VBlockP)(vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCTION__, __LINE__, (name), (param)) \
+                                                    : (buf)->size); \
+}
 
 #define buf_alloc_more(vb, buf, more, at_least, type, grow_at_least_factor) \
     buf_alloc ((vb), (buf), MAX(at_least, ((buf)->len+(more)))*sizeof(type), (grow_at_least_factor), (buf)->name, (buf)->param)
@@ -134,7 +136,7 @@ typedef struct {
 
 extern void buf_display_memory_usage (bool memory_full, unsigned max_threads, unsigned used_threads);
 
-#define buf_set(buf_p,value) { memset ((buf_p)->data, value, (buf_p)->size); }
+#define buf_set(buf_p,value) { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); }
 #define buf_zero(buf_p) buf_set(buf_p, 0)
 
 extern void buf_add_to_buffer_list (VBlockP vb, Buffer *buf);

@@ -28,6 +28,11 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->contexts[VCF_INFO]  .inst = CTX_INST_NO_STONS;
 
     mtf_get_ctx (vb, dict_id_FORMAT_GT)->inst = CTX_INST_NO_STONS; // we store the GT matrix in local, so cannot accomodate singletons
+
+    // room for already existing FORMATs from previous VBs
+    vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_mtf.len;
+    buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Structured), 1.2, "format_mapper_buf", 0);
+    buf_zero (&vb->format_mapper_buf);
 }             
 
 static void vcf_seg_complete_missing_lines (VBlockVCF *vb);
@@ -191,18 +196,16 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     dl->format_mtf_i = node_index;
 
-    // if this is a new format - add mapper
     if (is_new) {
         ASSERT (node_index == vb->format_mapper_buf.len, 
                 "Error: node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
 
-        vb->format_mapper_buf.len++;
-    }
+        buf_alloc (vb, &vb->format_mapper_buf, (++vb->format_mapper_buf.len) * sizeof (Structured), 2, "format_mapper_buf", 0);
+    }    
 
-    // it is possible that the mapper is not set yet even though not new - if the node is from a previous VB and
-    // we have not yet encountered in node in this VB
-    buf_alloc (vb, &vb->format_mapper_buf, MAX (vb->format_mapper_buf.len, vb->contexts[VCF_FORMAT].ol_mtf.len) * sizeof (Structured), 2, "format_mapper_buf", 0);
-    *ENT (Structured, vb->format_mapper_buf, node_index) = format_mapper;
+    Structured *st = ENT (Structured, vb->format_mapper_buf, node_index);
+    if (is_new || !st->num_items) // assign if not already assigned. 
+        *st = format_mapper; 
 }
 
 static inline bool vcf_seg_test_svlen (VBlockVCF *vb, const char *svlen_str, unsigned svlen_str_len)

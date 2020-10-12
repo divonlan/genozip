@@ -57,7 +57,7 @@ char *buf_display (const Buffer *buf)
 // NOT THREAD SAFE - used in error messages terminating executation
 const char *buf_desc (const Buffer *buf)
 {
-    static char desc[300];
+    static char desc[300]; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
     sprintf (desc, "%s:%"PRId64" len=%"PRIu64" allocated in %s:%u by vb_i=%d", 
              buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->func, buf->code_line, (buf->vb ? buf->vb->vblock_i : -999));
     return desc;

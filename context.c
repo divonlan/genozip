@@ -295,8 +295,10 @@ WordIndex mtf_evaluate_snip_seg (VBlock *segging_vb, Context *vb_ctx,
 {
     ASSERT0 (vb_ctx, "Error in mtf_evaluate_snip_seg: vb_ctx is NULL");
 
-    if (!snip_len) 
+    if (!snip_len) {
+        if (is_new) *is_new = false;
         return (!snip || (segging_vb->data_type == DT_VCF && *snip != ':')) ? WORD_INDEX_MISSING_SF : WORD_INDEX_EMPTY_SF;
+    }
 
     WordIndex node_index_if_new = vb_ctx->ol_mtf.len + vb_ctx->mtf.len;
     
