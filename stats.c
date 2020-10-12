@@ -316,6 +316,7 @@ void stats_compress (void)
     stats_merge_related_stats (sbl, num_stats, "QUAL", "QUAL", "QDOMRUNS", 0, 0);
     stats_merge_related_stats (sbl, num_stats, "DESC", "DESC", 0, 0, 0);
     stats_merge_related_stats (sbl, num_stats, "QNAME", "QNAME", 0, 0, 0);
+    stats_merge_related_stats (sbl, num_stats, "EOL", "E1L", "E2L", 0, 0);
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
