@@ -93,7 +93,7 @@ extern CommandType command, primary_command;
 #define RESTORE_FLAG(flag) flag = save_##flag
 
 // flags set by user's command line options
-extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
+extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_show_alleles, flag_show_time, flag_bgzip, flag_bam, flag_bcf,
            flag_show_memory, flag_show_dict, flag_show_b250, flag_show_stats, flag_show_headers, flag_show_aliases,
            flag_show_index, flag_show_gheader, flag_show_ref_contigs, flag_stdout, flag_replace, flag_test, flag_regions,  
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms, 
@@ -105,9 +105,10 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_unbind, flag_show_a
 
            flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
            flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC,
+           flag_ref_use_aligner;
 
-// flags set in code, that impact reference
-            flag_ref_use_aligner;
+extern char *flag_grep, *flag_show_is_set, *flag_unbind;
+extern uint64_t flag_stdin_size;
 
 // values of flag_reference
 typedef enum { REF_NONE,      // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -123,8 +124,6 @@ extern ReferenceType flag_reference;
 #define PAIR_READ_1    1
 #define PAIR_READ_2    2
 
-extern char *flag_grep, *flag_show_is_set;
-extern uint64_t flag_stdin_size;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
 extern VBlockP evb;

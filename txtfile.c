@@ -572,12 +572,18 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     // 2. when reading a reference file - we create txt_file here (but don't actually open the physical file)
     if (flag_unbind || flag_reading_reference) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in unbind mode or when reading reference");
-        txt_file = file_open (header->txt_filename, WRITE, TXT_FILE, z_file->data_type);
+        
+        char *filename = malloc (strlen (header->txt_filename) + strlen (flag_unbind) + 1);
+        ASSERT0 (filename, "Error in txtfile_genozip_to_txt_header: failed to allocated filename");
+
+        sprintf (filename, "%s%s", flag_unbind, header->txt_filename);
+        txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
+        FREE (filename); // file_open copies the names
     }
 
     txt_file->txt_data_size_single = BGEN64 (header->txt_data_size); 
     txt_file->max_lines_per_vb     = BGEN32 (header->max_lines_per_vb);
-    txt_file->codec             = header->compression_type;
+    txt_file->codec                = header->compression_type;
     
     if (is_first_txt || flag_unbind) 
         z_file->num_lines = BGEN64 (header->num_lines);

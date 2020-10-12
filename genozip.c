@@ -55,7 +55,7 @@ uint32_t global_max_threads = DEFAULT_MAX_THREADS;
 uint32_t global_max_memory_per_vb = 0; // ZIP only: used for reading text file data
 
 // the flags - representing command line options - available globally
-int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
+int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_optimize=0, flag_bgzip=0, flag_bam=0, flag_bcf=0,
     flag_show_alleles=0, flag_show_time=0, flag_show_memory=0, flag_show_dict=0, flag_multiple_files=0,
     flag_show_b250=0, flag_show_stats=0, flag_show_headers=0, flag_show_index=0, flag_show_gheader=0, flag_show_threads=0,
     flag_stdout=0, flag_replace=0, flag_test=0, flag_regions=0, flag_samples=0, flag_fast=0, flag_best=0, flag_list_chroms=0,
@@ -72,7 +72,7 @@ int flag_quiet=0, flag_force=0, flag_bind=0, flag_md5=0, flag_unbind=0, flag_opt
 
 ReferenceType flag_reference = REF_NONE;
 uint64_t flag_stdin_size = 0;
-char *flag_grep = NULL, *flag_show_is_set = NULL;
+char *flag_grep = NULL, *flag_show_is_set = NULL, *flag_unbind = NULL;
 
 DictId dict_id_show_one_b250  = DICT_ID_NONE,  // argument of --show-b250-one
        dict_id_show_one_dict  = DICT_ID_NONE,  // argument of --show-dict-one
@@ -662,7 +662,7 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
         #define _9D {"optimize-DESC", no_argument,       &flag_optimize_DESC,    1 }
         #define _pe {"pair",          no_argument,       &flag_pair,   PAIR_READ_1 } 
         #define _th {"threads",       required_argument, 0, '@'                    }
-        #define _u  {"unbind",        no_argument,       &flag_unbind,           1 }
+        #define _u  {"unbind",        optional_argument, 0, 'u'                    }
         #define _o  {"output",        required_argument, 0, 'o'                    }
         #define _p  {"password",      required_argument, 0, 'p'                    }
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
@@ -724,10 +724,10 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static const char *short_options[NUM_EXE_TYPES] = { // same order as ExeType
-            "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2uz",  // genozip
-            "czfhLqQt^V@:uo:p:me:wW",                // genounzip
-            "hLVp:qf",                               // genols
-            "hLV@:p:qQ1r:s:H1Go:fg:e:E:wW"           // genocat
+            "i:I:cdfhlLqQt^Vzm@:o:p:B:9wWFe:E:2zu", // genozip (note: includes some genounzip options to be used in combination with -d)
+            "czfhLqQt^V@:uo:p:me:wW",               // genounzip
+            "hLVp:qf",                              // genols
+            "hLV@:p:qQ1r:s:H1Go:fg:e:E:wW"          // genocat
         };
 
         int option_index = -1;
@@ -764,7 +764,7 @@ static void main_set_flags_from_command_line (int argc, char **argv, bool *is_sh
             case 'e' : flag_reference     = REF_EXTERNAL  ; ref_set_reference (optarg); break;
             case 'E' : flag_reference     = REF_EXT_STORE ; ref_set_reference (optarg); break;
             case 'm' : flag_md5           = 1      ; break;
-            case 'u' : flag_unbind        = 1      ; break;
+            case 'u' : flag_unbind = optarg ? optarg : "" ; break; // unbind with or without a prefix
             case 'G' : flag_drop_genotypes= 1      ; break;
             case 'H' : flag_no_header     = 1      ; break;
             case '1' : flag_header_one    = 1      ; break;

@@ -232,7 +232,7 @@ static const char *help_genounzip[] = {
     "",
     "   -^ --replace      Replace the source file with the result file, rather than leaving it unchanged",    
     "",
-    "   -u --unbind       Split a bound file back to its original components",
+    "   -u --unbind[=prefix] Split a bound file back to its original components. If the '--unbind=prefix' form is used, a prefix is added to each file component. A prefix may include a directory.",
     "",
     "   -o --output       <output-filename>. Output to this filename instead of the default one",
     "",
