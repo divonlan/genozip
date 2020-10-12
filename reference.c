@@ -509,8 +509,10 @@ void ref_load_stored_reference (void)
 
     // decompress reference using Dispatcher
     bool external = flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE;
-    dispatcher_fan_out_task (external ? ref_filename : z_file->basename, 
-                             PROGRESS_MESSAGE, external ? "Reading reference file..." : "Reading stored reference...", flag_test, 
+    dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 
+                             external ? PROGRESS_MESSAGE : PROGRESS_NONE, 
+                             external ? "Reading reference file..." : NULL, 
+                             flag_test, 
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
