@@ -272,8 +272,10 @@ static void ref_show_sequence (void)
         if (!r->ref.num_of_bits ||
             !regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, &first_pos, &last_pos)) continue;
 
-        if (r->ref.num_of_bits)
+        if (r->ref.num_of_bits) {
+            fprintf (stderr, "%.*s\n", r->chrom_name_len, r->chrom_name);
             ref_print_bases (stderr, &r->ref, first_pos, last_pos-first_pos+1, true);
+        }
     }
 
     if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
