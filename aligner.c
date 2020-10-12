@@ -15,6 +15,8 @@
 #include "compressor.h"
 #include "piz.h"
 
+#define MAX_GPOS_DELTA 1000 // paired reads are usually with a delta less than 300 - so this is more than enough
+
 #define COMPLIMENT(b) (3-(b))
 
 // strict encoding of A,C,G,T - everything else in non-encodable (a 4 here)
@@ -270,10 +272,10 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
         ASSERT (buf_is_allocated (&gpos_ctx->pair), "Error in aligner_seg_seq vb_i=%u: expecting gpos_ctx->pair to be allocated", vb->vblock_i);
         
-        PosType pair_gpos = (PosType) BGEN32 (*ENT (uint32_t, gpos_ctx->pair, vb->line_i)); // same location, in the pair's local
+        PosType pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
         PosType gpos_delta = gpos - pair_gpos; 
 
-        if (gpos != NO_GPOS && gpos_delta <= MAX_POS_DELTA && gpos_delta >= -MAX_POS_DELTA) {
+        if (gpos != NO_GPOS && gpos_delta <= MAX_GPOS_DELTA && gpos_delta >= -MAX_GPOS_DELTA) {
             store_local = false;      
 
             char delta_snip[30] = { SNIP_PAIR_DELTA };

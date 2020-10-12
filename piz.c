@@ -390,7 +390,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 
     case SNIP_PAIR_DELTA: { // used for FASTQ_GPOS 
         uint32_t fastq_line_i = vb->line_i / 4 - vb->first_line; 
-        int64_t pair_value = BGEN32 ((int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i));  
+        int64_t pair_value = (int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i);  
         int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
         new_value.i = pair_value + delta;
         RECONSTRUCT_INT (new_value.i);
