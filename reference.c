@@ -1074,7 +1074,12 @@ void ref_compress_ref (void)
 
 void ref_set_reference (const char *filename)
 {
-    ref_filename = filename;
+    ASSERT0 (filename, "Error in ref_set_reference: filename is NULL");
+
+    ref_filename = malloc (strlen (filename) + 1);
+    ASSERT0 (ref_filename, "Error in ref_set_reference: failed to allocate memory");
+
+    strcpy ((char*)ref_filename, filename);
 }
 
 // called when loading an external reference
@@ -1169,6 +1174,11 @@ static void ref_save_genome_copy_if_needed (bool is_last_file)
         // copy initial state of ranges, before they are modifed by compacting
         buf_copy (evb, &ranges_copy, &ranges, sizeof (Range), 0, 0, "ranges_copy", 0);
     }
+}
+
+bool ref_is_reference_loaded (void)
+{
+    return buf_is_allocated (&ranges);
 }
 
 // ZIP & PIZ: import external reference

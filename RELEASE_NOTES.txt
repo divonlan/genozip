@@ -196,3 +196,4 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Canceled optimize-SEQ (benefits were tiny if any, but it slowed down --optimize considerably)
 - Added --best to contrast --fast. --best doesn't have any additional effect as its the default mode of genozip.
 - Added =prefix option to --unbind, to add a prefix when unbinding
+- --reference in genounzip is now optional - will use original reference filename absent --reference

@@ -57,10 +57,11 @@ typedef enum { RT_NONE,     // value of ranges.param if ranges is unallocated
               
 extern void ref_initialize_ranges (RangesType ranges_type);
 extern void ref_compress_ref (void);
+extern void ref_load_external_reference (bool display, bool is_last_file);
 extern void ref_load_stored_reference (void);
+extern bool ref_is_reference_loaded (void);
 extern void ref_set_reference (const char *filename);
 extern void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name);
-extern void ref_load_external_reference (bool display, bool is_last_file);
 extern void ref_unload_reference (bool force_clean_all);
 extern MemStats ref_memory_consumption (void);
 extern const Range *ref_piz_get_range (VBlockP vb, PosType first_pos_needed, uint32_t num_nucleotides_needed);

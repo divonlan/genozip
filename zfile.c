@@ -663,10 +663,6 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
             if (exe_type == EXE_GENOCAT) exit_ok; // in genocat --show-reference, we only show the reference, not the data
         }
 
-        ASSERT (md5_is_zero (header->ref_file_md5) || flag_reference == REF_EXTERNAL || flag_genocat_info_only, 
-                "Error reading %s: please use --reference to specify the reference filename.\nNote: the reference used to compress this file was %s",
-                z_name, header->ref_filename);
-
         if (!(flag_reference == REF_NONE || flag_reference == REF_INTERNAL || md5_is_equal (header->ref_file_md5, ref_md5))) {
     
             // fail if user loaded an external reference, but file does not require one
@@ -681,6 +677,15 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
                     "Reference used to compress the file: %s MD5=%s\n", 
                     z_name, ref_filename, md5_display (ref_md5), 
                     header->ref_filename, md5_display (header->ref_file_md5));
+        }
+
+        // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
+        // reference specified in the header. 
+        // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
+        if (!md5_is_zero (header->ref_file_md5) && !ref_filename) {
+            ASSERTW (flag_genocat_info_only, "Note: using the reference file %s. You can override this with --reference", header->ref_filename);
+            ref_set_reference (header->ref_filename);
+            flag_reference = REF_EXTERNAL;
         }
     }
      
@@ -846,7 +851,7 @@ void zfile_write_txt_header (Buffer *txt_header_text, Md5Hash header_md5, bool i
     header.h.section_type          = SEC_TXT_HEADER;
     header.h.data_uncompressed_len = BGEN32 (txt_header_text->len);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderTxtHeader));
-    header.h.codec   = CODEC_BZ2;
+    header.h.codec                 = CODEC_BZ2;
     header.num_lines               = NUM_LINES_UNKNOWN; 
     header.compression_type        = (uint8_t)txt_file->codec; 
     header.md5_header              = header_md5;

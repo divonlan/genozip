@@ -308,9 +308,22 @@ static void main_genounzip (const char *z_filename,
 
     z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
     
-    // if we can't get the data type by the extension, we get it from the genozip header
-    if (z_file->data_type == DT_NONE) 
+    // cases we pre-read the genozip header:
+    // 1) if we can't get the data type by the extension - get it from the genozip header
+    // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
+    if (z_file->data_type == DT_NONE || flag_reference != REF_EXTERNAL) 
         zfile_read_genozip_header (NULL);
+
+    // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
+    if (flag_reference == REF_EXTERNAL && !ref_is_reference_loaded()) {
+        ASSINP (flag_reference != REF_EXTERNAL || !flag_show_ref_seq, "%s: Error: --show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead", global_cmd);
+
+        if (!flag_genocat_info_only) {
+            SAVE_FLAG (z_file); // actually, read the reference first
+            ref_load_external_reference (false, false /* parameter ignored for REF_EXTERNAL */);
+            RESTORE_FLAG (z_file);
+        }
+    }
 
     // get output FILE 
     if (txt_filename) {
@@ -833,6 +846,7 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     ASSINP (flag_reference != REF_EXTERNAL  || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("reference", "e"));
     ASSINP (flag_reference != REF_EXT_STORE || !flag_make_reference,"%s: option %s is incompatable with --make-reference", global_cmd, OT("REFERENCE", "E"));
     ASSINP (flag_reference != REF_EXT_STORE || exe_type != EXE_GENOCAT, "%s: option %s supported only for viewing the reference file itself", global_cmd, OT("REFERENCE", "E"));
+    ASSINP (flag_reference != REF_EXTERNAL  || !flag_show_ref_seq,  "%s: option %s is incompatable with --show-ref-seq: use genocat --show-ref-seq on the reference file itself instead", global_cmd, OT("reference", "e"));
     ASSINP (!dump_one_b250_dict_id.num || !dump_one_local_dict_id.num, "%s: option --dump-one-b250 is incompatable with --dump-one-local", global_cmd);
 
     // some genozip flags are allowed only in combination with --decompress 
