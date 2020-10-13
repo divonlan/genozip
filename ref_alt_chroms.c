@@ -18,7 +18,7 @@
 typedef struct { WordIndex user_file_chrom, alt_chrom_in_ref_file; } AltChrom;
 
 // ZIP of a file with REF_EXTERNAL/REF_EXT_STORE: When a chrom in the user file matches an alternate chrom in the reference file, 
-// we create a mapping here user_chrom->alt_chrom and pass it to Piz as a SEC_ALT_CHROMS section. It contains at most as many entries 
+// we create a mapping here user_chrom->alt_chrom and pass it to Piz as a SEC_REF_ALT_CHROMS section. It contains at most as many entries 
 // as the number of contigs in the reference file.
 void ref_alt_chroms_compress (void)
 {
@@ -55,19 +55,19 @@ void ref_alt_chroms_compress (void)
     }
 
     z_file->alt_chrom_map.len *= sizeof (AltChrom);
-    zfile_compress_section_data_codec (evb, SEC_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
+    zfile_compress_section_data_codec (evb, SEC_REF_ALT_CHROMS, &z_file->alt_chrom_map, 0,0, CODEC_LZMA); // compresses better with LZMA than BZLIB
 
     buf_free (&z_file->alt_chrom_map);
 }
 
 void ref_alt_chroms_load (void)
 {
-    SectionListEntry *sl = sections_get_first_section_of_type (SEC_ALT_CHROMS, true);
+    SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_ALT_CHROMS, true);
     if (!sl) return; // we don't have alternate chroms
 
-    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_ALT_CHROMS, sl);
+    zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_ALT_CHROMS, sl);
 
-    zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", 0, SEC_ALT_CHROMS);
+    zfile_uncompress_section (evb, evb->z_data.data, &evb->compressed, "compressed", 0, SEC_REF_ALT_CHROMS);
 
     if (flag_show_ref_alts) 
         fprintf (stderr, "\nAlternative chroms (output of --show-ref-alts): chroms that are in the file and are mapped to a different name in the reference\n");
@@ -109,7 +109,7 @@ void ref_alt_chroms_load (void)
     buf_free (&evb->compressed);
 }
 
-// ZIP only: in PIZ, we get the maping from SEC_ALT_CHROMS
+// ZIP only: in PIZ, we get the maping from SEC_REF_ALT_CHROMS
 WordIndex ref_alt_chroms_zip_get_alt_index (const char *chrom, unsigned chrom_len, GetWordIndexType where_is_alt, WordIndex fallback_index)
 {
     WordIndex alternative_chrom_word_index = WORD_INDEX_NONE;

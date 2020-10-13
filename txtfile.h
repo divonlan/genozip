@@ -22,6 +22,6 @@ extern bool txtfile_header_to_genozip (uint32_t *vcf_line_i);
 extern bool txtfile_genozip_to_txt_header (ConstSectionListEntryP sl, Md5Hash *digest);
 
 extern void txtfile_header_initialize(void);
-uint32_t txtfile_get_last_header_len(void); // for stats
+uint32_t txtfile_get_bound_headers_len(void); // for stats
 
 #endif

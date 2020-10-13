@@ -24,9 +24,9 @@
 #include "zlib/zlib.h"
 
 static bool is_first_txt = true; 
-static uint32_t last_txt_header_len = 0;
+static uint32_t total_bound_txt_headers_len = 0;
 
-uint32_t txtfile_get_last_header_len(void) { return last_txt_header_len; }
+uint32_t txtfile_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
 
 static void txtfile_update_md5 (const char *data, uint32_t len, bool is_2ndplus_txt_header)
 {
@@ -537,8 +537,8 @@ bool txtfile_header_to_genozip (uint32_t *txt_line_i)
     if (z_file && !flag_test_seg) zfile_write_txt_header (&evb->txt_data, header_md5, is_first_txt); // we write all headers in bound mode too, to support --unbind
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
-    if (!flag_bind) last_txt_header_len=0;
-    last_txt_header_len += evb->txt_data.len; 
+    if (!flag_bind) total_bound_txt_headers_len=0;
+    total_bound_txt_headers_len += evb->txt_data.len; 
 
     z_file->num_txt_components_so_far++; // when compressing
 

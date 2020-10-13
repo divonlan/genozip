@@ -26,7 +26,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_DICT            = 10, 
     SEC_B250            = 11, 
     SEC_LOCAL           = 12, 
-    SEC_ALT_CHROMS      = 13,
+    SEC_REF_ALT_CHROMS  = 13,
     SEC_STATS           = 14,
 
     NUM_SEC_TYPES // fake section for counting
@@ -47,7 +47,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_DICT"},              \
     {"SEC_B250"},              \
     {"SEC_LOCAL"},             \
-    {"SEC_ALT_CHROMS"},        \
+    {"SEC_REF_ALT_CHROMS"},        \
     {"SEC_STATS"},             \
 }
 

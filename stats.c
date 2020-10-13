@@ -3,6 +3,7 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#include <stdarg.h>
 #include "genozip.h"
 #include "buffer.h"
 #include "dict_id.h"
@@ -21,61 +22,27 @@ static int *count_per_section = NULL;
 // a concatenation of all bound txt_names that contributed to this genozip file
 static Buffer bound_txt_names = EMPTY_BUFFER;
 
-#define OVERHEAD_SEC_VB_HDR      -1
-#define OVERHEAD_SEC_ALIASES     -2
-#define OVERHEAD_SEC_TXT_HDR     -3
-#define OVERHEAD_SEC_RA_INDEX    -4
-#define OVERHEAD_SEC_REFERENCE   -5 // used only for REF_EXT_STORE
-#define OVERHEAD_SEC_REF_HASH    -6 // used only in a reference file
-#define OVERHEAD_SEC_REF_CONTIGS -7 
-#define OVERHEAD_SEC_ALT_CHROMS  -8 
-#define LAST_OVERHEAD            -8
-
-static void stats_get_sizes (DictId dict_id /* option 1 */, int overhead_sec /* option 2*/, 
+static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size)
 {
     *dict_compressed_size = *b250_compressed_size = *local_compressed_size = 0;
 
-    for (unsigned i=0; i < z_file->section_list_buf.len; i++) {
+    for (uint64_t i=0; i < z_file->section_list_buf.len; i++) {
 
         SectionListEntry *section = ENT (SectionListEntry, z_file->section_list_buf, i);
         int64_t after_sec = (i == z_file->section_list_buf.len - 1) ? z_file->disk_so_far : (section+1)->offset;
         int64_t sec_size = after_sec - section->offset;
 
         count_per_section[i]++; // we're optimistically assuming section will be count_per_section - we will revert if not
-        
-        // we put all the SEQ derived data in a single stats line for easy comparison (reference in dict, the +- section SEQ in b250, and the unique non-ref sequence stretchs in local)
-        if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_SEQ_BITMAP]) { // 'SEQ' line - must be before SEC_LOCAL
-            if (section->dict_id.num == dict_id_fields[SAM_NONREF])
-                *local_compressed_size += sec_size;
-            else if ((section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET) && flag_reference == REF_INTERNAL)
-                *dict_compressed_size += sec_size;
-            else if (section->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP])
-                *b250_compressed_size += sec_size;
-        }
 
-        else if (overhead_sec == OVERHEAD_SEC_REFERENCE && 
-                 (flag_reference == REF_EXT_STORE || z_file->data_type != DT_SAM) && 
-                 (section->section_type == SEC_REFERENCE || section->section_type == SEC_REF_IS_SET))
-            *dict_compressed_size += sec_size;
-
-        else if (z_file->data_type == DT_SAM && dict_id.num == dict_id_fields[SAM_NONREF]) {} // ^ already handled above
-
-        else if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
+        if (section->dict_id.num == dict_id.num && section->section_type == SEC_DICT)
             *dict_compressed_size += sec_size;
 
         else if (section->dict_id.num == dict_id.num && section->section_type == SEC_B250)
             *b250_compressed_size += sec_size;
 
         else if ((section->dict_id.num == dict_id.num && section->section_type == SEC_LOCAL) ||
-                 (section->section_type == SEC_VB_HEADER       && overhead_sec == OVERHEAD_SEC_VB_HDR) ||
-                 (section->section_type == SEC_DICT_ID_ALIASES && overhead_sec == OVERHEAD_SEC_ALIASES) ||
-                 (section->section_type == SEC_REF_CONTIGS     && overhead_sec == OVERHEAD_SEC_REF_CONTIGS) ||
-                 (section->section_type == SEC_ALT_CHROMS      && overhead_sec == OVERHEAD_SEC_ALT_CHROMS) ||
-                 (section->section_type == SEC_REF_HASH        && overhead_sec == OVERHEAD_SEC_REF_HASH) ||
-                 (section->section_type == SEC_TXT_HEADER      && overhead_sec == OVERHEAD_SEC_TXT_HDR) ||
-                 (section->section_type == SEC_RANDOM_ACCESS   && overhead_sec == OVERHEAD_SEC_RA_INDEX) ||
-                 (section->section_type == SEC_REF_RAND_ACC    && overhead_sec == OVERHEAD_SEC_RA_INDEX))
+                 (section->section_type == non_ctx_sec))
             *local_compressed_size += sec_size;
              
         else count_per_section[i]--; // acually... not count_per_section!
@@ -107,17 +74,8 @@ static void stats_show_file_metadata (Buffer *buf)
                    memchr (bound_txt_names.data, ' ', bound_txt_names.len) ? "s" : "", // a space separator indicates more than one file
                    (int)bound_txt_names.len, bound_txt_names.data);
     
-    if (flag_reference == REF_INTERNAL && z_file->data_type == DT_SAM) {
-        bufprintf (evb, buf, "Reference: Internal ('SEQ' line: 'comp dict'=stored reference, 'comp 250'=bitmap, 'comp local'=non-refereance bases)%s\n", "");
-    }
-    else if (flag_reference == REF_EXTERNAL) {
-        if (z_file->data_type == DT_SAM)
-            bufprintf (evb, buf, "Reference: %s ('SEQ' line: 'comp 250'=bitmap, 'comp local'=non-refereance bases)\n", ref_filename)
-        else
-            bufprintf (evb, buf, "Reference: %s (not stored in genozip file)\n", ref_filename);
-    }
-    else if (flag_reference == REF_INTERNAL || flag_reference == REF_EXT_STORE)
-        bufprintf (evb, buf, "Reference: %s (size appears in 'Reference' line)\n", ref_filename);
+    if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) 
+        bufprintf (evb, buf, "Reference: %s\n", ref_filename);
 
     char ls[30];
     if (z_file->data_type == DT_VCF) 
@@ -135,9 +93,10 @@ static void stats_show_file_metadata (Buffer *buf)
 
 typedef struct {
     int64_t txt_size, z_size;
-    char did_i[20], name[50], type[20], words[20], hash[20], uncomp_dict[20], comp_dict[20],
-         comp_b250[20], comp_data[20];
-         double pc_of_txt, pc_of_z, pc_dict, pc_singletons, pc_failed_singletons, pc_hash_occupancy;
+    const char *name;
+    char did_i[20], type[20], words[20], hash[20], uncomp_dict[20], comp_dict[20],
+    comp_b250[20], comp_data[20];
+    double pc_of_txt, pc_of_z, pc_dict, pc_singletons, pc_failed_singletons, pc_hash_occupancy;
 } StatsByLine;
 
 static int stats_sort_by_z_size(const void *a, const void *b)  
@@ -145,34 +104,66 @@ static int stats_sort_by_z_size(const void *a, const void *b)
     return (((StatsByLine*)b)->z_size > ((StatsByLine*)a)->z_size) ? 1 : -1; // use comparison (>) and not minus (-) as the retun value is only 32 bit
 }
 
-static void stats_merge_related_stats (StatsByLine *s, unsigned num_stats, const char *consolidated_name,
-                                       const char *dep1, const char *dep2, const char *dep3, const char *dep4)
+static void stats_consolidate_compound (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, const char *field)
 {
-    // find survivor
-    StatsByLine *survivor = NULL;
+    unsigned field_len = strlen (field);
+
+    StatsByLine *survivor = NULL;    
     for (uint32_t i=0; i < num_stats; i++)
-        if (!strcmp (s[i].name, dep1)) { // dep1 will be the surviving field to which other fields will be consolidated
-            survivor = &s[i];
-            break;
+        if (sbl[i].name && !strcmp (sbl[i].name, field)) {
+            survivor = &sbl[i];
+            survivor->name = consolidated_name;
         }
-    if (!survivor) return; // this file doesn't have this field
 
-    unsigned dep1_len = strlen (dep1);
-    for (uint32_t i=0; i < num_stats; i++, s++) {
+    if (!survivor) return; // this data type doesn't have this compound field
 
-        if ((!dep2 && (dep1_len+1 == strlen (s->name)) && (dep1[0] == s->name[0]) && !strcmp (&dep1[1], &s->name[2])) ||  // check for compound name eg DESC -> D1ESC
-            (dep2 && !strcmp (dep2, s->name)) || 
-            (dep3 && !strcmp (dep3, s->name)) || 
-            (dep4 && !strcmp (dep4, s->name))) {
-            
-            survivor->txt_size  += s->txt_size;   s->txt_size  = 0;
-            survivor->z_size    += s->z_size;     s->z_size    = 0;
-            survivor->pc_of_txt += s->pc_of_txt;  s->pc_of_txt = 0;
-            survivor->pc_of_z   += s->pc_of_z;    s->pc_of_z   = 0;
+    for (unsigned i=0; i < num_stats; i++) {
+        
+        // check for eg DESC -> D1ESC
+        if (sbl[i].name && (field_len+1 == strlen (sbl[i].name)) && (field[0] == sbl[i].name[0]) && !strcmp (&field[1], &sbl[i].name[2])) {
+            survivor->txt_size  += sbl[i].txt_size;
+            survivor->z_size    += sbl[i].z_size;  
+            survivor->pc_of_txt += sbl[i].pc_of_txt;
+            survivor->pc_of_z   += sbl[i].pc_of_z;  
+
+            sbl[i] = (StatsByLine){};
         }
     }
+}
 
-    strcpy (survivor->name, consolidated_name);
+static void stats_consolidate_related (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, unsigned num_deps, ...)
+{
+    va_list args;
+    va_start (args, num_deps);
+
+    const char *deps[num_deps];
+    for (unsigned d=0; d < num_deps; d++) 
+        deps[d] = va_arg (args, const char *);
+
+    StatsByLine *survivor = NULL;
+    for (unsigned i=0; i < num_stats; i++) {
+        
+        if (!sbl[i].name) continue; // unused entry
+
+        for (unsigned d=0; d < num_deps; d++)
+            if (!strcmp (deps[d], sbl[i].name)) {
+                if (!survivor) {
+                    survivor = &sbl[i]; // first found gets to be the survivor
+                }
+                else {
+                    survivor->txt_size  += sbl[i].txt_size;
+                    survivor->z_size    += sbl[i].z_size;  
+                    survivor->pc_of_txt += sbl[i].pc_of_txt;
+                    survivor->pc_of_z   += sbl[i].pc_of_z; 
+                    survivor->name       = consolidated_name; // rename only if at least one was consolidated
+
+                    sbl[i] = (StatsByLine){}; 
+                }
+                break;
+            } 
+    }
+
+    va_end (args);
 }
 
 static void stats_output_stats (StatsByLine *s, unsigned num_stats, 
@@ -230,28 +221,32 @@ void stats_compress (void)
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
 
     //prepare data
-    StatsByLine sbl[MAX_DICTS+50], *s = sbl;
-    memset (sbl, 0, sizeof(sbl));
+    StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { 0 }, *s = sbl;
 
     count_per_section = calloc (z_file->section_list_buf.len, sizeof (int));
 
-    for (int i=LAST_OVERHEAD; i < (int)z_file->num_contexts; i++) { 
+    #define SEC(i) (i<0 ? -(i)-1 : SEC_NONE) // i to section type
+    #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
+
+    for (int i=-NUM_SEC_TYPES; i < (int)z_file->num_contexts; i++) { // sections go into -1 to -NUM_SEC_TYPES (see SEC())
+
+        if (SEC(i) == SEC_DICT || SEC(i) == SEC_B250 || SEC(i) == SEC_LOCAL) continue; // these are covered by indiviual contexts
 
         Context *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
    
         int64_t dict_compressed_size, b250_compressed_size, local_compressed_size;
-        stats_get_sizes (ctx ? ctx->dict_id : DICT_ID_NONE, ctx ? 0 : i, 
+        stats_get_sizes (ctx ? ctx->dict_id : DICT_ID_NONE, SEC(i), 
                          &dict_compressed_size, &b250_compressed_size, &local_compressed_size);
 
         s->z_size = dict_compressed_size + b250_compressed_size + local_compressed_size;
 
-        ASSERTW (s->z_size >= 0, "Hmm... s->z_size=%"PRId64" is negative for overhead=%d", s->z_size, i);
+        ASSERTW (s->z_size >= 0, "Hmm... s->z_size=%"PRId64" is negative for %s", s->z_size, s->name);
 
         if (ctx && !ctx->mtf_i.len && !ctx->txt_len && !ctx->b250.len && !s->z_size) continue;
 
-        s->txt_size = ctx ? ctx->txt_len : (i==OVERHEAD_SEC_TXT_HDR ? txtfile_get_last_header_len() : 0);
+        s->txt_size = ctx ? ctx->txt_len : (i==-SEC_TXT_HEADER ? txtfile_get_bound_headers_len() : 0);
 
-        bool is_dict_a_reference = (i == OVERHEAD_SEC_REFERENCE) || // reference appreas in "comp_dict" of "Reference" line
+        bool is_dict_a_reference = (i == -SEC_REFERENCE) || // reference appreas in "comp_dict" of "Reference" line
                                    (ctx && z_file->data_type == DT_SAM && (ctx->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP] || ctx->dict_id.num == dict_id_fields[SAM_NONREF])); // reference appreas in "comp_dict" of "SEQ" line
         
         if (!is_dict_a_reference) all_comp_dict += dict_compressed_size;
@@ -261,17 +256,7 @@ void stats_compress (void)
         all_z_size      += s->z_size;
         all_txt_size    += s->txt_size;
 
-        /* Name         */ 
-        if (ctx)                              strcpy (s->name, ctx->name); 
-        else if (i==OVERHEAD_SEC_ALIASES)     strcpy (s->name, "aliases");
-        else if (i==OVERHEAD_SEC_VB_HDR)      strcpy (s->name, "VBlock hdrs");
-        else if (i==OVERHEAD_SEC_TXT_HDR)     strcpy (s->name, "Txt file header");
-        else if (i==OVERHEAD_SEC_RA_INDEX)    strcpy (s->name, "--regions index");
-        else if (i==OVERHEAD_SEC_REFERENCE)   strcpy (s->name, "Reference");
-        else if (i==OVERHEAD_SEC_REF_HASH)    strcpy (s->name, "Refhash");
-        else if (i==OVERHEAD_SEC_REF_CONTIGS) strcpy (s->name, "Ref Contigs");
-        else if (i==OVERHEAD_SEC_ALT_CHROMS)  strcpy (s->name, "Alt Chroms");
-
+        /* Name           */ s->name = ctx ? ctx->name : ST_NAME (SEC(i)); 
         /* Type           */ strcpy (s->type, ctx ? dict_id_display_type (z_file->data_type, ctx->dict_id) : "OTHER");
 
         if (ctx) {
@@ -302,7 +287,6 @@ void stats_compress (void)
     }
     unsigned num_stats = s - sbl;
 
-
     double all_comp_ratio = (double)all_txt_size / (double)all_z_size;
     double all_pc_of_txt  = 100.0 * (double)all_txt_size        / (double)z_file->txt_data_so_far_bind;
     double all_pc_of_z    = 100.0 * (double)all_z_size / (double)z_file->disk_so_far;
@@ -312,11 +296,22 @@ void stats_compress (void)
     stats_output_STATS (sbl, num_stats, all_txt_size, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
     // consolidates stats of related lines into one - for SEQ, QUAL, DESC and QNAME
-    stats_merge_related_stats (sbl, num_stats, "SEQ", "SQBITMAP", "GPOS", "NONREF", "STRAND");
-    stats_merge_related_stats (sbl, num_stats, "QUAL", "QUAL", "QDOMRUNS", 0, 0);
-    stats_merge_related_stats (sbl, num_stats, "DESC", "DESC", 0, 0, 0);
-    stats_merge_related_stats (sbl, num_stats, "QNAME", "QNAME", 0, 0, 0);
-    stats_merge_related_stats (sbl, num_stats, "EOL", "E1L", "E2L", 0, 0);
+    stats_consolidate_compound (sbl, num_stats, "Description", "DESC");
+    
+    stats_consolidate_compound (sbl, num_stats, "QNAME", "QNAME");
+
+    stats_consolidate_related (sbl, num_stats, "Sequence", 4, "SQBITMAP", "GPOS", "NONREF", "STRAND");
+    
+    stats_consolidate_related (sbl, num_stats, "Quality",  2, "QUAL", "QDOMRUNS");
+    
+    stats_consolidate_related (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
+                               ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));
+
+    stats_consolidate_related (sbl, num_stats, "Other", 12, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", "TOPLEVEL", "LINEMETA", "CONTIG",
+                               ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
+                               ST_NAME (SEC_TXT_HEADER), ST_NAME (SEC_VB_HEADER));
+
+    stats_consolidate_related (sbl, num_stats, "BD_BI",  3, "BD_BI", "BD:Z", "BI:Z");
 
     // short form stats from --show-stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
@@ -382,5 +377,3 @@ void stats_add_txt_name (const char *fn)
     if (bound_txt_names.len) buf_add (&bound_txt_names, " ", 1);
     buf_add (&bound_txt_names, fn, fn_len);
 }
-
-
