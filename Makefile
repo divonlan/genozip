@@ -36,7 +36,7 @@ MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_
 		  gff3_seg.c \
 		  me23_seg.c \
 		  buffer.c random_access.c sections.c base64.c \
-		  compressor.c comp_bz2.c comp_lzma.c comp_acgt.c comp_ht.c comp_bsc.c comp_none.c \
+		  compressor.c codec_bz2.c codec_lzma.c codec_acgt.c codec_ht.c codec_bsc.c codec_none.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c
 

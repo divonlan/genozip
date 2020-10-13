@@ -932,18 +932,28 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
                               flag_show_reference || flag_show_ref_contigs || flag_show_ref_index || flag_show_ref_hash || flag_show_ref_alts || flag_show_ref_seq);
 }
 
+extern bool comp_bsc_compress (VBlock *vb, Codec codec,
+const char *uncompressed,      // option 1 - compress contiguous data
+uint32_t uncompressed_len, 
+LocalGetLineCallback callback, // option 2 - compress data one line at a time
+char *compressed, uint32_t *compressed_len /* in/out */, 
+bool soft_fail);
 void TEST()
 {
+    FILE *fp = fopen ("seq", "rb");
+    char *data = malloc (14236798);
+    fread (data, 1, 14236798, fp);
 }
 
 int main (int argc, char **argv)
 {
-    //TEST();exit(0);
     arch_initialize();
     buf_initialize(); 
     vb_initialize_evb();
     random_access_initialize();
     comp_initialize();
+    
+    //TEST();exit(0);
 
 #ifdef _WIN32
     // lowercase argv[0] to allow case-insensitive comparison in Windows

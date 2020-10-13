@@ -71,30 +71,7 @@ static char domqual_has_dominant_value (VBlock *vb, LocalGetLineCallback get_lin
 
     return -1; // no value is dominant
 }
-/*
-for bug 178
-static inline char domqual_get_dom (const char *qual, unsigned qual_len)
-{
-#   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
-#   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
-#   define DOMQUAL_LINE_SAMPLE_LEN 1000         // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
 
-    uint32_t char_counter[256] = { 0 };
-    if (qual_len > DOMQUAL_LINE_SAMPLE_LEN) qual_len = DOMQUAL_LINE_SAMPLE_LEN; 
-    
-    unsigned threshold = MAX ((unsigned)((double)qual_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL), DOMQUAL_THREADSHOLD_NUM_CHARS);
-
-    for (unsigned i=0; i < qual_len; i++)
-        char_counter[(uint8_t)qual[i]]++;
-
-    if (char_counter['F'] >= threshold) return 'F'; // shortcut for common Illumina binning
-
-    for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
-        if (char_counter[c] > threshold) return c; 
-
-    return 0; // no value has more than 50% 
-}
-*/
 static inline void domqual_add_runs (Buffer *qdomruns_buf, uint32_t runlen)
 {
     // add one more bytes to represent the run

@@ -88,13 +88,16 @@ static void comp_ht_compress_one_array (VBlockP vb, uint32_t ht_i,
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool comp_ht_compress (VBlock *vb, Codec codec,
-                       const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                       LocalGetLineCallback callback,                       // option 2 - not supported
+                       const char *uncompressed,       // option 1 - compress contiguous data
+                       uint32_t uncompressed_len, 
+                       LocalGetLineCallback callback,  // option 2 - not supported
                        char *compressed, uint32_t *compressed_len /* in/out */, 
                        bool soft_fail)
 {
     START_TIMER;
     
+    ASSERT0 (uncompressed && !callback, "Error in comp_ht_compress: callback option not supported");
+
     HaploTypeSortHelperIndex *helper_index = comp_ht_count_alt_alleles (vb);
     
     // sort the helper index by number of alt alleles
