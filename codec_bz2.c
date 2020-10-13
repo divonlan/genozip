@@ -5,19 +5,19 @@
 
 #include <bzlib.h>
 #include "genozip.h"
-#include "comp_private.h"
+#include "codec.h"
 #include "vblock.h"
 #include "buffer.h"
 #include "strings.h"
 
 static void *comp_bzalloc (void *vb_, int items, int size)
 {
-    return comp_alloc ((VBlock *)vb_, items * size, 1); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc ((VBlock *)vb_, items * size, 1); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 static void comp_bzfree (void *vb_, void *addr)
 {
-    comp_free ((VBlock *)vb_, addr);
+    codec_free ((VBlock *)vb_, addr);
 }
 
 static const char *BZ2_errstr (int err)
@@ -63,10 +63,10 @@ uint64_t BZ2_consumed (void *bz_file)
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_bzlib_compress (VBlock *vb, Codec codec,
+bool codec_bz2_compress (VBlock *vb, Codec codec,
                           const char *uncompressed,       // option 1 - compress contiguous data
-                          uint32_t uncompressed_len, 
-                          LocalGetLineCallback callback,  // option 2 - compress data one line at a tim
+                          uint32_t *uncompressed_len, 
+                          LocalGetLineCB callback,  // option 2 - compress data one line at a tim
                           char *compressed, uint32_t *compressed_len /* in/out */, 
                           bool soft_fail)
 {
@@ -91,7 +91,7 @@ bool comp_bzlib_compress (VBlock *vb, Codec codec,
     // option 1 - compress contiguous data
     if (uncompressed) {
         strm.next_in   = (char*)uncompressed;
-        strm.avail_in  = uncompressed_len;
+        strm.avail_in  = *uncompressed_len;
 
         ret = BZ2_bzCompress (&strm, BZ_FINISH);
         if (soft_fail && ret == BZ_FINISH_OK)
@@ -105,7 +105,7 @@ bool comp_bzlib_compress (VBlock *vb, Codec codec,
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
-            ASSERT (!strm.avail_in, "Error in comp_bzlib_compress: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
+            ASSERT (!strm.avail_in, "Error in codec_bz2_compress: expecting strm.avail_in to be 0, but it is %u", strm.avail_in);
 
             // initialize to 0
             char *next_in_2=0;     strm.next_in=0;
@@ -145,7 +145,7 @@ bool comp_bzlib_compress (VBlock *vb, Codec codec,
         }
     }
     else 
-        ABORT0 ("Error in comp_bzlib_compress: neither src_data nor callback is provided");
+        ABORT0 ("Error in codec_bz2_compress: neither src_data nor callback is provided");
     
     ret = BZ2_bzCompressEnd (&strm);
     ASSERT (ret == BZ_OK, "Error: BZ2_bzCompressEnd failed: %s", BZ2_errstr (ret));
@@ -157,9 +157,10 @@ bool comp_bzlib_compress (VBlock *vb, Codec codec,
     return success;
 }
 
-void comp_bzlib_uncompress (VBlock *vb, 
+void codec_bz2_uncompress (VBlock *vb, 
                             const char *compressed, uint32_t compressed_len,
-                            char *uncompressed_data, uint64_t uncompressed_len)
+                            char *uncompressed_data, uint64_t uncompressed_len, 
+                            Codec unused)
 {
     bz_stream strm;
     strm.bzalloc = comp_bzalloc;

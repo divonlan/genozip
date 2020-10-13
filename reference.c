@@ -28,6 +28,8 @@
 #include "refhash.h"
 #include "ref_private.h"
 #include "bit_array.h"
+#include "codec.h"
+#include "compressor.h"
 
 // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_DENOVO_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
 Buffer ranges                       = EMPTY_BUFFER; 
@@ -337,8 +339,8 @@ static void ref_uncompress_one_range (VBlockP vb)
 
         ASSERT (uncomp_len == roundup_bits2bytes64 (ref_sec_len), "Error in ref_uncompress_one_range: when uncompressing SEC_REF_IS_SET: uncomp_len=%u inconsistent with len=%"PRId64, uncomp_len, ref_sec_len); 
 
-        // uncompress into r->is_set, via vb->compress
-        ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compress to be free, but its not");
+        // uncompress into r->is_set, via vb->compressed
+        ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compressed to be free, but its not");
         zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", 0, SEC_REF_IS_SET);
 
         BitArray *is_set = buf_zfile_buf_to_bitarray (&vb->compressed, ref_sec_len);
@@ -410,8 +412,8 @@ static void ref_uncompress_one_range (VBlockP vb)
         if (!uncomp_len) return;  // empty header - if it appears, it is the final header (eg in case of an unaligned SAM file)
     }
 
-    // uncompress into r->ref, via vb->compress
-    ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compress to be free, but its not");
+    // uncompress into r->ref, via vb->compressed
+    ASSERT0 (!vb->compressed.len, "Error in ref_uncompress_one_range: expecting vb->compressed to be free, but its not");
     zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->compressed, "compressed", 0, SEC_REFERENCE);
 
     // lock - while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level

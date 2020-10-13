@@ -10,7 +10,6 @@
 #include "dict_id.h"
 #include "mutex.h"
 #include "strings.h"
-#include "compressor.h"
 #include "regions.h"
 
 unsigned fast_vb_size (void) { return sizeof (VBlockFAST); }

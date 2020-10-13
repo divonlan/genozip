@@ -20,7 +20,7 @@
 #include "url.h"
 #include "vblock.h"
 #include "strings.h"
-#include "compressor.h"
+#include "codec.h"
 #include "mutex.h"
 
 // globals

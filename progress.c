@@ -76,7 +76,7 @@ void progress_new_component (const char *new_component_name,
         }
     }
 
-    progress_udpate_status (status); 
+    progress_update_status (status); 
 }
 
 void progress_update (uint64_t sofar, uint64_t total, bool done)
@@ -98,7 +98,7 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
 
     // case: we've reached 99% prematurely... we under-estimated the time
     if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) 
-        progress_udpate_status ("Finalizing...");
+        progress_update_status ("Finalizing...");
 
     // case: we're making progress... show % and time remaining
     else if (!done && percent && (last_seconds_so_far < seconds_so_far)) { 
@@ -115,7 +115,7 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
             else
                 sprintf (progress, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", (unsigned)percent, time_str, sofar, total, seconds_so_far);            
 
-            progress_udpate_status (progress);
+            progress_update_status (progress);
         }
     }
 
@@ -126,7 +126,7 @@ void progress_update (uint64_t sofar, uint64_t total, bool done)
     last_seconds_so_far = seconds_so_far;
 }
 
-void progress_udpate_status (const char *status)
+void progress_update_status (const char *status)
 {
     if (flag_quiet) return;
 
@@ -146,7 +146,7 @@ void progress_udpate_status (const char *status)
 void progress_finalize_component (const char *status)
 {
     if (!flag_quiet) {
-        progress_udpate_status (status);
+        progress_update_status (status);
         fprintf (stderr, "\n");
     }
 

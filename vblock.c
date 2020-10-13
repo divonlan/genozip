@@ -38,7 +38,7 @@ void vb_release_vb (VBlock *vb)
     vb->range = NULL;
     vb->chrom_name = NULL;
     vb->prev_range = NULL;
-    vb->ht_ctx = vb->ht_index_ctx = NULL;
+    vb->ht_ctx = vb->ht_index_ctx = vb->qual_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->md5_hash_so_far = MD5HASH_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
@@ -67,8 +67,8 @@ void vb_release_vb (VBlock *vb)
         if (vb->contexts[i].dict_id.num)
             mtf_free_context (&vb->contexts[i]);
 
-    for (unsigned i=0; i < NUM_COMPRESS_BUFS; i++)
-        buf_free (&vb->compress_bufs[i]);
+    for (unsigned i=0; i < NUM_CODEC_BUFS; i++)
+        buf_free (&vb->codec_bufs[i]);
         
     vb->in_use = false; // released the VB back into the pool - it may now be reused
 
@@ -109,8 +109,8 @@ void vb_destroy_vb (VBlockP *vb_p)
         if (vb->contexts[i].dict_id.num)
             mtf_destroy_context (&vb->contexts[i]);
 
-    for (unsigned i=0; i < NUM_COMPRESS_BUFS; i++)
-        buf_destroy (&vb->compress_bufs[i]);
+    for (unsigned i=0; i < NUM_CODEC_BUFS; i++)
+        buf_destroy (&vb->codec_bufs[i]);
 
     // destory data_type -specific buffers
     if (vb->data_type != DT_NONE && DTP(destroy_vb))

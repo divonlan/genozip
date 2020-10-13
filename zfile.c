@@ -18,6 +18,7 @@
 #include "version.h"
 #include "sections.h"
 #include "compressor.h"
+#include "codec.h"
 #include "piz.h"
 #include "zip.h"
 #include "license.h"
@@ -127,7 +128,6 @@ void zfile_uncompress_section (VBlock *vb,
     uint32_t data_compressed_len   = BGEN32 (section_header->data_compressed_len);
     uint32_t data_uncompressed_len = BGEN32 (section_header->data_uncompressed_len);
     uint32_t vblock_i              = BGEN32 (section_header->vblock_i);
-    Codec codec                    = section_header->codec;
 
     // sanity checks
     ASSERT (section_header->section_type == expected_section_type, "Error in zfile_uncompress_section: expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
@@ -150,7 +150,7 @@ void zfile_uncompress_section (VBlock *vb,
             uncompressed_data = uncompressed_buf->data;
         }
 
-        comp_uncompress (vb, codec, (char*)section_header + compressed_offset, data_compressed_len, 
+        comp_uncompress (vb, section_header->codec, section_header->sub_codec, (char*)section_header + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len);
     }
  
@@ -235,9 +235,9 @@ void zfile_compress_b250_data (VBlock *vb, Context *ctx, Codec codec)
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
-static LocalGetLineCallback *zfile_get_local_data_callback (DataType dt, Context *ctx)
+static LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
 {
-    static struct { DataType dt; const uint64_t *dict_id_num; LocalGetLineCallback *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
+    static struct { DataType dt; const uint64_t *dict_id_num; LocalGetLineCB *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
 
     for (unsigned i=0; i < sizeof(callbacks)/sizeof(callbacks[0]); i++)
         if (callbacks[i].dt == dt && *callbacks[i].dict_id_num == ctx->dict_id.num && !(ctx->inst & CTX_INST_NO_CALLBACK)) 
@@ -260,6 +260,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
         .h.data_uncompressed_len = BGEN32 (ctx->local.len * lt_desc[ctx->ltype].width),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
         .h.codec                 = ctx->lcodec,
+        .h.sub_codec             = codec_args[ctx->lcodec].sub_codec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags                 = flags,
         .dict_id                 = ctx->dict_id,
@@ -267,7 +268,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
         .param                   = (flags & CTX_FL_COPY_PARAM) ? (uint8_t)ctx->local.param : 0
     };
 
-    LocalGetLineCallback *callback = zfile_get_local_data_callback (vb->data_type, ctx);
+    LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
 
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
                    callback ? NULL : ctx->local.data, 
@@ -289,7 +290,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 // 2. line by line data - by providing a callback + total_len
 void zfile_compress_section_data_codec (VBlock *vb, SectionType section_type, 
                                         Buffer *section_data,          // option 1 - compress contiguous data
-                                        LocalGetLineCallback callback, uint32_t total_len, // option 2 - compress data one line at a time
+                                        LocalGetLineCB callback, uint32_t total_len, // option 2 - compress data one line at a time
                                         Codec codec)
 {
     SectionHeader header = (SectionHeader){
@@ -468,7 +469,7 @@ void *zfile_read_section_header (VBlockP vb, uint64_t offset,
                          (expected_sec_type != SEC_GENOZIP_HEADER) &&
                          crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
         
-    ASSERT (!vb->compressed.len, "Error in zfile_read_section_header vb_i=%u expected_sec_type=%s: expecting vb->compress to be free, but its not",
+    ASSERT (!vb->compressed.len, "Error in zfile_read_section_header vb_i=%u expected_sec_type=%s: expecting vb->compressed to be free, but its not",
             vb->vblock_i, st_name (expected_sec_type));
     
     buf_alloc (evb, &vb->compressed, header_size, 4, "compressed", 0); 
@@ -592,7 +593,11 @@ int16_t zfile_read_genozip_header (Md5Hash *digest) // out
             z_name, header->genozip_version, header->genozip_version);
 
     // in version 7, we canceled backward compatability with v6
-    ASSERT (header->genozip_version >= 7, "Error: %s was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions 6",
+    ASSERT (header->genozip_version >= 7, "Error: %s was compressed with an version 6 of genozip - version %u.\nIt may be uncompressed with genozip versions 6",
+            z_name, header->genozip_version);
+
+    // in version 8, we canceled backward compatability with v7
+    ASSERT (header->genozip_version >= 8, "Error: %s was compressed with an version 7 of genozip - version %u.\nIt may be uncompressed with genozip versions 7",
             z_name, header->genozip_version);
 
     data_type = (DataType)(BGEN16 (header->data_type)); 

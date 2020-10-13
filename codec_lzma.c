@@ -6,19 +6,19 @@
 #include "lzma/LzmaEnc.h"
 #include "lzma/LzmaDec.h"
 #include "genozip.h"
-#include "comp_private.h"
+#include "codec.h"
 #include "vblock.h"
 #include "buffer.h"
 #include "strings.h"
 
 void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size)
 {
-    return comp_alloc ((VBlock *)alloc_stuff->vb, size, 1.15); // lzma 5th buffer (the largest) may vary in size between subsequent compressions
+    return codec_alloc ((VBlock *)alloc_stuff->vb, size, 1.15); // lzma 5th buffer (the largest) may vary in size between subsequent compressions
 }
 
 void lzma_free (ISzAllocPtr alloc_stuff, void *addr)
 {
-    comp_free ((VBlock *)alloc_stuff->vb, addr);
+    codec_free ((VBlock *)alloc_stuff->vb, addr);
 }
 
 const char *lzma_errstr (SRes res) 
@@ -42,7 +42,7 @@ const char *lzma_status (ELzmaStatus status)
 }
 
 
-static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t *size)
+static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t *size)
 {
     ISeqInStream *instream = (ISeqInStream *)p; // discard the const
     VBlockP vb = (VBlockP)instream->vb;
@@ -69,8 +69,8 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
         if (instream->codec == CODEC_ACGT && (instream->avail_in_1 || instream->avail_in_2)) {
 
             // pack into vb->compressed
-            if (instream->avail_in_1) comp_acgt_pack (vb, instream->next_in_1, instream->avail_in_1, instream->bits_consumed, !instream->avail_in_2, false); 
-            if (instream->avail_in_2) comp_acgt_pack (vb, instream->next_in_2, instream->avail_in_2, 0, true, false); 
+            if (instream->avail_in_1) codec_acgt_pack (vb, instream->next_in_1, instream->avail_in_1, instream->bits_consumed, !instream->avail_in_2, false); 
+            if (instream->avail_in_2) codec_acgt_pack (vb, instream->next_in_2, instream->avail_in_2, 0, true, false); 
 
             BitArray *packed = buf_get_bitarray (&vb->compressed);
             instream->next_in_1  = (char*)packed->words;
@@ -88,7 +88,7 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
         !instream->avail_in_1 && !instream->avail_in_2 &&
         instream->codec == CODEC_ACGT) 
     
-        comp_acgt_pack_last_partial_word (vb, instream); // also does BGEN
+        codec_acgt_pack_last_partial_word (vb, instream); // also does BGEN
 
     ASSERT (instream->avail_in_1 + instream->avail_in_2 <= instream->avail_in, 
             "Expecting avail_in_1=%u + avail_in_2=%u <= avail_in=%u but avail_in_1+avail_in_2=%u",
@@ -114,7 +114,7 @@ static SRes comp_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t
     return SZ_OK;
 }
 
-static size_t comp_lzma_data_out_callback (const ISeqOutStream *p, const void *buf, size_t size)
+static size_t codec_lzma_data_out_callback (const ISeqOutStream *p, const void *buf, size_t size)
 {
     ISeqOutStream *outstream = (ISeqOutStream *)p; // discard the const
 
@@ -128,9 +128,10 @@ static size_t comp_lzma_data_out_callback (const ISeqOutStream *p, const void *b
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_lzma_compress (VBlock *vb, Codec codec,
-                         const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                         LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
+bool codec_lzma_compress (VBlock *vb, Codec codec,
+                         const char *uncompressed,    // option 1 - compress contiguous data
+                         uint32_t *uncompressed_len,
+                         LocalGetLineCB callback,     // option 2 - compress data one line at a time
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
@@ -157,19 +158,19 @@ bool comp_lzma_compress (VBlock *vb, Codec codec,
 
     bool success = true;
 
-    ASSERT0 (codec != CODEC_ACGT || (!vb->compressed.len && !vb->compressed.param), "Error in comp_lzma_compress codec=ACGT: expecting vb->compress to be free, but its not");
+    ASSERT0 (codec != CODEC_ACGT || (!vb->compressed.len && !vb->compressed.param), "Error in codec_lzma_compress codec=ACGT: expecting vb->compressed to be free, but its not");
 
     // option 1 - compress contiguous data
     if (uncompressed) {
 
         if (codec == CODEC_ACGT) 
-            comp_acgt_pack (vb, uncompressed, uncompressed_len, 0, true, true); // pack into the vb->compressed buffer
+            codec_acgt_pack (vb, uncompressed, *uncompressed_len, 0, true, true); // pack into the vb->compressed buffer
 
         SizeT data_compressed_len64 = (SizeT)*compressed_len - LZMA_PROPS_SIZE;
         res = LzmaEnc_MemEncode (lzma_handle, 
                                 (uint8_t *)compressed + LZMA_PROPS_SIZE, &data_compressed_len64, 
                                 (uint8_t *)(codec == CODEC_ACGT ? vb->compressed.data : uncompressed),
-                                codec == CODEC_ACGT ? vb->compressed.len * sizeof (int64_t) : uncompressed_len,
+                                codec == CODEC_ACGT ? vb->compressed.len * sizeof (int64_t) : *uncompressed_len,
                                 true, NULL, &alloc_stuff, &alloc_stuff);
         
         *compressed_len = (uint32_t)data_compressed_len64 + LZMA_PROPS_SIZE;
@@ -177,11 +178,11 @@ bool comp_lzma_compress (VBlock *vb, Codec codec,
     // option 2 - compress data one line at a time
     else if (callback) {
 
-        ISeqInStream instream =   { .Read          = comp_lzma_data_in_callback, 
+        ISeqInStream instream =   { .Read          = codec_lzma_data_in_callback, 
                                     .vb            = vb,
                                     .codec           = codec,
                                     .line_i        = 0,
-                                    .avail_in      = uncompressed_len,
+                                    .avail_in      = *uncompressed_len,
                                     .bits_consumed = 0,
                                     .next_in_1     = NULL,
                                     .avail_in_1    = 0,
@@ -189,7 +190,7 @@ bool comp_lzma_compress (VBlock *vb, Codec codec,
                                     .avail_in_2    = 0,
                                     .callback      = callback };
                                   
-        ISeqOutStream outstream = { .Write        = comp_lzma_data_out_callback,
+        ISeqOutStream outstream = { .Write        = codec_lzma_data_out_callback,
                                     .next_out     = compressed + LZMA_PROPS_SIZE,
                                     .avail_out    = *compressed_len - LZMA_PROPS_SIZE};
         
@@ -212,9 +213,10 @@ bool comp_lzma_compress (VBlock *vb, Codec codec,
     return success;
 }
 
-void comp_lzma_uncompress (VBlock *vb, 
+void codec_lzma_uncompress (VBlock *vb, 
                            const char *compressed, uint32_t compressed_len,
-                           char *uncompressed_data, uint64_t uncompressed_len)
+                           char *uncompressed_data, uint64_t uncompressed_len, 
+                           Codec unused)
 {
     ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
     ELzmaStatus status;

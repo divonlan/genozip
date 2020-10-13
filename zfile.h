@@ -9,7 +9,6 @@
 #include "genozip.h"
 #include "sections.h"
 #include "md5.h"
-#include "compressor.h"
 #include "data_types.h"
 
 extern int16_t zfile_read_genozip_header (Md5Hash *digest);
@@ -23,7 +22,7 @@ extern bool zfile_get_genozip_header (FileP file, DataType *dt,
                                       Md5Hash *ref_file_md5);
 
 extern void zfile_compress_section_data_codec (VBlockP vb, SectionType section_type, 
-                                             BufferP section_data, LocalGetLineCallback callback, uint32_t total_len, 
+                                             BufferP section_data, LocalGetLineCB callback, uint32_t total_len, 
                                              Codec codec);
 #define zfile_compress_section_data(vb, section_type, section_data) \
     zfile_compress_section_data_codec ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2)

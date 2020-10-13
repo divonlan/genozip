@@ -21,6 +21,7 @@
 #include "endianness.h"
 #include "crypt.h"
 #include "progress.h"
+#include "codec.h"
 #include "zlib/zlib.h"
 
 static bool is_first_txt = true; 

@@ -16,6 +16,7 @@
 #include "random_access.h"
 #include "dict_id.h"
 #include "strings.h"
+#include "codec.h"
 #include "reference.h"
 
 // returns true if section is to be skipped reading / uncompressing
@@ -64,7 +65,7 @@ void vcf_piz_special_FORMAT (VBlock *vb, Context *ctx, const char *snip, unsigne
         vb->ht_ctx       = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT);
         vb->ht_index_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
         
-        comp_ht_piz_calculate_columns (vb);
+        codec_ht_piz_calculate_columns (vb);
     }
 }
 

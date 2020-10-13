@@ -42,6 +42,7 @@
 #include "refhash.h"
 #include "context.h"
 #include "random_access.h"
+#include "codec.h"
 
 // globals - set it main() and never change
 const char *global_cmd = NULL; 
@@ -932,12 +933,6 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
                               flag_show_reference || flag_show_ref_contigs || flag_show_ref_index || flag_show_ref_hash || flag_show_ref_alts || flag_show_ref_seq);
 }
 
-extern bool comp_bsc_compress (VBlock *vb, Codec codec,
-const char *uncompressed,      // option 1 - compress contiguous data
-uint32_t uncompressed_len, 
-LocalGetLineCallback callback, // option 2 - compress data one line at a time
-char *compressed, uint32_t *compressed_len /* in/out */, 
-bool soft_fail);
 void TEST()
 {
     FILE *fp = fopen ("seq", "rb");
@@ -951,7 +946,7 @@ int main (int argc, char **argv)
     buf_initialize(); 
     vb_initialize_evb();
     random_access_initialize();
-    comp_initialize();
+    codec_initialize();
     
     //TEST();exit(0);
 

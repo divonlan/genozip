@@ -84,8 +84,8 @@ extern DataTypeProperties dt_props[NUM_DATATYPES];
 // Fields - the CHROM field MUST be the first field (because of mtf_copy_reference_contig_to_chrom_ctx)
 typedef enum { REF_CONTIG, NUM_REF_FIELDS } RefFields;
 typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_EOL, VCF_TOPLEVEL, NUM_VCF_FIELDS } VcfFields;
-typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SEQ_BITMAP, SAM_NONREF, SAM_GPOS, SAM_STRAND, SAM_QUAL, SAM_QDOMRUNS, SAM_EOL, SAM_TOPLEVEL, NUM_SAM_FIELDS } SamFields;
-typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_QUAL, FASTQ_QDOMRUNS, FASTQ_TOPLEVEL, NUM_FASTQ_FIELDS } FastqFields;
+typedef enum { SAM_RNAME, SAM_QNAME, SAM_FLAG, SAM_POS, SAM_MAPQ, SAM_CIGAR, SAM_RNEXT, SAM_PNEXT, SAM_TLEN, SAM_OPTIONAL, SAM_SEQ_BITMAP, SAM_NONREF, SAM_GPOS, SAM_STRAND, SAM_QUAL, SAM_DOMQRUNS, SAM_EOL, SAM_TOPLEVEL, NUM_SAM_FIELDS } SamFields;
+typedef enum { FASTQ_CONTIG /* copied from reference */, FASTQ_DESC, FASTQ_E1L, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_GPOS, FASTQ_STRAND, FASTQ_E2L, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_TOPLEVEL, NUM_FASTQ_FIELDS } FastqFields;
 typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_SEQ, FASTA_DESC, FASTA_COMMENT, FASTA_SQBITMAP, FASTA_NONREF, FASTA_GPOS, FASTA_STRAND, FASTA_TOPLEVEL, NUM_FASTA_FIELDS } FastaFields;
 typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, NUM_GFF3_FIELDS } Gff3Fields;
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, NUM_ME23_FIELDS } Me23Fields;  
@@ -117,8 +117,8 @@ typedef struct DataTypeFields {
 /* num_fields        pos         info        eol        names (including extend fields) - max 8 characters - 2 first chars must be unique within each data type (for dict_id_to_did_i_map) */ \
   {NUM_REF_FIELDS,   -1,         -1,         -1,        { "CONTIG", }, }, \
   {NUM_VCF_FIELDS,   VCF_POS,    VCF_INFO,   VCF_EOL,   { "CHROM", "POS", "ID", "REF+ALT", "QUAL", "FILTER", "INFO", "FORMAT", "SAMPLES", "EOL", TOPLEVEL } }, \
-  {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_EOL,   { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "GPOS", "STRAND", "QUAL", "QDOMRUNS", "EOL", TOPLEVEL } }, \
-  {NUM_FASTQ_FIELDS, -1,         -1,         FASTQ_E1L, { "CONTIG", "DESC", "E1L", "SQBITMAP", "NONREF", "GPOS", "STRAND", "E2L", "QUAL", "QDOMRUNS", TOPLEVEL } }, \
+  {NUM_SAM_FIELDS,   SAM_POS,    -1,         SAM_EOL,   { "RNAME", "QNAME", "FLAG", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "OPTIONAL", "SQBITMAP", "NONREF", "GPOS", "STRAND", "QUAL", "DOMQRUNS", "EOL", TOPLEVEL } }, \
+  {NUM_FASTQ_FIELDS, -1,         -1,         FASTQ_E1L, { "CONTIG", "DESC", "E1L", "SQBITMAP", "NONREF", "GPOS", "STRAND", "E2L", "QUAL", "DOMQRUNS", TOPLEVEL } }, \
   {NUM_FASTA_FIELDS, -1,         -1,         FASTA_EOL, { "CONTIG", "LINEMETA", "EOL", "SEQ", "DESC", "COMMENT", "SQBITMAP", "NONREF", "GPOS", "STRAND", TOPLEVEL } }, \
   {NUM_GFF3_FIELDS,  GFF3_START, GFF3_ATTRS, GFF3_EOL,  { "SEQID", "SOURCE", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTRS", "EOL", TOPLEVEL } }, \
   {NUM_ME23_FIELDS,  ME23_POS,   -1,         ME23_EOL,  { "CHROM", "POS", "ID", "GENOTYPE", "EOL", TOPLEVEL } }, \
@@ -128,10 +128,6 @@ extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTFZ(prop) (dt_fields[z_file->  data_type].prop)
 
 // list of ctx who's local data is compressed via a callback function
-typedef void LocalGetLineCallback (VBlockP vb, uint32_t vb_line_i, 
-                                   char **line_data_1, uint32_t *line_data_len_1,
-                                   char **line_data_2, uint32_t *line_data_len_2);
-
 #define LOCAL_GET_LINE_CALLBACKS {  \
     VCF_LOCAL_GET_LINE_CALLBACKS    \
     GFF3_LOCAL_GET_LINE_CALLBACKS   \

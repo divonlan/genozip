@@ -9,9 +9,9 @@
 #include "piz.h"
 #include "strings.h"
 #include "dict_id.h"
+#include "codec.h" // must be included before reference.h
 #include "reference.h"
 #include "regions.h"
-#include "compressor.h"
 #include "aligner.h"
 #include "file.h"
 

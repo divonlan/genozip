@@ -20,8 +20,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(piz_reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
-    ADD(comp_ht_compress);
-    ADD(comp_ht_piz_get_one_line);
+    ADD(codec_ht_compress);
+    ADD(codec_ht_piz_get_one_line);
     ADD(sam_seg_seq_field);
     ADD(zfile_compress_dictionary_data);
     ADD(zfile_uncompress_section);
@@ -29,11 +29,11 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
-    ADD(domqual_convert_qual_to_domqual);
+    ADD(codec_domq_compress);
     ADD(mtf_merge_in_vb_ctx);
-    ADD(comp_ht_count_alt_alleles);
-    ADD(comp_acgt_pack);
-    ADD(comp_non_acgt_compress);
+    ADD(codec_ht_count_alt_alleles);
+    ADD(codec_acgt_pack);
+    ADD(codec_non_acgt_compress);
     ADD(md5);
     ADD(lock_mutex_compress_dict);
     ADD(lock_mutex_zf_ctx);
@@ -100,7 +100,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (zfile_uncompress_section, 1);
         PRINT (piz_reconstruct_vb, 1);
         PRINT (piz_get_line_subfields, 2);
-        PRINT (comp_ht_piz_get_one_line, 2);
+        PRINT (codec_ht_piz_get_one_line, 2);
     }
     else { // compress
         fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
@@ -116,7 +116,6 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (aligner_get_match_len, 3);
         PRINT (aligner_get_word_from_seq, 3);
         PRINT (sam_seg_seq_field,2);
-        PRINT (domqual_convert_qual_to_domqual, 2);
         PRINT (mtf_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);
         PRINT (mtf_merge_in_vb_ctx_one_dict_id, 2);
@@ -126,10 +125,11 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_bz2, 2);
         PRINT (compressor_lzma, 2);
         PRINT (compressor_bsc, 2);
-        PRINT (comp_acgt_pack, 3);
-        PRINT (comp_non_acgt_compress, 2);
-        PRINT (comp_ht_compress,2);
-        PRINT (comp_ht_count_alt_alleles, 3);
+        PRINT (codec_acgt_pack, 3);
+        PRINT (codec_domq_compress, 2);
+        PRINT (codec_non_acgt_compress, 2);
+        PRINT (codec_ht_compress,2);
+        PRINT (codec_ht_count_alt_alleles, 3);
     }    
 
     PRINT (buf_alloc, 0);

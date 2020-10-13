@@ -302,7 +302,7 @@ void stats_compress (void)
 
     stats_consolidate_related (sbl, num_stats, "Sequence", 4, "SQBITMAP", "GPOS", "NONREF", "STRAND");
     
-    stats_consolidate_related (sbl, num_stats, "Quality",  2, "QUAL", "QDOMRUNS");
+    stats_consolidate_related (sbl, num_stats, "Quality",  2, "QUAL", "DOMQRUNS");
     
     stats_consolidate_related (sbl, num_stats, "Reference", 5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS));

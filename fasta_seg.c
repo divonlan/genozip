@@ -13,7 +13,7 @@
 #include "strings.h"
 #include "regions.h"
 
-// callback function for compress to get data of one line (called by comp_lzma_data_in_callback)
+// callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
 void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i, 
                                          char **line_seq_data, uint32_t *line_seq_len,  // out 
                                          char **unused_data,  uint32_t *unused_len)

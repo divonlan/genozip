@@ -19,7 +19,7 @@
 
 #define MAPPER_CTX(mapper,sf) (((mapper)->did_i[(sf)] != DID_I_NONE) ? &vb->contexts[(mapper)->did_i[(sf)]] : NULL)
 
-#define NUM_COMPRESS_BUFS 7   // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
+#define NUM_CODEC_BUFS 7   // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
 
 typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
 
@@ -106,19 +106,24 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer show_b250_buf;                      /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
     Buffer section_list_buf;                   /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     \
-    /* Compressor stuff */ \
-    Buffer compress_bufs[NUM_COMPRESS_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
-    bool has_non_agct;                         /* the last context compressed with CODEC_ACGT has characters that are not A,C,G,T */ \
+    /* Codec stuff */ \
+    Buffer codec_bufs[NUM_CODEC_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
+    \
+    /* used by CODEC_AGCT (For SEQ) */ \
+    bool has_non_agct;                /* the last context compressed with CODEC_ACGT has characters that are not A,C,G,T */ \
     \
     /* used by CODEC_HT (for VCF haplotype matrix) */ \
     ContextP ht_ctx, ht_index_ctx;    /* haplotype matrix context */ \
     uint32_t num_haplotypes_per_line; \
     Buffer helper_index_buf;          /* used by zip_do_haplotypes */ \
     Buffer ht_columns_data;           /* used by piz_get_ht_permutation_lookups */ \
-    Buffer column_of_zeros;           /* used by comp_ht_piz_calculate_columns */  \
+    Buffer column_of_zeros;           /* used by codec_ht_piz_calculate_columns */  \
     Buffer ht_one_array;              /* one line or column */ \
-    uint32_t ht_one_array_line_i;     /* line or column number to which ht_one_array belongs */ 
-
+    uint32_t ht_one_array_line_i;     /* line or column number to which ht_one_array belongs */ \
+    \
+    /* used by CODEC_DOMQ (for FASTQ / SAM quality scores) */ \
+    ContextP qual_ctx;                /* note: domqruns_ctx is always qual_ctx+1 */
+    
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;

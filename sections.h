@@ -47,7 +47,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_DICT"},              \
     {"SEC_B250"},              \
     {"SEC_LOCAL"},             \
-    {"SEC_REF_ALT_CHROMS"},        \
+    {"SEC_REF_ALT_CHROMS"},    \
     {"SEC_STATS"},             \
 }
 
@@ -69,9 +69,9 @@ typedef struct SectionHeader {
     uint32_t    data_uncompressed_len;
     uint32_t    vblock_i;             // VB with in file starting from 1 ; 0 for Txt Header
     SectionType section_type;         // 1 byte
-    Codec       codec;                // 1 byte
+    Codec       codec;                // 1 byte - primary codec in which this section is compressed
+    Codec       sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
     uint8_t     flags;                // CTX_FL_*
-    uint8_t     ffu;
 } SectionHeader; 
 
 // flags written to SectionHeaderGenozipHeader.h.flags allowing Seg to communicate instructions to Piz
@@ -82,7 +82,6 @@ typedef struct {
     uint8_t  genozip_version;
     EncryptionType encryption_type;   // one of ENC_TYPE_*
     uint16_t data_type;               // one of DATA_TYPE_*
-    uint32_t unused; 
     uint64_t uncompressed_data_size;  // data size of uncompressed` file, if uncompressed as a single file
     uint64_t num_items_bound;         // number of items in a bound file. "item" is data_type-dependent. For VCF, it is lines.
     uint32_t num_sections;            // number sections in this file (including this one)
@@ -109,9 +108,9 @@ typedef struct {
     uint64_t txt_data_size;    // number of bytes in the original txt file. 
 #define NUM_LINES_UNKNOWN ((uint64_t)-1) 
     uint64_t num_lines;        // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
-    uint32_t unused; 
     uint32_t max_lines_per_vb; // upper bound on how many data lines a VB can have in this file
     Codec    compression_type; // compression type of original file
+    uint8_t  unused[3];
     Md5Hash  md5_hash_single;  // non-0 only if this genozip file is a result of binding with --md5. md5 of original single txt file.
     Md5Hash  md5_header;       // MD5 of header
 #define TXT_FILENAME_LEN 256
@@ -126,7 +125,6 @@ typedef struct {
     uint32_t vb_data_size;     // size of vblock as it appears in the source file 
     uint32_t z_data_bytes;     // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len; // length of the longest line in this vblock 
-    uint64_t unused; 
     Md5Hash md5_hash_so_far;   // partial calculation of MD5 up to and including this VB 
 } SectionHeaderVbHeader; 
 

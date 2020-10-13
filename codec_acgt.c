@@ -7,7 +7,8 @@
 #include "lzma/LzmaEnc.h"
 #include "lzma/LzmaDec.h"
 #include "genozip.h"
-#include "comp_private.h"
+#include "codec.h"
+#include "compressor.h"
 #include "vblock.h"
 #include "buffer.h"
 #include "strings.h"
@@ -61,9 +62,9 @@ static const uint8_t non_acgt_encode[256] =
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-// packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compress. Previous incomplete 64bit words in carry
+// packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compressed. Previous incomplete 64bit words in carry
 // are used at the beginning of the resulting array, and any uncomplete 64bit word at the end, is stored back in carry
-void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned bits_consumed, bool do_lten, bool do_lten_partial_final_word)
+void codec_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned bits_consumed, bool do_lten, bool do_lten_partial_final_word)
 {
     START_TIMER;
     
@@ -98,17 +99,17 @@ void comp_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned b
     if (do_lten)
         LTEN_bit_array (packed, do_lten_partial_final_word);
 
-    COPY_TIMER (vb->profile.comp_acgt_pack)
+    COPY_TIMER (vb->profile.codec_acgt_pack)
 }
 
-void comp_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream)
+void codec_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream)
 {
     BitArray *packed = buf_get_bitarray (&vb->compressed);
     uint64_t bits_remaining = packed->num_of_bits - instream->bits_consumed;
 
     if (bits_remaining) { 
         
-        ASSERT (bits_remaining >= 1 && bits_remaining <= 63, "Error in comp_acgt_pack_last_partial_word: Invalid bits_remaining%u", (uint32_t)bits_remaining);
+        ASSERT (bits_remaining >= 1 && bits_remaining <= 63, "Error in codec_acgt_pack_last_partial_word: Invalid bits_remaining%u", (uint32_t)bits_remaining);
 
         bit_array_shift_right_shrink (packed, instream->bits_consumed);
      
@@ -120,7 +121,7 @@ void comp_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream)
     }
 }
 
-static void comp_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t uncompressed_len)
+static void codec_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t uncompressed_len)
 {
     BitArray *packed = buf_get_bitarray (&vb->compressed);
     packed->num_of_bits = uncompressed_len * 2;
@@ -134,7 +135,7 @@ static void comp_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t unco
         uncompressed_data[i] = ACGT_DECODE(packed, i);
 }
 
-static inline void comp_non_acgt_transform (char *data, uint32_t len)
+static inline void codec_non_acgt_transform (char *data, uint32_t len)
 {
     for (uint32_t i=0; i < len; i++)
         data[i] ^= non_acgt_encode[(uint8_t)data[i]];
@@ -145,10 +146,12 @@ static inline void comp_non_acgt_transform (char *data, uint32_t len)
 // -- an A,C,G or T character is encoded as 0 (its encoded by CODEC_ACGT)
 // -- an a,c,g or t character is encoded as 1 (its encoded by CODEC_ACGT the same as its uppercase counterpart
 // -- any other character remains as is
+// This works well, because we usually expect long runs of 0
 // We modify the source data (and hence NON-AGCT compression is destructive!) and then recursively compress it with bz2.
-bool comp_non_acgt_compress (VBlock *vb, Codec codec,
-                             const char *uncompressed, uint32_t uncompressed_len, // option 1 - compress contiguous data
-                             LocalGetLineCallback callback,                        // option 2 - compress data one line at a time
+bool codec_non_acgt_compress (VBlock *vb, Codec codec,
+                             const char *uncompressed,    // option 1 - compress contiguous data
+                             uint32_t *uncompressed_len,
+                             LocalGetLineCB callback,     // option 2 - compress data one line at a time
                              char *compressed, uint32_t *compressed_len /* in/out */, 
                              bool soft_fail)
 {
@@ -156,7 +159,7 @@ bool comp_non_acgt_compress (VBlock *vb, Codec codec,
 
     // option 1 - compress contiguous data
     if (uncompressed) 
-        comp_non_acgt_transform ((char*)uncompressed, uncompressed_len);
+        codec_non_acgt_transform ((char*)uncompressed, *uncompressed_len);
     
     // option 2 - compress data one line at a time
     else if (callback) {
@@ -168,19 +171,19 @@ bool comp_non_acgt_compress (VBlock *vb, Codec codec,
             
             callback (vb, line_i, &data_1, &data_1_len, &data_2, &data_2_len);
 
-            comp_non_acgt_transform (data_1, data_1_len);
-            comp_non_acgt_transform (data_2, data_2_len);
+            codec_non_acgt_transform (data_1, data_1_len);
+            codec_non_acgt_transform (data_2, data_2_len);
         }
     }
     else 
-        ABORT0 ("Error in comp_non_acgt_compress: neither src_data nor callback is provided");
+        ABORT0 ("Error in codec_non_acgt_compress: neither src_data nor callback is provided");
     
-    COPY_TIMER (vb->profile.comp_non_acgt_compress); // excluding bzlib
+    COPY_TIMER (vb->profile.codec_non_acgt_compress); // excluding bzlib
     
     // now do the compression on the non-agct data
     // note: we don't support soft-fail because the allocated amount (uncompressed_len/2) is plenty for our textual data,
     // and we can't allow re-calling of this routine as the xor will undo itself
-    return comp_bzlib_compress (vb, CODEC_BZ2, uncompressed, uncompressed_len, callback, compressed, compressed_len, false);
+    return codec_bz2_compress (vb, CODEC_BZ2, uncompressed, uncompressed_len, callback, compressed, compressed_len, false);
 }
 
 static void comp_apply_non_acgt_on_top_of_acgt (char *acgt, const char *non_acgt, uint64_t len)
@@ -194,21 +197,23 @@ static void comp_apply_non_acgt_on_top_of_acgt (char *acgt, const char *non_acgt
         else if (non_acgt[i]) acgt[i] = non_acgt[i];
 }
 
-void comp_non_acgt_uncompress (VBlock *vb, 
+void codec_non_acgt_uncompress (VBlock *vb, 
                                const char *compressed, uint32_t compressed_len,
-                               char *uncompressed_data, uint64_t uncompressed_len)
+                               char *uncompressed_data, uint64_t uncompressed_len, 
+                               Codec sub_codec)
 {
     // first - do bzip2 decoding into vb->compressed
     buf_alloc (vb, &vb->compressed, uncompressed_len, 1.5, "compressed", 0);
-    comp_uncompress (vb, CODEC_BZ2, compressed, compressed_len, vb->compressed.data, uncompressed_len);
+    comp_uncompress (vb, CODEC_BZ2, CODEC_NONE, compressed, compressed_len, vb->compressed.data, uncompressed_len);
 
     // second, fix "compressed", already containing ACGT data, with the data from this NON_ACGT data
     comp_apply_non_acgt_on_top_of_acgt (uncompressed_data, vb->compressed.data, uncompressed_len);
 }
 
-void comp_acgt_uncompress (VBlock *vb, 
+void codec_acgt_uncompress (VBlock *vb, 
                            const char *compressed, uint32_t compressed_len,
-                           char *uncompressed_data, uint64_t uncompressed_len)
+                           char *uncompressed_data, uint64_t uncompressed_len,
+                           Codec sub_codec)
 {
     ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
     ELzmaStatus status;
@@ -232,6 +237,6 @@ void comp_acgt_uncompress (VBlock *vb,
     ASSERT (expected_num_uncompressed_bytes == actual_num_uncompressed_bytes, "Error in comp_uncompress while decompressing ACGT: expected_num_uncompressed_bytes(%u) != actual_num_uncompressed_bytes(%u)",
             (uint32_t)expected_num_uncompressed_bytes, (uint32_t)actual_num_uncompressed_bytes);
             
-    comp_acgt_unpack (vb, uncompressed_data, uncompressed_len);    
+    codec_acgt_unpack (vb, uncompressed_data, uncompressed_len);    
 }
 

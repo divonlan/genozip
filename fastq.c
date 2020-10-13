@@ -16,7 +16,7 @@
 #include "zfile.h"
 #include "piz.h"
 #include "buffer.h"
-#include "domqual.h"
+#include "codec.h"
 #include "aligner.h"
 
 // used in case of flag_optimize_DESC to count the number of lines, as we need it for the description
@@ -73,10 +73,6 @@ void fastq_seg_initialize (VBlockFAST *vb)
     vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
     vb->contexts[FASTQ_NONREF].lcodec  = CODEC_ACGT; // better than LZMA and BSC
 
-    vb->contexts[FASTQ_QUAL].ltype     = LT_SEQUENCE; // might be overridden by domqual_convert_qual_to_domqual
-    vb->contexts[FASTQ_QUAL].inst      = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
-    vb->contexts[FASTQ_QUAL].lcodec    = CODEC_BSC; // for QUAL scores that fail DomQual, BSC is ~15% better than BZ2, which is better than LZMA 
-
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst   = CTX_INST_PAIR_LOCAL;
         vb->contexts[FASTQ_STRAND].inst   = CTX_INST_PAIR_LOCAL; 
@@ -93,8 +89,14 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
 void fastq_seg_finalize (VBlockP vb)
 {
-    // check if domqual compression is applicable to this quality data, and prepare QUAL/QDOMRUNS local data if it is
-    domqual_convert_qual_to_domqual (vb, fastq_zip_qual, FASTQ_QUAL);
+    // for qual data - select domqual compression if possible, or fallback 
+    if (!codec_domq_comp_init (vb, FASTQ_QUAL, fastq_zip_qual)) {
+        vb->contexts[FASTQ_QUAL].ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
+        vb->contexts[FASTQ_QUAL].inst   = 0; // don't inherit from previous file 
+
+        // TODO - choose between BSC and BZ2
+        vb->contexts[FASTQ_QUAL].lcodec = CODEC_BSC; // for QUAL scores that fail DomQual, BSC is ~15% better than BZ2, which is better than LZMA 
+    }
 
     // top level snip
     Structured top_level = { 
@@ -288,7 +290,7 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     return next_field;
 }
 
-// callback function for compress to get data of one line (called by comp_bzlib_compress)
+// callback function for compress to get data of one line (called by codec_bz2_compress)
 void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                           char **line_qual_data, uint32_t *line_qual_len, // out
                                           char **unused_data,   uint32_t *unused_len) 
@@ -316,7 +318,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || dict_id.num == dict_id_fields[FASTQ_NONREF] || 
          dict_id.num == dict_id_fields[FASTQ_GPOS]     || dict_id.num == dict_id_fields[FASTQ_STRAND] || 
          dict_id.num == dict_id_fields[FASTQ_E2L]      || dict_id.num == dict_id_fields[FASTQ_QUAL]   || 
-         dict_id.num == dict_id_fields[FASTQ_QDOMRUNS]))
+         dict_id.num == dict_id_fields[FASTQ_DOMQRUNS]))
         return true;
         
     // when grepping by I/O thread - skipping all sections but DESC

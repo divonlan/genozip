@@ -1,17 +1,15 @@
 // ------------------------------------------------------------------
-//   comp_ht.c
+//   codec_ht.c
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 #include "genozip.h"
-#include "comp_private.h"
+#include "codec.h"
 #include "vblock.h"
 #include "buffer.h"
 #include "strings.h"
 #include "file.h"
 #include "endianness.h"
-
-#define HT_MATRIX_CODEC CODEC_BZ2 // better than BSC and LZMA. Note: changing this value changes the file format, decompression uses the value from this define, not passed in the file.
 
 typedef struct {
     int num_alt_alleles;
@@ -33,7 +31,7 @@ static int sort_by_original_index_comparator(const void *p, const void *q)
     return (l - r); 
 }
 
-static HaploTypeSortHelperIndex *comp_ht_count_alt_alleles (VBlock *vb)
+static HaploTypeSortHelperIndex *codec_ht_count_alt_alleles (VBlock *vb)
 {
     START_TIMER; 
 
@@ -56,12 +54,12 @@ static HaploTypeSortHelperIndex *comp_ht_count_alt_alleles (VBlock *vb)
                 helper_index[ht_i].num_alt_alleles++;
         }
     }
-    COPY_TIMER (vb->profile.comp_ht_count_alt_alleles);
+    COPY_TIMER (vb->profile.codec_ht_count_alt_alleles);
 
     return helper_index;
 }
 
-static void comp_ht_compress_one_array (VBlockP vb, uint32_t ht_i, 
+static void codec_ht_compress_one_array (VBlockP vb, uint32_t ht_i, 
                                          char **line_data_1, uint32_t *line_data_len_1,
                                          char **line_data_2, uint32_t *line_data_len_2)
 {
@@ -87,18 +85,18 @@ static void comp_ht_compress_one_array (VBlockP vb, uint32_t ht_i,
 // sort haplogroups by alt allele count within the variant group, create an index for it, and split
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool comp_ht_compress (VBlock *vb, Codec codec,
+bool codec_ht_compress (VBlock *vb, Codec codec,
                        const char *uncompressed,       // option 1 - compress contiguous data
-                       uint32_t uncompressed_len, 
-                       LocalGetLineCallback callback,  // option 2 - not supported
+                       uint32_t *uncompressed_len, 
+                       LocalGetLineCB callback,  // option 2 - not supported
                        char *compressed, uint32_t *compressed_len /* in/out */, 
                        bool soft_fail)
 {
     START_TIMER;
     
-    ASSERT0 (uncompressed && !callback, "Error in comp_ht_compress: callback option not supported");
+    ASSERT0 (uncompressed && !callback, "Error in codec_ht_compress: callback option not supported");
 
-    HaploTypeSortHelperIndex *helper_index = comp_ht_count_alt_alleles (vb);
+    HaploTypeSortHelperIndex *helper_index = codec_ht_count_alt_alleles (vb);
     
     // sort the helper index by number of alt alleles
     qsort (helper_index, vb->num_haplotypes_per_line, sizeof (HaploTypeSortHelperIndex), sort_by_alt_allele_comparator);
@@ -112,10 +110,14 @@ bool comp_ht_compress (VBlock *vb, Codec codec,
     // compress the matrix one column at a time, by the order of helper index
     uint64_t save_lines_len = vb->lines.len;
     vb->lines.len = vb->num_haplotypes_per_line; // temporarily set vb->lines.len to number of columns, as this is the number of time the callback will be called
-    bool success  = codec_args[HT_MATRIX_CODEC].compress (vb, codec, 0, uncompressed_len, comp_ht_compress_one_array, compressed, compressed_len, soft_fail);
+    
+    Codec sub_codec = codec_args[CODEC_HT].sub_codec;
+    bool success  = codec_args[sub_codec].compress (vb, codec, 0, uncompressed_len, codec_ht_compress_one_array, 
+                                                    compressed, compressed_len, soft_fail);
+    
     vb->lines.len = save_lines_len;
 
-    if (!success) return false; // soft fail
+    if (!success) return false; // soft fail (if it was hard fail, compress() already failed)
 
     // final step - build the reverse index that will allow access by the original index to the sorted array
     // this will be included in the genozip file
@@ -135,20 +137,21 @@ bool comp_ht_compress (VBlock *vb, Codec codec,
     for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
         hp_index[ht_i] = BGEN32 (helper_index[ht_i].index_in_sorted_line);
 
-    COPY_TIMER (vb->profile.comp_ht_compress);
+    COPY_TIMER (vb->profile.codec_ht_compress);
 
     return true;
 }
 
-uint32_t comp_ht_est_size (uint64_t uncompressed_len)
+uint32_t codec_ht_est_size (uint64_t uncompressed_len)
 {
-    return codec_args[HT_MATRIX_CODEC].est_size (uncompressed_len);
+    Codec sub_codec = codec_args[CODEC_HT].sub_codec;
+    return codec_args[sub_codec].est_size (uncompressed_len);
 }
 
 // PIZ: for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
 // transposed, each column will be a row, or a contiguous array, in the section data. This function returns an array
 // of pointers, each pointer being a beginning of column data within the section array
-void comp_ht_piz_calculate_columns (VBlock *vb)
+void codec_ht_piz_calculate_columns (VBlock *vb)
 {
     uint32_t num_haplotypes_per_line = vb->num_haplotypes_per_line = (uint32_t)(vb->ht_ctx->local.len / vb->lines.len);
 
@@ -161,7 +164,7 @@ void comp_ht_piz_calculate_columns (VBlock *vb)
     ARRAY (const char *, ht_columns_data, vb->ht_columns_data); 
     ARRAY (const unsigned, permutatation_index, vb->ht_index_ctx->local);
     
-    ASSERT0 (permutatation_index, "Error in comp_ht_piz_calculate_columns: ht_index_ctx.local is empty");
+    ASSERT0 (permutatation_index, "Error in codec_ht_piz_calculate_columns: ht_index_ctx.local is empty");
 
     // provide 7 extra zero-columns for the convenience of the permuting loop (supporting 64bit assignments)
     // note: txt_file->max_lines_per_vb will be zero if genozip file was created by redirecting output
@@ -176,7 +179,7 @@ void comp_ht_piz_calculate_columns (VBlock *vb)
 }
 
 // PIZ: build haplotype for a line - reversing the permutation and the transposal.
-void comp_ht_piz_get_one_line (VBlock *vb)
+void codec_ht_piz_get_one_line (VBlock *vb)
 {
     START_TIMER;
 
@@ -216,12 +219,13 @@ void comp_ht_piz_get_one_line (VBlock *vb)
     if (flag_show_alleles)
         printf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->ht_one_array.len, vb->ht_one_array.data);
 
-    COPY_TIMER (vb->profile.comp_ht_piz_get_one_line);
+    COPY_TIMER (vb->profile.codec_ht_piz_get_one_line);
 }
 
-void comp_ht_uncompress (VBlock *vb, 
-                         const char *compressed, uint32_t compressed_len,
-                         char *uncompressed_data, uint64_t uncompressed_len)
+void codec_ht_uncompress (VBlock *vb, 
+                          const char *compressed, uint32_t compressed_len,
+                          char *uncompressed_data, uint64_t uncompressed_len, 
+                          Codec sub_codec)
 {
-    return codec_args[HT_MATRIX_CODEC].uncompress (vb, compressed, compressed_len, uncompressed_data, uncompressed_len);
+    return codec_args[sub_codec].uncompress (vb, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_NONE);
 }

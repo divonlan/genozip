@@ -5,6 +5,7 @@
 
 #include "genozip.h"
 #include "mutex.h"
+#include "codec.h" // must be included before reference.h
 #include "reference.h"
 #include "sections.h"
 #include "buffer.h"

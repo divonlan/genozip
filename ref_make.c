@@ -1,9 +1,9 @@
 #include "data_types.h"
+#include "codec.h" // must be included before reference.h
 #include "reference.h"
 #include "vblock.h"
 #include "fast_private.h"
 #include "ref_private.h"
-#include "compressor.h"
 #include "mutex.h"
 #include "refhash.h"
 #include "random_access.h"

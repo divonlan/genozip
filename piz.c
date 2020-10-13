@@ -25,9 +25,9 @@
 #include "reference.h"
 #include "refhash.h"
 #include "progress.h"
-#include "domqual.h"
 #include "profiler.h"
 #include "stats.h"
+#include "codec.h"
 
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new last_pos
 // Special values:
@@ -111,7 +111,7 @@ static void piz_reconstruct_from_local_ht (VBlock *vb, Context *ctx)
 
     // get one row of the haplotype matrix for this line into vb->ht_one_array if we don't have it already
     if (vb->ht_one_array_line_i != vb->line_i) {
-        comp_ht_piz_get_one_line (vb);
+        codec_ht_piz_get_one_line (vb);
         vb->ht_one_array.len = 0; // length of data consumed
         vb->ht_one_array_line_i = vb->line_i;
     }
@@ -501,7 +501,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
             piz_reconstruct_from_local_text (vb, ctx);
 
         else if (ctx->ltype == LT_DOMQUAL)
-            domqual_reconstruct (vb, ctx);
+            codec_domq_reconstruct (vb, ctx);
 
         else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }

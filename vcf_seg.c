@@ -13,8 +13,8 @@
 #include "strings.h"
 #include "zip.h"
 #include "dict_id.h"
+#include "codec.h"
 #include "reference.h"
-#include "compressor.h"
 
 #define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
 

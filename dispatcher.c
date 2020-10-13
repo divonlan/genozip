@@ -136,7 +136,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
                                 test_mode); 
 
     if (prog == PROGRESS_MESSAGE)
-        progress_udpate_status (prog_msg);
+        progress_update_status (prog_msg);
 
     return dd;
 }

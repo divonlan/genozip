@@ -14,8 +14,7 @@
 #include "zip.h"
 #include "optimize.h"
 #include "dict_id.h"
-#include "compressor.h"
-#include "domqual.h"
+#include "codec.h"
 #include "aligner.h"
 
 // called by I/O thread (zip_initialize callback)
@@ -67,7 +66,7 @@ bool sam_inspect_txt_header (BufferP txt_header)
     return true;
 }
 
-// callback function for compress to get data of one line (called by comp_bzlib_compress)
+// callback function for compress to get data of one line (called by codec_bz2_compress)
 void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                         char **line_qual_data, uint32_t *line_qual_len, // out
                                         char **line_u2_data,   uint32_t *line_u2_len) 
@@ -130,9 +129,6 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_SEQ_BITMAP].ltype = LT_BITMAP;
     vb->contexts[SAM_NONREF].lcodec    = CODEC_ACGT; // better than LZMA and BSC
     vb->contexts[SAM_NONREF].ltype     = LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].ltype       = LT_SEQUENCE;
-    vb->contexts[SAM_QUAL].lcodec      = CODEC_BSC;
-    vb->contexts[SAM_QUAL].inst        = 0; // don't inherit from previous file (we will set CTX_INST_NO_CALLBACK if needed, later)
     vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
     vb->contexts[SAM_STRAND].ltype     = LT_BITMAP;
@@ -144,8 +140,14 @@ void sam_seg_initialize (VBlock *vb)
 
 void sam_seg_finalize (VBlockP vb)
 {
-    // check if domqual compression is applicable to this quality data, and prepare QUAL/QDOMRUNS local data if it is
-    domqual_convert_qual_to_domqual (vb, sam_zip_qual, SAM_QUAL);
+    // for qual data - select domqual compression if possible, or fallback 
+    if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) {
+        vb->contexts[SAM_QUAL].ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
+        vb->contexts[SAM_QUAL].inst   = 0; // don't inherit from previous file 
+
+        // TODO - choose between BSC and BZ2
+        vb->contexts[SAM_QUAL].lcodec = CODEC_BSC; // for QUAL scores that fail DomQual, BSC is ~15% better than BZ2, which is better than LZMA 
+    }
 
     // top level snip
     Structured top_level = { 

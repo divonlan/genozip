@@ -164,6 +164,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     // CODEC_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters
     CODEC_ACGT=10, CODEC_NON_ACGT=11, 
     CODEC_HT=12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
+    CODEC_DOMQ=13, // compress SAM/FASTQ quality scores, if dominated by a single character
 
     CODEC_BGZ=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  // external compressors
 
@@ -172,7 +173,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
 // aligned with Codec ; used in --show-header (max 4 chars)
 #define CODEC_NAMES {"NONE", "GZ", "BZ2", "LZMA", "BSC", "FFU5", "FFU6", "FFU7", "FFU8", "FFU9", \
-                     "ACGT", "~CGT", "HT", "FF13", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
+                     "ACGT", "~CGT", "HT", "DOMQ", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
                      "BGZ", "XZ", "BCF", "BAM", "CRAM", "ZIP" }
 
 // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
@@ -181,10 +182,12 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
                      "+.bgz", "+.xz", "-.bcf", "-.bam", "-.cram", "+.zip" }
 
 #define COMPRESSOR_CALLBACK(func) \
-extern void func (VBlockP vb, uint32_t vb_line_i, \
-                  char **line_data_1, uint32_t *line_data_len_1,\
-                  char **line_data_2, uint32_t *line_data_len_2);
-                  
+void func (VBlockP vb, uint32_t vb_line_i, \
+           char **line_data_1, uint32_t *line_data_len_1,\
+           char **line_data_2, uint32_t *line_data_len_2);
+
+typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
+
 // sanity checks
 extern void main_exit (bool show_stack, bool is_error);
 #define exit_on_error(show_stack) main_exit (show_stack, true)

@@ -12,7 +12,7 @@
 #include "endianness.h"
 #include "file.h"
 #include "strings.h"
-#include "compressor.h"
+#include "codec.h"
 #include "piz.h"
 
 #define MAX_GPOS_DELTA 1000 // paired reads are usually with a delta less than 300 - so this is more than enough
