@@ -29,7 +29,7 @@ See also the bsc and libbsc web site:
   http://libbsc.com/ for more information.
 
 // ------------------------------------------------------------------
-//   All modifications:
+//   This file was extensively modified to adapt it to genozip. All modifications:
 //   Copyright (C) 2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 

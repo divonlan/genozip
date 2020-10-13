@@ -24,6 +24,12 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+// ------------------------------------------------------------------
+//   This file was extensively modified to adapt it to genozip. All modifications:
+//   Copyright (C) 2020 Divon Lan <divon@genozip.com>
+//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+
+
 #if defined(_MSC_VER)
   #pragma warning(disable : 4244)
 #endif
