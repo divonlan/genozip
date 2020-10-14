@@ -135,7 +135,6 @@ typedef struct {
 } SectionHeaderDictionary; 
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
-// IMPORTANT - if adding or chaging LTs, all lt_* arrays in sections.c need to be updated
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_TEXT     = 0,
     LT_INT8     = 1,    
@@ -180,7 +179,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "SEQ", 0,   1,  0,     0                        }, \
    { "BMP", 0,   8,  0,     0                        }, \
    { "DOM", 0,   1,  0,     0                        }, \
-   { "HT ", 0,   1,  0,     0                        }  \
+   { "HT ", 0,   1,  0,     0                        }, \
 }
 
 // flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz
@@ -193,7 +192,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 
 typedef struct {
     SectionHeader h;
-    LocalType ltype; // used by SEC_LOCAL
+    LocalType ltype; // used by SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
     uint8_t param;   // goes into ctx.b250/local.param if flags contains CTX_FL_COPY_PARAM
     uint8_t ffu[2];
     DictId dict_id;           

@@ -94,7 +94,7 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
     }
     
 finish:
-    COPY_TIMER (evb->profile.read);
+    COPY_TIMER_VB (evb, read);
 
     return bytes_read;
 }
@@ -171,7 +171,7 @@ finish:
 
     *AFTERENT (char, evb->txt_data) = 0; // null-terminate
 
-    COPY_TIMER (evb->profile.txtfile_read_header);
+    COPY_TIMER_VB (evb, txtfile_read_header);
 
     return header_md5;
 }
@@ -367,7 +367,7 @@ void txtfile_read_vblock (VBlock *vb)
     buf_free (&block_start_buf);
     buf_free (&block_len_buf);
 
-    COPY_TIMER (vb->profile.txtfile_read_vblock);
+    COPY_TIMER (txtfile_read_vblock);
 }
 
 // read num_lines of the txtfile (after the header), and call test_func for each line. true iff the proportion of lines
@@ -457,7 +457,7 @@ void txtfile_write_one_vblock (VBlockP vb)
                 file_plain_text_ext_of_dt (vb->data_type));
     }
 
-    COPY_TIMER (vb->profile.write);
+    COPY_TIMER (write);
 }
 
 // ZIP only - estimate the size of the txt data in this file. affects the hash table size and the progress indicator.

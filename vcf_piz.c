@@ -62,8 +62,8 @@ void vcf_piz_special_FORMAT (VBlock *vb, Context *ctx, const char *snip, unsigne
     // initialize haplotype stuff
     if (has_GT && !vb->ht_ctx) {
 
-        vb->ht_ctx       = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT);
-        vb->ht_index_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
+        ASSERT ((vb->ht_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT data", vb->vblock_i);
+        ASSERT ((vb->ht_index_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX)), "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT_INDEX data", vb->vblock_i);
         
         codec_ht_piz_calculate_columns (vb);
     }

@@ -207,7 +207,7 @@ void md5_update (Md5Context *ctx, const void *data, unsigned len)
 finish:
     //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", md5_display (md5_snapshot (ctx)));
     //md5_display_ctx (ctx);
-    COPY_TIMER (evb->profile.md5);
+    COPY_TIMER_VB (evb, md5);
     return;
 }
 
@@ -242,7 +242,7 @@ Md5Hash md5_finalize (Md5Context *ctx)
 
     memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
 
-    COPY_TIMER (evb->profile.md5);
+    COPY_TIMER_VB (evb, md5);
 
     return digest;
 }

@@ -49,7 +49,7 @@ void sam_piz_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unus
             aligner_reconstruct_seq ((VBlockP)vb, bitmap_ctx, vb->seq_len, false);
             nonref_ctx->next_local = ROUNDUP_TO_NEAREST_4 (nonref_ctx->next_local);
         }
-        // case: no reference was used - in this case, the sequence is not encoded in the bitmap at all. we just copy it from SEQ_NOREF
+        // case: no reference was used - in this case, the sequence is not encoded in the bitmap at all. we just copy it from NONREF
         else {
             RECONSTRUCT (nonref, vb->seq_len); 
             nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (vb->seq_len);

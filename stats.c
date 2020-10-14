@@ -245,11 +245,8 @@ void stats_compress (void)
         if (ctx && !ctx->mtf_i.len && !ctx->txt_len && !ctx->b250.len && !s->z_size) continue;
 
         s->txt_size = ctx ? ctx->txt_len : (i==-SEC_TXT_HEADER ? txtfile_get_bound_headers_len() : 0);
-
-        bool is_dict_a_reference = (i == -SEC_REFERENCE) || // reference appreas in "comp_dict" of "Reference" line
-                                   (ctx && z_file->data_type == DT_SAM && (ctx->dict_id.num == dict_id_fields[SAM_SEQ_BITMAP] || ctx->dict_id.num == dict_id_fields[SAM_NONREF])); // reference appreas in "comp_dict" of "SEQ" line
         
-        if (!is_dict_a_reference) all_comp_dict += dict_compressed_size;
+        all_comp_dict   += dict_compressed_size;
         all_uncomp_dict += ctx ? ctx->dict.len : 0;
         all_comp_b250   += b250_compressed_size;
         all_comp_data   += local_compressed_size;
@@ -273,7 +270,7 @@ void stats_compress (void)
         else 
             s->did_i[0] = s->words[0] = s->hash[0] = s->uncomp_dict[0] = '-';
         
-        if (ctx || is_dict_a_reference)
+        if (ctx)
         /* comp dict      */ str_size (dict_compressed_size, s->comp_dict);
         else 
             s->comp_dict[0] = '-';
@@ -300,7 +297,7 @@ void stats_compress (void)
     
     stats_consolidate_compound (sbl, num_stats, "QNAME", "QNAME");
 
-    stats_consolidate_related (sbl, num_stats, "Sequence", 4, "SQBITMAP", "GPOS", "NONREF", "STRAND");
+    stats_consolidate_related (sbl, num_stats, "Sequence", 4, "SQBITMAP", "GPOS", "NONREF", "NONREF_X", "STRAND");
     
     stats_consolidate_related (sbl, num_stats, "Quality",  2, "QUAL", "DOMQRUNS");
     

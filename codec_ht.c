@@ -10,12 +10,30 @@
 #include "strings.h"
 #include "file.h"
 #include "endianness.h"
+#include "context.h"
+#include "dict_id.h"
+#include "piz.h"
+
+//--------------
+// ZIP side
+//--------------
 
 typedef struct {
     int num_alt_alleles;
     uint32_t index_in_original_line;
     uint32_t index_in_sorted_line;
 } HaploTypeSortHelperIndex;
+
+void codec_ht_comp_init (VBlock *vb)
+{
+    vb->ht_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
+    vb->ht_ctx->ltype  = LT_HT;
+    vb->ht_ctx->lcodec = CODEC_HT;
+
+    vb->ht_index_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
+    vb->ht_index_ctx->ltype  = LT_UINT32;
+    vb->ht_index_ctx->lcodec = codec_args[CODEC_HT].sub_codec2; // BSC is 4-5% better than LZMA, only slightly slower
+}
 
 static int sort_by_alt_allele_comparator(const void *p, const void *q)  
 { 
@@ -54,7 +72,7 @@ static HaploTypeSortHelperIndex *codec_ht_count_alt_alleles (VBlock *vb)
                 helper_index[ht_i].num_alt_alleles++;
         }
     }
-    COPY_TIMER (vb->profile.codec_ht_count_alt_alleles);
+    COPY_TIMER (codec_ht_count_alt_alleles);
 
     return helper_index;
 }
@@ -85,8 +103,9 @@ static void codec_ht_compress_one_array (VBlockP vb, uint32_t ht_i,
 // sort haplogroups by alt allele count within the variant group, create an index for it, and split
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool codec_ht_compress (VBlock *vb, Codec codec,
-                       const char *uncompressed,       // option 1 - compress contiguous data
+bool codec_ht_compress (VBlock *vb, 
+                       Codec *codec,             // out
+                       const char *uncompressed, // option 1 - compress contiguous data
                        uint32_t *uncompressed_len, 
                        LocalGetLineCB callback,  // option 2 - not supported
                        char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -111,10 +130,16 @@ bool codec_ht_compress (VBlock *vb, Codec codec,
     uint64_t save_lines_len = vb->lines.len;
     vb->lines.len = vb->num_haplotypes_per_line; // temporarily set vb->lines.len to number of columns, as this is the number of time the callback will be called
     
-    Codec sub_codec = codec_args[CODEC_HT].sub_codec;
-    bool success  = codec_args[sub_codec].compress (vb, codec, 0, uncompressed_len, codec_ht_compress_one_array, 
-                                                    compressed, compressed_len, soft_fail);
+    // compress as a normal sub-codec section. all piz-side logic will happen during reconstruction.
+    *codec = codec_args[CODEC_HT].sub_codec1;
+    Compressor compress = codec_args[*codec].compress;
+
+    PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
+
+    bool success = compress (vb, codec, 0, uncompressed_len, codec_ht_compress_one_array, compressed, compressed_len, soft_fail);
     
+    RESUME_TIMER (compressor_ht);
+
     vb->lines.len = save_lines_len;
 
     if (!success) return false; // soft fail (if it was hard fail, compress() already failed)
@@ -137,16 +162,14 @@ bool codec_ht_compress (VBlock *vb, Codec codec,
     for (uint32_t ht_i=0; ht_i < vb->num_haplotypes_per_line ; ht_i++)
         hp_index[ht_i] = BGEN32 (helper_index[ht_i].index_in_sorted_line);
 
-    COPY_TIMER (vb->profile.codec_ht_compress);
+    COPY_TIMER (compressor_ht);
 
     return true;
 }
 
-uint32_t codec_ht_est_size (uint64_t uncompressed_len)
-{
-    Codec sub_codec = codec_args[CODEC_HT].sub_codec;
-    return codec_args[sub_codec].est_size (uncompressed_len);
-}
+//--------------
+// PIZ side
+//--------------
 
 // PIZ: for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
 // transposed, each column will be a row, or a contiguous array, in the section data. This function returns an array
@@ -179,7 +202,7 @@ void codec_ht_piz_calculate_columns (VBlock *vb)
 }
 
 // PIZ: build haplotype for a line - reversing the permutation and the transposal.
-void codec_ht_piz_get_one_line (VBlock *vb)
+static inline void codec_ht_piz_get_one_line (VBlock *vb)
 {
     START_TIMER;
 
@@ -219,13 +242,40 @@ void codec_ht_piz_get_one_line (VBlock *vb)
     if (flag_show_alleles)
         printf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->ht_one_array.len, vb->ht_one_array.data);
 
-    COPY_TIMER (vb->profile.codec_ht_piz_get_one_line);
+    COPY_TIMER (codec_ht_piz_get_one_line);
 }
 
-void codec_ht_uncompress (VBlock *vb, 
-                          const char *compressed, uint32_t compressed_len,
-                          char *uncompressed_data, uint64_t uncompressed_len, 
-                          Codec sub_codec)
+// Explanation of the reconstruction process of VCF haplotype matrix data compressed with the HT codec:
+// 1) The GT_HT and GT_HT_INDEX sections as decompressed normally using the sub-codecs
+// 2) When reconstructing, this function codec_ht_reconstruct is called for every haplotype value needed (eg the "1" in "1/0"),
+//    by PIZ as the LT_HT reconstructor. It takes data from GT_HT, consulting GT_HT_INDEX
+//    to find the correct column in the matrix, and skips '*'s (missing haplotypes due to mixed ploidy, missing samples,
+//    or lines missing GT in FORMAT) until it finds a valid haplotype value.
+void codec_ht_reconstruct (VBlock *vb, Context *ctx)
 {
-    return codec_args[sub_codec].uncompress (vb, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_NONE);
+    if (vb->dont_show_curr_line) return;
+
+    // get one row of the haplotype matrix for this line into vb->ht_one_array if we don't have it already
+    if (vb->ht_one_array_line_i != vb->line_i) {
+        codec_ht_piz_get_one_line (vb);
+        vb->ht_one_array.len = 0; // length of data consumed
+        vb->ht_one_array_line_i = vb->line_i;
+    }
+
+    // find next allele - skipping unused spots ('*')
+    uint8_t ht = '*';
+    while (ht == '*' && vb->ht_one_array.len < vb->num_haplotypes_per_line)
+        ht = *ENT(uint8_t, vb->ht_one_array, vb->ht_one_array.len++);
+
+    if (ht == '.' || IS_DIGIT(ht)) 
+        RECONSTRUCT1 (ht);
+    
+    else if (ht == '*') 
+        ABORT ("Error in codec_ht_reconstruct: reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u)", 
+               vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len)
+    
+    else { // allele 10 to 99 (ascii 58 to 147)
+        RECONSTRUCT_INT (ht - '0');
+    }
 }
+

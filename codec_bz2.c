@@ -63,12 +63,12 @@ uint64_t BZ2_consumed (void *bz_file)
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool codec_bz2_compress (VBlock *vb, Codec codec,
-                          const char *uncompressed,       // option 1 - compress contiguous data
-                          uint32_t *uncompressed_len, 
-                          LocalGetLineCB callback,  // option 2 - compress data one line at a tim
-                          char *compressed, uint32_t *compressed_len /* in/out */, 
-                          bool soft_fail)
+bool codec_bz2_compress (VBlock *vb, Codec *codec,
+                         const char *uncompressed,       // option 1 - compress contiguous data
+                         uint32_t *uncompressed_len, 
+                         LocalGetLineCB callback,  // option 2 - compress data one line at a tim
+                         char *compressed, uint32_t *compressed_len /* in/out */, 
+                         bool soft_fail)
 {
     // good manual: http://linux.math.tifr.res.in/manuals/html/manual_3.html
     START_TIMER;
@@ -152,15 +152,15 @@ bool codec_bz2_compress (VBlock *vb, Codec codec,
 
     *compressed_len -= strm.avail_out;
 
-    COPY_TIMER(vb->profile.compressor_bz2);
+    COPY_TIMER (compressor_bz2); // higher level codecs are accounted for in their codec code
 
     return success;
 }
 
-void codec_bz2_uncompress (VBlock *vb, 
-                            const char *compressed, uint32_t compressed_len,
-                            char *uncompressed_data, uint64_t uncompressed_len, 
-                            Codec unused)
+void codec_bz2_uncompress (VBlock *vb, Codec codec,
+                           const char *compressed, uint32_t compressed_len,
+                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
+                           Codec unused)
 {
     bz_stream strm;
     strm.bzalloc = comp_bzalloc;
@@ -172,7 +172,7 @@ void codec_bz2_uncompress (VBlock *vb,
 
     strm.next_in   = (char *)compressed;
     strm.avail_in  = compressed_len;
-    strm.next_out  = uncompressed_data;
+    strm.next_out  = uncompressed_buf->data;
     strm.avail_out = uncompressed_len;
 
     ret = BZ2_bzDecompress (&strm);

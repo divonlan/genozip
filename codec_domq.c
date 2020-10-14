@@ -41,7 +41,7 @@
 // This is typically with Illumina binning and "normal" samples where most scores are F
 // but might apply with other technologies too, including in combination with our optimize-QUAL
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
-bool codec_domq_comp_init (VBlock *vb, DidIType qual_field, LocalGetLineCB callback)
+bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
 {
 #   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
 #   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
@@ -67,15 +67,15 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_field, LocalGetLineCB callb
 
     for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
         if (char_counter[c] > threshold) {
-            vb->qual_ctx = &vb->contexts[qual_field];
-            vb->qual_ctx->local.param = c;
-            vb->qual_ctx->inst    = CTX_INST_LOCAL_PARAM;
-            vb->qual_ctx->ltype   = LT_DOMQUAL;
-            vb->qual_ctx->lcodec  = CODEC_DOMQ;
+            Context *qual_ctx = &vb->contexts[DTF(qual)];
+            qual_ctx->local.param = c;
+            qual_ctx->inst    = CTX_INST_LOCAL_PARAM;
+            qual_ctx->ltype   = LT_DOMQUAL;
+            qual_ctx->lcodec  = CODEC_DOMQ;
 
-            Context *domqruns_ctx = vb->qual_ctx + 1;
+            Context *domqruns_ctx = qual_ctx + 1;
             domqruns_ctx->ltype   = LT_UINT8;
-            domqruns_ctx->lcodec  = CODEC_BSC;
+            domqruns_ctx->lcodec  = codec_args[CODEC_DOMQ].sub_codec2;
             return true;
         }
 
@@ -93,14 +93,9 @@ static inline void codec_domq_add_runs (Buffer *qdomruns_buf, uint32_t runlen)
     }
 }
 
-uint32_t codec_domq_est_size (uint64_t uncompressed_len)
-{
-    Codec sub_codec = codec_args[CODEC_DOMQ].sub_codec;
-    return codec_args[sub_codec].est_size (uncompressed_len);
-}
-
-bool codec_domq_compress (VBlock *vb, Codec codec,
-                          const char *uncompressed,       // option 1 - not supported
+bool codec_domq_compress (VBlock *vb, 
+                          Codec *codec,             // out
+                          const char *uncompressed, // option 1 - not supported
                           uint32_t *uncompressed_len, 
                           LocalGetLineCB callback,  // option 2 - callback to fetch one line of qual data
                           char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -110,16 +105,18 @@ bool codec_domq_compress (VBlock *vb, Codec codec,
 
     ASSERT0 (!uncompressed && callback, "Error in codec_domq_compress: only callback option is supported");
 
-    const char dom = vb->qual_ctx->local.param;
+    Context *qual_ctx = &vb->contexts[DTF(qual)];
+
+    const char dom = qual_ctx->local.param;
     ASSERT0 (dom, "Error in codec_domq_compress: dom is not set");
 
-    Buffer *qual_buf     = &vb->qual_ctx->local;
-    Buffer *qdomruns_buf = &(vb->qual_ctx+1)->local;
+    Buffer *qual_buf     = &qual_ctx->local;
+    Buffer *qdomruns_buf = &(qual_ctx+1)->local;
 
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
     buf_alloc (vb, qual_buf, qual_buf->len / 5, 1, "context->local", dom); // dom goes into param, and eventually into SectionHeaderCtx.local_param
-    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "context->local", (vb->qual_ctx+1)->did_i);
+    buf_alloc (vb, qdomruns_buf, qual_buf->len / 10, 1, "context->local", (qual_ctx+1)->did_i);
 
     qual_buf->len = 0; 
     uint32_t runlen = 0;
@@ -170,11 +167,14 @@ bool codec_domq_compress (VBlock *vb, Codec codec,
     *uncompressed_len = (uint32_t)qual_buf->len;
 
     // compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context
-    Codec sub_codec = codec_args[CODEC_DOMQ].sub_codec;
-    bool success  = codec_args[sub_codec].compress (vb, codec, qual_buf->data, uncompressed_len, NULL, 
-                                                    compressed, compressed_len, soft_fail);
+    // compress as a normal sub-codec section. all piz-side logic will happen during reconstruction.
+    *codec = codec_args[CODEC_DOMQ].sub_codec1;
 
-    COPY_TIMER (vb->profile.codec_domq_compress);
+    COPY_TIMER (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
+
+    Compressor compress = codec_args[*codec].compress;
+    bool success = compress (vb, codec, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
+
     return success;
 }
 
@@ -231,8 +231,14 @@ static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, Context *domq
     return runlen;
 }
 
+// Explanation of the reconstruction process of QUAL data compressed with the DOMQ codec:
+// 1) The QUAL and DOMQ sections are decompressed normally using their sub_codecs
+// 2) When reconstructing a QUAL field on a specific line, piz calls the LT_DOMQUAL reconstructor, codec_domq_reconstruct,
+//    which combines data from the local buffers of QUAL and DOMQRUNS to reconstruct the original QUAL field.
 void codec_domq_reconstruct (VBlockP vb, ContextP qual_ctx)
 {
+    bool reconstruct = !piz_is_skip_section (vb, SEC_LOCAL, qual_ctx->dict_id);
+
     Context *domqruns_ctx = qual_ctx + 1;   // the qdomruns context is always one after qual context
     char dom = (char)qual_ctx->local.param; // passed from SectionHeaderCtx.local_param
 
@@ -258,19 +264,12 @@ void codec_domq_reconstruct (VBlockP vb, ContextP qual_ctx)
         else
             c = NEXTLOCAL (char, qual_ctx);
 
-        RECONSTRUCT1 (c==' ' ? '*' : c); // in SAM, we re-wrote a '*' marking 'unavailable' as ' ' to avoid confusing with '*' as a valid quality store during optimizaition
+        if (reconstruct)
+            RECONSTRUCT1 (c==' ' ? '*' : c); // in SAM, sam_zip_qual re-wrote a '*' marking 'unavailable' as ' ' to avoid confusing with '*' as a valid quality score
+
         qual_len++;
     }
 
     ASSERT (qual_len == vb->seq_len, "Error in codec_domq_reconstruct: expecting qual_len(%u) == vb->seq_len(%u) in vb_i=%u (last_line=%u, num_lines=%u) line_i=%u", 
             qual_len, vb->seq_len, vb->vblock_i, vb->first_line + (uint32_t)vb->lines.len-1, (uint32_t)vb->lines.len, vb->line_i);   
-}
-
-// decompresses into the QUAL local, but doesn't reassemble with domqruns. That is done by codec_domq_reconstruct during reconstruction 
-void codec_domq_uncompress (VBlock *vb, 
-                            const char *compressed, uint32_t compressed_len,
-                            char *uncompressed_data, uint64_t uncompressed_len, 
-                            Codec sub_codec)
-{
-    codec_args[sub_codec].uncompress (vb, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_NONE);
 }

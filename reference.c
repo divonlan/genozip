@@ -723,7 +723,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
            !((*sl)->vblock_i == ra->vblock_i && (*sl)->section_type == SEC_REFERENCE)) 
         (*sl)++;
 
-    ASSERT (*sl < AFTERENT (SectionListEntry, ref_file_section_list), "Error in ref_copy_one_compressed_section: cannot find FASTA_SEQ of vb_i=%u in section list of reference file", ra->vblock_i);
+    ASSERT (*sl < AFTERENT (SectionListEntry, ref_file_section_list), "Error in ref_copy_one_compressed_section: cannot find FASTA_NONREF of vb_i=%u in section list of reference file", ra->vblock_i);
 
     static Buffer ref_seq_section = EMPTY_BUFFER;
 
@@ -745,7 +745,7 @@ static void ref_copy_one_compressed_section (File *ref_file, const RAEntry *ra, 
     // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
     START_TIMER;
     file_write (z_file, ref_seq_section.data, ref_seq_section.len);
-    COPY_TIMER (evb->profile.write);
+    COPY_TIMER_VB (evb, write);
 
     // "manually" add the reference section to the section list - normally it is added in comp_compress()
     sections_add_to_list (evb, &header->h);
@@ -897,7 +897,7 @@ static void ref_compress_one_range (VBlockP vb)
     // First, SEC_REF_IS_SET section (but not needed if the entire range is used)
     if (r && is_compacted) {
 
-        LTEN_bit_array (&r->is_set, true);
+        LTEN_bit_array (&r->is_set);
 
         header.h.section_type          = SEC_REF_IS_SET;  // most of the header is the same as ^
         header.h.codec                 = CODEC_BZ2;
@@ -913,7 +913,7 @@ static void ref_compress_one_range (VBlockP vb)
     }
 
     // Second. SEC_REFERENCE
-    if (r) LTEN_bit_array (&r->ref, true);
+    if (r) LTEN_bit_array (&r->ref);
 
     header.h.section_type          = SEC_REFERENCE;
     header.h.codec                 = CODEC_LZMA; // better than BSC: slightly better compression and compression speed, 2.5X faster decompression
@@ -1159,7 +1159,7 @@ void ref_generate_reverse_complement_genome (void)
                                 ref_reverse_compliment_genome_prepare, 
                                 ref_reverse_compliment_genome_do, 
                                 NULL);
-    COPY_TIMER(evb->profile.generate_rev_complement_genome);
+    COPY_TIMER_VB (evb, generate_rev_complement_genome);
 }
 
 static void ref_save_genome_copy_if_needed (bool is_last_file)

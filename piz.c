@@ -104,35 +104,6 @@ static int64_t piz_reconstruct_from_local_int (VBlock *vb, Context *ctx, char se
     return num;
 }
 
-// reconstruct a allele value from haplotype matrix (used in VCF)
-static void piz_reconstruct_from_local_ht (VBlock *vb, Context *ctx)
-{
-    if (vb->dont_show_curr_line) return;
-
-    // get one row of the haplotype matrix for this line into vb->ht_one_array if we don't have it already
-    if (vb->ht_one_array_line_i != vb->line_i) {
-        codec_ht_piz_get_one_line (vb);
-        vb->ht_one_array.len = 0; // length of data consumed
-        vb->ht_one_array_line_i = vb->line_i;
-    }
-
-    // find next allele - skipping unused spots ('*')
-    uint8_t ht = '*';
-    while (ht == '*' && vb->ht_one_array.len < vb->num_haplotypes_per_line)
-        ht = *ENT(uint8_t, vb->ht_one_array, vb->ht_one_array.len++);
-
-    if (ht == '.' || IS_DIGIT(ht)) 
-        RECONSTRUCT1 (ht);
-    
-    else if (ht == '*') 
-        ABORT ("Error in piz_reconstruct_from_local_ht: reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u)", 
-               vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len)
-    
-    else { // allele 10 to 99 (ascii 58 to 147)
-        RECONSTRUCT_INT (ht - '0');
-    }
-}
-
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from seq_len.
 static void piz_reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const char *snip, unsigned snip_len)
@@ -145,14 +116,14 @@ static void piz_reconstruct_from_local_sequence (VBlock *vb, Context *ctx, const
     // if we have length in the snip, update vb->seq_len (for example in FASTQ, we will a snip for seq but qual will use seq_len)
     if (snip_len) vb->seq_len = atoi(snip);
 
-    // special case: it is "*" that was written to " " - we reconstruct it
+    // special case: in SAM, sam_zip_qual re-wrote a '*' marking 'unavailable' as ' ' to avoid confusing with '*' as a valid quality score
     if (ctx->local.data[ctx->next_local] == ' ') {
         len = 1;
         if (reconstruct) RECONSTRUCT1 ('*');
     }
     else {
         len = vb->seq_len;
-        ASSERT (ctx->next_local + len <= ctx->local.len, "Error reading txt_line=%u vb_i=%u: unexpected end of %s data", 
+        ASSERT (ctx->next_local + len <= ctx->local.len, "Error in piz_reconstruct_from_local_sequence: reading txt_line=%u vb_i=%u: unexpected end of %s data", 
                 vb->line_i, vb->vblock_i, ctx->name);
 
         if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
@@ -236,7 +207,7 @@ void piz_reconstruct_structured_do (VBlock *vb, DictId dict_id, const Structured
                             (st->items[st->num_items-1].seperator[1] != 0);
 
     if (st->flags & STRUCTURED_TOPLEVEL)   
-        COPY_TIMER (vb->profile.piz_reconstruct_vb);
+        COPY_TIMER (piz_reconstruct_vb);
 }
 
 static void piz_reconstruct_structured (VBlock *vb, Context *ctx, WordIndex word_index, const char *snip, unsigned snip_len)
@@ -350,7 +321,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             // we are request to reconstruct from another ctx
             base_ctx = piz_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
 
-        // case 1: LOCAL is not LT_SEQ* - we reconstruct this snip before adding the looked up data
+        // case: LOCAL is not LT_SEQUENCE/LT_BITMAP - we reconstruct this snip before adding the looked up data
         if (snip_len && base_ctx->ltype != LT_SEQUENCE && base_ctx->ltype != LT_BITMAP) 
             RECONSTRUCT (snip, snip_len);
         
@@ -359,7 +330,7 @@ void piz_reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             have_new_value = true;
         }
 
-        // case 2: LT_SEQUENCE  - the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
+        // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
         else if (base_ctx->ltype == LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
 
@@ -487,11 +458,11 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
             piz_reconstruct_from_local_int(vb, ctx, 0);
         
         else if (ctx->ltype == LT_HT)
-            piz_reconstruct_from_local_ht (vb, ctx);
+            codec_ht_reconstruct (vb, ctx);
 
         else if (ctx->ltype == LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
-        
+                
         else if (ctx->ltype == LT_BITMAP) {
             ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
             DTP (reconstruct_seq) (vb, ctx, NULL, 0);
@@ -506,7 +477,7 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
         else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }
 
-    // in case of LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in SEQ_NOREF (e.g. unaligned SAM)
+    // in case of LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in NONREF (e.g. unaligned SAM)
     else if (ctx->ltype == LT_BITMAP && (ctx+1)->local.len) {
         ASSERT (DTP (reconstruct_seq), "Error: data_type=%s doesn't support reconstruct_seq", dt_name (vb->data_type));
         DTP (reconstruct_seq) (vb, ctx, NULL, 0);
@@ -566,7 +537,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
                 buf.len /= lt_desc[ctx->ltype].width; \
                 if (ctx->ltype == LT_BITMAP) { \
                     buf.param = buf.len * 64; /* number of bits. note: this might be higher than the number of bits on the ZIP side, since we are rounding up the word boundary */ \
-                    LTEN_bit_array (buf_get_bitarray (&buf), true); \
+                    LTEN_bit_array (buf_get_bitarray (&buf)); \
                 } \
                 else if (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_UINT64)    \
                     lt_desc[ctx->ltype].file_to_native (&buf); \
@@ -637,7 +608,7 @@ static void piz_uncompress_one_vb (VBlock *vb)
 
 done:
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
-    COPY_TIMER (vb->profile.compute);
+    COPY_TIMER (compute);
 }
 
 static void piz_read_all_ctxs (VBlock *vb, SectionListEntry **next_sl)
@@ -761,7 +732,7 @@ static bool piz_read_one_vb (VBlock *vb)
     // read additional sections and other logic specific to this data type
     bool ok_to_compute = DTPZ(piz_read_one_vb) ? DTPZ(piz_read_one_vb)(vb, sl) : true; // true if we should go forward with computing this VB (otherwise skip it)
 
-    COPY_TIMER (vb->profile.piz_read_one_vb); 
+    COPY_TIMER (piz_read_one_vb); 
 
     return ok_to_compute;
 }

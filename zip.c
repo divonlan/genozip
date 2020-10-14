@@ -114,13 +114,13 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
                 mtf_dump_local (ctx, true);
 
             if (ctx->ltype == LT_BITMAP) 
-                LTEN_bit_array (buf_get_bitarray (&ctx->local), true);
+                LTEN_bit_array (buf_get_bitarray (&ctx->local));
 
             zfile_compress_local_data (vb, ctx);
         }
     }
 
-    COPY_TIMER (vb->profile.zip_generate_and_compress_ctxs);
+    COPY_TIMER (zip_generate_and_compress_ctxs);
 }
 
 // here we translate the mtf_i indices creating during seg_* to their finally dictionary indices in base-250.
@@ -209,7 +209,7 @@ void zip_output_processed_vb (VBlock *vb, Buffer *section_list_buf, bool update_
     if (section_list_buf) sections_list_concat (vb, section_list_buf);
 
     file_write (z_file, data_buf->data, data_buf->len);
-    COPY_TIMER (vb->profile.write);
+    COPY_TIMER (write);
 
     z_file->disk_so_far += (int64_t)data_buf->len;
     data_buf->len = 0;
@@ -331,7 +331,7 @@ static void zip_compress_one_vb (VBlock *vb)
     // this this operation needn't be atomic, but it likely is anyway
     vb->is_processed = true; 
 
-    COPY_TIMER (vb->profile.compute);
+    COPY_TIMER (compute);
 }
 
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 

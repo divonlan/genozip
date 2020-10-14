@@ -187,7 +187,7 @@ extern void bit_array_dealloc(BitArray* bitarr);
 // Get length of bit array
 extern bit_index_t bit_array_length(const BitArray* bit_arr);
 
-extern void LTEN_bit_array (BitArray* bitarr, bool also_partial_topword); // divon
+extern void LTEN_bit_array (BitArray* bitarr); // divon
 
 //
 // Macros

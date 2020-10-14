@@ -45,7 +45,6 @@ const char *lzma_status (ELzmaStatus status)
 static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t *size)
 {
     ISeqInStream *instream = (ISeqInStream *)p; // discard the const
-    VBlockP vb = (VBlockP)instream->vb;
 
     // case: we're done serving all the data
     if (!instream->avail_in) {
@@ -66,29 +65,8 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
                             &instream->next_in_1, &instream->avail_in_1,
                             &instream->next_in_2, &instream->avail_in_2);
 
-        if (instream->codec == CODEC_ACGT && (instream->avail_in_1 || instream->avail_in_2)) {
-
-            // pack into vb->compressed
-            if (instream->avail_in_1) codec_acgt_pack (vb, instream->next_in_1, instream->avail_in_1, instream->bits_consumed, !instream->avail_in_2, false); 
-            if (instream->avail_in_2) codec_acgt_pack (vb, instream->next_in_2, instream->avail_in_2, 0, true, false); 
-
-            BitArray *packed = buf_get_bitarray (&vb->compressed);
-            instream->next_in_1  = (char*)packed->words;
-            instream->avail_in_1 = (packed->num_of_bits & ~(uint64_t)0x3f) / 8; // # of bytes - bits rounded down to the nearest word - possibly leaving some carry bits for next time (incomplete word)
-            instream->avail_in_2 = 0;
-
-            instream->bits_consumed = instream->avail_in_1 * 8; // whole 64b words - could be less than packed->num_of_bits
-        }
-
         instream->line_i++;
     }
-
-    // pack ACGT last partial byte, if there is one
-    if (instream->line_i == ((VBlockP)instream->vb)->lines.len && 
-        !instream->avail_in_1 && !instream->avail_in_2 &&
-        instream->codec == CODEC_ACGT) 
-    
-        codec_acgt_pack_last_partial_word (vb, instream); // also does BGEN
 
     ASSERT (instream->avail_in_1 + instream->avail_in_2 <= instream->avail_in, 
             "Expecting avail_in_1=%u + avail_in_2=%u <= avail_in=%u but avail_in_1+avail_in_2=%u",
@@ -128,7 +106,7 @@ static size_t codec_lzma_data_out_callback (const ISeqOutStream *p, const void *
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool codec_lzma_compress (VBlock *vb, Codec codec,
+bool codec_lzma_compress (VBlock *vb, Codec *codec,
                          const char *uncompressed,    // option 1 - compress contiguous data
                          uint32_t *uncompressed_len,
                          LocalGetLineCB callback,     // option 2 - compress data one line at a time
@@ -158,19 +136,13 @@ bool codec_lzma_compress (VBlock *vb, Codec codec,
 
     bool success = true;
 
-    ASSERT0 (codec != CODEC_ACGT || (!vb->compressed.len && !vb->compressed.param), "Error in codec_lzma_compress codec=ACGT: expecting vb->compressed to be free, but its not");
-
     // option 1 - compress contiguous data
     if (uncompressed) {
-
-        if (codec == CODEC_ACGT) 
-            codec_acgt_pack (vb, uncompressed, *uncompressed_len, 0, true, true); // pack into the vb->compressed buffer
 
         SizeT data_compressed_len64 = (SizeT)*compressed_len - LZMA_PROPS_SIZE;
         res = LzmaEnc_MemEncode (lzma_handle, 
                                 (uint8_t *)compressed + LZMA_PROPS_SIZE, &data_compressed_len64, 
-                                (uint8_t *)(codec == CODEC_ACGT ? vb->compressed.data : uncompressed),
-                                codec == CODEC_ACGT ? vb->compressed.len * sizeof (int64_t) : *uncompressed_len,
+                                (uint8_t *)uncompressed, *uncompressed_len,
                                 true, NULL, &alloc_stuff, &alloc_stuff);
         
         *compressed_len = (uint32_t)data_compressed_len64 + LZMA_PROPS_SIZE;
@@ -180,10 +152,8 @@ bool codec_lzma_compress (VBlock *vb, Codec codec,
 
         ISeqInStream instream =   { .Read          = codec_lzma_data_in_callback, 
                                     .vb            = vb,
-                                    .codec           = codec,
                                     .line_i        = 0,
                                     .avail_in      = *uncompressed_len,
-                                    .bits_consumed = 0,
                                     .next_in_1     = NULL,
                                     .avail_in_1    = 0,
                                     .next_in_2     = NULL,
@@ -206,16 +176,14 @@ bool codec_lzma_compress (VBlock *vb, Codec codec,
 
     LzmaEnc_Destroy (lzma_handle, &alloc_stuff, &alloc_stuff);
 
-    buf_free (&vb->compressed);
-
-    COPY_TIMER(vb->profile.compressor_lzma);
+    COPY_TIMER (compressor_lzma); // higher level codecs are accounted for in their codec code
 
     return success;
 }
 
-void codec_lzma_uncompress (VBlock *vb, 
+void codec_lzma_uncompress (VBlock *vb, Codec codec,
                            const char *compressed, uint32_t compressed_len,
-                           char *uncompressed_data, uint64_t uncompressed_len, 
+                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
                            Codec unused)
 {
     ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
@@ -223,11 +191,11 @@ void codec_lzma_uncompress (VBlock *vb,
 
     SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
     
-    SRes ret = LzmaDecode ((uint8_t *)uncompressed_data, &uncompressed_len, 
-                            (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
-                            (uint8_t *)compressed, LZMA_PROPS_SIZE, 
-                            LZMA_FINISH_END, &status, &alloc_stuff);
+    SRes ret = LzmaDecode ((uint8_t *)uncompressed_buf->data, &uncompressed_len, 
+                           (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
+                           (uint8_t *)compressed, LZMA_PROPS_SIZE, 
+                           LZMA_FINISH_END, &status, &alloc_stuff);
 
     ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
-            "Error: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
+            "Error in codec_lzma_uncompress: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
 }

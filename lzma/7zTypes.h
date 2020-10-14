@@ -154,12 +154,9 @@ struct ISeqInStream
 
   // all the remaining fields (except for Read) were added by Divon
   void *vb;                    
-  Codec codec;            // CODEC_LZMA or CODEC_ACGT
   unsigned line_i;        // current partially-consumed line, or next line if no partially consumed line
   unsigned avail_in;      // total bytes remaining
   
-  unsigned bits_consumed; // CODEC_ACGT only: number of bits consumed of packed
-
   // we refer to two line segments (eg SEQ and E2 or QUAL and U2)
   char *next_in_1;        // if there is a line partially-consumed, this is the next byte
   char *next_in_2;        // if there is a line partially-consumed, and next_in==NULL, this is the next byte

@@ -83,6 +83,22 @@ extern uint32_t global_max_threads, global_max_memory_per_vb;
 extern const char *global_cmd;            // set once in main()
 extern ExeType exe_type;
 
+// IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
+// If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
+typedef enum __attribute__ ((__packed__)) { // 1 byte
+    CODEC_UNKNOWN=-1, 
+    CODEC_NONE=0, CODEC_GZ=1, CODEC_BZ2=2, CODEC_LZMA=3, CODEC_BSC=4, // internal compressors
+    
+    CODEC_ACGT = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
+    CODEC_HT   = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
+    CODEC_DOMQ = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
+    
+    // external compressors (used by executing an external application)
+    CODEC_BGZ=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  
+
+    NUM_CODECS
+} Codec; 
+
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
 typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP='h', TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
@@ -151,35 +167,6 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 } EncryptionType;
 
 #define ENC_NAMES { "No encryption", "AES 256 bit" }
-
-// IMPORTANT: This is part of the genozip file format. 
-// If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
-typedef enum __attribute__ ((__packed__)) { // 1 byte
-    CODEC_UNKNOWN=-1, 
-    CODEC_NONE=0, CODEC_GZ=1, CODEC_BZ2=2, CODEC_LZMA=3, CODEC_BSC=4, // internal compressors
-    
-    // novel codecs
-    // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA. It's about 25X faster and 
-    // slightly better compression ratio than LZMA. Any characters that are not ACGT are stored in a complementary 
-    // CODEC_NON_ACGT compression - which is \0 for ACGT locations, \1 for acgt (smaller letters) locations and verbatim for other characters
-    CODEC_ACGT=10, CODEC_NON_ACGT=11, 
-    CODEC_HT=12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
-    CODEC_DOMQ=13, // compress SAM/FASTQ quality scores, if dominated by a single character
-
-    CODEC_BGZ=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  // external compressors
-
-    NUM_CODECS
-} Codec; 
-
-// aligned with Codec ; used in --show-header (max 4 chars)
-#define CODEC_NAMES {"NONE", "GZ", "BZ2", "LZMA", "BSC", "FFU5", "FFU6", "FFU7", "FFU8", "FFU9", \
-                     "ACGT", "~CGT", "HT", "DOMQ", "FF14", "FF15", "FF16", "FF17", "FF18", "FF19", \
-                     "BGZ", "XZ", "BCF", "BAM", "CRAM", "ZIP" }
-
-// extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
-#define CODEC_EXTS  {"+", "+.gz", "+.bz",  "+", "+", "+", "+", "+", "+", "+", \
-                     "+", "+", "+", "+", "+", "+", "+", "+", "+", "+", \
-                     "+.bgz", "+.xz", "-.bcf", "-.bam", "-.cram", "+.zip" }
 
 #define COMPRESSOR_CALLBACK(func) \
 void func (VBlockP vb, uint32_t vb_line_i, \

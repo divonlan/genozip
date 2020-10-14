@@ -109,8 +109,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* Codec stuff */ \
     Buffer codec_bufs[NUM_CODEC_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
     \
-    /* used by CODEC_AGCT (For SEQ) */ \
-    bool has_non_agct;                /* the last context compressed with CODEC_ACGT has characters that are not A,C,G,T */ \
+    /* used by CODEC_ACGT (For SEQ) */ \
+    bool has_non_agct;                /* ZIP only */ \
     \
     /* used by CODEC_HT (for VCF haplotype matrix) */ \
     ContextP ht_ctx, ht_index_ctx;    /* haplotype matrix context */ \
@@ -119,10 +119,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer ht_columns_data;           /* used by piz_get_ht_permutation_lookups */ \
     Buffer column_of_zeros;           /* used by codec_ht_piz_calculate_columns */  \
     Buffer ht_one_array;              /* one line or column */ \
-    uint32_t ht_one_array_line_i;     /* line or column number to which ht_one_array belongs */ \
-    \
-    /* used by CODEC_DOMQ (for FASTQ / SAM quality scores) */ \
-    ContextP qual_ctx;                /* note: domqruns_ctx is always qual_ctx+1 */
+    uint32_t ht_one_array_line_i;     /* line or column number to which ht_one_array belongs */ 
     
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS

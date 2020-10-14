@@ -47,10 +47,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     }
 
     // if there's no data to compress, or its too small, don't compress (except for HT, as it generates an index too)
-    if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION && header->codec != CODEC_HT) 
+    if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION && 
+        !codec_args[header->codec].sub_codec1) // simple codec (no sub-codecs)
         header->codec = CODEC_NONE;
 
-    uint32_t est_compressed_len = codec_args[header->codec].est_size (data_uncompressed_len); 
+    uint32_t est_compressed_len = codec_args[header->codec].est_size (header->codec, data_uncompressed_len); 
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
@@ -63,7 +64,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         bool success = 
-            codec_args[header->codec].compress (vb, header->codec, uncompressed_data, &data_uncompressed_len,
+            codec_args[header->codec].compress (vb, &header->codec, uncompressed_data, &data_uncompressed_len,
                                                 callback,  
                                                 &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
                                                 true);
@@ -77,7 +78,7 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset
 
-            codec_args[header->codec].compress (vb, header->codec,
+            codec_args[header->codec].compress (vb, &header->codec,
                                                 uncompressed_data, &data_uncompressed_len,
                                                 callback,  
                                                 &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
@@ -141,11 +142,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
 void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec,
                       const char *compressed, uint32_t compressed_len,
-                      char *uncompressed_data, uint64_t uncompressed_len)
+                      Buffer *uncompressed_data, uint64_t uncompressed_len)
 {
     ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
 
-    codec_args[codec].uncompress (vb, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
+    codec_args[codec].uncompress (vb, codec, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
 
     codec_free_all (vb); // just in case
 }
@@ -160,15 +161,16 @@ void comp_unit_test (Codec codec)
     //FILE *fp = fopen ("bugq.bz2", "rb");
     //ASSERT0 (fread (data, 1, size, fp) == size, "read failed");
 
-    uint32_t comp_len = codec_args[codec].est_size (size);
+    uint32_t comp_len = codec_args[codec].est_size (codec, size);
     char *comp = malloc (comp_len);
+    
+    codec_args[codec].compress (evb, &codec, data, &size, 0, comp, &comp_len, false);
 
-    codec_args[codec].compress (evb, CODEC_BSC, data, &size, 0, comp, &comp_len, false);
+    Buffer uncomp = EMPTY_BUFFER;
+    buf_alloc (evb, &uncomp, size, 1, "uncomp", 0);
+    codec_args[codec].uncompress (evb, codec, comp, comp_len, &uncomp, size, CODEC_NONE);
 
-    char *uncomp = malloc (size);
-    codec_args[codec].uncompress (evb, comp, comp_len, uncomp, size, codec_args[codec].sub_codec);
-
-    printf ("Unit test %s!\n", memcmp (data, uncomp, size) ? "failed" : "succeeded");
+    printf ("Unit test %s!\n", memcmp (data, uncomp.data, size) ? "failed" : "succeeded");
 
     exit(0);
 }

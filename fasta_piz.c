@@ -27,7 +27,8 @@ bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     if (flag_reading_reference) return false;  // doesn't apply when using FASTA as a reference
 
     // note that piz_read_global_area rewrites --header-only as flag_header_one
-    if (flag_header_one && (dict_id.num == dict_id_fields[FASTA_SEQ] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
+    if (flag_header_one && 
+        (dict_id.num == dict_id_fields[FASTA_NONREF] || dict_id.num == dict_id_fields[FASTA_NONREF_X] || dict_id.num == dict_id_fields[FASTA_COMMENT]))
         return true;
 
     // when grepping by I/O thread - skipping all sections but DESC

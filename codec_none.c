@@ -8,7 +8,7 @@
 #include "vblock.h"
 #include "buffer.h"
 
-bool codec_none_compress (VBlock *vb, Codec codec,
+bool codec_none_compress (VBlock *vb, Codec *codec,
                          const char *uncompressed, uint32_t *uncompressed_len, // option 1 - compress contiguous data
                          LocalGetLineCB callback,                        // option 2 - compress data one line at a tim
                          char *compressed, uint32_t *compressed_len /* in/out */, 
@@ -37,15 +37,15 @@ bool codec_none_compress (VBlock *vb, Codec codec,
     return true;
 }
 
-void codec_none_uncompress (VBlock *vb, 
+void codec_none_uncompress (VBlock *vb, Codec codec,
                            const char *compressed, uint32_t compressed_len,
-                           char *uncompressed_data, uint64_t uncompressed_len, 
+                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
                            Codec unused)
 {
-    memcpy (uncompressed_data, compressed, compressed_len);
+    memcpy (uncompressed_buf->data, compressed, compressed_len);
 }
 
-uint32_t codec_none_est_size (uint64_t uncompressed_len)
+uint32_t codec_none_est_size (Codec codec, uint64_t uncompressed_len)
 {
     return (uint32_t)uncompressed_len;
 }

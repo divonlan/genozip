@@ -3,13 +3,16 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
+#ifndef CODEC_INCLUDED
+#define CODEC_INCLUDED
+
 #include "lzma/7zTypes.h"
 #include "lzma/LzmaDec.h"
 #include "genozip.h"
 #include "data_types.h"
 
 typedef bool CodecCompress (VBlockP vb, 
-                            Codec codec,
+                            Codec *codec,               // in / out
                             const char *uncompressed,   // option 1 - compress contiguous data
                             uint32_t *uncompressed_len, // in/out (might be modified by complex codecs)
                             LocalGetLineCB callback,    // option 2 - compress data one line at a tim
@@ -18,44 +21,61 @@ typedef bool CodecCompress (VBlockP vb,
                             bool soft_fail);
 typedef CodecCompress (*Compressor);
 
-extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_non_acgt_compress, codec_ht_compress, codec_bsc_compress, 
-                     codec_domq_compress, codec_none_compress;
+extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compress, codec_ht_compress, codec_bsc_compress, 
+                     codec_none_compress, codec_acgt_compress, codec_xcgt_compress;
 
-typedef void CodecUncompress (VBlockP vb, 
+typedef void CodecUncompress (VBlockP vb, Codec codec,
                                const char *compressed, uint32_t compressed_len,
-                               char *uncompressed_data, uint64_t uncompressed_len,
+                               Buffer *uncompressed_buf, uint64_t uncompressed_len,
                                Codec sub_codec);
 typedef CodecUncompress (*Uncompressor);
 
-extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_non_acgt_uncompress,
-                       codec_bsc_uncompress, codec_domq_uncompress, codec_ht_uncompress, codec_none_uncompress;
+extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
+                       codec_bsc_uncompress, codec_none_uncompress;
 
-typedef uint32_t CodecEstSizeFunc (uint64_t uncompressed_len);
+typedef uint32_t CodecEstSizeFunc (Codec codec, uint64_t uncompressed_len);
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_ht_est_size, codec_domq_est_size;
 
 typedef struct {
+    const char       *name;
+    const char       *ext; // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
     CodecCompress    *compress;
     CodecUncompress  *uncompress;
     CodecEstSizeFunc *est_size;
-    Codec            sub_codec; // used if this is a novel codec that invokes another codec
+    Codec            sub_codec1, sub_codec2;  // for complex codecs that invokes another codec (for each of the two sections)
 } CodecArgs;
 
-#define CODEC_ARGS { \
-    /* NONE */ { codec_none_compress,     codec_none_uncompress,     codec_none_est_size    }, \
-    /* GZ   */ { codec_compress_error,    codec_uncompress_error,    codec_est_size_default }, \
-    /* BZ2  */ { codec_bz2_compress,      codec_bz2_uncompress,      codec_est_size_default }, \
-    /* LZMA */ { codec_lzma_compress,     codec_lzma_uncompress,     codec_est_size_default }, \
-    /* BSC  */ { codec_bsc_compress,      codec_bsc_uncompress,      codec_bsc_est_size     }, \
-    /* FFU5 */ { codec_compress_error,    codec_uncompress_error,    codec_est_size_default }, \
-    /* FFU6 */ { codec_compress_error,    codec_uncompress_error,    codec_est_size_default }, \
-    /* FFU7 */ { codec_compress_error,    codec_uncompress_error,    codec_est_size_default }, \
-    /* FFU8 */ { codec_compress_error,    codec_uncompress_error,    codec_est_size_default }, \
-    /* FFU9 */ { codec_compress_error,    codec_uncompress_error,    codec_est_size_default }, \
-    /* ACGT */ { codec_lzma_compress,     codec_acgt_uncompress,     codec_est_size_default }, \
-    /* ~CGT */ { codec_non_acgt_compress, codec_non_acgt_uncompress, codec_est_size_default }, \
-    /* HT   */ { codec_ht_compress,       codec_ht_uncompress,       codec_ht_est_size,     CODEC_BZ2 }, \
-    /* DOMQ */ { codec_domq_compress,     codec_domq_uncompress,     codec_domq_est_size,   CODEC_BSC }, \
+#define NA1 codec_compress_error
+#define NA2 codec_uncompress_error
+#define NA3 codec_est_size_default
+#define CODEC_ARGS { /* aligned with Codec defined in genozip.h */ \
+    { "NONE", "+",      codec_none_compress, codec_none_uncompress, codec_none_est_size }, \
+    { "GZ",   "+.gz",   NA1,                 NA2,                   NA3                 }, \
+    { "BZ2",  "+.bz",   codec_bz2_compress,  codec_bz2_uncompress,  NA3                 }, \
+    { "LZMA", "+",      codec_lzma_compress, codec_lzma_uncompress, NA3                 }, \
+    { "BSC",  "+",      codec_bsc_compress,  codec_bsc_uncompress,  codec_bsc_est_size  }, \
+    { "FFU5", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FFU6", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FFU7", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FFU8", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FFU9", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "ACGT", "+",      codec_acgt_compress, codec_acgt_uncompress, codec_sc1_est_size, CODEC_LZMA /* NONREF   */ }, \
+    { "XCGT", "+",      codec_xcgt_compress, codec_xcgt_uncompress, codec_sc1_est_size, CODEC_BZ2  /* NONREF_X */ }, \
+    { "HT",   "+",      codec_ht_compress,   NA2,                   codec_sc1_est_size, CODEC_BZ2  /* GT_HT    */, CODEC_BZ2 /* GT_HT_INDEX */ }, \
+    { "DOMQ", "+",      codec_domq_compress, NA2,                   codec_sc1_est_size, CODEC_BSC  /* QUAL     */, CODEC_BSC /* DOMQRUNS    */ }, \
+    { "FF14", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FF15", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FF16", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FF17", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FF18", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "FF19", "+",      NA1,                 NA2,                   NA3                 }, \
+    { "BGZ",  "+.bgz",  NA1,                 NA2,                   NA3                 }, \
+    { "XZ",   "+.xz",   NA1,                 NA2,                   NA3                 }, \
+    { "BCF",  "-.bcf",  NA1,                 NA2,                   NA3                 }, \
+    { "BAM",  "-.bam",  NA1,                 NA2,                   NA3                 }, \
+    { "CRAM", "-.cram", NA1,                 NA2,                   NA3                 }, \
+    { "ZIP",  "+.zip",  NA1,                 NA2,                   NA3                 }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -71,18 +91,20 @@ extern void codec_free_all (VBlockP vb);
 extern const uint8_t acgt_encode[256];
 extern const char acgt_decode[4];
 #define ACGT_DECODE(bitarr,idx) acgt_decode[bit_array_get ((bitarr), ((int64_t)(idx))*2) + (bit_array_get ((bitarr), ((int64_t)(idx))*2 + 1) << 1)]
-extern void codec_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned bits_consumed, bool do_lten, bool do_lten_partial_final_word);
-extern void codec_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream);
+
+extern void codec_acgt_comp_init (VBlockP vb);
+extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
 
 // BSC stuff
 extern void codec_bsc_initialize (void);
 
 // HT stuff
-extern void codec_ht_piz_get_one_line (VBlockP vb);
+extern void codec_ht_comp_init (VBlockP vb);
 extern void codec_ht_piz_calculate_columns (VBlockP vb);
+extern void codec_ht_reconstruct (VBlockP vb, ContextP ctx);
 
 // DOMQ stuff
-extern bool codec_domq_comp_init (VBlockP vb, DidIType qual_field, LocalGetLineCB callback);
+extern bool codec_domq_comp_init (VBlockP vb, LocalGetLineCB callback);
 extern void codec_domq_reconstruct (VBlockP vb, ContextP qual_ctx);
 
 // BZ2 stuff
@@ -93,3 +115,5 @@ extern void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size);
 extern void lzma_free (ISzAllocPtr alloc_stuff, void *addr);
 extern const char *lzma_errstr (SRes res);
 extern const char *lzma_status (ELzmaStatus status);
+
+#endif

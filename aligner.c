@@ -50,7 +50,7 @@ static inline bool aligner_get_word_from_seq (VBlock *vb, const char *seq, uint3
     for (int i=0; direction * i < nukes_per_hash; i += direction) {   
         uint32_t base = nuke_encode[(uint8_t)seq[i]];
         if (base == 4) {
-            COPY_TIMER (vb->profile.aligner_get_word_from_seq);
+            COPY_TIMER (aligner_get_word_from_seq);
             return false; // not a A,C,G,T
         }
 
@@ -63,7 +63,7 @@ static inline bool aligner_get_word_from_seq (VBlock *vb, const char *seq, uint3
     if (bits_per_hash_is_odd) 
         *refhash_word &= layer_bitmask[0]; 
 
-    COPY_TIMER (vb->profile.aligner_get_word_from_seq);
+    COPY_TIMER (aligner_get_word_from_seq);
     return true;
 }
 
@@ -97,7 +97,7 @@ static inline uint32_t aligner_get_match_len (VBlock *vb, const BitArray *seq_bi
     if (seq_bits->num_of_bits % 64)
         nonmatches -= __builtin_popcountll (word & ~bitmask64 (seq_bits->num_of_bits % 64));
 
-    COPY_TIMER (vb->profile.aligner_get_match_len);
+    COPY_TIMER (aligner_get_match_len);
     return (uint32_t)seq_bits->num_of_bits - nonmatches; // this is the number of matches
 }
 
@@ -225,7 +225,7 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
 done:
     *is_forward = best_is_forward;
 
-    COPY_TIMER (vb->profile.aligner_best_match);
+    COPY_TIMER (aligner_best_match);
     return best_gpos;
 }
 
@@ -233,8 +233,8 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 {
     // these 4 contexts are consecutive and in the same order for all relevant data_types in data_types.h
     Context *nonref_ctx = bitmap_ctx + 1; // NONREF
-    Context *gpos_ctx   = bitmap_ctx + 2; // GPOS
-    Context *strand_ctx = bitmap_ctx + 3; // STRAND
+    Context *gpos_ctx   = bitmap_ctx + 3; // GPOS
+    Context *strand_ctx = bitmap_ctx + 4; // STRAND
 
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
@@ -357,8 +357,8 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
     if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
 
     Context *nonref_ctx = bitmap_ctx + 1;
-    Context *gpos_ctx   = bitmap_ctx + 2;
-    Context *strand_ctx = bitmap_ctx + 3;
+    Context *gpos_ctx   = bitmap_ctx + 3;
+    Context *strand_ctx = bitmap_ctx + 4;
     
     if (buf_is_allocated (&bitmap_ctx->local)) { // not all non-ref
 

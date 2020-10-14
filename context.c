@@ -390,7 +390,7 @@ void mtf_clone_ctx (VBlock *vb)
 
     vb->num_contexts = z_num_contexts;
 
-    COPY_TIMER (vb->profile.mtf_clone_ctx)
+    COPY_TIMER (mtf_clone_ctx);
 }
 
 static void mtf_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map)
@@ -533,7 +533,7 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
     { START_TIMER; 
       mtf_lock (merging_vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
-      COPY_TIMER (merging_vb->profile.lock_mutex_zf_ctx);  
+      COPY_TIMER_VB (merging_vb, lock_mutex_zf_ctx);  
     }
 
     START_TIMER; // note: careful not to count time spent waiting for the mutex
@@ -591,14 +591,14 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     if (added_chars) {
         {   START_TIMER; 
             mtf_lock (merging_vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", merging_vb->vblock_i);
-            COPY_TIMER (merging_vb->profile.lock_mutex_compress_dict);
+            COPY_TIMER_VB (merging_vb, lock_mutex_compress_dict);
         }  
         zfile_compress_dictionary_data (merging_vb, zf_ctx, added_words, start_dict, added_chars);
         mtf_unlock (merging_vb, &compress_dictionary_data_mutex, "compress_dictionary_data_mutex", merging_vb->vblock_i);
     }
 
 finish:
-    COPY_TIMER (merging_vb->profile.mtf_merge_in_vb_ctx_one_dict_id)
+    COPY_TIMER_VB (merging_vb, mtf_merge_in_vb_ctx_one_dict_id)
     mtf_unlock (merging_vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
 }
 
@@ -630,7 +630,7 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
     if (merging_vb->vblock_i == 1)  
         mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
 
-    COPY_TIMER (merging_vb->profile.mtf_merge_in_vb_ctx);
+    COPY_TIMER_VB (merging_vb, mtf_merge_in_vb_ctx);
 }
 
 // PIZ: add aliases to dict_id_to_did_i_map
@@ -800,7 +800,7 @@ void mtf_integrate_dictionary_fragment (VBlock *vb, char *section_data)
 
     buf_free (&fragment);
 
-    COPY_TIMER(vb->profile.mtf_integrate_dictionary_fragment);
+    COPY_TIMER (mtf_integrate_dictionary_fragment);
 }
 
 // PIZ only: this is called by the I/O thread after it integrated all the dictionary fragment read from disk for one VB.

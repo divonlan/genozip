@@ -33,6 +33,8 @@ void vcf_seg_initialize (VBlock *vb_)
     vb->format_mapper_buf.len = vb->contexts[VCF_FORMAT].ol_mtf.len;
     buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Structured), 1.2, "format_mapper_buf", 0);
     buf_zero (&vb->format_mapper_buf);
+
+    codec_ht_comp_init (vb_);
 }             
 
 static void vcf_seg_complete_missing_lines (VBlockVCF *vb);
@@ -156,16 +158,6 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
     dl->has_haplotype_data = (str[0] == 'G' && str[1] == 'T' && (str[2] == ':' || field_len==2)); // GT field in FORMAT columns - must always appear first per VCF spec (if at appears)
     dl->has_genotype_data  = (field_len > 2 || (!dl->has_haplotype_data && field_len > 0));
-
-    if (dl->has_haplotype_data && !vb->ht_ctx) {
-        vb->ht_ctx = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
-        vb->ht_ctx->ltype = LT_HT;
-        vb->ht_ctx->lcodec = CODEC_HT;
-
-        vb->ht_index_ctx  = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
-        vb->ht_index_ctx->ltype = LT_UINT32;
-        vb->ht_index_ctx->lcodec = CODEC_BSC; // 4-5% better than LZMA, only slightly slower
-    }
 
     bool last_item = false;
     do {

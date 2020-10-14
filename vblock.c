@@ -38,7 +38,7 @@ void vb_release_vb (VBlock *vb)
     vb->range = NULL;
     vb->chrom_name = NULL;
     vb->prev_range = NULL;
-    vb->ht_ctx = vb->ht_index_ctx = vb->qual_ctx = NULL;
+    vb->ht_ctx = vb->ht_index_ctx = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->md5_hash_so_far = MD5HASH_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;

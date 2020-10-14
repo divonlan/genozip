@@ -20,7 +20,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(piz_reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
-    ADD(codec_ht_compress);
+    ADD(compressor_ht);
     ADD(codec_ht_piz_get_one_line);
     ADD(sam_seg_seq_field);
     ADD(zfile_compress_dictionary_data);
@@ -29,11 +29,10 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(txtfile_read_vblock);
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
-    ADD(codec_domq_compress);
+    ADD(compressor_domq);
     ADD(mtf_merge_in_vb_ctx);
     ADD(codec_ht_count_alt_alleles);
-    ADD(codec_acgt_pack);
-    ADD(codec_non_acgt_compress);
+    ADD(compressor_actg);
     ADD(md5);
     ADD(lock_mutex_compress_dict);
     ADD(lock_mutex_zf_ctx);
@@ -122,13 +121,12 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (lock_mutex_compress_dict, 2);
         PRINT (zfile_compress_dictionary_data, 2);
         PRINT (zip_generate_and_compress_ctxs, 1);
-        PRINT (compressor_bz2, 2);
+        PRINT (compressor_bz2,  2);
         PRINT (compressor_lzma, 2);
-        PRINT (compressor_bsc, 2);
-        PRINT (codec_acgt_pack, 3);
-        PRINT (codec_domq_compress, 2);
-        PRINT (codec_non_acgt_compress, 2);
-        PRINT (codec_ht_compress,2);
+        PRINT (compressor_bsc,  2);
+        PRINT (compressor_domq, 2);
+        PRINT (compressor_actg, 2);
+        PRINT (compressor_ht,   2);
         PRINT (codec_ht_count_alt_alleles, 3);
     }    
 

@@ -3,16 +3,13 @@
 //   Copyright (C) 2019-2020 Divon Lan <divon@genozip.com>
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "lzma/7zTypes.h"
-#include "lzma/LzmaEnc.h"
-#include "lzma/LzmaDec.h"
 #include "genozip.h"
 #include "codec.h"
-#include "compressor.h"
 #include "vblock.h"
 #include "buffer.h"
 #include "strings.h"
 #include "endianness.h"
+#include "piz.h"
 
 // -------------------------------------------------------------------------------------
 // acgt stuff
@@ -43,127 +40,110 @@ const uint8_t acgt_encode[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 
-// table to convert ASCII to NON-ACGT encoding. The character is XORed with the entry in the table
-static const uint8_t non_acgt_encode[256] = 
-                                 { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0   -> XOR with 0 = stay unchanged
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 16
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 32
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 48
-                                   0,'A',0,'C',0, 0, 0,'G',0, 0, 0, 0, 0, 0, 0, 0,   // 64  A(65), C(67), G(71) -> 0 (XORed with self)
-                                   0, 0, 0, 0,'T',0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 80  T(84)->0
-                                   0, 'a'^1,0,'c'^1,0,0,0,'g'^1,0,0,0,0,0,0, 0, 0,   // 96  a(97), c(99), g(103)-> 1 (XORed with self XOR 1)
-                                   0, 0, 0, 0,'t'^1,0,0,0, 0, 0, 0, 0, 0, 0, 0, 0,   // 112 t(116)->1
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 128
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+//--------------
+// ZIP side
+//--------------
 
-// packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compressed. Previous incomplete 64bit words in carry
-// are used at the beginning of the resulting array, and any uncomplete 64bit word at the end, is stored back in carry
-void codec_acgt_pack (VBlockP vb, const char *data, uint64_t data_len, unsigned bits_consumed, bool do_lten, bool do_lten_partial_final_word)
+void codec_acgt_comp_init (VBlock *vb)
 {
-    START_TIMER;
-    
-    buf_alloc (vb, &vb->compressed, 
-               (vb->compressed.len + roundup_bits2words64 (data_len * 2)) * sizeof (uint64_t), // note: len is in words
-               2, buf_is_allocated (&vb->compressed) ? NULL : "compress", 0); // NULL if already allocated, to avoid overwriting param which is overlayed with BitArray->num_of_bits
+        Context *nonref_ctx   = &vb->contexts[DTF(nonref)];
+        nonref_ctx->lcodec    = CODEC_ACGT; // ACGT is better than LZMA and BSC
+        nonref_ctx->ltype     = LT_SEQUENCE;
 
-    BitArray *packed = buf_get_bitarray (&vb->compressed);
+        Context *nonref_x_ctx = nonref_ctx + 1;
+        nonref_x_ctx->lcodec  = CODEC_XCGT;
+        nonref_x_ctx->ltype   = LT_UINT8;
+}
 
-    // remove consumed bits
-    if (bits_consumed)
-        bit_array_shift_right_shrink (packed, bits_consumed);
-
+// packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compressed. 
+/// returns true if non-ACGT was encountered.
+bool codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_len)
+{
     // increase bit array to accomodate data
-    uint64_t next_bit = packed->num_of_bits;
+    uint64_t next_bit    = packed->num_of_bits;
     packed->num_of_bits += data_len * 2;
     packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
+    
+    bool has_non_agct    = false;
 
     // pack nucleotides - each character is packed into 2 bits
     for (uint64_t i=0 ; i < data_len ; i++) {
-        if (!IS_NUCLEOTIDE (data[i])) 
-            vb->has_non_agct = true;
-
+        has_non_agct = has_non_agct || !IS_NUCLEOTIDE (data[i]);
+        
         uint8_t encoding = acgt_encode[(uint8_t)data[i]];
-        bit_array_assign (packed, next_bit, encoding & 1);
-        bit_array_assign (packed, next_bit + 1, (encoding & 2) >> 1);
+        
+        bit_array_assign (packed, next_bit,   (encoding & 1)     );
+        bit_array_assign (packed, next_bit+1, (encoding & 2) >> 1);
         next_bit += 2;
     }
 
-    // note: we store in Little Endian unlike the rest of the data that is in Big Endian, because LTEN keeps the nucleotides in their
-    // original order, and improves compression ratio by about 2%
-    if (do_lten)
-        LTEN_bit_array (packed, do_lten_partial_final_word);
-
-    COPY_TIMER (vb->profile.codec_acgt_pack)
+    return has_non_agct;
 }
 
-void codec_acgt_pack_last_partial_word (VBlockP vb, ISeqInStream *instream)
+// This function decompsoses SEQ data into two buffers:
+// 1. A,G,C,T characters are packed into a 2-bit BitArray, placed in vb->compressed and then compressed with ACGT.sub_codec1
+// 2. NONREF_X.local is constructed to be the same length on the SEQ data, with each characer corresponding to a character in SEQ:
+// -- an A,C,G or T character in SEQ is corresponds to a \0 in NONREF_X 
+// -- an a,c,g or t character in SEQ is corresponds to a \1 in NONREF_X 
+// -- any other character is copied from SEQ as is
+// NONREF_X.local is later compressed in codec_xcgt_compress with XCGT.sub_codec1
+bool codec_acgt_compress (VBlock *vb, Codec *codec,
+                          const char *uncompressed,    // option 1 - compress contiguous data
+                          uint32_t *uncompressed_len,
+                          LocalGetLineCB callback,     // option 2 - compress data one line at a time
+                          char *compressed, uint32_t *compressed_len /* in/out */, 
+                          bool soft_fail)
 {
-    BitArray *packed = buf_get_bitarray (&vb->compressed);
-    uint64_t bits_remaining = packed->num_of_bits - instream->bits_consumed;
+    // table to convert SEQ data to ACGT exceptions. The character is XORed with the entry in the table
+    static const uint8_t acgt_exceptions[256] = {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 0   -> XOR with 0 = stay unchanged
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 16
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 32
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 48
+        0,'A',0,'C',0, 0, 0,'G',0, 0, 0, 0, 0, 0, 0, 0,   // 64  A(65), C(67), G(71) -> 0 (XORed with self)
+        0, 0, 0, 0,'T',0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 80  T(84)->0
+        0, 'a'^1,0,'c'^1,0,0,0,'g'^1,0,0,0,0,0,0, 0, 0,   // 96  a(97), c(99), g(103)-> 1 (XORed with self XOR 1)
+        0, 0, 0, 0,'t'^1,0,0,0, 0, 0, 0, 0, 0, 0, 0, 0,   // 112 t(116)->1
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // 128
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 
+    };
 
-    if (bits_remaining) { 
-        
-        ASSERT (bits_remaining >= 1 && bits_remaining <= 63, "Error in codec_acgt_pack_last_partial_word: Invalid bits_remaining%u", (uint32_t)bits_remaining);
-
-        bit_array_shift_right_shrink (packed, instream->bits_consumed);
-     
-        instream->bits_consumed = 0;
-        packed->num_of_bits  = packed->num_of_words = 0;
-        packed->words[0]     = LTEN64 (packed->words[0]);
-        instream->next_in_1  = (char *)packed->words; // last word
-        instream->avail_in_1 = sizeof (uint64_t);
-    }
-}
-
-static void codec_acgt_unpack (VBlockP vb, char *uncompressed_data, uint64_t uncompressed_len)
-{
-    BitArray *packed = buf_get_bitarray (&vb->compressed);
-    packed->num_of_bits = uncompressed_len * 2;
-    packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
-
-    LTEN_bit_array (packed, true);
-
-    bit_array_clear_excess_bits_in_top_word (packed);
-
-    for (uint64_t i=0; i < uncompressed_len; i++) 
-        uncompressed_data[i] = ACGT_DECODE(packed, i);
-}
-
-static inline void codec_non_acgt_transform (char *data, uint32_t len)
-{
-    for (uint32_t i=0; i < len; i++)
-        data[i] ^= non_acgt_encode[(uint8_t)data[i]];
-}
-
-// returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-// the purpose of NON-AGCT compression is to be used after ACGT, on the same data, to capture the characters that are NOT ACGT
-// -- an A,C,G or T character is encoded as 0 (its encoded by CODEC_ACGT)
-// -- an a,c,g or t character is encoded as 1 (its encoded by CODEC_ACGT the same as its uppercase counterpart
-// -- any other character remains as is
-// This works well, because we usually expect long runs of 0
-// We modify the source data (and hence NON-AGCT compression is destructive!) and then recursively compress it with bz2.
-bool codec_non_acgt_compress (VBlock *vb, Codec codec,
-                             const char *uncompressed,    // option 1 - compress contiguous data
-                             uint32_t *uncompressed_len,
-                             LocalGetLineCB callback,     // option 2 - compress data one line at a time
-                             char *compressed, uint32_t *compressed_len /* in/out */, 
-                             bool soft_fail)
-{
     START_TIMER;
-
-    // option 1 - compress contiguous data
-    if (uncompressed) 
-        codec_non_acgt_transform ((char*)uncompressed, *uncompressed_len);
     
-    // option 2 - compress data one line at a time
+    #define PACK(data,len) { if (len) vb->has_non_agct = codec_acgt_pack (packed, (data), (len)) || vb->has_non_agct; }
+
+    Context *nonref_ctx   = &vb->contexts[DTF(nonref)];
+    Context *nonref_x_ctx = nonref_ctx + 1;
+
+    ASSERT0 (!vb->compressed.len && !vb->compressed.param, "Error in codec_acgt_compress_nonref: expecting vb->compressed to be free, but its not");
+
+    // we will pack into vb->compressed
+    buf_alloc (vb, &vb->compressed, roundup_bits2bytes64 (*uncompressed_len * 2), 1, "compress", 0);
+    BitArray *packed = buf_get_bitarray (&vb->compressed);
+
+    // option 1 - pack contiguous data
+    if (uncompressed) {
+        // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
+        buf_set_overlayable (&nonref_ctx->local);
+        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "context->local", nonref_x_ctx->did_i);
+
+        PACK (uncompressed, *uncompressed_len); // pack into vb->compressed
+
+        // calculate the exception in-place in NONREF.local also overlayed to NONREF_X.local
+        for (uint32_t i=0; i < *uncompressed_len; i++) \
+            ((char*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
+    }
+
+    // option 2 - callback to get each line
     else if (callback) {
 
+        buf_alloc (vb, &nonref_x_ctx->local, *uncompressed_len, CTX_GROWTH, "ctx->local", nonref_x_ctx->did_i);
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             char *data_1=0, *data_2=0;
@@ -171,72 +151,104 @@ bool codec_non_acgt_compress (VBlock *vb, Codec codec,
             
             callback (vb, line_i, &data_1, &data_1_len, &data_2, &data_2_len);
 
-            codec_non_acgt_transform (data_1, data_1_len);
-            codec_non_acgt_transform (data_2, data_2_len);
+            PACK (data_1, data_1_len);
+            PACK (data_2, data_2_len);
+
+            for (uint32_t i=0; i < data_1_len; i++) 
+                NEXTENT (uint8_t, nonref_x_ctx->local) = (uint8_t)(data_1[i]) ^ acgt_exceptions[(uint8_t)(data_1[i])];
+
+            for (uint32_t i=0; i < data_2_len; i++) 
+                NEXTENT (uint8_t, nonref_x_ctx->local) = (uint8_t)(data_2[i]) ^ acgt_exceptions[(uint8_t)(data_2[i])];
         }
     }
     else 
-        ABORT0 ("Error in codec_non_acgt_compress: neither src_data nor callback is provided");
-    
-    COPY_TIMER (vb->profile.codec_non_acgt_compress); // excluding bzlib
-    
-    // now do the compression on the non-agct data
-    // note: we don't support soft-fail because the allocated amount (uncompressed_len/2) is plenty for our textual data,
-    // and we can't allow re-calling of this routine as the xor will undo itself
-    return codec_bz2_compress (vb, CODEC_BZ2, uncompressed, uncompressed_len, callback, compressed, compressed_len, false);
+        ABORT0 ("Error in codec_acgt_compress_nonref: neither src_data nor callback is provided");
+
+    // note: we store in Little Endian unlike the rest of the data that is in Big Endian, because LTEN keeps the nucleotides in their
+    // original order, and improves compression ratio by about 2%
+    LTEN_bit_array (packed);
+
+    Compressor compress = codec_args[codec_args[*codec].sub_codec1].compress;
+    uint32_t packed_uncompressed_len = packed->num_of_words * sizeof (word_t);
+
+    PAUSE_TIMER; // sub-codec compresssors account for themselves
+    compress (vb, codec, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, false); // no soft fail
+    RESUME_TIMER (compressor_actg);
+
+    buf_free (&vb->compressed);
+
+    // note: NONREF_X will be compressed after us in codec_xcgt_compress, as it is the subsequent context, and its local is now populated
+
+    COPY_TIMER (compressor_actg); // don't include sub-codec compressor - it accounts for itself
+    return true;
 }
 
-static void comp_apply_non_acgt_on_top_of_acgt (char *acgt, const char *non_acgt, uint64_t len)
+// Compresss NONREF_X data with codec XCGT, using CODEC_BZ2 sub-codec, which would work well since we expect long runs of \0.
+bool codec_xcgt_compress (VBlock *vb, Codec *codec,
+                          const char *uncompressed,    // option 1 - compress contiguous data
+                          uint32_t *uncompressed_len,
+                          LocalGetLineCB callback,     // option 2 - compress data one line at a time
+                          char *compressed, uint32_t *compressed_len /* in/out */, 
+                          bool soft_fail)
 {
-    for (uint64_t i=0; i < len; i++)
-        
-        // if we have a 1 - we convert the nucleotide to lower case
-        if (non_acgt[i] == 1) acgt[i] += 32;
-
-        // if its a non-0, non-1 - we copy verbatim (this is usually, but not necessarily, 'N')
-        else if (non_acgt[i]) acgt[i] = non_acgt[i];
+    Compressor compress = codec_args[codec_args[*codec].sub_codec1].compress;
+    return compress (vb, codec, uncompressed, uncompressed_len, callback, compressed, compressed_len, soft_fail); 
 }
 
-void codec_non_acgt_uncompress (VBlock *vb, 
-                               const char *compressed, uint32_t compressed_len,
-                               char *uncompressed_data, uint64_t uncompressed_len, 
-                               Codec sub_codec)
-{
-    // first - do bzip2 decoding into vb->compressed
-    buf_alloc (vb, &vb->compressed, uncompressed_len, 1.5, "compressed", 0);
-    comp_uncompress (vb, CODEC_BZ2, CODEC_NONE, compressed, compressed_len, vb->compressed.data, uncompressed_len);
+//--------------
+// PIZ side
+//--------------
 
-    // second, fix "compressed", already containing ACGT data, with the data from this NON_ACGT data
-    comp_apply_non_acgt_on_top_of_acgt (uncompressed_data, vb->compressed.data, uncompressed_len);
+// two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
+// if snip_len==0, then the length is taken from seq_len.
+void codec_xcgt_uncompress (VBlock *vb, Codec codec,
+                            const char *compressed, uint32_t compressed_len,
+                            Buffer *uncompressed_buf, uint64_t uncompressed_len,
+                            Codec sub_codec)
+{
+    // uncompress NONREF_X using CODEC_XCGT.sub_codec1 (passed to us as sub_codec)
+    codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, uncompressed_buf, uncompressed_len, CODEC_NONE);
+
+    const BitArray *acgt_packed = buf_get_bitarray (&vb->compressed); // data from NONREF context (2-bit per base)
+    const char *acgt_x = FIRSTENT (const char, *uncompressed_buf); // data from NONREF_X context
+    
+    Context *nonref_ctx = &vb->contexts[DTF(nonref)];
+    char *nonref = FIRSTENT (char, nonref_ctx->local); // note: local was allocated by caller ahead of comp_uncompress -> codec_acgt_uncompress of the NONREF context
+
+    for (uint32_t i=0; i < uncompressed_len; i++) {
+        if      (!acgt_x || acgt_x[i] == 0) *nonref++ = ACGT_DECODE(acgt_packed, i);      // case 0: use acgt as is - 'A', 'C', 'G' or 'T'
+        else if (           acgt_x[i] == 1) *nonref++ = ACGT_DECODE(acgt_packed, i) + 32; // case 1: convert to lower case - 'a', 'c', 'g' or 't'
+        else                                *nonref++ = acgt_x[i];                        // case non-0/1: use acgt_x (this is usually, but not necessarily, 'N')
+    }
+
+    buf_free (&vb->compressed)
 }
 
-void codec_acgt_uncompress (VBlock *vb, 
-                           const char *compressed, uint32_t compressed_len,
-                           char *uncompressed_data, uint64_t uncompressed_len,
-                           Codec sub_codec)
+// Explanation of uncompression of data compressed with the ACGT codec:
+// - ACGT-compressed data is stored in two consecutive sections, NONREF which has CODEC_ACGT, and NONREF_X which has sub_codec2
+// 1) NONREF contains a 2-bit representation of the bases: is is uncompressed by codec_acgt_uncompress into vb->compressed using sub_codec1
+// 2) NONREF_X is a character array of exceptions and is uncompressed into NONREF_X.local by codec_xcgt_uncompress
+// 3) codec_xcgt_uncompress also combines vb->compressed with NONREF_X.local to recreate NONREF.local - an LT_SEQUENCE local buffer
+void codec_acgt_uncompress (VBlock *vb, Codec codec,
+                            const char *compressed, uint32_t compressed_len,
+                            Buffer *uncompressed_buf, uint64_t num_bases,
+                            Codec sub_codec)
 {
-    ISzAlloc alloc_stuff = { .Alloc = lzma_alloc, .Free = lzma_free, .vb = vb};
-    ELzmaStatus status;
+    ASSERT0 (!vb->compressed.len && !vb->compressed.param, "Error in codec_acgt_uncompress: expected vb->compressed to be free, but its not");
 
-    SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
+    uint64_t bitmap_num_bytes = roundup_bits2bytes64 (num_bases * 2); // 4 nucleotides per byte, rounded up to whole 64b words
+    buf_alloc (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed", 0);    
 
-    uint64_t bitarray_size = roundup_bits2bytes64 (uncompressed_len * 2); // 4 nucleotides per byte, rounded up to whole 64b words
-    buf_alloc (vb, &vb->compressed, bitarray_size, 2, "compressed", 0);
-    
-    uint64_t expected_num_uncompressed_bytes = roundup_bits2bytes64 (uncompressed_len * 2); // 4 nucleotides per byte, rounded up to whole bytes
-    uint64_t actual_num_uncompressed_bytes = expected_num_uncompressed_bytes;
-    
-    SRes ret = LzmaDecode ((uint8_t *)vb->compressed.data, &actual_num_uncompressed_bytes, 
-                            (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
-                            (uint8_t *)compressed, LZMA_PROPS_SIZE, 
-                            LZMA_FINISH_END, &status, &alloc_stuff);
+    // uncompress bitmap using CODEC_ACGT.sub_codec1 (passed to us as sub_codec) into vb->compressed
+    codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, &vb->compressed, bitmap_num_bytes, CODEC_NONE);
 
-    ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
-            "Error: LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
+    // finalize bitmap structure
+    BitArray *packed     = buf_get_bitarray (&vb->compressed);
+    packed->num_of_bits  = num_bases * 2;
+    packed->num_of_words = roundup_bits2words64 (packed->num_of_bits);
 
-    ASSERT (expected_num_uncompressed_bytes == actual_num_uncompressed_bytes, "Error in comp_uncompress while decompressing ACGT: expected_num_uncompressed_bytes(%u) != actual_num_uncompressed_bytes(%u)",
-            (uint32_t)expected_num_uncompressed_bytes, (uint32_t)actual_num_uncompressed_bytes);
-            
-    codec_acgt_unpack (vb, uncompressed_data, uncompressed_len);    
+    LTEN_bit_array (packed);
+
+    bit_array_clear_excess_bits_in_top_word (packed);
 }
 

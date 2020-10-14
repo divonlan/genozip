@@ -856,5 +856,5 @@ void seg_all_data_lines (VBlock *vb)
 
     if (!flag_make_reference) seg_verify_file_size (vb);
 
-    COPY_TIMER(vb->profile.seg_all_data_lines);
+    COPY_TIMER (seg_all_data_lines);
 }

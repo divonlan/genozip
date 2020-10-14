@@ -127,8 +127,6 @@ void sam_seg_initialize (VBlock *vb)
 {
     vb->contexts[SAM_RNAME].inst       = CTX_INST_NO_STONS; // needs b250 node_index for random access
     vb->contexts[SAM_SEQ_BITMAP].ltype = LT_BITMAP;
-    vb->contexts[SAM_NONREF].lcodec    = CODEC_ACGT; // better than LZMA and BSC
-    vb->contexts[SAM_NONREF].ltype     = LT_SEQUENCE;
     vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
     vb->contexts[SAM_STRAND].ltype     = LT_BITMAP;
@@ -136,13 +134,14 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_GPOS].ltype       = LT_UINT32;
     vb->contexts[SAM_GPOS].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_GPOS].lcodec      = CODEC_LZMA;
+    codec_acgt_comp_init (vb);
 }
 
 void sam_seg_finalize (VBlockP vb)
 {
     // for qual data - select domqual compression if possible, or fallback 
-    if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) {
-        vb->contexts[SAM_QUAL].ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
+    if (!codec_domq_comp_init (vb, sam_zip_qual)) {
+        vb->contexts[SAM_QUAL].ltype  = LT_SEQUENCE; 
         vb->contexts[SAM_QUAL].inst   = 0; // don't inherit from previous file 
 
         // TODO - choose between BSC and BZ2
@@ -442,7 +441,7 @@ align_nonref_local: {
     if (add_chars) buf_add (&nonref_ctx->local, "AAA", add_chars); // add 1 to 3 As
 }
 done:
-    COPY_TIMER (vb->profile.sam_seg_seq_field);
+    COPY_TIMER (sam_seg_seq_field);
 }
 
 static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id, 

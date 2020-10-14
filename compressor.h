@@ -8,6 +8,7 @@
 
 #include "genozip.h"
 #include "data_types.h"
+#include "codec.h"
 
 extern void comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
                            SectionHeaderP header, 
@@ -16,7 +17,7 @@ extern void comp_compress (VBlockP vb, BufferP z_data, bool is_z_file_buf,
 
 extern void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec,
                              const char *compressed_data, uint32_t compressed_data_len,
-                             char *uncompressed_data, uint64_t uncompressed_len);
+                             Buffer *uncompressed_data, uint64_t uncompressed_len);
 
 extern void comp_unit_test (Codec codec);
 

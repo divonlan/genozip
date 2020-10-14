@@ -1665,11 +1665,11 @@ char* bit_array_word2str_rev(const void *ptr, size_t num_of_bits, char *str)
   return str;
 }
 
-void LTEN_bit_array (BitArray* bitarr, bool also_partial_topword)
+void LTEN_bit_array (BitArray* bitarr)
 {
 #ifndef __LITTLE_ENDIAN__
 
-  int64_t num_words = (bitarr->num_of_bits >> 6) + (also_partial_topword && (bitarr->num_of_bits & 0x3f) != 0);
+  int64_t num_words = (bitarr->num_of_bits >> 6) + ((bitarr->num_of_bits & 0x3f) != 0);
   
   for (uint64_t i=0; i < num_words; i++)
     bitarr->words[i] = LTEN64 (bitarr->words[i]);

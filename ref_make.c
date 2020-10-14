@@ -29,7 +29,7 @@ static Range *ref_make_ref_get_range (uint32_t vblock_i)
 void ref_make_create_range (VBlockP vb)
 {
     Range *r = ref_make_ref_get_range (vb->vblock_i);
-    uint64_t seq_len = vb->contexts[FASTA_SEQ].local.len;
+    uint64_t seq_len = vb->contexts[FASTA_NONREF].local.len;
 
     // as this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_prepare_range_for_compress

@@ -26,13 +26,15 @@ static const char *codec_bsc_errstr (int err)
     }
 }
 
-bool codec_bsc_compress (VBlock *vb, Codec codec,
+bool codec_bsc_compress (VBlock *vb, Codec *codec,
                         const char *uncompressed,      // option 1 - compress contiguous data
                         uint32_t *uncompressed_len, 
                         LocalGetLineCB callback, // option 2 - compress data one line at a time
                         char *compressed, uint32_t *compressed_len /* in/out */, 
                         bool soft_fail)
 {
+    START_TIMER;
+
     ASSERT0 (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "Error in codec_bsc_compress: compressed_len too small");
 
     // libbsc doesn't allow piecemiel compression, so we need to copy all the data in case of callback
@@ -70,20 +72,22 @@ bool codec_bsc_compress (VBlock *vb, Codec codec,
 
     *compressed_len = ret;
 
+    COPY_TIMER (compressor_bsc); // higher level codecs are accounted for in their codec code
+
     return true;
 }
 
-void codec_bsc_uncompress (VBlock *vb, 
+void codec_bsc_uncompress (VBlock *vb, Codec codec,
                           const char *compressed, uint32_t compressed_len,
-                          char *uncompressed_data, uint64_t uncompressed_len, 
+                          Buffer *uncompressed_buf, uint64_t uncompressed_len, 
                           Codec unused)
 {
-    int ret = bsc_decompress (vb, (const uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
+    int ret = bsc_decompress (vb, (const uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
     ASSERT (ret >= LIBBSC_NO_ERROR, "Error in codec_bsc_uncompress: %s", codec_bsc_errstr (ret));    
 }
 
-uint32_t codec_bsc_est_size (uint64_t uncompressed_len)
+uint32_t codec_bsc_est_size (Codec codec, uint64_t uncompressed_len)
 {
     return (uint32_t)uncompressed_len + LIBBSC_HEADER_SIZE; // as required by libbsc
 }

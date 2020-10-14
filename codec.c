@@ -50,36 +50,36 @@ void codec_free_all (VBlock *vb)
         buf_free (&vb->codec_bufs[i]);
 }
 
-static bool codec_compress_error (VBlock *vb, Codec codec, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
+static bool codec_compress_error (VBlock *vb, Codec *codec, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
                                  char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
-    ABORT0 ("Error in comp_compress: Unsupported section compression codecorithm");
+    ABORT ("Error in comp_compress: Unsupported codec: %s", codec_name (*codec));
     return false;
 }
 
 
-static void codec_uncompress_error (VBlock *vb,
+static void codec_uncompress_error (VBlock *vb, Codec codec, 
                                    const char *compressed, uint32_t compressed_len,
-                                   char *uncompressed_data, uint64_t uncompressed_len,
+                                   Buffer *uncompressed_buf, uint64_t uncompressed_len,
                                    Codec sub_codec)
 {
-    ABORT0 ("Error in comp_uncompress: Unsupported section compression codecorithm");
+    ABORT ("Error in comp_uncompress: Unsupported codec: %s", codec_name (codec));
 }
 
-static uint32_t codec_est_size_default (uint64_t uncompressed_len)
+static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)
 {
     return (uint32_t)MAX (uncompressed_len / 2, 500);
 }
 
+static uint32_t codec_sc1_est_size (Codec codec, uint64_t uncompressed_len)
+{
+    Codec sub_codec1 = codec_args[codec].sub_codec1;
+    return codec_args[sub_codec1].est_size (sub_codec1, uncompressed_len);
+}
+
 const char *codec_name (Codec codec)
 {
-    static const char *comp_names[NUM_CODECS] = CODEC_NAMES;
-
-    if (codec >=0 && codec < NUM_CODECS) 
-        return comp_names[codec];
-
-    else
-        return "BAD!";    
+    return (codec >=0 && codec < NUM_CODECS) ? codec_args[codec].name : "BAD!";    
 }
 
 void codec_initialize (void)

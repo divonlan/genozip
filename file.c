@@ -857,22 +857,22 @@ const char *file_viewer (const File *file)
 // PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
 const char *file_guess_original_filename (const File *file)
 {
-    static const char *codec_exts[NUM_CODECS] = CODEC_EXTS; 
-
     if (file->codec == CODEC_NONE) return file->name;
 
     unsigned len = strlen (file->name) + 10;
     char *org_name = malloc (len);
     strcpy (org_name, file->name);
 
+    const char *ext = codec_args[file->codec].ext;
+
     // remove existing extension if needed (eg when replacing .sam with .bam)
-    if (codec_exts[file->codec][0] == '-') {
+    if (ext[0] == '-') {
         char *last_dot = strrchr (org_name, '.');
         if (last_dot) *last_dot = 0;
     }
 
     // add new extension
-    strcpy (&org_name[strlen(org_name)], &codec_exts[file->codec][1]);
+    strcpy (&org_name[strlen(org_name)], &ext[1]);
 
     return org_name;
 }

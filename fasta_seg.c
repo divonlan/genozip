@@ -12,11 +12,12 @@
 #include "random_access.h"
 #include "strings.h"
 #include "regions.h"
+#include "codec.h"
 
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
 void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i, 
-                                         char **line_seq_data, uint32_t *line_seq_len,  // out 
-                                         char **unused_data,  uint32_t *unused_len)
+                    char **line_seq_data, uint32_t *line_seq_len,  // out 
+                    char **unused_data,  uint32_t *unused_len)
 {
     ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
     *line_seq_len  = dl->seq_len;
@@ -34,12 +35,10 @@ void fasta_seg_initialize (VBlockFAST *vb)
 
         vb->contexts[FASTA_LINEMETA].inst = CTX_INST_NO_STONS; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_piz_reconstruct_vb iterates on ctx->b250
         
-        Context *seq_ctx = &vb->contexts[FASTA_SEQ];
-        seq_ctx->lcodec  = CODEC_ACGT; // ACGT is better than LZMA and BSC
-        seq_ctx->ltype   = LT_SEQUENCE;
+        codec_acgt_comp_init ((VBlockP)vb);
 
         if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE)
-            vb->contexts[FASTA_SEQ].inst |= CTX_INST_NO_CALLBACK; // override callback if we are segmenting to a reference
+            vb->contexts[FASTA_NONREF].inst |= CTX_INST_NO_CALLBACK; // override callback if we are segmenting to a reference
     }
 
     vb->contexts[FASTA_CONTIG].inst = CTX_INST_NO_STONS; // needs b250 node_index for reference
@@ -136,14 +135,14 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
         DATA_LINE (vb->line_i)->seq_data_start = line_start - vb->txt_data.data;
         DATA_LINE (vb->line_i)->seq_len        = line_len;
 
-        Context *seq_ctx = &vb->contexts[FASTA_SEQ];
-        seq_ctx->local.len += line_len;
+        Context *nonref_ctx = &vb->contexts[FASTA_NONREF];
+        nonref_ctx->local.len += line_len;
 
         if (!flag_make_reference) {
 
-            seq_ctx->txt_len += line_len;
+            nonref_ctx->txt_len += line_len;
 
-            seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_SEQ], true, (int32_t)line_len, &special_snip[3], &special_snip_len);
+            seg_prepare_snip_other (SNIP_OTHER_LOOKUP, (DictId)dict_id_fields[FASTA_NONREF], true, (int32_t)line_len, &special_snip[3], &special_snip_len);
 
             special_snip[0] = SNIP_SPECIAL;
             special_snip[1] = FASTA_SPECIAL_SEQ;
@@ -154,7 +153,7 @@ const char *fasta_seg_txt_line (VBlockFAST *vb, const char *line_start, bool *ha
 
 //            if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
 //                aligner_seg_seq (vb, line_start, line_len, FASTA_SQBITMAP);
-//                seq_ctx->local.len = 0; // we don't use FASTA_SEQ if segging to a reference
+//                seq_ctx->local.len = 0; // we don't use FASTA_NONREF if segging to a reference
 //            }
         }
 

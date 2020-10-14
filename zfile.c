@@ -105,8 +105,8 @@ static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_
 // when we get here, the header is already unencrypted zfile_one_section
 void zfile_uncompress_section (VBlock *vb,
                                void *section_header_p,
-                               void *uncompressed_data, // Buffer * or char *
-                               const char *uncompressed_data_buf_name, // a name if Buffer, NULL if char *
+                               Buffer *uncompressed_data, 
+                               const char *uncompressed_data_buf_name, // a name if Buffer, NULL ok if buffer need not be realloced
                                uint32_t expected_vb_i,
                                SectionType expected_section_type) 
 {
@@ -140,24 +140,21 @@ void zfile_uncompress_section (VBlock *vb,
     if (data_encrypted_len) 
         crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_header->section_type, false);
 
-    BufferP uncompressed_buf = NULL;
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
-        if (uncompressed_data_buf_name) { // we're decompressing into a buffer
-            uncompressed_buf = (BufferP)uncompressed_data;
-            buf_alloc (vb, uncompressed_buf, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name, 0); // add a 64b word for safety in case this buffer will be converted to a bitarray later
-            uncompressed_buf->len = data_uncompressed_len;
-            uncompressed_data = uncompressed_buf->data;
+        if (uncompressed_data_buf_name) { 
+            buf_alloc (vb, uncompressed_data, data_uncompressed_len + sizeof (uint64_t), 1.1, uncompressed_data_buf_name, 0); // add a 64b word for safety in case this buffer will be converted to a bitarray later
+            uncompressed_data->len = data_uncompressed_len;
         }
 
         comp_uncompress (vb, section_header->codec, section_header->sub_codec, (char*)section_header + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len);
     }
  
-    if (uncompressed_buf && flag_show_b250 && expected_section_type == SEC_B250) 
-        zfile_show_b250_section (section_header_p, uncompressed_buf);
+    if (flag_show_b250 && expected_section_type == SEC_B250) 
+        zfile_show_b250_section (section_header_p, uncompressed_data);
     
-    if (vb) COPY_TIMER(vb->profile.zfile_uncompress_section);
+    if (vb) COPY_TIMER (zfile_uncompress_section);
 }
 
 // generate the metadata string eg "user@domain.com 2019-11-16 16:48:19"
@@ -215,7 +212,7 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
     z_file->dict_data.name  = "z_file->dict_data"; // comp_compress requires that it is set in advance
     comp_compress (vb, &z_file->dict_data, true, (SectionHeader*)&header, data, NULL);
 
-    COPY_TIMER (vb->profile.zfile_compress_dictionary_data)    
+    COPY_TIMER (zfile_compress_dictionary_data)    
 //printf ("End compress dict vb_i=%u did_i=%u\n", vb->vblock_i, ctx->did_i);
 }
 
@@ -260,7 +257,7 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
         .h.data_uncompressed_len = BGEN32 (ctx->local.len * lt_desc[ctx->ltype].width),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
         .h.codec                 = ctx->lcodec,
-        .h.sub_codec             = codec_args[ctx->lcodec].sub_codec,
+        .h.sub_codec             = codec_args[ctx->lcodec].sub_codec1,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags                 = flags,
         .dict_id                 = ctx->dict_id,
@@ -273,16 +270,6 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
     comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
                    callback ? NULL : ctx->local.data, 
                    callback);
-
-    // for CODEC_ACGT, if we discovered any non-A,G,C,T, then we need an additional section with CODEC_NON_ACGT 
-    // that will have the correction needed
-    if ((ctx->lcodec == CODEC_ACGT) && vb->has_non_agct) {
-        header.h.codec = CODEC_NON_ACGT;
-
-        comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
-                       callback ? NULL : ctx->local.data, 
-                       callback);
-    }
 }
 
 // compress section - two options for input data - 
@@ -342,7 +329,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
 
             ASSERT (file->z_last_read || !memcpyied, "Error: data requested could not be read bytes_so_far=%"PRIu64"", file->disk_so_far);
             if (!file->z_last_read) {
-                COPY_TIMER (vb->profile.read);
+                COPY_TIMER (read);
                 return NULL; // file is exhausted - nothing read
             }
         }
@@ -359,7 +346,7 @@ static void *zfile_read_from_disk (File *file, VBlock *vb, Buffer *buf, uint32_t
         memcpyied += memcpy_len;
     }
 
-    COPY_TIMER (vb->profile.read);
+    COPY_TIMER (read);
 
     return start;
 }
@@ -831,7 +818,6 @@ bool zfile_get_genozip_header (File *file,
 
     if (dt)               *dt               = (DataType)BGEN16 (header.data_type);
     if (uncomp_data_size) *uncomp_data_size = BGEN64 (header.uncompressed_data_size);
-    //if (num_samples)      *num_samples      = BGEN32 (header.num_samples);
     if (num_items_bound)  *num_items_bound  = BGEN64 (header.num_items_bound);
     if (md5_hash_bound)   *md5_hash_bound   = header.md5_hash_bound;
     if (license_hash)     *license_hash     = header.license_hash;

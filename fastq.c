@@ -70,8 +70,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
 
     vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
 
-    vb->contexts[FASTQ_NONREF].ltype   = LT_SEQUENCE;
-    vb->contexts[FASTQ_NONREF].lcodec  = CODEC_ACGT; // better than LZMA and BSC
+    codec_acgt_comp_init ((VBlockP)vb);
 
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst   = CTX_INST_PAIR_LOCAL;
@@ -90,7 +89,7 @@ void fastq_seg_initialize (VBlockFAST *vb)
 void fastq_seg_finalize (VBlockP vb)
 {
     // for qual data - select domqual compression if possible, or fallback 
-    if (!codec_domq_comp_init (vb, FASTQ_QUAL, fastq_zip_qual)) {
+    if (!codec_domq_comp_init (vb, fastq_zip_qual)) {
         vb->contexts[FASTQ_QUAL].ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
         vb->contexts[FASTQ_QUAL].inst   = 0; // don't inherit from previous file 
 
@@ -315,10 +314,10 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     // note that piz_read_global_area rewrites --header-only as flag_header_one: skip all items but DESC and E1L
     if (flag_header_one && 
-        (dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || dict_id.num == dict_id_fields[FASTQ_NONREF] || 
-         dict_id.num == dict_id_fields[FASTQ_GPOS]     || dict_id.num == dict_id_fields[FASTQ_STRAND] || 
-         dict_id.num == dict_id_fields[FASTQ_E2L]      || dict_id.num == dict_id_fields[FASTQ_QUAL]   || 
-         dict_id.num == dict_id_fields[FASTQ_DOMQRUNS]))
+        (dict_id.num == dict_id_fields[FASTQ_E2L]      || dict_id.num == dict_id_fields[FASTQ_SQBITMAP] || 
+         dict_id.num == dict_id_fields[FASTQ_NONREF]   || dict_id.num == dict_id_fields[FASTQ_NONREF_X] || 
+         dict_id.num == dict_id_fields[FASTQ_GPOS]     || dict_id.num == dict_id_fields[FASTQ_STRAND]   || 
+         dict_id.num == dict_id_fields[FASTQ_QUAL]     || dict_id.num == dict_id_fields[FASTQ_DOMQRUNS] ))
         return true;
         
     // when grepping by I/O thread - skipping all sections but DESC

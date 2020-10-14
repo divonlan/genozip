@@ -490,7 +490,7 @@ uint64_t buf_alloc_do (VBlock *vb,
 //             buf_desc (buf), str_size (new_size, size_str), vb->vblock_i);
 
 finish:
-    if (vb != evb) COPY_TIMER (vb->profile.buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread
+    if (vb != evb) COPY_TIMER (buf_alloc); // this is not thread-safe for evb as evb buffers might be allocated by any thread
     return buf->size;
 }
 
@@ -735,7 +735,7 @@ BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t num_of_bits)
     ASSERT (roundup_bits2bytes64 (num_of_bits) <= buf->size, "Error in buf_zfile_buf_to_bitarray: buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
             buf->size, bitarr->num_of_words, bitarr->num_of_words * sizeof(uint64_t));
 
-    LTEN_bit_array (bitarr, true);
+    LTEN_bit_array (bitarr);
 
     return bitarr;
 }

@@ -163,7 +163,7 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
 {
     DispatcherData *dd = (DispatcherData *)*dispatcher;
 
-    COPY_TIMER (evb->profile.wallclock);
+    COPY_TIMER_VB (evb, wallclock);
 
     if (flag_show_time) 
         profiler_print_report (&evb->profile, 
