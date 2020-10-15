@@ -45,20 +45,20 @@ typedef struct {
 #define NA4 codec_est_size_default
 #define USE_SUBCODEC NULL
 #define CODEC_ARGS { /* aligned with Codec defined in genozip.h */ \
+    { "N/A",  "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "NONE", "+",      codec_none_compress, codec_none_uncompress, NA3,                    codec_none_est_size }, \
     { "GZ",   "+.gz",   NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "BZ2",  "+.bz",   codec_bz2_compress,  codec_bz2_uncompress,  NA3,                    NA4                 }, \
     { "LZMA", "+",      codec_lzma_compress, codec_lzma_uncompress, NA3,                    NA4                 }, \
     { "BSC",  "+",      codec_bsc_compress,  codec_bsc_uncompress,  NA3,                    codec_bsc_est_size  }, \
-    { "FFU5", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "FFU6", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "FFU7", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "FFU8", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "FFU9", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
-    { "ACGT", "+",      codec_acgt_compress, codec_acgt_uncompress, NA3,                    codec_sc1_est_size, CODEC_LZMA /* NONREF   */ }, \
-    { "XCGT", "+",      codec_xcgt_compress, codec_xcgt_uncompress, NA3,                    codec_sc1_est_size, CODEC_BZ2  /* NONREF_X */ }, \
-    { "HT",   "+",      codec_ht_compress,   USE_SUBCODEC,          codec_ht_reconstruct,   codec_sc1_est_size, CODEC_BZ2  /* GT_HT    */, CODEC_BZ2 /* GT_HT_INDEX */ }, \
-    { "DOMQ", "+",      codec_domq_compress, USE_SUBCODEC,          codec_domq_reconstruct, codec_sc1_est_size, CODEC_BSC  /* QUAL     */, CODEC_BSC /* DOMQRUNS    */ }, \
+    { "ACGT", "+",      codec_acgt_compress, codec_acgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_LZMA /* NONREF   */ }, \
+    { "XCGT", "+",      USE_SUBCODEC,        codec_xcgt_uncompress, NA3,                    USE_SUBCODEC,       CODEC_BZ2  /* NONREF_X */ }, \
+    { "HT",   "+",      codec_ht_compress,   USE_SUBCODEC,          codec_ht_reconstruct,   USE_SUBCODEC,       CODEC_BZ2  /* GT_HT    */, CODEC_BZ2 /* GT_HT_INDEX */ }, \
+    { "DOMQ", "+",      codec_domq_compress, USE_SUBCODEC,          codec_domq_reconstruct, USE_SUBCODEC,       CODEC_BSC  /* QUAL     */, CODEC_BSC /* DOMQRUNS    */ }, \
     { "FF14", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "FF15", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \
     { "FF16", "+",      NA1,                 NA2,                   NA3,                    NA4                 }, \

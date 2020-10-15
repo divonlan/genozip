@@ -69,12 +69,16 @@ bool sam_inspect_txt_header (BufferP txt_header)
 // callback function for compress to get data of one line (called by codec_bz2_compress)
 void sam_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                         char **line_qual_data, uint32_t *line_qual_len, // out
-                                        char **line_u2_data,   uint32_t *line_u2_len) 
+                                        char **line_u2_data,   uint32_t *line_u2_len,
+                                        uint32_t maximum_len) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
-    *line_qual_len  = dl->qual_data_len;
-    *line_u2_len    = dl->u2_data_len;
+    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
+    *line_qual_len  = MIN (maximum_len, dl->qual_data_len);
+    
+    maximum_len -= *line_qual_len; 
+    *line_u2_len    = MIN (maximum_len, dl->u2_data_len);
 
     if (!line_qual_data) return; // only lengths were requested
 
@@ -98,7 +102,8 @@ void sam_zip_qual (VBlock *vb, uint32_t vb_line_i,
 // note: if only one of BD or BI exists, the missing data in the interlaced string will be 0 (this should is not expected to ever happen)
 void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i, 
                     char **line_data, uint32_t *line_len,  // out 
-                    char **unused1,  uint32_t *unused2)
+                    char **unused1,  uint32_t *unused2,
+                    uint32_t maximum_len)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
@@ -108,7 +113,8 @@ void sam_zip_bd_bi (VBlock *vb_, uint32_t vb_line_i,
     
     if (!bd && !bi) return; // no BD or BI on this line
 
-    *line_len  = dl->seq_len * 2;
+    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
+    *line_len  = MIN (maximum_len, dl->seq_len * 2);
 
     if (!line_data) return; // only length was requested
 
@@ -130,10 +136,8 @@ void sam_seg_initialize (VBlock *vb)
     vb->contexts[SAM_TLEN].flags       = CTX_FL_STORE_INT;
     vb->contexts[SAM_OPTIONAL].flags   = CTX_FL_STRUCTURED;
     vb->contexts[SAM_STRAND].ltype     = LT_BITMAP;
-    vb->contexts[SAM_STRAND].lcodec    = CODEC_NONE; // bz2 and lzma only make it bigger
     vb->contexts[SAM_GPOS].ltype       = LT_UINT32;
     vb->contexts[SAM_GPOS].flags       = CTX_FL_STORE_INT;
-    vb->contexts[SAM_GPOS].lcodec      = CODEC_LZMA;
     codec_acgt_comp_init (vb);
 }
 
@@ -143,9 +147,6 @@ void sam_seg_finalize (VBlockP vb)
     if (!codec_domq_comp_init (vb, sam_zip_qual)) {
         vb->contexts[SAM_QUAL].ltype  = LT_SEQUENCE; 
         vb->contexts[SAM_QUAL].inst   = 0; // don't inherit from previous file 
-
-        // TODO - choose between BSC and BZ2
-        vb->contexts[SAM_QUAL].lcodec = CODEC_BSC; // for QUAL scores that fail DomQual, BSC is ~15% better than BZ2, which is better than LZMA 
     }
 
     // top level snip
@@ -492,7 +493,6 @@ static void sam_seg_SA_or_OA_field (VBlockSAM *vb, DictId subfield_dict_id,
         seg_by_dict_id (vb, nm,     nm_len,     structured_SA_OA.items[5].dict_id, 1 + nm_len);
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_SA_OA.items[1].dict_id);
-        pos_ctx->lcodec  = CODEC_LZMA;
         pos_ctx->ltype   = LT_UINT32;
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, 1 + pos_len);
     }
@@ -555,7 +555,6 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
         
         Context *pos_ctx = mtf_get_ctx (vb, structured_XA.items[2].dict_id);
         pos_ctx->ltype  = LT_UINT32;
-        pos_ctx->lcodec = CODEC_LZMA;
 
         seg_add_to_local_uint32 ((VBlockP)vb, pos_ctx, pos_value, pos_len); // +1 for seperator, -1 for strand
     }
@@ -717,7 +716,6 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, const c
         Context *ctx = mtf_get_ctx (vb, dict_id_OPTION_BD_BI);
         ctx->txt_len += value_len + 1; // +1 for \t
         ctx->ltype   = LT_SEQUENCE;
-        ctx->lcodec  = CODEC_BSC;
 
         if (!dl->bdbi_data_start[!is_bi]) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
             ctx->local.len += value_len * 2;

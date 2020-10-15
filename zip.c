@@ -26,6 +26,9 @@
 #include "mutex.h"
 #include "fastq.h"
 #include "stats.h"
+#include "codec.h"
+#include "compressor.h"
+#include "strings.h"
 
 static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, bool is_final_component)
 {
@@ -66,6 +69,109 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
         else // source was compressed
             progress_finalize_component_time_ratio_better (dt_name (z_file->data_type), ratio, file_exts[txt_file->type], ratio2, md5);
     }
+}
+
+typedef struct {
+    Codec codec;
+    double size;
+    double clock;
+} CodecTest;
+
+static int zip_codec_test_sorter (const CodecTest *t1, const CodecTest *t2)
+{
+    // case: select for significant difference in size (more than 2%)
+    if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
+    if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
+
+    // case: size is similar, select for significant difference in time (more than 30%)
+    if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
+    if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
+
+    // case: size and time are quite similar, check 2nd level 
+
+    // case: select for smaller difference in size (more than 1%)
+    if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
+    if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
+
+    // case: select for smaller difference in time (more than 15%)
+    if (t1->clock < t2->clock * 0.75) return -1; // t1 has significantly better time
+    if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
+
+    // time and size are very similar (within %1 and 15% respectively) - select for smaller size
+    return t1->size - t2->size;
+}
+
+// Codecs may be assigned in 3 stages:
+// 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
+// 2. At merge - inherit from z_file->context if not set in Seg
+// 3. After merge before compress - if still not assigned - zip_assign_best_codec - which also commits back to z_file->context
+//    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
+// Note: if vb=1 commits a lcodec, it will be during its lock, so that all subsequent VBs will inherit it. But for
+// contexts not committed by vb=1 - multiple contexts running in parallel may commit their lcodec overriding each other. that's ok.
+static void zip_assign_best_codec (VBlock *vb)
+{
+    #define NUM_TESTS (sizeof (tests) / sizeof (tests[0]))
+    
+    #define SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
+
+    RESET_FLAG (flag_show_headers);
+    uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
+    uint64_t save_z_data       = vb->z_data.len;
+
+    if (flag_show_codec_test && vb->vblock_i == 1)
+        fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
+                 "Results in the format [codec size clock] are in order of quality - the first was selected.\n", SAMPLE_SIZE);
+
+    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
+        Context *ctx = &vb->contexts[did_i];
+        CodecTest tests[] = { { CODEC_BSC }, { CODEC_NONE }, { CODEC_BZ2 }, { CODEC_LZMA } };
+        uint32_t len = ctx->local.len * lt_desc[ctx->ltype].width;
+        
+        if (len < MIN_LEN_FOR_COMPRESSION || ctx->lcodec != CODEC_UNKNOWN) continue;
+
+        // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
+        // it doesn't prevent double testing 100% of time, but that's good enough) 
+        Codec zf_lcodec = z_file->contexts[did_i].lcodec; // read without locking (1 byte)
+        if (zf_lcodec != CODEC_UNKNOWN) {
+            ctx->lcodec = zf_lcodec;
+            continue;
+        }
+
+        if (flag_fast) {
+            ctx->lcodec = CODEC_BZ2;
+            continue;
+        }
+
+        // measure the compressed size and duration for a small sample of of the local data, for each codec
+        for (unsigned t=0; t < NUM_TESTS; t++) {
+
+            ctx->lcodec = tests[t].codec;
+
+            clock_t start_time = clock();
+            tests[t].size  = (ctx->lcodec == CODEC_NONE) ? MIN (len, SAMPLE_SIZE)
+                                                         : zfile_compress_local_data (vb, ctx, SAMPLE_SIZE);
+            tests[t].clock = (clock() - start_time);
+
+            vb->z_data.len = save_z_data; // roll back
+        }
+
+        // sort codec by our selection criteria
+        qsort (tests, NUM_TESTS, sizeof (CodecTest), (int (*)(const void *, const void*))zip_codec_test_sorter);
+
+        if (flag_show_codec_test)
+            fprintf (stderr, "vb_i=%u %-8s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", vb->vblock_i, ctx->name, 
+                    codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
+                    codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
+                    codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
+                    codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
+
+        // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
+        ctx->lcodec = tests[0].codec;
+        mtf_commit_lcodec_to_zf_ctx (vb, ctx);
+    }
+
+    RESTORE_FLAG (flag_show_headers);
+    vb->section_list_buf.len = save_section_list; // roll back
 }
 
 // after segging - if any context appears to contain only singleton snips (eg a unique ID),
@@ -116,7 +222,7 @@ static void zip_generate_and_compress_ctxs (VBlock *vb)
             if (ctx->ltype == LT_BITMAP) 
                 LTEN_bit_array (buf_get_bitarray (&ctx->local));
 
-            zfile_compress_local_data (vb, ctx);
+            zfile_compress_local_data (vb, ctx, 0);
         }
     }
 
@@ -314,6 +420,13 @@ static void zip_compress_one_vb (VBlock *vb)
     // vcf_zip_generate_genotype_one_section(). writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     mtf_merge_in_vb_ctx(vb);
+
+    // for each context with CODEC_UNKNOWN - i.e. that was not assigned in Seg AND not inherited from
+    // a previous VB during merge - find the best codec for this local data. 
+    // This lcodec will be commited to zf_ctx so that subsequent VBs inherit it during their merge
+    zip_assign_best_codec (vb);
+
+    if (vb->vblock_i == 1) mtf_vb_1_unlock(vb); 
 
     // merge in random access - IF it is used
     if (DTP(has_random_access)) 

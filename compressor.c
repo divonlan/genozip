@@ -11,14 +11,14 @@
 #include "crypt.h"
 #include "zfile.h"
 #include "strings.h"
-
-#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
+#include "compressor.h"
 
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
-void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
-                    SectionHeader *header, 
-                    const char *uncompressed_data,  // option 1 - compress contiguous data
-                    LocalGetLineCB callback)  // option 2 - compress data one line at a time
+// returns data_compressed_len
+uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
+                        SectionHeader *header, 
+                        const char *uncompressed_data,  // option 1 - compress contiguous data
+                        LocalGetLineCB callback)  // option 2 - compress data one line at a time
 { 
     ASSERT0 (!uncompressed_data || !callback, "Error in comp_compress: expecting either uncompressed_data or callback but not both");
 
@@ -51,12 +51,18 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         !codec_args[header->codec].sub_codec1) // simple codec (no sub-codecs)
         header->codec = CODEC_NONE;
 
-    uint32_t est_compressed_len = codec_args[header->codec].est_size (header->codec, data_uncompressed_len); 
+    // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec1 instead
+    Codec est_size_codec = codec_args[header->codec].est_size ? header->codec : codec_args[header->codec].sub_codec1;
+
+    uint32_t est_compressed_len = codec_args[est_size_codec].est_size (header->codec, data_uncompressed_len); 
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     // note: its ok for other threads to allocate evb data because we have a special mutex in buffer protecting the 
     // evb buffer list
     buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, z_data->name, z_data->param);
+
+    // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec1 instead
+    Codec comp_codec = codec_args[header->codec].compress ? header->codec : codec_args[header->codec].sub_codec1;
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
@@ -64,10 +70,10 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         bool success = 
-            codec_args[header->codec].compress (vb, &header->codec, uncompressed_data, &data_uncompressed_len,
-                                                callback,  
-                                                &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                                true);
+            codec_args[comp_codec].compress (vb, &header->codec, uncompressed_data, &data_uncompressed_len,
+                                               callback,  
+                                               &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                               true);
         codec_free_all (vb); // just in case
 
         // if output buffer is too small, increase it, and try again
@@ -78,11 +84,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset
 
-            codec_args[header->codec].compress (vb, &header->codec,
-                                                uncompressed_data, &data_uncompressed_len,
-                                                callback,  
-                                                &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                                false);
+            codec_args[comp_codec].compress (vb, &header->codec,
+                                               uncompressed_data, &data_uncompressed_len,
+                                               callback,  
+                                               &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                               false);
 
             codec_free_all (vb); // just in case
         }
@@ -136,8 +142,11 @@ void comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     z_data->len += total_z_len;
 
-    if (flag_show_headers) 
+    if (flag_show_headers
+    ) 
         zfile_show_header (header, vb->vblock_i ? vb : NULL, offset, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
+
+    return data_compressed_len;
 }
 
 void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec,

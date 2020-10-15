@@ -1039,7 +1039,7 @@ void ref_compress_ref (void)
     spin_initialize (ref_stored_ra_spin);
 
     // compression of reference doesn't output % progress
-    RESET_FLAG (flag_quiet);
+    SAVE_FLAG (flag_quiet);
     if (flag_show_reference) flag_quiet = true; // show references instead of progress
 
     // proceed to compress all ranges that have still have data in them after copying

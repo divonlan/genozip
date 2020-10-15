@@ -57,15 +57,21 @@ static void fastq_get_optimized_desc_read_name (VBlockFAST *vb)
         if (vb->optimized_desc[i] == '.') vb->optimized_desc[i] = '-';
 }
 
+// called by I/O thread at the beginning of zipping this file
+void fastq_zip_initialize (void)
+{
+    // reset lcodec for STRAND and GPOS, as these may change between PAIR_1 and PAIR_2 files
+    z_file->contexts[FASTQ_STRAND].lcodec = CODEC_UNKNOWN;
+    z_file->contexts[FASTQ_GPOS  ].lcodec = CODEC_UNKNOWN;
+}
+
+// called by Compute thread at the beginning of this VB
 void fastq_seg_initialize (VBlockFAST *vb)
 {
     if (flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE) {
-        vb->contexts[FASTQ_STRAND].ltype  = LT_BITMAP;
-        vb->contexts[FASTQ_STRAND].lcodec = CODEC_NONE; // bz2 and lzma only make it bigger
-
-        vb->contexts[FASTQ_GPOS].ltype    = LT_UINT32;
-        vb->contexts[FASTQ_GPOS].flags    = CTX_FL_STORE_INT;
-        vb->contexts[FASTQ_GPOS].lcodec   = CODEC_LZMA; // BSC is almost exactly the same time and size
+        vb->contexts[FASTQ_STRAND].ltype = LT_BITMAP;
+        vb->contexts[FASTQ_GPOS  ].ltype = LT_UINT32;
+        vb->contexts[FASTQ_GPOS  ].flags = CTX_FL_STORE_INT;
     }
 
     vb->contexts[FASTQ_SQBITMAP].ltype = LT_BITMAP; 
@@ -75,7 +81,6 @@ void fastq_seg_initialize (VBlockFAST *vb)
      if (flag_pair == PAIR_READ_2) {
         vb->contexts[FASTQ_GPOS]  .inst   = CTX_INST_PAIR_LOCAL;
         vb->contexts[FASTQ_STRAND].inst   = CTX_INST_PAIR_LOCAL; 
-        vb->contexts[FASTQ_STRAND].lcodec = CODEC_BZ2; // pair2 is expected to contain long runs, so BZ2 is good. We set it explicitly to override the CODEC_NONE possibly inherited from the last vb of the previous bound file
 
         piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
 
@@ -92,9 +97,6 @@ void fastq_seg_finalize (VBlockP vb)
     if (!codec_domq_comp_init (vb, fastq_zip_qual)) {
         vb->contexts[FASTQ_QUAL].ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
         vb->contexts[FASTQ_QUAL].inst   = 0; // don't inherit from previous file 
-
-        // TODO - choose between BSC and BZ2
-        vb->contexts[FASTQ_QUAL].lcodec = CODEC_BSC; // for QUAL scores that fail DomQual, BSC is ~15% better than BZ2, which is better than LZMA 
     }
 
     // top level snip
@@ -292,11 +294,13 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
 // callback function for compress to get data of one line (called by codec_bz2_compress)
 void fastq_zip_qual (VBlock *vb, uint32_t vb_line_i, 
                                           char **line_qual_data, uint32_t *line_qual_len, // out
-                                          char **unused_data,   uint32_t *unused_len) 
+                                          char **unused_data,   uint32_t *unused_len,
+                                          uint32_t maximum_len) 
 {
     ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
 
-    *line_qual_len  = dl->seq_len;
+    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
+    *line_qual_len  = MIN (dl->seq_len, maximum_len);
     
     if (!line_qual_data) return; // only lengths were requested
 

@@ -507,9 +507,13 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         bool is_local = header->h.section_type == SEC_LOCAL;
         if (header->h.section_type == SEC_B250 || is_local) {
             Context *ctx = mtf_get_ctx (vb, header->dict_id); // creates the context
+
+            // case: in ZIP & we are PAIR_2, reading PAIR_1 info - save flags, ltype, lcodec to restore later
+            uint8_t save_flags=0; LocalType save_ltype=0; Codec save_lcodec=0;
+            if (pair_vb_i && command == ZIP) { save_flags=ctx->flags; save_ltype=ctx->ltype; save_lcodec=ctx->lcodec; }
+            
             ctx->flags |= header->h.flags;
             ctx->ltype  = header->ltype;
-
             if (is_local) ctx->lcodec = header->h.codec;
 
             // case: in PIZ: CTX_FL_PAIRED appears on the sections the "pair 2" VB (that come first in section_index)
@@ -547,6 +551,9 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
 
             if (header->h.flags & CTX_FL_COPY_PARAM)
                 target_buf->param = header->param;
+
+            // restore
+            if (pair_vb_i && command == ZIP) { ctx->flags=save_flags; ctx->ltype=save_ltype; ctx->lcodec=save_lcodec; }
 
             section_i++;
         }    

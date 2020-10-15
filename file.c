@@ -580,7 +580,8 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
     
     if (mode==READ) {
         file->data_type = file_get_data_type (stdin_type, true);
-        file->type = stdin_type; 
+        file->type  = stdin_type; 
+        file->codec = CODEC_NONE;
     }
     else { // WRITE
         file->data_type = data_type;

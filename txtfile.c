@@ -90,7 +90,7 @@ static uint32_t txtfile_read_block (char *data, uint32_t max_bytes)
             txt_file->disk_so_far = BZ2_consumed ((BZFILE *)txt_file->file); 
     } 
     else {
-        ABORT ("txtfile_read_block: Invalid file type %s", ft_name (txt_file->type));
+        ABORT ("txtfile_read_block: Invalid file type %s (codec=%s)", ft_name (txt_file->type), codec_name (txt_file->codec));
     }
     
 finish:

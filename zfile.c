@@ -252,7 +252,8 @@ static LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
     return NULL;
 }
 
-void zfile_compress_local_data (VBlock *vb, Context *ctx)
+// returns compressed size
+uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_size /* 0 means entire local buffer */)
 {   
     vb->has_non_agct = false;
     
@@ -260,12 +261,18 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
                     ((ctx->inst & CTX_INST_PAIR_LOCAL)  ? CTX_FL_PAIRED     : 0) |
                     ((ctx->inst & CTX_INST_LOCAL_PARAM) ? CTX_FL_COPY_PARAM : 0);
                     
+    uint32_t uncompressed_len = ctx->local.len * lt_desc[ctx->ltype].width;
+    
+    // case: we're just testing a small sample
+    if (sample_size && uncompressed_len > sample_size) 
+        uncompressed_len = sample_size;
+
     SectionHeaderCtx header = (SectionHeaderCtx) {
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_LOCAL,
-        .h.data_uncompressed_len = BGEN32 (ctx->local.len * lt_desc[ctx->ltype].width),
+        .h.data_uncompressed_len = BGEN32 (uncompressed_len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.codec                 = ctx->lcodec,
+        .h.codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->lcodec, // if codec has not been decided yet, fall back on BZ2
         .h.sub_codec             = codec_args[ctx->lcodec].sub_codec1,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags                 = flags,
@@ -276,9 +283,9 @@ void zfile_compress_local_data (VBlock *vb, Context *ctx)
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
 
-    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
-                   callback ? NULL : ctx->local.data, 
-                   callback);
+    return comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, 
+                          callback ? NULL : ctx->local.data, 
+                          callback);
 }
 
 // compress section - two options for input data - 
@@ -431,10 +438,12 @@ int32_t zfile_read_section (File *file,
     int32_t remaining_data_len = (int32_t)data_len - (int32_t)(bytes_read - header_size); 
     
     // check that we received the section type we expect, 
+    char s[30];
     ASSERT (expected_sec_type == header->section_type || 
             (expected_sec_type == SEC_GENOZIP_HEADER && header->flags == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where flags is now
-            "Error: Unexpected section type when reading %s: expecting %s, found %s", 
-            z_name, st_name(expected_sec_type), st_name(header->section_type));
+            "Error: Unexpected section type when reading %s: expecting %s, found %s sl(expecting)=(offset=%s, dict_id=%s)",
+            z_name, st_name(expected_sec_type), st_name(header->section_type), 
+            sl ? str_uint_commas (sl->offset, s) : "N/A", sl ? err_dict_id (sl->dict_id) : "N/A");
 
     ASSERT (compressed_offset == header_size || expected_sec_type == SEC_GENOZIP_HEADER || // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
             "Error: invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 

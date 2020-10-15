@@ -149,7 +149,7 @@ bool codec_acgt_compress (VBlock *vb, Codec *codec,
             char *data_1=0, *data_2=0;
             uint32_t data_1_len=0, data_2_len=0;
             
-            callback (vb, line_i, &data_1, &data_1_len, &data_2, &data_2_len);
+            callback (vb, line_i, &data_1, &data_1_len, &data_2, &data_2_len, *uncompressed_len - nonref_x_ctx->local.len);
 
             PACK (data_1, data_1_len);
             PACK (data_2, data_2_len);
@@ -181,18 +181,6 @@ bool codec_acgt_compress (VBlock *vb, Codec *codec,
 
     COPY_TIMER (compressor_actg); // don't include sub-codec compressor - it accounts for itself
     return true;
-}
-
-// Compresss NONREF_X data with codec XCGT, using CODEC_BZ2 sub-codec, which would work well since we expect long runs of \0.
-bool codec_xcgt_compress (VBlock *vb, Codec *codec,
-                          const char *uncompressed,    // option 1 - compress contiguous data
-                          uint32_t *uncompressed_len,
-                          LocalGetLineCB callback,     // option 2 - compress data one line at a time
-                          char *compressed, uint32_t *compressed_len /* in/out */, 
-                          bool soft_fail)
-{
-    CodecCompress *compress = codec_args[codec_args[*codec].sub_codec1].compress;
-    return compress (vb, codec, uncompressed, uncompressed_len, callback, compressed, compressed_len, soft_fail); 
 }
 
 //--------------

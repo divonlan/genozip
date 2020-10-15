@@ -76,15 +76,13 @@ static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)
     return (uint32_t)MAX (uncompressed_len / 2, 500);
 }
 
-static uint32_t codec_sc1_est_size (Codec codec, uint64_t uncompressed_len)
-{
-    Codec sub_codec1 = codec_args[codec].sub_codec1;
-    return codec_args[sub_codec1].est_size (sub_codec1, uncompressed_len);
-}
-
+// returns 4-character codec name
 const char *codec_name (Codec codec)
 {
-    return (codec >=0 && codec < NUM_CODECS) ? codec_args[codec].name : "BAD!";    
+    switch (codec) {
+        case 0 ... NUM_CODECS : return codec_args[codec].name;
+        default               : return "BAD!";    
+    }
 }
 
 void codec_initialize (void)

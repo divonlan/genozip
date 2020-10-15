@@ -211,6 +211,7 @@ extern MtfNode *mtf_node_vb_do (const Context *ctx, WordIndex node_index, const 
 extern MtfNode *mtf_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node_zf(ctx, node_index, snip_in_dict, snip_len) mtf_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
+extern void mtf_commit_lcodec_to_zf_ctx (VBlockP vb, ContextP vb_ctx);
 
 extern Context *mtf_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, DidIType *num_contexts, DictId dict_id);
 
@@ -249,6 +250,7 @@ extern void mtf_destroy_context (Context *ctx);
 extern void mtf_map_aliases (VBlockP vb);
 
 extern void mtf_vb_1_lock (VBlockP vb);
+extern void mtf_vb_1_unlock (VBlockP vb);
 extern MtfNode *mtf_get_node_by_word_index (Context *ctx, WordIndex word_index);
 extern const char *mtf_get_snip_by_word_index (const Buffer *word_list, const Buffer *dict, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);

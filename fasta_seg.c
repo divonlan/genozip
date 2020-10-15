@@ -17,10 +17,13 @@
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
 void fasta_zip_seq (VBlock *vb, uint32_t vb_line_i, 
                     char **line_seq_data, uint32_t *line_seq_len,  // out 
-                    char **unused_data,  uint32_t *unused_len)
+                    char **unused_data,  uint32_t *unused_len,
+                    uint32_t maximum_len)
 {
     ZipDataLineFAST *dl = DATA_LINE (vb_line_i);
-    *line_seq_len  = dl->seq_len;
+
+    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
+    *line_seq_len  = MIN (dl->seq_len, maximum_len);
     
     if (line_seq_data) // if NULL, only length was requested
         *line_seq_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;

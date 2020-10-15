@@ -86,8 +86,8 @@ extern ExeType exe_type;
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
 // If making any changes, update arrays in 1. comp_compress 2. file_viewer 3. txtfile_estimate_txt_data_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
-    CODEC_UNKNOWN=-1, 
-    CODEC_NONE=0, CODEC_GZ=1, CODEC_BZ2=2, CODEC_LZMA=3, CODEC_BSC=4, // internal compressors
+    CODEC_UNKNOWN=0, 
+    CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, // internal compressors
     
     CODEC_ACGT = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
     CODEC_HT   = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
@@ -116,8 +116,8 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_show_alleles, flag_
            flag_show_vblocks, flag_sblock, flag_vblock, flag_gt_only, 
            flag_header_one, flag_fast, flag_multiple_files, flag_sequential, flag_register, flag_show_ref_seq,
            flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_show_ref_alts, flag_pair, flag_genocat_info_only, 
-           flag_test_seg, flag_debug_progress, flag_show_hash, flag_debug_memory, 
-           flag_make_reference, flag_reading_reference,
+           flag_test_seg, flag_debug_progress, flag_show_hash, flag_debug_memory, flag_show_codec_test,
+           flag_make_reference, flag_reading_reference, 
 
            flag_optimize, flag_optimize_sort, flag_optimize_PL, flag_optimize_GL, flag_optimize_GP, flag_optimize_VQSLOD, 
            flag_optimize_QUAL, flag_optimize_Vf, flag_optimize_ZM, flag_optimize_DESC,
@@ -171,7 +171,9 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 #define COMPRESSOR_CALLBACK(func) \
 void func (VBlockP vb, uint32_t vb_line_i, \
            char **line_data_1, uint32_t *line_data_len_1,\
-           char **line_data_2, uint32_t *line_data_len_2);
+           char **line_data_2, uint32_t *line_data_len_2,\
+           uint32_t maximum_size); // might be less than the size available if we're sampling in zip_assign_best_codec()
+#define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
 
 typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 

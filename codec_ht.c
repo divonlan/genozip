@@ -79,7 +79,8 @@ static HaploTypeSortHelperIndex *codec_ht_count_alt_alleles (VBlock *vb)
 
 static void codec_ht_compress_one_array (VBlockP vb, uint32_t ht_i, 
                                          char **line_data_1, uint32_t *line_data_len_1,
-                                         char **line_data_2, uint32_t *line_data_len_2)
+                                         char **line_data_2, uint32_t *line_data_len_2,
+                                         uint32_t unused_maximum_len)
 {
     uint32_t orig_col_i = ENT (HaploTypeSortHelperIndex, vb->helper_index_buf, ht_i)->index_in_original_line; 
     const uint32_t increment = vb->num_haplotypes_per_line; // automatic var that can be optimized to a register

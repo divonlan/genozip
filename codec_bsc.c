@@ -47,7 +47,9 @@ bool codec_bsc_compress (VBlock *vb, Codec *codec,
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0, *start2=0;
             uint32_t len1=0, len2=0;        
-            callback (vb, line_i, &start1, &len1, &start2, &len2);
+            
+            // note: get what we need, might be less than what's available if calling from zip_assign_best_codec
+            callback (vb, line_i, &start1, &len1, &start2, &len2, *uncompressed_len - vb->compressed.len); 
 
             if (start1 && len1) buf_add (&vb->compressed, start1, len1);
             if (start2 && len2) buf_add (&vb->compressed, start2, len2);

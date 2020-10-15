@@ -197,6 +197,8 @@ static const char *help_genozip_developer[] = {
     "   ZUC  --show-reference  Show the ranges included the SEC_REFERENCE sections",    
     "",
     "   UC   --show-is-set     <contig> Shows the contents of SEC_REF_IS_SET section for the given contig",    
+    "",
+    "   Z    --show-codec-test Genozip tests for the best codec when it first encounters a new type of data. See the results",    
 };
 
 static const char *help_genounzip[] = {

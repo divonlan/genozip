@@ -9,6 +9,7 @@
 #include "genozip.h"
 
 // ZIP Stuff
+extern void fastq_zip_initialize (void);
 extern void fastq_zip_read_one_vb (VBlockP vb);
 COMPRESSOR_CALLBACK(fastq_zip_qual)
 

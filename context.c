@@ -66,6 +66,13 @@ void mtf_vb_1_lock (VBlockP vb)
     mtf_lock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
 }
 
+void mtf_vb_1_unlock (VBlockP vb)
+{
+    ASSERT0 (vb->vblock_i == 1, "Error: Only vb_i=1 can call mtf_vb_1_unlock");
+
+    mtf_unlock (vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
+}
+
 // ZIP: add a snip to the dictionary the first time it is encountered in the VCF file.
 // the dictionary will be written to GENOZIP and used to reconstruct the MTF during decompression
 typedef enum { DICT_VB, DICT_ZF, DICT_ZF_SINGLETON } DictType;
@@ -377,7 +384,7 @@ void mtf_clone_ctx (VBlock *vb)
         vb_ctx->flags   = zf_ctx->flags;
         vb_ctx->ltype   = zf_ctx->ltype;
         vb_ctx->inst    = zf_ctx->inst;
-        vb_ctx->lcodec  = zf_ctx->lcodec;
+        // note: lcodec is NOT inherited here, only merge (see comment in zip_assign_best_codec)
 
         memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
@@ -398,8 +405,6 @@ static void mtf_initialize_ctx (Context *ctx, DataType dt, DidIType did_i, DictI
     ctx->did_i   = did_i;
     ctx->dict_id = dict_id;
     
-    if (command == ZIP) ctx->lcodec = CODEC_BSC; // default, may be changed in seg
-
     memcpy ((char*)ctx->name, dict_id_printable (dict_id).id, DICT_ID_LEN);
     ((char*)ctx->name)[DICT_ID_LEN] = 0;
 
@@ -507,9 +512,9 @@ static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
     zf_ctx->dict_id = vb_ctx->dict_id;
     zf_ctx->flags   = vb_ctx->flags;
     zf_ctx->inst    = vb_ctx->inst;
-    zf_ctx->lcodec  = vb_ctx->lcodec;
     zf_ctx->ltype   = vb_ctx->ltype;
     memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
+    // note: lcodec is NOT copied here, see comment in zip_assign_best_codec
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
@@ -520,6 +525,20 @@ finish:
     return zf_ctx;
 }
 
+void mtf_commit_lcodec_to_zf_ctx (VBlock *vb, Context *vb_ctx)
+{
+    Context *zf_ctx  = mtf_get_zf_ctx (vb_ctx->dict_id);
+    ASSERT (zf_ctx, "Error in mtf_commit_lcodec_to_zf_ctx: zf_ctx is missing for %s in vb=%u", vb_ctx->name, vb->vblock_i); // zf_ctx is expected to exist as this is called after merge
+
+    { START_TIMER; 
+      mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
+      COPY_TIMER_VB (vb, lock_mutex_zf_ctx);  
+    }
+
+    zf_ctx->lcodec = vb_ctx->lcodec;
+
+    mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
+}
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
 // we are careful never to hold two muteces at the same time to avoid deadlocks
@@ -543,6 +562,9 @@ static void mtf_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
     zf_ctx->txt_len += vb_ctx->txt_len; // for stats
     zf_ctx->num_new_entries_prev_merged_vb = vb_ctx->mtf.len; // number of new words in this dict from this VB
     zf_ctx->num_singletons += vb_ctx->num_singletons; // add singletons created by seg (i.e. SNIP_LOOKUP_* in b250, and snip in local)
+
+    // we assign VB a codec from zf_ctx, if not already assigned by Seg. See comment in zip_assign_best_codec
+    if (!vb_ctx->lcodec) vb_ctx->lcodec = zf_ctx->lcodec;
 
     if (!buf_is_allocated (&vb_ctx->dict)) goto finish; // nothing yet for this dict_id
 
@@ -626,9 +648,6 @@ void mtf_merge_in_vb_ctx (VBlock *merging_vb)
     // vb_i=2 started, z_file is empty, created 10 contexts
     // vb_i=1 completes, merges 20 contexts to z_file, which has 20 contexts after
     // vb_i=2 completes, merges 10 contexts, of which 5 (for example) are shared with vb_i=1. Now z_file has 25 contexts after.
-
-    if (merging_vb->vblock_i == 1)  
-        mtf_unlock (merging_vb, &wait_for_vb_1_mutex, "wait_for_vb_1_mutex", 1);
 
     COPY_TIMER_VB (merging_vb, mtf_merge_in_vb_ctx);
 }
@@ -953,12 +972,13 @@ void mtf_free_context (Context *ctx)
     buf_free (&ctx->struct_cache);
     buf_free (&ctx->struct_index);
     buf_free (&ctx->struct_len);
+    buf_free (&ctx->pair);
     
     ctx->mtf_i.len = 0; // VCF stores FORMAT length in here for stats, even if mtf_i is not allocated (and therefore buf_free will not cleanup)
     ctx->local.len = 0; // For callback ctxs, length is stored, but data is not copied to local and is kept in vb->txt_data
     ctx->dict_id.num = 0;
-    ctx->iterator.next_b250 = NULL;
-    ctx->iterator.prev_word_index =0;
+    ctx->iterator.next_b250 = ctx->pair_b250_iter.next_b250 = NULL;
+    ctx->iterator.prev_word_index = ctx->pair_b250_iter.prev_word_index = 0;
     ctx->local_hash_prime = 0;
     ctx->global_hash_prime = 0;
     ctx->merge_num = 0;
@@ -967,6 +987,7 @@ void mtf_free_context (Context *ctx)
     ctx->last_delta = 0;
     ctx->last_value.i = 0;
     ctx->last_line_i = 0;
+    ctx->did_i = ctx->flags = ctx->inst = ctx->ltype = ctx->lcodec = 0;
     memset ((char*)ctx->name, 0, sizeof(ctx->name));
     mutex_destroy (ctx->mutex);
 }

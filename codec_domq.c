@@ -48,12 +48,15 @@ bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
 #   define DOMQUAL_LINE_SAMPLE_LEN 500          // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
 #   define NUM_LINES_IN_SAMPLE 5
 
+    Context *qual_ctx = &vb->contexts[DTF(qual)];
+    qual_ctx->lcodec = CODEC_UNKNOWN; // cancel possible inheritence from previous VB
+
     uint32_t char_counter[256] = { 0 };
     uint32_t total_len = 0;
     for (uint32_t line_i=0; line_i < MIN (NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
         char *qual_data, *unused;
         uint32_t qual_data_len, unused_len;
-        callback (vb, line_i, &qual_data, &qual_data_len, &unused, &unused_len);
+        callback (vb, line_i, &qual_data, &qual_data_len, &unused, &unused_len, CALLBACK_NO_SIZE_LIMIT);
     
         if (qual_data_len > DOMQUAL_LINE_SAMPLE_LEN) qual_data_len = DOMQUAL_LINE_SAMPLE_LEN; 
     
@@ -67,7 +70,6 @@ bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
 
     for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
         if (char_counter[c] > threshold) {
-            Context *qual_ctx = &vb->contexts[DTF(qual)];
             qual_ctx->local.param = c;
             qual_ctx->inst    = CTX_INST_LOCAL_PARAM;
             qual_ctx->ltype   = LT_CODEC;
@@ -124,7 +126,7 @@ bool codec_domq_compress (VBlock *vb,
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {   
         char *qual[2] = {};
         uint32_t qual_len[2] = {};
-        callback (vb, line_i, &qual[0], &qual_len[0], &qual[1], &qual_len[1]);
+        callback (vb, line_i, &qual[0], &qual_len[0], &qual[1], &qual_len[1], CALLBACK_NO_SIZE_LIMIT);
 
         // grow if needed
         buf_alloc_more (vb, qual_buf, 2 * (qual_len[0] + qual_len[1]), 0, char, 1.5); // theoretical worst case is 2 characters (added NO_DOMS) per each original character
