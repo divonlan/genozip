@@ -27,7 +27,7 @@ typedef struct {
 void codec_ht_comp_init (VBlock *vb)
 {
     vb->ht_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT);
-    vb->ht_ctx->ltype  = LT_HT;
+    vb->ht_ctx->ltype  = LT_CODEC;
     vb->ht_ctx->lcodec = CODEC_HT;
 
     vb->ht_index_ctx         = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
@@ -130,9 +130,8 @@ bool codec_ht_compress (VBlock *vb,
     uint64_t save_lines_len = vb->lines.len;
     vb->lines.len = vb->num_haplotypes_per_line; // temporarily set vb->lines.len to number of columns, as this is the number of time the callback will be called
     
-    // compress as a normal sub-codec section. all piz-side logic will happen during reconstruction.
-    *codec = codec_args[CODEC_HT].sub_codec1;
-    Compressor compress = codec_args[*codec].compress;
+    Codec sub_codec = codec_args[CODEC_HT].sub_codec1;
+    CodecCompress *compress = codec_args[sub_codec].compress;
 
     PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
 
@@ -248,10 +247,10 @@ static inline void codec_ht_piz_get_one_line (VBlock *vb)
 // Explanation of the reconstruction process of VCF haplotype matrix data compressed with the HT codec:
 // 1) The GT_HT and GT_HT_INDEX sections as decompressed normally using the sub-codecs
 // 2) When reconstructing, this function codec_ht_reconstruct is called for every haplotype value needed (eg the "1" in "1/0"),
-//    by PIZ as the LT_HT reconstructor. It takes data from GT_HT, consulting GT_HT_INDEX
+//    by PIZ as the LT_CODEC reconstructor for CODEC_HT. It takes data from GT_HT, consulting GT_HT_INDEX
 //    to find the correct column in the matrix, and skips '*'s (missing haplotypes due to mixed ploidy, missing samples,
 //    or lines missing GT in FORMAT) until it finds a valid haplotype value.
-void codec_ht_reconstruct (VBlock *vb, Context *ctx)
+void codec_ht_reconstruct (VBlock *vb, Codec codec, Context *ctx)
 {
     if (vb->dont_show_curr_line) return;
 

@@ -372,12 +372,12 @@ void mtf_clone_ctx (VBlock *vb)
             vb_ctx->num_new_entries_prev_merged_vb = zf_ctx->num_new_entries_prev_merged_vb;
         }
 
-        vb_ctx->did_i    = did_i;
-        vb_ctx->dict_id  = zf_ctx->dict_id;
-        vb_ctx->flags    = zf_ctx->flags;
-        vb_ctx->ltype    = zf_ctx->ltype;
-        vb_ctx->inst     = zf_ctx->inst;
-        vb_ctx->lcodec = zf_ctx->lcodec;
+        vb_ctx->did_i   = did_i;
+        vb_ctx->dict_id = zf_ctx->dict_id;
+        vb_ctx->flags   = zf_ctx->flags;
+        vb_ctx->ltype   = zf_ctx->ltype;
+        vb_ctx->inst    = zf_ctx->inst;
+        vb_ctx->lcodec  = zf_ctx->lcodec;
 
         memcpy ((char*)vb_ctx->name, zf_ctx->name, sizeof (vb_ctx->name));
 
@@ -503,12 +503,12 @@ static Context *mtf_add_new_zf_ctx (VBlock *merging_vb, const Context *vb_ctx)
 
     mutex_initialize (zf_ctx->mutex);
 
-    zf_ctx->did_i      = z_file->num_contexts; 
-    zf_ctx->dict_id    = vb_ctx->dict_id;
-    zf_ctx->flags      = vb_ctx->flags;
-    zf_ctx->inst       = vb_ctx->inst;
-    zf_ctx->lcodec = vb_ctx->lcodec;
-    zf_ctx->ltype      = vb_ctx->ltype;
+    zf_ctx->did_i   = z_file->num_contexts; 
+    zf_ctx->dict_id = vb_ctx->dict_id;
+    zf_ctx->flags   = vb_ctx->flags;
+    zf_ctx->inst    = vb_ctx->inst;
+    zf_ctx->lcodec  = vb_ctx->lcodec;
+    zf_ctx->ltype   = vb_ctx->ltype;
     memcpy ((char*)zf_ctx->name, vb_ctx->name, sizeof(zf_ctx->name));
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because

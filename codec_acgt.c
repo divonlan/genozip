@@ -168,7 +168,7 @@ bool codec_acgt_compress (VBlock *vb, Codec *codec,
     // original order, and improves compression ratio by about 2%
     LTEN_bit_array (packed);
 
-    Compressor compress = codec_args[codec_args[*codec].sub_codec1].compress;
+    CodecCompress *compress = codec_args[codec_args[*codec].sub_codec1].compress;
     uint32_t packed_uncompressed_len = packed->num_of_words * sizeof (word_t);
 
     PAUSE_TIMER; // sub-codec compresssors account for themselves
@@ -191,7 +191,7 @@ bool codec_xcgt_compress (VBlock *vb, Codec *codec,
                           char *compressed, uint32_t *compressed_len /* in/out */, 
                           bool soft_fail)
 {
-    Compressor compress = codec_args[codec_args[*codec].sub_codec1].compress;
+    CodecCompress *compress = codec_args[codec_args[*codec].sub_codec1].compress;
     return compress (vb, codec, uncompressed, uncompressed_len, callback, compressed, compressed_len, soft_fail); 
 }
 

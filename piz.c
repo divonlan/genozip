@@ -457,8 +457,8 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
         if (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_UINT64)
             piz_reconstruct_from_local_int(vb, ctx, 0);
         
-        else if (ctx->ltype == LT_HT)
-            codec_ht_reconstruct (vb, ctx);
+        else if (ctx->ltype == LT_CODEC)
+            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx);
 
         else if (ctx->ltype == LT_SEQUENCE) 
             piz_reconstruct_from_local_sequence (vb, ctx, NULL, 0);
@@ -470,9 +470,6 @@ int32_t piz_reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, char sep)
         
         else if (ctx->ltype == LT_TEXT)
             piz_reconstruct_from_local_text (vb, ctx);
-
-        else if (ctx->ltype == LT_DOMQUAL)
-            codec_domq_reconstruct (vb, ctx);
 
         else ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%u", ctx->ltype, ctx->name, vb->vblock_i, vb->line_i);
     }
@@ -511,7 +508,9 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         if (header->h.section_type == SEC_B250 || is_local) {
             Context *ctx = mtf_get_ctx (vb, header->dict_id); // creates the context
             ctx->flags |= header->h.flags;
-            ctx->ltype = header->ltype;
+            ctx->ltype  = header->ltype;
+
+            if (is_local) ctx->lcodec = header->h.codec;
 
             // case: in PIZ: CTX_FL_PAIRED appears on the sections the "pair 2" VB (that come first in section_index)
             if ((ctx->flags & CTX_FL_PAIRED) && !pair_vb_i) 

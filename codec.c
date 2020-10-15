@@ -66,6 +66,11 @@ static void codec_uncompress_error (VBlock *vb, Codec codec,
     ABORT ("Error in comp_uncompress: Unsupported codec: %s", codec_name (codec));
 }
 
+static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
+{
+    ABORT ("Error in piz_reconstruct_from_ctx_do: Unsupported codec: %s", codec_name (codec));
+}
+
 static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)
 {
     return (uint32_t)MAX (uncompressed_len / 2, 500);

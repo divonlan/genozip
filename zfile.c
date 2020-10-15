@@ -36,8 +36,9 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
     DictId dict_id = {0};
     char flags[10] = "", param[10] = "";
     const char *ltype="";
-    bool has_ltype = false;
-
+    bool has_ltype = (header->section_type == SEC_LOCAL);
+    bool has_param = (header->section_type == SEC_LOCAL || header->section_type == SEC_B250);
+    bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     if (header->section_type == SEC_DICT) 
         dict_id = ((SectionHeaderDictionary *)header)->dict_id;
     
@@ -45,8 +46,7 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
         SectionHeaderCtx *header_ctx = (SectionHeaderCtx *)header;
         dict_id = header_ctx->dict_id;
         str_int (header_ctx->param, param);
-        ltype = lt_desc[header_ctx->ltype].name;
-        has_ltype = true;
+        if (has_ltype) ltype = lt_desc[header_ctx->ltype].name;
     }
 
     if (header->flags) 
@@ -54,12 +54,21 @@ void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if o
 
     char str[1000];
 
-    sprintf (str, "%c %-9"PRIu64" %-19s %*.*s %4s%-3s %6s%-3s %7s%-3s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
-             rw, offset, st_name(header->section_type), -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
-             header->flags ? "flg=" : "", flags, has_ltype ? "ltype=" : "", ltype, has_ltype ? "param=" : "", param, 
-             codec_name (header->codec),
-             BGEN32 (header->vblock_i), BGEN32 (header->compressed_offset), BGEN32 (header->data_uncompressed_len),
-             BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len), BGEN32 (header->magic));
+    sprintf (str, "%c %s%-*"PRIu64" %-19s %*.*s %4s%-3s %5s%-3s %4s%-3s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u mgc=%8.8x\n",
+             rw, 
+             is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
+             st_name(header->section_type), 
+             -DICT_ID_LEN, DICT_ID_LEN, dict_id.num ? dict_id_printable (dict_id).id : dict_id.id,
+             header->flags ? "flg=" : "", flags, 
+             has_ltype ? "type=" : "", ltype, 
+             has_param ? "prm=" : "", param, 
+             codec_name (header->codec), codec_name (header->sub_codec),
+             BGEN32 (header->vblock_i), 
+             BGEN32 (header->compressed_offset), 
+             BGEN32 (header->data_uncompressed_len), 
+             BGEN32 (header->data_compressed_len), 
+             BGEN32 (header->data_encrypted_len), 
+             BGEN32 (header->magic));
 
     if (vb) {
         unsigned len = strlen (str);

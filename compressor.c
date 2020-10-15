@@ -146,7 +146,10 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec,
 {
     ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
 
-    codec_args[codec].uncompress (vb, codec, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
+    // if codec doesn't have an uncompressor, use the sub-codec's one (eg: HT, DOMQ don't have a special uncompressor)
+    Codec uncompress_codec = codec_args[codec].uncompress ? codec : sub_codec;
+
+    codec_args[uncompress_codec].uncompress (vb, codec, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
 
     codec_free_all (vb); // just in case
 }

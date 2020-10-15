@@ -149,8 +149,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_FLOAT64  = 10,  // ffu
     LT_SEQUENCE = 11,  // length of data extracted is determined by vb->seq_len
     LT_BITMAP   = 12,  // a bitmap
-    LT_DOMQUAL  = 13,  // quality scores in domqual format
-    LT_HT       = 14,  // haplotypes - 48->147 for allele values or '.' or '*' for missing value
+    LT_CODEC    = 13,  // codec specific type with its codec specific reconstructor
     NUM_LOCAL_TYPES
 } LocalType;
 
@@ -178,8 +177,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "F64", 0,   8,  0,     0                        }, \
    { "SEQ", 0,   1,  0,     0                        }, \
    { "BMP", 0,   8,  0,     0                        }, \
-   { "DOM", 0,   1,  0,     0                        }, \
-   { "HT ", 0,   1,  0,     0                        }, \
+   { "COD", 0,   1,  0,     0                        }, \
 }
 
 // flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz

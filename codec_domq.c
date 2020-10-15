@@ -70,7 +70,7 @@ bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
             Context *qual_ctx = &vb->contexts[DTF(qual)];
             qual_ctx->local.param = c;
             qual_ctx->inst    = CTX_INST_LOCAL_PARAM;
-            qual_ctx->ltype   = LT_DOMQUAL;
+            qual_ctx->ltype   = LT_CODEC;
             qual_ctx->lcodec  = CODEC_DOMQ;
 
             Context *domqruns_ctx = qual_ctx + 1;
@@ -166,13 +166,12 @@ bool codec_domq_compress (VBlock *vb,
 
     *uncompressed_len = (uint32_t)qual_buf->len;
 
-    // compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context
-    // compress as a normal sub-codec section. all piz-side logic will happen during reconstruction.
-    *codec = codec_args[CODEC_DOMQ].sub_codec1;
+    // compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context.
+    Codec sub_codec = codec_args[CODEC_DOMQ].sub_codec1;
+    CodecCompress *compress = codec_args[sub_codec].compress;
 
     COPY_TIMER (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
 
-    Compressor compress = codec_args[*codec].compress;
     bool success = compress (vb, codec, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
 
     return success;
@@ -233,9 +232,9 @@ static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, Context *domq
 
 // Explanation of the reconstruction process of QUAL data compressed with the DOMQ codec:
 // 1) The QUAL and DOMQ sections are decompressed normally using their sub_codecs
-// 2) When reconstructing a QUAL field on a specific line, piz calls the LT_DOMQUAL reconstructor, codec_domq_reconstruct,
-//    which combines data from the local buffers of QUAL and DOMQRUNS to reconstruct the original QUAL field.
-void codec_domq_reconstruct (VBlockP vb, ContextP qual_ctx)
+// 2) When reconstructing a QUAL field on a specific line, piz calls the LT_CODEC reconstructor for CODEC_DOMQUAL, 
+//    codec_domq_reconstruct,which combines data from the local buffers of QUAL and DOMQRUNS to reconstruct the original QUAL field.
+void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
 {
     bool reconstruct = !piz_is_skip_section (vb, SEC_LOCAL, qual_ctx->dict_id);
 
