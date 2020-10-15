@@ -221,7 +221,7 @@ void stats_compress (void)
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_size=0;
 
     //prepare data
-    StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { 0 }, *s = sbl;
+    StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { }, *s = sbl;
 
     count_per_section = calloc (z_file->section_list_buf.len, sizeof (int));
 
