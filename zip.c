@@ -71,182 +71,29 @@ static void zip_display_compression_ratio (Dispatcher dispatcher, Md5Hash md5, b
     }
 }
 
-typedef struct {
-    Codec codec;
-    double size;
-    double clock;
-} CodecTest;
-
-static int zip_codec_test_sorter (const CodecTest *t1, const CodecTest *t2)
-{
-    // case: select for significant difference in size (more than 2%)
-    if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
-
-    // case: size is similar, select for significant difference in time (more than 30%)
-    if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
-
-    // case: size and time are quite similar, check 2nd level 
-
-    // case: select for smaller difference in size (more than 1%)
-    if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
-
-    // case: select for smaller difference in time (more than 15%)
-    if (t1->clock < t2->clock * 0.75) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
-
-    // time and size are very similar (within %1 and 15% respectively) - select for smaller size
-    return t1->size - t2->size;
-}
-
-// Codecs may be assigned in 3 stages:
-// 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
-// 2. At merge - inherit from z_file->context if not set in Seg
-// 3. After merge before compress - if still not assigned - zip_assign_best_codec - which also commits back to z_file->context
-//    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
-// Note: if vb=1 commits a lcodec, it will be during its lock, so that all subsequent VBs will inherit it. But for
-// contexts not committed by vb=1 - multiple contexts running in parallel may commit their lcodec overriding each other. that's ok.
-static void zip_assign_best_codec (VBlock *vb)
-{
-    #define NUM_TESTS (sizeof (tests) / sizeof (tests[0]))
-    
-    #define SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
-
-    RESET_FLAG (flag_show_headers);
-    uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
-    uint64_t save_z_data       = vb->z_data.len;
-
-    if (flag_show_codec_test && vb->vblock_i == 1)
-        fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
-                 "Results in the format [codec size clock] are in order of quality - the first was selected.\n", SAMPLE_SIZE);
-
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
-        CodecTest tests[] = { { CODEC_BSC }, { CODEC_NONE }, { CODEC_BZ2 }, { CODEC_LZMA } };
-        uint32_t len = ctx->local.len * lt_desc[ctx->ltype].width;
-        
-        if (len < MIN_LEN_FOR_COMPRESSION || ctx->lcodec != CODEC_UNKNOWN) continue;
-
-        // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
-        // it doesn't prevent double testing 100% of time, but that's good enough) 
-        Codec zf_lcodec = z_file->contexts[did_i].lcodec; // read without locking (1 byte)
-        if (zf_lcodec != CODEC_UNKNOWN) {
-            ctx->lcodec = zf_lcodec;
-            continue;
-        }
-
-        if (flag_fast) {
-            ctx->lcodec = CODEC_BZ2;
-            continue;
-        }
-
-        // measure the compressed size and duration for a small sample of of the local data, for each codec
-        for (unsigned t=0; t < NUM_TESTS; t++) {
-
-            ctx->lcodec = tests[t].codec;
-
-            clock_t start_time = clock();
-            tests[t].size  = (ctx->lcodec == CODEC_NONE) ? MIN (len, SAMPLE_SIZE)
-                                                         : zfile_compress_local_data (vb, ctx, SAMPLE_SIZE);
-            tests[t].clock = (clock() - start_time);
-
-            vb->z_data.len = save_z_data; // roll back
-        }
-
-        // sort codec by our selection criteria
-        qsort (tests, NUM_TESTS, sizeof (CodecTest), (int (*)(const void *, const void*))zip_codec_test_sorter);
-
-        if (flag_show_codec_test)
-            fprintf (stderr, "vb_i=%u %-8s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", vb->vblock_i, ctx->name, 
-                    codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
-                    codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
-                    codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
-                    codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
-
-        // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
-        ctx->lcodec = tests[0].codec;
-        mtf_commit_lcodec_to_zf_ctx (vb, ctx);
-    }
-
-    RESTORE_FLAG (flag_show_headers);
-    vb->section_list_buf.len = save_section_list; // roll back
-}
-
-// after segging - if any context appears to contain only singleton snips (eg a unique ID),
-// we move it to local instead of needlessly cluttering the global dictionary
-static void zip_handle_unique_words_ctxs (VBlock *vb)
-{
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
-    
-        if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
-        if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
-        if (ctx->mtf.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
-        if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
-
-        // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
-        if ((ctx->inst & CTX_INST_NO_STONS) || ctx->ltype != LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
-
-        buf_move (vb, &ctx->local, vb, &ctx->dict);
-        buf_free (&ctx->mtf);
-        buf_free (&ctx->mtf_i);
-    }
-}
-
-// generate & write b250 data for all primary fields of this data type
-static void zip_generate_and_compress_ctxs (VBlock *vb)
-{
-    START_TIMER;
-
-    // generate & write b250 data for all primary fields
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = &vb->contexts[did_i];
-
-        if (ctx->mtf_i.len) {
-            
-            zip_generate_b250_section (vb, ctx);
-
-            if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
-                mtf_dump_local (ctx, false);
-
-            zfile_compress_b250_data (vb, ctx, CODEC_BSC);
-        }
-
-        if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty
-
-            if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
-                mtf_dump_local (ctx, true);
-
-            if (ctx->ltype == LT_BITMAP) 
-                LTEN_bit_array (buf_get_bitarray (&ctx->local));
-
-            zfile_compress_local_data (vb, ctx, 0);
-        }
-    }
-
-    COPY_TIMER (zip_generate_and_compress_ctxs);
-}
-
 // here we translate the mtf_i indices creating during seg_* to their finally dictionary indices in base-250.
 // Note that the dictionary indices have changed since segregate (which is why we needed this intermediate step)
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs ; 2. for the first VB, we sort the dictionary by frequency
-void zip_generate_b250_section (VBlock *vb, Context *ctx)
+static void zip_generate_b250_section (VBlock *vb, Context *ctx, uint32_t sample_size)
 {
     ASSERT (ctx->b250.len==0, "Error in zip_generate_b250_section: ctx->mtf_i is not empty. Dict=%s", ctx->name);
 
     buf_alloc (vb, &ctx->b250, ctx->mtf_i.len * MAX_BASE250_NUMERALS, // maximum length is if all entries are 4-numeral.
                1.1, "ctx->b250_buf", 0);
 
-    bool show = flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num;
+    bool show = (flag_show_b250 || dict_id_printable (ctx->dict_id).num == dict_id_show_one_b250.num) && !sample_size;
 
     if (show) 
         bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->name);
 
+    // calculate number of mtf_i words to be generated - normally all of them, except if we're just sampling in zip_assign_best_codec
+    uint32_t num_words = (uint32_t)ctx->mtf_i.len;
+    if (sample_size && num_words > sample_size / sizeof (uint32_t))
+        num_words = sample_size / sizeof (uint32_t);
+
     WordIndex prev = WORD_INDEX_NONE; 
-    for (uint32_t i=0; i < (uint32_t)ctx->mtf_i.len; i++) {
+    for (uint32_t i=0; i < num_words; i++) {
 
         WordIndex node_index = *ENT(WordIndex, ctx->mtf_i, i);
 
@@ -293,6 +140,188 @@ void zip_generate_b250_section (VBlock *vb, Context *ctx)
         fprintf (stderr, "%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
         buf_free (&vb->show_b250_buf);
     }
+}
+
+typedef struct {
+    Codec codec;
+    double size;
+    double clock;
+} CodecTest;
+
+static int zip_codec_test_sorter (const CodecTest *t1, const CodecTest *t2)
+{
+    // case: select for significant difference in size (more than 2%)
+    if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
+    if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
+
+    // case: size is similar, select for significant difference in time (more than 30%)
+    if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
+    if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
+
+    // case: size and time are quite similar, check 2nd level 
+
+    // case: select for smaller difference in size (more than 1%)
+    if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
+    if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
+
+    // case: select for smaller difference in time (more than 15%)
+    if (t1->clock < t2->clock * 0.75) return -1; // t1 has significantly better time
+    if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
+
+    // time and size are very similar (within %1 and 15% respectively) - select for smaller size
+    return t1->size - t2->size;
+}
+
+static void zip_assign_best_codec_test_one (VBlockP vb, ContextP ctx, bool is_local, uint32_t len)
+{
+    CodecTest tests[] = { { CODEC_BSC }, { CODEC_NONE }, { CODEC_BZ2 }, { CODEC_LZMA } };
+    #define NUM_TESTS (sizeof (tests) / sizeof (tests[0]))    
+
+    Codec *selected_codec = is_local ? &ctx->lcodec : &ctx->bcodec;
+
+    if (len < MIN_LEN_FOR_COMPRESSION || *selected_codec != CODEC_UNKNOWN) return;
+
+    if (flag_fast) {
+        *selected_codec = CODEC_BZ2;
+        return;
+    }
+
+    // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
+    // it doesn't prevent double testing 100% of time, but that's good enough) 
+    Codec zf_codec = is_local ? z_file->contexts[ctx->did_i].lcodec :  // read without locking (1 byte)
+                                z_file->contexts[ctx->did_i].bcodec;
+    
+    if (zf_codec != CODEC_UNKNOWN) {
+        *selected_codec = zf_codec;
+        return;
+    }
+
+    // measure the compressed size and duration for a small sample of of the local data, for each codec
+    for (unsigned t=0; t < NUM_TESTS; t++) {
+        *selected_codec = tests[t].codec;
+
+        clock_t start_time = clock();
+        tests[t].size  = (*selected_codec == CODEC_NONE) ? len : 
+                                                           is_local ? zfile_compress_local_data (vb, ctx, len)
+                                                                    : zfile_compress_b250_data (vb, ctx);
+        tests[t].clock = (clock() - start_time);
+    }
+
+    // sort codec by our selection criteria
+    qsort (tests, NUM_TESTS, sizeof (CodecTest), (int (*)(const void *, const void*))zip_codec_test_sorter);
+
+    if (flag_show_codec_test)
+        fprintf (stderr, "vb_i=%u %-8s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
+                vb->vblock_i, ctx->name, is_local ? "LOCAL" : "B250",
+                codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
+                codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
+                codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
+                codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
+
+    // assign the best codec - the first one in the sorted array - and commit it to zf_ctx
+    *selected_codec = tests[0].codec;
+    mtf_commit_codec_to_zf_ctx (vb, ctx, is_local);
+}
+
+// Codecs may be assigned in 3 stages:
+// 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
+// 2. At merge - inherit from z_file->context if not set in Seg
+// 3. After merge before compress - if still not assigned - zip_assign_best_codec - which also commits back to z_file->context
+//    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
+// Note: if vb=1 commits a codec, it will be during its lock, so that all subsequent VBs will inherit it. But for
+// contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
+static void zip_assign_best_codec (VBlock *vb)
+{
+//    #define NUM_TESTS (sizeof (tests) / sizeof (tests[0]))
+    
+    #define SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
+
+    RESET_FLAG (flag_show_headers);
+    uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
+    uint64_t save_z_data       = vb->z_data.len;
+
+    if (flag_show_codec_test && vb->vblock_i == 1)
+        fprintf (stderr, "\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
+                 "Results in the format [codec size clock] are in order of quality - the first was selected.\n", SAMPLE_SIZE);
+
+    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
+        Context *ctx = &vb->contexts[did_i];
+       
+        // local
+        uint32_t len = MIN (SAMPLE_SIZE, ctx->local.len * lt_desc[ctx->ltype].width);
+        zip_assign_best_codec_test_one (vb, ctx, true, len);
+
+        // b250
+        if (ctx->mtf_i.len * sizeof (uint32_t) < MIN_LEN_FOR_COMPRESSION)
+            continue; // case: size is too small even before shrinking during generation
+
+        // generate a sample of ctx.b250 data from ctx.mtf_i data
+        zip_generate_b250_section (vb, ctx, SAMPLE_SIZE);
+
+        zip_assign_best_codec_test_one (vb, ctx, false, ctx->b250.len);
+        
+        // roll back
+        ctx->b250.len = 0; 
+        vb->z_data.len = save_z_data;
+    }
+
+    RESTORE_FLAG (flag_show_headers);
+    vb->section_list_buf.len = save_section_list; // roll back
+}
+
+// after segging - if any context appears to contain only singleton snips (eg a unique ID),
+// we move it to local instead of needlessly cluttering the global dictionary
+static void zip_handle_unique_words_ctxs (VBlock *vb)
+{
+    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
+        Context *ctx = &vb->contexts[did_i];
+    
+        if (!ctx->mtf.len || ctx->mtf.len != ctx->mtf_i.len) continue; // check that all words are unique (and new to this vb)
+        if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
+        if (ctx->mtf.len < vb->lines.len / 5)   continue; // don't bother if this is a rare field less than 20% of the lines
+        if (buf_is_allocated (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
+
+        // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
+        if ((ctx->inst & CTX_INST_NO_STONS) || ctx->ltype != LT_TEXT) continue; // NO_STONS is implicit if ctx isn't text
+
+        buf_move (vb, &ctx->local, vb, &ctx->dict);
+        buf_free (&ctx->mtf);
+        buf_free (&ctx->mtf_i);
+    }
+}
+
+// generate & write b250 data for all primary fields of this data type
+static void zip_generate_and_compress_ctxs (VBlock *vb)
+{
+    START_TIMER;
+
+    // generate & write b250 data for all primary fields
+    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
+        Context *ctx = &vb->contexts[did_i];
+
+        if (ctx->mtf_i.len) {
+            
+            zip_generate_b250_section (vb, ctx, 0);
+
+            if (dict_id_printable (ctx->dict_id).num == dump_one_b250_dict_id.num) 
+                mtf_dump_local (ctx, false);
+
+            zfile_compress_b250_data (vb, ctx);
+        }
+
+        if (ctx->local.len || ctx->ltype == LT_BITMAP) { // bitmaps are always written, even if empty
+
+            if (dict_id_printable (ctx->dict_id).num == dump_one_local_dict_id.num) 
+                mtf_dump_local (ctx, true);
+
+            if (ctx->ltype == LT_BITMAP) 
+                LTEN_bit_array (buf_get_bitarray (&ctx->local));
+
+            zfile_compress_local_data (vb, ctx, 0);
+        }
+    }
+
+    COPY_TIMER (zip_generate_and_compress_ctxs);
 }
 
 static void zip_update_txt_counters (VBlock *vb, bool update_txt_file)
@@ -422,8 +451,8 @@ static void zip_compress_one_vb (VBlock *vb)
     mtf_merge_in_vb_ctx(vb);
 
     // for each context with CODEC_UNKNOWN - i.e. that was not assigned in Seg AND not inherited from
-    // a previous VB during merge - find the best codec for this local data. 
-    // This lcodec will be commited to zf_ctx so that subsequent VBs inherit it during their merge
+    // a previous VB during merge - find the best codecs for its local and b250 data. 
+    // These codecs will be committed to zf_ctx so that subsequent VBs inherit it during their merge
     zip_assign_best_codec (vb);
 
     if (vb->vblock_i == 1) mtf_vb_1_unlock(vb); 

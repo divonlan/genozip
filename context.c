@@ -525,20 +525,22 @@ finish:
     return zf_ctx;
 }
 
-void mtf_commit_lcodec_to_zf_ctx (VBlock *vb, Context *vb_ctx)
+void mtf_commit_codec_to_zf_ctx (VBlock *vb, Context *vb_ctx, bool is_lcodec)
 {
     Context *zf_ctx  = mtf_get_zf_ctx (vb_ctx->dict_id);
-    ASSERT (zf_ctx, "Error in mtf_commit_lcodec_to_zf_ctx: zf_ctx is missing for %s in vb=%u", vb_ctx->name, vb->vblock_i); // zf_ctx is expected to exist as this is called after merge
+    ASSERT (zf_ctx, "Error in mtf_commit_codec_to_zf_ctx: zf_ctx is missing for %s in vb=%u", vb_ctx->name, vb->vblock_i); // zf_ctx is expected to exist as this is called after merge
 
     { START_TIMER; 
       mtf_lock (vb, &zf_ctx->mutex, "zf_ctx", zf_ctx->did_i);
       COPY_TIMER_VB (vb, lock_mutex_zf_ctx);  
     }
 
-    zf_ctx->lcodec = vb_ctx->lcodec;
+    if (is_lcodec) zf_ctx->lcodec = vb_ctx->lcodec;
+    else           zf_ctx->bcodec = vb_ctx->bcodec;
 
     mtf_unlock (vb, &zf_ctx->mutex, "zf_ctx->mutex", zf_ctx->did_i);
 }
+
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
 // we are careful never to hold two muteces at the same time to avoid deadlocks
@@ -987,7 +989,7 @@ void mtf_free_context (Context *ctx)
     ctx->last_delta = 0;
     ctx->last_value.i = 0;
     ctx->last_line_i = 0;
-    ctx->did_i = ctx->flags = ctx->inst = ctx->ltype = ctx->lcodec = 0;
+    ctx->did_i = ctx->flags = ctx->inst = ctx->ltype = ctx->lcodec = ctx->bcodec = 0;
     memset ((char*)ctx->name, 0, sizeof(ctx->name));
     mutex_destroy (ctx->mutex);
 }

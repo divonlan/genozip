@@ -144,7 +144,7 @@ typedef struct Context {
     Buffer mtf_i;              // contains 32bit indices into the ctx->mtf - this is an intermediate step before generating b250 or genotype_data 
     
     // settings
-    Codec lcodec;              // codec used to compress local
+    Codec lcodec, bcodec;      // codec used to compress local and b250
     uint8_t inst;              // instructions for seg/zip - ORed CTX_INST_ values
 
     // hash stuff 
@@ -211,7 +211,7 @@ extern MtfNode *mtf_node_vb_do (const Context *ctx, WordIndex node_index, const 
 extern MtfNode *mtf_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define mtf_node_zf(ctx, node_index, snip_in_dict, snip_len) mtf_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void mtf_merge_in_vb_ctx (VBlockP vb);
-extern void mtf_commit_lcodec_to_zf_ctx (VBlockP vb, ContextP vb_ctx);
+extern void mtf_commit_codec_to_zf_ctx (VBlockP vb, ContextP vb_ctx, bool is_lcodec);
 
 extern Context *mtf_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, uint8_t *dict_id_to_did_i_map, uint8_t map_did_i, DidIType *num_contexts, DictId dict_id);
 

@@ -225,20 +225,21 @@ void zfile_compress_dictionary_data (VBlock *vb, Context *ctx,
 //printf ("End compress dict vb_i=%u did_i=%u\n", vb->vblock_i, ctx->did_i);
 }
 
-void zfile_compress_b250_data (VBlock *vb, Context *ctx, Codec codec)
+uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
 {
     SectionHeaderCtx header = (SectionHeaderCtx) { 
         .h.magic                 = BGEN32 (GENOZIP_MAGIC),
         .h.section_type          = SEC_B250,
         .h.data_uncompressed_len = BGEN32 (ctx->b250.len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.codec                 = codec,
+        .h.codec                 = ctx->bcodec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags                 = (uint8_t)(ctx->flags & 0xff) | ((ctx->inst & CTX_INST_PAIR_B250) ? CTX_FL_PAIRED : 0), // 8 bit
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype
     };
-    comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
+    
+    return comp_compress (vb, &vb->z_data, false, (SectionHeader*)&header, ctx->b250.data, NULL);
 }
 
 static LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)

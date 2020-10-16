@@ -32,7 +32,7 @@ extern void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs *
 
 extern void zfile_compress_dictionary_data (VBlockP vb, ContextP ctx, 
                                             uint32_t num_words, const char *data, uint32_t num_chars);
-extern void zfile_compress_b250_data  (VBlockP vb, ContextP ctx, Codec codec);
+extern uint32_t zfile_compress_b250_data  (VBlockP vb, ContextP ctx);
 extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_size);
 
 // returns offset of header within data, EOF if end of file (or end of VCF component in the case of flag_unbind)
