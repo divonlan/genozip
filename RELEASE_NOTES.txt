@@ -188,7 +188,9 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 7.0.5
 - Add --show-stats and --SHOW-STATS to genocat/genounzip by introducing a new section SEC_STATS ; remove limitation of only one file when -w or -W
 
-7.0.6
+8.0.0
+- Added libbsc codec
+- Dynamic selection of codec between lzma, bz2, bsc for each local and b250 buffer
 - --show-ref-seq can now work in combination with --regions in genocat/genounzip
 - Better license registration flow
 - Consume ~0.5GB (for human data) less RAM in genounzip of SAM files compressed without a reference 
@@ -197,3 +199,4 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Added --best to contrast --fast. --best doesn't have any additional effect as its the default mode of genozip.
 - Added =prefix option to --unbind, to add a prefix when unbinding
 - --reference in genounzip is now optional - will use original reference filename absent --reference
+- Not backward compatible
