@@ -297,7 +297,7 @@ void stats_compress (void)
     
     stats_consolidate_compound (sbl, num_stats, "QNAME", "QNAME");
 
-    stats_consolidate_related (sbl, num_stats, "Sequence", 4, "SQBITMAP", "GPOS", "NONREF", "NONREF_X", "STRAND");
+    stats_consolidate_related (sbl, num_stats, "Sequence", 5, "SQBITMAP", "GPOS", "NONREF", "NONREF_X", "STRAND");
     
     stats_consolidate_related (sbl, num_stats, "Quality",  2, "QUAL", "DOMQRUNS");
     
