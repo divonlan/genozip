@@ -46,7 +46,7 @@ See also the bsc and libbsc web site:
 #include "lzp.h"
 #include "coder.h"
 
-void* (* bsc_malloc)(void *vb, uint64_t size) = NULL;
+void* (* bsc_malloc)(void *vb, size_t size) = NULL;
 void  (* bsc_free)(void *vb, void* address) = NULL;
 
 int bsc_init_full(int features, 

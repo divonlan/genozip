@@ -989,7 +989,9 @@ void mtf_free_context (Context *ctx)
     ctx->last_delta = 0;
     ctx->last_value.i = 0;
     ctx->last_line_i = 0;
-    ctx->did_i = ctx->flags = ctx->inst = ctx->ltype = ctx->lcodec = ctx->bcodec = 0;
+    ctx->did_i = ctx->flags = ctx->inst = 0;
+    ctx->ltype = 0;
+    ctx->lcodec = ctx->bcodec = 0;
     memset ((char*)ctx->name, 0, sizeof(ctx->name));
     mutex_destroy (ctx->mutex);
 }
