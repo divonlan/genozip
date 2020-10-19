@@ -38,7 +38,7 @@ bool crypt_prompt_for_password()
     password = calloc (MAX_PASSWORD_LEN+1, 1); // allocated once, never freed
     printf("\n\nPassword: ");
     
-    fgets (password, MAX_PASSWORD_LEN, stdin);
+    (void)!fgets (password, MAX_PASSWORD_LEN, stdin); // (void)! to avoid compiler "warning: ignoring return value"
     password[strlen(password)-1] = 0; // truncate the newline
 
     ASSERT0 (strlen(password), "Goodbye!"); // exit if user clicked Enter only
