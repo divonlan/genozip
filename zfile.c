@@ -707,10 +707,9 @@ final:
 
 void zfile_compress_genozip_header (Md5Hash single_component_md5)
 {
-    SectionHeaderGenozipHeader header;
+    SectionHeaderGenozipHeader header = {};
 
     // start with just the fields needed by sections_add_to_list
-    memset (&header, 0, sizeof(SectionHeaderGenozipHeader)); // safety
     header.h.section_type = SEC_GENOZIP_HEADER;
 
     // "manually" add the genozip section to the section list - normally it is added in comp_compress()
@@ -745,9 +744,13 @@ void zfile_compress_genozip_header (Md5Hash single_component_md5)
     // (unless the fasta is piped from stdin, or its name is too long)
     else if (flag_make_reference && strcmp (txt_name, FILENAME_STDIN) && strlen (txt_name) <= REF_FILENAME_LEN-1) {
 #ifndef WIN32
-        realpath (txt_name, header.ref_filename);
+        char *ref_filename = realpath (txt_name, NULL); // allocates memory
+        ASSERT (ref_filename, "Error in zfile_compress_genozip_header: realpath() failed: %s", strerror (errno));
+
+        strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
+        FREE (ref_filename);
 #else
-        _fullpath (header.ref_filename, txt_name, REF_FILENAME_LEN);
+        ASSERT0 (_fullpath (header.ref_filename, txt_name, REF_FILENAME_LEN), "Error in zfile_compress_genozip_header: _fullpath() failed");
 #endif
     }
 

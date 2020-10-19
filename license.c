@@ -85,7 +85,7 @@ static uint32_t licence_retrieve_locally (void)
     if (!fp) return 0; // no license
 
     uint32_t license_num=0; // initialize - so that we return 0 if fscanf fails to read a number
-    fscanf (fp, "%u", &license_num);
+    ASSERT0 (fscanf (fp, "%u", &license_num) == 1, "Error in licence_retrieve_locally: failed to read license_num");
     
     fclose (fp);
     free (filename);

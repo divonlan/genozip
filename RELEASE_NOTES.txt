@@ -200,3 +200,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Added =prefix option to --unbind, to add a prefix when unbinding
 - --reference in genounzip is now optional - will use original reference filename absent --reference
 - Not backward compatible
+
+8.0.1
+- Bug fixes

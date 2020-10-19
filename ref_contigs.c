@@ -300,7 +300,8 @@ void ref_contigs_verify_identical_chrom (const char *chrom_name, unsigned chrom_
         chrom_index = ref_alt_chroms_zip_get_alt_index (chrom_name, chrom_name_len, WI_REF_CONTIG, WORD_INDEX_NONE);
 
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
-    if (chrom_index == WORD_INDEX_NONE) return;
+    RETURNW (chrom_index != WORD_INDEX_NONE,, "Warning: header of %s lists contig '%.*s', which is absent from %s. This might result in sub-optimal compression (but no harm otherwise).",
+             txt_file->basename, chrom_name_len, chrom_name, ref_filename);
 
     // get info as it appears in reference
     PosType ref_last_pos = ENT (Range, ranges, chrom_index)->last_pos;
@@ -367,7 +368,7 @@ WordIndex ref_contigs_get_by_accession_number (const char *ac, unsigned ac_len)
     for (WordIndex alt_chrom=0 ; alt_chrom < loaded_contigs.len; alt_chrom++) {
         const char *alt_chrom_name = ENT (const char, loaded_contig_dict, ENT (RefContig, loaded_contigs, alt_chrom)->char_index);
         const char *substr = strstr (alt_chrom_name, numeric);
-        if (substr && (substr - alt_chrom_name >= letter_len) && !strncasecmp (substr-letter_len, ac, numeric_len + letter_len)) 
+        if (substr && (substr - alt_chrom_name >= letter_len) && !strncasecmp (substr-letter_len, ac, (size_t)(numeric_len + letter_len))) 
             return alt_chrom;
     }
 

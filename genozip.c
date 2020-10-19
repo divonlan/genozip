@@ -938,7 +938,7 @@ void TEST()
 {
     FILE *fp = fopen ("seq", "rb");
     char *data = malloc (14236798);
-    fread (data, 1, 14236798, fp);
+    (void)!fread (data, 1, 14236798, fp); // (void)! to quieten compiler "warning: ignoring return value"
 }
 
 int main (int argc, char **argv)

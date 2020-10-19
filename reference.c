@@ -621,6 +621,10 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const ch
         // check for hash conflict 
         if ((range->range_i != range_i || vb->chrom_name_len != range->chrom_name_len || memcmp (vb->chrom_name, range->chrom_name, vb->chrom_name_len))) {
             *lock = ref_unlock (*lock);
+
+            ASSERTW (!flag_test_seg, "Warning: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
+                     vb->chrom_name_len, vb->chrom_name, (uint32_t)pos); // only show this in --test-seg
+
             range = NULL;  // no soup for you
         }
 
@@ -667,9 +671,10 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, PosType pos, uint32_t
         uint32_t num_contigs = ref_contigs_num_contigs();
         if (vb->chrom_node_index >= num_contigs) 
             vb->chrom_node_index = ref_alt_chroms_zip_get_alt_index (vb->chrom_name, vb->chrom_name_len, WI_REF_CONTIG, vb->chrom_node_index); // change temporarily just for ref_range_id_by_word_index()
-        
-        ASSSEG (vb->chrom_node_index < num_contigs, field, "Error in ref_seg_get_locked_range: chrom \"%.*s\" is not found in the reference file %s",
-                MIN (vb->chrom_name_len, 100), vb->chrom_name, ref_filename);
+
+        // case: the contig is not in the reference - we will just consider it an unaligned line 
+        // (we already gave a warning for this in ref_contigs_verify_identical_chrom, so no need for another one)
+        if (vb->chrom_node_index >= num_contigs) return NULL;
     }
 
     ASSSEG (vb->chrom_node_index < ranges.len, field, "Error in ref_seg_get_locked_range: vb->chrom_node_index=%u expected to be smaller than ranges.len=%u", 

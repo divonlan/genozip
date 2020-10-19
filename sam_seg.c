@@ -275,12 +275,10 @@ static void sam_seg_seq_field (VBlockSAM *vb, const char *seq, uint32_t seq_len,
     RefLock lock;
     Range *range = ref_seg_get_locked_range ((VBlockP)vb, pos, vb->ref_consumed, seq, &lock);
 
-    ASSERTW (range || !flag_test_seg, "Warning: ref range contention: chrom=%.*s pos=%u ref_consumed=%u (this slightly affects compression ratio, but is harmless)", 
-             vb->chrom_name_len, vb->chrom_name, (uint32_t)pos, vb->ref_consumed); // only show this in --test-seg
-
     // Cases where we don't consider the refernce and just copy the seq as-is
-    if (!range || // 1. if reference range is NULL as the hash entry for this range is unfortunately already occupied by another range (can only happen with REF_INTERNAL)
-        (cigar[0] == '*' && cigar[1] == 0)) { // 2. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
+    if (!range || // 1. (denovo:) case reference range is NULL as the hash entry for this range is unfortunately already occupied by another range
+                  // 2. (loaded:) case contig doesn't exist in the reference
+        (cigar[0] == '*' && cigar[1] == 0)) { // 3. in case there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
 
         buf_add (&nonref_ctx->local, seq, seq_len);
         

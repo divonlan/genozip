@@ -166,17 +166,26 @@ bool codec_domq_compress (VBlock *vb,
         NEXTENT (char, *qual_buf) = NO_DOMS;
     }
 
-    *uncompressed_len = (uint32_t)qual_buf->len;
-
-    // compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context.
     Codec sub_codec = codec_args[CODEC_DOMQ].sub_codec1;
     CodecCompress *compress = codec_args[sub_codec].compress;
+    uint32_t min_required_compressed_len = codec_args[sub_codec].est_size (sub_codec, qual_buf->len);
 
     COPY_TIMER (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
 
-    bool success = compress (vb, codec, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
+    // case: all good - compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context.
+    if (*compressed_len >= min_required_compressed_len) {
+        *uncompressed_len = (uint32_t)qual_buf->len;
+        return compress (vb, codec, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
+    }
 
-    return success;
+    // case: our uncompressed length is too long vs the allocation of compressed (in a rare case that domqual enlengthen QUAL)
+    // fallback on compressing the QUAL data using sub_codec1 directly (by which compressed_len was alloceted in comp_compress)
+    else {
+        *codec = sub_codec; 
+        buf_free (qual_buf);
+        buf_free (qdomruns_buf);
+        return compress (vb, codec, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);
+    }
 }
 
 //--------------

@@ -27,15 +27,16 @@ static const char *codec_bsc_errstr (int err)
 }
 
 bool codec_bsc_compress (VBlock *vb, Codec *codec,
-                        const char *uncompressed,      // option 1 - compress contiguous data
-                        uint32_t *uncompressed_len, 
-                        LocalGetLineCB callback, // option 2 - compress data one line at a time
-                        char *compressed, uint32_t *compressed_len /* in/out */, 
-                        bool soft_fail)
+                         const char *uncompressed,      // option 1 - compress contiguous data
+                         uint32_t *uncompressed_len, 
+                         LocalGetLineCB callback, // option 2 - compress data one line at a time
+                         char *compressed, uint32_t *compressed_len /* in/out */, 
+                         bool soft_fail)
 {
     START_TIMER;
 
-    ASSERT0 (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "Error in codec_bsc_compress: compressed_len too small");
+    ASSERT (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "Error in codec_bsc_compress: compressed_len too small: compress_len=%u < uncompressed_len=%u + LIBBSC_HEADER_SIZE=%u",
+            *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE);
 
     // libbsc doesn't allow piecemiel compression, so we need to copy all the data in case of callback
     if (callback) {

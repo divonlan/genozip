@@ -9,7 +9,6 @@
 #define _FILE_OFFSET_BITS 64
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #ifndef _MSC_VER // Microsoft compiler
 #include <inttypes.h>
 #include <unistd.h> 
@@ -18,6 +17,7 @@
 #include "compatibility/visual_c_unistd.h"
 #include "compatibility/visual_c_misc_funcs.h"
 #endif
+#include <string.h> // must be after inttypes
 
 // -----------------
 // system parameters
