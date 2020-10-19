@@ -181,11 +181,11 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 }
 
 // flags written to SectionHeaderCtx.h.flags allowing Seg to communicate instructions to Piz
-#define CTX_FL_STORE_INT    0x01 // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)
-#define CTX_FL_STORE_FLOAT  0x02 // after reconstruction of a snip, store it in ctx.last_value as double
-#define CTX_FL_PAIRED       0x04 // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-#define CTX_FL_STRUCTURED   0x08 // snips may contain Structured
-#define CTX_FL_COPY_PARAM   0x10 // copy ctx.b250/local.param from SectionHeaderCtx.param
+#define CTX_FL_STORE_INT    ((uint8_t)0x01) // after reconstruction of a snip, store it in ctx.last_value as int64_t (eg because they are a basis for a delta calculation)
+#define CTX_FL_STORE_FLOAT  ((uint8_t)0x02) // after reconstruction of a snip, store it in ctx.last_value as double
+#define CTX_FL_PAIRED       ((uint8_t)0x04) // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
+#define CTX_FL_STRUCTURED   ((uint8_t)0x08) // snips may contain Structured
+#define CTX_FL_COPY_PARAM   ((uint8_t)0x10) // copy ctx.b250/local.param from SectionHeaderCtx.param
 #define ctx_is_store(ctx, store_flag) (((ctx)->flags & 0x3) == (store_flag))
 
 typedef struct {

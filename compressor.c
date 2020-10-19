@@ -70,10 +70,10 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         bool success = 
-            codec_args[comp_codec].compress (vb, &header->codec, uncompressed_data, &data_uncompressed_len,
-                                               callback,  
-                                               &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                               true);
+            codec_args[comp_codec].compress (vb, header, uncompressed_data, &data_uncompressed_len,
+                                             callback,  
+                                             &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                             true);
         codec_free_all (vb); // just in case
 
         // if output buffer is too small, increase it, and try again
@@ -84,15 +84,15 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset
 
-            codec_args[comp_codec].compress (vb, &header->codec,
-                                               uncompressed_data, &data_uncompressed_len,
-                                               callback,  
-                                               &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
-                                               false);
+            codec_args[comp_codec].compress (vb, header,
+                                             uncompressed_data, &data_uncompressed_len,
+                                             callback,  
+                                             &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                             false);
 
             codec_free_all (vb); // just in case
         }
-
+    
         // update uncompressed length - complex codecs (like domqual) might change it
         header->data_uncompressed_len = BGEN32 (data_uncompressed_len);
         
@@ -163,7 +163,7 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec,
     codec_free_all (vb); // just in case
 }
 
-void comp_unit_test (Codec codec)
+void comp_unit_test (SectionHeader *header)
 {
     uint32_t size = 1000000;
     //int size = 3380084;
@@ -173,14 +173,14 @@ void comp_unit_test (Codec codec)
     //FILE *fp = fopen ("bugq.bz2", "rb");
     //ASSERT0 (fread (data, 1, size, fp) == size, "read failed");
 
-    uint32_t comp_len = codec_args[codec].est_size (codec, size);
+    uint32_t comp_len = codec_args[header->codec].est_size (header->codec, size);
     char *comp = malloc (comp_len);
     
-    codec_args[codec].compress (evb, &codec, data, &size, 0, comp, &comp_len, false);
+    codec_args[header->codec].compress (evb, header, data, &size, 0, comp, &comp_len, false);
 
     Buffer uncomp = EMPTY_BUFFER;
     buf_alloc (evb, &uncomp, size, 1, "uncomp", 0);
-    codec_args[codec].uncompress (evb, codec, comp, comp_len, &uncomp, size, CODEC_NONE);
+    codec_args[header->codec].uncompress (evb, header->codec, comp, comp_len, &uncomp, size, CODEC_NONE);
 
     printf ("Unit test %s!\n", memcmp (data, uncomp.data, size) ? "failed" : "succeeded");
 

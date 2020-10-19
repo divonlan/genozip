@@ -12,7 +12,7 @@
 #include "data_types.h"
 
 typedef bool CodecCompress (VBlockP vb, 
-                            Codec *codec,               // in / out
+                            SectionHeader *header,       // in / out
                             const char *uncompressed,   // option 1 - compress contiguous data
                             uint32_t *uncompressed_len, // in/out (might be modified by complex codecs)
                             LocalGetLineCB callback,    // option 2 - compress data one line at a tim

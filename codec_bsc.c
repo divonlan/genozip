@@ -26,7 +26,7 @@ static const char *codec_bsc_errstr (int err)
     }
 }
 
-bool codec_bsc_compress (VBlock *vb, Codec *codec,
+bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
                          const char *uncompressed,      // option 1 - compress contiguous data
                          uint32_t *uncompressed_len, 
                          LocalGetLineCB callback, // option 2 - compress data one line at a time

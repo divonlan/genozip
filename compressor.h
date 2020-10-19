@@ -21,6 +21,4 @@ extern void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec,
                              const char *compressed_data, uint32_t compressed_data_len,
                              Buffer *uncompressed_data, uint64_t uncompressed_len);
 
-extern void comp_unit_test (Codec codec);
-
 #endif

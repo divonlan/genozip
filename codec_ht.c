@@ -105,12 +105,12 @@ static void codec_ht_compress_one_array (VBlockP vb, uint32_t ht_i,
 // it to sample groups. for each sample a haplotype is just a string of 1 and 0 etc (could be other alleles too)
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 bool codec_ht_compress (VBlock *vb, 
-                       Codec *codec,             // out
-                       const char *uncompressed, // option 1 - compress contiguous data
-                       uint32_t *uncompressed_len, 
-                       LocalGetLineCB callback,  // option 2 - not supported
-                       char *compressed, uint32_t *compressed_len /* in/out */, 
-                       bool soft_fail)
+                        SectionHeader *header,    
+                        const char *uncompressed, // option 1 - compress contiguous data
+                        uint32_t *uncompressed_len, 
+                        LocalGetLineCB callback,  // option 2 - not supported
+                        char *compressed, uint32_t *compressed_len /* in/out */, 
+                        bool soft_fail)
 {
     START_TIMER;
     
@@ -136,7 +136,7 @@ bool codec_ht_compress (VBlock *vb,
 
     PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
 
-    bool success = compress (vb, codec, 0, uncompressed_len, codec_ht_compress_one_array, compressed, compressed_len, soft_fail);
+    bool success = compress (vb, header, 0, uncompressed_len, codec_ht_compress_one_array, compressed, compressed_len, soft_fail);
     
     RESUME_TIMER (compressor_ht);
 

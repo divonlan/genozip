@@ -50,10 +50,10 @@ void codec_free_all (VBlock *vb)
         buf_free (&vb->codec_bufs[i]);
 }
 
-static bool codec_compress_error (VBlock *vb, Codec *codec, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
+static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
                                  char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
-    ABORT ("Error in comp_compress: Unsupported codec: %s", codec_name (*codec));
+    ABORT ("Error in comp_compress: Unsupported codec: %s", codec_name (header->codec));
     return false;
 }
 
@@ -68,7 +68,7 @@ static void codec_uncompress_error (VBlock *vb, Codec codec,
 
 static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
 {
-    ABORT ("Error in piz_reconstruct_from_ctx_do: Unsupported codec: %s", codec_name (codec));
+    ABORT ("Error in piz_reconstruct_from_ctx_do: codec %s has no LT_CODEC reconstruction", codec_name (codec));
 }
 
 static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)

@@ -96,7 +96,7 @@ static inline void codec_domq_add_runs (Buffer *qdomruns_buf, uint32_t runlen)
 }
 
 bool codec_domq_compress (VBlock *vb, 
-                          Codec *codec,             // out
+                          SectionHeader *header,    // out
                           const char *uncompressed, // option 1 - not supported
                           uint32_t *uncompressed_len, 
                           LocalGetLineCB callback,  // option 2 - callback to fetch one line of qual data
@@ -175,16 +175,19 @@ bool codec_domq_compress (VBlock *vb,
     // case: all good - compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context.
     if (*compressed_len >= min_required_compressed_len) {
         *uncompressed_len = (uint32_t)qual_buf->len;
-        return compress (vb, codec, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
+        return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
     }
 
     // case: our uncompressed length is too long vs the allocation of compressed (in a rare case that domqual enlengthen QUAL)
     // fallback on compressing the QUAL data using sub_codec1 directly (by which compressed_len was alloceted in comp_compress)
     else {
-        *codec = sub_codec; 
+        ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LD_CODEC any more
+        header->codec     = sub_codec;
+        header->sub_codec = CODEC_UNKNOWN;
+        header->flags    &= ~CTX_FL_COPY_PARAM; // cancel flag
         buf_free (qual_buf);
         buf_free (qdomruns_buf);
-        return compress (vb, codec, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);
+        return compress (vb, header, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);
     }
 }
 
