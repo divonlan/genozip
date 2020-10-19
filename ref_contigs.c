@@ -20,7 +20,7 @@ static Buffer loaded_contig_dict          = EMPTY_BUFFER;
 static Buffer loaded_contigs_sorted_index = EMPTY_BUFFER; // an array of uint32 of indexes into loaded_contigs - sorted by alphabetical order of the snip in contig_dict
 
 #ifdef __linux__ 
-extern int strncasecmp (const char *s1, const char *s2, size_t n); // for some reason GCC-9 under WSL Ubuntu 20 cannot find this in <strings.h> or <string.h>
+extern int strncasecmp (const char *s1, const char *s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
 #endif
 
 void ref_contigs_free (void)
