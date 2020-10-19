@@ -816,7 +816,8 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
                     // read one VB's genozip data
                     grepped_out = !piz_read_one_vb (next_vb);
 
-                    if (grepped_out) dispatcher_abandon_next_vb (dispatcher); 
+                    if (grepped_out || (flag_show_headers && exe_type == EXE_GENOCAT)) 
+                        dispatcher_abandon_next_vb (dispatcher); 
 
                     still_more_data = true; // not eof yet
 
@@ -837,7 +838,7 @@ bool piz_dispatcher (bool is_first_component, bool is_last_file)
             }
             
             if (still_more_data) {
-                if (!grepped_out) 
+                if (!grepped_out && !(flag_show_headers && exe_type == EXE_GENOCAT)) 
                     dispatcher_compute (dispatcher, piz_uncompress_one_vb);
                     
                 header_only_file = false;                

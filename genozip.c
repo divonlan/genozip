@@ -930,7 +930,7 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
     // cases where genocat is used to view some information, but not the file contents
     flag_genocat_info_only = exe_type == EXE_GENOCAT &&
                              (flag_show_stats || flag_show_dict || flag_show_b250 || flag_list_chroms || dict_id_show_one_dict.num ||
-                              flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num ||
+                              flag_show_index || dump_one_local_dict_id.num || dump_one_b250_dict_id.num || flag_show_headers ||
                               flag_show_reference || flag_show_ref_contigs || flag_show_ref_index || flag_show_ref_hash || flag_show_ref_alts || flag_show_ref_seq);
 }
 

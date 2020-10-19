@@ -593,11 +593,13 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
 
     // now get the text of the txt header itself
     static Buffer header_buf = EMPTY_BUFFER;
-    zfile_uncompress_section (evb, header, &header_buf, "header_buf", 0, SEC_TXT_HEADER);
+    
+    if (!(flag_show_headers && exe_type == EXE_GENOCAT))
+        zfile_uncompress_section (evb, header, &header_buf, "header_buf", 0, SEC_TXT_HEADER);
 
     bool is_vcf = (z_file->data_type == DT_VCF);
 
-    bool can_bind = is_vcf ? vcf_header_set_globals(z_file->name, &header_buf) : true;
+    bool can_bind = (is_vcf && !(flag_show_headers && exe_type == EXE_GENOCAT)) ? vcf_header_set_globals(z_file->name, &header_buf) : true;
     if (!can_bind) {
         buf_free (&header_section);
         buf_free (&header_buf);
@@ -609,7 +611,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (is_vcf && flag_header_one) vcf_header_keep_only_last_line (&header_buf);  // drop lines except last (with field and samples name)
 
     // write vcf header if not in bound mode, or, in bound mode, we write the vcf header, only for the first genozip file
-    if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference) {
+    if ((is_first_txt || flag_unbind) && !flag_no_header && !flag_reading_reference && !flag_show_headers) {
         txtfile_write_to_disk (&header_buf);
 
         if (flag_md5 && !md5_is_zero (header->md5_header)) {

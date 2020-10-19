@@ -422,7 +422,11 @@ int32_t zfile_read_section (File *file,
         is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC; // update after decryption
     }
 
-    if (flag_show_headers) zfile_show_header (header, NULL, sl ? sl->offset : 0, 'R');
+    if (flag_show_headers) {
+        zfile_show_header (header, NULL, sl ? sl->offset : 0, 'R');
+        if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250 || expected_sec_type == SEC_LOCAL || expected_sec_type == SEC_DICT))
+             return header_offset; // in genocat --show-header - we only show headers, nothing else
+    }
 
     ASSERT (is_magical, "Error in zfile_read_section: corrupt data (magic is wrong) when attempting to read section %s of vblock_i=%u component=%u in file %s", 
             st_name (expected_sec_type), vb->vblock_i, z_file->num_txt_components_so_far, z_name);
@@ -524,7 +528,8 @@ void zfile_read_all_dictionaries (uint32_t last_vb_i /* 0 means all VBs */, Read
         zfile_read_section (z_file, evb, sl_ent->vblock_i, &evb->z_data, "z_data", sizeof(SectionHeaderDictionary), sl_ent->section_type, sl_ent);    
 
         // update dictionaries in z_file->contexts with dictionary data 
-        mtf_integrate_dictionary_fragment (evb, evb->z_data.data);
+        if (!flag_show_headers)
+            mtf_integrate_dictionary_fragment (evb, evb->z_data.data);
 
         buf_free (&evb->z_data);
     }
