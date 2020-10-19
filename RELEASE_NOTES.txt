@@ -203,3 +203,4 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 
 8.0.1
 - Bug fixes
+- Improved 'genocat --show-headers'
