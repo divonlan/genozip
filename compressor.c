@@ -167,14 +167,14 @@ void comp_unit_test (SectionHeader *header)
 {
     uint32_t size = 1000000;
     //int size = 3380084;
-    char *data = malloc(size);
+    char *data = MALLOC (size);
     for (int i=0; i < size; i++) data[i] = 'A' + (i%26);
 
     //FILE *fp = fopen ("bugq.bz2", "rb");
     //ASSERT0 (fread (data, 1, size, fp) == size, "read failed");
 
     uint32_t comp_len = codec_args[header->codec].est_size (header->codec, size);
-    char *comp = malloc (comp_len);
+    char *comp = MALLOC (comp_len);
     
     codec_args[header->codec].compress (evb, header, data, &size, 0, comp, &comp_len, false);
 

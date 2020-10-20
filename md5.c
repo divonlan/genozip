@@ -268,7 +268,7 @@ Md5Hash md5_snapshot (const Md5Context *ctx)
 
 const char *md5_display (const Md5Hash digest)
 {
-    char *str = malloc (34); // we're going to leak this memory - nevermind, it is small and rare
+    char *str = MALLOC (34); // we're going to leak this memory - nevermind, it is small and rare
 
     const uint8_t *b = digest.bytes; 
     

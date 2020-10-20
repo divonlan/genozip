@@ -106,7 +106,7 @@ const char *url_get_status (const char *url, bool *file_exists, int64_t *file_si
     *file_exists = false;
     *file_size = 0;
     char response[CURL_RESPONSE_LEN];
-    char *error = malloc (CURL_RESPONSE_LEN);
+    char *error = MALLOC (CURL_RESPONSE_LEN);
     unsigned response_len, error_len;
 
     // run 'curl --head url'
@@ -209,7 +209,7 @@ void url_kill_curl (void)
 // make a string into a a string containing only valid url characters, eg "first last" -> "first%20last"
 char *url_esc_non_valid_chars (const char *in)
 {
-    char *out = malloc (strlen(in) * 3 + 1);
+    char *out = MALLOC (strlen(in) * 3 + 1);
     char *next = out;
 
     for (; *in; in++) {

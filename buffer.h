@@ -146,7 +146,10 @@ extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
 #define FREE(p) { if (p) { buf_low_level_free (((void*)p), __FUNCTION__, __LINE__); p=NULL; } }
 
 extern void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t code_line);
-#define REALLOC(p,size) buf_low_level_realloc (p, size, __FUNCTION__, __LINE__);
+#define REALLOC(p,size) buf_low_level_realloc (p, size, __FUNCTION__, __LINE__)
+
+extern void *buf_low_level_malloc (size_t size, const char *func, uint32_t code_line);
+#define MALLOC(size) buf_low_level_malloc (size, __FUNCTION__, __LINE__)
 
 extern const char *buf_desc (const Buffer *buf);
 

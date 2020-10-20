@@ -45,7 +45,7 @@ void fastq_zip_read_one_vb (VBlockP vb)
 // eg. "../../fqs/sample.1.fq.gz" -> "@sample-1:"
 static void fastq_get_optimized_desc_read_name (VBlockFAST *vb)
 {
-    vb->optimized_desc = malloc (strlen (txt_file->basename) + 30); // leave room for the line number to follow
+    vb->optimized_desc = MALLOC (strlen (txt_file->basename) + 30); // leave room for the line number to follow
     vb->optimized_desc[0] = '@';
     strcpy (&vb->optimized_desc[1], txt_file->basename);
     file_get_raw_name_and_type (&vb->optimized_desc[1], NULL, NULL); // remove file type extension

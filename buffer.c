@@ -713,12 +713,27 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t code_line)
 {
     void *new = realloc (p, size);
+    ASSERT (new, "Error in %s:%u: REALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
 
-    if (flag_debug_memory && new != p) {
-        char s[POINTER_STR_LEN];
-        fprintf (stderr, "Memory freed by realloc(): %s %s:%u\n", str_pointer (p, s), func, code_line);
+    if (flag_debug_memory) {
+        char s1[POINTER_STR_LEN], s2[POINTER_STR_LEN];
+        fprintf (stderr, "realloc(): old=%s new=%s size=%"PRIu64" %s:%u\n", 
+                 str_pointer (p, s1), str_pointer (new, s2), (uint64_t)size, func, code_line);
     }
 
+    return new;
+}
+
+void *buf_low_level_malloc (size_t size, const char *func, uint32_t code_line)
+{
+    void *new = malloc (size);
+    ASSERT (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
+
+    if (flag_debug_memory) {
+        char s[POINTER_STR_LEN];
+        fprintf (stderr, "malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new, s), (uint64_t)size, func, code_line);
+    }
+    
     return new;
 }
 

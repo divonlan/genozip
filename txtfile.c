@@ -574,7 +574,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
     if (flag_unbind || flag_reading_reference) {
         ASSERT0 (!txt_file, "Error: not expecting txt_file to be open already in unbind mode or when reading reference");
         
-        char *filename = malloc (strlen (header->txt_filename) + strlen (flag_unbind) + 1);
+        char *filename = MALLOC (strlen (header->txt_filename) + strlen (flag_unbind) + 1);
         ASSERT0 (filename, "Error in txtfile_genozip_to_txt_header: failed to allocated filename");
 
         sprintf (filename, "%s%s", flag_unbind, header->txt_filename);

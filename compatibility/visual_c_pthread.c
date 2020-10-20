@@ -25,7 +25,7 @@ static DWORD pthread_entry (void *payload_)
 int pthread_create (pthread_t *newthread, const void *unused, void *(*start_routine) (void *), void *arg)
 {
     // allocate the payload on the heap to avoid weird problems (and leak the memory... its tiny an infrequent)
-    ThreadPayload *payload = (ThreadPayload *)malloc (sizeof (ThreadPayload));
+    ThreadPayload *payload = (ThreadPayload *)MALLOC (sizeof (ThreadPayload));
     payload->start_routine = start_routine;
     payload->arg = arg;
 

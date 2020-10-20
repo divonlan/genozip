@@ -648,7 +648,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, PosType pos, const ch
     range->chrom          = WORD_INDEX_NONE;  // Note: in REF_INTERNAL the chrom index is private to the VB prior to merge, so we can't use it
     
     // chrom_name points into vb->txt_data that will disappear at the end of this VB, 
-    range->chrom_name = malloc (vb->chrom_name_len);
+    range->chrom_name = MALLOC (vb->chrom_name_len);
     memcpy ((char *)range->chrom_name, vb->chrom_name, vb->chrom_name_len);
 
     // nothing is set yet - in ZIP, bits get set as they are encountered in the compressing txt file
@@ -1094,7 +1094,7 @@ void ref_set_reference (const char *filename)
 {
     ASSERT0 (filename, "Error in ref_set_reference: filename is NULL");
 
-    ref_filename = malloc (strlen (filename) + 1);
+    ref_filename = MALLOC (strlen (filename) + 1);
     ASSERT0 (ref_filename, "Error in ref_set_reference: failed to allocate memory");
 
     strcpy ((char*)ref_filename, filename);
@@ -1106,7 +1106,7 @@ void ref_set_ref_file_info (Md5Hash md5, const char *fasta_name)
     ref_md5 = md5;
 
     if (fasta_name[0]) {
-        ref_fasta_name = malloc (strlen (fasta_name) + 1); 
+        ref_fasta_name = MALLOC (strlen (fasta_name) + 1); 
         strcpy (ref_fasta_name, fasta_name);
     }
 }
@@ -1457,7 +1457,7 @@ const char *ref_get_cram_ref (void)
     ASSINP (file_exists, "%s: cannot find the fasta file %s. Note: this is the file that was used to create %s, and it needs to exist in this name, in order to be passed to samtools as a reference file (-T option) for reading the CRAM file", 
             global_cmd, ref_fasta_name, ref_filename);
 
-    samtools_T_option = malloc (strlen (ref_fasta_name) + 10);
+    samtools_T_option = MALLOC (strlen (ref_fasta_name) + 10);
     sprintf (samtools_T_option, "-T%s", ref_fasta_name);
 
 done:

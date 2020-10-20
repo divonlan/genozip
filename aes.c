@@ -222,7 +222,7 @@ void aes_initialize (VBlock *vb, const uint8_t* key)
 
 char *aes_display_data (const uint8_t *data, unsigned data_len)
 {
-    char *str = malloc (data_len * 2 + 1);
+    char *str = MALLOC (data_len * 2 + 1);
 
     for (unsigned i=0; i < data_len; i++) 
         sprintf (&str[i*2], "%2.2x", data[i]);

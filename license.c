@@ -18,6 +18,7 @@
 #include "url.h"
 #include "license.h"
 #include "version.h"
+#include "buffer.h"
 
 void license_display (void)
 {
@@ -56,7 +57,7 @@ static char *get_license_filename (bool create_folder_if_needed)
     ASSERT0 (folder, "%s: cannot store license, because HOME env var is not defined");
 #endif    
 
-    char *filename = malloc (strlen(folder) + 50);
+    char *filename = MALLOC (strlen(folder) + 50);
     sprintf (filename, "%s/.genozip_license", folder);
 
     return filename;

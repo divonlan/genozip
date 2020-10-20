@@ -298,7 +298,7 @@ static void main_genounzip (const char *z_filename,
     RETURNW (file_get_size (z_filename),, "Cannot decompress file %s because its size is 0 - skipping it", z_filename);
 
     if (!txt_filename && (!flag_stdout || flag_bgzip || flag_bcf || flag_bam) && !flag_unbind) {
-        txt_filename = (char *)malloc(fn_len + 10);
+        txt_filename = (char *)MALLOC(fn_len + 10);
         ASSERT(txt_filename, "Error: failed to malloc txt_filename, len=%u", fn_len+10);
 
         // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz ; fastq.genozip -> .fastq or .fastq.gz
@@ -442,7 +442,7 @@ static void main_genozip (const char *txt_filename,
                 const char *local_txt_filename = basename ? basename : txt_filename;
 
                 unsigned fn_len = strlen (local_txt_filename);
-                z_filename = (char *)malloc (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
+                z_filename = (char *)MALLOC (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
                 ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
                 // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
@@ -595,7 +595,7 @@ static char *main_get_fastq_pair_filename (const char *fn1, const char *fn2)
 
     if (!((rn1[df] == '1' && rn2[df] == '2') || (rn1[df] == '2' && rn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
 
-    char *pair_fn = malloc (len+20);
+    char *pair_fn = MALLOC (len+20);
     sprintf (pair_fn, "%.*s1+2%s" FASTQ_GENOZIP_, df, rn1, &rn1[df+1]);
     
     return pair_fn;
@@ -938,7 +938,7 @@ static void main_process_flags (unsigned num_files, char **filenames, const bool
 void TEST()
 {
     FILE *fp = fopen ("seq", "rb");
-    char *data = malloc (14236798);
+    char *data = MALLOC (14236798);
     (void)!fread (data, 1, 14236798, fp); // (void)! to quieten compiler "warning: ignoring return value"
 }
 

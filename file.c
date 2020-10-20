@@ -131,7 +131,7 @@ void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *out_
     unsigned len = strlen (filename);
 
     if (raw_name) {
-        *raw_name = malloc (len + 30);
+        *raw_name = MALLOC (len + 30);
         memcpy (*raw_name, filename, len);
         (*raw_name)[len] = 0;
     }
@@ -573,7 +573,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
     // copy filename 
     unsigned fn_size = strlen (filename) + 1; // inc. \0
-    file->name = malloc (fn_size);
+    file->name = MALLOC (fn_size);
     memcpy (file->name, filename, fn_size);
 
     file->mode = mode;
@@ -734,7 +734,7 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
     len = len - (start-filename);
 
     if (!basename) 
-        basename = (char *)malloc (len + 1); // +1 for \0
+        basename = (char *)MALLOC (len + 1); // +1 for \0
     else
         len = MIN (len, basename_size-1);
 
@@ -893,7 +893,7 @@ const char *file_guess_original_filename (const File *file)
     if (file->codec == CODEC_NONE) return file->name;
 
     unsigned len = strlen (file->name) + 10;
-    char *org_name = malloc (len);
+    char *org_name = MALLOC (len);
     strcpy (org_name, file->name);
 
     const char *ext = codec_args[file->codec].ext;

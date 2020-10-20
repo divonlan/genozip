@@ -16,6 +16,7 @@
 #include "genozip.h"
 #include "endianness.h"
 #include "bit_array.h"
+#include "buffer.h"
 
 //
 // Tables of constants
@@ -350,7 +351,7 @@ BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits)
 {
   bitarr->num_of_bits = nbits;
   bitarr->num_of_words = roundup_bits2words64(nbits);
-  bitarr->words = (word_t*)malloc(bitarr->num_of_words * sizeof(word_t)); // divon
+  bitarr->words = (word_t*)MALLOC (bitarr->num_of_words * sizeof(word_t)); // divon
   ASSERT (bitarr->words, "Error in bit_array_alloc: failed to allocate %"PRId64" bytes", bitarr->num_of_words * sizeof(word_t));
 
   // zero the bits in the top word that are beyond nbits

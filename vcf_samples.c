@@ -30,7 +30,7 @@ void vcf_samples_add  (const char *samples_str)
 
     // make a copy of the string and leave the original one for error message. 
     // we don't free this memory as chrom fields in regions will be pointing to it
-    char *next_region_token = malloc (strlen (samples_str)+1); // heap memory, as cmd_samples_buf elements point into this
+    char *next_region_token = MALLOC (strlen (samples_str)+1); // heap memory, as cmd_samples_buf elements point into this
     strcpy (next_region_token, samples_str + is_negated); // drop the ^ if there is one
 
     while (1) {
@@ -79,16 +79,16 @@ void samples_digest_vcf_header (Buffer *vcf_header_buf)
             break;
         }
     
-    vcf_samples_is_included = malloc (num_samples);
+    vcf_samples_is_included = MALLOC (num_samples);
     memset (vcf_samples_is_included, cmd_is_negative_samples, num_samples); // 0 if not included unless list says so (positive) and vice versa
 
     unsigned vcf_names_start_index = i + 1 + strlen(standard);
     unsigned vcf_names_data_len = vcf_header_buf->len - vcf_names_start_index;
-    vcf_sample_names_data = malloc (vcf_names_data_len);
+    vcf_sample_names_data = MALLOC (vcf_names_data_len);
     memcpy (vcf_sample_names_data, &vcf_header_buf->data[vcf_names_start_index], vcf_names_data_len);
     vcf_sample_names_data[vcf_names_data_len-1] = '\t'; // change last separator from \n to \t
 
-    vcf_sample_names = malloc (num_samples * sizeof (char *));
+    vcf_sample_names = MALLOC (num_samples * sizeof (char *));
 
     vcf_header_buf->len = vcf_names_start_index;
     char *next_token = vcf_sample_names_data;

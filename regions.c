@@ -100,7 +100,7 @@ void regions_add (const char *region_str)
 
     // make a copy of the string and leave the original one for error message. 
     // we don't free this memory as chrom fields in regions will be pointing to it
-    char *rs = malloc (strlen (region_str)+1); // heap memoery, as reg->chrom points into this
+    char *rs = MALLOC (strlen (region_str)+1); // heap memoery, as reg->chrom points into this
     strcpy (rs, region_str + is_negated); // drop the ^ if there is one
 
     char *next_region_token = rs;
