@@ -288,7 +288,7 @@ static void ref_show_sequence (void)
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET sections
 static void ref_uncompress_one_range (VBlockP vb)
 {
-    if (!buf_is_allocated (&vb->z_data)) goto finish; // we have no data in this VB because it was skipped due to --regions
+    if (!buf_is_allocated (&vb->z_data) || !vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
 
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
 
@@ -491,6 +491,9 @@ static void ref_read_one_range (VBlockP vb)
     if (sl_ent->section_type == SEC_REF_IS_SET) 
         ref_read_one_range (vb);
 
+    if (flag_show_headers && exe_type == EXE_GENOCAT) 
+        vb->z_data.len = 0; // roll back if we're only showing headers
+
     vb->ready_to_dispatch = true; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
 }
 
@@ -500,21 +503,23 @@ void ref_load_stored_reference (void)
 {
     ASSERT0 (!buf_is_allocated (&ranges), "Error in ref_load_stored_reference: expecting ranges to be unallocated");
     
-    random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
-    
-    if (flag_reading_reference) {
-        buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra", 0);
-        buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
+    if (!(flag_show_headers && exe_type == EXE_GENOCAT)) {
+        random_access_pos_of_chrom (0, 0, 0); // initialize if not already initialized
+        
+        if (flag_reading_reference) {
+            buf_copy (evb, &ref_external_ra, &z_file->ra_buf, sizeof (RAEntry), 0, 0, "ref_external_ra", 0);
+            buf_copy (evb, &ref_file_section_list, &z_file->section_list_buf, sizeof (SectionListEntry), 0, 0, "ref_file_section_list", 0);
+        }
+
+        ref_initialize_ranges (RT_LOADED);
+        
+        sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
+        ref_range_cursor = 0;
+
+        spin_initialize (region_to_set_list_spin);
+        buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list", 0);
     }
-
-    ref_initialize_ranges (RT_LOADED);
     
-    sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-    ref_range_cursor = 0;
-
-    spin_initialize (region_to_set_list_spin);
-    buf_alloc (evb, &region_to_set_list, sections_count_sections (SEC_REFERENCE) * sizeof (RegionToSet), 1, "region_to_set_list", 0);
-
     // decompress reference using Dispatcher
     bool external = flag_reference == REF_EXTERNAL || flag_reference == REF_EXT_STORE;
     dispatcher_fan_out_task (external ? ref_filename     : z_file->basename, 

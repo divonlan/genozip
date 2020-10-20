@@ -179,6 +179,8 @@ void ref_contigs_load_contigs (void)
     SectionListEntry *sl = sections_get_first_section_of_type (SEC_REF_CONTIGS, false);
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", sizeof (SectionHeader), SEC_REF_CONTIGS, sl);
 
+    if (flag_show_headers && exe_type == EXE_GENOCAT) goto done;
+
     zfile_uncompress_section (evb, evb->z_data.data, &loaded_contigs, "loaded_contigs", 0, SEC_REF_CONTIGS);
 
     loaded_contigs.len /= sizeof (RefContig);
@@ -193,6 +195,7 @@ void ref_contigs_load_contigs (void)
         if (exe_type == EXE_GENOCAT) exit_ok;  // in genocat this, not the data
     }
 
+done:
     buf_free (&evb->z_data);
 }
 

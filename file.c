@@ -234,13 +234,15 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
     samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
 
     has_no_PG = !!(len && strstr (samtools_help_text, "--no-PG"));
-    if (has_no_PG) return true;
+    if (has_no_PG) goto done;
 
     len = read (fileno (stream_from_stream_stdout (samtools)), samtools_help_text, SAMTOOLS_HELP_MAX_LEN-1);
     samtools_help_text[len] = '\0'; 
 
     has_no_PG = !!(len && strstr (samtools_help_text, "--no-PG"));
 
+done:
+    stream_close (&samtools, STREAM_WAIT_FOR_PROCESS);
     return has_no_PG;
 }
 
