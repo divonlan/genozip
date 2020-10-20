@@ -443,11 +443,15 @@ finish:
 static void ref_read_one_range (VBlockP vb)
 {
     if (!sections_get_next_section_of_type (&sl_ent, &ref_range_cursor, SEC_REFERENCE, SEC_REF_IS_SET) || // no more reference sections
-        sl_ent->vblock_i == 0) // final, empty section sometimes exist (see ref_compress_ref)
+        ((sl_ent+1)->offset - sl_ent->offset) == sizeof (SectionHeaderReference)) // final, header-only section sometimes exists (see ref_compress_ref)
         return; // we're done
-
-    ASSERT (sl_ent->vblock_i == vb->vblock_i, "Error in ref_read_one_range: mismatch: sl_ent->vblock_i=%u but vb->vblock_i=%u",
-            sl_ent->vblock_i, vb->vblock_i);
+    
+    if (sl_ent->vblock_i == 0) // section was created with ref_copy_one_compressed_section
+        z_file->num_copied_ref_sections++;
+    else        
+        ASSERT (sl_ent->vblock_i + z_file->num_copied_ref_sections == vb->vblock_i, 
+                "Error in ref_read_one_range: mismatch: sl_ent->vblock_i=%u but vb->vblock_i=%u, z_file->num_copied_ref_sections=%u",
+                sl_ent->vblock_i, vb->vblock_i, z_file->num_copied_ref_sections);
 
     // if the user specified --regions, check if this ref range is needed
     bool range_is_included = true;
@@ -1033,7 +1037,7 @@ void ref_compress_ref (void)
         zip_output_processed_vb (evb, &evb->section_list_buf, false, PD_REFERENCE_DATA); 
     }
 
-    // copy already-compressed SEQ sections from the FASTA genozip reference, but only such sections that are entirely
+    // copy already-compressed SEQ sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_accessed=true. we mark these ranges affected as is_accessed=false.
     if (ranges.param == RT_LOADED)
         ref_copy_compressed_sections_from_reference_file ();
@@ -1057,11 +1061,11 @@ void ref_compress_ref (void)
     RESTORE_FLAG (flag_quiet);
     
     // SAM require at least one reference section, but if the SAM is unaligned, there will be none - create one empty section
-    // (this will also happen if SAM has just only reference section, we will just needless write another tiny section - no harm)
-    // incidentally, will also be written in case of a small (one vb) reference - no harm
+    // (this will also happen if SAM has just only reference section, we will just needlessly write another tiny section - no harm)
+    // incidentally, this empty section will also be written in case of a small (one vb) reference - no harm
     if (z_file->data_type == DT_SAM && num_vbs_dispatched==1) {
         evb->range = NULL;
-        ref_compress_one_range (evb); // written with vb_i=0
+        ref_compress_one_range (evb); // written with vb_i=0, section header only (no body)
     }
 
     // compress reference random access (note: in case of a reference file, SEC_REF_RAND_ACC will be identical to SEC_RANDOM_ACCESS. That's ok, its tiny)
