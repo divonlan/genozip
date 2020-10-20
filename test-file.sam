@@ -4,7 +4,7 @@
 @CO	CIGAR - with M/X/= ; I ; D
 @CO	PNEXT - =, same rname, different rname, 0
 @CO	TLEN - negative-to-positive, positive-to-negative, and neither
-@CO SEQ - unavailable ('*') in mid and end of a chrom, overlapping SEQ with different base
+@CO	SEQ - unavailable ('*') in mid and end of a chrom, overlapping SEQ with different base
 @CO	SA, XA, OA fields
 @CO	OA with empty NM
 @CO	XA with unexpected (but valid) format
@@ -13,9 +13,9 @@
 @CO	mc - positive, negative delta vs POS
 @CO	MD - A. numeric only - matches CIGAR, B. complex - matches CIGAR C. doesn't match CIGAR
 @CO	AS - valid and invalid values
-@CO MC and OC dict id aliases
-@CO BI with and without BD
-@CO Unaligned (no RNAME,POS) line
+@CO	MC and OC dict id aliases
+@CO	BI with and without BD
+@CO	Unaligned (no RNAME,POS) line
 @SQ	SN:chr1	LN:10000000
 @SQ	SN:chr2	LN:10000000
 @SQ	SN:chr3	LN:10000000

@@ -51,10 +51,10 @@ test_bam() {
     if `command -v samtools >& /dev/null`; then
         test_header "$1 - input and output as BAM"
         grep -v TooBigForSamTools $1 > bam-test.input.sam || exit 1
-        samtools view bam-test.input.sam -OBAM -h > bam-test.input.bam || exit 1
+        samtools view --no-PG bam-test.input.sam -OBAM -h > bam-test.input.bam || exit 1
         ./genozip bam-test.input.bam $2 -fto $output || exit 1
         ./genounzip $output $2 --force --output bam-test.output.bam || exit 1
-        usleep 200000 # wait for BAM to be flused to the disk
+        sleep 0.2 # wait for BAM to be flushed to the disk
         cmp_2_files bam-test.input.bam bam-test.output.bam.fake-extension-removed-by-cmp_2_files
         rm -f bam-test.input.sam bam-test.input.bam bam-test.output.bam
     fi
