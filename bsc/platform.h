@@ -7,6 +7,6 @@
 
 #define ALPHABET_SIZE 256
 
-void *(* bsc_malloc)(void *vb, uint64_t size);
+void *(* bsc_malloc)(void *vb, size_t size);
 void  (* bsc_free)(void *vb, void *address);
-void *bsc_zero_malloc (void *vb, uint64_t size);
+void *bsc_zero_malloc (void *vb, size_t size);

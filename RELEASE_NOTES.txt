@@ -201,6 +201,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - --reference in genounzip is now optional - will use original reference filename absent --reference
 - Not backward compatible
 
-8.0.1
+8.0.2
 - Bug fixes
 - Improved 'genocat --show-headers'

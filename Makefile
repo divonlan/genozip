@@ -48,7 +48,7 @@ BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c b
 
 LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
-BSC_SRC    = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
+BSC_SRCS    = bsc/divsufsort.c bsc/adler32.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
 
 CONDA_DEVS = Makefile .gitignore test-file.vcf 
 
@@ -97,10 +97,10 @@ endif
 
 ifndef IS_CONDA 
 # local - static link everything
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRC) $(LZMA_SRCS)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS)
 else 
 # conda - use packages for bzip2
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRC)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS)
 endif
 
 OBJS       := $(C_SRCS:.c=.o)
@@ -217,7 +217,7 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
+.archive.tar.gz : increment-version $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) 
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push 
@@ -225,7 +225,8 @@ decrement-version:
 	@git push origin genozip-$(version)
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@
 	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
-	@echo "'Tag version' and 'Release title' are both: genozip-$(version)"
+	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
+	@echo "2. Copy the notes for the version from RELEASE NOTES"
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz
 	@echo "Generating conda/meta.yaml"

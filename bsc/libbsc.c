@@ -58,7 +58,7 @@ int bsc_init_full(int features,
     return bsc_coder_init(features);
 }
 
-void *bsc_zero_malloc (void *vb, uint64_t size)
+void *bsc_zero_malloc (void *vb, size_t size)
 {
     void *address = bsc_malloc (vb, size);
     if (address) memset (address, 0, size);
