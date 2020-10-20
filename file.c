@@ -217,6 +217,33 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
     file->file = stream_to_stream_stdin (output_compressor);
 }
 
+// starting samtools 1.10, a PG record is added to the SAM header every "samtools view", and an option, --no-PG, 
+// is provided to avoid this. See: https://github.com/samtools/samtools/releases/
+ bool file_has_samtools_no_PG (void)
+{
+    static int has_no_PG = -1; // unknown
+
+    if (has_no_PG >= 0) return has_no_PG; // we already tested
+
+    StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, "To read/write BAM files",
+                                      "samtools", "view", "--help", NULL);
+
+    #define SAMTOOLS_HELP_MAX_LEN 20000
+    char samtools_help_text[SAMTOOLS_HELP_MAX_LEN];
+    int len = read (fileno (stream_from_stream_stderr (samtools)), samtools_help_text, SAMTOOLS_HELP_MAX_LEN-1);
+    samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
+
+    has_no_PG = !!(len && strstr (samtools_help_text, "--no-PG"));
+    if (has_no_PG) return true;
+
+    len = read (fileno (stream_from_stream_stdout (samtools)), samtools_help_text, SAMTOOLS_HELP_MAX_LEN-1);
+    samtools_help_text[len] = '\0'; 
+
+    has_no_PG = !!(len && strstr (samtools_help_text, "--no-PG"));
+
+    return has_no_PG;
+}
+
 // returns true if successful
 bool file_open_txt (File *file)
 {
@@ -385,7 +412,7 @@ bool file_open_txt (File *file)
                                                     file->is_remote ? SKIP_ARG : file->name,    // local file name 
                                                     (bam || cram) ? "-h" : "--no-version", // BAM: include header
                                                                                            // BCF: do not append version and command line to the header
-                                                    (bam || cram) ? "--no-PG" : NULL,      // don't add a PG line to the header
+                                                    (bam || cram) ? (file_has_samtools_no_PG() ? "--no-PG" : "-h") : NULL,  // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
                                                     cram ? ref_get_cram_ref() : NULL,
                                                     NULL);
                 file->file = stream_from_stream_stdout (input_decompressor);
@@ -395,7 +422,7 @@ bool file_open_txt (File *file)
                                                 bam ? "samtools" : "bcftools", 
                                                 "view", 
                                                 bam ? "-OBAM" : "-Ob",
-                                                bam ? "--no-PG" : NULL);            
+                                                bam && file_has_samtools_no_PG() ? "--no-PG" : NULL);            
             }
             break;
         }
