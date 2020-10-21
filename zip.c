@@ -174,17 +174,12 @@ static int zip_codec_test_sorter (const CodecTest *t1, const CodecTest *t2)
 
 static void zip_assign_best_codec_test_one (VBlockP vb, ContextP ctx, bool is_local, uint32_t len)
 {
-    CodecTest tests[] = { { CODEC_BSC }, { CODEC_NONE }, { CODEC_BZ2 }, { CODEC_LZMA } };
-    #define NUM_TESTS (sizeof (tests) / sizeof (tests[0]))    
+    CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA } };
+    const unsigned num_tests = flag_fast ? 2 : 4; // don't consider BSC or LZMA if --fast as they are slow
 
     Codec *selected_codec = is_local ? &ctx->lcodec : &ctx->bcodec;
 
     if (len < MIN_LEN_FOR_COMPRESSION || *selected_codec != CODEC_UNKNOWN) return;
-
-    if (flag_fast) {
-        *selected_codec = CODEC_BZ2;
-        return;
-    }
 
     // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
     // it doesn't prevent double testing 100% of time, but that's good enough) 
@@ -197,7 +192,7 @@ static void zip_assign_best_codec_test_one (VBlockP vb, ContextP ctx, bool is_lo
     }
 
     // measure the compressed size and duration for a small sample of of the local data, for each codec
-    for (unsigned t=0; t < NUM_TESTS; t++) {
+    for (unsigned t=0; t < num_tests; t++) {
         *selected_codec = tests[t].codec;
 
         clock_t start_time = clock();
@@ -208,7 +203,7 @@ static void zip_assign_best_codec_test_one (VBlockP vb, ContextP ctx, bool is_lo
     }
 
     // sort codec by our selection criteria
-    qsort (tests, NUM_TESTS, sizeof (CodecTest), (int (*)(const void *, const void*))zip_codec_test_sorter);
+    qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))zip_codec_test_sorter);
 
     if (flag_show_codec_test)
         fprintf (stderr, "vb_i=%u %-8s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
