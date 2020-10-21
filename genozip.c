@@ -302,8 +302,12 @@ static void main_genounzip (const char *z_filename,
         ASSERT(txt_filename, "Error: failed to malloc txt_filename, len=%u", fn_len+10);
 
         // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz ; fastq.genozip -> .fastq or .fastq.gz
+        int genozip_ext_len = strlen (GENOZIP_EXT);
         sprintf ((char *)txt_filename, "%.*s%s", 
-                 (int)(fn_len - strlen(GENOZIP_EXT)), z_filename,
+                 (int)(fn_len - genozip_ext_len) - 
+                    ((flag_bam && strcmp (&txt_filename[fn_len-genozip_ext_len-4], ".sam")) ? 4 : 0) - // remove .sam if .sam.genozip->.bam
+                    ((flag_bcf && strcmp (&txt_filename[fn_len-genozip_ext_len-4], ".vcf")) ? 4 : 0),  // remove .vcf if .vcf.genozip->.bcf                    
+                 z_filename,
                  flag_bgzip ? ".gz" : flag_bam ? ".bam" : flag_bcf ? ".bcf" : "");    
     }
 
