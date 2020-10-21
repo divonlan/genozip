@@ -225,24 +225,29 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
 
     if (has_no_PG >= 0) return has_no_PG; // we already tested
 
-    StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, "To read/write BAM files",
-                                      "samtools", "view", "--help", NULL);
-
     #define SAMTOOLS_HELP_MAX_LEN 20000
     char samtools_help_text[SAMTOOLS_HELP_MAX_LEN];
+
+    #define MIN_ACCEPTABLE_LEN 100
     int len=0;
 
-    for (unsigned i=0; i < 50 && !len; i++) { // limit to 50 tries for safety
+    for (unsigned i=1; i < 15 && len < MIN_ACCEPTABLE_LEN; i++) {
+        // Tested on samtools 1.11: The normal way to see help is "samtools help view" however it fails if stdin is not the terminal. 
+        // Instead, we use samtools view with an invalid option "--junk". This *sometimes* shows the help, and sometimes
+        // just shows one line "samtools view:". We overcome this by repeating if the response is not long enough.
+        StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, "To read/write BAM files",
+                                        "samtools", "view", "--junk", NULL);
+        usleep (50000 * i); // wait for samtools
+
         // read both stderr and stdout from samtools
         len  = read (fileno (stream_from_stream_stderr (samtools)), samtools_help_text,       SAMTOOLS_HELP_MAX_LEN-1);
         len += read (fileno (stream_from_stream_stdout (samtools)), &samtools_help_text[len], SAMTOOLS_HELP_MAX_LEN-len-1);
-        if (!len) usleep (100000); // no output yet - sleep 100ms and try again  
+
+        stream_close (&samtools, STREAM_DONT_WAIT_FOR_PROCESS);
     } 
     samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
 
-    ASSERT0 (len, "Error in file_has_samtools_no_PG: no response from \"samtools view --help\"");
-
-    stream_close (&samtools, STREAM_WAIT_FOR_PROCESS);
+    ASSERT0 (len >= MIN_ACCEPTABLE_LEN, "Error in file_has_samtools_no_PG: no response from \"samtools view --junk\"");
 
     return (has_no_PG = !!strstr (samtools_help_text, "--no-PG"));
 }

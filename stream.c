@@ -314,8 +314,8 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
 #endif
     
     int exit_code = 0; 
-    if ((*stream)->pid && close_mode != STREAM_PROCESS_ALREADY_DEAD)
-        // Terminate process is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)
+    if ((*stream)->pid && close_mode != STREAM_DONT_WAIT_FOR_PROCESS)
+        // TerminateProcess is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)
         exit_code = stream_wait_for_exit (*stream);
 
     FREE (*stream);

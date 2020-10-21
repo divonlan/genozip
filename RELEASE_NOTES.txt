@@ -204,3 +204,8 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 8.0.2
 - Bug fixes
 - Improved 'genocat --show-headers'
+
+8.0.3
+- Support samtools with or without --no-PG
+- Fix reading and writing BAM files using samtools
+- Fix bug in genocat --show-headers
