@@ -360,11 +360,8 @@ void refhash_initialize (void)
     nukes_per_hash = (1 + bits_per_hash) / 2; // round up
 
     // allocate memory
-    refhash_bufs = calloc (num_layers, sizeof (Buffer)); // array of Buffer
-    ASSERT0 (refhash_bufs, "Error in refhash_initialize: failed to calloc refhash_bufs");
-
-    refhashs = calloc (num_layers, sizeof (uint32_t *)); // array of pointers
-    ASSERT0 (refhashs, "Error in refhash_initialize: failed to calloc refhashs");
+    refhash_bufs = CALLOC (num_layers * sizeof (Buffer));     // array of Buffer
+    refhashs     = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointeshs");
 
     // base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
     for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {

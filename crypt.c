@@ -35,7 +35,7 @@ bool crypt_prompt_for_password()
     ASSERT0 (isatty (1) && isatty(2), "Error: this file is encrypted, please use --password");
 
 #define MAX_PASSWORD_LEN 100
-    password = calloc (MAX_PASSWORD_LEN+1, 1); // allocated once, never freed
+    password = CALLOC (MAX_PASSWORD_LEN+1); // allocated once, never freed
     printf("\n\nPassword: ");
     
     (void)!fgets (password, MAX_PASSWORD_LEN, stdin); // (void)! to avoid compiler "warning: ignoring return value"

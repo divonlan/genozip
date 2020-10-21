@@ -299,7 +299,6 @@ static void main_genounzip (const char *z_filename,
 
     if (!txt_filename && (!flag_stdout || flag_bgzip || flag_bcf || flag_bam) && !flag_unbind) {
         txt_filename = (char *)MALLOC(fn_len + 10);
-        ASSERT(txt_filename, "Error: failed to malloc txt_filename, len=%u", fn_len+10);
 
         // .vcf.genozip -> .vcf or .vcf.gz or .bcf ; .sam.genozip -> .sam or .bam or .sam.gz ; fastq.genozip -> .fastq or .fastq.gz
         int genozip_ext_len = strlen (GENOZIP_EXT);
@@ -447,7 +446,6 @@ static void main_genozip (const char *txt_filename,
 
                 unsigned fn_len = strlen (local_txt_filename);
                 z_filename = (char *)MALLOC (fn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
-                ASSERT(z_filename, "Error: Failed to malloc z_filename len=%u", fn_len+4);
 
                 // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
                 const char *genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];

@@ -114,9 +114,7 @@ Dispatcher dispatcher_init (unsigned max_threads, unsigned previous_vb_i,
 {
     clock_gettime(CLOCK_REALTIME, &profiler_timer);
 
-    DispatcherData *dd = (DispatcherData *)calloc (1, sizeof(DispatcherData));
-    ASSERT0 (dd, "failed to calloc DispatcherData");
-
+    DispatcherData *dd = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     dd->next_vb_i    = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
     dd->max_threads  = max_threads;
     dd->is_last_file = is_last_file;

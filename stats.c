@@ -223,7 +223,7 @@ void stats_compress (void)
     //prepare data
     StatsByLine sbl[MAX_DICTS + NUM_SEC_TYPES] = { }, *s = sbl;
 
-    count_per_section = calloc (z_file->section_list_buf.len, sizeof (int));
+    count_per_section = CALLOC (z_file->section_list_buf.len * sizeof (int));
 
     #define SEC(i) (i<0 ? -(i)-1 : SEC_NONE) // i to section type
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 

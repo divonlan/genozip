@@ -724,7 +724,7 @@ void *buf_low_level_realloc (void *p, size_t size, const char *func, uint32_t co
     return new;
 }
 
-void *buf_low_level_malloc (size_t size, const char *func, uint32_t code_line)
+void *buf_low_level_malloc (size_t size, bool zero, const char *func, uint32_t code_line)
 {
     void *new = malloc (size);
     ASSERT (new, "Error in %s:%u: MALLOC failed (size=%"PRIu64" bytes)", func, code_line, (uint64_t)size);
@@ -733,6 +733,8 @@ void *buf_low_level_malloc (size_t size, const char *func, uint32_t code_line)
         char s[POINTER_STR_LEN];
         fprintf (stderr, "malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new, s), (uint64_t)size, func, code_line);
     }
+
+    if (zero) memset (new, 0, size);
     
     return new;
 }

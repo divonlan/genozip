@@ -126,9 +126,7 @@ void vb_create_pool (unsigned num_vbs)
 
     if (!pool)  {
         // allocation includes array of pointers (initialized to NULL)
-        pool = (VBlockPool *)calloc (1, sizeof (VBlockPool) + num_vbs * sizeof (VBlock *)); // note we can't use Buffer yet, because we don't have VBs yet...
-        ASSERT0 (pool, "Error: failed to calloc pool");
-
+        pool = (VBlockPool *)CALLOC (sizeof (VBlockPool) + num_vbs * sizeof (VBlock *)); // note we can't use Buffer yet, because we don't have VBs yet...
         pool->num_vbs = num_vbs; 
     }
 }
@@ -142,8 +140,7 @@ void vb_initialize_evb(void)
 {
     ASSERT0 (!evb, "Error: evb already initialized");
 
-    evb = calloc (1, sizeof (VBlock));
-    ASSERT0 (evb, "Error: failed to calloc evb");
+    evb = CALLOC (sizeof (VBlock));
     evb->data_type = DT_NONE;
     evb->id = -1;
 }
@@ -163,7 +160,7 @@ VBlock *vb_get_vb (unsigned vblock_i)
         
         if (!pool->vb[vb_i]) { // VB is not allocated - allocate it
             unsigned sizeof_vb = z_file && DTPZ(sizeof_vb) ? DTPZ(sizeof_vb)() : sizeof (VBlock);
-            pool->vb[vb_i] = calloc (sizeof_vb, 1); 
+            pool->vb[vb_i] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
             pool->vb[vb_i]->data_type = z_file ? z_file->data_type : DT_NONE;
         }

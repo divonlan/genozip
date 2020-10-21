@@ -539,7 +539,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 {
     ASSINP0 (filename, "Error in file_open: filename is null");
 
-    File *file = (File *)calloc (1, sizeof(File) + (((mode == READ || mode == WRITEREAD) && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
+    File *file = (File *)CALLOC (sizeof(File) + (((mode == READ || mode == WRITEREAD) && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
     file->supertype = supertype;
     file->is_remote = url_is_url (filename);
@@ -602,7 +602,7 @@ File *file_open_redirect (FileMode mode, FileSupertype supertype, DataType data_
             "%s: to redirect from standard input use --input (or -i) with one of the supported file types:%s", 
             global_cmd, file_compressible_extensions());
 
-    File *file = (File *)calloc (1, sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
+    File *file = (File *)CALLOC (sizeof(File) + ((mode == READ && supertype == Z_FILE) ? READ_BUFFER_SIZE : 0));
 
     file->file = (mode == READ) ? fdopen (STDIN_FILENO,  "rb")
                                 : fdopen (STDOUT_FILENO, "wb");

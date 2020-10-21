@@ -352,7 +352,6 @@ BitArray* bit_array_alloc(BitArray* bitarr, bit_index_t nbits)
   bitarr->num_of_bits = nbits;
   bitarr->num_of_words = roundup_bits2words64(nbits);
   bitarr->words = (word_t*)MALLOC (bitarr->num_of_words * sizeof(word_t)); // divon
-  ASSERT (bitarr->words, "Error in bit_array_alloc: failed to allocate %"PRId64" bytes", bitarr->num_of_words * sizeof(word_t));
 
   // zero the bits in the top word that are beyond nbits
   bit_array_clear_excess_bits_in_top_word (bitarr);

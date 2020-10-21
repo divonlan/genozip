@@ -6,6 +6,7 @@
 #include "genozip.h"
 #include "mutex.h"
 #include "ref_private.h"
+#include "buffer.h"
 
 #define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K
 
@@ -15,7 +16,7 @@ static uint32_t genome_num_muteces=0;
 static void ref_lock_initialize_do (uint32_t num_muteces)
 {
     genome_num_muteces = num_muteces;
-    genome_muteces = calloc (num_muteces, sizeof (pthread_mutex_t));
+    genome_muteces = CALLOC (num_muteces * sizeof (pthread_mutex_t));
     for (unsigned i=0; i < num_muteces; i++)
         pthread_mutex_init (&genome_muteces[i], NULL);
 }

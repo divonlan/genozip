@@ -1095,7 +1095,6 @@ void ref_set_reference (const char *filename)
     ASSERT0 (filename, "Error in ref_set_reference: filename is NULL");
 
     ref_filename = MALLOC (strlen (filename) + 1);
-    ASSERT0 (ref_filename, "Error in ref_set_reference: failed to allocate memory");
 
     strcpy ((char*)ref_filename, filename);
 }

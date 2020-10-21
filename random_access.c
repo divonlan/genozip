@@ -157,7 +157,6 @@ void random_access_finalize_entries (Buffer *ra_buf)
     // build an index into ra_buf that we will sort. we need that, because for same-vb entries we need to 
     // maintain their current order - sorted by the index
     int32_t *sorter = MALLOC (ra_buf->len * sizeof (int32_t));
-    ASSERT (sorter, "Error in random_access_finalize_entries: failed to malloc %u bytes", (uint32_t)(ra_buf->len * sizeof (uint32_t)));
 
     for (int32_t i=0; i < ra_buf->len; i++) sorter[i] = i;
 

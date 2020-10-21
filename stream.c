@@ -229,7 +229,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     if (from_stream_stderr) stream_pipe (stream_stderr_to_genozip, from_stream_stderr, true);
     if (to_stream_stdin)    stream_pipe (genozip_to_stream_stdin,  to_stream_stdin, false);
 
-    Stream *stream = calloc (1, sizeof (Stream));
+    Stream *stream = CALLOC (sizeof (Stream));
     stream->exec_name = exec_name;
     if (parent_stream) parent_stream->substream = stream;
 

@@ -173,7 +173,7 @@ void regions_make_chregs (void)
     Context *chrom_ctx = &z_file->contexts[CHROM];
 
     num_chroms = chrom_ctx->word_list.len;
-    chregs = calloc (num_chroms, sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
+    chregs = CALLOC (num_chroms * sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
     
     for (int i=0; i < regions_buf.len; i++) {
 
@@ -210,7 +210,7 @@ void regions_transform_negative_to_positive_complement()
     if (!is_negative_regions) return; // nothing to do
 
     Buffer *neg_chregs = chregs;
-    chregs = calloc (num_chroms, sizeof (Buffer));
+    chregs = CALLOC (num_chroms * sizeof (Buffer));
 
     // initialize regions for each chr - to be the whole chr
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) {
