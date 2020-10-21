@@ -27,6 +27,8 @@ else
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -D_LARGEFILE64_SOURCE=1 -march=native 
 endif 
 
+SRC_DIRS = zlib bzlib lzma bsc compatibility
+
 MY_SRCS = genozip.c base250.c context.c strings.c stats.c arch.c license.c data_types.c bit_array.c progress.c \
           zip.c piz.c seg.c zfile.c aligner.c \
 		  reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c  \
@@ -77,21 +79,26 @@ ifeq ($(CC),cl)
 	MY_SRCS += compatibility/visual_c_gettime.c compatibility/visual_c_misc_funcs.c compatibility/visual_c_pthread.c
 endif
 
+OBJDIR=objdir # fallback if not win, linux, mac
+
 ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
 	LDFLAGS += -static -static-libgcc
 	LZMA_SRCS += lzma/Threads.c lzma/LzFindMt.c
+	OBJDIR=objdir.windows
 else
 	CFLAGS += -D_7ZIP_ST
     uname := $(shell uname -s)
     ifeq ($(uname),Linux)
 # Linux
         LDFLAGS += -lrt
-    endif
+    	OBJDIR=objdir.linux
+	endif
     ifeq ($(uname),Darwin)
 # Mac
 		MY_SRCS += compatibility/mac_gettime.c
+    	OBJDIR=objdir.mac
     endif
 endif
 
@@ -103,11 +110,10 @@ else
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS)
 endif
 
-OBJS       := $(C_SRCS:.c=.o)
-DEBUG_OBJS := $(C_SRCS:.c=.debug-o) 
-OPT_OBJS   := $(C_SRCS:.c=.opt-o)   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
-
-DEPS       := $(C_SRCS:.c=.d) 
+OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))
+DEBUG_OBJS := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.debug-o)) 
+OPT_OBJS   := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.opt-o))   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+DEPS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.d)) 
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
@@ -124,29 +130,33 @@ else
 endif
 
 all   : CFLAGS += $(OPTFLAGS) 
-all   : $(EXECUTABLES) LICENSE.non-commercial.txt
+all   : $(OBJDIR) $(EXECUTABLES) LICENSE.non-commercial.txt
 
 debug : CFLAGS += $(DEBUGFLAGS)
-debug : $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
+debug : $(OBJDIR) $(DEBUG_EXECUTABLES) LICENSE.non-commercial.txt
 
 opt   : CFLAGS += -g $(OPTFLAGS)
-opt   : $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
+opt   : $(OBJDIR) $(OPT_EXECUTABLES) LICENSE.non-commercial.txt
 
 -include $(DEPS)
 
-%.d: %.c
+$(OBJDIR): 
+	@echo Making directory $@
+	@mkdir $@ $(addprefix $@/, $(SRC_DIRS))
+
+$(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
-%.o: %.c %.d
+$(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-%.debug-o: %.c %.d
+$(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-%.opt-o: %.c %.d
+$(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
@@ -414,16 +424,17 @@ clean-test.sh-files:
 
 clean-debug:
 	@echo Cleaning up debug
-	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) *.debug-o
-	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) *.opt-o
+	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o
+	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o
 
 clean-optimized:
 	@echo Cleaning up optimized
-	@rm -f $(OBJS) $(EXECUTABLES) *.o
+	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
 
-clean: clean-debug clean-optimized clean-test.sh-files
+clean: clean-test.sh-files
 	@echo Cleaning up
-	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump
+	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES)
+	@rm -Rf $(OBJDIR)
 
 .PHONY: clean clean-debug clean-optimized git-pull macos mac/.remote_mac_timestamp delete-arch
 

@@ -65,6 +65,27 @@
             }
         },
         {
+            "type": "process",
+            "label": "Make Linux",
+            "command": "c:\\Windows\\system32\\bash.exe",
+            "args": [
+                "/home/divon/genozip/wsl-make.sh"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
             "type": "shell",
             "label": "Clean All",
             "command": "make.exe",
