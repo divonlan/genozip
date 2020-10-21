@@ -142,10 +142,18 @@ for file in ${files[@]}; do
     
     if `command -v bzip2 >& /dev/null` && [ $allow_compressed == 1 ]; then
         test_header "${file} - with bzip2"
-        cp -f $file copy.$file
-        bzip2 -f copy.$file
-        $genozip copy.${file}.bz2 -ft -o $output || exit 1
-        rm -f copy.${file}.bz2
+        
+        # bzip2 fails if it can't chmod the dst file, but chmod from WSL fails on an NTFS filesystem
+        if [ -n "`uname -a | grep -i microsoft-standard`" ]; then
+            copy=~/copy.$file
+        else 
+            copy=./copy.$file
+        fi
+
+        cp -f $file $copy
+        bzip2 $copy
+        $genozip ${copy}.bz2 -ft -o $output || exit 1
+        rm -f ${copy}.bz2
     fi
     
     if `command -v xz >& /dev/null` && [ $allow_compressed == 1 ]; then
