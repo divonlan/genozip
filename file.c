@@ -230,18 +230,19 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
 
     #define SAMTOOLS_HELP_MAX_LEN 20000
     char samtools_help_text[SAMTOOLS_HELP_MAX_LEN];
-    int len = read (fileno (stream_from_stream_stderr (samtools)), samtools_help_text, SAMTOOLS_HELP_MAX_LEN-1);
+    int len=0;
+
+    for (unsigned i=0; i < 50 && !len; i++) { // limit to 50 tries for safety
+        // read both stderr and stdout from samtools
+        len  = read (fileno (stream_from_stream_stderr (samtools)), samtools_help_text,       SAMTOOLS_HELP_MAX_LEN-1);
+        len += read (fileno (stream_from_stream_stdout (samtools)), &samtools_help_text[len], SAMTOOLS_HELP_MAX_LEN-len-1);
+        if (!len) usleep (100000); // no output yet - sleep 100ms and try again  
+    } 
+
     samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
 
     has_no_PG = !!(len && strstr (samtools_help_text, "--no-PG"));
-    if (has_no_PG) goto done;
 
-    len = read (fileno (stream_from_stream_stdout (samtools)), samtools_help_text, SAMTOOLS_HELP_MAX_LEN-1);
-    samtools_help_text[len] = '\0'; 
-
-    has_no_PG = !!(len && strstr (samtools_help_text, "--no-PG"));
-
-done:
     stream_close (&samtools, STREAM_WAIT_FOR_PROCESS);
     return has_no_PG;
 }
@@ -404,6 +405,7 @@ bool file_open_txt (File *file)
             if (file->mode == READ) {
                 char reason[100];
                 sprintf (reason, "To compress a %s file", file_exts[file->type]);
+
                 input_decompressor = stream_create (0, global_max_memory_per_vb, DEFAULT_PIPE_SIZE, 0, 0, 
                                                     file->is_remote ? file->name : NULL,         // url                                        
                                                     reason, 
