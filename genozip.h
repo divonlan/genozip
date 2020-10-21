@@ -90,7 +90,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, // internal compressors
     
     CODEC_ACGT = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
-    CODEC_HT   = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
+    CODEC_HAPM = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
     CODEC_DOMQ = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
     
     // external compressors (used by executing an external application)

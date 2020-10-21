@@ -478,7 +478,7 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
     switch (txt_file->codec) {
         // if we decomprssed gz/bz2 data directly - we extrapolate from the observed compression ratio
         case CODEC_GZ:
-        case CODEC_BZ2: ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size; break;
+        case CODEC_BZ2:  ratio = (double)vb->vb_data_size / (double)vb->vb_data_read_size; break;
 
         // for compressed files for which we don't have their size (eg streaming from an http server) - we use
         // estimates based on a benchmark compression ratio of files with and without genotype data
@@ -486,15 +486,15 @@ void txtfile_estimate_txt_data_size (VBlock *vb)
         // note: .bcf files might be compressed or uncompressed - we have no way of knowing as 
         // "bcftools view" always serves them to us in plain VCF format. These ratios are assuming
         // the bcf is compressed as it normally is.
-        case CODEC_BCF: ratio = is_no_ht_vcf ? 55 : 8.5; break;
+        case CODEC_BCF:  ratio = is_no_ht_vcf ? 55 : 8.5; break;
 
-        case CODEC_XZ:  ratio = is_no_ht_vcf ? 171 : 12.7; break;
+        case CODEC_XZ:   ratio = is_no_ht_vcf ? 171 : 12.7; break;
 
-        case CODEC_BAM: ratio = 7; break;
+        case CODEC_BAM:  ratio = 7; break;
 
         case CODEC_CRAM: ratio = 9; break;
 
-        case CODEC_ZIP: ratio = 3; break;
+        case CODEC_ZIP:  ratio = 3; break;
 
         case CODEC_NONE: ratio = 1; break;
 
@@ -576,7 +576,7 @@ bool txtfile_genozip_to_txt_header (const SectionListEntry *sl, Md5Hash *digest)
         
         char *filename = MALLOC (strlen (header->txt_filename) + strlen (flag_unbind) + 1);
         sprintf (filename, "%s%s", flag_unbind, header->txt_filename);
-        
+
         txt_file = file_open (filename, WRITE, TXT_FILE, z_file->data_type);
         FREE (filename); // file_open copies the names
     }

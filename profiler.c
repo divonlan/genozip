@@ -20,8 +20,8 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(piz_reconstruct_vb);
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
-    ADD(compressor_ht);
-    ADD(codec_ht_piz_get_one_line);
+    ADD(compressor_hapmat);
+    ADD(codec_hapmat_piz_get_one_line);
     ADD(sam_seg_seq_field);
     ADD(zfile_compress_dictionary_data);
     ADD(zfile_uncompress_section);
@@ -31,7 +31,7 @@ void profiler_add (ProfilerRec *dst, const ProfilerRec *src)
     ADD(seg_all_data_lines);
     ADD(compressor_domq);
     ADD(mtf_merge_in_vb_ctx);
-    ADD(codec_ht_count_alt_alleles);
+    ADD(codec_hapmat_count_alt_alleles);
     ADD(compressor_actg);
     ADD(md5);
     ADD(lock_mutex_compress_dict);
@@ -99,7 +99,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (zfile_uncompress_section, 1);
         PRINT (piz_reconstruct_vb, 1);
         PRINT (piz_get_line_subfields, 2);
-        PRINT (codec_ht_piz_get_one_line, 2);
+        PRINT (codec_hapmat_piz_get_one_line, 2);
     }
     else { // compress
         fprintf (stderr, "GENOZIP I/O thread (zip_dispatcher):\n");
@@ -126,8 +126,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_bsc,  2);
         PRINT (compressor_domq, 2);
         PRINT (compressor_actg, 2);
-        PRINT (compressor_ht,   2);
-        PRINT (codec_ht_count_alt_alleles, 3);
+        PRINT (compressor_hapmat,   2);
+        PRINT (codec_hapmat_count_alt_alleles, 3);
     }    
 
     PRINT (buf_alloc, 0);

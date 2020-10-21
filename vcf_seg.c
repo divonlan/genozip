@@ -34,7 +34,7 @@ void vcf_seg_initialize (VBlock *vb_)
     buf_alloc (vb, &vb->format_mapper_buf, vb->format_mapper_buf.len * sizeof (Structured), 1.2, "format_mapper_buf", 0);
     buf_zero (&vb->format_mapper_buf);
 
-    codec_ht_comp_init (vb_);
+    codec_hapmat_comp_init (vb_);
 }             
 
 static void vcf_seg_complete_missing_lines (VBlockVCF *vb);
@@ -42,7 +42,7 @@ void vcf_seg_finalize (VBlockP vb_)
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     
-    if (vb->ht_ctx) 
+    if (vb->hapmat_ctx) 
         vcf_seg_complete_missing_lines (vb);
 
     // top level snip
@@ -64,11 +64,11 @@ void vcf_seg_finalize (VBlockP vb_)
     
     seg_structured_by_ctx (vb_, &vb->contexts[VCF_TOPLEVEL], &top_level, 0, 0, 0);
 
-    if (flag_show_alleles && vb->ht_ctx) {
-        printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->ht_ctx->local.len);
+    if (flag_show_alleles && vb->hapmat_ctx) {
+        printf ("After segmenting (lines=%u samples=%u ploidy=%u len=%u):\n", (uint32_t)vb->lines.len, vcf_num_samples, vb->ploidy, (unsigned)vb->hapmat_ctx->local.len);
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++)
-            printf ("Line %-2u: %.*s\n", line_i, vb->num_haplotypes_per_line, ENT (char, vb->ht_ctx->local, line_i * vb->num_haplotypes_per_line));
+            printf ("Line %-2u: %.*s\n", line_i, vb->num_haplotypes_per_line, ENT (char, vb->hapmat_ctx->local, line_i * vb->num_haplotypes_per_line));
     }
 }
 
@@ -327,7 +327,7 @@ static void vcf_seg_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, unsigne
             "Error: haplotype data overflow due to increased ploidy on line %u", vb->line_i);
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + sample_i; // all samples in previous lines + previous samples in current line
-    char *ht_data = vb->ht_ctx->local.data;
+    char *ht_data = vb->hapmat_ctx->local.data;
 
     // copy the haplotypes backwards (to avoid overlap), padding with '*'
     for (int sam_i = num_samples-1; sam_i >= 0; sam_i--) {
@@ -375,12 +375,12 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         // we overlay on the txt to save memory. since the HT data is by definition a subset of txt, we only overwrite txt
         // areas after we have already consumed them
         buf_set_overlayable (&vb->txt_data);
-        buf_overlay ((VBlockP)vb, &vb->ht_ctx->local, &vb->txt_data, "context->local", vb->ht_ctx->did_i);
+        buf_overlay ((VBlockP)vb, &vb->hapmat_ctx->local, &vb->txt_data, "context->local", vb->hapmat_ctx->did_i);
     }
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample)
 
-    char *ht_data = ENT (char, vb->ht_ctx->local, vb->line_i * vb->num_haplotypes_per_line + vb->ploidy * sample_i);
+    char *ht_data = ENT (char, vb->hapmat_ctx->local, vb->line_i * vb->num_haplotypes_per_line + vb->ploidy * sample_i);
 
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
 
@@ -575,15 +575,15 @@ static const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *
                  vb->line_i, samples.repeats, vcf_num_samples);
 
         if (dl->has_haplotype_data) {
-            char *ht_data = ENT (char, vb->ht_ctx->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
+            char *ht_data = ENT (char, vb->hapmat_ctx->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
             memset (ht_data, '*', vb->ploidy * (vcf_num_samples - samples.repeats));
         }
     }
     
     seg_structured_by_ctx ((VBlockP)vb, &vb->contexts[VCF_SAMPLES], &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
 
-    if (vb->ht_ctx)
-        vb->ht_ctx->local.len = (vb->line_i+1) * vb->num_haplotypes_per_line;
+    if (vb->hapmat_ctx)
+        vb->hapmat_ctx->local.len = (vb->line_i+1) * vb->num_haplotypes_per_line;
  
     return next_field;
 }
@@ -594,8 +594,8 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
 {
     for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
 
-        if (vb->ht_ctx && !DATA_LINE (vb->line_i)->has_haplotype_data) {
-            char *ht_data = ENT (char, vb->ht_ctx->local, vb->line_i * vb->num_haplotypes_per_line);
+        if (vb->hapmat_ctx && !DATA_LINE (vb->line_i)->has_haplotype_data) {
+            char *ht_data = ENT (char, vb->hapmat_ctx->local, vb->line_i * vb->num_haplotypes_per_line);
             memset (ht_data, '*', vb->num_haplotypes_per_line);
 
             // NOTE: we DONT set dl->has_haplotype_data to true bc downstream we still
@@ -603,7 +603,7 @@ static void vcf_seg_complete_missing_lines (VBlockVCF *vb)
         }
     }
 
-    vb->ht_ctx->local.len = vb->lines.len * vb->num_haplotypes_per_line;
+    vb->hapmat_ctx->local.len = vb->lines.len * vb->num_haplotypes_per_line;
 }
 
 /* segment a VCF line into its fields:

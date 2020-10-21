@@ -110,16 +110,17 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Buffer codec_bufs[NUM_CODEC_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
     \
     /* used by CODEC_ACGT (For SEQ) */ \
-    bool has_non_agct;                /* ZIP only */ \
+    bool has_non_agct;            /* ZIP only */ \
     \
-    /* used by CODEC_HT (for VCF haplotype matrix) */ \
-    ContextP ht_ctx, ht_index_ctx;    /* haplotype matrix context */ \
+    /* used by CODEC_HAPM (for VCF haplotype matrix) */ \
+    ContextP hapmat_ctx;          /* haplotype matrix context */ \
+    ContextP hapmat_index_ctx;    /* permutation index for haplotype matrix */ \
     uint32_t num_haplotypes_per_line; \
-    Buffer helper_index_buf;          /* used by zip_do_haplotypes */ \
-    Buffer ht_columns_data;           /* used by piz_get_ht_permutation_lookups */ \
-    Buffer column_of_zeros;           /* used by codec_ht_piz_calculate_columns */  \
-    Buffer ht_one_array;              /* one line or column */ \
-    uint32_t ht_one_array_line_i;     /* line or column number to which ht_one_array belongs */ 
+    Buffer helper_index_buf;      /* used by zip_do_haplotypes */ \
+    Buffer ht_columns_data;       /* used by codec_hapmat_piz_get_one_line */ \
+    Buffer column_of_zeros;       /* used by codec_hapmat_piz_calculate_columns */  \
+    Buffer ht_one_array;          /* one line or column */ \
+    uint32_t ht_one_array_line_i; /* line or column number to which ht_one_array belongs */ 
     
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
