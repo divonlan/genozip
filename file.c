@@ -238,13 +238,13 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
         len += read (fileno (stream_from_stream_stdout (samtools)), &samtools_help_text[len], SAMTOOLS_HELP_MAX_LEN-len-1);
         if (!len) usleep (100000); // no output yet - sleep 100ms and try again  
     } 
-
     samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
 
-    has_no_PG = !!(len && strstr (samtools_help_text, "--no-PG"));
+    ASSERT0 (len, "Error in file_has_samtools_no_PG: no response from \"samtools view --help\"");
 
     stream_close (&samtools, STREAM_WAIT_FOR_PROCESS);
-    return has_no_PG;
+
+    return (has_no_PG = !!strstr (samtools_help_text, "--no-PG"));
 }
 
 // returns true if successful
