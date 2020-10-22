@@ -66,10 +66,53 @@
         },
         {
             "type": "process",
-            "label": "Make Linux",
+            "label": "Make Linux Optimized",
             "command": "c:\\Windows\\system32\\bash.exe",
             "args": [
                 "/home/divon/genozip/wsl-make.sh"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "process",
+            "label": "Make Linux Opt - compiler debug info and optimizations",
+            "command": "c:\\Windows\\system32\\bash.exe",
+            "args": [
+                "/home/divon/genozip/wsl-make.sh",
+                "opt"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },        {
+            "type": "process",
+            "label": "Make Linux Debug",
+            "command": "c:\\Windows\\system32\\bash.exe",
+            "args": [
+                "/home/divon/genozip/wsl-make.sh",
+                "debug"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

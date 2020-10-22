@@ -89,10 +89,10 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, // internal compressors
     
-    CODEC_ACGT = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
-    CODEC_HAPM = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
-    CODEC_DOMQ = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
-    
+    CODEC_ACGT    = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
+    CODEC_HAPM    = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
+    CODEC_DOMQ    = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
+    CODEC_GTSHARK = 14, // compress VCF haplotype matrix with gtshark
     // external compressors (used by executing an external application)
     CODEC_BGZ=20, CODEC_XZ=21, CODEC_BCF=22, CODEC_BAM=23, CODEC_CRAM=24, CODEC_ZIP=25,  
 
@@ -113,7 +113,7 @@ extern int flag_force, flag_quiet, flag_bind, flag_md5, flag_show_alleles, flag_
            flag_show_memory, flag_show_dict, flag_show_b250, flag_show_stats, flag_show_headers, flag_show_aliases,
            flag_show_index, flag_show_gheader, flag_show_ref_contigs, flag_stdout, flag_replace, flag_test, flag_regions,  
            flag_samples, flag_drop_genotypes, flag_no_header, flag_header_only, flag_show_threads, flag_list_chroms, 
-           flag_show_vblocks, flag_sblock, flag_vblock, flag_gt_only, 
+           flag_show_vblocks, flag_sblock, flag_vblock, flag_gt_only, flag_gtshark,
            flag_header_one, flag_fast, flag_multiple_files, flag_sequential, flag_register, flag_show_ref_seq,
            flag_show_reference, flag_show_ref_hash, flag_show_ref_index, flag_show_ref_alts, flag_pair, flag_genocat_info_only, 
            flag_test_seg, flag_debug_progress, flag_show_hash, flag_debug_memory, flag_show_codec_test,

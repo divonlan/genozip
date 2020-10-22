@@ -112,16 +112,20 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* used by CODEC_ACGT (For SEQ) */ \
     bool has_non_agct;            /* ZIP only */ \
     \
-    /* used by CODEC_HAPM (for VCF haplotype matrix) */ \
-    ContextP hapmat_ctx;          /* haplotype matrix context */ \
-    ContextP hapmat_index_ctx;    /* permutation index for haplotype matrix */ \
+    /* used by HT matrix codec */ \
     uint32_t num_haplotypes_per_line; \
-    Buffer helper_index_buf;      /* used by zip_do_haplotypes */ \
-    Buffer ht_columns_data;       /* used by codec_hapmat_piz_get_one_line */ \
-    Buffer column_of_zeros;       /* used by codec_hapmat_piz_calculate_columns */  \
-    Buffer ht_one_array;          /* one line or column */ \
-    uint32_t ht_one_array_line_i; /* line or column number to which ht_one_array belongs */ 
-    
+    Context *ht_matrix_ctx; \
+    \
+    /* used by CODEC_HAPM (for VCF haplotype matrix) */ \
+    Context *hapmat_index_ctx; \
+    Buffer hapmat_helper_index_buf; /* used by codec_hapmat_count_alt_alleles */ \
+    Buffer hapmat_columns_data;     /* used by codec_hapmat_piz_get_one_line */ \
+    Buffer hapmat_column_of_zeros;  /* used by codec_hapmat_piz_calculate_columns */  \
+    Buffer hapmat_one_array;            /* one line or column */ \
+    \
+    /* used by CODEC_GTSHARK */ \
+    Context *gtshark_gt, *gtshark_db, *gtshark_x_line, *gtshark_x_ht, *gtshark_x_allele; \
+
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;

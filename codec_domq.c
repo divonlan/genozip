@@ -77,7 +77,6 @@ bool codec_domq_comp_init (VBlock *vb, LocalGetLineCB callback)
 
             Context *domqruns_ctx = qual_ctx + 1;
             domqruns_ctx->ltype   = LT_UINT8;
-            domqruns_ctx->lcodec  = codec_args[CODEC_DOMQ].sub_codec2;
             return true;
         }
 
@@ -166,7 +165,7 @@ bool codec_domq_compress (VBlock *vb,
         NEXTENT (char, *qual_buf) = NO_DOMS;
     }
 
-    Codec sub_codec = codec_args[CODEC_DOMQ].sub_codec1;
+    Codec sub_codec = codec_args[CODEC_DOMQ].sub_codec;
     CodecCompress *compress = codec_args[sub_codec].compress;
     uint32_t min_required_compressed_len = codec_args[sub_codec].est_size (sub_codec, qual_buf->len);
 
@@ -179,7 +178,7 @@ bool codec_domq_compress (VBlock *vb,
     }
 
     // case: our uncompressed length is too long vs the allocation of compressed (in a rare case that domqual enlengthen QUAL)
-    // fallback on compressing the QUAL data using sub_codec1 directly (by which compressed_len was alloceted in comp_compress)
+    // fallback on compressing the QUAL data using sub_codec directly (by which compressed_len was alloceted in comp_compress)
     else {
         ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LD_CODEC any more
         header->codec     = sub_codec;

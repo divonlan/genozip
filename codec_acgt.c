@@ -81,12 +81,12 @@ bool codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_len)
 }
 
 // This function decompsoses SEQ data into two buffers:
-// 1. A,G,C,T characters are packed into a 2-bit BitArray, placed in vb->compressed and then compressed with ACGT.sub_codec1
+// 1. A,G,C,T characters are packed into a 2-bit BitArray, placed in vb->compressed and then compressed with ACGT.sub_codec
 // 2. NONREF_X.local is constructed to be the same length on the SEQ data, with each characer corresponding to a character in SEQ:
 // -- an A,C,G or T character in SEQ is corresponds to a \0 in NONREF_X 
 // -- an a,c,g or t character in SEQ is corresponds to a \1 in NONREF_X 
 // -- any other character is copied from SEQ as is
-// NONREF_X.local is later compressed in codec_xcgt_compress with XCGT.sub_codec1
+// NONREF_X.local is later compressed in codec_xcgt_compress with XCGT.sub_codec
 bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
                           const char *uncompressed,    // option 1 - compress contiguous data
                           uint32_t *uncompressed_len,
@@ -168,7 +168,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     // original order, and improves compression ratio by about 2%
     LTEN_bit_array (packed);
 
-    CodecCompress *compress = codec_args[codec_args[header->codec].sub_codec1].compress;
+    CodecCompress *compress = codec_args[codec_args[header->codec].sub_codec].compress;
     uint32_t packed_uncompressed_len = packed->num_of_words * sizeof (word_t);
 
     PAUSE_TIMER; // sub-codec compresssors account for themselves
@@ -194,7 +194,7 @@ void codec_xcgt_uncompress (VBlock *vb, Codec codec,
                             Buffer *uncompressed_buf, uint64_t uncompressed_len,
                             Codec sub_codec)
 {
-    // uncompress NONREF_X using CODEC_XCGT.sub_codec1 (passed to us as sub_codec)
+    // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
     codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, uncompressed_buf, uncompressed_len, CODEC_NONE);
 
     const BitArray *acgt_packed = buf_get_bitarray (&vb->compressed); // data from NONREF context (2-bit per base)
@@ -214,7 +214,7 @@ void codec_xcgt_uncompress (VBlock *vb, Codec codec,
 
 // Explanation of uncompression of data compressed with the ACGT codec:
 // - ACGT-compressed data is stored in two consecutive sections, NONREF which has CODEC_ACGT, and NONREF_X which has sub_codec2
-// 1) NONREF contains a 2-bit representation of the bases: is is uncompressed by codec_acgt_uncompress into vb->compressed using sub_codec1
+// 1) NONREF contains a 2-bit representation of the bases: is is uncompressed by codec_acgt_uncompress into vb->compressed using sub_codec
 // 2) NONREF_X is a character array of exceptions and is uncompressed into NONREF_X.local by codec_xcgt_uncompress
 // 3) codec_xcgt_uncompress also combines vb->compressed with NONREF_X.local to recreate NONREF.local - an LT_SEQUENCE local buffer
 void codec_acgt_uncompress (VBlock *vb, Codec codec,
@@ -227,7 +227,7 @@ void codec_acgt_uncompress (VBlock *vb, Codec codec,
     uint64_t bitmap_num_bytes = roundup_bits2bytes64 (num_bases * 2); // 4 nucleotides per byte, rounded up to whole 64b words
     buf_alloc (vb, &vb->compressed, bitmap_num_bytes, 1, "compressed", 0);    
 
-    // uncompress bitmap using CODEC_ACGT.sub_codec1 (passed to us as sub_codec) into vb->compressed
+    // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->compressed
     codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, &vb->compressed, bitmap_num_bytes, CODEC_NONE);
 
     // finalize bitmap structure

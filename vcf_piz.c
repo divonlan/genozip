@@ -60,12 +60,15 @@ void vcf_piz_special_FORMAT (VBlock *vb, Context *ctx, const char *snip, unsigne
         RECONSTRUCT (snip, snip_len);
 
     // initialize haplotype stuff
-    if (has_GT && !vb->hapmat_ctx) {
+    if (has_GT && !vb->ht_matrix_ctx) {
 
-        ASSERT ((vb->hapmat_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT data", vb->vblock_i);
-        ASSERT ((vb->hapmat_index_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX)), "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT_INDEX data", vb->vblock_i);
+        ASSERT ((vb->ht_matrix_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT)), "Error in vcf_piz_special_FORMAT vb_i=%u: cannot find GT_HT data", vb->vblock_i);
+
+        // will exist in case of use of CODEC_HAPMAT but not CODEC_GTSHARK        
+        vb->hapmat_index_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_HT_INDEX);
         
-        codec_hapmat_piz_calculate_columns (vb);
+        if (vb->hapmat_index_ctx)
+            codec_hapmat_piz_calculate_columns (vb);
     }
 }
 

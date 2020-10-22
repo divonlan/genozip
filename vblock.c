@@ -25,7 +25,6 @@ void vb_release_vb (VBlock *vb)
     if (!vb) return; // nothing to release
 
     vb->first_line = vb->vblock_i = vb->txt_data_next_offset = vb->num_haplotypes_per_line = 0;
-    vb->ht_one_array_line_i = 0;
     vb->vb_data_size = vb->vb_data_read_size = vb->longest_line_len = vb->line_i = vb->grep_stages = 0;
     vb->ready_to_dispatch = vb->is_processed = vb->dont_show_curr_line = false;
     vb->z_next_header_i = 0;
@@ -38,7 +37,8 @@ void vb_release_vb (VBlock *vb)
     vb->range = NULL;
     vb->chrom_name = NULL;
     vb->prev_range = NULL;
-    vb->hapmat_ctx = vb->hapmat_index_ctx = NULL;
+    vb->ht_matrix_ctx = NULL;
+    vb->gtshark_gt = vb->gtshark_db = vb->gtshark_x_line = vb->gtshark_x_ht = vb->gtshark_x_allele = NULL;
     vb->prev_range_chrom_node_index = vb->prev_range_range_i = vb->range_num_set_bits = 0;
     vb->md5_hash_so_far = MD5HASH_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
@@ -58,10 +58,10 @@ void vb_release_vb (VBlock *vb)
     buf_free(&vb->show_b250_buf);
     buf_free(&vb->section_list_buf);
     buf_free(&vb->region_ra_intersection_matrix);
-    buf_free(&vb->helper_index_buf);
-    buf_free(&vb->ht_columns_data);
-    buf_free(&vb->ht_one_array);
-    buf_free(&vb->column_of_zeros);
+    buf_free(&vb->hapmat_helper_index_buf);
+    buf_free(&vb->hapmat_columns_data);
+    buf_free(&vb->hapmat_one_array);
+    buf_free(&vb->hapmat_column_of_zeros);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)
@@ -100,10 +100,10 @@ void vb_destroy_vb (VBlockP *vb_p)
     buf_destroy (&vb->show_b250_buf);
     buf_destroy (&vb->section_list_buf);
     buf_destroy (&vb->region_ra_intersection_matrix);
-    buf_destroy (&vb->helper_index_buf);
-    buf_destroy (&vb->ht_columns_data);
-    buf_destroy (&vb->ht_one_array);
-    buf_destroy (&vb->column_of_zeros);
+    buf_destroy (&vb->hapmat_helper_index_buf);
+    buf_destroy (&vb->hapmat_columns_data);
+    buf_destroy (&vb->hapmat_one_array);
+    buf_destroy (&vb->hapmat_column_of_zeros);
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         if (vb->contexts[i].dict_id.num)

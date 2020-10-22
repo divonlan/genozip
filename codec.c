@@ -6,6 +6,7 @@
 #include "codec.h"
 #include "vblock.h"
 #include "strings.h"
+#include "dict_id.h"
 
 // --------------------------------------
 // memory functions that serve the codecs
@@ -51,7 +52,7 @@ void codec_free_all (VBlock *vb)
 }
 
 static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char *uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
-                                 char *compressed, uint32_t *compressed_len, bool soft_fail) 
+                                  char *compressed, uint32_t *compressed_len, bool soft_fail) 
 {
     ABORT ("Error in comp_compress: Unsupported codec: %s", codec_name (header->codec));
     return false;
@@ -59,16 +60,17 @@ static bool codec_compress_error (VBlock *vb, SectionHeader *header, const char 
 
 
 static void codec_uncompress_error (VBlock *vb, Codec codec, 
-                                   const char *compressed, uint32_t compressed_len,
-                                   Buffer *uncompressed_buf, uint64_t uncompressed_len,
-                                   Codec sub_codec)
+                                    const char *compressed, uint32_t compressed_len,
+                                    Buffer *uncompressed_buf, uint64_t uncompressed_len,
+                                    Codec sub_codec)
 {
     ABORT ("Error in comp_uncompress: Unsupported codec: %s", codec_name (codec));
 }
 
 static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
 {
-    ABORT ("Error in piz_reconstruct_from_ctx_do: codec %s has no LT_CODEC reconstruction", codec_name (codec));
+    ABORT ("Error in piz_reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction", 
+           err_dict_id (ctx->dict_id), codec_name (codec));
 }
 
 static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)

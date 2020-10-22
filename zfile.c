@@ -274,7 +274,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
         .h.data_uncompressed_len = BGEN32 (uncompressed_len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
         .h.codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->lcodec, // if codec has not been decided yet, fall back on BZ2
-        .h.sub_codec             = codec_args[ctx->lcodec].sub_codec1,
+        .h.sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : codec_args[ctx->lcodec].sub_codec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags                 = flags,
         .dict_id                 = ctx->dict_id,
@@ -937,7 +937,7 @@ bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header,
     return true; // success
 }
 
-// ZIP compute thread - called from sam_zip_compress_one_vb()
+// ZIP compute thread - called from zip_compress_one_vb()
 void zfile_compress_vb_header (VBlock *vb)
 {
     uint32_t sizeof_header = sizeof (SectionHeaderVbHeader);

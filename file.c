@@ -236,7 +236,7 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
         // Instead, we use samtools view with an invalid option "--junk". This *sometimes* shows the help, and sometimes
         // just shows one line "samtools view:". We overcome this by repeating if the response is not long enough.
         StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, "To read/write BAM files",
-                                        "samtools", "view", "--junk", NULL);
+                                          "samtools", "view", "--junk", NULL);
         usleep (50000 * i); // wait for samtools
 
         // read both stderr and stdout from samtools

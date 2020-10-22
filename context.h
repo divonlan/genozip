@@ -145,6 +145,7 @@ typedef struct Context {
     
     // settings
     Codec lcodec, bcodec;      // codec used to compress local and b250
+    Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
     uint8_t inst;              // instructions for seg/zip - ORed CTX_INST_ values
 
     // hash stuff 

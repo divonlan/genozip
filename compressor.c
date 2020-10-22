@@ -46,13 +46,13 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         encryption_padding_reserve = crypt_max_padding_len(); // padding for the body
     }
 
-    // if there's no data to compress, or its too small, don't compress (except for HT, as it generates an index too)
+    // if there's no data to compress, or its too small, and its a simple codec - don't compress
     if (data_uncompressed_len < MIN_LEN_FOR_COMPRESSION && 
-        !codec_args[header->codec].sub_codec1) // simple codec (no sub-codecs)
+        codec_args[header->codec].is_simple) 
         header->codec = CODEC_NONE;
 
-    // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec1 instead
-    Codec est_size_codec = codec_args[header->codec].est_size ? header->codec : codec_args[header->codec].sub_codec1;
+    // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
+    Codec est_size_codec = codec_args[header->codec].est_size ? header->codec : codec_args[header->codec].sub_codec;
 
     uint32_t est_compressed_len = codec_args[est_size_codec].est_size (header->codec, data_uncompressed_len); 
 
@@ -61,8 +61,8 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
     // evb buffer list
     buf_alloc (is_z_file_buf ? evb : vb, z_data, z_data->len + compressed_offset + est_compressed_len + encryption_padding_reserve, 1.5, z_data->name, z_data->param);
 
-    // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec1 instead
-    Codec comp_codec = codec_args[header->codec].compress ? header->codec : codec_args[header->codec].sub_codec1;
+    // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
+    Codec comp_codec = codec_args[header->codec].compress ? header->codec : codec_args[header->codec].sub_codec;
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
@@ -103,6 +103,10 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
         }
     }
 
+    // if there is no compressed data, then no need to write this section (this can happen when
+    // novel codecs create other sections, eg CODEC_GTSHARK)
+    if (data_uncompressed_len && !data_compressed_len) goto done;
+
     // finalize & copy header
     header->compressed_offset   = BGEN32 (compressed_offset);  // updated value to include header padding
     header->data_compressed_len = BGEN32 (data_compressed_len);   
@@ -142,10 +146,10 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data, bool is_z_file_buf,
 
     z_data->len += total_z_len;
 
-    if (flag_show_headers
-    ) 
+    if (flag_show_headers) 
         zfile_show_header (header, vb->vblock_i ? vb : NULL, offset, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
 
+done:
     return data_compressed_len;
 }
 
@@ -155,12 +159,14 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec,
 {
     ASSERT0 (compressed_len, "Error in comp_uncompress: compressed_len=0");
 
-    // if codec doesn't have an uncompressor, use the sub-codec's one (eg: HT, DOMQ don't have a special uncompressor)
-    Codec uncompress_codec = codec_args[codec].uncompress ? codec : sub_codec;
+    if (codec && codec_args[codec].uncompress) // might be UNKNOWN (eg GT_X_ALLELES) or not have an uncompressor (eg: HT, DOMQ don't have a special uncompressor) and only a sub-codec available
+        codec_args[codec].uncompress (vb, codec, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
 
-    codec_args[uncompress_codec].uncompress (vb, codec, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
-
-    codec_free_all (vb); // just in case
+    // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or
+    // (2) or no codec uncompressor - the sub-codec now run it now
+    // note: for non-simple codecs, the sub-codec is used in the codec decompression
+    if (sub_codec && (codec_args[codec].is_simple || !codec_args[codec].uncompress))
+        codec_args[sub_codec].uncompress (vb, sub_codec, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_UNKNOWN);
 }
 
 void comp_unit_test (SectionHeader *header)

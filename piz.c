@@ -59,8 +59,8 @@ static int64_t piz_reconstruct_from_delta (VBlock *vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSERT (ctx->next_local < ctx->local.len, \
-            "Error reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u)", \
-            vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len);
+            "Error in %s:%u reconstructing txt_line=%u vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
+            __FUNCTION__, __LINE__, vb->line_i, vb->vblock_i, ctx->name, (uint32_t)ctx->local.len, lt_desc[ctx->ltype].name, codec_name (ctx->lcodec));
 
 static uint32_t piz_reconstruct_from_local_text (VBlock *vb, Context *ctx)
 {

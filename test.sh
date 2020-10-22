@@ -213,7 +213,13 @@ cp -f $file copy.unsorted2.sam
 $genozip copy.unsorted1.sam copy.unsorted2.sam -ft -o $output || exit 1
 rm -f copy.unsorted1.sam copy.unsorted2.sam $output
 
-# FASTA genocat testsc
+# VCF gtshark test
+if `command -v gtshark >& /dev/null`; then
+    test_header "test-file.vcf --gtshark"
+    $genozip test-file.vcf --gtshark -ft -o $output || exit 1
+fi
+
+# FASTA genocat tests
 test_count_genocat_lines test-file.fa "--sequential" 9
 test_count_genocat_lines test-file.fa "--header-only" 3
 test_count_genocat_lines test-file.fa "--header-one" 3
