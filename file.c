@@ -711,6 +711,17 @@ void file_remove (const char *filename, bool fail_quietly)
     ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
 }
 
+void file_mkfifo (const char *filename)
+{
+#ifndef _WIN32
+    file_remove (filename, true);
+    ASSERT (!mkfifo (filename, 0666), "Error in file_mkfifo: mkfifo failed for %s: %s", file_mkfifo, strerror (errno));
+
+#else
+    ABORT0 ("file_mkfifo not supported on Windows");
+#endif
+}
+
 bool file_has_ext (const char *filename, const char *extension)
 {
     if (!filename) return false;

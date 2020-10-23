@@ -129,11 +129,13 @@ static const char *help_genozip[] = {
     "FASTQ-specific options (ignored for other file types):",
     "   -2 --pair         Compress pairs of paired-end consecutive files, resulting in compression ratios better than compressing the files individually. When using this option, every two consecutive files on the file list should be paired read fastq files with an identical number of reads, --reference or --REFERENCE must be specified. The resulting genozip file is a bound file. To unbind the genozip file back to its original FASTQ files, use genounzip --unbind",
     "",
+#ifndef _WIN32
     "VCF-specific options (ignored for other file types):",
     "   --gtshark         Uses gtshark as the codec for compressing FORMAT/GT data.",
     "                     Note: For this to work, gtshark needs to be installed - it is a separate software package that is not affiliated with genozip in any way. It can be found here: https://github.com/refresh-bio/GTShark",
     "                     Note: gtshark also needs to be installed for decompressing files that were compressed with this option. ",
     "",
+#endif
      "genozip is available for free for non-commercial use and some other limited use cases. See 'genozip -L for details'. Commercial use requires a commercial license",
 };
 
