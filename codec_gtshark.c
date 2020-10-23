@@ -27,10 +27,6 @@
 // -------------
 
 #define PIPE_MAX_BYTES 32768
-#define GTSHARK_CHROM_ID "Z"
-
-#define GTSHARK_VCF_LINE_VARDATA GTSHARK_CHROM_ID "\t.\t.\t.\t.\t.\t.\t.\tGT\t"
-static const unsigned vardata_len = 19;
 
 // gtshark vcf file stuff
 #define GTSHARK_CHROM_ID "Z"
@@ -144,7 +140,7 @@ static void *codec_gtshark_zip_create_vcf_file (void *arg)
                    GTSHARK_NUM_HT_PER_LINE "%u\n"
                    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", num_hts);
 
-    for (unsigned i=0; i < num_hts; i++) fprintf (file, "\t%u", i+1);
+    for (unsigned i=0; i < num_hts; i++) fprintf (file, "\t%x", i+1);
     fputc ('\n', file);
 
     // exceptions - one byte per matrix byte, ASCII 0 matrix is '0' or '1', or the matrix value if not
