@@ -92,17 +92,17 @@ static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_n
     FILE *file = fopen (gtshark_vcf_name, "wb");
     ASSERT (file, "Error: failed to create temporary file %s", gtshark_vcf_name);
 
-    fprintf (file, "##fileformat=VCFv4.2\n");
-    fprintf (file, "##contig=<ID=Z>\n");
-    fprintf (file, "##FORMAT=<ID=GT>\n");
+    fputs ("##fileformat=VCFv4.2\n", file);
+    fputs ("##contig=<ID=Z>\n", file);
+    fputs ("##FORMAT=<ID=GT>\n", file);
 
     #define GTSHARK_NUM_HT_PER_LINE "##num_haplotypes_per_line="
     fprintf (file, GTSHARK_NUM_HT_PER_LINE "%u\n", num_hts);
-    fprintf (file, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
+    fputs ("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", file);
 
     for (unsigned i=0; i < num_hts; i++)
         fprintf (file, "\t%u", i+1);
-    fprintf (file, "\n");
+    fputc ('\n', file);
 
     // exceptions - one byte per matrix byte, ASCII 0 matrix is '0' or '1', or the matrix value if not
     buf_alloc (vb, &vb->gtshark_ex_ctx->local, vb->lines.len * num_hts, 1.1, "context->local", 0);
@@ -121,19 +121,19 @@ static void codec_gtshark_create_vcf_file (VBlock *vb, const char *gtshark_vcf_n
         fprintf (file, GTSHARK_VCF_LINE_VARDATA);
 
         for (unsigned ht_i=0; ht_i < num_hts; ht_i++) {
-            char c = ht_matrix[vb_line_i * num_hts + ht_i]; 
+            char s[2] = { '\t', ht_matrix[vb_line_i * num_hts + ht_i] }; 
             
             // case: gtshark can't handle alleles>2 (natively, it splits them to several lines).
             // we put this allele in the exception matrix and change it to '0' for gtshark.
-            if (c < '0' || c > '2') {
-                gtshark_ex[vb_line_i * num_hts + ht_i] = c;
-                c = '0';
+            if (s[1] < '0' || s[1] > '2') {
+                gtshark_ex[vb_line_i * num_hts + ht_i] = s[1];
+                s[1] = '0';
                 has_ex = true;
             }
 
-            fprintf (file, "\t%c", c);
+            fwrite (s, 1, 2, file);
         }
-        fprintf (file, "\n");
+        fputc ('\n', file);
     }
 
     FCLOSE (file, gtshark_vcf_name);
