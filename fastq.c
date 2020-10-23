@@ -238,7 +238,9 @@ const char *fastq_seg_txt_line (VBlockFAST *vb, const char *field_start_line, bo
     if (flag_optimize_DESC) {
         unoptimized_len = field_len;
         field_start = vb->optimized_desc;
-        field_len = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);        
+        field_len = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);   
+
+        vb->vb_data_size -= unoptimized_len - field_len;
     }
 
     // we segment it using / | : and " " as separators. 
