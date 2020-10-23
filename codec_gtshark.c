@@ -28,6 +28,12 @@
 
 #define PIPE_MAX_BYTES 32768
 
+// gtshark vcf file stuff
+#define GTSHARK_CHROM_ID "Z"
+#define GTSHARK_NUM_HT_PER_LINE "##num_hts="
+#define GTSHARK_VCF_LINE_VARDATA GTSHARK_CHROM_ID "\t.\t.\t.\t.\t.\t.\t.\tGT\t"
+static const unsigned vardata_len = 19;
+
 // check stdout / stderr output of the gtshark process for errors
 static void gtshark_check_pipe_for_errors (char *data, FILE *fp, uint32_t vb_i, bool is_stderr) 
 {
@@ -127,16 +133,14 @@ static void *codec_gtshark_zip_create_vcf_file (void *arg)
     FILE *file = fopen (gtshark_vcf_name, "wb");
     ASSERT (file, "Error: failed to create temporary file %s", gtshark_vcf_name);
 
-    fputs ("##fileformat=VCFv4.2\n", file);
-    fputs ("##contig=<ID=Z>\n", file);
-    fputs ("##FORMAT=<ID=GT>\n", file);
+    // write gtshark vcf header
+    fprintf (file, "##fileformat=VCFv4.2\n" 
+                   "##contig=<ID=" GTSHARK_CHROM_ID ">\n" 
+                   "##FORMAT=<ID=GT>\n"
+                   GTSHARK_NUM_HT_PER_LINE "%u\n"
+                   "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", num_hts);
 
-    #define GTSHARK_NUM_HT_PER_LINE "##num_haplotypes_per_line="
-    fprintf (file, GTSHARK_NUM_HT_PER_LINE "%u\n", num_hts);
-    fputs ("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", file);
-
-    for (unsigned i=0; i < num_hts; i++)
-        fprintf (file, "\t%u", i+1);
+    for (unsigned i=0; i < num_hts; i++) fprintf (file, "\t%u", i+1);
     fputc ('\n', file);
 
     // exceptions - one byte per matrix byte, ASCII 0 matrix is '0' or '1', or the matrix value if not
@@ -148,29 +152,33 @@ static void *codec_gtshark_zip_create_vcf_file (void *arg)
     ARRAY (char, ht_matrix, vb->ht_matrix_ctx->local);
     ARRAY (char, gtshark_ex, vb->gtshark_ex_ctx->local);
 
+    // prepare line template
+    buf_alloc (vb, &vb->compressed, vardata_len + num_hts*2, 1.2, "compressed", 0);
+    buf_add (&vb->compressed, GTSHARK_VCF_LINE_VARDATA, vardata_len);
+    memset (AFTERENT (char, vb->compressed), '\t', num_hts*2);  
+    vb->compressed.len += num_hts*2;
+    *LASTENT (char, vb->compressed) = '\n';
+
+    // add the haplotypes and write lines - one line at a time
     for (unsigned vb_line_i=0; vb_line_i < vb->lines.len; vb_line_i++) {
 
-        #define GTSHARK_CHROM_ID "Z"
-        #define GTSHARK_VCF_LINE_VARDATA GTSHARK_CHROM_ID "\t.\t.\t.\t.\t.\t.\t.\tGT"
-
-        fprintf (file, GTSHARK_VCF_LINE_VARDATA);
-
         for (unsigned ht_i=0; ht_i < num_hts; ht_i++) {
-            char s[2] = { '\t', ht_matrix[vb_line_i * num_hts + ht_i] }; 
+            char c = ht_matrix[vb_line_i * num_hts + ht_i]; 
             
             // case: gtshark can't handle alleles>2 (natively, it splits them to several lines).
             // we put this allele in the exception matrix and change it to '0' for gtshark.
-            if (s[1] < '0' || s[1] > '2') {
-                gtshark_ex[vb_line_i * num_hts + ht_i] = s[1];
-                s[1] = '0';
+            if (c < '0' || c > '2') {
+                gtshark_ex[vb_line_i * num_hts + ht_i] = c;
+                c = '0';
                 has_ex = true;
             }
 
-            fwrite (s, 1, 2, file);
+            *ENT (char, vb->compressed, vardata_len + ht_i*2) = c;
         }
-        fputc ('\n', file);
+        fwrite (vb->compressed.data, 1, vb->compressed.len, file);
     }
 
+    buf_free (&vb->compressed);
     FCLOSE (file, gtshark_vcf_name);
 
     if (!has_ex) buf_free (&vb->gtshark_ex_ctx->local); // no exceptions - no need to write an exceptions section
@@ -297,11 +305,12 @@ static void codec_gtshark_piz_reconstruct_ht_matrix (VBlock *vb)
     // build the transposed matrix from the vcf data - this will include alleles 0, 1 or 2 with higher
     // alleles showing as 0
     const char *next = substr + 1; // point to the CHROM = '1'
-    const unsigned prefix_len = strlen (GTSHARK_VCF_LINE_VARDATA) + 1; // +1 for the tab after GT
     
     for (uint32_t vb_line_i=0; vb_line_i < num_lines; vb_line_i++) {
-        ASSERT (*next == 'Z', "Error in codec_gtshark_piz_reconstruct_ht_matrix: expecting vb_line_i=%u to start with 'Z'", vb_line_i);
-        next += prefix_len; // skipping the line fields 1-9, arriving at the first haplotype
+        ASSERT (*next == GTSHARK_CHROM_ID[0], "Error in codec_gtshark_piz_reconstruct_ht_matrix: expecting vb_line_i=%u to start with '" GTSHARK_CHROM_ID "' but seeing '%c' (ASCII %u)", 
+                vb_line_i, *next, *next);
+
+        next += vardata_len; // skipping the line fields 1-9, arriving at the first haplotype
     
         for (uint32_t ht_i=0; ht_i < num_hts; ht_i++) {
             ht_matrix[vb_line_i * num_hts + ht_i] = *next; // haplotypes it gtshark vcf file are transposed vs ht_matrix
