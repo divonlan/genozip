@@ -74,6 +74,33 @@ static bool codec_gtshark_run (uint32_t vb_i, const char *command,
     return true; // successfully executed gtshark
 }
 
+typedef struct { VBlockP vb; const char *filename; Buffer *buf; } RWThreadArg;
+
+static void *codec_gtshark_read_gtshark_output_file (void *arg)
+{
+    const char *filename = ((RWThreadArg *)arg)->filename;
+    Buffer *buf          = ((RWThreadArg *)arg)->buf;
+    VBlockP vb           = ((RWThreadArg *)arg)->vb;
+
+    FILE *file = fopen (filename, "rb");
+    ASSERT (file, "Error: cannot open %s: %s", filename, strerror (errno));
+
+    #define CHUNK 100000
+
+    uint32_t bytes_read;
+    do {
+        buf_alloc (vb, buf, buf->len + CHUNK, 2, "context->local", 0); 
+        bytes_read = fread (AFTERENT (char, *buf), 1, CHUNK, file);
+        buf->len += bytes_read;
+    } while (bytes_read == CHUNK); // its EOF if its smaller
+
+    ASSERT (!fclose (file), "Error in codec_gtshark_read_gtshark_output_file: fclose failed: %s", strerror (errno));
+
+    file_remove (filename, false);
+
+    return NULL;
+}
+
 // -------------
 // ZIP side
 // -------------
@@ -90,7 +117,7 @@ void codec_gtshark_comp_init (VBlock *vb)
 
 typedef struct { VBlockP vb; const char *fifo; } VcfThreadArg;
 
-static void *codec_gtshark_create_vcf_file (void *arg)
+static void *codec_gtshark_zip_create_vcf_file (void *arg)
 {
     VBlockP vb = ((VcfThreadArg *)arg)->vb;
     const char *gtshark_vcf_name = ((VcfThreadArg *)arg)->fifo;
@@ -151,6 +178,20 @@ static void *codec_gtshark_create_vcf_file (void *arg)
     return NULL;
 }
 
+#define GET_FILENAMES_FIFOS(vb_i) \
+    const char *tmpdir = getenv ("TMPDIR") ? getenv ("TMPDIR") : "/tmp"; \
+    const char *base = file_basename (z_name, 0,0,0,0); \
+    unsigned fn_len = strlen (z_file->name) + 20; \
+    char gtshark_vcf_name[fn_len], gtshark_base_name[fn_len], gtshark_db_name[fn_len], gtshark_gt_name[fn_len]; \
+    sprintf (gtshark_vcf_name,  "%s/%s.%u.vcf", tmpdir, base, vb->vblock_i); \
+    sprintf (gtshark_base_name, "%s/%s.%u", tmpdir, base, vb->vblock_i); \
+    sprintf (gtshark_db_name,   "%s_db", gtshark_base_name); \
+    sprintf (gtshark_gt_name,   "%s_gt", gtshark_base_name); \
+    FREE (base); \
+    file_mkfifo (gtshark_vcf_name); \
+    file_mkfifo (gtshark_db_name); \
+    file_mkfifo (gtshark_gt_name); 
+
 bool codec_gtshark_compress (VBlock *vb, 
                              SectionHeader *header,    
                              const char *uncompressed, // option 1 - compress contiguous data
@@ -159,43 +200,35 @@ bool codec_gtshark_compress (VBlock *vb,
                              char *compressed, uint32_t *compressed_len /* in/out */, 
                              bool soft_fail)           // soft fail not supported
 {
-    const char *tmpdir = getenv ("TMPDIR") ? getenv ("TMPDIR") : "/tmp";
+    pthread_t vcf_thread, db_thread, gt_thread;
+    GET_FILENAMES_FIFOS (vb->vblock_i);
 
     // create the VCF file to be consumed by gtshark - using a separate thread that will write to a FIFO (named pipe)
     // while gtshark reads from it
-    char gtshark_vcf_name[strlen (z_file->name) + 20];
-    sprintf (gtshark_vcf_name, "%s/%s.%u.vcf", tmpdir, z_name, vb->vblock_i);
-    file_mkfifo (gtshark_vcf_name);
-    
-    char gtshark_base_name[strlen (z_file->name) + 20];
-    sprintf (gtshark_base_name, "%s/%s.%u", tmpdir, z_name, vb->vblock_i);
-
-    char gtshark_db_name[strlen (z_file->name) + 20];
-    sprintf (gtshark_db_name, "%s/%s.%u_db", tmpdir, z_name, vb->vblock_i);
-
-    char gtshark_gt_name[strlen (z_file->name) + 20];
-    sprintf (gtshark_gt_name, "%s/%s.%u_gt", tmpdir, z_name, vb->vblock_i);
-
-    pthread_t vcf_thread;
     VcfThreadArg vcf_thread_arg = { vb, gtshark_vcf_name };
-    
-    int err = pthread_create (&vcf_thread, NULL, codec_gtshark_create_vcf_file, &vcf_thread_arg);
+    int err = pthread_create (&vcf_thread, NULL, codec_gtshark_zip_create_vcf_file, &vcf_thread_arg);
     ASSERT (!err, "Error in codec_gtshark_compress: failed to create thread vcf_thread: %s", strerror (err));
 
-    // remove in case of leftovers from previous run
-    file_remove (gtshark_db_name, true);
-    file_remove (gtshark_gt_name, true);
+    // Create reader threads to consume both gtshark output files, and remove them when done
+    RWThreadArg db_read_thread_arg = { vb, gtshark_db_name, &vb->gtshark_db_ctx->local };
+    err = pthread_create (&db_thread, NULL, codec_gtshark_read_gtshark_output_file, &db_read_thread_arg);
+    ASSERT (!err, "Error in codec_gtshark_compress: failed to create thread db_thread: %s", strerror (err));
 
+    RWThreadArg gt_read_thread_arg = { vb, gtshark_gt_name, &vb->gtshark_gt_ctx->local };
+    err = pthread_create (&gt_thread, NULL, codec_gtshark_read_gtshark_output_file, &gt_read_thread_arg);
+    ASSERT (!err, "Error in codec_gtshark_compress: failed to create thread gt_thread: %s", strerror (err));
+
+    // Run gtshark - reading and writing data to fifos - i.e. in memory rather than disk
     codec_gtshark_run (vb->vblock_i, "compress-db", gtshark_vcf_name, gtshark_base_name);
-
-    // read both gtshark output files
-    file_get_file ((VBlockP)vb, gtshark_db_name, &vb->gtshark_db_ctx->local, "context->local", vb->vblock_i, false);
-    file_get_file ((VBlockP)vb, gtshark_gt_name, &vb->gtshark_gt_ctx->local, "context->local", vb->vblock_i, false);
     
     file_remove (gtshark_vcf_name, false);
-    file_remove (gtshark_db_name,  false);
-    file_remove (gtshark_gt_name,  false);
 
+    // wait for threads to complete (writer first, then readers)
+    pthread_join (vcf_thread, NULL);
+    pthread_join (db_thread,  NULL);
+    pthread_join (gt_thread,  NULL);
+
+    // set parameters for output sections
     vb->gtshark_db_ctx->ltype  = LT_UINT8;
     vb->gtshark_gt_ctx->ltype  = LT_UINT8;
     vb->gtshark_ex_ctx->ltype  = LT_UINT8;
@@ -223,39 +256,22 @@ bool codec_gtshark_compress (VBlock *vb,
 // PIZ side
 // ----------
 
-static char *codec_gtshark_write_db_file (uint32_t vb_i, const char *file_ext, const Buffer *buf)
+static void *codec_gtshark_write_gtshark_input_file (void *arg)
 {
-    char *filename = malloc (strlen (z_name) + 50);
-    sprintf (filename, "%s.%u.%s", z_name, vb_i, file_ext);
+    const char *filename = ((RWThreadArg *)arg)->filename;
+    Buffer *buf          = ((RWThreadArg *)arg)->buf;
+    VBlockP vb           = ((RWThreadArg *)arg)->vb;
 
     FILE *file = fopen (filename, "wb");
 
     size_t bytes_written = fwrite (buf->data, 1, buf->len, file);
     ASSERT (bytes_written == buf->len, 
             "Error in uncompressing vb_i=%u: failed to write file %s - only %u out of %u bytes written: %s",
-            vb_i, filename, (unsigned)bytes_written, (uint32_t)buf->len, strerror (errno));
+            vb->vblock_i, filename, (unsigned)bytes_written, (uint32_t)buf->len, strerror (errno));
 
     FCLOSE (file, filename);
-    return filename;
+    return NULL;
 }
-
-static void codec_gtshark_run_decompress (VBlock *vb)
-{
-    char gtshark_base_name[strlen (z_name) + 50];
-    sprintf (gtshark_base_name, "%s.%u.db", z_name, vb->vblock_i);
-
-    char gtshark_vcf_name[strlen (z_name) + 50];
-    sprintf (gtshark_vcf_name, "%s.%u.vcf", z_name, vb->vblock_i);
-
-    // remove in case of leftovers from previous run
-    file_remove (gtshark_vcf_name, true);
-
-    codec_gtshark_run (vb->vblock_i, "decompress-db", gtshark_base_name, gtshark_vcf_name);
-
-    file_get_file ((VBlockP)vb, gtshark_vcf_name, &vb->compressed, "compressed", vb->vblock_i, true);
-
-    file_remove (gtshark_vcf_name, false);
-}    
 
 // PIZ: convert the vcf generated by gtshark when decompressing the db, into our haplotype matrix
 static void codec_gtshark_piz_reconstruct_ht_matrix (VBlock *vb)
@@ -312,6 +328,9 @@ void codec_gtshark_uncompress (VBlock *vb, Codec codec,
                                Buffer *uncompressed_buf, uint64_t uncompressed_len,
                                Codec sub_codec)
 {
+    pthread_t vcf_thread, db_thread, gt_thread;
+    GET_FILENAMES_FIFOS (vb->vblock_i);
+    
     vb->ht_matrix_ctx    = mtf_get_ctx (vb, dict_id_FORMAT_GT_HT); // create context, as it doesn't exist in the file
     vb->ht_matrix_ctx->lcodec = CODEC_GTSHARK;
     vb->ht_matrix_ctx->ltype  = LT_CODEC; // reconstruction will go to codec_gtshark_reconstruct as defined in codec_args for CODEC_GTSHARK
@@ -320,15 +339,32 @@ void codec_gtshark_uncompress (VBlock *vb, Codec codec,
     vb->gtshark_gt_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_GT);
     vb->gtshark_ex_ctx = mtf_get_existing_ctx (vb, dict_id_FORMAT_GT_SHARK_EX); // note: gtshark_ex_ctx will be set only if there was a gtshark_ex section
 
-    char *filename_db_db = codec_gtshark_write_db_file (vb->vblock_i, "db_db", &vb->gtshark_db_ctx->local);
-    char *filename_db_gt = codec_gtshark_write_db_file (vb->vblock_i, "db_gt", &vb->gtshark_gt_ctx->local);
+    ASSERT0 (vb->gtshark_db_ctx, "Error in codec_gtshark_uncompress: gtshark_db_ctx is NULL, perhaps the section is missing in the file?");
+    ASSERT0 (vb->gtshark_gt_ctx, "Error in codec_gtshark_uncompress: gtshark_gt_ctx is NULL, perhaps the section is missing in the file?");
 
-    codec_gtshark_run_decompress (vb);                            
+    // create threads for writing gtshark files for its decompressor to consume 
+    RWThreadArg db_write_thread_arg = { vb, gtshark_db_name, &vb->gtshark_db_ctx->local };
+    int err = pthread_create (&db_thread, NULL, codec_gtshark_write_gtshark_input_file, &db_write_thread_arg);
+    ASSERT (!err, "Error in codec_gtshark_uncompress: failed to create thread db_thread: %s", strerror (err));
 
-    file_remove (filename_db_db, false);
-    file_remove (filename_db_gt, false);
-    free (filename_db_db);
-    free (filename_db_gt);
+    RWThreadArg gt_write_thread_arg = { vb, gtshark_gt_name, &vb->gtshark_gt_ctx->local };
+    err = pthread_create (&gt_thread, NULL, codec_gtshark_write_gtshark_input_file, &gt_write_thread_arg);
+    ASSERT (!err, "Error in codec_gtshark_uncompress: failed to create thread gt_thread: %s", strerror (err));
+
+    // thread from reading VCF file outputed by gtshark decompressor
+    RWThreadArg vcf_read_thread_arg = { vb, gtshark_vcf_name, &vb->compressed };
+    err = pthread_create (&vcf_thread, NULL, codec_gtshark_read_gtshark_output_file, &vcf_read_thread_arg);
+    ASSERT (!err, "Error in codec_gtshark_compress: failed to create thread vcf_thread: %s", strerror (err));
+
+    codec_gtshark_run (vb->vblock_i, "decompress-db", gtshark_base_name, gtshark_vcf_name);
+
+    // wait for threads to complete (writers first, then reader)
+    pthread_join (db_thread,  NULL);
+    pthread_join (gt_thread,  NULL);
+    pthread_join (vcf_thread, NULL);
+    
+    file_remove (gtshark_db_name, false);
+    file_remove (gtshark_gt_name, false);
 
     codec_gtshark_piz_reconstruct_ht_matrix (vb); 
 }

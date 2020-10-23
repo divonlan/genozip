@@ -210,3 +210,6 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Fix reading and writing BAM files using samtools
 - Fix bug in genocat --show-headers
 - Add back gtshark as a codec for VCF allele data, --gtshark option
+
+8.0.4
+- 10X improvement in --gtshark speed by moving to in-memory comms using fifo

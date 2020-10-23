@@ -715,7 +715,7 @@ void file_mkfifo (const char *filename)
 {
 #ifndef _WIN32
     file_remove (filename, true);
-    ASSERT (!mkfifo (filename, 0666), "Error in file_mkfifo: mkfifo failed for %s: %s", file_mkfifo, strerror (errno));
+    ASSERT (!mkfifo (filename, 0666), "Error in file_mkfifo: mkfifo failed for %s: %s", filename, strerror (errno));
 
 #else
     ABORT0 ("file_mkfifo not supported on Windows");
